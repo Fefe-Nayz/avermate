@@ -42,7 +42,7 @@
     "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.13",
     "@uploadthing/react": "https://pkg.pr.new/pingdotgg/uploadthing/@uploadthing/react@1099",
-    "better-auth": "^1.2.8",
+    "better-auth": "^1.1.21",
     "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
