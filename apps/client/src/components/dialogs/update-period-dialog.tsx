@@ -17,6 +17,7 @@ import { useState } from "react";
 import { UpdatePeriodForm } from "../forms/update-period-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
+import { usePeriods } from "@/hooks/use-periods";
 
 export default function UpdatePeriodCredenza({
   periodId,
@@ -43,14 +44,7 @@ export default function UpdatePeriodCredenza({
     data: periods,
     isPending: isPeriodsPending,
     isError: isPeriodsError,
-  } = useQuery({
-    queryKey: ["periods"],
-    queryFn: async () => {
-      const res = await apiClient.get("periods");
-      const data = await res.json<{ periods: Period[] }>();
-      return data.periods;
-    },
-  });
+  } = usePeriods(period?.yearId || "none");
 
   return (
     <Credenza open={open} onOpenChange={setOpen}>

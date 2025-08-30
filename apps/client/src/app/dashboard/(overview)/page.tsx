@@ -26,8 +26,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DataCards from "./data-cards";
 import { useTranslations } from "next-intl"; // Import useTranslations
-import { useActiveYears } from "@/hooks/use-active-year";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { useYears } from "@/hooks/use-years";
 
 /**
  * Vue d'ensemble des notes
@@ -47,7 +48,9 @@ export default function OverviewPage() {
 
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
 
-  const { activeId, active } = useActiveYears();
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
 
   // Fetch subjects lists with grades from API
   const { data: subjects, isError, isPending } = useSubjects(activeId);
@@ -99,7 +102,9 @@ export default function OverviewPage() {
 
     const savedTab = localStorage.getItem("selectedTab");
 
-    if (savedTab) {
+    const savedTabExists = periods.find((period) => period.id === savedTab);
+
+    if (savedTabExists) {
       setSelectedTab(savedTab);
     } else {
       const defaultTab =

@@ -20,8 +20,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SubjectWrapper from "./subject-wrapper";
 import { useTranslations } from "next-intl";
-import { useActiveYears } from "@/hooks/use-active-year";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
+import { useYears } from "@/hooks/use-years";
+import { useActiveYearStore } from "@/stores/active-year-store";
 
 export default function SubjectPage() {
   const t = useTranslations("Dashboard.Loader.SubjectLoader");
@@ -51,7 +52,9 @@ export default function SubjectPage() {
     localStorage.removeItem("backFromGradeOrSubject");
   };
 
-  const { activeId, active, years } = useActiveYears();
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
 
   const {
     data: subject,
@@ -165,7 +168,7 @@ export default function SubjectPage() {
       if (periodId === "full-year") {
         return subjects;
       }
-      
+
       // Attempt to fix period grades leaks.
       return organizedSubjects.find((p) => p.period.id === periodId)?.subjects || [];
       // return subjects;

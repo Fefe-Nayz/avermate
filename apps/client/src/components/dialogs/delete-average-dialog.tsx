@@ -40,12 +40,15 @@ export default function DeleteAverageDialog({ average }: { average: Average }) {
       return data.customAverage;
     },
     onSuccess: (deletedAverage) => {
-      queryClient.invalidateQueries({ queryKey: ["customAverages"] });
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription", { name: deletedAverage.name }),
       });
       setOpen(false);
+    },
+    onSettled() {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("error"));

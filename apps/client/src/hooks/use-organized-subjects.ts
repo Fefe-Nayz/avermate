@@ -3,7 +3,7 @@ import { GetOrganizedSubjectsResponse } from "@/types/get-organized-subjects-res
 import { useQuery } from "@tanstack/react-query";
 
 export const useOrganizedSubjects = (yearId: string) => useQuery({
-    queryKey: ["subjects", "organized-by-periods", yearId],
+    queryKey: ["subjects", "organized-by-periods"],
     queryFn: async () => {
         const res = await apiClient.get(`years/${yearId}/subjects/organized-by-periods`);
         const data = await res.json<GetOrganizedSubjectsResponse>();

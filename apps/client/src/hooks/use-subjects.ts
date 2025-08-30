@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 export const useSubjects = (yearId: string) =>
   useQuery({
-    queryKey: ["subjects", yearId],
+    queryKey: ["subjects"],
     queryFn: async () => {
       const res = await apiClient.get(`years/${yearId}/subjects`);
       const data = await res.json<GetSubjectsResponse>();

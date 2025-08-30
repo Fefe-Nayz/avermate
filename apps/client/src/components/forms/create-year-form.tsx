@@ -19,7 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isBefore } from "date-fns";
 import { CalendarIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -64,6 +64,8 @@ export const CreateYearForm = () => {
     });
 
     type CreateYearSchema = z.infer<typeof createYearSchema>;
+    
+    const queryClient = useQueryClient();
 
     const { mutate, isPending } = useMutation({
         mutationKey: ["create-year"],
@@ -87,6 +89,10 @@ export const CreateYearForm = () => {
             });
 
             router.push(`/onboarding/${data.id}`);
+        },
+        onSettled: () => {
+            queryClient.cancelQueries();
+            queryClient.invalidateQueries({ queryKey: ["years"] });
         },
         onError: (error) => {
             handleError(error, toaster, errorTranslations, "YEAR_CREATE_FAILED");

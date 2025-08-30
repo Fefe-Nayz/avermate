@@ -13,6 +13,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ConfettiButton } from "@/components/ui/confetti";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import { useActiveYearStore } from "@/stores/active-year-store";
 
 const stepIds = ["matieres", "periodes"];
 const steps = [
@@ -40,6 +41,8 @@ function OnboardingContent() {
   const { data: session } = authClient.useSession() as unknown as {
     data: { session: Session; user: User };
   };
+
+  const { setActiveId } = useActiveYearStore();
 
   useEffect(() => {
     const stepId = steps[currentStep].id;
@@ -74,6 +77,7 @@ function OnboardingContent() {
   const handleOnboardingCompletion = () => {
     // localStorage.setItem("isOnboardingCompleted", "true");
     router.push("/dashboard");
+    setActiveId(yearId);
   };
 
   return (

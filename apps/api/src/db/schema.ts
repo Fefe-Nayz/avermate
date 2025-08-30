@@ -2,10 +2,13 @@ import { generateId } from "@/lib/nanoid";
 import { relations } from "drizzle-orm";
 import {
   foreignKey,
+  index,
   integer,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+
+// TODO: Add index on userId and yearId
 
 export const years = sqliteTable("years", {
   id: text().notNull().primaryKey().$defaultFn(() => generateId("y")),
@@ -13,6 +16,7 @@ export const years = sqliteTable("years", {
   startDate: integer({ mode: "timestamp" }).notNull(),
   endDate: integer({ mode: "timestamp" }).notNull(),
   defaultOutOf: integer().notNull(),
+  // createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   userId: text().notNull().references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
 });
 

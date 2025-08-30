@@ -67,7 +67,7 @@ export const UpdateSubjectForm = ({
     }
   }, [openParent, isDesktop]);
 
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(subject.yearId);
 
   // -----------------------------------
   // 1) First, define 'form'
@@ -149,7 +149,13 @@ export const UpdateSubjectForm = ({
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
       queryClient.invalidateQueries({ queryKey: ["subject", subject.id] });
     },
     onError: (error) => {

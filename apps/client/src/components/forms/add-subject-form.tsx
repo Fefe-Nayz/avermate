@@ -108,7 +108,13 @@ export const AddSubjectForm = ({
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("errorAddingSubject"));

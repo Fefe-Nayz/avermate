@@ -1,26 +1,21 @@
 "use client";
 
 import { Year } from "@/types/year";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useYears } from "./use-years";
 import { useRouter } from "next/navigation";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { is } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
 
 export const useActiveYears = () => {
-    const [active, setActive] = useState<Year | undefined>(undefined);
-    const [isPending, setIsPending] = useState(true);
-    const [isError, setIsError] = useState(false);
-    const [years, setYears] = useState<Year[]>([]);
-    const [activeId, setActiveId] = useState<string | undefined>(undefined);
+    const { setActiveId } = useActiveYearStore();
     const router = useRouter();
+    const queryClient = useQueryClient();
 
-    const { data, isPending: isFetchPending, isError: isFetchError } = useYears();
+    const { data, isPending, isError } = useYears();
 
     useEffect(() => {
-        setIsPending(isFetchPending);
-        setIsError(isFetchError);
-        setYears(data || []);
-
         if (data) {
             const status = getStatusFromLocalStorage();
 
@@ -29,10 +24,10 @@ export const useActiveYears = () => {
                 const defaultActive = findDefaultActive(data);
 
                 if (defaultActive) {
-                    setActive(defaultActive);
                     saveIdToLocalStorage(defaultActive.id);
                     setActiveId(defaultActive.id);
                     saveStatusToLocalStorage("default");
+                    return;
                 }
             }
 
@@ -47,10 +42,10 @@ export const useActiveYears = () => {
                     // Fallback to default
 
                     if (defaultActive) {
-                        setActive(defaultActive);
                         saveIdToLocalStorage(defaultActive.id);
                         setActiveId(defaultActive.id);
                         saveStatusToLocalStorage("default");
+                        return;
                     }
                 }
 
@@ -58,20 +53,20 @@ export const useActiveYears = () => {
                 if (manualActive) {
                     // If manual is default turn off manual
                     if (manualActive.id === defaultActive?.id && defaultActive) {
-                        setActive(defaultActive);
                         saveIdToLocalStorage(defaultActive.id);
                         setActiveId(defaultActive.id);
                         saveStatusToLocalStorage("default");
+                        return;
                     }
 
-                    setActive(manualActive);
                     saveIdToLocalStorage(manualActive.id);
                     setActiveId(manualActive.id);
                     saveStatusToLocalStorage("manual");
+                    return;
                 }
             }
         }
-    }, [data, isFetchPending, isFetchError]);
+    }, [data, isPending, isError]);
 
     // Si aucun years n'existe
     useEffect(() => {
@@ -80,27 +75,26 @@ export const useActiveYears = () => {
         }
     }, [data, isPending, isError]);
 
-    useEffect(() => {
-        console.log(`Active ID: ${activeId}`);
-    }, [activeId])
-
     function select(id: string) {
-        const manualActive = years.find((year) => year.id === id);
-        const defaultActive = findDefaultActive(years);
+        const manualActive = data?.find((year) => year.id === id);
+        const defaultActive = findDefaultActive(data || []);
+
+        queryClient.cancelQueries();
+        queryClient.clear();
+        queryClient.invalidateQueries();
 
         if (!manualActive || manualActive.id === defaultActive?.id) {
             if (!defaultActive) return;
-            setActive(defaultActive);
             saveIdToLocalStorage(defaultActive.id);
             setActiveId(defaultActive.id);
             saveStatusToLocalStorage("default");
             return;
         }
 
-        setActive(manualActive);
         saveIdToLocalStorage(manualActive.id);
         setActiveId(manualActive.id);
         saveStatusToLocalStorage("manual");
+        return;
     }
 
     function findDefaultActive(years: Year[]): Year | undefined {
@@ -142,10 +136,7 @@ export const useActiveYears = () => {
     }
 
     return {
-        active,
-        activeId: activeId || getIdFromLocalStorage() || "none",
         select,
-        years,
         isPending,
         isError
     };

@@ -94,14 +94,14 @@ export const AddPeriodForm = ({
         description: t("successDescription"),
       });
 
-      queryClient.invalidateQueries({ queryKey: ["periods"] });
-      queryClient.invalidateQueries({ queryKey: ["subjects"] });
-      queryClient.invalidateQueries({
-        queryKey: ["subjects", "organized-by-periods"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["periods"] });
-
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["periods"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("errorAddingPeriod"));

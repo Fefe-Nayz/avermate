@@ -73,8 +73,6 @@ export const UpdateCustomAverageForm = ({
 
   const [openSubjectIndex, setOpenSubjectIndex] = useState<number | null>(null);
 
-  const { data: subjects } = useSubjects();
-
   // Feedback schema validation
   const updateCustomAverageSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
@@ -97,6 +95,8 @@ export const UpdateCustomAverageForm = ({
 
   type UpdateCustomAverageSchema = z.infer<typeof updateCustomAverageSchema>;
 
+  const { data: subjects } = useSubjects(customAverage.yearId);
+
   const { mutate, isPending: isSubmitting } = useMutation({
     mutationKey: ["update-custom-average"],
     mutationFn: async (values: UpdateCustomAverageSchema) => {
@@ -115,7 +115,11 @@ export const UpdateCustomAverageForm = ({
         description: t("successDescription"),
       });
       close();
-      queryClient.invalidateQueries({ queryKey: ["customAverages"] });
+
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
       queryClient.invalidateQueries({
         queryKey: ["average", customAverage.id],
       });

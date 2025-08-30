@@ -163,8 +163,12 @@ export const AddGradeForm = ({
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["grades"] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {

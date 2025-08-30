@@ -150,9 +150,14 @@ export const UpdateGradeForm = ({
         description: t("successDescription"),
       });
       close();
+      
+    },
+    onSettled() {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["grades"] });
-      queryClient.invalidateQueries({ queryKey: ["grade", grade.id] });
+      queryClient.invalidateQueries({ queryKey: ["grades", grade.id] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {

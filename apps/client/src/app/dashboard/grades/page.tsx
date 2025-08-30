@@ -18,10 +18,11 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useActiveYears } from "@/hooks/use-active-year";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
+import { useYears } from "@/hooks/use-years";
+import { useActiveYearStore } from "@/stores/active-year-store";
 import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -30,7 +31,9 @@ export default function GradesPage() {
   const t = useTranslations("Dashboard.Pages.GradesPage"); // Initialize t
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
 
-  const { activeId } = useActiveYears();
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
 
   const {
     data: periods,
@@ -56,7 +59,9 @@ export default function GradesPage() {
 
     const savedTab = localStorage.getItem("selectedTab");
 
-    if (savedTab) {
+    const savedTabExists = periods.find((period) => period.id === savedTab);
+
+    if (savedTabExists) {
       setSelectedTab(savedTab);
     } else {
       const defaultTab =
@@ -183,7 +188,7 @@ export default function GradesPage() {
             .map((period) => (
               <TabsContent key={period.id} value={period.id}>
                 <GradesTable
-                yearId={activeId}
+                  yearId={activeId}
                   subjects={
                     organizedSubjects?.find((p) => p.period.id === period.id)
                       ?.subjects || []

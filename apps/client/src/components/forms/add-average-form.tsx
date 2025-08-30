@@ -108,7 +108,10 @@ export const AddAverageForm = ({ close, yearId }: { close: () => void; yearId: s
         description: t("successDescription"),
       });
       close();
-      queryClient.invalidateQueries({ queryKey: ["customAverages"] });
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
     },
     onError: (error: any) => {
       handleError(error, toaster, errorTranslations, t("errorCreating"));

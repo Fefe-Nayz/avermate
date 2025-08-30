@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 export const useCustomAverages = (yearId: string) =>
   useQuery({
-    queryKey: ["customAverages", yearId],
+    queryKey: ["custom-averages"],
     queryFn: async () => {
       const res = await apiClient.get(`years/${yearId}/averages`);
       const data = await res.json<{ customAverages: Average[] }>();

@@ -100,13 +100,15 @@ export const UpdatePeriodForm = ({
         description: t("successDescription"),
       });
 
+      close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["periods"] });
       queryClient.invalidateQueries({ queryKey: ["period", period.id] });
-      queryClient.invalidateQueries({
-        queryKey: ["subjects", "organized-by-periods"],
-      });
-
-      close();
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
