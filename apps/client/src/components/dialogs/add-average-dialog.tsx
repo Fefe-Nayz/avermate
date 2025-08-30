@@ -15,8 +15,10 @@ import { useTranslations } from "next-intl";
 
 export default function AddAverageDialog({
   children,
+  yearId,
 }: {
   children: React.ReactNode;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.AddAverage");
   const [open, setOpen] = useState(false);
@@ -30,7 +32,7 @@ export default function AddAverageDialog({
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
-          <AddAverageForm close={() => setOpen(false)} />
+          <AddAverageForm yearId={yearId} close={() => setOpen(false)} />
         </CredenzaBody>
       </CredenzaContent>
     </Credenza>

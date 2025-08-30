@@ -565,7 +565,7 @@ const createCustomAverageSchema = z.object({
     isMainAverage: z.boolean().optional().default(false),
 });
 
-app.post("/:yearId/custom-averages", zValidator("json", createCustomAverageSchema), async (c) => {
+app.post("/:yearId/averages", zValidator("json", createCustomAverageSchema), async (c) => {
     const session = c.get("session");
     if (!session) throw new HTTPException(401);
 
@@ -627,7 +627,7 @@ app.post("/:yearId/custom-averages", zValidator("json", createCustomAverageSchem
 /**
  * Retrieve All Custom Averages for the Authenticated User
  */
-app.get("/:yearId/custom-averages", async (c) => {
+app.get("/:yearId/averages", async (c) => {
     const session = c.get("session");
     if (!session) throw new HTTPException(401);
 

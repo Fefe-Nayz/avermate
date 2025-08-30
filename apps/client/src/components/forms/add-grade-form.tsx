@@ -62,9 +62,11 @@ dayjs.locale("fr");
 export const AddGradeForm = ({
   close,
   parentId,
+  yearId,
 }: {
   close: () => void;
   parentId?: string;
+  yearId: string;
 }) => {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
@@ -83,9 +85,9 @@ export const AddGradeForm = ({
   const [isManualPeriod, setIsManualPeriod] = useState(false);
 
   // Queries
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(yearId);
 
-  const { data: periods } = usePeriods();
+  const { data: periods } = usePeriods(yearId);
 
   // Schema
   const addGradeSchema = z.object({
@@ -136,7 +138,7 @@ export const AddGradeForm = ({
       subjectId,
       periodId,
     }: AddGradeSchema) => {
-      const res = await apiClient.post("grades", {
+      const res = await apiClient.post(`years/${yearId}/grades`, {
         json: {
           name,
           value,

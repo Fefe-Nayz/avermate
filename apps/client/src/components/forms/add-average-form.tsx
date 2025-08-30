@@ -57,7 +57,7 @@ import { useTranslations } from "next-intl";
 
 dayjs.locale("fr");
 
-export const AddAverageForm = ({ close }: { close: () => void }) => {
+export const AddAverageForm = ({ close, yearId }: { close: () => void; yearId: string }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddAverage");
   const toaster = useToast();
@@ -66,7 +66,7 @@ export const AddAverageForm = ({ close }: { close: () => void }) => {
 
   const [openSubjectIndex, setOpenSubjectIndex] = useState<number | null>(null);
 
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(yearId);
 
   const addCustomAverageSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
@@ -92,7 +92,7 @@ export const AddAverageForm = ({ close }: { close: () => void }) => {
   const { mutate, isPending: isSubmitting } = useMutation({
     mutationKey: ["create-custom-average"],
     mutationFn: async (formData: AddCustomAverageSchema) => {
-      const res = await apiClient.post("averages", {
+      const res = await apiClient.post(`years/${yearId}/averages`, {
         json: {
           name: formData.name,
           subjects: formData.subjects,
