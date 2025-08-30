@@ -668,7 +668,7 @@
         "createCustomAverage": "Create Custom Average",
         "nameRequired": "Name is required",
         "nameTooLong": "Name is too long",
-        "subjectIdRequired": "Subject ID is required",
+        "subjectIdRequired": "A subject is required",
         "coefficientMin": "Coefficient must be at least 1",
         "coefficientMax": "Coefficient cannot exceed 1000",
         "atLeastOneSubject": "At least one subject must be selected"
@@ -682,7 +682,7 @@
         "valueMax": "Value cannot exceed 1000",
         "coefficientMin": "Coefficient must be at least 0",
         "coefficientMax": "Coefficient cannot exceed 1000",
-        "subjectIdRequired": "Subject ID is required",
+        "subjectIdRequired": "A subject is required",
         "subjectIdMax": "Subject ID cannot exceed 64 characters",
         "periodIdRequired": "Period ID is required",
         "periodIdMax": "Period ID cannot exceed 64 characters",
@@ -707,7 +707,14 @@
         "subject": "Subject",
         "chooseSubject": "Choose a subject",
         "noSubjectFound": "No subject found.",
-        "submit": "Add Grade"
+        "submit": "Add Grade",
+        "coefficientRequired": "Coefficient is required",
+        "gradeValueRequired": "Grade is required",
+        "gradeOutOfRequired": "Out of is required",
+        "dateRequired": "Date is required",
+        "subjectRequired": "Subject is required",
+        "passedAtRequired": "Passed at is required",
+        "valueCannotExceedOutOf": "Grade cannot exceed out of"
       },
       "AddPeriod": {
         "nameRequired": "Name is required",
@@ -731,6 +738,7 @@
         "nameTooLong": "Name is too long",
         "coefficientMin": "Coefficient must be at least 0",
         "coefficientMax": "Coefficient cannot exceed 1000",
+        "coefficientRequired": "Le coefficient est requis",
         "parentIdMax": "Parent ID cannot exceed 64 characters",
         "successTitle": "Subject added successfully!",
         "successDescription": "Add grades to this subject to track your progress.",
@@ -750,7 +758,8 @@
         "chooseParentSubjectPlaceholder": "Choose a subject",
         "noParentSubjectFound": "No parent subject found.",
         "parentSubjectDescription": "A parent subject groups several sub-subjects, facilitating their organization.",
-        "submit": "Add Subject"
+        "submit": "Add Subject",
+        "noParent": "Sans Parent"
       },
       "Feedback": {
         "feedbackType": "Feedback Type",

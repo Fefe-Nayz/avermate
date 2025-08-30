@@ -11,8 +11,10 @@ import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
+dayjs.locale("fr");
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -57,18 +59,34 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
+import { isEqual } from "lodash";
 
-dayjs.locale("fr");
+const addGradeSchema = z.object({
+  name: z.string().min(1).optional(),
+  outOf: z.coerce.number().min(0).max(1000).optional(),
+  value: z.coerce.number().min(0).max(1000).optional(),
+  coefficient: z.coerce.number().min(0).max(1000).optional(),
+  passedAt: z.date().optional(),
+  subjectId: z.string().min(1).max(64),
+  periodId: z.string().min(1).max(64).nullable(),
+});
 
-export const AddGradeForm = ({
+export type AddGradeSchema = z.infer<typeof addGradeSchema>;
+
+export function AddGradeForm({
   close,
   parentId,
+  // 1) New props to handle external state
+  formData,
+  setFormData,
   yearId,
 }: {
   close: () => void;
   parentId?: string;
+  formData: AddGradeSchema;  // parent's data
+  setFormData: React.Dispatch<React.SetStateAction<AddGradeSchema>>;
   yearId: string;
-}) => {
+}) {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
 
@@ -94,42 +112,43 @@ export const AddGradeForm = ({
 
   const year = years?.find((y) => y.id === yearId);
 
-  // Schema
   const addGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    outOf: z.coerce.number().min(0, t("outOfMin")).max(1000, t("outOfMax")),
-    value: z.coerce.number().min(0, t("valueMin")).max(1000, t("valueMax")),
-    coefficient: z.coerce
-      .number()
-      .min(0, t("coefficientMin"))
-      .max(1000, t("coefficientMax")),
-    passedAt: z.date(),
-    subjectId: z
-      .string()
-      .min(1, t("subjectIdRequired"))
-      .max(64, t("subjectIdMax")),
-    periodId: z
-      .string()
-      .min(1, t("periodIdRequired"))
-      .max(64, t("periodIdMax"))
-      .nullable(),
+    outOf: z.coerce.number({
+      invalid_type_error: t("gradeOutOfRequired"),
+    }).min(0, t("outOfMin")).max(1000, t("outOfMax")),
+    value: z.coerce.number({
+      invalid_type_error: t("gradeValueRequired"),
+    }).min(0, t("valueMin")).max(1000, t("valueMax")),
+    coefficient: z.coerce.number({
+      invalid_type_error: t("coefficientRequired"),
+    }).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
+    passedAt: z.date({
+      required_error: t("passedAtRequired"),
+    }),
+    subjectId: z.string().min(1, t("subjectIdRequired")).max(64, t("subjectIdMax")),
+    periodId: z.string().min(1, t("periodIdRequired")).max(64, t("periodIdMax")).nullable(),
+  }).refine((data) => data.value <= data.outOf, {
+    message: t("valueCannotExceedOutOf"),
+    path: ["value"],
   });
 
   type AddGradeSchema = z.infer<typeof addGradeSchema>;
 
-  const determinePeriodId = (
+  // The same schema is used
+  function determinePeriodId(
     date: string | number | Date | dayjs.Dayjs | null | undefined,
-    periods: any[] | undefined
-  ) => {
-    if (!date || !periods) return "";
+    allPeriods: any[] | undefined
+  ) {
+    if (!date || !allPeriods) return "";
     const formattedDate = dayjs(date);
-    const matchedPeriod = periods.find(
+    const matchedPeriod = allPeriods.find(
       (period) =>
         formattedDate.isSameOrAfter(dayjs(period.startAt)) &&
         formattedDate.isSameOrBefore(dayjs(period.endAt))
     );
     return matchedPeriod ? matchedPeriod.id : "full-year";
-  };
+  }
 
   // Mutation to create a grade
   const { mutate, isPending } = useMutation({
@@ -176,23 +195,32 @@ export const AddGradeForm = ({
     },
   });
 
+  // 2) Now we use parent's `formData` as defaultValues
   const form = useForm<AddGradeSchema>({
     resolver: zodResolver(addGradeSchema),
-    defaultValues: {
-      name: "",
-      subjectId: parentId || "",
-    },
+    defaultValues: formData,
   });
 
-  // Watch the `passedAt` field
-  const watchedPassedAt = useWatch({ control: form.control, name: "passedAt" });
+  // 3) On mount, sync
+  useEffect(() => {
+    form.reset(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Automatically set the periodId when passedAt changes, unless manually changed
+  // 4) Watch + call setFormData if changed
+  const watchedValues = form.watch();
+  useEffect(() => {
+    if (!isEqual(watchedValues, formData)) {
+      setFormData(watchedValues);
+    }
+  }, [watchedValues, formData, setFormData]);
+
+  // Keep the logic the same for auto-setting period
+  const watchedPassedAt = useWatch({ control: form.control, name: "passedAt" });
   useEffect(() => {
     if (!isManualPeriod && watchedPassedAt && periods) {
       const matchedPeriodId = determinePeriodId(watchedPassedAt, periods);
       const currentPeriodId = form.getValues("periodId");
-
       if (matchedPeriodId !== currentPeriodId) {
         form.setValue("periodId", matchedPeriodId, { shouldValidate: true });
       }
@@ -200,10 +228,10 @@ export const AddGradeForm = ({
   }, [watchedPassedAt, periods, form, isManualPeriod]);
 
   const selectedPeriod = periods?.find(
-    (period) => period.id === form.getValues("periodId")
+    (p) => p.id === form.getValues("periodId")
   );
   const selectedSubject = subjects?.find(
-    (subject) => subject.id === form.getValues("subjectId")
+    (s) => s.id === form.getValues("subjectId")
   );
 
   const onSubmit = (values: AddGradeSchema) => {
@@ -217,7 +245,7 @@ export const AddGradeForm = ({
   const periodInputRef = useRef<HTMLInputElement>(null);
   const subjectInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the CommandInput inside the Drawer whenever it opens
+  // Keep the same focus logic
   useEffect(() => {
     if (!isDesktop && openPeriod) {
       setTimeout(() => periodInputRef.current?.focus(), 350);
@@ -477,7 +505,7 @@ export const AddGradeForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={periodInputRef}
@@ -496,7 +524,7 @@ export const AddGradeForm = ({
                                     form.setValue("periodId", period.id, {
                                       shouldValidate: true,
                                     });
-                                    setIsManualPeriod(true); // Mark as manually selected
+                                    setIsManualPeriod(true);
                                     setOpenPeriod(false);
                                   }}
                                 >
@@ -513,7 +541,7 @@ export const AddGradeForm = ({
                                   form.setValue("periodId", "full-year", {
                                     shouldValidate: true,
                                   });
-                                  setIsManualPeriod(true); // Mark as manually selected
+                                  setIsManualPeriod(true);
                                   setOpenPeriod(false);
                                 }}
                               >
@@ -582,26 +610,26 @@ export const AddGradeForm = ({
                           <CommandGroup>
                             {subjects
                               ?.filter(
-                                (subject) => subject.isDisplaySubject === false
+                                (subj) => subj.isDisplaySubject === false
                               )
                               .slice()
                               .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((subject) => (
+                              .map((subj) => (
                                 <CommandItem
-                                  key={subject.id}
-                                  value={subject.name}
+                                  key={subj.id}
+                                  value={subj.name}
                                   onSelect={() => {
-                                    form.setValue("subjectId", subject.id, {
+                                    form.setValue("subjectId", subj.id, {
                                       shouldValidate: true,
                                     });
                                     setOpenSubject(false);
                                   }}
                                 >
-                                  <span>{subject.name}</span>
+                                  <span>{subj.name}</span>
                                   {form.getValues("subjectId") ===
-                                    subject.id && (
-                                      <Check className="ml-auto h-4 w-4" />
-                                    )}
+                                    subj.id && (
+                                    <Check className="ml-auto h-4 w-4" />
+                                  )}
                                 </CommandItem>
                               ))}
                           </CommandGroup>
@@ -632,7 +660,7 @@ export const AddGradeForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={subjectInputRef}
@@ -645,27 +673,26 @@ export const AddGradeForm = ({
                             <CommandGroup>
                               {subjects
                                 ?.filter(
-                                  (subject) =>
-                                    subject.isDisplaySubject === false
+                                  (subj) => subj.isDisplaySubject === false
                                 )
                                 .slice()
                                 .sort((a, b) => a.name.localeCompare(b.name))
-                                .map((subject) => (
+                                .map((subj) => (
                                   <CommandItem
-                                    key={subject.id}
-                                    value={subject.name}
+                                    key={subj.id}
+                                    value={subj.name}
                                     onSelect={() => {
-                                      form.setValue("subjectId", subject.id, {
+                                      form.setValue("subjectId", subj.id, {
                                         shouldValidate: true,
                                       });
                                       setOpenSubject(false);
                                     }}
                                   >
-                                    <span>{subject.name}</span>
+                                    <span>{subj.name}</span>
                                     {form.getValues("subjectId") ===
-                                      subject.id && (
-                                        <Check className="ml-auto h-4 w-4" />
-                                      )}
+                                      subj.id && (
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
                                   </CommandItem>
                                 ))}
                             </CommandGroup>
@@ -689,4 +716,4 @@ export const AddGradeForm = ({
       </Form>
     </div>
   );
-};
+}

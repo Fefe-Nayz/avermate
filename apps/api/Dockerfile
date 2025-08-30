@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS build
+FROM oven/bun:1.2.21 AS build
 
 WORKDIR /app
 

@@ -17,7 +17,6 @@ import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average, averageOverTime } from "@/utils/average";
 import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
-import { useState, useCallback } from "react";
 import {
   Area,
   AreaChart,
@@ -27,9 +26,12 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceDot,
   XAxis,
   YAxis,
+  useActiveTooltipLabel,
 } from "recharts";
+
 import AddGradeDialog from "../dialogs/add-grade-dialog";
 import { SubjectEmptyState } from "../empty-states/subject-empty-state";
 import { Button } from "../ui/button";
@@ -37,35 +39,121 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 
+export interface TickProps {
+  x?: number | string;
+  y?: number | string;
+  cx?: number | string;
+  cy?: number | string;
+  payload?: { value?: string };
+}
+
 function getCumulativeStartDate(
   periods: Period[],
   currentPeriod: Period
 ): Date {
   if (currentPeriod.id === "full-year") {
-    // full-year => keep your existing logic or just use currentPeriod.startAt
     return new Date(currentPeriod.startAt);
   }
 
-  // Sort by start date
   const sorted = [...periods].sort(
     (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
   );
   const currentIndex = sorted.findIndex((p) => p.id === currentPeriod.id);
 
   if (currentIndex === -1) {
-    // fallback
     return new Date(currentPeriod.startAt);
   }
 
   if (currentPeriod.isCumulative) {
-    // earliest is from the first period
     return new Date(sorted[0].startAt);
   }
 
   return new Date(currentPeriod.startAt);
 }
 
-export const description = "A simple area chart";
+interface ChartDataPoint {
+  date: string;
+  average: number | null;
+}
+
+function findNearestDatum(data: ChartDataPoint[], targetDate: string): ChartDataPoint | null {
+  let nearestDatum: ChartDataPoint | null = null;
+  let minDiff = Infinity;
+  const targetTime = new Date(targetDate).getTime();
+
+  data.forEach((datum) => {
+    if (datum.average === null) return;
+
+    const datumTime = new Date(datum.date).getTime();
+    const diff = Math.abs(datumTime - targetTime);
+
+    if (diff < minDiff) {
+      minDiff = diff;
+      nearestDatum = datum;
+    }
+  });
+
+  return nearestDatum;
+}
+
+function GlobalActiveDot({
+  chartData,
+}: {
+  chartData: ChartDataPoint[];
+}) {
+  const activeLabel = useActiveTooltipLabel();
+  if (!activeLabel) return null;
+
+  const nearestDatum = findNearestDatum(chartData, activeLabel);
+  if (!nearestDatum || nearestDatum.average === null) return null;
+
+  return (
+    <ReferenceDot
+      x={nearestDatum.date}
+      y={nearestDatum.average}
+      r={4}
+      fill="#2662d9"
+      strokeWidth={0}
+      opacity={0.8}
+    />
+  );
+}
+
+function CustomTooltipContent({
+  active,
+  label,
+  chartData,
+  formatDates,
+}: {
+  active?: boolean;
+  label?: string;
+  chartData: ChartDataPoint[];
+  formatDates: ReturnType<typeof useFormatDates>;
+}) {
+  if (!active || !label) return null;
+
+  const nearestDatum = findNearestDatum(chartData, label);
+  const value = nearestDatum?.average ?? null;
+
+  return (
+    <ChartTooltipContent
+      active={true}
+      label={formatDates.formatShort(new Date(label))}
+      payload={
+        value !== null
+          ? [
+              {
+                name: "Global Average",
+                value: value.toFixed(2),
+                color: "#2662d9",
+                payload: null,
+              },
+            ]
+          : []
+      }
+    />
+  );
+}
 
 export default function GlobalAverageChart({
   subjects,
@@ -80,18 +168,7 @@ export default function GlobalAverageChart({
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.GlobalAverageChart");
-
   const formatDates = useFormatDates(formatter);
-
-  // Update state to use single index instead of indices
-  const [activeTooltipIndex, setActiveTooltipIndex] = useState<number | null>(
-    null
-  );
-
-  // Update callback to handle single index
-  const handleActiveTooltipIndexChange = useCallback((index: number | null) => {
-    setActiveTooltipIndex(index);
-  }, []);
 
   // Calculate the start and end dates
   const endDate = new Date(period.endAt);
@@ -122,7 +199,7 @@ export default function GlobalAverageChart({
     },
   };
 
-  // Calculate average grades per subject for radar chart, only if it is a main subject
+  // Calculate average grades per subject for radar chart
   const subjectAverages = subjects
     .filter((subject) => subject.isMainSubject)
     .map((subject) => {
@@ -135,26 +212,16 @@ export default function GlobalAverageChart({
       };
     });
 
-  const radarData = subjectAverages;
-
-  const renderPolarAngleAxis = ({
-    payload,
-    x,
-    y,
-    cx,
-    cy,
-  }: {
-    payload: { value: string };
-    x: number;
-    y: number;
-    cx: number;
-    cy: number;
-  }) => {
-    // Calculate the angle in radians between the label position and the center
+  const renderPolarAngleAxis = (props: TickProps) => {
+    const x = Number(props.x ?? 0);
+    const y = Number(props.y ?? 0);
+    const cx = Number(props.cx ?? 0);
+    const cy = Number(props.cy ?? 0);
+    const value = props.payload?.value ?? '';
+    
     const radius = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
     const angle = Math.atan2(y - cy, x - cx);
-
-    // Determine the truncate length based on screen width
+  
     const truncateLength =
       window.innerWidth < 450
         ? 5
@@ -165,29 +232,22 @@ export default function GlobalAverageChart({
         : window.innerWidth < 2100
         ? 9
         : 12;
-
-    const truncatedLabel =
-      payload.value.length > truncateLength
-        ? `${payload.value.slice(0, truncateLength)}...`
-        : payload.value;
-
-    // Adjust the radius to move the labels inside
+  
+    const truncatedLabel = value.length > truncateLength
+      ? `${value.slice(0, truncateLength)}...`
+      : value;
+  
     const labelRadius = radius - truncatedLabel.length * 3 + 10;
-
-    // Calculate new label positions
     const nx = cx + labelRadius * Math.cos(angle);
     const ny = cy + labelRadius * Math.sin(angle);
-
-    // Convert angle to degrees for rotation
     let rotation = (angle * 180) / Math.PI;
-
-    // Flip text if rotation is beyond 90 degrees
+  
     if (rotation > 90) {
       rotation -= 180;
     } else if (rotation < -90) {
       rotation += 180;
     }
-
+  
     return (
       <text
         x={nx}
@@ -200,16 +260,7 @@ export default function GlobalAverageChart({
         {truncatedLabel}
       </text>
     );
-  };
-
-  // Update CustomDot component to use single index
-  const CustomDot = (props: any) => {
-    const { cx, cy, index, stroke } = props;
-    if (activeTooltipIndex !== null && index === activeTooltipIndex) {
-      return <circle cx={cx} cy={cy} r={4} fill={stroke} opacity={0.8} />;
-    }
-    return null;
-  };
+  }
 
   // Handle if there are no subjects
   if (subjects.length === 0) {
@@ -245,7 +296,6 @@ export default function GlobalAverageChart({
 
       <CardContent>
         <div className="flex items-start lg:space-x-4 text-sm flex-wrap lg:flex-nowrap h-fit justify-center gap-[10px] flex-col lg:flex-row pt-2">
-          {/* Area Chart Section */}
           <div className="flex flex-col items-center lg:items-start grow min-w-0 my-0 mx-auto w-[100%] lg:w-[60%]">
             <CardDescription className="pb-8">
               {t("areaChartDescription")}
@@ -272,47 +322,27 @@ export default function GlobalAverageChart({
                 <ChartTooltip
                   filterNull={false}
                   cursor={false}
-                  content={
-                    <ChartTooltipContent
+                  content={({ active, label }) => (
+                    <CustomTooltipContent
+                      active={active}
+                      label={label ? label.toString() : undefined}
                       chartData={chartData}
-                      findNearestNonNull={true}
-                      dataKey="average"
-                      labelFormatter={(value) => value}
-                      valueFormatter={(val) => val.toFixed(2)}
-                      onUpdateActiveTooltipIndex={
-                        handleActiveTooltipIndexChange
-                      }
+                      formatDates={formatDates}
                     />
-                  }
-                  labelFormatter={(value) =>
-                    formatDates.formatShort(new Date(value))
-                  }
+                  )}
                 />
-                <defs>
-                  <linearGradient id="fillAverage" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2662d9" stopOpacity={0.8} />
-                    <stop offset="95%" stopColor="#2662d9" stopOpacity={0.1} />
-                  </linearGradient>
-                </defs>
                 <Area
                   dataKey="average"
                   type="monotone"
-                  fill="url(#fillAverage)"
+                  fill="#2662d9"
                   stroke="#2662d9"
+                  fillOpacity={0.1}
+                  strokeWidth={2}
                   connectNulls={true}
+                  dot={false}
                   activeDot={false}
-                  dot={(props) => {
-                    const { key, ...rest } = props;
-                    return (
-                      <CustomDot
-                        key={key}
-                        {...rest}
-                        dataKey="average"
-                        activeTooltipIndex={activeTooltipIndex}
-                      />
-                    );
-                  }}
                 />
+                <GlobalActiveDot chartData={chartData} />
               </AreaChart>
             </ChartContainer>
           </div>
@@ -322,30 +352,24 @@ export default function GlobalAverageChart({
             className="hidden lg:block h-[360px]"
           />
 
-          {/* Radar Chart Section */}
           <div className="flex flex-col items-center lg:space-y-2 lg:w-[40%] m-auto lg:pt-0 pt-8 w-[100%]">
             <CardDescription>{t("radarChartDescription")}</CardDescription>
             <ChartContainer
               config={chartConfig}
               className="h-[332px] w-[100%] m-auto !aspect-auto"
             >
-              <RadarChart data={radarData} outerRadius="90%">
+              <RadarChart data={subjectAverages} outerRadius="90%">
                 <PolarGrid />
                 <PolarAngleAxis dataKey="subject" tick={renderPolarAngleAxis} />
                 <Radar
                   dataKey="average"
+                  fillOpacity={0.1}
                   stroke="#2662d9"
                   fill="#2662d9"
-                  fillOpacity={0.6}
+                  strokeWidth={2}
                 />
                 <PolarRadiusAxis domain={[0, 20]} stroke="#a1a1aa" />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      valueFormatter={(val) => val.toFixed(2)}
-                    />
-                  }
-                />
+                <ChartTooltip content={<ChartTooltipContent />} />
               </RadarChart>
             </ChartContainer>
           </div>

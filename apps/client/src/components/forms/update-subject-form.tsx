@@ -1,12 +1,37 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Subject } from "@/types/subject";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckIcon, Loader2Icon } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   Drawer,
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { useMediaQuery } from "@/components/ui/use-media-query";
+import { handleError } from "@/utils/error-utils";
+import { useSubjects } from "@/hooks/use-subjects";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -17,57 +42,44 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { useMediaQuery } from "@/components/ui/use-media-query";
-import { useSubjects } from "@/hooks/use-subjects";
-import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api";
-import { Subject } from "@/types/subject";
-import { handleError } from "@/utils/error-utils";
-import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/24/outline";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { Badge } from "../ui/badge";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "../ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { useTranslations } from "next-intl"; // Import useTranslations
+import { isEqual } from "lodash";
+import { ChevronUpDownIcon } from "@heroicons/react/24/outline";
 
-export const UpdateSubjectForm = ({
-  close,
-  subject,
-}: {
+// match the parent's updateSubjectSchema
+const updateSubjectSchema = z.object({
+  name: z.string().min(1).max(64),
+  coefficient: z.number().min(0).max(1000),
+  parentId: z.string().max(64).nullable().optional(),
+  isMainSubject: z.boolean().optional(),
+  isDisplaySubject: z.boolean().optional(),
+});
+type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
+
+interface UpdateSubjectFormProps {
   close: () => void;
-  subject: Subject;
+  subjectId: string;
+  yearId: string;
+  formData: UpdateSubjectSchema;
+  setFormData: React.Dispatch<React.SetStateAction<UpdateSubjectSchema>>;
+}
+
+export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
+  close,
+  subjectId,
+  formData,
+  setFormData,
+  yearId,
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateSubject");
-  const [openParent, setOpenParent] = useState(false);
-  const [parentInputValue, setParentInputValue] = useState("");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const parentInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!isDesktop && openParent) {
-      setTimeout(() => parentInputRef.current?.focus(), 350);
-    }
-  }, [openParent, isDesktop]);
-
-  const { data: subjects } = useSubjects(subject.yearId);
+  const { data: subjects } = useSubjects(yearId);
 
   // -----------------------------------
   // 1) First, define 'form'
@@ -95,55 +107,43 @@ export const UpdateSubjectForm = ({
 
   const form = useForm<UpdateSubjectSchema>({
     resolver: zodResolver(updateSubjectSchema),
-    defaultValues: {
-      name: subject.name,
-      coefficient: subject.coefficient / 100,
-      parentId: subject.parentId ?? "none",
-      isMainSubject: subject.isMainSubject,
-      isDisplaySubject: subject.isDisplaySubject,
-    },
+    defaultValues: formData,
   });
 
-  // -----------------------------------
-  // 2) Then use 'form' to find selectedParent
-  // -----------------------------------
   const selectedParent = subjects?.find(
     (s) => s.id === form.getValues("parentId")
   );
 
-  // 3) Filter based on parentInputValue
-  const filteredSubjects = subjects
-    ?.filter(
-      (s) =>
-        s.id !== subject.id &&
-        s.name.toLowerCase().includes(parentInputValue.toLowerCase())
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // On mount, sync
+  useEffect(() => {
+    form.reset(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // 4) Use the rest exactly the same
+  // watch => setFormData
+  const watchedValues = form.watch();
+  useEffect(() => {
+    if (!isEqual(watchedValues, formData)) {
+      setFormData(watchedValues);
+    }
+  }, [watchedValues, formData, setFormData]);
+
+  // handle isDisplaySubject => setCoefficient=1
+  const isDisplaySubject = form.watch("isDisplaySubject");
+  const coefficient = form.watch("coefficient");
+  useEffect(() => {
+    if (isDisplaySubject && coefficient !== 1) {
+      form.setValue("coefficient", 1);
+    }
+  }, [isDisplaySubject, coefficient, form]);
+
   const { mutate, isPending } = useMutation({
-    mutationKey: ["update-subject"],
-    mutationFn: async ({
-      name,
-      coefficient,
-      parentId,
-      isMainSubject,
-      isDisplaySubject,
-    }: UpdateSubjectSchema) => {
-      const res = await apiClient.patch(`subjects/${subject.id}`, {
-        json: {
-          name,
-          coefficient,
-          parentId,
-          isMainSubject,
-          isDisplaySubject,
-        },
-      });
-
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
+    mutationKey: ["update-subject", subjectId],
+    mutationFn: async (vals: UpdateSubjectSchema) => {
+      const res = await apiClient.patch(`subjects/${subjectId}`, { json: vals });
+      return (await res.json<{ subject: Subject }>()).subject;
     },
-    onSuccess: () => {
+    onSuccess: (subject) => {
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription"),
@@ -152,35 +152,34 @@ export const UpdateSubjectForm = ({
     },
     onSettled: () => {
       queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["subject", subjectId] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
       queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
       queryClient.invalidateQueries({ queryKey: ["grades"] });
-      queryClient.invalidateQueries({ queryKey: ["subject", subject.id] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
     },
   });
 
-  const isDisplaySubject = form.watch("isDisplaySubject");
-
-  useEffect(() => {
-    if (isDisplaySubject) {
-      form.setValue("coefficient", 1);
-    }
-  }, [isDisplaySubject, form]);
-
   const onSubmit = (values: UpdateSubjectSchema) => {
     mutate(values);
   };
 
-  // Reset parentInputValue when popover/drawer opens
+  // For picking a parent
+  const [openParent, setOpenParent] = useState(false);
   useEffect(() => {
-    if (openParent) {
-      setParentInputValue(selectedParent?.name ?? "");
+    if (!isDesktop && openParent) {
+      setTimeout(() => parentInputRef.current?.focus(), 350);
     }
-  }, [openParent, selectedParent]);
+  }, [openParent, isDesktop]);
+
+  // Filter out self & search
+  const [parentInputValue, setParentInputValue] = useState("");
+  const filteredSubjects = subjects
+    ?.filter((s) => s.id !== subjectId && s.name.toLowerCase().includes(parentInputValue.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="">
@@ -198,7 +197,7 @@ export const UpdateSubjectForm = ({
               <FormItem className="mx-1">
                 <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
-                  <Input type="text" placeholder={subject.name} {...field} />
+                  <Input type="text" placeholder={formData.name} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -215,7 +214,7 @@ export const UpdateSubjectForm = ({
                 <FormControl>
                   <Input
                     type="number"
-                    placeholder={(subject.coefficient / 100).toString()}
+                    placeholder={(formData.coefficient / 100).toString()}
                     {...field}
                     disabled={isPending || isDisplaySubject}
                     onChange={(e) => field.onChange(e.target.value)}
@@ -239,10 +238,7 @@ export const UpdateSubjectForm = ({
                 <div className="col-span-2 flex flex-row gap-4 items-center">
                   <FormLabel>{t("isMainSubject")}</FormLabel>
                   <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
+                    <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -261,10 +257,7 @@ export const UpdateSubjectForm = ({
                 <div className="col-span-2 flex flex-row gap-4 items-center">
                   <FormLabel>{t("isDisplaySubject")}</FormLabel>
                   <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
+                    <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                   </FormControl>
                 </div>
                 <FormMessage />
@@ -301,12 +294,13 @@ export const UpdateSubjectForm = ({
                           aria-expanded={openParent ? "true" : "false"}
                           className="justify-between"
                           onClick={() => setOpenParent(!openParent)}
+                          disabled={isPending}
                         >
-                          {selectedParent
-                            ? selectedParent.name
-                            : field.value === "none"
-                            ? t("chooseParentSubject")
-                            : ""}
+                          {field.value === null
+                            ? t("noParent")
+                            : field.value
+                              ? subjects?.find((s) => s.id === field.value)?.name
+                              : t("chooseParentSubject")}
                           <ChevronUpDownIcon className="opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -374,11 +368,11 @@ export const UpdateSubjectForm = ({
                           className="justify-between"
                           onClick={() => setOpenParent(!openParent)}
                         >
-                          {selectedParent
-                            ? selectedParent.name
-                            : field.value === "none"
-                            ? t("chooseParentSubject")
-                            : ""}
+                          {field.value === null
+                            ? t("noParent")
+                            : field.value
+                              ? subjects?.find((s) => s.id === field.value)?.name
+                              : t("chooseParentSubject")}
                           <ChevronUpDownIcon className="opacity-50" />
                         </Button>
                       </FormControl>
@@ -387,7 +381,7 @@ export const UpdateSubjectForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("chooseParentSubject")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={parentInputRef}

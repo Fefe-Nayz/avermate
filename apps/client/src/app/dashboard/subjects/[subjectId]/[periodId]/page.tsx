@@ -6,7 +6,6 @@ import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
 import { apiClient } from "@/lib/api";
-import { GetOrganizedSubjectsResponse } from "@/types/get-organized-subjects-response";
 import { Subject } from "@/types/subject";
 import {
   addGeneralAverageToSubjects,
@@ -71,7 +70,7 @@ export default function SubjectPage() {
   });
 
   const yearId = isVirtualSubject ? activeId : subject?.yearId || "none";
-  const year = isVirtualSubject ? active : years.find((y) => y.id === subject?.yearId);
+  const year = isVirtualSubject ? active : years?.find((y) => y.id === subject?.yearId);
 
   const {
     data: organizedSubjects,

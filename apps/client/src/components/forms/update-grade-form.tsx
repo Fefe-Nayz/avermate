@@ -1,14 +1,17 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
+import dayjs from "dayjs";
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { CalendarIcon } from "@heroicons/react/24/outline";
+import { Calendar } from "@/components/ui/calendar";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Drawer,
   DrawerContent,
@@ -25,7 +28,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useMediaQuery } from "@/components/ui/use-media-query";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
 import { useToast } from "@/hooks/use-toast";
@@ -33,40 +36,46 @@ import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Grade } from "@/types/grade";
 import { handleError } from "@/utils/error-utils";
-import { CalendarIcon } from "@heroicons/react/24/outline";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import dayjs from "dayjs";
-import "dayjs/locale/fr";
-import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
-import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
-import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { z } from "zod";
-import { Calendar } from "../ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { useMediaQuery } from "../ui/use-media-query";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
+import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
+import { isEqual } from "lodash";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
-
 dayjs.locale("fr");
 
-export const UpdateGradeForm = ({
-  close,
-  grade,
-}: {
-  close: () => void;
-  grade: Grade;
-  }) => {
-  const formatter = useFormatter();
-  const formatDates = useFormatDates(formatter);
+/** The same shape we used in the parent. */
+const updateGradeSchema = z.object({
+  name: z.string().min(1).max(64),
+  outOf: z.number().min(0).max(1000),
+  value: z.number().min(0).max(1000),
+  coefficient: z.number().min(0).max(1000),
+  passedAt: z.date(),
+  subjectId: z.string().min(1).max(64),
+  periodId: z.string().min(1).max(64).nullable(),
+});
+type UpdateGradeSchema = z.infer<typeof updateGradeSchema>;
 
+interface UpdateGradeFormProps {
+  gradeId: string;
+  close: () => void;
+  formData: UpdateGradeSchema;
+  setFormData: React.Dispatch<React.SetStateAction<UpdateGradeSchema>>;
+  yearId: string;
+}
+
+export function UpdateGradeForm({
+  gradeId,
+  close,
+  formData,
+  setFormData,
+  yearId
+}: UpdateGradeFormProps) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateGrade");
   const toaster = useToast();
@@ -82,17 +91,10 @@ export const UpdateGradeForm = ({
   const [periodInputValue, setPeriodInputValue] = useState("");
   const [subjectInputValue, setSubjectInputValue] = useState("");
 
-  // Track if period was manually selected
-  const [isManualPeriod, setIsManualPeriod] = useState(false);
+  const { data: subjects } = useSubjects(yearId);
 
-  // Store initial date so we only apply date->period logic after date changes
-  const [initialDate] = useState(grade.passedAt);
+  const { data: periods } = usePeriods(yearId);
 
-  const { data: subjects } = useSubjects(grade.yearId);
-
-  const { data: periods } = usePeriods(grade.yearId);
-
-  // Feedback schema validation
   const updateGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     outOf: z.coerce.number().min(0, t("outOfMin")).max(1000, t("outOfMax")),
@@ -115,34 +117,26 @@ export const UpdateGradeForm = ({
 
   type UpdateGradeSchema = z.infer<typeof updateGradeSchema>;
 
-  const determinePeriodId = (
-    date: Date | null | undefined,
-    periods:
-      | { id: string; name: string; startAt: string; endAt: string }[]
-      | undefined
-  ) => {
-    if (!date || !periods) return "";
-    const formattedDate = dayjs(date);
-    const matchedPeriod = periods.find(
-      (period) =>
-        formattedDate.isSameOrAfter(dayjs(period.startAt)) &&
-        formattedDate.isSameOrBefore(dayjs(period.endAt))
+  // This is how we pick an automatic period
+  function determinePeriodId(date: Date | null | undefined, allPeriods: { id: string; name: string; startAt: string; endAt: string }[] | undefined) {
+    if (!date || !allPeriods) return "";
+    const d = dayjs(date);
+    const matched = allPeriods.find(
+      (p) => d.isSameOrAfter(dayjs(p.startAt)) && d.isSameOrBefore(dayjs(p.endAt))
     );
-    return matchedPeriod ? matchedPeriod.id : "full-year";
-  };
+    return matched ? matched.id : "full-year";
+  }
 
   const { mutate, isPending } = useMutation({
-    mutationKey: ["update-grade"],
-    mutationFn: async (values: UpdateGradeSchema) => {
+    mutationKey: ["update-grade", gradeId],
+    mutationFn: async (vals: UpdateGradeSchema) => {
+      // Convert "full-year" => null
       const payload = {
-        ...values,
-        periodId: values.periodId === "full-year" ? null : values.periodId,
+        ...vals,
+        periodId: vals.periodId === "full-year" ? null : vals.periodId,
       };
-      const res = await apiClient.patch(`grades/${grade.id}`, {
-        json: payload,
-      });
-      const data = await res.json<{ grade: Grade }>();
-      return data.grade;
+      const res = await apiClient.patch(`grades/${gradeId}`, { json: payload });
+      return (await res.json<{ grade: Grade }>()).grade;
     },
     onSuccess: () => {
       toaster.toast({
@@ -155,7 +149,7 @@ export const UpdateGradeForm = ({
     onSettled() {
       queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["grades"] });
-      queryClient.invalidateQueries({ queryKey: ["grades", grade.id] });
+      queryClient.invalidateQueries({ queryKey: ["grade", gradeId] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
       queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
@@ -166,40 +160,52 @@ export const UpdateGradeForm = ({
   });
 
   const { data: years } = useYears();
-  const year = years?.find((y) => y.id === grade?.yearId);
+  const year = years?.find((y) => y.id === yearId);
 
+  // Setup our form with parent's data
   const form = useForm<UpdateGradeSchema>({
     resolver: zodResolver(updateGradeSchema),
-    defaultValues: {
-      name: grade.name,
-      outOf: grade.outOf / 100,
-      value: grade.value / 100,
-      coefficient: grade.coefficient / 100,
-      passedAt: new Date(grade.passedAt),
-      subjectId: grade.subjectId,
-      periodId: grade.periodId === null ? "full-year" : grade.periodId,
-    },
+    defaultValues: formData,
   });
 
-  const watchedPassedAt = useWatch({ control: form.control, name: "passedAt" });
+  // On mount, reset
+  useEffect(() => {
+    form.reset(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // When the date changes, if not manually selected and if actually changed from initial, update the periodId
+  // Watch + sync
+  const watchedValues = form.watch();
+  useEffect(() => {
+    if (!isEqual(watchedValues, formData)) {
+      setFormData(watchedValues);
+    }
+  }, [watchedValues, formData, setFormData]);
+
+  // Auto select period if date changes + user hasn't manually chosen
+  const [isManualPeriod, setIsManualPeriod] = useState(false);
+  const watchedPassedAt = useWatch({ control: form.control, name: "passedAt" });
+  const [initialDate] = useState(formData.passedAt); // store original date
+
   useEffect(() => {
     if (
       watchedPassedAt &&
       initialDate &&
-      new Date(watchedPassedAt).getTime() !== new Date(initialDate).getTime() &&
+      watchedPassedAt.getTime() !== initialDate.getTime() &&
       !isManualPeriod &&
       periods
     ) {
-      const matchedPeriodId = determinePeriodId(watchedPassedAt, periods);
-      const currentPeriodId = form.getValues("periodId");
-
-      if (matchedPeriodId !== currentPeriodId) {
-        form.setValue("periodId", matchedPeriodId, { shouldValidate: true });
+      const matchedId = determinePeriodId(watchedPassedAt, periods);
+      const current = form.getValues("periodId");
+      if (matchedId !== current) {
+        form.setValue("periodId", matchedId, { shouldValidate: true });
       }
     }
   }, [watchedPassedAt, periods, form, isManualPeriod, initialDate]);
+
+  const onSubmit = (vals: UpdateGradeSchema) => {
+    mutate(vals);
+  };
 
   useEffect(() => {
     if (!isDesktop && openPeriod) {
@@ -216,18 +222,13 @@ export const UpdateGradeForm = ({
   const selectedPeriodValue = form.getValues("periodId");
   const selectedPeriod =
     selectedPeriodValue && selectedPeriodValue !== "full-year"
-      ? periods?.find((p) => p.id === selectedPeriodValue)
-      : null;
+    ? periods?.find((p) => p.id === selectedPeriodValue)
+    : null;
 
   const selectedSubject = subjects?.find(
     (subject) => subject.id === form.getValues("subjectId")
   );
 
-  const onSubmit = (values: UpdateGradeSchema) => {
-    mutate(values);
-  };
-
-  // Filter periods based on input
   const filteredPeriods = periods
     ?.filter((p) =>
       p.name.toLowerCase().includes(periodInputValue.toLowerCase())
@@ -361,7 +362,7 @@ export const UpdateGradeForm = ({
                         )}
                       >
                         {field.value
-                          ? formatDates.formatLong(new Date(field.value))
+                          ? useFormatDates(useFormatter()).formatLong(new Date(field.value))
                           : t("chooseDate")}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
@@ -410,6 +411,8 @@ export const UpdateGradeForm = ({
                           role="combobox"
                           aria-expanded={openPeriod ? "true" : "false"}
                           className="justify-between"
+                          disabled={isPending}
+                          onClick={() => setOpenPeriod(!openPeriod)}
                         >
                           {selectedPeriod
                             ? selectedPeriod.name
@@ -480,6 +483,8 @@ export const UpdateGradeForm = ({
                           role="combobox"
                           aria-expanded={openPeriod ? "true" : "false"}
                           className="justify-between"
+                          disabled={isPending}
+                          onClick={() => setOpenPeriod(!openPeriod)}
                         >
                           {selectedPeriod
                             ? selectedPeriod.name
@@ -494,10 +499,11 @@ export const UpdateGradeForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={periodInputRef}
+                            autoFocus
                             placeholder={t("choosePeriod")}
                             className="h-9"
                             onValueChange={setPeriodInputValue}
@@ -573,6 +579,8 @@ export const UpdateGradeForm = ({
                           role="combobox"
                           aria-expanded={openSubject ? "true" : "false"}
                           className="justify-between"
+                          disabled={isPending}
+                          onClick={() => setOpenSubject(!openSubject)}
                         >
                           {selectedSubject
                             ? selectedSubject.name
@@ -624,6 +632,8 @@ export const UpdateGradeForm = ({
                           role="combobox"
                           aria-expanded={openSubject ? "true" : "false"}
                           className="justify-between"
+                          disabled={isPending}
+                          onClick={() => setOpenSubject(!openSubject)}
                         >
                           {selectedSubject
                             ? selectedSubject.name
@@ -636,10 +646,11 @@ export const UpdateGradeForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={subjectInputRef}
+                            autoFocus
                             placeholder={t("chooseSubject")}
                             className="h-9"
                             value={subjectInputValue}

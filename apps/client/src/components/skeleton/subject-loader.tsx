@@ -49,7 +49,10 @@ export default function subjectLoader(t: any) {
       <div className="flex justify-between items-center">
         <Skeleton className="h-9 w-1/2" />
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 md:gap-4">
+          <Button className="md:hidden" size={"icon"} disabled>
+            <PlusCircleIcon className="size-4" />
+          </Button>
           <Button variant="outline" className="hidden md:flex" disabled>
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addGrade")}

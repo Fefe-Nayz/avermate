@@ -10,7 +10,7 @@ import {
   CredenzaTrigger,
 } from "@/components/ui/credenza";
 import { useState } from "react";
-import { AddGradeForm } from "../forms/add-grade-form";
+import { AddGradeForm, AddGradeSchema } from "../forms/add-grade-form";
 import { useTranslations } from "next-intl";
 
 export default function AddGradeDialog({
@@ -25,8 +25,29 @@ export default function AddGradeDialog({
   const t = useTranslations("Dashboard.Dialogs.AddGrade");
   const [open, setOpen] = useState(false);
 
+  // The same defaults you had in the original code
+  const EMPTY_FORM_DATA: AddGradeSchema = {
+    name: "",
+    outOf: undefined,
+    value: undefined,
+    coefficient: undefined,
+    passedAt: undefined, 
+    subjectId: parentId || "",
+    periodId: null, 
+  };
+
+  const [formData, setFormData] = useState<AddGradeSchema>(EMPTY_FORM_DATA);
+
   return (
-    <Credenza open={open} onOpenChange={setOpen}>
+    <Credenza
+      open={open}
+      onOpenChange={(newOpen) => {
+        setOpen(newOpen);
+        if (!newOpen) {
+          setFormData(EMPTY_FORM_DATA);
+        }
+      }}
+    >
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
       <CredenzaContent>
         <CredenzaHeader>
@@ -34,7 +55,15 @@ export default function AddGradeDialog({
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
-          <AddGradeForm yearId={yearId} close={() => setOpen(false)} parentId={parentId} />
+          {open && (
+            <AddGradeForm
+              close={() => setOpen(false)}
+              parentId={parentId}
+              formData={formData}
+              setFormData={setFormData}
+              yearId={yearId}
+            />
+          )}
         </CredenzaBody>
       </CredenzaContent>
     </Credenza>

@@ -85,7 +85,9 @@ const updateGradeBodySchema = z.object({
     .max(1000 * 10)
     .transform((f) => Math.round(f * 100))
     .optional(),
-  passedAt: z.coerce.date().max(new Date()).optional(),
+  passedAt: z.coerce.date().refine((date) => date <= new Date(), {
+    message: "Date cannot be in the future",
+  }).optional(),
   subjectId: z.string().min(1).max(64).optional(),
   periodId: z.string().min(1).max(64).optional().nullable(),
 });

@@ -24,6 +24,7 @@ import { useSubjects } from "@/hooks/use-subjects";
 import { useYears } from "@/hooks/use-years";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { PlusCircleIcon } from "@heroicons/react/24/outline";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
@@ -114,7 +115,6 @@ export default function GradesPage() {
 
         <div className="flex gap-2 lg:hidden">
           <AddGradeButton yearId={activeId} />
-
           <MobileAddButtons yearId={activeId} />
         </div>
       </div>
@@ -125,6 +125,8 @@ export default function GradesPage() {
       <Tabs
         value={selectedTab}
         onValueChange={(value) => {
+          //delete url anchor
+          window.history.replaceState(null, "", window.location.pathname);
           setSelectedTab(value);
           localStorage.setItem("selectedTab", value);
         }}
@@ -157,6 +159,8 @@ export default function GradesPage() {
           <Select
             value={selectedTab}
             onValueChange={(value) => {
+              //delete url anchor
+              window.history.replaceState(null, "", window.location.pathname);
               setSelectedTab(value);
               localStorage.setItem("selectedTab", value);
             }}

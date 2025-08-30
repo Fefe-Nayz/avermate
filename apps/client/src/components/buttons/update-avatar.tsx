@@ -33,7 +33,7 @@ const UpdateAvatar = () => {
   const [zoom, setZoom] = useState<number>(1);
 
   // Ref to store the resolve function of the cropping promise
-  const croppingPromiseRef = useRef<(file: File | null) => void>();
+  const croppingPromiseRef = useRef<((file: File | null) => void) | null>(null);
 
   // Ref to store the current object URL for cleanup
   const objectUrlRef = useRef<string | null>(null);

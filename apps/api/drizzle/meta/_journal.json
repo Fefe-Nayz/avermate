@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1734191532078,
-      "tag": "0000_robust_rumiko_fujikawa",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1734733093703,
-      "tag": "0001_mixed_alice",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1735773380967,
-      "tag": "0002_rainy_mentallo",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1756555333883,
-      "tag": "0003_goofy_miracleman",
+      "when": 1756597818083,
+      "tag": "0000_yellow_leo",
       "breakpoints": true
     }
   ]

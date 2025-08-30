@@ -22,30 +22,31 @@ export const PresetList = ({
   close,
   presets,
   yearId,
+  state,
+  setState,
 }: {
   close: () => void;
-  presets: Preset[];
   yearId: string;
+  presets: Preset[];
+  state: { searchTerm: string };
+  setState: React.Dispatch<React.SetStateAction<{ searchTerm: string }>>;
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Onboarding.Step2.Presets");
   const toaster = useToast();
   const queryClient = useQueryClient();
-
-  // Add search state
-  const [searchTerm, setSearchTerm] = useState("");
   const [loadingPresetId, setLoadingPresetId] = useState<string | null>(null);
 
   // Filter presets based on search term
   const filteredPresets = presets.filter(
     (preset) =>
-      preset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      preset.description.toLowerCase().includes(searchTerm.toLowerCase())
+      preset.name.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
+      preset.description.toLowerCase().includes(state.searchTerm.toLowerCase())
   );
 
   // Define the mutation to apply a preset
   const mutation = useMutation<
-    any, // Replace 'any' with your expected response type
+    any,
     Error,
     { presetId: string }
   >({
@@ -91,8 +92,8 @@ export const PresetList = ({
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder={t("search")}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          value={state.searchTerm}
+          onChange={(e) => setState(prev => ({ ...prev, searchTerm: e.target.value }))}
           className="pl-9"
         />
       </div>
@@ -124,8 +125,8 @@ export const PresetList = ({
         ) : (
           <div className="text-center py-8">
             <p className="text-muted-foreground text-sm">
-              {searchTerm
-                ? t("noSearchResults", { search: searchTerm })
+              {state.searchTerm
+                ? t("noSearchResults", { search: state.searchTerm })
                 : t("noPresets")}
             </p>
           </div>

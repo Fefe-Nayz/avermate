@@ -33,35 +33,55 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
+import { isEqual } from "lodash";
+import React, { useEffect } from "react";
+
+interface AddPeriodFormProps {
+  close: () => void;
+  periods: Period[];
+  formData: {
+    name: string;
+    dateRange: {
+      from?: Date;
+      to?: Date;
+    };
+    isCumulative?: boolean;
+  };
+  setFormData: React.Dispatch<
+    React.SetStateAction<{
+      name: string;
+      dateRange: { from?: Date; to?: Date };
+      isCumulative?: boolean;
+    }>
+  >;
+  yearId: string;
+}
 
 export const AddPeriodForm = ({
   close,
   periods,
+  formData,
+  setFormData,
   yearId,
-}: {
-  close: () => void;
-  periods: Period[];
-  yearId: string;
-}) => {
+}: AddPeriodFormProps) => {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddPeriod");
+
   const addPeriodSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     dateRange: z
       .object({
-        from: z.date({
-          required_error: t("startDateRequired"),
-        }),
-        to: z.date({
-          required_error: t("endDateRequired"),
-        }),
+        from: z.date({ required_error: t("startDateRequired") }),
+        to: z.date({ required_error: t("endDateRequired") }),
       })
       .refine(
         (data) =>
-          isBefore(data.from, data.to) ||
-          data.from.getTime() === data.to.getTime(),
+          data.from &&
+          data.to &&
+          (isBefore(data.from, data.to) ||
+            data.from.getTime() === data.to.getTime()),
         {
           message: t("startDateBeforeEndDate"),
           path: ["to"],
@@ -69,8 +89,8 @@ export const AddPeriodForm = ({
       ),
     isCumulative: z.boolean().optional(),
   });
-
   type AddPeriodSchema = z.infer<typeof addPeriodSchema>;
+
   const toaster = useToast();
   const queryClient = useQueryClient();
 
@@ -85,15 +105,12 @@ export const AddPeriodForm = ({
           isCumulative,
         },
       });
-
-      const data = await res.json();
-      return data;
+      return await res.json();
     },
     onSuccess: () => {
       toaster.toast({
         description: t("successDescription"),
       });
-
       close();
     },
     onSettled: () => {
@@ -110,6 +127,7 @@ export const AddPeriodForm = ({
 
   const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
+  // Keep your original defaults here:
   const form = useForm<AddPeriodSchema>({
     resolver: zodResolver(addPeriodSchema),
     defaultValues: {
@@ -125,38 +143,45 @@ export const AddPeriodForm = ({
   const { data: years } = useYears();
 
   const year = years?.find((y) => y.id === yearId);
+  // 1) On mount, reset with parent's data
+  useEffect(() => {
+    form.reset(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 2) Watch everything
+  const watchedValues = form.watch();
+
+  // 3) If changed, sync to parent
+  useEffect(() => {
+    if (!isEqual(watchedValues, formData)) {
+      setFormData(watchedValues);
+    }
+  }, [watchedValues, formData, setFormData]);
 
   const onSubmit = (values: AddPeriodSchema) => {
-    const { from: startAt, to: endAt } = values.dateRange;
+    // Additional overlap checks
+    if (values.dateRange.from && values.dateRange.to) {
+      const normalizedStartAt = startOfDay(values.dateRange.from);
+      const normalizedEndAt = startOfDay(values.dateRange.to);
 
-    const normalizedStartAt = startOfDay(startAt);
-    const normalizedEndAt = startOfDay(endAt);
-
-    // Check overlap
-    const overlappingPeriod = periods.find((period) => {
-      const normalizedPeriodStartAt = startOfDay(period.startAt);
-      const normalizedPeriodEndAt = startOfDay(period.endAt);
-
-      return (
-        isWithinInterval(normalizedStartAt, {
-          start: normalizedPeriodStartAt,
-          end: normalizedPeriodEndAt,
-        }) ||
-        isWithinInterval(normalizedEndAt, {
-          start: normalizedPeriodStartAt,
-          end: normalizedPeriodEndAt,
-        }) ||
-        (normalizedPeriodStartAt >= normalizedStartAt &&
-          normalizedPeriodEndAt <= normalizedEndAt)
-      );
-    });
-
-    if (overlappingPeriod) {
-      toaster.toast({
-        title: t("overlappingPeriods"),
-        variant: "destructive",
+      const overlappingPeriod = periods.find((p) => {
+        const pStart = startOfDay(p.startAt);
+        const pEnd = startOfDay(p.endAt);
+        return (
+          isWithinInterval(normalizedStartAt, { start: pStart, end: pEnd }) ||
+          isWithinInterval(normalizedEndAt, { start: pStart, end: pEnd }) ||
+          (pStart >= normalizedStartAt && pEnd <= normalizedEndAt)
+        );
       });
-      return;
+
+      if (overlappingPeriod) {
+        toaster.toast({
+          title: t("overlappingPeriods"),
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     mutate(values);
@@ -201,7 +226,7 @@ export const AddPeriodForm = ({
                     <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
-                          variant={"outline"}
+                          variant="outline"
                           className={
                             !field.value?.from ? "text-muted-foreground" : ""
                           }
@@ -219,7 +244,6 @@ export const AddPeriodForm = ({
                           ) : (
                             <span>{t("selectDateRange")}</span>
                           )}
-
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -263,14 +287,12 @@ export const AddPeriodForm = ({
                   <FormLabel>{t("isCumulative")}</FormLabel>
                   <FormControl>
                     <Switch
-                      checked={field.value}
+                      checked={field.value ?? false}
                       onCheckedChange={field.onChange}
                     />
                   </FormControl>
                 </div>
-                <FormDescription>
-                  {t("isCumulativeDescription")}
-                </FormDescription>
+                <FormDescription>{t("isCumulativeDescription")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { type TickProps } from "@/components/charts/global-average-chart";
 import AddGradeDialog from "@/components/dialogs/add-grade-dialog";
 import { SubjectEmptyState } from "@/components/empty-states/subject-empty-state";
 import { Button } from "@/components/ui/button";
@@ -11,14 +12,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  ChartTooltipContent as BaseChartTooltipContent,
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Separator } from "@/components/ui/separator";
 import { useLocalizedSubjects } from "@/data/mock";
 import { average, averageOverTime } from "@/utils/average";
+import { useFormatDates } from "@/utils/format";
 import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import { useFormatter, useTranslations } from "next-intl";
+import * as React from "react";
 import {
   Area,
   AreaChart,
@@ -30,9 +34,98 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useTranslations } from "next-intl";
-import { useFormatDates } from "@/utils/format";
-import { useFormatter } from "next-intl";
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    name?: string;
+    dataKey?: string;
+    color?: string;
+  }>;
+  label?: string;
+  className?: string;
+  valueFormatter?: (value: number) => string;
+}
+
+const CustomTooltipContent: React.FC<CustomTooltipProps> = ({
+  active,
+  payload,
+  label,
+  className,
+  valueFormatter = (value) => value.toString(),
+}) => {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  return (
+    <BaseChartTooltipContent
+      active={active}
+      payload={payload.map((item) => ({
+        name: item.name,
+        value:
+          typeof item.value === "number"
+            ? valueFormatter(item.value)
+            : item.value,
+        color: item.color,
+      }))}
+      label={label}
+      className={className}
+    />
+  );
+};
+
+const renderPolarAngleAxis = (props: TickProps) => {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const cx = Number(props.cx ?? 0);
+  const cy = Number(props.cy ?? 0);
+
+  const radius = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+  const angle = Math.atan2(y - cy, x - cx);
+
+  const truncateLength =
+    window.innerWidth < 450
+      ? 5
+      : window.innerWidth < 1024
+      ? 10
+      : window.innerWidth < 1300
+      ? 5
+      : window.innerWidth < 2100
+      ? 9
+      : 12;
+
+  const value = props.payload?.value ?? "";
+  const truncatedLabel =
+    value.length > truncateLength
+      ? `${value.slice(0, truncateLength)}...`
+      : value;
+
+  const labelRadius = radius - truncatedLabel.length * 3 + 10;
+  const nx = cx + labelRadius * Math.cos(angle);
+  const ny = cy + labelRadius * Math.sin(angle);
+  let rotation = (angle * 180) / Math.PI;
+
+  if (rotation > 90) {
+    rotation -= 180;
+  } else if (rotation < -90) {
+    rotation += 180;
+  }
+
+  return (
+    <text
+      x={nx}
+      y={ny}
+      textAnchor="middle"
+      transform={`rotate(${rotation}, ${nx}, ${ny})`}
+      fontSize={12}
+      fill="#a1a1aa"
+    >
+      {truncatedLabel}
+    </text>
+  );
+};
 
 export const MockAverageChart = () => {
   const formatter = useFormatter();
@@ -94,84 +187,22 @@ export const MockAverageChart = () => {
 
   const radarData = subjectAverages;
 
-  const renderPolarAngleAxis = ({
-    payload,
-    x,
-    y,
+  // Custom dot component
+  const CustomDot = ({
     cx,
     cy,
+    index,
+    stroke,
+    activeTooltipIndex,
   }: {
-    payload: { value: string };
-    x: number;
-    y: number;
-    cx: number;
-    cy: number;
+    cx?: number;
+    cy?: number;
+    index?: number;
+    stroke?: string;
+    activeTooltipIndex?: number | null;
   }) => {
-    // Calculate the angle in radians between the label position and the center
-    const radius = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-    const angle = Math.atan2(y - cy, x - cx);
-
-    // Determine the truncate length based on screen width
-    const truncateLength =
-      window.innerWidth < 450
-        ? 5
-        : window.innerWidth < 1024
-        ? 10
-        : window.innerWidth < 1300
-        ? 5
-        : window.innerWidth < 2100
-        ? 9
-        : 12;
-
-    const truncatedLabel =
-      payload.value.length > truncateLength
-        ? `${payload.value.slice(0, truncateLength)}...`
-        : payload.value;
-
-    // Adjust the radius to move the labels inside
-    const labelRadius = radius - truncatedLabel.length * 3 + 10;
-
-    // Calculate new label positions
-    const nx = cx + labelRadius * Math.cos(angle);
-    const ny = cy + labelRadius * Math.sin(angle);
-
-    // Convert angle to degrees for rotation
-    let rotation = (angle * 180) / Math.PI;
-
-    // Flip text if rotation is beyond 90 degrees
-    if (rotation > 90) {
-      rotation -= 180;
-    } else if (rotation < -90) {
-      rotation += 180;
-    }
-
-    return (
-      <text
-        x={nx}
-        y={ny}
-        textAnchor="middle"
-        transform={`rotate(${rotation}, ${nx}, ${ny})`}
-        fontSize={12}
-        fill="#a1a1aa"
-      >
-        {truncatedLabel}
-      </text>
-    );
-  };
-
-  // Custom dot component
-  const CustomDot = (props: any) => {
-    const { cx, cy, index, stroke, activeTooltipIndex } = props;
     if (activeTooltipIndex !== null && index === activeTooltipIndex) {
-      return (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={4} // Adjust size as needed
-          fill={stroke}
-          opacity={0.8}
-        />
-      );
+      return <circle cx={cx} cy={cy} r={4} fill={stroke} opacity={0.8} />;
     }
     return null;
   };
@@ -207,10 +238,8 @@ export const MockAverageChart = () => {
       <CardHeader>
         <CardTitle>{t("overallAverage")}</CardTitle>
       </CardHeader>
-
       <CardContent>
         <div className="flex items-start lg:space-x-4 text-sm flex-wrap lg:flex-nowrap h-fit justify-center gap-[10px] flex-col lg:flex-row pt-2">
-          {/* Area Chart Section */}
           <div className="flex flex-col items-center lg:items-start grow min-w-0 my-0 mx-auto w-[100%] lg:w-[60%]">
             <CardDescription className="pb-8">
               {t("visualizeOverallAverage")}
@@ -237,18 +266,13 @@ export const MockAverageChart = () => {
                 <ChartTooltip
                   filterNull={false}
                   cursor={false}
-                  content={
-                    <ChartTooltipContent
-                      chartData={chartData}
-                      findNearestNonNull={true}
-                      dataKey="average"
-                      labelFormatter={(value) => value}
-                      valueFormatter={(val) => val.toFixed(2)}
+                  content={(props) => (
+                    <CustomTooltipContent
+                      {...props}
+                      label={props.label ? props.label.toString() : undefined}
+                      valueFormatter={(value) => value.toFixed(2)}
                     />
-                  }
-                  labelFormatter={(value) =>
-                    formatDates.formatShort(new Date(value))
-                  }
+                  )}
                 />
                 <defs>
                   <linearGradient id="fillAverage" x1="0" y1="0" x2="0" y2="1">
@@ -259,14 +283,13 @@ export const MockAverageChart = () => {
                 <Area
                   dataKey="average"
                   type="monotone"
-                  fill="url(#fillAverage)"
+                  fill="#2662d9"
                   stroke="#2662d9"
+                  fillOpacity={0.1}
+                  strokeWidth={2}
                   connectNulls={true}
+                  dot={false}
                   activeDot={false}
-                  dot={(props) => {
-                    const { key, ...rest } = props;
-                    return <CustomDot key={key} {...rest} />;
-                  }}
                 />
               </AreaChart>
             </ChartContainer>
@@ -277,7 +300,6 @@ export const MockAverageChart = () => {
             className="hidden lg:block h-[360px]"
           />
 
-          {/* Radar Chart Section */}
           <div className="flex flex-col items-center lg:space-y-2 lg:w-[40%] m-auto lg:pt-0 pt-8 w-[100%]">
             <CardDescription>{t("visualizeAverageBySubject")}</CardDescription>
             <ChartContainer
@@ -289,16 +311,19 @@ export const MockAverageChart = () => {
                 <PolarAngleAxis dataKey="subject" tick={renderPolarAngleAxis} />
                 <Radar
                   dataKey="average"
+                  fillOpacity={0.1}
                   stroke="#2662d9"
                   fill="#2662d9"
-                  fillOpacity={0.6}
                 />
                 <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      valueFormatter={(val) => val.toFixed(2)}
+                  cursor={false}
+                  content={(props) => (
+                    <CustomTooltipContent
+                      {...props}
+                      label={props.label ? props.label.toString() : undefined}
+                      valueFormatter={(value) => value.toFixed(2)}
                     />
-                  }
+                  )}
                 />
               </RadarChart>
             </ChartContainer>

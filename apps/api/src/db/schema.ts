@@ -18,7 +18,9 @@ export const years = sqliteTable("years", {
   defaultOutOf: integer().notNull(),
   // createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   userId: text().notNull().references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-});
+}, (t) => ({
+  userIdIdx: index("years_user_id_idx").on(t.userId),
+}));
 
 export const subjects = sqliteTable(
   "subjects",
@@ -56,7 +58,9 @@ export const subjects = sqliteTable(
     })
       .onDelete("cascade")
       .onUpdate("cascade"),
-  })
+    userIdIdx: index("subjects_user_id_idx").on(t.userId),
+    yearIdIdx: index("subjects_year_id_idx").on(t.yearId),
+  }),
 );
 
 export const subjectsRelations = relations(subjects, ({ one, many }) => ({
@@ -97,7 +101,10 @@ export const periods = sqliteTable("periods", {
   yearId: text()
     .notNull()
     .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
-});
+}, (t) => ({
+  userIdIdx: index("periods_user_id_idx").on(t.userId),
+  yearIdIdx: index("periods_year_id_idx").on(t.yearId),
+}));
 
 
 export const grades = sqliteTable("grades", {
@@ -130,7 +137,11 @@ export const grades = sqliteTable("grades", {
   yearId: text()
     .notNull()
     .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
-});
+}, (t) => ({
+  userIdIdx: index("grades_user_id_idx").on(t.userId),
+  subjectIdIdx: index("grades_subject_id_idx").on(t.subjectId),
+  yearIdIdx: index("grades_year_id_idx").on(t.yearId),
+}));
 
 export const gradesRelations = relations(grades, ({ one }) => ({
   subject: one(subjects, {
@@ -166,15 +177,17 @@ export const users = sqliteTable("users", {
 
   updatedAt: integer({ mode: "timestamp" }).notNull(),
   createdAt: integer({ mode: "timestamp" }).notNull(),
-});
+}, (t) => ({
+  emailIdx: index("users_email_idx").on(t.email),
+}));
 
 export const usersRelations = relations(users, ({ many }) => ({
   subjects: many(subjects),
   grades: many(grades),
   sessions: many(sessions),
   accounts: many(accounts),
-  cardTemplates: many(cardTemplates),
-  cardLayouts: many(cardLayouts),
+  // cardTemplates: many(cardTemplates),
+  // cardLayouts: many(cardLayouts),
 }));
 
 export const sessions = sqliteTable("sessions", {
@@ -183,7 +196,7 @@ export const sessions = sqliteTable("sessions", {
     .primaryKey()
     .$defaultFn(() => generateId("ses", 32)),
 
-  token: text().notNull(),
+  token: text().unique().notNull(),
 
   expiresAt: integer({ mode: "timestamp" }).notNull(),
   createdAt: integer({ mode: "timestamp" }).notNull(),
@@ -195,7 +208,10 @@ export const sessions = sqliteTable("sessions", {
   userId: text()
     .notNull()
     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-});
+}, (t) => ({
+  userIdIdx: index("sessions_user_id_idx").on(t.userId),
+  tokenIdx: index("sessions_token_idx").on(t.token),
+}));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
@@ -229,7 +245,13 @@ export const accounts = sqliteTable("accounts", {
   updatedAt: integer({ mode: "timestamp" }).notNull(),
 
   password: text(),
-});
+}, (t) => ({
+  userIdIdx: index("accounts_user_id_idx").on(t.userId),
+  accountIdProviderIdIdx: index("accounts_account_id_provider_id_idx").on(
+    t.accountId,
+    t.providerId,
+  ),
+}));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
   user: one(users, {
@@ -272,53 +294,55 @@ export const customAverages = sqliteTable("custom_averages", {
   yearId: text()
     .notNull()
     .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
-});
-
-export const cardTemplates = sqliteTable("card_templates", {
-  id: text()
-    .notNull()
-    .primaryKey()
-    .$defaultFn(() => generateId("ct")),
-
-  type: text().notNull(), // 'built_in' or 'custom'
-  identifier: text().notNull(),
-
-  config: text().notNull(), // JSON string containing title, description template, etc.
-
-  userId: text() // Only for custom templates
-    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-
-  createdAt: integer({ mode: "timestamp" }).notNull(),
-});
-
-export const cardTemplatesRelations = relations(cardTemplates, ({ one }) => ({
-  user: one(users, {
-    fields: [cardTemplates.userId],
-    references: [users.id],
-  }),
+}, (t) => ({
+  yearIdIdx: index("custom_averages_year_id_idx").on(t.yearId),
 }));
 
-export const cardLayouts = sqliteTable("card_layouts", {
-  id: text()
-    .notNull()
-    .primaryKey()
-    .$defaultFn(() => generateId("cl")),
+// export const cardTemplates = sqliteTable("card_templates", {
+//   id: text()
+//     .notNull()
+//     .primaryKey()
+//     .$defaultFn(() => generateId("ct")),
 
-  userId: text()
-    .notNull()
-    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+//   type: text().notNull(), // 'built_in' or 'custom'
+//   identifier: text().notNull(),
 
-  page: text().notNull(), // 'dashboard', 'grade', or 'subject'
+//   config: text().notNull(), // JSON string containing title, description template, etc.
 
-  cards: text().notNull(), // JSON array of card positions and customizations
+//   userId: text() // Only for custom templates
+//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
 
-  createdAt: integer({ mode: "timestamp" }).notNull(),
-  updatedAt: integer({ mode: "timestamp" }).notNull(),
-});
+//   createdAt: integer({ mode: "timestamp" }).notNull(),
+// });
 
-export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
-  user: one(users, {
-    fields: [cardLayouts.userId],
-    references: [users.id],
-  }),
-}));
+// export const cardTemplatesRelations = relations(cardTemplates, ({ one }) => ({
+//   user: one(users, {
+//     fields: [cardTemplates.userId],
+//     references: [users.id],
+//   }),
+// }));
+
+// export const cardLayouts = sqliteTable("card_layouts", {
+//   id: text()
+//     .notNull()
+//     .primaryKey()
+//     .$defaultFn(() => generateId("cl")),
+
+//   userId: text()
+//     .notNull()
+//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+
+//   page: text().notNull(), // 'dashboard', 'grade', or 'subject'
+
+//   cards: text().notNull(), // JSON array of card positions and customizations
+
+//   createdAt: integer({ mode: "timestamp" }).notNull(),
+//   updatedAt: integer({ mode: "timestamp" }).notNull(),
+// });
+
+// export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
+//   user: one(users, {
+//     fields: [cardLayouts.userId],
+//     references: [users.id],
+//   }),
+// }));

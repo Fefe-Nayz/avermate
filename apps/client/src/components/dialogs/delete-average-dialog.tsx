@@ -24,7 +24,7 @@ import {
 } from "../ui/alert-dialog";
 import { useTranslations } from "next-intl";
 
-export default function DeleteAverageDialog({ average }: { average: Average }) {
+export default function DeleteAverageDialog({ average, averageId, averageName }: { average?: Average, averageId?: string, averageName?: string }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteAverage");
   const errorTranslations = useTranslations("Errors");
   const [open, setOpen] = useState(false);
@@ -33,9 +33,9 @@ export default function DeleteAverageDialog({ average }: { average: Average }) {
   const toaster = useToast();
 
   const { mutate, isPending } = useMutation({
-    mutationKey: ["average", "delete", average.id],
+    mutationKey: ["average", "delete", averageId || average?.id],
     mutationFn: async () => {
-      const res = await apiClient.delete(`averages/${average.id}`);
+      const res = await apiClient.delete(`averages/${averageId || average?.id}`);
       const data = await res.json<{ customAverage: Average }>();
       return data.customAverage;
     },
@@ -74,10 +74,10 @@ export default function DeleteAverageDialog({ average }: { average: Average }) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t("title", { name: average.name })}
+            {t("title", { name: average?.name || averageName })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("description", { name: average.name })}
+            {t("description", { name: average?.name || averageName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

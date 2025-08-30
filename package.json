@@ -14,5 +14,9 @@
   ],
   "dependencies": {
     "uploadthing": "https://pkg.pr.new/pingdotgg/uploadthing@1099"
+  },
+  "overrides": {
+    "@reduxjs/toolkit": "2.2.6",
+    "react-redux": "9.1.2"
   }
 }

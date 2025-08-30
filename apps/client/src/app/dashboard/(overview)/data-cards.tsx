@@ -11,6 +11,8 @@ import {
   getSubjectAverageComparison,
   getWorstGrade,
   getWorstSubject,
+  addGeneralAverageToSubjects,
+  buildGeneralAverageSubject,
 } from "@/utils/average";
 import {
   AcademicCapIcon,
@@ -133,8 +135,8 @@ export default function DataCards({
           growth > 0
             ? `+${growth.toFixed(2)}% ${t("sinceStart")}`
             : growth < 0
-            ? `${growth.toFixed(2)}% ${t("sinceStart")}`
-            : t("noChangeSinceStart")
+              ? `${growth.toFixed(2)}% ${t("sinceStart")}`
+              : t("noChangeSinceStart")
         }
       >
         {average(undefined, subjects) !== null ? (
@@ -148,7 +150,22 @@ export default function DataCards({
 
       {/* 2) Main Custom Averages */}
       {mainCustomAverages?.map((ca) => {
-        const customVal = average(undefined, subjects, ca);
+        const subjectsToGive = () => {
+          const customAverageId = ca.id;
+          const customAverage = customAverageId
+            ? customAverages?.find((ca) => ca.id === customAverageId)
+            : undefined;
+
+
+          return addGeneralAverageToSubjects(subjects, customAverage);
+        }
+        const subjectVirtual = () => {
+          return (
+            subjectsToGive().find((s) => s.id === ca.id) ||
+            buildGeneralAverageSubject()
+          );
+        };
+        const customVal = (average(subjectVirtual()?.id, subjectsToGive()));
         if (customVal === null) {
           return null;
         }
@@ -197,10 +214,10 @@ export default function DataCards({
         description={
           bestGrade !== null
             ? // Use interpolation tokens for subject & grade name
-              t("bestGradeWithSubject", {
-                subjectName: bestGrade?.subject?.name,
-                gradeName: bestGrade?.name,
-              })
+            t("bestGradeWithSubject", {
+              subjectName: bestGrade?.subject?.name,
+              gradeName: bestGrade?.name,
+            })
             : t("noBestGrade")
         }
       >
@@ -219,13 +236,13 @@ export default function DataCards({
         icon={ArrowTrendingUpIcon}
         description={
           bestSubjectAverage !== null &&
-          bestSubjectAverageComparaison?.percentageChange
+            bestSubjectAverageComparaison?.percentageChange
             ? // Use interpolation for subject and percentage
-              t("bestSubjectWithComparison", {
-                subjectName: bestSubject?.name,
-                percentage:
-                  bestSubjectAverageComparaison.percentageChange.toFixed(2),
-              })
+            t("bestSubjectWithComparison", {
+              subjectName: bestSubject?.name,
+              percentage:
+                bestSubjectAverageComparaison.percentageChange.toFixed(2),
+            })
             : t("noBestSubject")
         }
       >
@@ -241,9 +258,9 @@ export default function DataCards({
         description={
           worstGrade !== null
             ? t("worstGradeWithSubject", {
-                subjectName: worstGrade?.subject?.name,
-                gradeName: worstGrade?.name,
-              })
+              subjectName: worstGrade?.subject?.name,
+              gradeName: worstGrade?.name,
+            })
             : t("noWorstGrade")
         }
       >
@@ -262,12 +279,12 @@ export default function DataCards({
         icon={ArrowTrendingDownIcon}
         description={
           worstSubjectAverage !== null &&
-          worstSubjectAverageComparaison?.percentageChange
+            worstSubjectAverageComparaison?.percentageChange
             ? t("worstSubjectWithComparison", {
-                subjectName: worstSubject?.name,
-                percentage:
-                  worstSubjectAverageComparaison.percentageChange.toFixed(2),
-              })
+              subjectName: worstSubject?.name,
+              percentage:
+                worstSubjectAverageComparaison.percentageChange.toFixed(2),
+            })
             : t("noWorstSubject")
         }
       >

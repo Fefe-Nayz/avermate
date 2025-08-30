@@ -11,7 +11,7 @@ import {
   PlusCircle,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -46,24 +46,48 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-
 import { useMediaQuery } from "@/components/ui/use-media-query";
 import { useSubjects } from "@/hooks/use-subjects";
 import { useToast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api";
-import { Average } from "@/types/average";
+
 import { handleError } from "@/utils/error-utils";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
+import { isEqual } from "lodash";
+import { Average } from "@/types/average";
 
-dayjs.locale("fr");
+/**
+ * Reuse your 'updateCustomAverageSchema' or define it similarly.
+ * Must match the parent's shape to keep them in sync.
+ */
+const updateCustomAverageSchema = z.object({
+  name: z.string().min(1),
+  subjects: z.array(
+    z.object({
+      id: z.string().min(1),
+      customCoefficient: z.number().min(1).max(1000).nullable().optional(),
+      includeChildren: z.boolean().optional(),
+    })
+  ),
+  isMainAverage: z.boolean().default(false).optional(),
+});
+type UpdateCustomAverageSchema = z.infer<typeof updateCustomAverageSchema>;
 
-export const UpdateCustomAverageForm = ({
-  close,
-  customAverage,
-}: {
+interface UpdateCustomAverageFormProps {
   close: () => void;
-  customAverage: Average;
+  averageId: string; // So we know which item to PATCH
+  formData: UpdateCustomAverageSchema;
+  setFormData: React.Dispatch<React.SetStateAction<UpdateCustomAverageSchema>>;
+  yearId: string;
+}
+
+export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = ({
+  close,
+  averageId,
+  formData,
+  setFormData,
+  yearId,
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateAverage");
@@ -71,40 +95,43 @@ export const UpdateCustomAverageForm = ({
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  const [openSubjectIndex, setOpenSubjectIndex] = useState<number | null>(null);
-
-  // Feedback schema validation
-  const updateCustomAverageSchema = z.object({
-    name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    subjects: z
-      .array(
-        z.object({
-          id: z.string().min(1, t("subjectIdRequired")),
-          customCoefficient: z
-            .number()
-            .min(1, t("customCoefficientMin"))
-            .max(1000, t("customCoefficientMax"))
-            .nullable()
-            .optional(),
-          includeChildren: z.boolean().optional(),
-        })
-      )
-      .min(1, t("subjectsMin")),
-    isMainAverage: z.boolean().optional().default(false),
+  // Prepare our local form using parent's data
+  const form = useForm<UpdateCustomAverageSchema>({
+    resolver: zodResolver(updateCustomAverageSchema),
+    defaultValues: formData,
   });
 
-  type UpdateCustomAverageSchema = z.infer<typeof updateCustomAverageSchema>;
+  // On mount, reset to parent's data
+  useEffect(() => {
+    form.reset(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const { data: subjects } = useSubjects(customAverage.yearId);
+  const { data: subjects } = useSubjects(yearId);
 
+  // Watch everything so we can sync back up to the parent
+  const watchedValues = form.watch();
+  useEffect(() => {
+    if (!isEqual(watchedValues, formData)) {
+      setFormData(watchedValues);
+    }
+  }, [watchedValues, formData, setFormData]);
+
+  // For handling multiple subject fields
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "subjects",
+  });
+
+  // Our mutation to update the average via PATCH
   const { mutate, isPending: isSubmitting } = useMutation({
-    mutationKey: ["update-custom-average"],
-    mutationFn: async (values: UpdateCustomAverageSchema) => {
-      const res = await apiClient.patch(`averages/${customAverage.id}`, {
+    mutationKey: ["update-custom-average", averageId],
+    mutationFn: async (vals: UpdateCustomAverageSchema) => {
+      const res = await apiClient.patch(`averages/${averageId}`, {
         json: {
-          name: values.name,
-          subjects: values.subjects,
-          isMainAverage: values.isMainAverage,
+          name: vals.name,
+          subjects: vals.subjects,
+          isMainAverage: vals.isMainAverage,
         },
       });
       return res.json();
@@ -121,7 +148,7 @@ export const UpdateCustomAverageForm = ({
       queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
       queryClient.invalidateQueries({
-        queryKey: ["average", customAverage.id],
+        queryKey: ["average", averageId],
       });
     },
     onError: (error: any) => {
@@ -129,26 +156,22 @@ export const UpdateCustomAverageForm = ({
     },
   });
 
-  const form = useForm<UpdateCustomAverageSchema>({
-    resolver: zodResolver(updateCustomAverageSchema),
-    defaultValues: {
-      name: customAverage.name,
-      isMainAverage: customAverage.isMainAverage,
-      subjects: customAverage.subjects.map((s) => ({
-        id: s.id,
-        customCoefficient: s.customCoefficient ?? null,
-        includeChildren: s.includeChildren ?? false,
-      })),
-    },
-  });
+  const onSubmit = (vals: UpdateCustomAverageSchema) => {
+    const filtered = vals.subjects.filter((s) => s.id !== "");
+    if (!filtered.length) {
+      toaster.toast({
+        title: t("errorTitle"),
+        description: t("selectAtLeastOneSubject"),
+        variant: "destructive",
+      });
+      return;
+    }
+    mutate({ ...vals, subjects: filtered });
+  };
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "subjects",
-  });
-
+  // Subject selection combos
+  const [openSubjectIndex, setOpenSubjectIndex] = useState<number | null>(null);
   const subjectInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     if (!isDesktop && openSubjectIndex !== null) {
       setTimeout(() => subjectInputRef.current?.focus(), 350);
@@ -160,24 +183,10 @@ export const UpdateCustomAverageForm = ({
     setOpenSubjectIndex(null);
   };
 
-  const onSubmit = (values: UpdateCustomAverageSchema) => {
-    const filteredSubjects = values.subjects.filter((s) => s.id !== "");
-    if (filteredSubjects.length === 0) {
-      toaster.toast({
-        title: t("errorTitle"),
-        description: t("selectAtLeastOneSubject"),
-        variant: "destructive",
-      });
-      return;
-    }
-    mutate({ ...values, subjects: filteredSubjects });
-  };
-
-  const renderSubjectField = (index: number, fieldItem: { id: string }) => {
+  // Renders the repeated subject row
+  const renderSubjectField = (index: number, fieldItem: any) => {
     const selectedSubjectId = form.getValues(`subjects.${index}.id`);
-    const selectedSubjectName = subjects?.find(
-      (s) => s.id === selectedSubjectId
-    )?.name;
+    const selectedSubjectName = subjects?.find((s) => s.id === selectedSubjectId)?.name;
 
     return (
       <div
@@ -275,7 +284,7 @@ export const UpdateCustomAverageForm = ({
                       <VisuallyHidden>
                         <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
                       </VisuallyHidden>
-                      <div className="mt-4 border-t p-4">
+                      <div className="mt-4 border-t p-4 overflow-scroll">
                         <Command>
                           <CommandInput
                             ref={subjectInputRef}
@@ -420,7 +429,7 @@ export const UpdateCustomAverageForm = ({
                 <FormLabel>{t("displayOnMainPage")}</FormLabel>
                 <FormControl>
                   <Switch
-                    checked={field.value}
+                    checked={field.value ?? false}
                     onCheckedChange={field.onChange}
                     disabled={isSubmitting}
                   />

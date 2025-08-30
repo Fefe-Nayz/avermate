@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+ push:
+   branches:
+     - "main"
+
+permissions:
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: https://ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/fefe-nayz/avermate-api:latest
+            ghcr.io/fefe-nayz/avermate-api:${{ github.sha }}
+
+      - name: Build and push Docker Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/client/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/fefe-nayz/avermate-web:latest
+            ghcr.io/fefe-nayz/avermate-web:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - build-push
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Deploying docker compose
+      uses: appleboy/ssh-action@v1.0.0
+      env:
+        DIRECTORY: ${{ secrets.DIRECTORY }}
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        password: ${{ secrets.SSH_PASSWORD }}
+        port: 22
+        envs: DIRECTORY
+        script: |
+          cd $DIRECTORY
+          docker compose pull
+          docker compose up --no-deps -d api web
+
+    #- name: create env file
+    #  run: |
+    #    echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
+
+    #- name: Docker Stack Deploy
+    #  uses: cssnr/stack-deploy-action@v1
+    #  with:
+    #    name: avermate
+    #    file: stack.yaml
+    #    host: nayz.fr
+    #    user: deploy
+    #    ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+    #    env_file: ./envfile

@@ -12,18 +12,20 @@ export default function GradeBadge({
   coefficient,
   id,
   periodId,
+  subjectId,
 }: {
   value: number;
   outOf: number;
   coefficient: number;
   id: string;
   periodId: string;
+  subjectId: string;
 }) {
   const pathname = usePathname();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
-    localStorage.setItem("backFromGradeOrSubject", currentPath);
+    localStorage.setItem("backFromGradeOrSubject", `${currentPath}#${subjectId}`);
   };
 
   return (

@@ -171,6 +171,7 @@ function renderSubjects(
                     coefficient={grade.coefficient}
                     id={grade.id}
                     periodId={grade.periodId}
+                    subjectId={grade.subjectId}
                   />
                 ))}
               </div>
@@ -194,6 +195,7 @@ function renderSubjects(
                       coefficient={grade.coefficient}
                       id={grade.id}
                       periodId={grade.periodId}
+                      subjectId={grade.subjectId}
                     />
                   ))}
                 </div>

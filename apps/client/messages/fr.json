@@ -668,7 +668,7 @@
         "createCustomAverage": "Créer la moyenne personnalisée",
         "nameRequired": "Le nom est requis",
         "nameTooLong": "Le nom est trop long",
-        "subjectIdRequired": "L'ID de la matière est requis",
+        "subjectIdRequired": "Une matière est requise",
         "coefficientMin": "Le coefficient doit être au moins 1",
         "coefficientMax": "Le coefficient ne peut pas dépasser 1000",
         "atLeastOneSubject": "Au moins une matière doit être sélectionnée"
@@ -682,7 +682,7 @@
         "valueMax": "La valeur ne peut pas dépasser 1000",
         "coefficientMin": "Le coefficient doit être au moins 0",
         "coefficientMax": "Le coefficient ne peut pas dépasser 1000",
-        "subjectIdRequired": "L'ID de la matière est requis",
+        "subjectIdRequired": "Une matière est requise",
         "subjectIdMax": "L'ID de la matière ne peut pas dépasser 64 caractères",
         "periodIdRequired": "L'ID de la période est requis",
         "periodIdMax": "L'ID de la période ne peut pas dépasser 64 caractères",
@@ -707,7 +707,14 @@
         "subject": "Matière",
         "chooseSubject": "Choisir une matière",
         "noSubjectFound": "Aucune matière trouvée.",
-        "submit": "Ajouter ma note"
+        "submit": "Ajouter ma note",
+        "coefficientRequired": "Le coefficient est requis",
+        "gradeValueRequired": "La note est requise",
+        "gradeOutOfRequired": "La note sur est requise",
+        "dateRequired": "La date est requise",
+        "subjectRequired": "La matière est requise",
+        "passedAtRequired": "La date de passage est requise",
+        "valueCannotExceedOutOf": "La valeur ne peut pas dépasser le total"
       },
       "AddPeriod": {
         "nameRequired": "Le nom est requis",
@@ -731,6 +738,7 @@
         "nameTooLong": "Le nom est trop long",
         "coefficientMin": "Le coefficient doit être au moins 0",
         "coefficientMax": "Le coefficient ne peut pas dépasser 1000",
+        "coefficientRequired": "Le coefficient est requis",
         "parentIdMax": "L'ID de la matière parente ne peut pas dépasser 64 caractères",
         "successTitle": "Matière ajoutée avec succès !",
         "successDescription": "Ajoutez des notes à cette matière pour suivre votre progression.",
@@ -750,7 +758,8 @@
         "chooseParentSubjectPlaceholder": "Choisir une matière",
         "noParentSubjectFound": "Aucune matière parente trouvée.",
         "parentSubjectDescription": "Une matière parente regroupe plusieurs sous-matières, facilitant leur organisation.",
-        "submit": "Ajouter une matière"
+        "submit": "Ajouter une matière",
+        "noParent": "Sans Parent"
       },
       "Feedback": {
         "feedbackType": "Type de remarque",

@@ -4,6 +4,8 @@ import ErrorStateCard from "@/components/skeleton/error-card";
 import gradeLoader from "@/components/skeleton/grade-loader";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { useGrade } from "@/hooks/use-grade";
+import { apiClient } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import GradeWrapper from "./grade-wrapper";

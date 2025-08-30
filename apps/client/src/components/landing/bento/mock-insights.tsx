@@ -27,7 +27,7 @@ export const MockInsights = () => {
         description={t("impactOnOverallAverageDescription")}
         icon={ArrowUpCircleIcon}
       >
-        <DifferenceBadge diff={1.4} />
+        <DifferenceBadge diff={0.358} />
       </DataCard>
 
       <DataCard
@@ -36,7 +36,7 @@ export const MockInsights = () => {
         description={t("impactOnMathAverageDescription")}
         icon={ArrowUpCircleIcon}
       >
-        <DifferenceBadge diff={2.38} />
+        <DifferenceBadge diff={2.387} />
       </DataCard>
 
       <DataCard
