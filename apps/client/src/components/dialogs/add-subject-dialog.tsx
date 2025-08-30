@@ -16,9 +16,11 @@ import { useTranslations } from "next-intl";
 export default function AddSubjectCredenza({
   children,
   parentId,
+  yearId,
 }: {
   children: React.ReactNode;
   parentId?: string;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.AddSubject");
   const [open, setOpen] = useState(false);
@@ -35,7 +37,7 @@ export default function AddSubjectCredenza({
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
-          <AddSubjectForm close={() => setOpen(false)} parentId={parentId} />
+          <AddSubjectForm yearId={yearId} close={() => setOpen(false)} parentId={parentId} />
         </CredenzaBody>
       </CredenzaContent>
     </Credenza>

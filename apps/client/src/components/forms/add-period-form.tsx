@@ -36,9 +36,11 @@ import { useFormatter } from "next-intl";
 export const AddPeriodForm = ({
   close,
   periods,
+  yearId,
 }: {
   close: () => void;
   periods: Period[];
+  yearId: string;
 }) => {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
@@ -74,7 +76,7 @@ export const AddPeriodForm = ({
   const { mutate, isPending } = useMutation({
     mutationKey: ["create-Period"],
     mutationFn: async ({ name, dateRange, isCumulative }: AddPeriodSchema) => {
-      const res = await apiClient.post("periods", {
+      const res = await apiClient.post(`years/${yearId}/periods`, {
         json: {
           name,
           startAt: dateRange.from,

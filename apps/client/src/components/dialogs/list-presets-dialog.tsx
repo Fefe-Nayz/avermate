@@ -19,8 +19,10 @@ import { useTranslations } from "next-intl";
 
 export default function ListPresetsDialog({
   children,
+  yearId,
 }: {
   children: React.ReactNode;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.ListPresets");
   const [open, setOpen] = useState(false);
@@ -48,7 +50,7 @@ export default function ListPresetsDialog({
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
           {!isLoading && !isError && presets && (
-            <PresetList presets={presets} close={() => setOpen(false)} />
+            <PresetList yearId={yearId} presets={presets} close={() => setOpen(false)} />
           )}
         </CredenzaBody>
       </CredenzaContent>

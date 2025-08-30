@@ -21,9 +21,11 @@ import { Input } from "@/components/ui/input";
 export const PresetList = ({
   close,
   presets,
+  yearId,
 }: {
   close: () => void;
   presets: Preset[];
+  yearId: string;
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Onboarding.Step2.Presets");
@@ -49,7 +51,7 @@ export const PresetList = ({
   >({
     mutationKey: ["set-preset"],
     mutationFn: async ({ presetId }) => {
-      const res = await apiClient.post(`presets/${presetId}`);
+      const res = await apiClient.post(`presets/${presetId}?yearId=${yearId}`);
       const data = await res.json();
       return data;
     },

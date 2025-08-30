@@ -11,6 +11,7 @@ import subjectsRoutes from "@/routes/subjects";
 import usersRoutes from "@/routes/users";
 import averagesRoute from "@/routes/averages";
 import feedbackRoute from "@/routes/feedback";
+import yearsRoutes from "@/routes/years";
 // import cardsRoute from "@/routes/cards";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -61,6 +62,8 @@ app.route("/landing", landingRoutes);
 app.route("/averages", averagesRoute);
 
 app.route("/feedback", feedbackRoute);
+
+app.route("/years", yearsRoutes);
 
 // app.route("/cards", cardsRoute);
 

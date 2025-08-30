@@ -46,9 +46,11 @@ import { useTranslations } from "next-intl";
 export const AddSubjectForm = ({
   close,
   parentId,
+  yearId,
 }: {
   close: () => void;
   parentId?: string;
+  yearId: string;
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddSubject");
@@ -83,7 +85,7 @@ export const AddSubjectForm = ({
     }
   }, [openParent, isDesktop]);
 
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(yearId);
 
   const { mutate, isPending } = useMutation({
     mutationKey: ["create-subject"],
@@ -94,7 +96,7 @@ export const AddSubjectForm = ({
       isMainSubject,
       isDisplaySubject,
     }: AddSubjectSchema) => {
-      const res = await apiClient.post("subjects", {
+      const res = await apiClient.post(`years/${yearId}/subjects`, {
         json: { name, coefficient, parentId, isMainSubject, isDisplaySubject },
       });
       const data = await res.json();
@@ -288,8 +290,8 @@ export const AddSubjectForm = ({
                                   <span>{subject.name}</span>
                                   {form.getValues("parentId") ===
                                     subject.id && (
-                                    <CheckIcon className="ml-auto h-4 w-4" />
-                                  )}
+                                      <CheckIcon className="ml-auto h-4 w-4" />
+                                    )}
                                 </CommandItem>
                               ))}
                           </CommandGroup>
@@ -348,8 +350,8 @@ export const AddSubjectForm = ({
                                     <span>{subject.name}</span>
                                     {form.getValues("parentId") ===
                                       subject.id && (
-                                      <CheckIcon className="w-4 h-4 ml-auto" />
-                                    )}
+                                        <CheckIcon className="w-4 h-4 ml-auto" />
+                                      )}
                                   </CommandItem>
                                 ))}
                             </CommandGroup>

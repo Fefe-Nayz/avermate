@@ -22,7 +22,7 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 
-export default function Step1() {
+export default function Step1({yearId}: {yearId: string}) {
   const formatter = useFormatter();
   const t = useTranslations("Onboarding.Step1");
   const formatDates = useFormatDates(formatter);
@@ -31,7 +31,7 @@ export default function Step1() {
     data: periods,
     isError: periodsIsError,
     isPending: periodsIsPending,
-  } = usePeriods();
+  } = usePeriods(yearId);
 
   if (periodsIsPending) {
     return (
@@ -58,7 +58,7 @@ export default function Step1() {
           </div>
         ))}
         <div className="flex flex-col items-center justify-center space-y-4">
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={yearId}>
             <Button variant="outline" disabled>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addNewPeriod")}
@@ -83,7 +83,7 @@ export default function Step1() {
             bold: (chunks) => <b className="text-foreground">{chunks}</b>,
           })}
         </p>
-        <AddPeriodDialog>
+        <AddPeriodDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addPeriod")}
@@ -133,7 +133,7 @@ export default function Step1() {
         </div>
       ))}
       <div className="flex flex-col items-center justify-center space-y-4">
-        <AddPeriodDialog>
+        <AddPeriodDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addNewPeriod")}

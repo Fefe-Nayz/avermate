@@ -60,7 +60,7 @@ app.post("/", zValidator("json", createYearSchema), async (c) => {
         endDate,
         defaultOutOf,
         userId: session.user.id,
-    });
+    }).returning().get();
 
     return c.json({ year }, 201);
 });
