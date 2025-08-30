@@ -14,6 +14,7 @@ import { ConfettiButton } from "@/components/ui/confetti";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useActiveYearStore } from "@/stores/active-year-store";
+import { useActiveYears } from "@/hooks/use-active-year";
 
 const stepIds = ["matieres", "periodes"];
 const steps = [
@@ -42,7 +43,7 @@ function OnboardingContent() {
     data: { session: Session; user: User };
   };
 
-  const { setActiveId } = useActiveYearStore();
+  const { select } = useActiveYears();
 
   useEffect(() => {
     const stepId = steps[currentStep].id;
@@ -77,7 +78,7 @@ function OnboardingContent() {
   const handleOnboardingCompletion = () => {
     // localStorage.setItem("isOnboardingCompleted", "true");
     router.push("/dashboard");
-    setActiveId(yearId);
+    select(yearId);
   };
 
   return (

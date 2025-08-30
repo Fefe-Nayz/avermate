@@ -2,6 +2,8 @@
 
 import { CustomAveragesSection } from '@/app/profile/settings/custom-averages-section';
 import { PeriodsSection } from '@/app/profile/settings/periods-section';
+import DeleteYearSection from '@/components/dashboard/year-settings/delete-year-section';
+import UpdateYearSection from '@/components/dashboard/year-settings/update-year-section';
 import { Separator } from '@/components/ui/separator';
 import { useYears } from '@/hooks/use-years';
 import { useActiveYearStore } from '@/stores/active-year-store';
@@ -24,12 +26,10 @@ export default function YearSettingsPage() {
 
             <Separator />
 
+            <UpdateYearSection />
+            <DeleteYearSection />
             <PeriodsSection yearId={activeId} />
             <CustomAveragesSection yearId={activeId} />
-
-            {/* Update year */}
-            <p>{year.name}</p>
-            {/* Delete year */}
         </main>
     )
 }
