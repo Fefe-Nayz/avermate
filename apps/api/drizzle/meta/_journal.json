@@ -22,6 +22,13 @@
       "when": 1735773380967,
       "tag": "0002_rainy_mentallo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1756555333883,
+      "tag": "0003_goofy_miracleman",
+      "breakpoints": true
     }
   ]
 }

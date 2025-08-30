@@ -30,6 +30,7 @@
     "start": "bun run src/index.ts",
     "db:push": "bunx drizzle-kit push",
     "db:studio": "bunx drizzle-kit studio",
-    "db:dev": "bunx turso dev --db-file dev.db"
+    "db:dev": "bunx turso dev --db-file dev.db",
+    "db:generate": "bunx drizzle-kit generate"
   }
 }
