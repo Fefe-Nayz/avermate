@@ -71,10 +71,12 @@ export default function GlobalAverageChart({
   subjects,
   period,
   periods,
+  yearId,
 }: {
   subjects: Subject[];
   period: Period;
   periods: Period[];
+  yearId: string;
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.GlobalAverageChart");
@@ -225,7 +227,7 @@ export default function GlobalAverageChart({
           </h2>
           <p className="text-center">{t("noGradesDescription")}</p>
         </div>
-        <AddGradeDialog>
+        <AddGradeDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addGrade")}

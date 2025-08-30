@@ -112,7 +112,7 @@ const createGradeSchema = z.object({
     periodId: z.string().min(1).max(64).nullable(),
 });
 
-app.post("/:yearId", zValidator("json", createGradeSchema), async (c) => {
+app.post("/:yearId/grades", zValidator("json", createGradeSchema), async (c) => {
     const session = c.get("session");
 
     if (!session) throw new HTTPException(401);
@@ -187,7 +187,7 @@ const getGradesQuerySchema = z.object({
     limit: z.coerce.number().int().optional(),
 });
 
-app.get("/:yearId", zValidator("query", getGradesQuerySchema), async (c) => {
+app.get("/:yearId/grades", zValidator("query", getGradesQuerySchema), async (c) => {
     const session = c.get("session");
     if (!session) throw new HTTPException(401);
 
@@ -211,8 +211,8 @@ app.get("/:yearId", zValidator("query", getGradesQuerySchema), async (c) => {
         where: and(
             eq(grades.userId, session.user.id),
             eq(grades.yearId, yearId),
-            from && gte(grades.passedAt, from),
-            to && lte(grades.passedAt, to)
+            from && gte(grades.createdAt, from),
+            to && lte(grades.createdAt, to)
         ),
         limit: limit,
         orderBy: desc(grades.passedAt),

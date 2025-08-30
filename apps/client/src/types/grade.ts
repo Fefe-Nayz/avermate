@@ -12,6 +12,7 @@ export type Grade = {
   userId: string;
   subject: PartialSubject;
   periodId: string;
+  yearId: string;
 };
 
 export type PartialGrade = Omit<Grade, "subject">;

@@ -3,6 +3,7 @@ import { Period } from "@/types/period";
 import { startOfDay } from "date-fns";
 import { Average } from "@/types/average";
 import { Grade } from "@/types/grade";
+import { Year } from "@/types/year";
 
 /**
  * Calculates the average score for a specific subject or overall.
@@ -618,12 +619,12 @@ export function subjectImpact(
   const subjectsCopy = deepCloneSubjects(subjects);
 
   // Handle both single string and array of strings
-  const impactingIds = Array.isArray(impactingSubjectIds) 
+  const impactingIds = Array.isArray(impactingSubjectIds)
     ? impactingSubjectIds
     : [impactingSubjectIds];
 
   // Get all impacting IDs including children
-  const allImpactingIds = impactingIds.flatMap(id => 
+  const allImpactingIds = impactingIds.flatMap(id =>
     [id, ...getChildren(subjectsCopy, id)]
   );
 
@@ -1003,10 +1004,10 @@ export function getSubjectAverages(
       const averageValue = calculateAverageForSubject(subject, subjects);
       return averageValue !== null
         ? {
-            id: subject.id,
-            average: averageValue,
-            isMainSubject: subject.isMainSubject ?? false,
-          }
+          id: subject.id,
+          average: averageValue,
+          isMainSubject: subject.isMainSubject ?? false,
+        }
         : null;
     })
     .filter(
@@ -1320,14 +1321,14 @@ export function getBestGrade(subjects: Subject[]): {
 
   return bestGrade
     ? {
-        grade: bestGrade.grade,
-        outOf: bestGrade.outOf,
-        subject: bestGrade.subject,
-        name: bestGrade.name,
-        coefficient: bestGrade.coefficient,
-        passedAt: bestGrade.passedAt,
-        createdAt: bestGrade.createdAt,
-      }
+      grade: bestGrade.grade,
+      outOf: bestGrade.outOf,
+      subject: bestGrade.subject,
+      name: bestGrade.name,
+      coefficient: bestGrade.coefficient,
+      passedAt: bestGrade.passedAt,
+      createdAt: bestGrade.createdAt,
+    }
     : null;
 }
 
@@ -1409,14 +1410,14 @@ export function getWorstGrade(subjects: Subject[]): {
 
   return worstGrade
     ? {
-        grade: worstGrade.grade,
-        outOf: worstGrade.outOf,
-        subject: worstGrade.subject,
-        name: worstGrade.name,
-        coefficient: worstGrade.coefficient,
-        passedAt: worstGrade.passedAt,
-        createdAt: worstGrade.createdAt,
-      }
+      grade: worstGrade.grade,
+      outOf: worstGrade.outOf,
+      subject: worstGrade.subject,
+      name: worstGrade.name,
+      coefficient: worstGrade.coefficient,
+      passedAt: worstGrade.passedAt,
+      createdAt: worstGrade.createdAt,
+    }
     : null;
 }
 
@@ -1590,15 +1591,24 @@ export function getGradeDates(subjects: Subject[], subjectId?: string): Date[] {
  *
  * For specific periods, it directly uses the provided `startAt` and `endAt` dates.
  */
-export function findPeriodBounds(period: Period, subjects: Subject[]): { startAt: Date; endAt: Date } {
+export function findPeriodBounds(period: Period, subjects: Subject[], year?: Year): { startAt: Date; endAt: Date } {
+  // TODO: FIX LATER USING YEAR DATERANGE (dont break this pls)
   if (period.id === "full-year" || period.id === null) {
+    // By default
     const now = new Date();
     let academicYear = now.getFullYear();
     if (now.getMonth() < 8) {
       academicYear--;
     }
-    const startDate = new Date(academicYear, 8, 1);
-    const endDate = now;
+    let startDate = new Date(academicYear, 8, 1);
+    let endDate = now;
+
+    // Use year date range
+    if (year) {
+      startDate = new Date(year.startDate);
+      endDate = new Date(year.endDate);
+    }
+
     const allGradeDates = getGradeDates(subjects);
     const firstGradeDate = allGradeDates.reduce((acc, date) => (date < acc ? date : acc), endDate);
     const lastGradeDate = allGradeDates.reduce((acc, date) => (date > acc ? date : acc), startDate);
@@ -1626,8 +1636,8 @@ export function findPeriodBounds(period: Period, subjects: Subject[]): { startAt
  *
  * This function is useful for scenarios where an overview of the entire academic year's performance is required.
  */
-export function fullYearPeriod(subjects: Subject[]): Period {
-  const bounds = findPeriodBounds({ id: "full-year" } as Period, subjects);
+export function fullYearPeriod(subjects: Subject[], year?: Year): Period {
+  const bounds = findPeriodBounds({ id: "full-year" } as Period, subjects, year);
   return {
     id: "full-year",
     name: "Toute l'année",
@@ -1636,6 +1646,7 @@ export function fullYearPeriod(subjects: Subject[]): Period {
     createdAt: new Date().toISOString(),
     userId: "",
     isCumulative: false,
+    yearId: year?.id || "full-year-period-none-id",
   };
 }
 
@@ -1668,7 +1679,7 @@ export function getMedianAverages(subjects: Subject[]): Map<string, number | nul
     const sortedGrades = subject.grades
       .map((grade) => grade.value / grade.outOf * 20)
       .sort((a, b) => a - b);
-    
+
     const len = sortedGrades.length;
     if (len === 0) {
       medianAverages.set(subject.id, null);
@@ -2322,7 +2333,7 @@ export function getLeastConsistentSubjects(
 
   // Sort subjects by their standard deviation in descending order
   leastConsistentSubjects.sort((a, b) => b.standardDeviation - a.standardDeviation);
-  
+
   // Return the top N least consistent subjects
   return leastConsistentSubjects.slice(0, topN);
 }
@@ -2499,7 +2510,7 @@ export function buildVirtualSubject(
   }
 
   // For custom averages
-  const includedSubjects = subjects.filter(subject => 
+  const includedSubjects = subjects.filter(subject =>
     average.subjects.some(avgSubj => {
       if (avgSubj.id === subject.id) {
         return true;
@@ -2524,6 +2535,7 @@ export function buildVirtualSubject(
     createdAt: new Date(),
     userId: "",
     isMainSubject: false,
+    yearId: average.yearId,
   };
 }
 
@@ -2539,11 +2551,12 @@ export function buildGeneralAverageSubject(): Subject {
     createdAt: new Date(),
     userId: "",
     isMainSubject: false,
+    yearId: "buildGeneralAverageSubjectId",
   };
 }
 
 export function addGeneralAverageToSubjects(
-  subjects: Subject[], 
+  subjects: Subject[],
   customAverage?: Average
 ): Subject[] {
   if (!customAverage) {
@@ -2557,7 +2570,7 @@ export function addGeneralAverageToSubjects(
   }
 
   // Handle custom average case
-  const includedSubjects = subjects.filter(subject => 
+  const includedSubjects = subjects.filter(subject =>
     customAverage.subjects.some(avgSubj => {
       if (avgSubj.id === subject.id) {
         return true;
@@ -2579,8 +2592,8 @@ export function addGeneralAverageToSubjects(
       depth: 1,
       parentId: customAverage.id,
       // Override coefficient if custom coefficient is specified
-      coefficient: customSubject?.customCoefficient != null 
-        ? customSubject!.customCoefficient * 100 
+      coefficient: customSubject?.customCoefficient != null
+        ? customSubject!.customCoefficient * 100
         : subject.coefficient
     };
   });

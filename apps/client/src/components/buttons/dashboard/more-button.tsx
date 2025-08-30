@@ -15,7 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 
-export default function MoreButton() {
+export default function MoreButton({ yearId }: { yearId: string }) {
   const t = useTranslations("Dashboard.Buttons.MoreButton");
 
   return (
@@ -27,13 +27,13 @@ export default function MoreButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <AddSubjectDialog>
+          <AddSubjectDialog yearId={yearId}>
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addSubject")}
           </AddSubjectDialog>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={yearId}>
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addPeriod")}
           </AddPeriodDialog>

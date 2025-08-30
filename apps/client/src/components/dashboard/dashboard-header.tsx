@@ -1,7 +1,8 @@
 import AccountDropdown from "@/components/buttons/account/account-dropdown";
 import Logo from "@/components/logo";
+import YearWorkspaceSelect from "../selects/year-workspace-select";
 
-export default function DashboardHeader() {
+export default function DashboardHeader({ hideWorkspaces }: { hideWorkspaces?: boolean }) {
   return (
     // <header className=" border-b border-solid px-4 py-1">
     //   <div className="max-w-[2000px] flex items-center justify-between gap-8 m-auto">
@@ -14,10 +15,13 @@ export default function DashboardHeader() {
     // </header>
 
     <header className="sticky border-b px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-8">
-      <div className="flex items-center justify-between gap-8 max-w-[2000px] m-auto">
+      <div className="flex items-center justify-between gap-8 max-w-[2000px]">
         <Logo />
 
-        <AccountDropdown />
+        <div className="flex items-center justify-between gap-4">
+          {!hideWorkspaces && <YearWorkspaceSelect />}
+          <AccountDropdown />
+        </div>
       </div>
     </header>
   );

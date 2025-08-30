@@ -19,7 +19,6 @@ import {
   subjectImpact,
   isSubjectIncludedInCustomAverage,
   buildCustomConfig,
-  fullYearPeriod as buildFullYearPeriod,
 } from "@/utils/average";
 import { formatGradeValue } from "@/utils/format";
 import {
@@ -187,14 +186,14 @@ function SubjectWrapper({
             <p className="text-center">{t("noGradesMessage")}</p>
           </div>
           {!subject.isDisplaySubject ? (
-            <AddGradeDialog parentId={subject.id}>
+            <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
               <Button variant="outline">
                 <PlusCircleIcon className="size-4 mr-2" />
                 {t("addGradeInSubject", { name: subject.name })}
               </Button>
             </AddGradeDialog>
           ) : (
-            <AddGradeDialog>
+            <AddGradeDialog yearId={subject.yearId} >
               <Button variant="outline">
                 <PlusCircleIcon className="size-4 mr-2" />
                 {t("addGrade")}
@@ -227,7 +226,7 @@ function SubjectWrapper({
         {!isVirtualSubject && (
           <div className="flex gap-4">
             {!subject.isDisplaySubject && (
-              <AddGradeDialog parentId={subject.id}>
+              <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
                 <Button className="hidden md:flex">
                   <PlusCircleIcon className="size-4 mr-2" />
                   {t("addGrade")}
@@ -249,8 +248,8 @@ function SubjectWrapper({
             subject.id === "general-average"
               ? 3
               : subject.id.startsWith("ca")
-              ? 4
-              : 5 +
+                ? 4
+                : 5 +
                 customAverages.filter((ca) =>
                   isSubjectIncludedInCustomAverage(
                     subject,
@@ -330,10 +329,10 @@ function SubjectWrapper({
                   ? ArrowUpCircleIcon
                   : ArrowDownCircleIcon
                 : subjects
-                ? (subjectImpact(subject.id, undefined, subjects)?.difference ?? 0) >= 0
-                  ? ArrowUpCircleIcon 
-                  : ArrowDownCircleIcon
-                : ArrowUpCircleIcon
+                  ? (subjectImpact(subject.id, undefined, subjects)?.difference ?? 0) >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                  : ArrowUpCircleIcon
             }
           >
             <DifferenceBadge
@@ -341,9 +340,9 @@ function SubjectWrapper({
                 subject.id.startsWith("ca")
                   ? customAverageImpact || 0
                   : subjects
-                  ? subjectImpact(subject.id, undefined, subjects)
+                    ? subjectImpact(subject.id, undefined, subjects)
                       ?.difference || 0
-                  : 0
+                    : 0
               }
             />
           </DataCard>
@@ -371,7 +370,7 @@ function SubjectWrapper({
               diff={
                 subjects
                   ? subjectImpact(subject.id, parent.id, subjects)
-                      ?.difference || 0
+                    ?.difference || 0
                   : 0
               }
             />
@@ -390,14 +389,14 @@ function SubjectWrapper({
           })()}
           icon={PlusIcon}
         >
-            {(() => {
-              const bestGradeObj = getBestGradeInSubject(subjects, subject.id);
-              return bestGradeObj?.grade !== undefined ? (
-                <GradeValue value={bestGradeObj.grade} outOf={bestGradeObj.outOf} />
-              ) : (
-                t("notAvailable")
-              );
-            })()}
+          {(() => {
+            const bestGradeObj = getBestGradeInSubject(subjects, subject.id);
+            return bestGradeObj?.grade !== undefined ? (
+              <GradeValue value={bestGradeObj.grade} outOf={bestGradeObj.outOf} />
+            ) : (
+              t("notAvailable")
+            );
+          })()}
         </DataCard>
 
         {/* Worst Grade */}
@@ -412,17 +411,17 @@ function SubjectWrapper({
           })()}
           icon={MinusIcon}
         >
-            {(() => {
-              const worstGradeObj = getWorstGradeInSubject(
-                subjects,
-                subject.id
-              );
-              return worstGradeObj?.grade !== undefined ? (
-                <GradeValue value={worstGradeObj.grade} outOf={worstGradeObj.outOf} />
-              ) : (
-                t("notAvailable")
-              );
-            })()}
+          {(() => {
+            const worstGradeObj = getWorstGradeInSubject(
+              subjects,
+              subject.id
+            );
+            return worstGradeObj?.grade !== undefined ? (
+              <GradeValue value={worstGradeObj.grade} outOf={worstGradeObj.outOf} />
+            ) : (
+              t("notAvailable")
+            );
+          })()}
         </DataCard>
       </div>
 

@@ -56,6 +56,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 
 dayjs.locale("fr");
 
@@ -88,6 +89,10 @@ export const AddGradeForm = ({
   const { data: subjects } = useSubjects(yearId);
 
   const { data: periods } = usePeriods(yearId);
+
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === yearId);
 
   // Schema
   const addGradeSchema = z.object({
@@ -345,10 +350,10 @@ export const AddGradeForm = ({
                         setIsManualPeriod(false); // Reset manual period selection
                       }}
                       disabled={(date) =>
-                        date > new Date() || date < new Date("2023-01-02")
+                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                       }
                       autoFocus
-                      defaultMonth={field.value || new Date()}
+                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                     />
                   </PopoverContent>
                 </Popover>
@@ -386,8 +391,8 @@ export const AddGradeForm = ({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : form.getValues("periodId") === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -458,8 +463,8 @@ export const AddGradeForm = ({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : form.getValues("periodId") === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </FormControl>
@@ -591,8 +596,8 @@ export const AddGradeForm = ({
                                   <span>{subject.name}</span>
                                   {form.getValues("subjectId") ===
                                     subject.id && (
-                                    <Check className="ml-auto h-4 w-4" />
-                                  )}
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
                                 </CommandItem>
                               ))}
                           </CommandGroup>
@@ -655,8 +660,8 @@ export const AddGradeForm = ({
                                     <span>{subject.name}</span>
                                     {form.getValues("subjectId") ===
                                       subject.id && (
-                                      <Check className="ml-auto h-4 w-4" />
-                                    )}
+                                        <Check className="ml-auto h-4 w-4" />
+                                      )}
                                   </CommandItem>
                                 ))}
                             </CommandGroup>

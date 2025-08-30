@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 
 export const UpdatePeriodForm = ({
   close,
@@ -123,6 +124,10 @@ export const UpdatePeriodForm = ({
       isCumulative: period.isCumulative || false,
     },
   });
+
+  const { data: years } = useYears();
+  
+  const year = years?.find((y) => y.id === period.yearId);
 
   const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
@@ -230,12 +235,18 @@ export const UpdatePeriodForm = ({
                           selected={field.value}
                           onSelect={field.onChange}
                           numberOfMonths={numberOfMonths}
-                          disabled={periods
-                            .filter((p) => p.id !== period.id)
-                            .map((p) => ({
-                              from: startOfDay(p.startAt),
-                              to: startOfDay(p.endAt),
-                            }))}
+                          disabled={[{
+                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                          },
+                          {
+                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                          },
+                          ...periods.filter((p) => p.id !== period.id).map((period) => ({
+                            from: startOfDay(period.startAt),
+                            to: startOfDay(period.endAt),
+                          }))]}
                           defaultMonth={field.value?.from || new Date()}
                         />
                       </PopoverContent>

@@ -6,4 +6,5 @@ export type Period = {
   createdAt: string;
   userId: string;
   isCumulative: boolean;
+  yearId: string;
 };

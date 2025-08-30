@@ -69,7 +69,8 @@
     "tailwindcss-animate": "^1.0.7",
     "uploadthing": "https://pkg.pr.new/pingdotgg/uploadthing@1099",
     "vaul": "^1.1.1",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

@@ -50,6 +50,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -87,9 +88,9 @@ export const UpdateGradeForm = ({
   // Store initial date so we only apply date->period logic after date changes
   const [initialDate] = useState(grade.passedAt);
 
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(grade.yearId);
 
-  const { data: periods } = usePeriods();
+  const { data: periods } = usePeriods(grade.yearId);
 
   // Feedback schema validation
   const updateGradeSchema = z.object({
@@ -158,6 +159,9 @@ export const UpdateGradeForm = ({
       handleError(error, toaster, errorTranslations, t("updateError"));
     },
   });
+
+  const { data: years } = useYears();
+  const year = years?.find((y) => y.id === grade?.yearId);
 
   const form = useForm<UpdateGradeSchema>({
     resolver: zodResolver(updateGradeSchema),
@@ -367,12 +371,10 @@ export const UpdateGradeForm = ({
                         setIsManualPeriod(false);
                       }}
                       disabled={(date) =>
-                        date > new Date() || date < new Date("2023-01-02")
+                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                       }
                       autoFocus
-                      defaultMonth={
-                        field.value ? dayjs(field.value).toDate() : new Date()
-                      }
+                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                     />
                   </PopoverContent>
                 </Popover>

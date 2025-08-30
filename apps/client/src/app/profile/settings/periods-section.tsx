@@ -28,7 +28,7 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 
-export const PeriodsSection = () => {
+export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   const formatter = useFormatter();
   const t = useTranslations("Settings.Settings.Periods");
   const formatDates = useFormatDates(formatter);
@@ -38,7 +38,7 @@ export const PeriodsSection = () => {
     data: period,
     isError: isPeriodError,
     isPending: isPeriodPending,
-  } = usePeriods();
+  } = usePeriods(yearId);
 
   if (isPeriodPending) {
     return (
@@ -76,7 +76,7 @@ export const PeriodsSection = () => {
                 </div>
               ))}
               <div className="flex justify-start">
-                <AddPeriodDialog>
+                <AddPeriodDialog yearId={yearId}>
                   <Button disabled>
                     <PlusCircleIcon className="size-4 mr-2" />
                     {t("addPeriod")}
@@ -105,7 +105,7 @@ export const PeriodsSection = () => {
             </h2>
             <p className="text-center">{t("addNewPeriod")}</p>
           </div>
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={yearId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPeriod")}
@@ -163,7 +163,7 @@ export const PeriodsSection = () => {
           </div>
         ))}
         <div className="flex justify-start">
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPeriod")}

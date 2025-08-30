@@ -34,7 +34,7 @@ export default function AddGradeDialog({
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
-          <AddGradeForm close={() => setOpen(false)} parentId={parentId} />
+          <AddGradeForm yearId={yearId} close={() => setOpen(false)} parentId={parentId} />
         </CredenzaBody>
       </CredenzaContent>
     </Credenza>

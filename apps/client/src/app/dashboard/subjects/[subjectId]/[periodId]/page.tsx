@@ -20,6 +20,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SubjectWrapper from "./subject-wrapper";
 import { useTranslations } from "next-intl";
+import { useActiveYears } from "@/hooks/use-active-year";
+import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 
 export default function SubjectPage() {
   const t = useTranslations("Dashboard.Loader.SubjectLoader");
@@ -49,18 +51,30 @@ export default function SubjectPage() {
     localStorage.removeItem("backFromGradeOrSubject");
   };
 
+  const { activeId, active, years } = useActiveYears();
+
+  const {
+    data: subject,
+    isError: isSubjectError,
+    isPending: isSubjectPending,
+  } = useQuery({
+    queryKey: ["subjects", subjectId],
+    queryFn: async () => {
+      const res = await apiClient.get(`subjects/${subjectId}`);
+      const data = await res.json<{ subject: Subject }>();
+      return data.subject;
+    },
+    enabled: !isVirtualSubject,
+  });
+
+  const yearId = isVirtualSubject ? activeId : subject?.yearId || "none";
+  const year = isVirtualSubject ? active : years.find((y) => y.id === subject?.yearId);
+
   const {
     data: organizedSubjects,
     isError: organizedSubjectsIsError,
     isPending: organizedSubjectsIsPending,
-  } = useQuery({
-    queryKey: ["subjects", "organized-by-periods"],
-    queryFn: async () => {
-      const res = await apiClient.get("subjects/organized-by-periods");
-      const data = await res.json<GetOrganizedSubjectsResponse>();
-      return data.periods;
-    },
-  });
+  } = useOrganizedSubjects(yearId);
 
   const {
     data: organizedSubject,
@@ -83,33 +97,19 @@ export default function SubjectPage() {
     data: period,
     isError: isPeriodError,
     isPending: isPeriodPending,
-  } = usePeriods();
-
-  const {
-    data: subject,
-    isError: isSubjectError,
-    isPending: isSubjectPending,
-  } = useQuery({
-    queryKey: ["subjects", subjectId],
-    queryFn: async () => {
-      const res = await apiClient.get(`subjects/${subjectId}`);
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
-    },
-    enabled: !isVirtualSubject,
-  });
+  } = usePeriods(yearId);
 
   const {
     data: subjects,
     isError: isSubjectsError,
     isPending: isSubjectsPending,
-  } = useSubjects();
+  } = useSubjects(yearId);
 
   const {
     data: customAverages,
     isError: isCustomAveragesError,
     isPending: isCustomAveragesPending,
-  } = useCustomAverages();
+  } = useCustomAverages(yearId);
 
   if (
     isPeriodError ||
@@ -139,9 +139,9 @@ export default function SubjectPage() {
 
   const periods =
     periodId === "full-year"
-      ? fullYearPeriod(subjects)
+      ? fullYearPeriod(subjects, year)
       : organizedSubjects?.find((p) => p.period.id === periodId)?.period ||
-        fullYearPeriod(subjects);
+      fullYearPeriod(subjects, year);
 
   // function to choose what to give to the wrapper depending on the periodId and if it's a virtual subject
   const subjectsToGive = () => {
@@ -157,12 +157,18 @@ export default function SubjectPage() {
       } else {
         return addGeneralAverageToSubjects(
           organizedSubjects?.find((p) => p.period.id === periodId)?.subjects ||
-            [],
+          [],
           customAverage
         );
       }
     } else {
-      return subjects;
+      if (periodId === "full-year") {
+        return subjects;
+      }
+      
+      // Attempt to fix period grades leaks.
+      return organizedSubjects.find((p) => p.period.id === periodId)?.subjects || [];
+      // return subjects;
     }
   };
 
@@ -187,7 +193,7 @@ export default function SubjectPage() {
       periodId === "full-year"
         ? subjects
         : organizedSubjects?.find((p) => p.period.id === periodId)?.subjects ||
-          []
+        []
     ).filter((subject) =>
       customAverage.subjects.some((avgSubj) => {
         if (avgSubj.id === subject.id) return true;
@@ -206,12 +212,12 @@ export default function SubjectPage() {
       periodId === "full-year"
         ? subjects
         : organizedSubjects?.find((p) => p.period.id === periodId)?.subjects ||
-            []
+        []
     );
 
     return impact?.difference || null;
   };
-  
+
   console.log(subjectsToGive());
 
   return (

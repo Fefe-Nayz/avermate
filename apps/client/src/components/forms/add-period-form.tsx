@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 
 export const AddPeriodForm = ({
   close,
@@ -121,6 +122,10 @@ export const AddPeriodForm = ({
     },
   });
 
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === yearId);
+
   const onSubmit = (values: AddPeriodSchema) => {
     const { from: startAt, to: endAt } = values.dateRange;
 
@@ -161,7 +166,7 @@ export const AddPeriodForm = ({
     <div className="">
       <Form {...form}>
         <form
-          noValidate  
+          noValidate
           onSubmit={form.handleSubmit(onSubmit)}
           className="flex flex-col gap-8"
         >
@@ -225,11 +230,19 @@ export const AddPeriodForm = ({
                           selected={field.value}
                           onSelect={field.onChange}
                           numberOfMonths={numberOfMonths}
-                          disabled={periods.map((period) => ({
+                          disabled={[{
+                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                          },
+                          {
+                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                          },
+                          ...periods.map((period) => ({
                             from: startOfDay(period.startAt),
                             to: startOfDay(period.endAt),
-                          }))}
-                          defaultMonth={field.value?.from || new Date()}
+                          }))]}
+                          defaultMonth={field.value.from || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                         />
                       </PopoverContent>
                     </Popover>
