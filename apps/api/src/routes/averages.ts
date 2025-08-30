@@ -18,109 +18,15 @@ const app = new Hono<{
   };
 }>();
 
-/**
- * Schema Definitions
- */
-const createCustomAverageSchema = z.object({
-  name: z.string().min(1).max(64),
-  subjects: z
-    .array(
-      z.object({
-        id: z.string().min(1).max(64),
-        customCoefficient: z
-          .number()
-          .min(1)
-          .max(1000)
-          .optional()
-          .nullable(),
-        includeChildren: z.boolean().optional().default(true),
-      })
-    )
-    .min(1),
-  isMainAverage: z.boolean().optional().default(false),
-});
-
-
-/**
- * Create a New Custom Average
- */
-app.post("/", zValidator("json", createCustomAverageSchema), async (c) => {
-  const session = c.get("session");
-  if (!session) throw new HTTPException(401);
-
-  if (!session.user.emailVerified) {
-    return c.json(
-      { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
-      403
-    );
-  }
-
-  // Extract and rename subjects to avoid naming conflicts
-  const { name, subjects: subjectArray, isMainAverage } = c.req.valid("json");
-  const subjectIds = subjectArray.map((s) => s.id);
-
-  // Validate subject ownership
-
-const userSubjects = await db.query.subjects.findMany({
-  where: and(
-    eq(subjects.userId, session.user.id),
-    inArray(subjects.id, subjectIds)
-  ),
-});
-
-
-  console.log(userSubjects);
-  console.log(subjectIds);
-
-  if (userSubjects.length !== subjectIds.length) {
-    return c.json(
-      { code: "INVALID_SUBJECTS", message: "One or more subjects are invalid." },
-      400
-    );
-  }
-
-  // Insert new average
-  const newAverage = await db
-    .insert(customAverages)
-    .values({
-      name,
-      subjects: JSON.stringify(subjectArray),
-      userId: session.user.id,
-      isMainAverage: isMainAverage || false,
-      createdAt: new Date(),
-    })
-    .returning()
-    .get();
-
-  return c.json({ customAverage: newAverage }, 201);
-});
-
-/**
- * Retrieve All Custom Averages for the Authenticated User
- */
-app.get("/", async (c) => {
-  const session = c.get("session");
-  if (!session) throw new HTTPException(401);
-
-  if (!session.user.emailVerified) {
-    return c.json(
-      { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
-      403
-    );
-  }
-
-  const averages = await db.query.customAverages.findMany({
-    where: eq(customAverages.userId, session.user.id),
-    orderBy: [sql`${customAverages.createdAt} DESC`],
+async function getCustomAverageById(averageId: string) {
+  const average = await db.query.customAverages.findFirst({
+    where: and(
+      eq(customAverages.id, averageId)
+    ),
   });
 
-  const parsedAverages = averages.map((avg) => ({
-    ...avg,
-    subjects: JSON.parse(avg.subjects),
-  }));
-
-  return c.json({ customAverages: parsedAverages });
-});
+  return average;
+}
 
 /**
  * Retrieve a Specific Custom Average by ID
@@ -165,10 +71,16 @@ app.get(
     }
 
     const { averageId } = c.req.valid("param");
-    const average = await db.query.customAverages.findFirst({
-      where: and(
-        eq(customAverages.id, averageId),
-        eq(customAverages.userId, session.user.id)
+    const average = await getCustomAverageById(averageId);
+
+    if (!average) throw new HTTPException(404);
+    if (average.userId !== session.user.id) throw new HTTPException(403);
+
+    return c.json({ customAverage: { ...average, subjects: JSON.parse(average.subjects) } });
+  }
+);
+
+/**
       ),
     });
 
@@ -197,32 +109,37 @@ app.patch(
     }
 
     const { averageId } = c.req.valid("param");
+
+    const average = await getCustomAverageById(averageId);
+
+    if (!average) throw new HTTPException(404);
+    if (average.userId !== session.user.id) throw new HTTPException(403);
+
     const updateData = c.req.valid("json");
-
-    const existingAverage = await db.query.customAverages.findFirst({
-      where: and(
-        eq(customAverages.id, averageId),
-        eq(customAverages.userId, session.user.id)
-      ),
-    });
-
-    if (!existingAverage) throw new HTTPException(404);
 
     // If subjects are provided, validate that they belong to the user
     if (updateData.subjects) {
       const subjectArray = updateData.subjects;
       const subjectIds = subjectArray.map((s) => s.id);
 
-      const userSubjects = await db.query.subjects.findMany({
-        where: and(
-          eq(subjects.userId, session.user.id),
-          inArray(subjects.id, subjectIds)
-        ),
+      const customAverageSubjects = await db.query.subjects.findMany({
+        where: inArray(subjects.id, subjectIds)
       });
 
-      if (userSubjects.length !== subjectIds.length) {
-        return c.json(
-          { code: "INVALID_SUBJECTS", message: "One or more subjects are invalid." },
+      if (customAverageSubjects.length != subjectIds.length) {
+        return c.json({
+          code: "SUBJECT_NOT_FOUND_ERROR"
+        }, 404);
+      }
+
+      // Validate subject ownership
+      for (const customAverageSubject of customAverageSubjects) {
+        if (customAverageSubject.userId !== session.user.id) return c.json(
+          { code: "SUBJECT_NOT_OWNED_ERROR" },
+          403
+        );
+        if (customAverageSubject.yearId !== average.yearId) return c.json(
+          { code: "SUBJECT_NOT_IN_YEAR_ERROR" },
           400
         );
       }
@@ -273,6 +190,12 @@ app.delete(
     }
 
     const { averageId } = c.req.valid("param");
+
+    const average = await getCustomAverageById(averageId);
+
+    if (!average) throw new HTTPException(404);
+    if (average.userId !== session.user.id) throw new HTTPException(403);
+
     const deletedAverage = await db
       .delete(customAverages)
       .where(

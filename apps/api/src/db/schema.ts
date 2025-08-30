@@ -7,6 +7,15 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
+export const years = sqliteTable("years", {
+  id: text().notNull().primaryKey().$defaultFn(() => generateId("y")),
+  name: text().notNull(),
+  startDate: integer({ mode: "timestamp" }).notNull(),
+  endDate: integer({ mode: "timestamp" }).notNull(),
+  defaultOutOf: integer().notNull(),
+  userId: text().notNull().references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+});
+
 export const subjects = sqliteTable(
   "subjects",
   {
@@ -31,6 +40,9 @@ export const subjects = sqliteTable(
     userId: text()
       .notNull()
       .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+    yearId: text()
+      .notNull()
+      .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
   },
   (t) => ({
     parentReference: foreignKey({
@@ -55,6 +67,10 @@ export const subjectsRelations = relations(subjects, ({ one, many }) => ({
     fields: [subjects.userId],
     references: [users.id],
   }),
+  year: one(years, {
+    fields: [subjects.yearId],
+    references: [years.id],
+  }),
 }));
 
 export const periods = sqliteTable("periods", {
@@ -74,6 +90,9 @@ export const periods = sqliteTable("periods", {
   userId: text()
     .notNull()
     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
 });
 
 
@@ -104,6 +123,9 @@ export const grades = sqliteTable("grades", {
   userId: text()
     .notNull()
     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
 });
 
 export const gradesRelations = relations(grades, ({ one }) => ({
@@ -118,6 +140,10 @@ export const gradesRelations = relations(grades, ({ one }) => ({
   user: one(users, {
     fields: [grades.userId],
     references: [users.id],
+  }),
+  year: one(years, {
+    fields: [grades.yearId],
+    references: [years.id],
   }),
 }));
 
@@ -238,6 +264,10 @@ export const customAverages = sqliteTable("custom_averages", {
   isMainAverage: integer({ mode: "boolean" }).default(false).notNull(),
 
   createdAt: integer({ mode: "timestamp" }).notNull(),
+
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" })
 });
 
 export const cardTemplates = sqliteTable("card_templates", {
@@ -248,9 +278,9 @@ export const cardTemplates = sqliteTable("card_templates", {
 
   type: text().notNull(), // 'built_in' or 'custom'
   identifier: text().notNull(),
-  
+
   config: text().notNull(), // JSON string containing title, description template, etc.
-  
+
   userId: text() // Only for custom templates
     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
 
@@ -273,11 +303,11 @@ export const cardLayouts = sqliteTable("card_layouts", {
   userId: text()
     .notNull()
     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-    
+
   page: text().notNull(), // 'dashboard', 'grade', or 'subject'
-  
+
   cards: text().notNull(), // JSON array of card positions and customizations
-  
+
   createdAt: integer({ mode: "timestamp" }).notNull(),
   updatedAt: integer({ mode: "timestamp" }).notNull(),
 });

@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { getConnInfo } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { getYearById } from "./years";
 
 const router = new Hono<{
   Variables: {
@@ -1028,6 +1029,7 @@ router.post(
   async (c) => {
     const { id } = c.req.valid("param");
 
+
     const preset = presets.find((p) => p.id === id);
 
     if (!preset) throw new HTTPException(404);
@@ -1069,6 +1071,11 @@ router.post(
         429
       );
 
+    const { yearId } = c.req.query();
+    const year = await getYearById(yearId);
+    if (!year) throw new HTTPException(404);
+    if (year.userId !== session.user.id) throw new HTTPException(403);
+
     const flattenSubjects = (
       subjectsArr: PresetSubject[],
       parentId: string | null = null,
@@ -1083,6 +1090,7 @@ router.post(
       isDisplaySubject: boolean;
       createdAt: Date;
       userId: string;
+      yearId: string;
     }[] => {
       return subjectsArr.flatMap((subject) => {
         const id = generateId("sub");
@@ -1097,6 +1105,7 @@ router.post(
           createdAt: new Date(),
           depth,
           userId: session.user.id,
+          yearId: year.id,
         };
 
         if (subject.subjects && subject.subjects.length > 0) {
@@ -1144,6 +1153,7 @@ router.post(
           userId: session.user.id,
           isMainAverage: customAvg.isMainAverage ?? false,
           createdAt: new Date(),
+          yearId: year.id,
         });
       }
 
