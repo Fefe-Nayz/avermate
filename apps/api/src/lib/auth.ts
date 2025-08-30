@@ -32,6 +32,12 @@ export const auth = betterAuth({
       // If already verified, don't send email
       if (user.emailVerified) return;
 
+      // If email disable console log
+      if (env.DISABLE_EMAIL) {
+        console.log(`Email verification url for ${user.email}: ${url}`);
+        return;
+      }
+
       const currentYear = new Date().getFullYear();
       const htmlContent = `
       <!DOCTYPE html>
@@ -139,6 +145,12 @@ export const auth = betterAuth({
     changeEmail: {
       enabled: true,
       sendChangeEmailVerification: async ({ user, newEmail, url }) => {
+        // If email disable console log
+        if (env.DISABLE_EMAIL) {
+          console.log(`Email update url for ${user.email} to ${newEmail}: ${url}`);
+          return;
+        }
+
         const currentYear = new Date().getFullYear();
         const htmlContent = `
         <!DOCTYPE html>
@@ -252,6 +264,12 @@ export const auth = betterAuth({
 
     // Password reset
     sendResetPassword: async ({ user, url }) => {
+      // If email disable console log
+      if (env.DISABLE_EMAIL) {
+        console.log(`Password reset url for ${user.email}: ${url}`);
+        return;
+      }
+
       const currentYear = new Date().getFullYear();
       const htmlContent = `
       <!DOCTYPE html>

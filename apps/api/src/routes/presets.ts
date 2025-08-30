@@ -9,6 +9,7 @@ import { getConnInfo } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { getYearById } from "./years";
+import { env } from "@/lib/env";
 
 const router = new Hono<{
   Variables: {
@@ -1048,28 +1049,30 @@ router.post(
       );
     }
 
-    const info = getConnInfo(c);
-    const forwardedFor = c.req.header("x-forwarded-for");
-    const identifier =
-      session?.user?.id || forwardedFor || info?.remote?.address || "anon";
+    if (!env.DISABLE_RATE_LIMIT) {
+      const info = getConnInfo(c);
+      const forwardedFor = c.req.header("x-forwarded-for");
+      const identifier =
+        session?.user?.id || forwardedFor || info?.remote?.address || "anon";
 
-    const { isExceeded, remaining, limit, resetIn } = await limitable.verify(
-      identifier,
-      "preset"
-    );
-
-    c.header("RateLimit-Limit", limit.toString());
-    c.header("RateLimit-Remaining", remaining.toString());
-    c.header("RateLimit-Reset", resetIn.toString());
-
-    if (isExceeded)
-      return c.json(
-        {
-          code: "ERR_RATE_LIMIT_EXCEEDED",
-          message: "You're being rate limited!",
-        },
-        429
+      const { isExceeded, remaining, limit, resetIn } = await limitable.verify(
+        identifier,
+        "preset"
       );
+
+      c.header("RateLimit-Limit", limit.toString());
+      c.header("RateLimit-Remaining", remaining.toString());
+      c.header("RateLimit-Reset", resetIn.toString());
+
+      if (isExceeded)
+        return c.json(
+          {
+            code: "ERR_RATE_LIMIT_EXCEEDED",
+            message: "You're being rate limited!",
+          },
+          429
+        );
+    }
 
     const { yearId } = c.req.query();
     const year = await getYearById(yearId);

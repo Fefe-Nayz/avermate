@@ -1,3 +1,4 @@
+import { env } from "@/lib/env";
 import { limitable } from "@/lib/limitable";
 import type { Context, Next } from "hono";
 import { getConnInfo } from "hono/bun";
@@ -5,6 +6,10 @@ import { getConnInfo } from "hono/bun";
 const restrictedMethods = ["POST", "PATCH", "PUT", "DELETE"];
 
 export async function ratelimit(c: Context, next: Next) {
+  if (env.DISABLE_RATE_LIMIT) {
+    return await next();
+  }
+
   const info = getConnInfo(c);
 
   console.time("ratelimit");

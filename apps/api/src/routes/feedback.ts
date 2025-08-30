@@ -26,7 +26,7 @@ const feedbackSchema = z.object({
         return isBase64 && size <= 2 * 1024 * 1024; // Max size 2MB
       },
       { message: "Image invalide ou trop volumineuse" }
-  ),
+    ),
   errorStack: z.string().optional(),
 });
 
@@ -43,9 +43,15 @@ const client = new Client({
 //   }
 // });
 
-client.login(env.DISCORD_TOKEN);
+if (!env.DISABLE_FEEDBACK) {
+  client.login(env.DISCORD_TOKEN);
+}
 
 app.post("/", zValidator("json", feedbackSchema), async (c) => {
+  if (env.DISABLE_FEEDBACK) {
+    return c.json({ code: "FEEDBACK_FEATURE_IS_DISABLED" }, 200);
+  }
+
   const { type, subject, content, email, image, errorStack } =
     c.req.valid("json");
 
@@ -63,12 +69,12 @@ app.post("/", zValidator("json", feedbackSchema), async (c) => {
           type === "Bug"
             ? 0xff0000
             : type === "Suggestion"
-            ? 0x00ff00
-            : 0x0000ff, // Red for bugs, green for suggestions, blue for general
+              ? 0x00ff00
+              : 0x0000ff, // Red for bugs, green for suggestions, blue for general
         image: image
           ? {
-              url: `attachment://feedback-image-${Date.now()}.png`, // Referencing the uploaded image
-            }
+            url: `attachment://feedback-image-${Date.now()}.png`, // Referencing the uploaded image
+          }
           : undefined,
       },
     ],

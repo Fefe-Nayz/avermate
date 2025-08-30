@@ -64,7 +64,9 @@ app.route("/feedback", feedbackRoute);
 
 // app.route("/cards", cardsRoute);
 
-app.all("/uploadthing", (ctx) => uploadHandlers(ctx.req.raw));
+if (env.DISABLE_UPLOADTHING) {
+  app.all("/uploadthing", (ctx) => uploadHandlers(ctx.req.raw));
+}
 
 export default {
   fetch: app.fetch,
