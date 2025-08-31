@@ -28,6 +28,7 @@ import Avatar from "./avatar";
 import { MessageSquareIcon } from "lucide-react";
 import FeedbackDialog from "@/components/dialogs/feedback-dialog";
 import { useTranslations } from "next-intl";
+import EarlyBirdBadge from "./early-bird-badge";
 
 export default function AccountDropdown() {
   const toaster = useToast();
@@ -126,7 +127,7 @@ export default function AccountDropdown() {
             className="rounded-full size-8"
           />
           <div className="flex flex-col">
-            <h1>{data?.user?.name}</h1>
+            <h1>{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
             <p className="text-muted-foreground font-medium ">
               {data?.user?.email}
             </p>
