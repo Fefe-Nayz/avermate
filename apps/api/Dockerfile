@@ -3,7 +3,7 @@ FROM oven/bun:1.2.21 AS build
 WORKDIR /app
 
 COPY package.json package.json
-COPY bun.lockb bun.lockb
+COPY bun.lock bun.lock
 COPY ./apps/api/package.json ./apps/api/package.json
 
 RUN cd ./apps/api/ && bun install

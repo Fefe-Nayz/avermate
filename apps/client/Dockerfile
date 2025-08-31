@@ -10,7 +10,7 @@ FROM base AS deps
 WORKDIR /app
 
 COPY package.json package.json
-COPY bun.lockb bun.lockb
+COPY bun.lock bun.lock
 COPY patches/ ./patches/
 COPY ./apps/client/package.json ./apps/client/package.json
 
