@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f084c744-d472-4f48-adef-7a5428bd980f",
+  "id": "34e43e17-c95f-4ed7-85ca-e37270640110",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "accounts": {
@@ -900,6 +900,13 @@
         },
         "default_out_of": {
           "name": "default_out_of",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

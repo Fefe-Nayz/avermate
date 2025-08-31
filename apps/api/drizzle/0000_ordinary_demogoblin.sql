@@ -126,6 +126,7 @@ CREATE TABLE `years` (
 	`start_date` integer NOT NULL,
 	`end_date` integer NOT NULL,
 	`default_out_of` integer NOT NULL,
+	`created_at` integer NOT NULL,
 	`user_id` text NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE cascade ON DELETE cascade
 );
