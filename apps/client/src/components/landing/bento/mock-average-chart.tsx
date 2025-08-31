@@ -141,6 +141,7 @@ export const MockAverageChart = () => {
     userId: "",
     createdAt: "",
     isCumulative: true,
+    yearId: "",
   };
 
   // Calculate the start and end dates
@@ -223,7 +224,7 @@ export const MockAverageChart = () => {
           </h2>
           <p className="text-center">{t("addGradeToStartTracking")}</p>
         </div>
-        <AddGradeDialog>
+        <AddGradeDialog yearId="">
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addGrade")}

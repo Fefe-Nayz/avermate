@@ -30,6 +30,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
+      yearId: ""
     },
     {
       id: "sub_ll8ou2dywa65",
@@ -42,6 +43,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
+      yearId: ""
     },
     {
       id: "sub_62sj3aw31h0c",
@@ -54,6 +56,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
+      yearId: ""
     },
     {
       id: "sub_9dp4yngnpw5w",
@@ -65,6 +68,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_3",
@@ -77,6 +81,7 @@ export const useLocalizedSubjects = () => {
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
           name: "",
+          yearId: "",
         },
       ],
     },
@@ -91,6 +96,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
+      yearId: "",
     },
     {
       id: "sub_916vdwzsayzu",
@@ -103,6 +109,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
+      yearId: "",
     },
     {
       id: "sub_5ibjf9qojvew",
@@ -114,6 +121,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_2",
@@ -126,6 +134,7 @@ export const useLocalizedSubjects = () => {
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
           name: "",
+          yearId: "",
         },
       ],
     },
@@ -139,6 +148,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_3",
@@ -151,6 +161,7 @@ export const useLocalizedSubjects = () => {
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
           name: "",
+          yearId: "",
         },
       ],
     },
@@ -164,6 +175,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_2",
@@ -175,6 +187,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
         {
@@ -187,6 +200,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
       ],
@@ -201,6 +215,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_1",
@@ -212,6 +227,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
         {
@@ -224,6 +240,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
       ],
@@ -238,6 +255,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_3",
@@ -249,6 +267,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
       ],
@@ -263,6 +282,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_1",
@@ -275,6 +295,7 @@ export const useLocalizedSubjects = () => {
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
           name: "",
+          yearId: "",
         },
         {
           id: "grade_2",
@@ -286,6 +307,7 @@ export const useLocalizedSubjects = () => {
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
+          yearId: "",
           name: "",
         },
         {
@@ -297,6 +319,7 @@ export const useLocalizedSubjects = () => {
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
           subjectId: "sub_u3aiif2dnei4",
+          yearId: "",
           userId: "u_8d9m6qgq2xf5",
           name: "",
         },
@@ -312,12 +335,14 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_1",
           value: 1150,
           outOf: 2000,
           coefficient: 100,
+          yearId: "",
           periodId: "full-year",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
@@ -333,6 +358,7 @@ export const useLocalizedSubjects = () => {
           periodId: "full-year",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
+          yearId: "",
           subjectId: "sub_pd5innyfom96",
           userId: "u_8d9m6qgq2xf5",
           name: "",
@@ -349,6 +375,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_1",
@@ -358,6 +385,7 @@ export const useLocalizedSubjects = () => {
           periodId: "full-year",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
+          yearId: "",
           subjectId: "sub_u3aiif2dnei4",
           userId: "u_8d9m6qgq2xf5",
           name: "",
@@ -374,6 +402,7 @@ export const useLocalizedSubjects = () => {
       isDisplaySubject: false,
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
+      yearId: "",
       grades: [
         {
           id: "grade_1",
@@ -381,6 +410,7 @@ export const useLocalizedSubjects = () => {
           outOf: 2000,
           coefficient: 500,
           periodId: "full-year",
+          yearId: "",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
           subjectId: "sub_916vdwzsayzu",
@@ -394,6 +424,7 @@ export const useLocalizedSubjects = () => {
           coefficient: 500,
           periodId: "full-year",
           createdAt: getRandomDate(),
+          yearId: "",
           passedAt: getRandomDate(),
           subjectId: "sub_916vdwzsayzu",
           userId: "u_8d9m6qgq2xf5",
@@ -406,6 +437,7 @@ export const useLocalizedSubjects = () => {
           coefficient: 500,
           periodId: "full-year",
           createdAt: getRandomDate(),
+          yearId: "",
           passedAt: getRandomDate(),
           subjectId: "sub_916vdwzsayzu",
           userId: "u_8d9m6qgq2xf5",
@@ -419,6 +451,7 @@ export const useLocalizedSubjects = () => {
       parentId: "sub_916vdwzsayzu",
       coefficient: 200,
       depth: 2,
+      yearId: "",
       isMainSubject: false,
       isDisplaySubject: false,
       createdAt: new Date(),
@@ -432,6 +465,7 @@ export const useLocalizedSubjects = () => {
           periodId: "full-year",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
+          yearId: "",
           subjectId: "sub_916vdwzsayzu",
           userId: "u_8d9m6qgq2xf5",
           name: "",
@@ -444,6 +478,7 @@ export const useLocalizedSubjects = () => {
           periodId: "full-year",
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
+          yearId: "",
           subjectId: "sub_916vdwzsayzu",
           userId: "u_8d9m6qgq2xf5",
           name: "",
@@ -457,6 +492,7 @@ export const useLocalizedSubjects = () => {
           createdAt: getRandomDate(),
           passedAt: getRandomDate(),
           subjectId: "sub_916vdwzsayzu",
+          yearId: "",
           userId: "u_8d9m6qgq2xf5",
           name: "",
         },
