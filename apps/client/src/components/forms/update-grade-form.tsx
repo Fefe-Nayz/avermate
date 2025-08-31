@@ -81,6 +81,8 @@ export function UpdateGradeForm({
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const formatter = useFormatter();
+  const formateDates = useFormatDates(formatter);
 
   const [openPeriod, setOpenPeriod] = useState(false);
   const [openSubject, setOpenSubject] = useState(false);
@@ -362,7 +364,7 @@ export function UpdateGradeForm({
                         )}
                       >
                         {field.value
-                          ? useFormatDates(useFormatter()).formatLong(new Date(field.value))
+                          ? formatDates.formatLong(new Date(field.value))
                           : t("chooseDate")}
                         <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
