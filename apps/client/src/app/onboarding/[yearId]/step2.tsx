@@ -29,9 +29,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 
-export default function Step2() {
+export default function Step2({yearId}: {yearId: string}) {
   const t = useTranslations("Onboarding.Step2");
-  const { data: subjects, isError, isLoading } = useSubjects();
+  const { data: subjects, isError, isLoading } = useSubjects(yearId);
 
   if (isLoading) {
     return (
@@ -58,13 +58,13 @@ export default function Step2() {
           ))}
         </div>
         <div className="flex md:flex-row flex-col items-center justify-center md:space-x-4 space-x-0 gap-2 md:gap-0">
-          <AddSubjectDialog>
+          <AddSubjectDialog yearId={yearId}>
             <Button variant="outline" disabled>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addSubject")}
             </Button>
           </AddSubjectDialog>
-          <ListPresetsDialog>
+          <ListPresetsDialog yearId={yearId}>
             <Button disabled>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPresetSubjects")}
@@ -103,13 +103,13 @@ export default function Step2() {
           </ul>
         </p>
         <div className="flex md:flex-row flex-col items-center justify-center md:space-x-4 space-x-0 gap-2 md:gap-0">
-          <AddSubjectDialog>
+          <AddSubjectDialog yearId={yearId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addSubject")}
             </Button>
           </AddSubjectDialog>
-          <ListPresetsDialog>
+          <ListPresetsDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPresetSubjects")}
@@ -160,7 +160,7 @@ export default function Step2() {
               )}
             </div>
             <div className="flex items-center space-x-2 flex-shrink-0">
-              <AddSubjectDialog parentId={subject.id}>
+              <AddSubjectDialog yearId={yearId} parentId={subject.id}>
                 <Button variant="outline" size="icon">
                   <PlusCircleIcon className="size-4" />
                 </Button>
@@ -194,7 +194,7 @@ export default function Step2() {
       <h2 className="text-2xl font-bold text-primary">{t("title")}</h2>
       <div>{renderSubjects(subjects ?? [])}</div>
       <div className="flex flex-col items-center justify-center space-y-4">
-        <AddSubjectDialog>
+        <AddSubjectDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addNewSubject")}

@@ -1,10 +1,15 @@
+"use client";
+
 import { OnboardingButton } from "@/components/buttons/dashboard/onboarding-button";
 import { Card } from "@/components/ui/card";
+import { useActiveYearStore } from "@/stores/active-year-store";
 import { BookOpenIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 export const SubjectEmptyState = () => {
   const t = useTranslations("Dashboard.EmptyStates.SubjectEmptyState");
+
+  const { activeId } = useActiveYearStore();
 
   return (
     <Card className="lg:col-span-10 flex flex-col justify-center items-center p-6 gap-8 w-full h-[400px] xl:h-[600px]">
@@ -16,7 +21,7 @@ export const SubjectEmptyState = () => {
         <p className="text-center">{t("noSubjectsDescription")}</p>
       </div>
 
-      <OnboardingButton />
+      <OnboardingButton yearId={activeId} />
     </Card>
   );
 };

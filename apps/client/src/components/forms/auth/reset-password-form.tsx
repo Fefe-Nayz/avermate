@@ -29,7 +29,7 @@ export const ResetPasswordForm = () => {
 
   const router = useRouter();
   const toaster = useToast();
-    const errorTranslations = useTranslations("Errors");
+  const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.Reset");
 
   const resetPasswordSchema = z.object({
@@ -56,6 +56,7 @@ export const ResetPasswordForm = () => {
     mutationFn: async ({ password }: ResetPasswordSchema) => {
       const data = await authClient.resetPassword({
         newPassword: password,
+        token: window.location.search.split("token=")[1],
       });
 
       return data;

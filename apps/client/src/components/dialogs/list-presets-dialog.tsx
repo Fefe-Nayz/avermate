@@ -27,8 +27,10 @@ const EMPTY_STATE: PresetListState = {
 
 export default function ListPresetsDialog({
   children,
+  yearId,
 }: {
   children: React.ReactNode;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.ListPresets");
   const [open, setOpen] = useState(false);
@@ -70,6 +72,7 @@ export default function ListPresetsDialog({
               close={() => setOpen(false)}
               state={state}
               setState={setState}
+              yearId={yearId}
             />
           )}
         </CredenzaBody>

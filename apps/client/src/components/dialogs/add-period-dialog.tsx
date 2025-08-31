@@ -17,14 +17,16 @@ import { z } from "zod";
 
 export default function AddPeriodCredenza({
   children,
+  yearId,
 }: {
   children: React.ReactNode;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.AddPeriod");
   const [open, setOpen] = useState(false);
 
   // Fetch existing periods to prevent overlapping
-  const { data: periods, isError, isPending } = usePeriods();
+  const { data: periods, isError, isPending } = usePeriods(yearId);
 
   // 1) Mirror the same shape as the AddPeriodForm’s defaultValues
   const AddPeriodSchema = z.object({
@@ -76,6 +78,7 @@ export default function AddPeriodCredenza({
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData}
+              yearId={yearId}
             />
           )}
         </CredenzaBody>

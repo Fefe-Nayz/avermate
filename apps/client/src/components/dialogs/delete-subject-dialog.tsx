@@ -47,10 +47,6 @@ export default function DeleteSubjectDialog({
       return data.subject;
     },
     onSuccess: (subject) => {
-      queryClient.invalidateQueries({ queryKey: ["grades"] });
-      queryClient.invalidateQueries({ queryKey: ["subjects", subject.id] });
-      queryClient.invalidateQueries({ queryKey: ["subjects"] });
-
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription", { name: subject.name }),
@@ -61,6 +57,13 @@ export default function DeleteSubjectDialog({
       if (backOnDelete) {
         router.back();
       }
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, t("error"));

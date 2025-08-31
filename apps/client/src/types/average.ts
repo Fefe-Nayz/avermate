@@ -9,4 +9,5 @@ export type Average = {
     isMainAverage: boolean;
     createdAt: number;
     userId: string;
+    yearId: string;
 };

@@ -42,10 +42,6 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
       return data.grade;
     },
     onSuccess: (grade) => {
-      queryClient.invalidateQueries({ queryKey: ["grades"] });
-      queryClient.invalidateQueries({ queryKey: ["grades", grade.id] });
-      queryClient.invalidateQueries({ queryKey: ["subjects"] });
-
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription", { name: grade.name }),
@@ -54,6 +50,13 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
       setOpen(false);
 
       router.back();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("error"));

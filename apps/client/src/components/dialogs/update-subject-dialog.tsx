@@ -38,7 +38,7 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
     isPending,
     isError,
   } = useQuery({
-    queryKey: ["subject", subjectId],
+    queryKey: ["subjects", subjectId],
     queryFn: async () => {
       const res = await apiClient.get(`subjects/${subjectId}`);
       const data = await res.json<{ subject: Subject }>();
@@ -80,7 +80,7 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
           {!isPending && !isError && formData && (
-            <UpdateSubjectForm subjectId={subject.id} close={() => setOpen(false)} formData={formData} setFormData={setFormData as React.Dispatch<React.SetStateAction<TUpdateSubject>>} />
+            <UpdateSubjectForm yearId={subject.yearId} subjectId={subject.id} close={() => setOpen(false)} formData={formData} setFormData={setFormData as React.Dispatch<React.SetStateAction<TUpdateSubject>>} />
           )}
         </CredenzaBody>
       </CredenzaContent>

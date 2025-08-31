@@ -1,7 +1,7 @@
 "use client";
 
+import { AddGradeButton } from "@/components/buttons/dashboard/grade/add-grade-button";
 import MobileAddButtons from "@/components/buttons/dashboard/mobile-add-buttons";
-import AddGradeDialog from "@/components/dialogs/add-grade-dialog";
 import AddPeriodDialog from "@/components/dialogs/add-period-dialog";
 import AddSubjectDialog from "@/components/dialogs/add-subject-dialog";
 import ErrorStateCard from "@/components/skeleton/error-card";
@@ -18,57 +18,51 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
-import { apiClient } from "@/lib/api";
-import { Period } from "@/types/period";
-import { Subject } from "@/types/subject";
+import { useYears } from "@/hooks/use-years";
+import { useActiveYearStore } from "@/stores/active-year-store";
 import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
-import { useOrganizedSubjects } from "@/hooks/use-get-oragnized-subjects";
-import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 
 export default function GradesPage() {
   const t = useTranslations("Dashboard.Pages.GradesPage"); // Initialize t
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
 
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
+
   const {
     data: periods,
     isError: periodsIsError,
     isPending: periodsIsPending,
-  } = usePeriods();
+  } = usePeriods(activeId);
 
   // Fetch subjects organized by period
   const {
     data: organizedSubjects,
     isError: organizedSubjectsIsError,
     isPending: organizedSubjectsIsPending,
-  } = useOrganizedSubjects();
-  
-  // useQuery({
-  //   queryKey: ["subjects", "organized-by-periods"],
-  //   queryFn: async () => {
-  //     const res = await apiClient.get("subjects/organized-by-periods");
-  //     const data = await res.json<{
-  //       periods: { period: Period; subjects: Subject[] }[];
-  //     }>();
-  //     return data.periods;
-  //   },
-  // });
+  } = useOrganizedSubjects(activeId);
 
   const {
     data: subjects,
     isError: subjectsIsError,
     isPending: subjectsIsPending,
-  } = useSubjects();
+  } = useSubjects(activeId);
 
   useEffect(() => {
     if (!periods) return;
 
     const savedTab = localStorage.getItem("selectedTab");
 
-    if (savedTab) {
+    const savedTabExists = periods.find((period) => period.id === savedTab);
+
+    if (savedTabExists) {
       setSelectedTab(savedTab);
     } else {
       const defaultTab =
@@ -102,34 +96,26 @@ export default function GradesPage() {
         <h1 className="text-xl md:text-3xl font-bold">{t("gradesTitle")}</h1>
 
         <div className=" gap-4 hidden lg:flex">
-          <AddGradeDialog>
-            <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addGrade")}
-            </Button>
-          </AddGradeDialog>
+          <AddGradeButton yearId={activeId} />
 
-          <AddSubjectDialog>
+          <AddSubjectDialog yearId={activeId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addSubject")}
             </Button>
           </AddSubjectDialog>
 
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={activeId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPeriod")}
             </Button>
           </AddPeriodDialog>
         </div>
-        <div className="flex lg:hidden gap-2">
-        <AddGradeDialog>
-            <Button size={"icon"}>
-              <PlusCircleIcon className="size-4" />
-            </Button>
-          </AddGradeDialog>
-          <MobileAddButtons />
+
+        <div className="flex gap-2 lg:hidden">
+          <AddGradeButton yearId={activeId} />
+          <MobileAddButtons yearId={activeId} />
         </div>
       </div>
 
@@ -206,6 +192,7 @@ export default function GradesPage() {
             .map((period) => (
               <TabsContent key={period.id} value={period.id}>
                 <GradesTable
+                  yearId={activeId}
                   subjects={
                     organizedSubjects?.find((p) => p.period.id === period.id)
                       ?.subjects || []
@@ -215,7 +202,7 @@ export default function GradesPage() {
               </TabsContent>
             ))}
         <TabsContent value="full-year">
-          <GradesTable subjects={subjects} periodId="full-year" />
+          <GradesTable yearId={activeId} subjects={subjects} periodId="full-year" />
         </TabsContent>
       </Tabs>
     </main>

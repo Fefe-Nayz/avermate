@@ -58,6 +58,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 
 const addGradeSchema = z.object({
@@ -78,11 +79,13 @@ export function AddGradeForm({
   // 1) New props to handle external state
   formData,
   setFormData,
+  yearId,
 }: {
   close: () => void;
   parentId?: string;
   formData: AddGradeSchema;  // parent's data
   setFormData: React.Dispatch<React.SetStateAction<AddGradeSchema>>;
+  yearId: string;
 }) {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
@@ -101,8 +104,13 @@ export function AddGradeForm({
   const [isManualPeriod, setIsManualPeriod] = useState(false);
 
   // Queries
-  const { data: subjects } = useSubjects();
-  const { data: periods } = usePeriods();
+  const { data: subjects } = useSubjects(yearId);
+
+  const { data: periods } = usePeriods(yearId);
+
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === yearId);
 
   const addGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
@@ -154,7 +162,7 @@ export function AddGradeForm({
       subjectId,
       periodId,
     }: AddGradeSchema) => {
-      const res = await apiClient.post("grades", {
+      const res = await apiClient.post(`years/${yearId}/grades`, {
         json: {
           name,
           value,
@@ -174,8 +182,12 @@ export function AddGradeForm({
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["grades"] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
@@ -370,10 +382,10 @@ export function AddGradeForm({
                         setIsManualPeriod(false); // Reset manual period selection
                       }}
                       disabled={(date) =>
-                        date > new Date() || date < new Date("2023-01-02")
+                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                       }
                       autoFocus
-                      defaultMonth={field.value || new Date()}
+                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                     />
                   </PopoverContent>
                 </Popover>
@@ -411,8 +423,8 @@ export function AddGradeForm({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : form.getValues("periodId") === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -483,8 +495,8 @@ export function AddGradeForm({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : form.getValues("periodId") === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </FormControl>

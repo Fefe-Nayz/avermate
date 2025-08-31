@@ -5,8 +5,6 @@ import gradeLoader from "@/components/skeleton/grade-loader";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { useGrade } from "@/hooks/use-grade";
 import { apiClient } from "@/lib/api";
-import { GetOrganizedSubjectsResponse } from "@/types/get-organized-subjects-response";
-import { useOrganizedSubjects } from "@/hooks/use-get-oragnized-subjects";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,6 +13,8 @@ import { useTranslations } from "next-intl";
 import { usePeriods } from "@/hooks/use-periods";
 import { fullYearPeriod } from "@/utils/average";
 import { useSubjects } from "@/hooks/use-subjects";
+import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
+import { useYears } from "@/hooks/use-years";
 
 export default function GradePage() {
   const { periodId, gradeId } = useParams() as {
@@ -50,40 +50,35 @@ export default function GradePage() {
     localStorage.removeItem("backFromGradeOrSubject");
   };
 
+  const { data: grade, isPending, isError } = useGrade(gradeId);
+
   const {
     data: organizedSubjects,
     isError: organizedSubjectsIsError,
     isPending: organizedSubjectsIsPending,
-  } = useOrganizedSubjects();
-  
-  // useQuery({
-  //   queryKey: ["subjects", "organized-by-periods"],
-  //   queryFn: async () => {
-  //     const res = await apiClient.get("subjects/organized-by-periods");
-  //     const data = await res.json<GetOrganizedSubjectsResponse>();
-  //     return data.periods;
-  //   },
-  // });
-
-  const { data: grade, isPending, isError } = useGrade(gradeId);
+  } = useOrganizedSubjects(grade?.yearId || "none");
 
   const {
     data: customAverages,
     isError: isCustomAveragesError,
     isPending: isCustomAveragesPending,
-  } = useCustomAverages();
+  } = useCustomAverages(grade?.yearId || "none");
 
   const {
     data: subjects,
     isPending: isSubjectsPending,
     isError: isSubjectsError,
-  } = useSubjects();
+  } = useSubjects(grade?.yearId || "none");
+
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === grade?.yearId);
 
   const {
     data: periods,
     isPending: isPeriodPending,
     isError: isPeriodError,
-  } = usePeriods();
+  } = usePeriods(grade?.yearId || "none");
 
   if (
     isError ||
@@ -108,8 +103,8 @@ export default function GradePage() {
 
   const period =
     periodId == "full-year"
-      ? { ...fullYearPeriod(subjects), name: tr("fullYear") }
-      : periods?.find((p) => p.id === periodId) || fullYearPeriod(subjects);
+      ? { ...fullYearPeriod(subjects, year), name: tr("fullYear") }
+      : periods?.find((p) => p.id === periodId) || fullYearPeriod(subjects, year);
 
   return (
     <GradeWrapper

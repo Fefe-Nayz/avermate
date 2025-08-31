@@ -16,9 +16,11 @@ import { useTranslations } from "next-intl";
 export default function AddGradeDialog({
   children,
   parentId,
+  yearId,
 }: {
   children: React.ReactNode;
   parentId?: string;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.AddGrade");
   const [open, setOpen] = useState(false);
@@ -59,6 +61,7 @@ export default function AddGradeDialog({
               parentId={parentId}
               formData={formData}
               setFormData={setFormData}
+              yearId={yearId}
             />
           )}
         </CredenzaBody>

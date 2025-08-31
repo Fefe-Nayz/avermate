@@ -3,7 +3,7 @@ import { Progress } from "@/components/ui/progress";
 import { useTranslations } from "next-intl";
 
 interface StepperProps {
-  steps: { title: "welcome" | "periodes" | "matieres" | "notes" }[];
+  steps: { title: "periodes" | "matieres" }[];
   currentStep: number;
   onStepChange: (stepIndex: number) => void;
 }

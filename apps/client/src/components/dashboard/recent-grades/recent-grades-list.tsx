@@ -11,9 +11,11 @@ import { Period } from "@/types/period";
 export default function RecentGradesList({
   recentGrades,
   period,
+  yearId,
 }: {
   recentGrades: Grade[];
   period: Period;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Cards.RecentGradesCard");
 
@@ -21,7 +23,7 @@ export default function RecentGradesList({
     return (
       <div className="flex flex-col items-center justify-center gap-6 h-full">
         <p className="text-center">{t("noRecentGrades")}</p>
-        <AddGradeDialog>
+        <AddGradeDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addGrade")}

@@ -9,7 +9,7 @@ export default function AuthenticatedLayout({
   return (
     <div className="flex flex-col shadow-[0px_4px_64px_0px_rgba(255,255,255,0.05)_inset] min-h-screen h-full overflow-x-hidden">
       {/* Header */}
-      <DashboardHeader />
+      <DashboardHeader hideWorkspaces={true} />
 
       {/* Page */}
       <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16">

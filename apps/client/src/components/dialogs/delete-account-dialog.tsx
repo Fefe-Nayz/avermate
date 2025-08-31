@@ -53,6 +53,7 @@ export default function DeleteAccountDialog() {
 
       router.push("/");
 
+      queryClient.cancelQueries();
       queryClient.clear();
       queryClient.invalidateQueries();
       queryClient.cancelQueries();

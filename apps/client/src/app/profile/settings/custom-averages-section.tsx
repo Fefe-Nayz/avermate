@@ -28,28 +28,22 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, PlusCircleIcon } from "lucide-react";
 import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
+import { useCustomAverages } from "@/hooks/use-custom-averages";
 
-export const CustomAveragesSection = () => {
+export const CustomAveragesSection = ({yearId}: {yearId: string}) => {
   const t = useTranslations("Settings.Settings.CustomAverages");
 
   const {
     data: averages,
     isError: isAveragesError,
     isPending: isAveragesPending,
-  } = useQuery({
-    queryKey: ["customAverages"],
-    queryFn: async () => {
-      const res = await apiClient.get("averages");
-      const data = await res.json<GetCustomAveragesResponse>();
-      return data.customAverages;
-    },
-  });
+  } = useCustomAverages(yearId);
 
   const {
     data: subjects,
     isError: isSubjectsError,
     isPending: isSubjectsPending,
-  } = useSubjects();
+  } = useSubjects(yearId);
 
   if (isAveragesPending || isSubjectsPending) {
     return (
@@ -87,7 +81,7 @@ export const CustomAveragesSection = () => {
                 </div>
               ))}
               <div className="flex justify-start">
-                <AddAverageDialog>
+                <AddAverageDialog yearId={yearId}>
                   <Button disabled>
                     <PlusCircleIcon className="size-4 mr-2" />
                     {t("addCustomAverage")}
@@ -116,7 +110,7 @@ export const CustomAveragesSection = () => {
             </h2>
             <p className="text-center">{t("addNewCustomAverage")}</p>
           </div>
-          <AddAverageDialog>
+          <AddAverageDialog yearId={yearId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addCustomAverage")}
@@ -178,7 +172,7 @@ export const CustomAveragesSection = () => {
           </div>
         ))}
         <div className="flex justify-start">
-          <AddAverageDialog>
+          <AddAverageDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addCustomAverage")}

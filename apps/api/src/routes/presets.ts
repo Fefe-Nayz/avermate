@@ -8,6 +8,8 @@ import { Hono } from "hono";
 import { getConnInfo } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { getYearById } from "./years";
+import { env } from "@/lib/env";
 
 const router = new Hono<{
   Variables: {
@@ -1028,6 +1030,7 @@ router.post(
   async (c) => {
     const { id } = c.req.valid("param");
 
+
     const preset = presets.find((p) => p.id === id);
 
     if (!preset) throw new HTTPException(404);
@@ -1046,28 +1049,35 @@ router.post(
       );
     }
 
-    const info = getConnInfo(c);
-    const forwardedFor = c.req.header("x-forwarded-for");
-    const identifier =
-      session?.user?.id || forwardedFor || info?.remote?.address || "anon";
+    if (!env.DISABLE_RATE_LIMIT) {
+      const info = getConnInfo(c);
+      const forwardedFor = c.req.header("x-forwarded-for");
+      const identifier =
+        session?.user?.id || forwardedFor || info?.remote?.address || "anon";
 
-    const { isExceeded, remaining, limit, resetIn } = await limitable.verify(
-      identifier,
-      "preset"
-    );
-
-    c.header("RateLimit-Limit", limit.toString());
-    c.header("RateLimit-Remaining", remaining.toString());
-    c.header("RateLimit-Reset", resetIn.toString());
-
-    if (isExceeded)
-      return c.json(
-        {
-          code: "ERR_RATE_LIMIT_EXCEEDED",
-          message: "You're being rate limited!",
-        },
-        429
+      const { isExceeded, remaining, limit, resetIn } = await limitable.verify(
+        identifier,
+        "preset"
       );
+
+      c.header("RateLimit-Limit", limit.toString());
+      c.header("RateLimit-Remaining", remaining.toString());
+      c.header("RateLimit-Reset", resetIn.toString());
+
+      if (isExceeded)
+        return c.json(
+          {
+            code: "ERR_RATE_LIMIT_EXCEEDED",
+            message: "You're being rate limited!",
+          },
+          429
+        );
+    }
+
+    const { yearId } = c.req.query();
+    const year = await getYearById(yearId);
+    if (!year) throw new HTTPException(404);
+    if (year.userId !== session.user.id) throw new HTTPException(403);
 
     const flattenSubjects = (
       subjectsArr: PresetSubject[],
@@ -1083,6 +1093,7 @@ router.post(
       isDisplaySubject: boolean;
       createdAt: Date;
       userId: string;
+      yearId: string;
     }[] => {
       return subjectsArr.flatMap((subject) => {
         const id = generateId("sub");
@@ -1097,6 +1108,7 @@ router.post(
           createdAt: new Date(),
           depth,
           userId: session.user.id,
+          yearId: year.id,
         };
 
         if (subject.subjects && subject.subjects.length > 0) {
@@ -1144,6 +1156,7 @@ router.post(
           userId: session.user.id,
           isMainAverage: customAvg.isMainAverage ?? false,
           createdAt: new Date(),
+          yearId: year.id,
         });
       }
 

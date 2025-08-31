@@ -11,6 +11,7 @@ export type Subject = {
   grades: PartialGrade[];
   isMainSubject: boolean;
   isDisplaySubject: boolean;
+  yearId: string;
 };
 
 export type PartialSubject = Omit<

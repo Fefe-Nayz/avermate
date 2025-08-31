@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import React, { useEffect } from "react";
 
@@ -56,6 +57,7 @@ interface UpdatePeriodFormProps {
   periods: Period[];
   formData: UpdatePeriodSchema;
   setFormData: React.Dispatch<React.SetStateAction<UpdatePeriodSchema>>;
+  yearId: string;
 }
 
 export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
@@ -64,6 +66,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
   periods,
   formData,
   setFormData,
+  yearId,
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdatePeriod");
@@ -108,17 +111,24 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
           isCumulative: vals.isCumulative,
         },
       });
-      return res.json();
+      const json = await res.json() as { period: Period };
+      return json.period;
     },
     onSuccess: () => {
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription"),
       });
-      queryClient.invalidateQueries({ queryKey: ["periods"] });
-      queryClient.invalidateQueries({ queryKey: ["period", periodId] });
-      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["periods", periodId] });
+      queryClient.invalidateQueries({ queryKey: ["periods"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
@@ -129,6 +139,10 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
     resolver: zodResolver(updatePeriodSchema),
     defaultValues: formData,
   });
+
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === yearId);
 
   // On mount, reset
   useEffect(() => {
@@ -237,12 +251,18 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
                           selected={field.value}
                           onSelect={field.onChange}
                           numberOfMonths={numberOfMonths}
-                          disabled={periods
-                            .filter((p) => p.id !== periodId)
-                            .map((p) => ({
-                              from: startOfDay(p.startAt),
-                              to: startOfDay(p.endAt),
-                            }))}
+                          disabled={[{
+                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                          },
+                          {
+                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                          },
+                          ...periods.filter((p) => p.id !== periodId).map((period) => ({
+                            from: startOfDay(period.startAt),
+                            to: startOfDay(period.endAt),
+                          }))]}
                           defaultMonth={field.value?.from || new Date()}
                         />
                       </PopoverContent>

@@ -41,6 +41,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
 import { isEqual } from "lodash";
 
@@ -65,6 +66,7 @@ interface UpdateGradeFormProps {
   close: () => void;
   formData: UpdateGradeSchema;
   setFormData: React.Dispatch<React.SetStateAction<UpdateGradeSchema>>;
+  yearId: string;
 }
 
 export function UpdateGradeForm({
@@ -72,15 +74,28 @@ export function UpdateGradeForm({
   close,
   formData,
   setFormData,
+  yearId
 }: UpdateGradeFormProps) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateGrade");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { data: subjects } = useSubjects();
-  const { data: periods } = usePeriods();
-  const formatDates = useFormatDates(useFormatter());
+  const formatter = useFormatter();
+  const formatDates = useFormatDates(formatter);
+
+  const [openPeriod, setOpenPeriod] = useState(false);
+  const [openSubject, setOpenSubject] = useState(false);
+
+  const periodInputRef = useRef<HTMLInputElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
+
+  const [periodInputValue, setPeriodInputValue] = useState("");
+  const [subjectInputValue, setSubjectInputValue] = useState("");
+
+  const { data: subjects } = useSubjects(yearId);
+
+  const { data: periods } = usePeriods(yearId);
 
   const updateGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
@@ -131,15 +146,23 @@ export function UpdateGradeForm({
         description: t("successDescription"),
       });
       close();
+      
+    },
+    onSettled() {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["grades"] });
       queryClient.invalidateQueries({ queryKey: ["grade", gradeId] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
     },
   });
+
+  const { data: years } = useYears();
+  const year = years?.find((y) => y.id === yearId);
 
   // Setup our form with parent's data
   const form = useForm<UpdateGradeSchema>({
@@ -186,26 +209,17 @@ export function UpdateGradeForm({
     mutate(vals);
   };
 
-  /** For combobox UI */
-  const [openPeriod, setOpenPeriod] = useState(false);
-  const periodInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!isDesktop && openPeriod) {
       setTimeout(() => periodInputRef.current?.focus(), 350);
     }
   }, [openPeriod, isDesktop]);
 
-  const [openSubject, setOpenSubject] = useState(false);
-  const subjectInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!isDesktop && openSubject) {
       setTimeout(() => subjectInputRef.current?.focus(), 350);
     }
   }, [openSubject, isDesktop]);
-
-  // For searching in combobox
-  const [periodInputValue, setPeriodInputValue] = useState("");
-  const [subjectInputValue, setSubjectInputValue] = useState("");
 
   const selectedPeriodValue = form.getValues("periodId");
   const selectedPeriod =
@@ -365,10 +379,10 @@ export function UpdateGradeForm({
                         setIsManualPeriod(false);
                       }}
                       disabled={(date) =>
-                        date > new Date() || date < new Date("2023-01-02")
+                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                       }
                       autoFocus
-                      defaultMonth={field.value || new Date()}
+                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                     />
                   </PopoverContent>
                 </Popover>

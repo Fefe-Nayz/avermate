@@ -18,6 +18,10 @@ export default function DashboardNav() {
       label: t("grades"),
       path: "/dashboard/grades",
     },
+    {
+      label: "DASHBOARD_NAV_SETTINGS_LABEL",
+      path: "/dashboard/settings",
+    },
   ];
 
   return (

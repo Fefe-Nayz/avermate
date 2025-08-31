@@ -23,11 +23,11 @@ function isAprilFoolsDay(): boolean {
   return today.getMonth() === 3 && today.getDate() === 1;
 }
 
-export const useSubjects = () =>
+export const useSubjects = (yearId: string) =>
   useQuery({
     queryKey: ["subjects"],
     queryFn: async () => {
-      const res = await apiClient.get("subjects");
+      const res = await apiClient.get(`years/${yearId}/subjects`);
       const data = await res.json<GetSubjectsResponse>();
 
       if (isAprilFoolsDay()) {

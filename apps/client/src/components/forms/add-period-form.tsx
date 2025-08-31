@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import React, { useEffect } from "react";
 
@@ -53,6 +54,7 @@ interface AddPeriodFormProps {
       isCumulative?: boolean;
     }>
   >;
+  yearId: string;
 }
 
 export const AddPeriodForm = ({
@@ -60,6 +62,7 @@ export const AddPeriodForm = ({
   periods,
   formData,
   setFormData,
+  yearId,
 }: AddPeriodFormProps) => {
   const formatter = useFormatter();
   const formatDates = useFormatDates(formatter);
@@ -94,7 +97,7 @@ export const AddPeriodForm = ({
   const { mutate, isPending } = useMutation({
     mutationKey: ["create-Period"],
     mutationFn: async ({ name, dateRange, isCumulative }: AddPeriodSchema) => {
-      const res = await apiClient.post("periods", {
+      const res = await apiClient.post(`years/${yearId}/periods`, {
         json: {
           name,
           startAt: dateRange.from,
@@ -108,12 +111,14 @@ export const AddPeriodForm = ({
       toaster.toast({
         description: t("successDescription"),
       });
-      queryClient.invalidateQueries({ queryKey: ["periods"] });
-      queryClient.invalidateQueries({ queryKey: ["subjects"] });
-      queryClient.invalidateQueries({
-        queryKey: ["subjects", "organized-by-periods"],
-      });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["periods"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("errorAddingPeriod"));
@@ -135,6 +140,9 @@ export const AddPeriodForm = ({
     },
   });
 
+  const { data: years } = useYears();
+
+  const year = years?.find((y) => y.id === yearId);
   // 1) On mount, reset with parent's data
   useEffect(() => {
     form.reset(formData);
@@ -246,11 +254,19 @@ export const AddPeriodForm = ({
                           selected={field.value}
                           onSelect={field.onChange}
                           numberOfMonths={numberOfMonths}
-                          disabled={periods.map((p) => ({
-                            from: startOfDay(p.startAt),
-                            to: startOfDay(p.endAt),
-                          }))}
-                          defaultMonth={field.value?.from || new Date()}
+                          disabled={[{
+                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                          },
+                          {
+                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                          },
+                          ...periods.map((period) => ({
+                            from: startOfDay(period.startAt),
+                            to: startOfDay(period.endAt),
+                          }))]}
+                          defaultMonth={field.value.from || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
                         />
                       </PopoverContent>
                     </Popover>

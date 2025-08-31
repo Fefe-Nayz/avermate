@@ -100,24 +100,26 @@ interface AddAverageFormProps {
   close: () => void;
   formData: AddCustomAverageSchema;
   setFormData: React.Dispatch<React.SetStateAction<AddCustomAverageSchema>>;
+  yearId: string;
 }
 
 export const AddAverageForm: React.FC<AddAverageFormProps> = ({
   close,
   formData,
   setFormData,
+  yearId
 }) => {
   const t = useTranslations("Dashboard.Forms.AddAverage");
   const errorTranslations = useTranslations("Errors");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(yearId);
   const localizedSchema = getLocalizedSchema(t);
 
   const form = useForm<AddCustomAverageSchema>({
     resolver: zodResolver(localizedSchema),
-    defaultValues: formData, 
+    defaultValues: formData,
   });
 
   useEffect(() => {
@@ -139,7 +141,7 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
   const { mutate, isPending: isSubmitting } = useMutation({
     mutationKey: ["create-custom-average"],
     mutationFn: async (vals: AddCustomAverageSchema) => {
-      const res = await apiClient.post("averages", {
+      const res = await apiClient.post(`years/${yearId}/averages`, {
         json: {
           name: vals.name,
           subjects: vals.subjects,
@@ -154,7 +156,10 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
         description: t("successDescription"),
       });
       close();
-      queryClient.invalidateQueries({ queryKey: ["customAverages"] });
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
     },
     onError: (error: any) => {
       handleError(error, toaster, errorTranslations, t("errorCreating"));

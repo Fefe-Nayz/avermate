@@ -35,6 +35,12 @@ export const env = createEnv({
 
     DISCORD_TOKEN: z.string(),
     DISCORD_CHANNEL_ID: z.string(),
+
+    // Dev
+    DISABLE_FEEDBACK: z.coerce.boolean().optional().default(false),
+    DISABLE_EMAIL: z.coerce.boolean().optional().default(false),
+    DISABLE_RATE_LIMIT: z.coerce.boolean().optional().default(false),
+    DISABLE_UPLOADTHING: z.coerce.boolean().optional().default(false),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -49,6 +49,7 @@ import React from "react";
 interface AddSubjectFormProps {
   close: () => void;
   parentId?: string;
+  yearId: string;
   formData: {
     name: string;
     coefficient?: number;
@@ -72,13 +73,14 @@ export const AddSubjectForm = ({
   parentId,
   formData,
   setFormData,
+  yearId,
 }: AddSubjectFormProps) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddSubject");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { data: subjects } = useSubjects();
+  const { data: subjects } = useSubjects(yearId);
 
   const addSubjectSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
@@ -95,13 +97,30 @@ export const AddSubjectForm = ({
   });
   type AddSubjectSchema = z.infer<typeof addSubjectSchema>;
 
+  const [openParent, setOpenParent] = useState(false);
+
+  const parentInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isDesktop && openParent) {
+      setTimeout(() => parentInputRef.current?.focus(), 350);
+    }
+  }, [openParent, isDesktop]);
+
   const { mutate, isPending } = useMutation({
     mutationKey: ["create-subject"],
-    mutationFn: async (vals: AddSubjectSchema) => {
-      const res = await apiClient.post("subjects", {
-        json: vals,
+    mutationFn: async ({
+      name,
+      coefficient,
+      parentId,
+      isMainSubject,
+      isDisplaySubject,
+    }: AddSubjectSchema) => {
+      const res = await apiClient.post(`years/${yearId}/subjects`, {
+        json: { name, coefficient, parentId, isMainSubject, isDisplaySubject },
       });
-      return await res.json();
+      const json = await res.json() as {subject: Subject};
+      return json.subject;
     },
     onSuccess: () => {
       toaster.toast({
@@ -109,7 +128,13 @@ export const AddSubjectForm = ({
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("errorAddingSubject"));
@@ -156,16 +181,6 @@ export const AddSubjectForm = ({
   const onSubmit = (values: AddSubjectSchema) => {
     mutate(values);
   };
-
-  // Subject selection logic for parent
-  const [openParent, setOpenParent] = useState(false);
-  const parentInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isDesktop && openParent) {
-      setTimeout(() => parentInputRef.current?.focus(), 350);
-    }
-  }, [openParent, isDesktop]);
 
   return (
     <div>

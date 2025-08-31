@@ -77,6 +77,7 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdateGradeSchema>>}
+              yearId={grade.yearId}
             />
           )}
         </CredenzaBody>

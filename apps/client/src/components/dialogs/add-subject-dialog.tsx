@@ -17,9 +17,11 @@ import { z } from "zod";
 export default function AddSubjectCredenza({
   children,
   parentId,
+  yearId,
 }: {
   children: React.ReactNode;
   parentId?: string;
+  yearId: string;
 }) {
   const t = useTranslations("Dashboard.Dialogs.AddSubject");
   const [open, setOpen] = useState(false);
@@ -69,6 +71,7 @@ export default function AddSubjectCredenza({
               parentId={parentId}
               formData={formData}
               setFormData={setFormData}
+              yearId={yearId}
             />
           )}
         </CredenzaBody>

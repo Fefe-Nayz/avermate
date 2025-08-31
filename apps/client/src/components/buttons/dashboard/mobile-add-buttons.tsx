@@ -14,7 +14,7 @@ import AddSubjectDialog from "@/components/dialogs/add-subject-dialog";
 import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 
-export default function MobileAddButtons() {
+export default function MobileAddButtons({yearId}: {yearId: string}) {
   const t = useTranslations("Dashboard.Buttons.MobileAddButtons");
 
   return (
@@ -38,7 +38,7 @@ export default function MobileAddButtons() {
 
         {/* Add subject */}
         <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-          <AddSubjectDialog>
+          <AddSubjectDialog yearId={yearId}>
             <Button variant="ghost" className="w-full justify-start">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addSubject")}
@@ -48,7 +48,7 @@ export default function MobileAddButtons() {
 
         {/* Add period */}
         <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-          <AddPeriodDialog>
+          <AddPeriodDialog yearId={yearId}>
             <Button variant="ghost" className="w-full justify-start">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPeriod")}

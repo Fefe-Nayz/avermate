@@ -21,10 +21,12 @@ import { Input } from "@/components/ui/input";
 export const PresetList = ({
   close,
   presets,
+  yearId,
   state,
   setState,
 }: {
   close: () => void;
+  yearId: string;
   presets: Preset[];
   state: { searchTerm: string };
   setState: React.Dispatch<React.SetStateAction<{ searchTerm: string }>>;
@@ -50,7 +52,7 @@ export const PresetList = ({
   >({
     mutationKey: ["set-preset"],
     mutationFn: async ({ presetId }) => {
-      const res = await apiClient.post(`presets/${presetId}`);
+      const res = await apiClient.post(`presets/${presetId}?yearId=${yearId}`);
       const data = await res.json();
       return data;
     },

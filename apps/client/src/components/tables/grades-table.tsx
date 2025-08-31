@@ -35,9 +35,11 @@ import {
 export default function GradesTable({
   subjects,
   periodId,
+  yearId,
 }: {
   subjects: Subject[];
   periodId: string;
+  yearId: string;
 }) {
   const pathname = usePathname();
   const t = useTranslations("Dashboard.Tables.GradesTable");
@@ -47,7 +49,7 @@ export default function GradesTable({
     isError: isPeriodError,
     isPending: isPeriodPending,
   } = useQuery({
-    queryKey: ["periods-name", periodId],
+    queryKey: ["periods", periodId],
     queryFn: async () => {
       if (periodId === "full-year") {
         return null;
@@ -71,7 +73,7 @@ export default function GradesTable({
     data: customAverages,
     isError: isCustomAveragesError,
     isPending: isCustomAveragesPending,
-  } = useCustomAverages();
+  } = useCustomAverages(yearId);
 
   // Loading State
   if (isPeriodPending || isCustomAveragesPending) {

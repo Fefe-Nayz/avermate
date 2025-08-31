@@ -79,6 +79,7 @@ interface UpdateCustomAverageFormProps {
   averageId: string; // So we know which item to PATCH
   formData: UpdateCustomAverageSchema;
   setFormData: React.Dispatch<React.SetStateAction<UpdateCustomAverageSchema>>;
+  yearId: string;
 }
 
 export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = ({
@@ -86,13 +87,13 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
   averageId,
   formData,
   setFormData,
+  yearId,
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateAverage");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { data: subjects } = useSubjects();
 
   // Prepare our local form using parent's data
   const form = useForm<UpdateCustomAverageSchema>({
@@ -105,6 +106,10 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
     form.reset(formData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  console.log("from form", yearId)
+
+  const { data: subjects } = useSubjects(yearId);
 
   // Watch everything so we can sync back up to the parent
   const watchedValues = form.watch();
@@ -139,8 +144,14 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
         description: t("successDescription"),
       });
       close();
-      queryClient.invalidateQueries({ queryKey: ["customAverages"] });
-      queryClient.invalidateQueries({ queryKey: ["average", averageId] });
+
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
+      queryClient.invalidateQueries({
+        queryKey: ["custom-averages", averageId],
+      });
     },
     onError: (error: any) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
@@ -248,67 +259,67 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
                 </Popover>
               ) : (
                 <>
-                <Drawer
-                  open={openSubjectIndex === index}
+                  <Drawer
+                    open={openSubjectIndex === index}
                     onOpenChange={(open) =>
                       setOpenSubjectIndex(open ? index : null)
                     }
-                >
-                  <DrawerTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
+                  >
+                    <DrawerTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
                           aria-expanded={
                             openSubjectIndex === index ? "true" : "false"
                           }
-                        className="justify-between w-full"
-                        onClick={() => setOpenSubjectIndex(index)}
-                        disabled={isSubmitting}
-                      >
-                        {selectedSubjectName || t("chooseSubject")}
-                        <ChevronsUpDown className="opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </DrawerTrigger>
-                  <DrawerContent>
-                    <VisuallyHidden>
-                      <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
-                    </VisuallyHidden>
-                    <div className="mt-4 border-t p-4 overflow-scroll">
-                      <Command>
+                          className="justify-between w-full"
+                          onClick={() => setOpenSubjectIndex(index)}
+                          disabled={isSubmitting}
+                        >
+                          {selectedSubjectName || t("chooseSubject")}
+                          <ChevronsUpDown className="opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </DrawerTrigger>
+                    <DrawerContent>
+                      <VisuallyHidden>
+                        <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
+                      </VisuallyHidden>
+                      <div className="mt-4 border-t p-4 overflow-scroll">
+                        <Command>
                           <CommandInput
                             ref={subjectInputRef}
                             placeholder={t("searchSubject")}
                             className="h-9"
                             autoFocus
                           />
-                        <CommandList>
-                          <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
-                          <CommandGroup>
-                            {subjects
-                              ?.slice()
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((subject) => (
-                                <CommandItem
-                                  key={subject.id}
-                                  value={subject.name}
+                          <CommandList>
+                            <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
+                            <CommandGroup>
+                              {subjects
+                                ?.slice()
+                                .sort((a, b) => a.name.localeCompare(b.name))
+                                .map((subject) => (
+                                  <CommandItem
+                                    key={subject.id}
+                                    value={subject.name}
                                     onSelect={() =>
                                       setSubjectForIndex(index, subject.id)
                                     }
-                                >
-                                  <span>{subject.name}</span>
-                                  {field.value === subject.id && (
-                                    <Check className="ml-auto h-4 w-4" />
-                                  )}
-                                </CommandItem>
-                              ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </div>
-                  </DrawerContent>
-                </Drawer>
+                                  >
+                                    <span>{subject.name}</span>
+                                    {field.value === subject.id && (
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </div>
+                    </DrawerContent>
+                  </Drawer>
                 </>
               )}
               <FormMessage />

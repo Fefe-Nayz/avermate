@@ -28,8 +28,6 @@ export default function DeletePeriodDialog({ period }: { period: Period }) {
   const errorTranslations = useTranslations("Errors");
   const [open, setOpen] = useState(false);
 
-  const router = useRouter();
-
   const toaster = useToast();
 
   const queryClient = useQueryClient();
@@ -42,15 +40,19 @@ export default function DeletePeriodDialog({ period }: { period: Period }) {
       return data.period;
     },
     onSuccess: (period) => {
-      queryClient.invalidateQueries({ queryKey: ["periods"] });
-      queryClient.invalidateQueries({ queryKey: ["period", period.id] });
-
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription", { name: period.name }),
       });
 
       setOpen(false);
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["periods"] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("error"));

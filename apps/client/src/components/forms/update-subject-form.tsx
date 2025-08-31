@@ -59,6 +59,7 @@ type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
 interface UpdateSubjectFormProps {
   close: () => void;
   subjectId: string;
+  yearId: string;
   formData: UpdateSubjectSchema;
   setFormData: React.Dispatch<React.SetStateAction<UpdateSubjectSchema>>;
 }
@@ -68,13 +69,21 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
   subjectId,
   formData,
   setFormData,
+  yearId,
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateSubject");
   const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const { data: subjects } = useSubjects();
+
+  const parentInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: subjects } = useSubjects(yearId);
+
+  // -----------------------------------
+  // 1) First, define 'form'
+  // -----------------------------------
   const updateSubjectSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     coefficient: z.coerce
@@ -134,14 +143,20 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
       const res = await apiClient.patch(`subjects/${subjectId}`, { json: vals });
       return (await res.json<{ subject: Subject }>()).subject;
     },
-    onSuccess: () => {
+    onSuccess: (subject) => {
       toaster.toast({
         title: t("successTitle"),
         description: t("successDescription"),
       });
       close();
+    },
+    onSettled: () => {
+      queryClient.cancelQueries();
+      queryClient.invalidateQueries({ queryKey: ["subjects", subjectId] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
-      queryClient.invalidateQueries({ queryKey: ["subject", subjectId] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
+      queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
       handleError(error, toaster, errorTranslations, t("updateError"));
@@ -154,7 +169,6 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
 
   // For picking a parent
   const [openParent, setOpenParent] = useState(false);
-  const parentInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!isDesktop && openParent) {
       setTimeout(() => parentInputRef.current?.focus(), 350);

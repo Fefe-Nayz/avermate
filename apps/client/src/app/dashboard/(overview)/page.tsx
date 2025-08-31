@@ -18,10 +18,7 @@ import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { usePeriods } from "@/hooks/use-periods";
 import { useRecentGrades } from "@/hooks/use-recent-grades";
 import { useSubjects } from "@/hooks/use-subjects";
-import { useOrganizedSubjects } from "@/hooks/use-get-oragnized-subjects";
-import { apiClient } from "@/lib/api";
 import { authClient } from "@/lib/auth";
-import { GetOrganizedSubjectsResponse } from "@/types/get-organized-subjects-response";
 import { fullYearPeriod } from "@/utils/average";
 import { useQuery } from "@tanstack/react-query";
 import { Session, User } from "better-auth/types";
@@ -29,6 +26,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DataCards from "./data-cards";
 import { useTranslations } from "next-intl"; // Import useTranslations
+import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { useYears } from "@/hooks/use-years";
 
 /**
  * Vue d'ensemble des notes
@@ -48,38 +48,36 @@ export default function OverviewPage() {
 
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
 
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
+
   // Fetch subjects lists with grades from API
-  const { data: subjects, isError, isPending } = useSubjects();
+  const { data: subjects, isError, isPending } = useSubjects(activeId);
+
+  useEffect(() => {
+    console.log("Active ID changed from overview:", activeId);
+  }, [activeId]);
 
   // Fetch periods from API
   const {
     data: periods,
     isError: periodsIsError,
     isPending: periodsIsPending,
-  } = usePeriods();
+  } = usePeriods(activeId);
 
   // fetch subjects but organized by period
   const {
     data: organizedSubjects,
     isError: organizedSubjectsIsError,
     isPending: organizedSubjectsIsPending,
-  } = useOrganizedSubjects();
-  
-  // 
-  // = useQuery({
-  //   queryKey: ["subjects", "organized-by-periods"],
-  //   queryFn: async () => {
-  //     const res = await apiClient.get("subjects/organized-by-periods");
-  //     const data = await res.json<GetOrganizedSubjectsResponse>();
-  //     return data.periods;
-  //   },
-  // });
+  } = useOrganizedSubjects(activeId);
 
   const {
     data: recentGrades,
     isError: isErrorRecentGrades,
     isPending: isPendingRecentGrades,
-  } = useRecentGrades();
+  } = useRecentGrades(activeId);
 
   const {
     data: accounts,
@@ -97,14 +95,16 @@ export default function OverviewPage() {
     data: customAverages,
     isError: isCustomAveragesError,
     isPending: isCustomAveragesPending,
-  } = useCustomAverages();
+  } = useCustomAverages(activeId);
 
   useEffect(() => {
     if (!periods) return;
 
     const savedTab = localStorage.getItem("selectedTab");
 
-    if (savedTab) {
+    const savedTabExists = periods.find((period) => period.id === savedTab);
+
+    if (savedTabExists) {
       setSelectedTab(savedTab);
     } else {
       const defaultTab =
@@ -161,7 +161,7 @@ export default function OverviewPage() {
   //todo implement a custom field
   if (
     new Date(session?.user?.createdAt).getTime() >
-      Date.now() - 1000 * 60 * 10 &&
+    Date.now() - 1000 * 60 * 10 &&
     (!subjects || subjects.length === 0) &&
     (linkedProviders.has("google") || linkedProviders.has("microsoft")) &&
     localStorage.getItem("isOnboardingCompleted") !== "true"
@@ -265,6 +265,7 @@ export default function OverviewPage() {
                   <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
                     {/* Evolution de la moyenne générale */}
                     <GlobalAverageChart
+                      yearId={activeId}
                       subjects={
                         organizedSubjects?.find(
                           (p) => p.period.id === period.id
@@ -273,14 +274,14 @@ export default function OverviewPage() {
                       period={
                         organizedSubjects?.find(
                           (p) => p.period.id === period.id
-                        )?.period || fullYearPeriod(subjects)
+                        )?.period || fullYearPeriod(subjects, active)
                       }
                       periods={periods}
                     />
 
                     {/* Dernières notes */}
                     {subjects.length > 0 && (
-                      <RecentGradesCard recentGrades={recentGrades} period={period} />
+                      <RecentGradesCard yearId={activeId} recentGrades={recentGrades} period={period} />
                     )}
                   </div>
                 </TabsContent>
@@ -288,20 +289,21 @@ export default function OverviewPage() {
           <TabsContent value="full-year">
             <DataCards
               subjects={subjects || []}
-              period={fullYearPeriod(subjects)}
+              period={fullYearPeriod(subjects, active)}
               customAverages={customAverages}
               periods={periods}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
               <GlobalAverageChart
+                yearId={activeId}
                 subjects={subjects || []}
-                period={fullYearPeriod(subjects)}
+                period={fullYearPeriod(subjects, active)}
                 periods={periods}
               />
 
               {subjects.length > 0 && (
-                <RecentGradesCard recentGrades={recentGrades} period={fullYearPeriod(subjects)} />
+                <RecentGradesCard yearId={activeId} recentGrades={recentGrades} period={fullYearPeriod(subjects, active)} />
               )}
             </div>
           </TabsContent>

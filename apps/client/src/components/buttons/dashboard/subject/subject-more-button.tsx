@@ -33,8 +33,8 @@ export default function SubjectMoreButton({ subject }: { subject: Subject }) {
         </DropdownMenuItem>
 
         {/* Add grade */}
-        {/* <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-          <AddGradeDialog parentId={subject.id}>
+        <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+          <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
             <Button
               className="w-full flex justify-start md:hidden"
               variant="ghost"
@@ -43,7 +43,7 @@ export default function SubjectMoreButton({ subject }: { subject: Subject }) {
               {t("addGrade")}
             </Button>
           </AddGradeDialog>
-        </DropdownMenuItem> */}
+        </DropdownMenuItem>
 
         {/* Delete grade */}
         <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>

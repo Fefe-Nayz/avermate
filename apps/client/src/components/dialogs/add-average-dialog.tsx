@@ -33,7 +33,7 @@ const EMPTY_FORM_DATA: AddCustomAverageSchema = {
   isMainAverage: false,
 };
 
-export default function AddAverageDialog({ children }: { children: React.ReactNode }) {
+export default function AddAverageDialog({ children, yearId }: { children: React.ReactNode; yearId: string }) {
   const t = useTranslations("Dashboard.Dialogs.AddAverage");
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState<AddCustomAverageSchema>(EMPTY_FORM_DATA);
@@ -60,6 +60,7 @@ export default function AddAverageDialog({ children }: { children: React.ReactNo
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData}
+              yearId={yearId}
             />
           )}
         </CredenzaBody>

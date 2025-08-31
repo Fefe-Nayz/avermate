@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { UpdatePeriodForm } from "../forms/update-period-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
+import { usePeriods } from "@/hooks/use-periods";
 import { z } from "zod";
 
 /** Match the shape from your UpdatePeriodForm. */
@@ -39,7 +40,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
     isPending,
     isError,
   } = useQuery({
-    queryKey: ["period", periodId],
+    queryKey: ["periods", periodId],
     queryFn: async () => {
       const res = await apiClient.get(`periods/${periodId}`);
       return await res.json<Period>();
@@ -50,14 +51,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
     data: periods,
     isPending: isPeriodsPending,
     isError: isPeriodsError,
-  } = useQuery({
-    queryKey: ["periods"],
-    queryFn: async () => {
-      const res = await apiClient.get("periods");
-      const data = await res.json<{ periods: Period[] }>();
-      return data.periods;
-    },
-  });
+  } = usePeriods(period?.yearId || "none");
 
   // store parent-level form data
   const [formData, setFormData] = useState<UpdatePeriodSchema | null>(null);
@@ -99,6 +93,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdatePeriodSchema>>}
+              yearId={period.yearId}
             />
           )}
         </CredenzaBody>

@@ -19,7 +19,6 @@ import {
   subjectImpact,
   isSubjectIncludedInCustomAverage,
   buildCustomConfig,
-  fullYearPeriod as buildFullYearPeriod,
 } from "@/utils/average";
 import { formatGradeValue } from "@/utils/format";
 import {
@@ -164,12 +163,12 @@ function SubjectWrapper({
             <div className="flex gap-2 md:gap-4">
               {!subject.isDisplaySubject && (
                 <>
-                  <AddGradeDialog parentId={subject.id}>
+                  <AddGradeDialog parentId={subject.id} yearId={subject.yearId}>
                     <Button className="md:hidden" size={"icon"}>
                       <PlusCircleIcon className="size-4" />
                     </Button>
                   </AddGradeDialog>
-                  <AddGradeDialog parentId={subject.id}>
+                  <AddGradeDialog parentId={subject.id} yearId={subject.yearId}>
                     <Button className="hidden md:flex">
                       <PlusCircleIcon className="size-4 mr-2" />
                       {t("addGrade")}
@@ -239,14 +238,14 @@ function SubjectWrapper({
             <p className="text-center">{t("noGradesMessage")}</p>
           </div>
           {!subject.isDisplaySubject ? (
-            <AddGradeDialog parentId={subject.id}>
+            <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
               <Button variant="outline">
                 <PlusCircleIcon className="size-4 mr-2" />
                 {t("addGradeInSubject", { name: subject.name })}
               </Button>
             </AddGradeDialog>
           ) : (
-            <AddGradeDialog>
+            <AddGradeDialog yearId={subject.yearId} >
               <Button variant="outline">
                 <PlusCircleIcon className="size-4 mr-2" />
                 {t("addGrade")}
@@ -280,12 +279,12 @@ function SubjectWrapper({
           <div className="flex gap-2 md:gap-4">
             {!subject.isDisplaySubject && (
               <>
-                <AddGradeDialog parentId={subject.id}>
+                <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
                   <Button className="md:hidden" size={"icon"}>
                     <PlusCircleIcon className="size-4" />
                   </Button>
                 </AddGradeDialog>
-                <AddGradeDialog parentId={subject.id}>
+                <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
                   <Button className="hidden md:flex">
                     <PlusCircleIcon className="size-4 mr-2" />
                     {t("addGrade")}
