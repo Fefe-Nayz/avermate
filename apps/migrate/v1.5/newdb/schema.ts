@@ -1,4 +1,4 @@
-import { generateId } from "@/lib/nanoid";
+import { generateId } from "../id";
 import { relations } from "drizzle-orm";
 import {
   foreignKey,
