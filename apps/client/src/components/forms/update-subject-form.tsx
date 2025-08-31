@@ -152,7 +152,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
     },
     onSettled: () => {
       queryClient.cancelQueries();
-      queryClient.invalidateQueries({ queryKey: ["subject", subjectId] });
+      queryClient.invalidateQueries({ queryKey: ["subjects", subjectId] });
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
       queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });

@@ -83,7 +83,7 @@ export default function SubjectPage() {
     isError: organizedSubjectIsError,
     isPending: organizedSubjectIsPending,
   } = useQuery({
-    queryKey: ["subject", "organized-by-periods", subjectId],
+    queryKey: ["subjects", "organized-by-periods", subjectId],
     queryFn: async () => {
       const res = await apiClient.get(
         `subjects/organized-by-periods/${subjectId}`

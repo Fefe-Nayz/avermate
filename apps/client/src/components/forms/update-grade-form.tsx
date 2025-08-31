@@ -82,7 +82,7 @@ export function UpdateGradeForm({
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const formatter = useFormatter();
-  const formateDates = useFormatDates(formatter);
+  const formatDates = useFormatDates(formatter);
 
   const [openPeriod, setOpenPeriod] = useState(false);
   const [openSubject, setOpenSubject] = useState(false);

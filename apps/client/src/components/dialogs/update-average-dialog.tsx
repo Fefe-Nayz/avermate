@@ -42,7 +42,7 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
     isPending,
     isError,
   } = useQuery({
-    queryKey: ["average", averageId],
+    queryKey: ["custom-averages", averageId],
     queryFn: async () => {
       const res = await apiClient.get(`averages/${averageId}`);
       const data = await res.json<{ customAverage: Average }>();

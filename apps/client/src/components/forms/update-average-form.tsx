@@ -150,7 +150,7 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
       queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
       queryClient.invalidateQueries({
-        queryKey: ["average", averageId],
+        queryKey: ["custom-averages", averageId],
       });
     },
     onError: (error: any) => {

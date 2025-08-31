@@ -124,7 +124,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
     },
     onSettled: () => {
       queryClient.cancelQueries();
-      queryClient.invalidateQueries({ queryKey: ["period", periodId] });
+      queryClient.invalidateQueries({ queryKey: ["periods", periodId] });
       queryClient.invalidateQueries({ queryKey: ["periods"] });
       queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });

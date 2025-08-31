@@ -49,7 +49,7 @@ export default function GradesTable({
     isError: isPeriodError,
     isPending: isPeriodPending,
   } = useQuery({
-    queryKey: ["periods-name", periodId],
+    queryKey: ["periods", periodId],
     queryFn: async () => {
       if (periodId === "full-year") {
         return null;

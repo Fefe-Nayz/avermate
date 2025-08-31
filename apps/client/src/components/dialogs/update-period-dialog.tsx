@@ -40,7 +40,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
     isPending,
     isError,
   } = useQuery({
-    queryKey: ["period", periodId],
+    queryKey: ["periods", periodId],
     queryFn: async () => {
       const res = await apiClient.get(`periods/${periodId}`);
       return await res.json<Period>();
