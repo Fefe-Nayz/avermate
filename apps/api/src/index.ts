@@ -67,7 +67,7 @@ app.route("/years", yearsRoutes);
 
 // app.route("/cards", cardsRoute);
 
-if (env.DISABLE_UPLOADTHING) {
+if (!env.DISABLE_UPLOADTHING) {
   app.all("/uploadthing", (ctx) => uploadHandlers(ctx.req.raw));
 }
 
