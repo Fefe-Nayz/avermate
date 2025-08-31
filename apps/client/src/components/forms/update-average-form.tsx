@@ -107,6 +107,8 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  console.log("from form", yearId)
+
   const { data: subjects } = useSubjects(yearId);
 
   // Watch everything so we can sync back up to the parent

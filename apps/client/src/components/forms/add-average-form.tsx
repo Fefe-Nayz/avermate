@@ -141,7 +141,7 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
   const { mutate, isPending: isSubmitting } = useMutation({
     mutationKey: ["create-custom-average"],
     mutationFn: async (vals: AddCustomAverageSchema) => {
-      const res = await apiClient.post("averages", {
+      const res = await apiClient.post(`years/${yearId}/averages`, {
         json: {
           name: vals.name,
           subjects: vals.subjects,

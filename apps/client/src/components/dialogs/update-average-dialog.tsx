@@ -92,6 +92,7 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
               formData={formData}
               averageId={averageId}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdateCustomAverageData>>}
+              yearId={fetchedAverage.yearId}
             />
           )}
         </CredenzaBody>

@@ -37,8 +37,25 @@ export function average(
   }
 
   if (!subjectId) {
+    // This attempts to fix bad calculation with non-category nested subjects for global avg and it works
     const rootSubjects = subjects.filter((s) => s.parentId === null);
-    return calculateAverageForSubjects(rootSubjects, subjects);
+    const otherSubjects = subjects.filter((s) => s.parentId !== null);
+    const globalSubject = {
+      id: "GLOBAL_SUBJECT_ID",
+      name: "GLOBAL_SUBJECT_NAME",
+      parentId: null,
+      yearId: "GLOBAL_SUBJECT_YEAR_ID",
+      coefficient: 1,
+      userId: "",
+      depth: 0,
+      grades: [],
+      isMainSubject: false,
+      isDisplaySubject: true,
+      createdAt: new Date(),
+    }
+    const subjectsList = [globalSubject, ...rootSubjects.map((s) => ({ ...s, parentId: globalSubject.id })), ...otherSubjects];
+    return calculateAverageForSubject(globalSubject, subjectsList);
+    // return calculateAverageForSubjects(rootSubjects, subjects);
   }
 
   const subject = subjects.find((s) => s.id === subjectId);
@@ -256,6 +273,8 @@ function calculateAverageForSubject(
  *
  * This function ensures that all relevant subjects are included in the average calculation without double-counting.
  */
+
+// TODO: There's a bug in this function that doesnt compute the correct global avg average for nested non-category subjects
 function calculateAverageForSubjects(
   subjects: Subject[],
   allSubjects: Subject[],
