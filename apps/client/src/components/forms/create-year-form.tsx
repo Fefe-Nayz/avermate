@@ -40,15 +40,20 @@ export const CreateYearForm = () => {
     const toaster = useToast();
     const router = useRouter();
 
+    const t = useTranslations("Dashboard.Forms.CREATE_YEAR_FORM");
+
     const createYearSchema = z.object({
-        name: z.string().min(1).max(32),
+        name: z
+            .string()
+            .min(1, t("CREATE_YEAR_FORM_NAME_REQUIRED_ERROR"))
+            .max(32, t("CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR")),
         dateRange: z
             .object({
                 from: z.date({
-                    required_error: "START_REQUIRED",
+                    required_error: t("CREATE_YEAR_FORM_START_REQUIRED_ERROR"),
                 }),
                 to: z.date({
-                    required_error: "END_REQUIRED",
+                    required_error: t("CREATE_YEAR_FORM_END_REQUIRED_ERROR"),
                 }),
             })
             .refine(
@@ -56,11 +61,11 @@ export const CreateYearForm = () => {
                     isBefore(data.from, data.to) ||
                     data.from.getTime() === data.to.getTime(),
                 {
-                    message: "START_BEFORE_END",
+                    message: t("CREATE_YEAR_FORM_START_BEFORE_END_ERROR"),
                     path: ["to"],
                 }
             ),
-        defaultOutOf: z.coerce.number().min(0, "DEFAULT_OUT_OF_MIN").max(1000, "DEFAULT_OUT_OF_MAX"),
+        defaultOutOf: z.coerce.number().min(0, t("CREATE_YEAR_FORM_OUT_OF_MIN_ERROR")).max(1000, t("CREATE_YEAR_FORM_OUT_OF_MAX_ERROR")),
     });
 
     type CreateYearSchema = z.infer<typeof createYearSchema>;
@@ -84,8 +89,8 @@ export const CreateYearForm = () => {
         },
         onSuccess: (data) => {
             toaster.toast({
-                title: "YEAR_CREATED_TITLE",
-                description: "YEAR_CREATED_DESC",
+                title: t("CREATE_YEAR_FORM_SUCCESS_TITLE"),
+                description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
             });
 
             router.push(`/onboarding/${data.id}`);
@@ -131,11 +136,11 @@ export const CreateYearForm = () => {
                         name="name"
                         render={({ field }) => (
                             <FormItem className="mx-1">
-                                <FormLabel>{"CREATE_YEAR_FORM_NAME_FIELD"}</FormLabel>
+                                <FormLabel>{t("CREATE_YEAR_FORM_NAME_FIELD_LABEL")}</FormLabel>
                                 <FormControl>
                                     <Input
                                         type="text"
-                                        placeholder={"CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER"}
+                                        placeholder={t("CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER")}
                                         {...field}
                                     />
                                 </FormControl>
@@ -150,7 +155,7 @@ export const CreateYearForm = () => {
                         name="dateRange"
                         render={({ field }) => (
                             <FormItem className="mx-1">
-                                <FormLabel>{"CREATE_YEAR_FORM_DATE_RANGE_FIELD"}</FormLabel>
+                                <FormLabel>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}</FormLabel>
                                 <FormControl>
                                     <div className="flex flex-col gap-2">
                                         <Popover modal>
@@ -172,7 +177,7 @@ export const CreateYearForm = () => {
                                                             formatDates.formatIntermediate(field.value.from)
                                                         )
                                                     ) : (
-                                                        <span>{"CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER"}</span>
+                                                        <span>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER")}</span>
                                                     )}
 
                                                     <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
@@ -202,11 +207,11 @@ export const CreateYearForm = () => {
                         disabled={isPending}
                         render={({ field }) => (
                             <FormItem className="mx-1">
-                                <FormLabel>{"CREATE_YEAR_FORM_DEFAULT_OUT_OF_FIELD"}</FormLabel>
+                                <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
                                 <FormControl>
                                     <Input
                                         type="number"
-                                        placeholder={"20"}
+                                        placeholder={t("CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER")}
                                         {...field}
                                         onChange={(e) => field.onChange(e.target.value)}
                                     />
@@ -219,7 +224,7 @@ export const CreateYearForm = () => {
                     {/* Submit Button */}
                     <Button className="w-full" type="submit" disabled={isPending}>
                         {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-                        {"CREATE_YEAR_FORM_SUBMIT"}
+                        {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
                     </Button>
                 </form>
             </Form>

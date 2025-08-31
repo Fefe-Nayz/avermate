@@ -16,12 +16,15 @@ import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
+import {useTranslations} from "next-intl";
 
 export default function YearWorkspaceSelect() {
     const id = useId();
     const { activeId } = useActiveYearStore();
     const { data: years, isPending } = useYears();
     const { select } = useActiveYears();
+
+    const t = useTranslations("Dashboard.Buttons");
 
     const router = useRouter();
 
@@ -76,11 +79,10 @@ export default function YearWorkspaceSelect() {
                         </SelectItem>
                     ))}
 
-
                     <SelectItem value="new">
                         <div className="flex items-center text-blue-500">
                             <PlusIcon className="size-4 mr-2" />
-                            <span className="block font-medium">{"CREATE_YEAR_BUTTON_LABEL"}</span>
+                            <span className="block font-medium">{t("CREATE_YEAR_BUTTON_LABEL")}</span>
                         </div>
                     </SelectItem>
                 </SelectContent>

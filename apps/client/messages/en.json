@@ -1,4 +1,7 @@
 {
+  "BADGE": {
+    "EARLY_BIRD_BADGE_LABEL": "OG"
+  },
   "Landing": {
     "Headline": {
       "title": "Take control of your grades",
@@ -497,6 +500,7 @@
       }
     },
     "Buttons": {
+      "CREATE_YEAR_BUTTON_LABEL": "Add a new year",
       "MoreButton": {
         "addSubject": "Add Subject",
         "addPeriod": "Add Period"
@@ -537,7 +541,8 @@
     },
     "Nav": {
       "overview": "Overview",
-      "grades": "Grades"
+      "grades": "Grades",
+      "YEAR_SETTINGS_PAGE_TITLE": "Year settings"
     },
     "Loader": {
       "GradeLoader": {
@@ -646,6 +651,26 @@
       }
     },
     "Forms": {
+      "CREATE_YEAR_FORM": {
+        "CREATE_YEAR_TITLE": "Create new year",
+        "CREATE_YEAR_DESC": "Create a workspace to organize your periods, subjects, and grades.",
+        "CREATE_YEAR_FORM_NAME_FIELD_LABEL": "Name",
+        "CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER": "Year 2024-2025",
+        "CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL": "Duration",
+        "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Select the start and end date.",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Default grading scale",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Create new year",
+        "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Please enter a name.",
+        "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "The name cannot exceed 32 characters.",
+        "CREATE_YEAR_FORM_START_REQUIRED_ERROR": "Please enter a start date.",
+        "CREATE_YEAR_FORM_END_REQUIRED_ERROR": "Please enter an end date.",
+        "CREATE_YEAR_FORM_START_BEFORE_END_ERROR": "The start date must be before the end date.",
+        "CREATE_YEAR_FORM_OUT_OF_MIN_ERROR": "The default grading scale must be at least 0.",
+        "CREATE_YEAR_FORM_OUT_OF_MAX_ERROR": "The default grading scale cannot exceed 1000.",
+        "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Year created successfully!",
+        "CREATE_YEAR_FORM_SUCCESS_DESC": "Your new year has been created."
+      },
       "AddAverage": {
         "errorCreating": "Error creating custom average.",
         "successTitle": "Custom average created successfully!",
@@ -915,6 +940,9 @@
       }
     },
     "Pages": {
+      "YEAR_SETTINGS_PAGE": {
+        "YEAR_SETTINGS_PAGE_TITLE": "Year settings"
+      },
       "OverviewPage": {
         "overviewTitle": "Overview",
         "greeting": "Hello {name}!",

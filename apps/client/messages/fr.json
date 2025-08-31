@@ -1,4 +1,7 @@
 {
+  "BADGE": {
+    "EARLY_BIRD_BADGE_LABEL": "OG"
+  },
   "Landing": {
     "Headline": {
       "title": "Prenez le contrôle de vos notes",
@@ -497,6 +500,7 @@
       }
     },
     "Buttons": {
+      "CREATE_YEAR_BUTTON_LABEL": "Créer une année",
       "MoreButton": {
         "addSubject": "Ajouter une matière",
         "addPeriod": "Ajouter une période"
@@ -537,7 +541,8 @@
     },
     "Nav": {
       "overview": "Vue d'ensemble",
-      "grades": "Notes"
+      "grades": "Notes",
+      "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année"
     },
     "Loader": {
       "GradeLoader": {
@@ -646,6 +651,26 @@
       }
     },
     "Forms": {
+      "CREATE_YEAR_FORM": {
+        "CREATE_YEAR_TITLE": "Créer une nouvelle année",
+        "CREATE_YEAR_DESC": "Créez un espace pour organiser vos périodes, matières et notes.",
+        "CREATE_YEAR_FORM_NAME_FIELD_LABEL": "Nom",
+        "CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER": "Année 2024-2025",
+        "CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL": "Durée",
+        "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Barème des moyennes par défaut",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Créer une nouvelle année",
+        "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Merci d'indiquer un nom.",
+        "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "Le nom ne peut pas dépasser 32 caractères.",
+        "CREATE_YEAR_FORM_START_REQUIRED_ERROR": "Merci d'indiquer une date de début.",
+        "CREATE_YEAR_FORM_END_REQUIRED_ERROR": "Merci d'indiquer une date de fin.",
+        "CREATE_YEAR_FORM_START_BEFORE_END_ERROR": "La date de début doit être avant la date de fin.",
+        "CREATE_YEAR_FORM_OUT_OF_MIN_ERROR": "Le barème des moyennes par défaut doit être au moins 0.",
+        "CREATE_YEAR_FORM_OUT_OF_MAX_ERROR": "Le barème des moyennes par défaut ne peut pas dépasser 1000.",
+        "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Année créée avec succès !",
+        "CREATE_YEAR_FORM_SUCCESS_DESC": "Votre nouvelle année a été créée."
+      },
       "AddAverage": {
         "errorCreating": "Erreur lors de la création de la moyenne personnalisée.",
         "successTitle": "Moyenne personnalisée créée avec succès !",
@@ -915,6 +940,9 @@
       }
     },
     "Pages": {
+      "YEAR_SETTINGS_PAGE": {
+        "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année"
+      },
       "OverviewPage": {
         "overviewTitle": "Vue d'ensemble",
         "greeting": "Bonjour {name}",

@@ -19,7 +19,7 @@ export default function DashboardNav() {
       path: "/dashboard/grades",
     },
     {
-      label: "DASHBOARD_NAV_SETTINGS_LABEL",
+      label: t("YEAR_SETTINGS_PAGE_TITLE"),
       path: "/dashboard/settings",
     },
   ];
