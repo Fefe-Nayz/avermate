@@ -220,8 +220,6 @@ export default function SubjectPage() {
     return impact?.difference || null;
   };
 
-  console.log(subjectsToGive());
-
   return (
     <SubjectWrapper
       subjects={subjectsToGive()}
