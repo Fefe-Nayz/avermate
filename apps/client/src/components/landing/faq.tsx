@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/accordion";
 import { LandingSection } from "./landing-section";
 import { useTranslations } from "next-intl";
+import { BlurFade } from "../magicui/blur-fade";
 
 export const FAQ = () => {
   const t = useTranslations("Landing.FAQ");
@@ -31,14 +32,18 @@ export const FAQ = () => {
 
   return (
     <LandingSection>
-      <Accordion type="single" collapsible className="w-full">
-        {questions.map(({ q, a }) => (
-          <AccordionItem key={q} value={q}>
-            <AccordionTrigger className="text-left">{q}</AccordionTrigger>
-            <AccordionContent>{a}</AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+      <BlurFade delay={0.3} duration={0.6} className="w-full">
+        <Accordion type="single" collapsible className="w-full">
+          {questions.map(({ q, a }, index) => (
+            <BlurFade key={q} delay={0.5 + index * 0.1} duration={0.5}>
+              <AccordionItem value={q}>
+                <AccordionTrigger className="text-left">{q}</AccordionTrigger>
+                <AccordionContent>{a}</AccordionContent>
+              </AccordionItem>
+            </BlurFade>
+          ))}
+        </Accordion>
+      </BlurFade>
     </LandingSection>
   );
 };
