@@ -164,7 +164,7 @@ export const CreateYearForm = () => {
                                         <Popover modal>
                                             <PopoverTrigger asChild>
                                                 <Button
-                                                    variant={"outline"}
+                                                    variant={"outline-solid"}
                                                     className={
                                                         !field.value?.from ? "text-muted-foreground" : ""
                                                     }

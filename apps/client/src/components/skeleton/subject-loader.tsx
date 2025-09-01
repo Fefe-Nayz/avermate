@@ -96,7 +96,7 @@ export default function subjectLoader(t: any) {
         </h2>
 
         <Card className="p-4">
-          <ChartContainer config={chartConfig} className="h-[400px] w-[100%]">
+          <ChartContainer config={chartConfig} className="h-[400px] w-full">
             <LineChart data={chartData} margin={{ left: -30 }}>
               <CartesianGrid vertical={false} />
               <XAxis

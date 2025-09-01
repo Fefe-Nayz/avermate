@@ -241,11 +241,11 @@ export const MockAverageChart = () => {
       </CardHeader>
       <CardContent>
         <div className="flex items-start lg:space-x-4 text-sm flex-wrap lg:flex-nowrap h-fit justify-center gap-[10px] flex-col lg:flex-row pt-2">
-          <div className="flex flex-col items-center lg:items-start grow min-w-0 my-0 mx-auto w-[100%] lg:w-[60%]">
+          <div className="flex flex-col items-center lg:items-start grow min-w-0 my-0 mx-auto w-full lg:w-[60%]">
             <CardDescription className="pb-8">
               {t("visualizeOverallAverage")}
             </CardDescription>
-            <ChartContainer config={chartConfig} className="h-[302px] w-[100%]">
+            <ChartContainer config={chartConfig} className="h-[302px] w-full">
               <AreaChart data={chartData} margin={{ left: -30 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis
@@ -301,11 +301,11 @@ export const MockAverageChart = () => {
             className="hidden lg:block h-[360px]"
           />
 
-          <div className="flex flex-col items-center lg:space-y-2 lg:w-[40%] m-auto lg:pt-0 pt-8 w-[100%]">
+          <div className="flex flex-col items-center lg:space-y-2 lg:w-[40%] m-auto lg:pt-0 pt-8 w-full">
             <CardDescription>{t("visualizeAverageBySubject")}</CardDescription>
             <ChartContainer
               config={chartConfig}
-              className="h-[332px] w-[100%] m-auto !aspect-auto"
+              className="h-[332px] w-full m-auto aspect-auto!"
             >
               <RadarChart data={radarData} outerRadius="90%">
                 <PolarGrid />

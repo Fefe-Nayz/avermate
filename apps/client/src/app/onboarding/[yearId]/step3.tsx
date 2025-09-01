@@ -92,7 +92,7 @@
 //             <div className="flex items-center space-x-2  flex-1 min-w-0">
 //               <span className="font-bold truncate">{subject.name}</span>
 //             </div>
-//             <div className="flex items-center space-x-2 flex-shrink-0">
+//             <div className="flex items-center space-x-2 shrink-0">
 //               {!subject.isDisplaySubject && (
 //                 <AddGradeDialog parentId={subject.id}>
 //                   <Button variant="outline" size="icon">

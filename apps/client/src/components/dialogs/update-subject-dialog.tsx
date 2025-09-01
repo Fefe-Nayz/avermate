@@ -69,7 +69,7 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
           {!isPending && !isError && formData && (
             <UpdateSubjectForm yearId={subject.yearId} subjectId={subject.id} close={() => setOpen(false)} formData={formData} setFormData={setFormData as React.Dispatch<React.SetStateAction<TUpdateSubject>>} />
           )}

@@ -54,7 +54,7 @@ export default function AddGradeDialog({
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
           {open && (
             <AddGradeForm
               close={() => setOpen(false)}
