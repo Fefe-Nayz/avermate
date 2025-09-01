@@ -84,7 +84,7 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
           {/* Only render the child if formData is non-null */}
           {!isPending && !isError && formData && (
             <UpdateCustomAverageForm

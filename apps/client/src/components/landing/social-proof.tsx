@@ -22,7 +22,7 @@ export const SocialProof = () => {
 
   if (isError) {
     return (
-      <LandingSection className="!px-0 !py-0">
+      <LandingSection className="px-0! py-0!">
         <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
           <div className="flex flex-col items-center px-1">
             <p className="font-extrabold text-lg md:text-2xl">0</p>
@@ -51,7 +51,7 @@ export const SocialProof = () => {
 
   if (isPending) {
     return (
-      <LandingSection className="!px-0 !py-0">
+      <LandingSection className="px-0! py-0!">
         <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
           <div className="flex flex-col items-center px-1">
               <Skeleton className="w-12 h-7 md:h-8" />
@@ -79,7 +79,7 @@ export const SocialProof = () => {
   }
 
   return (
-    <LandingSection className="!px-0 !py-0">
+    <LandingSection className="px-0! py-0!">
       <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
         <div className="flex flex-col items-center px-1">
           <p className="font-extrabold text-lg md:text-2xl">

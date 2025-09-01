@@ -41,7 +41,7 @@ export default function YearWorkspaceSelect() {
     }
 
     return (
-        <div className="*:not-first:mt-2">
+        <div className="not-first:*:mt-2">
             <Select defaultValue={activeId} value={activeId} onValueChange={(id) => {
                 if (id === "new") return router.push("/onboarding");
                 if (id !== activeId) {

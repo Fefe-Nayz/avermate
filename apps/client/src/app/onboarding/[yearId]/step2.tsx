@@ -159,7 +159,7 @@ export default function Step2({yearId}: {yearId: string}) {
                 </>
               )}
             </div>
-            <div className="flex items-center space-x-2 flex-shrink-0">
+            <div className="flex items-center space-x-2 shrink-0">
               <AddSubjectDialog yearId={yearId} parentId={subject.id}>
                 <Button variant="outline" size="icon">
                   <PlusCircleIcon className="size-4" />

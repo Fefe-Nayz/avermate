@@ -9,14 +9,14 @@ export const Picture = () => {
           <img
             src="/images/landing/main-desktop-dark.png"
             alt="Dashboard Desktop Dark"
-            className="hidden dark-desktop:block w-full rounded-3xl max-w-[2000px] [mask-image:linear-gradient(to_top,transparent_10%,#000_100%)]"
+            className="hidden dark-desktop:block w-full rounded-3xl max-w-[2000px] mask-[linear-gradient(to_top,transparent_10%,#000_100%)]"
           />
 
           {/* Desktop Light Theme */}
           <img
             src="/images/landing/main-desktop-light.png"
             alt="Dashboard Desktop Light"
-            className="hidden light-desktop:block dark:hidden w-full rounded-3xl max-w-[2000px] [mask-image:linear-gradient(to_top,transparent_10%,#000_100%)]"
+            className="hidden light-desktop:block dark:hidden w-full rounded-3xl max-w-[2000px] mask-[linear-gradient(to_top,transparent_10%,#000_100%)]"
           />
 
           {/* Mobile Dark Theme */}

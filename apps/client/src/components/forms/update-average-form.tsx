@@ -226,7 +226,7 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
                       </Button>
                     </PopoverTrigger>
                   </FormControl>
-                  <PopoverContent className="p-0 min-w-[var(--radix-popover-trigger-width)]">
+                  <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                     <Command>
                       <CommandInput
                         placeholder={t("searchSubject")}

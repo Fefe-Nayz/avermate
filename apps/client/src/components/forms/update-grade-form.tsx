@@ -357,7 +357,7 @@ export function UpdateGradeForm({
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
-                        variant={"outline"}
+                        variant={"outline-solid"}
                         className={cn(
                           "pl-3 text-left font-normal",
                           !field.value && "text-muted-foreground"
@@ -425,7 +425,7 @@ export function UpdateGradeForm({
                         </Button>
                       </PopoverTrigger>
                     </FormControl>
-                    <PopoverContent className="p-0 min-w-[var(--radix-popover-trigger-width)]">
+                    <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                       <Command>
                         <CommandInput
                           placeholder={t("choosePeriod")}
@@ -591,7 +591,7 @@ export function UpdateGradeForm({
                         </Button>
                       </PopoverTrigger>
                     </FormControl>
-                    <PopoverContent className="p-0 min-w-[var(--radix-popover-trigger-width)]">
+                    <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                       <Command>
                         <CommandInput
                           placeholder={t("chooseSubject")}

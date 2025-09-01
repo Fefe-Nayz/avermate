@@ -306,7 +306,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
                       </PopoverTrigger>
                     </FormControl>
                     <PopoverContent
-                      className="p-0 min-w-[var(--radix-popover-trigger-width)]"
+                      className="p-0 min-w-(--radix-popover-trigger-width)"
                       align="center"
                     >
                       <Command>

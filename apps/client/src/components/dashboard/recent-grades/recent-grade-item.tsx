@@ -23,7 +23,7 @@ export default function RecentGradeItem({ grade, period }: { grade: Grade, perio
           <p className="font-semibold truncate">{grade?.subject?.name}</p>
           <p className="text-sm text-muted-foreground truncate">{grade.name}</p>
         </div>
-        <div className="w-[60px] flex-shrink-0 overflow-hidden">
+        <div className="w-[60px] shrink-0 overflow-hidden">
           <GradeValue value={grade.value} outOf={grade.outOf} size="sm" />
         </div>
       </div>

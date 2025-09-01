@@ -223,7 +223,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
                     <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
-                          variant={"outline"}
+                          variant={"outline-solid"}
                           className={
                             !field.value?.from ? "text-muted-foreground" : ""
                           }

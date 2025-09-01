@@ -71,7 +71,7 @@ export default function AddPeriodCredenza({
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
           {!isPending && !isError && open && (
             <AddPeriodForm
               periods={periods}

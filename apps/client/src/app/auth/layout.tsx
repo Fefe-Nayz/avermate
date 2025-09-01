@@ -7,7 +7,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       {/* Left */}
       <div className="flex items-center justify-around content-between w-screen">
         <main className="flex w-full lg:w-[50%] justify-center py-6 max-h-screen overflow-y-scroll">
-          <div className="w-[100%] px-4 sm:px-16 sm:[400px] md:w-[600px] gap-8 flex flex-col">
+          <div className="w-full px-4 sm:px-16 sm:[400px] md:w-[600px] gap-8 flex flex-col">
             {children}
           </div>
         </main>

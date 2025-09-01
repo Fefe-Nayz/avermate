@@ -57,7 +57,7 @@ export default function SignOutButton() {
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <DropdownMenuItem
-          className="!text-red-500"
+          className="text-red-500!"
           onSelect={(e) => e.preventDefault()}
         >
           <LogOutIcon className="size-4 mr-2" />
