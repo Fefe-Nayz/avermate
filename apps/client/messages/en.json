@@ -941,7 +941,20 @@
     },
     "Pages": {
       "YEAR_SETTINGS_PAGE": {
-        "YEAR_SETTINGS_PAGE_TITLE": "Year settings"
+        "YEAR_SETTINGS_PAGE_TITLE": "Year settings",
+        "DELETE_YEAR_SECTION": {
+          "DELETE_YEAR_SECTION_TITLE": "Delete Year",
+          "DELETE_YEAR_SECTION_DESCRIPTION": "Deleting this year will remove all associated periods, subjects, grades, and custom averages. This action is irreversible.",
+          "DELETE_YEAR_DIALOG_OPEN_BUTTON": "Delete",
+          "DELETE_YEAR_DIALOG_TITLE": "Confirm Deletion",
+          "DELETE_YEAR_DIALOG_DESCRIPTION": "Your grades and associated subjects will be permanently deleted. Are you sure you want to continue?",
+          "DELETE_YEAR_DIALOG_CANCEL_BUTTON": "Cancel",
+          "DELETE_YEAR_DIALOG_DELETE_BUTTON": "Delete",
+          "DELETE_YEAR_DIALOG_TOAST_SUCCESS_TITLE": "Year deleted successfully",
+          "DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION": "Associated grades and subjects have been deleted.",
+          "DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE": "Error deleting year",
+          "DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION": "An error occurred while deleting the year. Please try again."
+        }
       },
       "OverviewPage": {
         "overviewTitle": "Overview",

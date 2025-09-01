@@ -941,7 +941,20 @@
     },
     "Pages": {
       "YEAR_SETTINGS_PAGE": {
-        "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année"
+        "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année",
+        "DELETE_YEAR_SECTION": {
+          "DELETE_YEAR_SECTION_TITLE": "Supprimer l'année",
+          "DELETE_YEAR_SECTION_DESCRIPTION": "Supprimer cette année supprimera toutes les périodes, matières, notes et moyennes personnalisées associées. Cette action est irréversible.",
+          "DELETE_YEAR_DIALOG_OPEN_BUTTON": "Supprimer",
+          "DELETE_YEAR_DIALOG_TITLE": "Confirmer la suppression",
+          "DELETE_YEAR_DIALOG_DESCRIPTION": "Vos notes et matières associées seront supprimées de manière irréversible. Êtes-vous sûr de vouloir continuer ?",
+          "DELETE_YEAR_DIALOG_CANCEL_BUTTON": "Annuler",
+          "DELETE_YEAR_DIALOG_DELETE_BUTTON": "Supprimer",
+          "DELETE_YEAR_DIALOG_TOAST_SUCCESS_TITLE": "Année supprimée avec succès",
+          "DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION": "Les notes et matières associées ont été supprimées.",
+          "DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE": "Erreur lors de la suppression de l'année",
+          "DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION": "Une erreur s'est produite lors de la suppression de l'année. Veuillez réessayer."
+        }
       },
       "OverviewPage": {
         "overviewTitle": "Vue d'ensemble",

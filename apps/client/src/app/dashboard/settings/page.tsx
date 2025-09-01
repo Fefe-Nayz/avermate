@@ -28,10 +28,10 @@ export default function YearSettingsPage() {
 
             <Separator />
 
-            <UpdateYearSection />
-            <DeleteYearSection />
+            <UpdateYearSection yearId={activeId} />
             <PeriodsSection yearId={activeId} />
             <CustomAveragesSection yearId={activeId} />
+            <DeleteYearSection yearId={activeId} />
         </main>
     )
 }
