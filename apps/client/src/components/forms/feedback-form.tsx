@@ -85,12 +85,12 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     subject: z.string().min(1, t("subjectRequired")).max(100, t("subjectTooLong")),
     content: z.string().min(10, t("contentMin")).max(1000, t("contentMax")),
     image: z.string().optional(),
-    email: z.string().email(t("invalidEmail")),
+    email: z.email(t("invalidEmail")),
   });
   type FeedbackSchema = z.infer<typeof feedbackSchema>;
 
   // Possibly retrieve user’s email
-  const { data } = authClient.useSession() as any;
+  const { data } = authClient.useSession();
   const defaultEmail = data?.user.email || "";
 
   const { mutate, isPending } = useMutation({
@@ -115,6 +115,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   // Keep original defaults from your code
   const form = useForm<FeedbackSchema>({
+    // @ts-ignore
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       type: formData.type || "Général",
@@ -124,6 +125,16 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       email: formData.email || defaultEmail,
     },
   });
+
+  
+const schema = z.object({
+  id: z.number(),
+});
+
+// Automatically infers the output type from the schema
+useForm({
+  resolver: zodResolver(schema),
+});
 
   // On mount, reset
   useEffect(() => {

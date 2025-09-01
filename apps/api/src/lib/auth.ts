@@ -7,6 +7,10 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 export const auth = betterAuth({
   appName: "Avermate",
 
+  telemetry: {
+    enabled: false,
+  },
+
   // Database
   database: drizzleAdapter(db, {
     provider: "sqlite",

@@ -14,8 +14,8 @@ export const env = createEnv({
    * 💡 You'll get type errors if these are not prefixed with NEXT_PUBLIC_.
    */
   client: {
-    NEXT_PUBLIC_API_URL: z.string().url(),
-    NEXT_PUBLIC_CLIENT_URL: z.string().url(),
+    NEXT_PUBLIC_API_URL: z.url(),
+    NEXT_PUBLIC_CLIENT_URL: z.url(),
   },
   /*
    * Due to how Next.js bundles environment variables on Edge and Client,

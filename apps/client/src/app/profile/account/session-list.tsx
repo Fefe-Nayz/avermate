@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import ProfileSection from "../profile-section";
@@ -15,41 +14,34 @@ import "dayjs/locale/fr";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useSessions } from "@/hooks/use-sessions";
 
 dayjs.locale("fr");
 dayjs.extend(relativeTime);
 
-type Session = {
-  id: string;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-  expiresAt: Date;
-  token: string;
-  ipAddress?: string | null | undefined;
-  userAgent?: string | null | undefined;
-};
+// type Session = {
+//   id: string;
+//   userId: string;
+//   createdAt: Date;
+//   updatedAt: Date;
+//   expiresAt: Date;
+//   token: string;
+//   ipAddress?: string | null | undefined;
+//   userAgent?: string | null | undefined;
+// };
 
 export default function SessionList() {
   const formatter = useFormatter();
   const t = useTranslations("Settings.Account.SessionList");
   const formatDates = useFormatDates(formatter);
 
-  const { data: currentSession } = authClient.useSession() as unknown as {
-    data: { session: Session };
-  };
+  const { data: currentSession } = authClient.useSession();
 
   const {
     data: sessions,
     isError,
     isPending,
-  } = useQuery({
-    queryKey: ["sessions-list"],
-    queryFn: async () => {
-      const sessions = (await authClient.listSessions()) satisfies Session[];
-      return sessions;
-    },
-  });
+  } = useSessions();
 
   if (isPending) {
     return (

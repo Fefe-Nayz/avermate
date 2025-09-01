@@ -24,7 +24,6 @@ import { useSubjects } from "@/hooks/use-subjects";
 import { useYears } from "@/hooks/use-years";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { PlusCircleIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 

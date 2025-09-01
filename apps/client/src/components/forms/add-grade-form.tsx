@@ -61,17 +61,18 @@ import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 
-const addGradeSchema = z.object({
+// Initial loose schema (not used for validation, can be removed or renamed)
+const looseAddGradeSchema = z.object({
   name: z.string().min(1).optional(),
-  outOf: z.coerce.number().min(0).max(1000).optional(),
-  value: z.coerce.number().min(0).max(1000).optional(),
-  coefficient: z.coerce.number().min(0).max(1000).optional(),
+  outOf: z.number().min(0).max(1000).optional(),
+  value: z.number().min(0).max(1000).optional(),
+  coefficient: z.number().min(0).max(1000).optional(),
   passedAt: z.date().optional(),
   subjectId: z.string().min(1).max(64),
   periodId: z.string().min(1).max(64).nullable(),
 });
 
-export type AddGradeSchema = z.infer<typeof addGradeSchema>;
+export type AddGradeSchema = z.infer<typeof looseAddGradeSchema>;
 
 export function AddGradeForm({
   close,
@@ -114,18 +115,10 @@ export function AddGradeForm({
 
   const addGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    outOf: z.coerce.number({
-      invalid_type_error: t("gradeOutOfRequired"),
-    }).min(0, t("outOfMin")).max(1000, t("outOfMax")),
-    value: z.coerce.number({
-      invalid_type_error: t("gradeValueRequired"),
-    }).min(0, t("valueMin")).max(1000, t("valueMax")),
-    coefficient: z.coerce.number({
-      invalid_type_error: t("coefficientRequired"),
-    }).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
-    passedAt: z.date({
-      required_error: t("passedAtRequired"),
-    }),
+    outOf: z.coerce.number(t("gradeOutOfRequired")).min(0, t("outOfMin")).max(1000, t("outOfMax")),
+    value: z.coerce.number(t("gradeValueRequired")).min(0, t("valueMin")).max(1000, t("valueMax")),
+    coefficient: z.coerce.number(t("coefficientRequired")).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
+    passedAt: z.date().min(1, t("passedAtRequired")),
     subjectId: z.string().min(1, t("subjectIdRequired")).max(64, t("subjectIdMax")),
     periodId: z.string().min(1, t("periodIdRequired")).max(64, t("periodIdMax")).nullable(),
   }).refine((data) => data.value <= data.outOf, {
@@ -628,8 +621,8 @@ export function AddGradeForm({
                                   <span>{subj.name}</span>
                                   {form.getValues("subjectId") ===
                                     subj.id && (
-                                    <Check className="ml-auto h-4 w-4" />
-                                  )}
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
                                 </CommandItem>
                               ))}
                           </CommandGroup>
@@ -691,8 +684,8 @@ export function AddGradeForm({
                                     <span>{subj.name}</span>
                                     {form.getValues("subjectId") ===
                                       subj.id && (
-                                      <Check className="ml-auto h-4 w-4" />
-                                    )}
+                                        <Check className="ml-auto h-4 w-4" />
+                                      )}
                                   </CommandItem>
                                 ))}
                             </CommandGroup>

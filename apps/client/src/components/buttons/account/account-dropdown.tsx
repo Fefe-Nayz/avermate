@@ -36,10 +36,7 @@ export default function AccountDropdown() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data, isPending } = authClient.useSession() as unknown as {
-    data: { user: User; session: Session };
-    isPending: boolean;
-  };
+  const { data, isPending } = authClient.useSession();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -63,6 +60,8 @@ export default function AccountDropdown() {
       router.push("/auth/sign-in");
       return;
     }
+
+    if (!data) return;
 
     // Not verified
     if (!data.user.emailVerified) {

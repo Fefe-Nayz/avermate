@@ -3,7 +3,6 @@
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Session } from "better-auth/types";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -34,9 +33,7 @@ export default function RevokeSessionButton({
   const toaster = useToast();
   const router = useRouter();
 
-  const { data: currentSession } = authClient.useSession() as unknown as {
-    data: { session: Session };
-  };
+  const { data: currentSession } = authClient.useSession();
 
   const queryClient = useQueryClient();
 

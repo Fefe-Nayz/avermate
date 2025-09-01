@@ -20,8 +20,6 @@ import { useRecentGrades } from "@/hooks/use-recent-grades";
 import { useSubjects } from "@/hooks/use-subjects";
 import { authClient } from "@/lib/auth";
 import { fullYearPeriod } from "@/utils/average";
-import { useQuery } from "@tanstack/react-query";
-import { Session, User } from "better-auth/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DataCards from "./data-cards";
@@ -29,20 +27,14 @@ import { useTranslations } from "next-intl"; // Import useTranslations
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
+import { useAccounts } from "@/hooks/use-accounts";
 
 /**
  * Vue d'ensemble des notes
  */
 export default function OverviewPage() {
   const t = useTranslations("Dashboard.Pages.OverviewPage"); // Initialize t
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-  };
-
-  type Account = {
-    id: string;
-    provider: string;
-  };
+  const { data: session } = authClient.useSession();
 
   const router = useRouter();
 
@@ -83,13 +75,7 @@ export default function OverviewPage() {
     data: accounts,
     isPending: isPendingAccount,
     isError: isErrorAccount,
-  } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: async () => {
-      const accounts = (await authClient.listAccounts()) satisfies Account[];
-      return accounts;
-    },
-  });
+  } = useAccounts();
 
   const {
     data: customAverages,
@@ -160,7 +146,8 @@ export default function OverviewPage() {
 
   //todo implement a custom field
   if (
-    new Date(session?.user?.createdAt).getTime() >
+    session?.user?.createdAt &&
+    new Date(session.user.createdAt).getTime() >
     Date.now() - 1000 * 60 * 10 &&
     (!subjects || subjects.length === 0) &&
     (linkedProviders.has("google") || linkedProviders.has("microsoft")) &&

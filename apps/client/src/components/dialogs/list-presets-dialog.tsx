@@ -11,11 +11,8 @@ import {
 } from "@/components/ui/credenza";
 import { useState } from "react";
 import { PresetList } from "../onboarding/preset-list";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
-import { Preset } from "@/types/get-preset-response";
-import { GetPresetResponse } from "@/types/get-preset-response";
 import { useTranslations } from "next-intl";
+import { usePresets } from "@/hooks/use-presets";
 
 interface PresetListState {
   searchTerm: string;
@@ -40,14 +37,7 @@ export default function ListPresetsDialog({
     data: presets,
     isError,
     isLoading,
-  } = useQuery<Preset[], Error>({
-    queryKey: ["presets"],
-    queryFn: async () => {
-      const res = await apiClient.get("presets");
-      const data = await res.json<GetPresetResponse>();
-      return data.presets;
-    },
-  });
+  } = usePresets();
 
   return (
     <Credenza

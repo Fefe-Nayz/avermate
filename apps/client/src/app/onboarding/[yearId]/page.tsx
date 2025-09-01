@@ -6,22 +6,17 @@ import Step1 from "./step1";
 import Step2 from "./step2";
 import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import { Stepper } from "./stepper";
-import { Rocket } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ConfettiButton } from "@/components/ui/confetti";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useActiveYearStore } from "@/stores/active-year-store";
 import { useActiveYears } from "@/hooks/use-active-year";
 
 const stepIds = ["matieres", "periodes"];
 const steps = [
-  // { title: "welcome" as const, component: WelcomeScreen, id: "welcome" },
   { title: "matieres" as const, component: Step2, id: "matieres" },
   { title: "periodes" as const, component: Step1, id: "periodes" },
-  // { title: "notes" as const, component: Step3, id: "notes" },
 ];
 
 function OnboardingContent() {
@@ -38,10 +33,6 @@ function OnboardingContent() {
 
   const [currentStep, setCurrentStep] = useState(getStepIndexFromParams());
   const [isAnimating, setIsAnimating] = useState(false); // Track animation state
-
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-  };
 
   const { select } = useActiveYears();
 

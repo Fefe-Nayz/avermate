@@ -1,22 +1,15 @@
 "use client";
 
-import { authClient } from "@/lib/auth";
 import { GetStartedButton } from "../buttons/get-started-button";
 import { GoToDashboardButton } from "../buttons/go-to-dashboard-button";
-import { useQuery } from "@tanstack/react-query";
+import { useSession } from "@/hooks/use-session";
 
 export const GetStarted = () => {
   const {
     data: session,
     isLoading,
     isError,
-  } = useQuery({
-    queryKey: ["session"],
-    queryFn: async () => {
-      const session = await authClient.getSession();
-      return session;
-    },
-  });
+  } = useSession();
 
   if (isLoading || !session || isError) {
     return <GetStartedButton />;
