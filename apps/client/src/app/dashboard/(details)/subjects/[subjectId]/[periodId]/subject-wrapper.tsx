@@ -1,6 +1,6 @@
 "use client";
 
-import { DifferenceBadge } from "@/app/dashboard/grades/[gradeId]/difference-badge";
+import { DifferenceBadge } from "@/app/dashboard/(details)/grades/[gradeId]/difference-badge";
 import SubjectMoreButton from "@/components/buttons/dashboard/subject/subject-more-button";
 import DataCard from "@/components/dashboard/data-card";
 import GradeValue from "@/components/dashboard/grade-value";
