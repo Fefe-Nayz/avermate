@@ -10,6 +10,19 @@ import {
 
 // TODO: Add index on userId and yearId
 
+export const goals = sqliteTable("goals", {
+  id: text("").notNull().primaryKey().$defaultFn(() => generateId("g")),
+  name: text().notNull(),
+  targetAverage: text().notNull(),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  userId: text().notNull().references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text().notNull().references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  periodId: text().notNull().references(() => periods.id, { onUpdate: "cascade", onDelete: "cascade" }),
+}, (t) => ({
+  goalsUserIdIdx: index("goals_user_id_idx").on(t.userId),
+  goalsYearIdIdx: index("goals_year_id_idx").on(t.yearId),
+}))
+
 export const years = sqliteTable("years", {
   id: text().notNull().primaryKey().$defaultFn(() => generateId("y")),
   name: text().notNull(),

@@ -12,13 +12,14 @@ ca - custom average
 ct - card template
 cl - card layout
 y - year
+g - goals
 */
 
-type IdPrefix = "u" | "acc" | "ses" | "ver" | "sub" | "gra" | "per" | "ca" | "ct" | "cl" | "y";
+type IdPrefix = "u" | "acc" | "ses" | "ver" | "sub" | "gra" | "per" | "ca" | "ct" | "cl" | "y" | "g";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-const nanoid = customAlphabet(ALPHABET, 12);
+const nanoid = customAlphabet(ALPHABET, 16);
 
 export const generateId = (prefix: IdPrefix, size?: number) => {
   const id = nanoid(size);
