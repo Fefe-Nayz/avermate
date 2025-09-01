@@ -946,7 +946,7 @@
           "DELETE_YEAR_SECTION_TITLE": "Supprimer l'année",
           "DELETE_YEAR_SECTION_DESCRIPTION": "Supprimer cette année supprimera toutes les périodes, matières, notes et moyennes personnalisées associées. Cette action est irréversible.",
           "DELETE_YEAR_DIALOG_OPEN_BUTTON": "Supprimer",
-          "DELETE_YEAR_DIALOG_TITLE": "Confirmer la suppression",
+          "DELETE_YEAR_DIALOG_TITLE": "Supprimer l'année",
           "DELETE_YEAR_DIALOG_DESCRIPTION": "Vos notes et matières associées seront supprimées de manière irréversible. Êtes-vous sûr de vouloir continuer ?",
           "DELETE_YEAR_DIALOG_CANCEL_BUTTON": "Annuler",
           "DELETE_YEAR_DIALOG_DELETE_BUTTON": "Supprimer",

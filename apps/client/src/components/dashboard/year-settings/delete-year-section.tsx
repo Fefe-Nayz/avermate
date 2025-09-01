@@ -17,7 +17,7 @@ export default function DeleteYearSection({ yearId }: { yearId: string }) {
     if (isError || !year) return <div>{ErrorStateCard()}</div>;
 
     return (
-        <ProfileSection title={t("DELETE_YEAR_SECTION_TITLE")} description={t("DELETE_YEAR_SECTION_DESCRIPTION")}>
+        <ProfileSection className="border-red-500" title={t("DELETE_YEAR_SECTION_TITLE")} description={t("DELETE_YEAR_SECTION_DESCRIPTION")}>
             <div className="flex justify-end">
                 <DeleteYearDialog year={year} />
             </div>
