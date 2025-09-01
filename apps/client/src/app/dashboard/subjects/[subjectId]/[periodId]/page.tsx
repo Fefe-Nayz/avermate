@@ -14,7 +14,6 @@ import {
   subjectImpact,
   getParents,
 } from "@/utils/average";
-import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SubjectWrapper from "./subject-wrapper";
@@ -22,6 +21,8 @@ import { useTranslations } from "next-intl";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 import { useYears } from "@/hooks/use-years";
 import { useActiveYearStore } from "@/stores/active-year-store";
+import { useSubject } from "@/hooks/use-subject";
+import { useOrganizedSubject } from "@/hooks/use-organized-subject";
 
 export default function SubjectPage() {
   const t = useTranslations("Dashboard.Loader.SubjectLoader");
@@ -59,15 +60,7 @@ export default function SubjectPage() {
     data: subject,
     isError: isSubjectError,
     isPending: isSubjectPending,
-  } = useQuery({
-    queryKey: ["subjects", subjectId],
-    queryFn: async () => {
-      const res = await apiClient.get(`subjects/${subjectId}`);
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
-    },
-    enabled: !isVirtualSubject,
-  });
+  } = useSubject(subjectId, isVirtualSubject);
 
   const yearId = isVirtualSubject ? activeId : subject?.yearId || "none";
   const year = isVirtualSubject ? active : years?.find((y) => y.id === subject?.yearId);
@@ -82,17 +75,7 @@ export default function SubjectPage() {
     data: organizedSubject,
     isError: organizedSubjectIsError,
     isPending: organizedSubjectIsPending,
-  } = useQuery({
-    queryKey: ["subjects", "organized-by-periods", subjectId],
-    queryFn: async () => {
-      const res = await apiClient.get(
-        `subjects/organized-by-periods/${subjectId}`
-      );
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
-    },
-    enabled: !isVirtualSubject,
-  });
+  } = useOrganizedSubject(subjectId, isVirtualSubject);
 
   // Fetch period data
   const {

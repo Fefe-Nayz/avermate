@@ -9,16 +9,14 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Period } from "@/types/period";
 import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { UpdatePeriodForm } from "../forms/update-period-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { usePeriods } from "@/hooks/use-periods";
 import { z } from "zod";
+import { usePeriod } from "@/hooks/use-period";
 
 /** Match the shape from your UpdatePeriodForm. */
 const updatePeriodSchema = z.object({
@@ -39,13 +37,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
     data: period,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["periods", periodId],
-    queryFn: async () => {
-      const res = await apiClient.get(`periods/${periodId}`);
-      return await res.json<Period>();
-    },
-  });
+  } = usePeriod(periodId);
 
   const {
     data: periods,

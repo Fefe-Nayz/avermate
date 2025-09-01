@@ -3,7 +3,6 @@
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Session } from "better-auth/types";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {

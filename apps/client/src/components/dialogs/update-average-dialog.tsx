@@ -9,15 +9,13 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Average } from "@/types/average";
 import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import React, { useState, useEffect } from "react";
 import { UpdateCustomAverageForm } from "../forms/update-average-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import { useAverage } from "@/hooks/use-average";
 
 // EXACT same shape as your UpdateCustomAverageForm expects:
 const updateCustomAverageSchema = z.object({
@@ -41,14 +39,7 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
     data: fetchedAverage,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["custom-averages", averageId],
-    queryFn: async () => {
-      const res = await apiClient.get(`averages/${averageId}`);
-      const data = await res.json<{ customAverage: Average }>();
-      return data.customAverage;
-    },
-  });
+  } = useAverage(averageId);
 
   // The parent keeps its form state as T | null
   const [formData, setFormData] = useState<UpdateCustomAverageData | null>(null);

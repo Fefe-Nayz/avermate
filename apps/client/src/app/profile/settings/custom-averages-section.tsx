@@ -21,10 +21,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubjects } from "@/hooks/use-subjects";
-import { apiClient } from "@/lib/api";
-import { GetCustomAveragesResponse } from "@/types/get-custom-averages-response";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { BookOpenIcon, PlusCircleIcon } from "lucide-react";
 import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";

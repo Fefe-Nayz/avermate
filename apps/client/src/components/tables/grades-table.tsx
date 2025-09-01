@@ -11,13 +11,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
-import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Average } from "@/types/average";
-import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average } from "@/utils/average";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
@@ -31,6 +28,7 @@ import {
   addGeneralAverageToSubjects,
   buildGeneralAverageSubject,
 } from "@/utils/average";
+import { usePeriod } from "@/hooks/use-period";
 
 export default function GradesTable({
   subjects,
@@ -48,17 +46,7 @@ export default function GradesTable({
     data: period,
     isError: isPeriodError,
     isPending: isPeriodPending,
-  } = useQuery({
-    queryKey: ["periods", periodId],
-    queryFn: async () => {
-      if (periodId === "full-year") {
-        return null;
-      }
-      const res = await apiClient.get(`periods/${periodId}`);
-      const data = await res.json<Period>();
-      return data;
-    },
-  });
+  } = usePeriod(periodId);
 
   useEffect(() => {
     if (window.location.hash) {
@@ -152,7 +140,7 @@ export default function GradesTable({
               }}
             >
               {t("overallAverage")}</Link>: {overallAverage}
-            
+
           </TableCell>
         </TableRow>
 
@@ -160,21 +148,21 @@ export default function GradesTable({
         {customAverages && customAverages.length > 0 && (
           <>
             {customAverages.map((ca) => {
-                const subjectsToGive = () => {
-                  const customAverageId = ca.id;
-                  const customAverage = customAverageId
-                    ? customAverages?.find((ca) => ca.id === customAverageId)
-                    : undefined;
-              
+              const subjectsToGive = () => {
+                const customAverageId = ca.id;
+                const customAverage = customAverageId
+                  ? customAverages?.find((ca) => ca.id === customAverageId)
+                  : undefined;
 
-                      return addGeneralAverageToSubjects(subjects, customAverage);
-                  }
-                    const subjectVirtual = () => {
-                      return (
-                        subjectsToGive().find((s) => s.id === ca.id) ||
-                        buildGeneralAverageSubject()
-                      );
-                    };
+
+                return addGeneralAverageToSubjects(subjects, customAverage);
+              }
+              const subjectVirtual = () => {
+                return (
+                  subjectsToGive().find((s) => s.id === ca.id) ||
+                  buildGeneralAverageSubject()
+                );
+              };
               const customAvgVal = (average(subjectVirtual()?.id, subjectsToGive()));
               const customAvg =
                 customAvgVal !== null ? customAvgVal.toFixed(2) : "—";

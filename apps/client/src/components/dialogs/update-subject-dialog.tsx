@@ -9,15 +9,13 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Subject } from "@/types/subject";
 import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { UpdateSubjectForm } from "../forms/update-subject-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import { useSubject } from "@/hooks/use-subject";
 
 /** match the shape from update-subject-form. */
 const updateSubjectSchema = z.object({
@@ -37,14 +35,7 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
     data: subject,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["subjects", subjectId],
-    queryFn: async () => {
-      const res = await apiClient.get(`subjects/${subjectId}`);
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
-    },
-  });
+  } = useSubject(subjectId);
 
   // parent-level form data
   const [formData, setFormData] = useState<TUpdateSubject | null>(null);

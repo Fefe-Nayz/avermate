@@ -20,7 +20,6 @@ import { useRecentGrades } from "@/hooks/use-recent-grades";
 import { useSubjects } from "@/hooks/use-subjects";
 import { authClient } from "@/lib/auth";
 import { fullYearPeriod } from "@/utils/average";
-import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DataCards from "./data-cards";
@@ -28,6 +27,7 @@ import { useTranslations } from "next-intl"; // Import useTranslations
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
+import { useAccounts } from "@/hooks/use-accounts";
 
 /**
  * Vue d'ensemble des notes
@@ -35,11 +35,6 @@ import { useYears } from "@/hooks/use-years";
 export default function OverviewPage() {
   const t = useTranslations("Dashboard.Pages.OverviewPage"); // Initialize t
   const { data: session } = authClient.useSession();
-
-  type Account = {
-    id: string;
-    provider: string;
-  };
 
   const router = useRouter();
 
@@ -80,13 +75,7 @@ export default function OverviewPage() {
     data: accounts,
     isPending: isPendingAccount,
     isError: isErrorAccount,
-  } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: async () => {
-      const accounts = (await authClient.listAccounts()) satisfies Account[];
-      return accounts;
-    },
-  });
+  } = useAccounts();
 
   const {
     data: customAverages,

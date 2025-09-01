@@ -6,24 +6,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import { useQuery } from "@tanstack/react-query";
-import ProfileSection from "../profile-section";
-import ErrorStateCard from "@/components/skeleton/error-card";
-import { Button } from "@/components/ui/button";
 import { FaGoogle, FaMicrosoft } from "react-icons/fa";
-import { KeyRoundIcon } from "lucide-react";
 import { useState } from "react";
-import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { useTranslations } from "next-intl";
 import { env } from "@/lib/env";
-
-type Account = {
-  id: string;
-  provider: string;
-};
+import { useAccounts } from "@/hooks/use-accounts";
+import ErrorStateCard from "@/components/skeleton/error-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Link, KeyRoundIcon } from "lucide-react";
+import ProfileSection from "../profile-section";
+import { Button } from "@/components/ui/button";
 
 const providers = [
   {
@@ -48,14 +42,7 @@ export default function LinkedAccount() {
     data: accounts,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["accounts"],
-    queryFn: async () => {
-      const accounts = (await authClient.listAccounts());
-      return accounts;
-    },
-  });
-
+  } = useAccounts();
   const { data: session, isPending: isPendingSession } = authClient.useSession();
 
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
@@ -74,6 +61,10 @@ export default function LinkedAccount() {
     } finally {
       setLinkingProvider(null);
     }
+  }
+
+  if (isError) {
+    return <div>{ErrorStateCard()}</div>
   }
 
   if (isPending || isPendingSession)
@@ -111,7 +102,6 @@ export default function LinkedAccount() {
       </Card>
     );
 
-  if (isError) return <div>{ErrorStateCard()}</div>;
 
   return (
     <ProfileSection title={t("title")} description={t("description")}>
