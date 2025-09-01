@@ -84,9 +84,9 @@ export const AddSubjectForm = ({
 
   const addSubjectSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    coefficient: z.coerce.number({
-      invalid_type_error: t("coefficientRequired"),
-    }).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
+    coefficient: z.coerce.number(t("coefficientRequired"))
+      .min(0, t("coefficientMin"))
+      .max(1000, t("coefficientMax")),
     parentId: z
       .string()
       .max(64, t("parentIdMax"))

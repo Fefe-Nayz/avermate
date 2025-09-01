@@ -21,7 +21,6 @@ import { useSubjects } from "@/hooks/use-subjects";
 import { authClient } from "@/lib/auth";
 import { fullYearPeriod } from "@/utils/average";
 import { useQuery } from "@tanstack/react-query";
-import { Session, User } from "better-auth/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import DataCards from "./data-cards";
@@ -35,9 +34,7 @@ import { useYears } from "@/hooks/use-years";
  */
 export default function OverviewPage() {
   const t = useTranslations("Dashboard.Pages.OverviewPage"); // Initialize t
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-  };
+  const { data: session } = authClient.useSession();
 
   type Account = {
     id: string;
@@ -160,7 +157,8 @@ export default function OverviewPage() {
 
   //todo implement a custom field
   if (
-    new Date(session?.user?.createdAt).getTime() >
+    session?.user?.createdAt &&
+    new Date(session.user.createdAt).getTime() >
     Date.now() - 1000 * 60 * 10 &&
     (!subjects || subjects.length === 0) &&
     (linkedProviders.has("google") || linkedProviders.has("microsoft")) &&

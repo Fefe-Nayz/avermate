@@ -3,7 +3,6 @@
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -19,6 +18,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { useTranslations } from "next-intl";
+import { env } from "@/lib/env";
 
 type Account = {
   id: string;
@@ -51,13 +51,12 @@ export default function LinkedAccount() {
   } = useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
-      const accounts = (await authClient.listAccounts()) satisfies Account[];
+      const accounts = (await authClient.listAccounts());
       return accounts;
     },
   });
 
-  const { data: session, isPending: isPendingSession } =
-    authClient.useSession();
+  const { data: session, isPending: isPendingSession } = authClient.useSession();
 
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
 
@@ -68,7 +67,7 @@ export default function LinkedAccount() {
       setLinkingProvider(provider);
       await authClient.linkSocial({
         provider,
-        callbackURL: `${location.origin}/profile/account`,
+        callbackURL: `${env.NEXT_PUBLIC_CLIENT_URL}/profile/account`,
       });
     } catch (error) {
       console.error("Error linking account:", error);

@@ -19,25 +19,23 @@ import { useFormatter } from "next-intl";
 dayjs.locale("fr");
 dayjs.extend(relativeTime);
 
-type Session = {
-  id: string;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
-  expiresAt: Date;
-  token: string;
-  ipAddress?: string | null | undefined;
-  userAgent?: string | null | undefined;
-};
+// type Session = {
+//   id: string;
+//   userId: string;
+//   createdAt: Date;
+//   updatedAt: Date;
+//   expiresAt: Date;
+//   token: string;
+//   ipAddress?: string | null | undefined;
+//   userAgent?: string | null | undefined;
+// };
 
 export default function SessionList() {
   const formatter = useFormatter();
   const t = useTranslations("Settings.Account.SessionList");
   const formatDates = useFormatDates(formatter);
 
-  const { data: currentSession } = authClient.useSession() as unknown as {
-    data: { session: Session };
-  };
+  const { data: currentSession } = authClient.useSession();
 
   const {
     data: sessions,
@@ -46,7 +44,7 @@ export default function SessionList() {
   } = useQuery({
     queryKey: ["sessions-list"],
     queryFn: async () => {
-      const sessions = (await authClient.listSessions()) satisfies Session[];
+      const sessions = (await authClient.listSessions());
       return sessions;
     },
   });

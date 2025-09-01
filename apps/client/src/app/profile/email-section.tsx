@@ -10,16 +10,12 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import ProfileSection from "./profile-section";
 import { useTranslations } from "next-intl";
 
 export default function EmailSection() {
   const t = useTranslations("Settings.Profile.Email");
-  const { data: session, isPending } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-    isPending: boolean;
-  };
+  const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
     return (

@@ -33,9 +33,7 @@ export default function DeleteAccountDialog() {
 
   const queryClient = new QueryClient();
 
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { user: User };
-  };
+  const { data: session } = authClient.useSession();
 
   const { mutate, isPending } = useMutation({
     mutationKey: ["users", "delete", session?.user?.id],

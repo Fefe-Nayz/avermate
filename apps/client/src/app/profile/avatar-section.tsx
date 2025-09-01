@@ -11,16 +11,12 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import ProfileSection from "./profile-section";
 import { useTranslations } from "next-intl";
 
 export default function AvatarSection() {
   const t = useTranslations("Settings.Profile.Avatar");
-  const { data: session, isPending } = authClient.useSession() as unknown as {
-    data: { user: User; session: Session };
-    isPending: boolean;
-  };
+  const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
     return (

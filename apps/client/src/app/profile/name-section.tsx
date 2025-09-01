@@ -11,18 +11,14 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import ProfileSection from "./profile-section";
 import { useTranslations } from "next-intl";
 
 export default function NameSection() {
   const t = useTranslations("Settings.Profile.Name");
-  const { data: session, isPending } = authClient.useSession() as unknown as {
-    data: { user: User; session: Session };
-    isPending: boolean;
-  };
+  const { data: session, isPending } = authClient.useSession();
 
-  if (isPending) {
+  if (isPending || !session) {
     return (
       <Card className={"p-6 w-full"}>
         <div className="flex flex-col gap-6">
@@ -57,7 +53,7 @@ export default function NameSection() {
 
   return (
     <ProfileSection title={t("title")} description={t("description")}>
-      <UpdateNameForm defaultName={session?.user?.name} />
+      <UpdateNameForm defaultName={session.user.name} />
     </ProfileSection>
   );
 }

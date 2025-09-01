@@ -118,6 +118,7 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
   const localizedSchema = getLocalizedSchema(t);
 
   const form = useForm<AddCustomAverageSchema>({
+    // @ts-ignore
     resolver: zodResolver(localizedSchema),
     defaultValues: formData,
   });

@@ -49,12 +49,8 @@ export const CreateYearForm = () => {
             .max(32, t("CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR")),
         dateRange: z
             .object({
-                from: z.date({
-                    required_error: t("CREATE_YEAR_FORM_START_REQUIRED_ERROR"),
-                }),
-                to: z.date({
-                    required_error: t("CREATE_YEAR_FORM_END_REQUIRED_ERROR"),
-                }),
+                from: z.date().min(1, t("CREATE_YEAR_FORM_START_REQUIRED_ERROR")),
+                to: z.date().min(1, t("CREATE_YEAR_FORM_END_REQUIRED_ERROR")),
             })
             .refine(
                 (data) =>
@@ -69,7 +65,7 @@ export const CreateYearForm = () => {
     });
 
     type CreateYearSchema = z.infer<typeof createYearSchema>;
-    
+
     const queryClient = useQueryClient();
 
     const { mutate, isPending } = useMutation({
@@ -121,6 +117,13 @@ export const CreateYearForm = () => {
     const onSubmit = (values: CreateYearSchema) => {
         mutate(values);
     };
+
+    const schema = z.object({
+        name: z.string().min(1, { message: 'Required' }),
+        age: z.number().min(10),
+    });
+
+    zodResolver(schema)
 
     return (
         <div className="w-full">

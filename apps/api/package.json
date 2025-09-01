@@ -15,7 +15,7 @@
     "@libsql/client": "^0.14.0",
     "@limitable/ratelimit": "^0.0.4",
     "@t3-oss/env-core": "^0.11.1",
-    "better-auth": "^1.0.10",
+    "better-auth": "^1.3.7",
     "discord.js": "^14.17.2",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.9.5",

@@ -34,9 +34,7 @@ export default function RevokeSessionButton({
   const toaster = useToast();
   const router = useRouter();
 
-  const { data: currentSession } = authClient.useSession() as unknown as {
-    data: { session: Session };
-  };
+  const { data: currentSession } = authClient.useSession();
 
   const queryClient = useQueryClient();
 

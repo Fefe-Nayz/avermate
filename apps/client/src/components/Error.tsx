@@ -37,9 +37,7 @@ export default function ErrorComponent({
   const toaster = useToast();
   const hasSentRef = useRef(false);
 
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { user: User; session: Session };
-  };
+  const { data: session } = authClient.useSession();
 
   const { mutate, isPending } = useMutation({
     mutationKey: ["send-error-report"],
