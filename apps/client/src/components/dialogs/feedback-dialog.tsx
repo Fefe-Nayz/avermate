@@ -13,6 +13,8 @@ import { useState } from "react";
 import { FeedbackForm } from "../forms/feedback-form";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 
 export default function FeedbackDialog({
   children,
@@ -54,12 +56,12 @@ export default function FeedbackDialog({
       }}
     >
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {open && (
             <FeedbackForm
               close={() => setOpen(false)}
@@ -67,8 +69,8 @@ export default function FeedbackDialog({
               setFormData={setFormData}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

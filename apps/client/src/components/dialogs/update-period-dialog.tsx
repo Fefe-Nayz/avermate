@@ -17,6 +17,8 @@ import { useTranslations } from "next-intl";
 import { usePeriods } from "@/hooks/use-periods";
 import { z } from "zod";
 import { usePeriod } from "@/hooks/use-period";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 /** Match the shape from your UpdatePeriodForm. */
 const updatePeriodSchema = z.object({
@@ -72,12 +74,12 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
         </Button>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && !isPeriodsPending && !isPeriodsError && formData && (
             <UpdatePeriodForm
               periodId={period?.id || ""}
@@ -88,8 +90,8 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
               yearId={period?.yearId || ""}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

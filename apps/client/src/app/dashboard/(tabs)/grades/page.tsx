@@ -4,10 +4,12 @@ import { AddGradeButton } from "@/components/buttons/dashboard/grade/add-grade-b
 import MobileAddButtons from "@/components/buttons/dashboard/mobile-add-buttons";
 import AddPeriodDialog from "@/components/dialogs/add-period-dialog";
 import AddSubjectDialog from "@/components/dialogs/add-subject-dialog";
+import YearWorkspaceSelect from "@/components/selects/year-workspace-select";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import GradesLoader from "@/components/skeleton/grades-loader";
 import GradesTable from "@/components/tables/grades-table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -164,7 +166,7 @@ export default function GradesPage() {
               localStorage.setItem("selectedTab", value);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue>
                 {periods?.find((period) => period.id === selectedTab)?.name ||
                   t("fullYear")}

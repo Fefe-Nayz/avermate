@@ -17,6 +17,8 @@ import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { Grade } from "@/types/grade";
 import { z } from "zod";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 // Match the shape your UpdateGradeForm expects
 const updateGradeSchema = z.object({
@@ -65,12 +67,12 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
         </Button>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && formData && (
             <UpdateGradeForm
               gradeId={grade.id}
@@ -80,8 +82,8 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
               yearId={grade.yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

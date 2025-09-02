@@ -16,6 +16,8 @@ import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { useSubject } from "@/hooks/use-subject";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 /** match the shape from update-subject-form. */
 const updateSubjectSchema = z.object({
@@ -64,17 +66,17 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
         </Button>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && formData && (
             <UpdateSubjectForm yearId={subject.yearId} subjectId={subject.id} close={() => setOpen(false)} formData={formData} setFormData={setFormData as React.Dispatch<React.SetStateAction<TUpdateSubject>>} />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

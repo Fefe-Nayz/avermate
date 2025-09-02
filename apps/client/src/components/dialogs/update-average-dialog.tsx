@@ -16,6 +16,8 @@ import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
 import { useAverage } from "@/hooks/use-average";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 // EXACT same shape as your UpdateCustomAverageForm expects:
 const updateCustomAverageSchema = z.object({
@@ -70,12 +72,12 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
         </Button>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {/* Only render the child if formData is non-null */}
           {!isPending && !isError && formData && (
             <UpdateCustomAverageForm
@@ -86,8 +88,8 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
               yearId={fetchedAverage.yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

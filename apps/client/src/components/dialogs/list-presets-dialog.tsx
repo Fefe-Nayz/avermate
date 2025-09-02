@@ -13,6 +13,8 @@ import { useState } from "react";
 import { PresetList } from "../onboarding/preset-list";
 import { useTranslations } from "next-intl";
 import { usePresets } from "@/hooks/use-presets";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 
 interface PresetListState {
   searchTerm: string;
@@ -50,12 +52,12 @@ export default function ListPresetsDialog({
       }}
     >
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {!isLoading && !isError && presets && (
             <PresetList
               presets={presets}
@@ -65,8 +67,8 @@ export default function ListPresetsDialog({
               yearId={yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

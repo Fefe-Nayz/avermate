@@ -16,7 +16,7 @@ import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
-import {useTranslations} from "next-intl";
+import { useTranslations } from "next-intl";
 
 export default function YearWorkspaceSelect() {
     const id = useId();
@@ -41,7 +41,7 @@ export default function YearWorkspaceSelect() {
     }
 
     return (
-        <div className="not-first:*:mt-2">
+        <div>
             <Select defaultValue={activeId} value={activeId} onValueChange={(id) => {
                 if (id === "new") return router.push("/onboarding");
                 if (id !== activeId) {
@@ -59,7 +59,7 @@ export default function YearWorkspaceSelect() {
             }}>
                 <SelectTrigger
                     id={id}
-                    className="h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&>span_img]:shrink-0"
+                    className="h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2"
                 >
                     <SelectValue placeholder={"YEAR_SELECT_PLACEHOLDER"} />
                 </SelectTrigger>

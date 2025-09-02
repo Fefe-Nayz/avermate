@@ -14,6 +14,8 @@ import { AddAverageForm } from "../forms/add-average-form";
 import { useTranslations } from "next-intl";
 
 import { z } from "zod";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 const addCustomAverageSchema = z.object({
   name: z.string().min(1).max(64),
   subjects: z.array(
@@ -49,12 +51,12 @@ export default function AddAverageDialog({ children, yearId }: { children: React
       }}
     >
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
+        <CredenzaBodyWrapper>
           {open && (
             <AddAverageForm
               close={() => setOpen(false)}
@@ -63,8 +65,8 @@ export default function AddAverageDialog({ children, yearId }: { children: React
               yearId={yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }
