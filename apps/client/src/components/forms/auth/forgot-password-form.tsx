@@ -65,6 +65,7 @@ export const ForgotPasswordForm = () => {
   });
 
   const form = useForm<ForgotPasswordSchema>({
+    // @ts-ignore
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
       email: "",

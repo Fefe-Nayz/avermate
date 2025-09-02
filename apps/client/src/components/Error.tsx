@@ -121,7 +121,7 @@ User Name: ${session?.user?.name || "Not logged in"}
         <CardContent className="text-center">
           <p className="text-lg mb-4">{t("title")}</p>
           <p className="text-muted-foreground">
-            {t("description", { statusCode: errorMessage })}
+            {t("description", { statusCode: errorMessage || "" })}
           </p>
         </CardContent>
         <CardFooter className="flex flex-col items-center space-y-2">

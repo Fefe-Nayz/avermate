@@ -293,7 +293,8 @@ function renderSubjects(
               style={getIndentationLinesStyle(subject.depth)}
               className={cn(
                 "font-medium relative",
-                getPaddingClass(subject.depth)
+                getPaddingClass(subject.depth),
+                "py-4"
               )}
             >
               <Link

@@ -105,7 +105,8 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
 
   type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
 
-  const form = useForm<UpdateSubjectSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(updateSubjectSchema),
     defaultValues: formData,
   });

@@ -126,15 +126,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     },
   });
 
-  
-const schema = z.object({
-  id: z.number(),
-});
-
-// Automatically infers the output type from the schema
-useForm({
-  resolver: zodResolver(schema),
-});
 
   // On mount, reset
   useEffect(() => {

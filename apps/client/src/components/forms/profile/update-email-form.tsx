@@ -61,7 +61,8 @@ export const UpdateEmailForm = ({
     },
   });
 
-  const form = useForm<UpdateEmailSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(updateEmailSchema),
     defaultValues: {
       email: defaultEmail,

@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth";
 import { Stepper } from "./stepper";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ConfettiButton } from "@/components/ui/confetti";
+import { ConfettiButton } from "@/components/magicui/confetti";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useActiveYears } from "@/hooks/use-active-year";

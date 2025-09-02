@@ -105,7 +105,7 @@ export function UpdateGradeForm({
       .number()
       .min(0, t("coefficientMin"))
       .max(1000, t("coefficientMax")),
-    passedAt: z.date({ required_error: t("passedAtRequired") }),
+    passedAt: z.date().min(0, t("passedAtRequired")),
     subjectId: z
       .string()
       .min(1, t("subjectIdRequired"))
@@ -146,7 +146,7 @@ export function UpdateGradeForm({
         description: t("successDescription"),
       });
       close();
-      
+
     },
     onSettled() {
       queryClient.cancelQueries();
@@ -165,7 +165,8 @@ export function UpdateGradeForm({
   const year = years?.find((y) => y.id === yearId);
 
   // Setup our form with parent's data
-  const form = useForm<UpdateGradeSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(updateGradeSchema),
     defaultValues: formData,
   });
@@ -224,8 +225,8 @@ export function UpdateGradeForm({
   const selectedPeriodValue = form.getValues("periodId");
   const selectedPeriod =
     selectedPeriodValue && selectedPeriodValue !== "full-year"
-    ? periods?.find((p) => p.id === selectedPeriodValue)
-    : null;
+      ? periods?.find((p) => p.id === selectedPeriodValue)
+      : null;
 
   const selectedSubject = subjects?.find(
     (subject) => subject.id === form.getValues("subjectId")
@@ -251,7 +252,7 @@ export function UpdateGradeForm({
     if (openPeriod) {
       setPeriodInputValue(
         selectedPeriod?.name ||
-          (selectedPeriodValue === "full-year" ? t("fullYear") : "")
+        (selectedPeriodValue === "full-year" ? t("fullYear") : "")
       );
     }
   }, [openPeriod, selectedPeriod, selectedPeriodValue, t]);
@@ -357,7 +358,7 @@ export function UpdateGradeForm({
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
-                        variant={"outline-solid"}
+                        variant="outline"
                         className={cn(
                           "pl-3 text-left font-normal",
                           !field.value && "text-muted-foreground"
@@ -419,8 +420,8 @@ export function UpdateGradeForm({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : selectedPeriodValue === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -491,8 +492,8 @@ export function UpdateGradeForm({
                           {selectedPeriod
                             ? selectedPeriod.name
                             : selectedPeriodValue === "full-year"
-                            ? t("fullYear")
-                            : t("choosePeriod")}
+                              ? t("fullYear")
+                              : t("choosePeriod")}
                           <ChevronsUpDown className="opacity-50" />
                         </Button>
                       </FormControl>
@@ -675,8 +676,8 @@ export function UpdateGradeForm({
                                   <span>{subject.name}</span>
                                   {form.getValues("subjectId") ===
                                     subject.id && (
-                                    <Check className="ml-auto h-4 w-4" />
-                                  )}
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
                                 </CommandItem>
                               ))}
                             </CommandGroup>

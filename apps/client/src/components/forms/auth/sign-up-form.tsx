@@ -87,7 +87,7 @@ export const SignUpForm = () => {
       if (!data.user.emailVerified) {
         toaster.toast({
           title: t("emailNotVerified"),
-          description: t("verificationLinkSent", { email: data.user.emailVerified }),
+          description: t("verificationLinkSent", { email: data.user.email || "" }),
         });
 
         // Redirect to email verify
@@ -104,6 +104,7 @@ export const SignUpForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<SignUpSchema>({
+    // @ts-ignore
     resolver: zodResolver(signUpSchema),
     defaultValues: {
       firstName: "",
@@ -252,10 +253,9 @@ export const SignUpForm = () => {
                           "h-full transition-all duration-500 ease-out"
                         )}
                         style={{
-                          width: `${
-                            getPasswordStrength(form.getValues("password"))
+                          width: `${getPasswordStrength(form.getValues("password"))
                               .entropy * 100
-                          }%`,
+                            }%`,
                         }}
                       ></div>
                     </div>

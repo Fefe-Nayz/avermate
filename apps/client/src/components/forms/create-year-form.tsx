@@ -102,7 +102,8 @@ export const CreateYearForm = () => {
 
     const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
-    const form = useForm<CreateYearSchema>({
+    const form = useForm({
+        // @ts-ignore
         resolver: zodResolver(createYearSchema),
         defaultValues: {
             name: "",
@@ -118,13 +119,6 @@ export const CreateYearForm = () => {
         mutate(values);
     };
 
-    const schema = z.object({
-        name: z.string().min(1, { message: 'Required' }),
-        age: z.number().min(10),
-    });
-
-    zodResolver(schema)
-
     return (
         <div className="w-full">
             <Form {...form}>
@@ -136,6 +130,7 @@ export const CreateYearForm = () => {
                     {/* Name Field */}
                     <FormField
                         control={form.control}
+                        disabled={isPending}
                         name="name"
                         render={({ field }) => (
                             <FormItem className="mx-1">
@@ -155,6 +150,7 @@ export const CreateYearForm = () => {
                     {/* Date Range Field */}
                     <FormField
                         control={form.control}
+                        disabled={isPending}
                         name="dateRange"
                         render={({ field }) => (
                             <FormItem className="mx-1">
@@ -164,7 +160,7 @@ export const CreateYearForm = () => {
                                         <Popover modal>
                                             <PopoverTrigger asChild>
                                                 <Button
-                                                    variant={"outline-solid"}
+                                                    variant="outline"
                                                     className={
                                                         !field.value?.from ? "text-muted-foreground" : ""
                                                     }

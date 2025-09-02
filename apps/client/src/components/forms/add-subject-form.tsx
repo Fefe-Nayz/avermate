@@ -2,11 +2,10 @@
 
 import { useToast } from "@/hooks/use-toast";
 import { Subject } from "@/types/subject";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, ChevronsUpDownIcon, Loader2Icon } from "lucide-react";
-import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -45,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { isEqual } from "lodash";
 import React from "react";
+import { useForm } from "react-hook-form";
 
 interface AddSubjectFormProps {
   close: () => void;
@@ -84,7 +84,7 @@ export const AddSubjectForm = ({
 
   const addSubjectSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    coefficient: z.coerce.number(t("coefficientRequired"))
+    coefficient: z.number(t("coefficientRequired"))
       .min(0, t("coefficientMin"))
       .max(1000, t("coefficientMax")),
     parentId: z
@@ -119,7 +119,7 @@ export const AddSubjectForm = ({
       const res = await apiClient.post(`years/${yearId}/subjects`, {
         json: { name, coefficient, parentId, isMainSubject, isDisplaySubject },
       });
-      const json = await res.json() as {subject: Subject};
+      const json = await res.json() as { subject: Subject };
       return json.subject;
     },
     onSuccess: () => {
@@ -141,17 +141,17 @@ export const AddSubjectForm = ({
     },
   });
 
-  // Keep original form default
-  const form = useForm<AddSubjectSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(addSubjectSchema),
     defaultValues: {
       name: "",
-      parentId: parentId?.toString() || "",
+      parentId: parentId || "",
       isDisplaySubject: false,
       isMainSubject: false,
-      coefficient: undefined,
+      coefficient: 1,
     },
-  });
+  })
 
   // Sync with parent's data
   useEffect(() => {

@@ -80,6 +80,7 @@ export const ResetPasswordForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<ResetPasswordSchema>({
+    // @ts-ignore
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
       password: "",

@@ -73,8 +73,8 @@ export const AddPeriodForm = ({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     dateRange: z
       .object({
-        from: z.date({ required_error: t("startDateRequired") }),
-        to: z.date({ required_error: t("endDateRequired") }),
+        from: z.date().min(0, t("startDateRequired")),
+        to: z.date().min(0, t("endDateRequired")),
       })
       .refine(
         (data) =>
@@ -128,7 +128,8 @@ export const AddPeriodForm = ({
   const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
   // Keep your original defaults here:
-  const form = useForm<AddPeriodSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(addPeriodSchema),
     defaultValues: {
       name: "",

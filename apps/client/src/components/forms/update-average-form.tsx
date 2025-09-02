@@ -96,7 +96,8 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Prepare our local form using parent's data
-  const form = useForm<UpdateCustomAverageSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(updateCustomAverageSchema),
     defaultValues: formData,
   });

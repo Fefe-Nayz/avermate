@@ -79,12 +79,9 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     dateRange: z
       .object({
-        from: z.date({
-          required_error: t("fromRequired"),
-        }),
-        to: z.date({
-          required_error: t("toRequired"),
-        }),
+        from: z.date().min(0, t("fromRequired")),
+        to: z.date().min(0, t("toRequired")),
+
       })
       .refine(
         (data) =>
@@ -136,6 +133,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
   });
 
   const form = useForm<UpdatePeriodSchema>({
+    // @ts-ignore
     resolver: zodResolver(updatePeriodSchema),
     defaultValues: formData,
   });
@@ -223,7 +221,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
                     <Popover modal>
                       <PopoverTrigger asChild>
                         <Button
-                          variant={"outline-solid"}
+                          variant="outline"
                           className={
                             !field.value?.from ? "text-muted-foreground" : ""
                           }

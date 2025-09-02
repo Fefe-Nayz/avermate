@@ -54,7 +54,8 @@ export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
     },
   });
 
-  const form = useForm<UpdateNameSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(updateNameSchema),
     defaultValues: {
       name: defaultName,

@@ -37,11 +37,11 @@ function Calendar({
         caption_label: "text-sm font-medium",
         nav: "flex items-center justify-between absolute inset-x-0",
         button_previous: cn(
-          buttonVariants({ variant: "outline-solid" }),
+          buttonVariants({ variant: "outline" }),
           "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 z-10"
         ),
         button_next: cn(
-          buttonVariants({ variant: "outline-solid" }),
+          buttonVariants({ variant: "outline" }),
           "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 z-10"
         ),
         weeks: "w-full border-collapse space-y-",

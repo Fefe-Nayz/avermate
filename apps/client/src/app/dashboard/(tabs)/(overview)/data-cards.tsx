@@ -239,7 +239,7 @@ export default function DataCards({
             bestSubjectAverageComparaison?.percentageChange
             ? // Use interpolation for subject and percentage
             t("bestSubjectWithComparison", {
-              subjectName: bestSubject?.name,
+              subjectName: bestSubject?.name || "",
               percentage:
                 bestSubjectAverageComparaison.percentageChange.toFixed(2),
             })
@@ -281,7 +281,7 @@ export default function DataCards({
           worstSubjectAverage !== null &&
             worstSubjectAverageComparaison?.percentageChange
             ? t("worstSubjectWithComparison", {
-              subjectName: worstSubject?.name,
+              subjectName: worstSubject?.name || "",
               percentage:
                 worstSubjectAverageComparaison.percentageChange.toFixed(2),
             })

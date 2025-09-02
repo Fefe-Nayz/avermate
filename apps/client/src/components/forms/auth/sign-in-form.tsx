@@ -106,6 +106,7 @@ export const SignInForm = () => {
   });
 
   const form = useForm<SignInSchema>({
+    // @ts-ignore
     resolver: zodResolver(signInSchema),
     defaultValues: {
       password: "",

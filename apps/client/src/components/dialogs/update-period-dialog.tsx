@@ -80,12 +80,12 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
         <CredenzaBody className="px-4 py-6 max-h-full overflow-auto">
           {!isPending && !isError && !isPeriodsPending && !isPeriodsError && formData && (
             <UpdatePeriodForm
-              periodId={period.id}
+              periodId={period?.id || ""}
               periods={periods}
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdatePeriodSchema>>}
-              yearId={period.yearId}
+              yearId={period?.yearId || ""}
             />
           )}
         </CredenzaBody>

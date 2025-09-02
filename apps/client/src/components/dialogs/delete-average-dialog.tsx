@@ -74,10 +74,10 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t("title", { name: average?.name || averageName })}
+            {t("title", { name: average?.name || averageName || "" })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("description", { name: average?.name || averageName })}
+            {t("description", { name: average?.name || averageName || "" })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

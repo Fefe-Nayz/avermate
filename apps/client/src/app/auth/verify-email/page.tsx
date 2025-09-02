@@ -41,7 +41,7 @@ const VerifyEmailPage = () => {
         <p className="text-3xl md:text-4xl font-bold">{t("verifyEmail")}</p>
 
         <div className="flex flex-col gap-0.5 text-sm md:text-base text-muted-foreground">
-          <p>{t("emailSent", { email: session?.user?.email })}</p>
+          <p>{t("emailSent", { email: session?.user?.email || "" })}</p>
         </div>
       </div>
 

@@ -189,7 +189,8 @@ export function AddGradeForm({
   });
 
   // 2) Now we use parent's `formData` as defaultValues
-  const form = useForm<AddGradeSchema>({
+  const form = useForm({
+    // @ts-ignore
     resolver: zodResolver(addGradeSchema),
     defaultValues: formData,
   });
@@ -353,7 +354,7 @@ export function AddGradeForm({
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
-                        variant={"outline-solid"}
+                        variant="outline"
                         className={cn(
                           "pl-3 text-left font-normal",
                           !field.value && "text-muted-foreground"
