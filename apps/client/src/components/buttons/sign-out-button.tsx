@@ -19,6 +19,7 @@ import {
 import { Button } from "../ui/button";
 import { DropdownMenuItem } from "../ui/dropdown-menu";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function SignOutButton() {
   const router = useRouter();
@@ -55,14 +56,14 @@ export default function SignOutButton() {
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <DropdownMenuItem
-          className="text-red-500!"
-          onSelect={(e) => e.preventDefault()}
-        >
-          <LogOutIcon className="size-4 mr-2" />
-          {t("signOut")}
-        </DropdownMenuItem>
+      <AlertDialogTrigger>
+        <DropDrawerItem className="w-full" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center gap-2 text-red-500!">
+            <LogOutIcon className="size-4" />
+            {t("signOut")}
+          </div>
+        </DropDrawerItem>
+
       </AlertDialogTrigger>
 
       <AlertDialogContent>
