@@ -56,6 +56,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { isEqual } from "lodash";
 import { Average } from "@/types/average";
+import { ScrollArea } from "../ui/scroll-area";
 
 /**
  * Reuse your 'updateCustomAverageSchema' or define it similarly.
@@ -445,11 +446,13 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
           {/* Subjects */}
           <div className="flex flex-col gap-4 mx-1">
             <FormLabel>{t("subjects")}</FormLabel>
-            <div className="flex flex-col gap-4">
-              {fields.map((fieldItem, index) =>
-                renderSubjectField(index, fieldItem)
-              )}
-            </div>
+              <div>
+                <div className="flex flex-col gap-4">
+                  {fields.map((fieldItem, index) =>
+                    renderSubjectField(index, fieldItem)
+                  )}
+                </div>
+              </div>
             <Button
               type="button"
               variant="secondary"
