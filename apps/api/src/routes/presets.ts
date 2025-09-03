@@ -1054,7 +1054,6 @@ router.post(
   async (c) => {
     const { id } = c.req.valid("param");
 
-
     const preset = presets.find((p) => p.id === id);
 
     if (!preset) throw new HTTPException(404);

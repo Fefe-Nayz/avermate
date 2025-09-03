@@ -346,3 +346,26 @@ export const customAverages = sqliteTable("custom_averages", {
 //     references: [users.id],
 //   }),
 // }));
+
+export const usages = sqliteTable("usage", {
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+
+  aiAutoFillUsageCount: integer().default(0).notNull(),
+
+  resetAt: integer({ mode: "timestamp" }).notNull().$default(() => new Date()),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const featureFlags = sqliteTable("feature_flags", {
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+
+  flags: text({ mode: "json" }).default({}).$type<{ AI_AUTO_FILL?: boolean }>().notNull(),
+
+  createdAt: integer({ mode: "timestamp" }).notNull(),
+});
