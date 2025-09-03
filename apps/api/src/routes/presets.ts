@@ -1041,10 +1041,10 @@ router.post(
     "param",
     z.object({
       id: z.enum([
-        "CPE_PREPA_SUP_NUM",
-        "CPE_PREPA_SUP_CHI",
-        "CPE_PREPA_SPE_PC",
-        "CPE_PREPA_SPE_PSI",
+        "CPE_PREPA_SUP_NUM_2025_2026",
+        "CPE_PREPA_SUP_CHI_2025_2026",
+        "CPE_PREPA_SPE_PC_2025_2026",
+        "CPE_PREPA_SPE_PSI_2025_2026",
         "LYCEE_TERMINALE_G",
         "LYCEE_1ERE_G",
         "LYCEE_2NDE_GT",
