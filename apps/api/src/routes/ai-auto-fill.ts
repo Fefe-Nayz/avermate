@@ -87,12 +87,12 @@ router.post("/", async (c) => {
     // Check usage limit
     if (usage && usage.aiAutoFillUsageCount >= AI_AUTO_FILL_USAGE_LIMIT) {
         // Check if reset date has reached else reject request
-        const nextResetAt = new Date(usage.createdAt.getTime() + AI_AUTO_FILL_USAGE_RESET_INTERVAL_MS);
+        const nextResetAt = new Date(usage.resetAt.getTime() + AI_AUTO_FILL_USAGE_RESET_INTERVAL_MS);
 
         if (usage.resetAt >= nextResetAt) {
             // Reset usage count
             await db.update(usages).set({
-                aiAutoFillUsageCount: 0,
+                aiAutoFillUsageCount: 1,
                 resetAt: new Date(),
             }).where(eq(usages.userId, session.user.id));
         } else {
