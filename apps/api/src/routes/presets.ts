@@ -22,9 +22,10 @@ const router = new Hono<{
 
 const presets: Preset[] = [
   {
-    id: "CPE_PREPA_SUP_NUM",
+    id: "CPE_PREPA_SUP_NUM_2025_2026",
     name: "Prépa CPE Sup Numérique",
     description: "Préset des matières pour la prépa CPE Sup Numérique",
+    tags: ["CPE", "2025-2026"],
     subjects: [
       {
         name: "Module Scientifique",
@@ -86,7 +87,7 @@ const presets: Preset[] = [
           {
             name: "Informatique",
             isMainSubject: true,
-            coefficient: 3,
+            coefficient: 5,
           },
           /**
            * TIPE
@@ -155,6 +156,10 @@ const presets: Preset[] = [
             name: "TIPE - Compétences Transversales",
             coefficient: 1,
           },
+          {
+            name: "Sport  /Club / Communications",
+            coefficient: 1,
+          },
         ],
       },
     ],
@@ -183,9 +188,10 @@ const presets: Preset[] = [
    * Prépa CPE Sup Chimie
    */
   {
-    id: "CPE_PREPA_SUP_CHI",
+    id: "CPE_PREPA_SUP_CHI_2025_2026",
     name: "Prépa CPE Sup Chimie",
     description: "Préset des matières pour la prépa CPE Sup Chimie",
+    tags: ["CPE", "2025-2026"],
     subjects: [
       {
         name: "Module Scientifique",
@@ -266,7 +272,7 @@ const presets: Preset[] = [
           {
             name: "Informatique",
             isMainSubject: true,
-            coefficient: 3,
+            coefficient: 4,
           },
           /**
            * TIPE
@@ -335,6 +341,10 @@ const presets: Preset[] = [
             name: "TIPE - Compétences Transversales",
             coefficient: 1,
           },
+          {
+            name: "Sport  /Club / Communications",
+            coefficient: 1,
+          },
         ],
       },
     ],
@@ -367,9 +377,10 @@ const presets: Preset[] = [
    * Prépa CPE SPE PSI
    */
   {
-    id: "CPE_PREPA_SPE_PSI",
+    id: "CPE_PREPA_SPE_PSI_2025_2026",
     name: "Prépa CPE Spé PSI",
     description: "Préset des matières pour la prépa CPE Spé PSI",
+    tags: ["CPE", "2025-2026"],
     subjects: [
       {
         name: "Module Scientifique",
@@ -431,7 +442,7 @@ const presets: Preset[] = [
           {
             name: "Informatique",
             isMainSubject: true,
-            coefficient: 3,
+            coefficient: 5,
           },
           /**
            * TIPE
@@ -507,6 +518,10 @@ const presets: Preset[] = [
             name: "Sport",
             coefficient: 1,
           },
+          {
+            name: "BDE / Club / Communications",
+            coefficient: 1,
+          },
         ],
       },
     ],
@@ -535,9 +550,10 @@ const presets: Preset[] = [
    * Prépa CPE Spé PC
    */
   {
-    id: "CPE_PREPA_SPE_PC",
+    id: "CPE_PREPA_SPE_PC_2025_2026",
     name: "Prépa CPE Spé PC",
     description: "Préset des matières pour la prépa CPE Spé PC",
+    tags: ["CPE", "2025-2026"],
     subjects: [
       {
         name: "Module Scientifique",
@@ -599,7 +615,7 @@ const presets: Preset[] = [
           {
             name: "Informatique",
             isMainSubject: true,
-            coefficient: 3,
+            coefficient: 4,
           },
           /**
            * TIPE
@@ -675,6 +691,10 @@ const presets: Preset[] = [
             name: "Sport",
             coefficient: 1,
           },
+          {
+            name: "BDE / Club / Communications",
+            coefficient: 1,
+          },
         ],
       },
     ],
@@ -709,6 +729,7 @@ const presets: Preset[] = [
     id: "LYCEE_TERMINALE_G",
     name: "Terminale - Section Générale",
     description: "Préset pour la terminale générale.",
+    tags: ["LYCEE"],
     subjects: [
       /**
        * Spécialité 1
@@ -791,6 +812,7 @@ const presets: Preset[] = [
     id: "LYCEE_1ERE_G",
     name: "1ère - Section Générale",
     description: "Préset pour la 1ère générale.",
+    tags: ["LYCEE"],
     subjects: [
       /**
        * Spécialité 1
@@ -881,6 +903,7 @@ const presets: Preset[] = [
     id: "LYCEE_2NDE_GT",
     name: "2nde - Section Générale & Technologique",
     description: "Préset pour la 2nde générale & technologie.",
+    tags: ["LYCEE"],
     subjects: [
       /**
        * Mathématiques
@@ -972,6 +995,7 @@ type Preset = {
   description: string;
   subjects: PresetSubject[];
   customAverages?: CustomAveragePreset[];
+  tags: string[];
 };
 
 type PresetSubject = {
