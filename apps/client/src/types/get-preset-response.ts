@@ -15,4 +15,5 @@ export type Preset = {
     name: string;
     description: string;
     subjects: PresetSubject[];
+    tags: string[];
 };

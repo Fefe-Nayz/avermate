@@ -17,6 +17,7 @@ import { Loader2Icon, CheckIcon, SearchIcon } from "lucide-react";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
+import { Badge } from "../ui/badge";
 
 export const PresetList = ({
   close,
@@ -103,7 +104,15 @@ export const PresetList = ({
           filteredPresets.map((preset) => (
             <Card key={preset.id}>
               <CardHeader>
-                <CardTitle>{preset.name}</CardTitle>
+                <CardTitle className="flex items-center">{preset.name}
+                  <span className="ml-2 flex gap-1">
+                    {preset.tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </span>
+                </CardTitle>
                 <CardDescription>{preset.description}</CardDescription>
               </CardHeader>
               <CardContent>
