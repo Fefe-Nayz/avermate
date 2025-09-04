@@ -182,11 +182,14 @@ router.post("/", async (c) => {
         stream: false,
     });
 
+    console.log("================== AI Auto Fill Response =================");
     console.log(response.output_text); // Pretty print the response to the
 
     console.log(`Input tokens: ${response.usage?.input_tokens}, Output tokens: ${response.usage?.output_tokens}`);
     console.log(`Total cost: ${((response.usage?.input_tokens || 0) / (10 ** 6)) * 0.050 + ((response.usage?.output_tokens || 0) / (10 ** 6)) * 0.400}$`);
-    return c.json({ success: true });
+    console.log("==========================================================");
+
+    return c.json(JSON.parse(response.output_text || "{}"));
 });
 
 export default router;
