@@ -43,5 +43,11 @@ export const limitable = new Limitable({
       windowMs: 60 * 60 * 1000,
       maxRequest: 20,
     },
+
+    aiAutoFill: {
+      // 10req/weeks
+      windowMs: 7 * 24 * 60 * 60 * 1000,
+      maxRequest: 10,
+    }
   },
 });

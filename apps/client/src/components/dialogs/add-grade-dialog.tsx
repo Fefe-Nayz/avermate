@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import { AddGradeForm, AddGradeSchema } from "../forms/add-grade-form";
 import { useTranslations } from "next-intl";
+import AiAutoFillButton from "../buttons/ai-auto-fill-button";
 
 export default function AddGradeDialog({
   children,
@@ -31,9 +32,9 @@ export default function AddGradeDialog({
     outOf: undefined,
     value: undefined,
     coefficient: undefined,
-    passedAt: undefined, 
+    passedAt: undefined,
     subjectId: parentId || "",
-    periodId: null, 
+    periodId: null,
   };
 
   const [formData, setFormData] = useState<AddGradeSchema>(EMPTY_FORM_DATA);
@@ -56,13 +57,16 @@ export default function AddGradeDialog({
         </CredenzaHeader>
         <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
           {open && (
-            <AddGradeForm
-              close={() => setOpen(false)}
-              parentId={parentId}
-              formData={formData}
-              setFormData={setFormData}
-              yearId={yearId}
-            />
+            <>
+              <AddGradeForm
+                close={() => setOpen(false)}
+                parentId={parentId}
+                formData={formData}
+                setFormData={setFormData}
+                yearId={yearId}
+              />
+              <AiAutoFillButton />
+            </>
           )}
         </CredenzaBody>
       </CredenzaContent>

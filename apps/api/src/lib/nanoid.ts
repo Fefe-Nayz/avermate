@@ -14,7 +14,7 @@ cl - card layout
 y - year
 */
 
-type IdPrefix = "u" | "acc" | "ses" | "ver" | "sub" | "gra" | "per" | "ca" | "ct" | "cl" | "y";
+type IdPrefix = "u" | "acc" | "ses" | "ver" | "sub" | "gra" | "per" | "ca" | "ct" | "cl" | "y" | "usa";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
