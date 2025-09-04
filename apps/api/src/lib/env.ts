@@ -36,6 +36,9 @@ export const env = createEnv({
     DISCORD_TOKEN: z.string(),
     DISCORD_CHANNEL_ID: z.string(),
 
+    // OpenAI
+    OPENAI_API_KEY: z.string(),
+
     // Dev
     DISABLE_FEEDBACK: z.coerce.boolean().optional().default(false),
     DISABLE_EMAIL: z.coerce.boolean().optional().default(false),

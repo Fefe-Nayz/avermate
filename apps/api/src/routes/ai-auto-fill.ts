@@ -3,10 +3,12 @@ import { featureFlags, usages } from "@/db/schema";
 import type { Session, User } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { limitable } from "@/lib/limitable";
+import { aiClient } from "@/lib/openai";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getConnInfo } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
+import path from "path"
 
 const router = new Hono<{
     Variables: {
@@ -20,6 +22,9 @@ const router = new Hono<{
 const AI_AUTO_FILL_USAGE_LIMIT = 100;
 const AI_AUTO_FILL_USAGE_RESET_INTERVAL_MS = 365 * 30 * 24 * 60 * 60 * 1000;
 const AI_AUTO_FILL_ENABLED_TO_ALL_USERS = false;
+const PROMPT_ID = "pmpt_68b7c29b8ff88193896951e8dac85eec08dec0586a6371ee";
+
+const allowedImageExtensions = ["png", "jpg", "jpeg", "webp"];
 
 router.post("/", async (c) => {
     const session = c.get("session");
@@ -117,7 +122,70 @@ router.post("/", async (c) => {
         },
     });
 
+    const body = await c.req.parseBody()
+    console.log(body['file']) // File | string
+
+    if (!body['file'] || !(body['file'] instanceof File)) {
+        return c.json(
+            {
+                code: "ERR_NO_FILE",
+                message: "No file provided",
+            },
+            400
+        );
+    }
+
+    const file = body['file'];
+
+    if (!allowedImageExtensions.includes(file.type.split("/").pop() || "")) {
+        return c.json(
+            {
+                code: "ERR_INVALID_FILE_TYPE",
+                message: `Invalid file type. Allowed types: ${allowedImageExtensions.join(", ")}`,
+            },
+            400
+        );
+    }
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB
+        return c.json(
+            {
+                code: "ERR_FILE_TOO_LARGE",
+                message: "File size exceeds the 5MB limit",
+            },
+            400
+        );
+    }
+
     // Handle request
+    const ext = path.extname(file.name);
+    const base64Image = (await file.bytes()).toBase64()
+    const dataUrl = `data:image/${ext};base64,${base64Image}`;
+
+    const response = await aiClient.responses.create({
+        model: "gpt-5-nano",
+        prompt: {
+            id: PROMPT_ID,
+        },
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "detail": "low",
+                        "image_url": dataUrl
+                    }
+                ]
+            }
+        ],
+        stream: false,
+    });
+
+    console.log(response.output_text); // Pretty print the response to the
+
+    console.log(`Input tokens: ${response.usage?.input_tokens}, Output tokens: ${response.usage?.output_tokens}`);
+    console.log(`Total cost: ${((response.usage?.input_tokens || 0) / (10 ** 6)) * 0.050 + ((response.usage?.output_tokens || 0) / (10 ** 6)) * 0.400}$`);
     return c.json({ success: true });
 });
 
