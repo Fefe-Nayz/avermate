@@ -209,19 +209,18 @@ const UpdateAvatar = () => {
     <>
       <OriginalUploadButton
         endpoint="avatarUploader"
-        className="flex flex-col items-center w-full"
+        className="flex flex-col items-center"
         appearance={{
           button({ ready, isUploading }) {
             return buttonVariants({
               variant: "default",
-              size: "default",
-              className: `w-full ${
-                isUploading || !ready ? "opacity-50 pointer-events-none" : ""
-              }`,
+              size: "sm",
+              className: `!h-9 !w-auto px-3 mb-0 ${isUploading || !ready ? "opacity-50 pointer-events-none" : ""
+                }`,
             });
           },
           container: "flex flex-col items-center space-y-2",
-          allowedContent: "text-sm text-muted-foreground mt-1",
+          allowedContent: "hidden",
         }}
         content={{
           button({ ready, isUploading }) {

@@ -102,6 +102,7 @@
       "transformEfforts": "Transformez vos efforts en succès"
     },
     "FAQ": {
+      "title": "Questions Fréquemment Posées",
       "question1": "Comment mes données sont elles stockées ?",
       "answer1": "Vos données sont stockées de façon sécurisée dans notre base de données.",
       "question2": "Qui d'autres peut voir mes notes ?",
@@ -340,7 +341,14 @@
         "uploadingMessage": "Veuillez patienter quelques instants.",
         "cropAvatar": "Recadrez votre avatar",
         "cancel": "Annuler",
-        "save": "Enregistrer"
+        "save": "Enregistrer",
+        "deleteAvatar": "Supprimer l'avatar",
+        "deleteAvatarConfirm": "Êtes-vous sûr de vouloir supprimer votre avatar ?",
+        "deleteAvatarDescription": "Cette action ne peut pas être annulée. Votre avatar sera définitivement supprimé.",
+        "deletingAvatar": "Suppression de l'avatar...",
+        "deleteSuccessTitle": "Avatar supprimé",
+        "deleteSuccessMessage": "Votre avatar a été supprimé avec succès.",
+        "deleteErrorMessage": "Une erreur est survenue lors de la suppression de l'avatar."
       }
     },
     "Account": {
@@ -348,7 +356,7 @@
         "title": "Active Sessions",
         "description": "Manage and monitor all your active sessions.",
         "revoke": "Revoke",
-        "current": "Current",
+        "current": "Actuelle",
         "expired": "Expired",
         "active": "Active",
         "successTitle": "Session révoquée",
@@ -358,7 +366,13 @@
         "titleDialog": "Révoquer la session",
         "descriptionDialog": "L'utilisateur sera invité à se reconnecter lors de sa prochaine visite.",
         "cancel": "Annuler",
-        "revokeSession": "Révoquer la session"
+        "revokeSession": "Révoquer la session",
+        "signoutDialog": "Se déconnecter",
+        "signoutSession": "Se déconnecter",
+        "signoutTitleDialog": "Se déconnecter",
+        "signoutDescriptionDialog": "Vous allez être déconnecté maintenant",
+        "currentSession": "Session active",
+        "expire": "Expire"
       },
       "LinkedAccounts": {
         "title": "Comptes Liés",
@@ -383,7 +397,7 @@
     },
     "Settings": {
       "Theme": {
-        "title": "Apparence",
+        "title": "Thème",
         "description": "Personnalisez le thème qui sera utilisé.",
         "themeLabel": "Thème",
         "selectPlaceholder": "Sélectionnez un thème",

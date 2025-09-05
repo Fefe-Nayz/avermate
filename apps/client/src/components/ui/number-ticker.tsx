@@ -106,8 +106,8 @@
 "use client";
 
 import NumberFlow, { continuous } from "@number-flow/react";
-import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { motion, useInView } from "motion/react";
+import { useEffect, useState, useRef } from "react";
 
 const MotionNumberFlow = motion.create(NumberFlow);
 
@@ -118,6 +118,7 @@ interface NumberTickerProps {
   onChange?: (currentValue: number) => void;
   className?: string;
   style?: React.CSSProperties;
+  triggerOnView?: boolean; // New prop to control view-based animation
 }
 
 export default function NumberTicker({
@@ -127,32 +128,46 @@ export default function NumberTicker({
   onChange,
   className,
   style,
+  triggerOnView = false,
 }: NumberTickerProps) {
   const [displayValue, setDisplayValue] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true, margin: "0px" });
 
   useEffect(() => {
-    const t = setTimeout(() => setDisplayValue(value), 0);
-    return () => clearTimeout(t);
-  }, [value]);
+    if (triggerOnView) {
+      // Only animate when in view
+      if (isInView) {
+        const t = setTimeout(() => setDisplayValue(value), 0);
+        return () => clearTimeout(t);
+      }
+    } else {
+      // Original behavior - animate immediately
+      const t = setTimeout(() => setDisplayValue(value), 0);
+      return () => clearTimeout(t);
+    }
+  }, [value, isInView, triggerOnView]);
 
   const handleAnimationsFinish = () => {
     onChange?.(value);
   };
 
   return (
-    <MotionNumberFlow
-      plugins={[continuous]}
-      value={displayValue}
-      // If you want fixed decimals, uncomment:
-      // format={{ minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }}
-      // If you want to slow down/speed up the digit roll, uncomment:
-      // transformTiming={{ duration: duration * 1000, easing: "ease-out" }}
-      onAnimationsFinish={handleAnimationsFinish}
-      /** KEY: allow container layout animation to pick up width changes from NumberFlow */
-      layout
-      layoutRoot
-      className={className}
-      style={style}
-    />
+    <span ref={ref} className="inline-block">
+      <MotionNumberFlow
+        plugins={[continuous]}
+        value={displayValue}
+        // If you want fixed decimals, uncomment:
+        // format={{ minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces }}
+        // If you want to slow down/speed up the digit roll, uncomment:
+        // transformTiming={{ duration: duration * 1000, easing: "ease-out" }}
+        onAnimationsFinish={handleAnimationsFinish}
+        /** KEY: allow container layout animation to pick up width changes from NumberFlow */
+        layout
+        layoutRoot
+        className={className}
+        style={style}
+      />
+    </span>
   );
 }

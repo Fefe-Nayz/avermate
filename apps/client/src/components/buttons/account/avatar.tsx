@@ -23,28 +23,47 @@ export default function Avatar({
     img.onerror = () => setLoaded(true);
   }, [src]);
 
-  return (
-    <>
-      {!loaded && (
-        <>
-          {size === 256 && (
-            <Skeleton className="rounded-full size-32 lg:size-64" />
-          )}
-          {size === 32 && <Skeleton className="rounded-full size-8" />}
-          {size === 128 && <Skeleton className="rounded-full size-32" />}
-          {size === 40 && <Skeleton className="rounded-full size-10" />}
-        </>
-      )}
+  // Get the appropriate CSS classes for the size
+  const getSizeClasses = (size: number) => {
+    switch (size) {
+      case 256:
+        return "size-32 lg:size-64";
+      case 32:
+        return "size-8";
+      case 128:
+        return "size-32";
+      case 40:
+        return "size-10";
+      case 80:
+        return "size-20";
+      default:
+        return `w-[${size}px] h-[${size}px]`;
+    }
+  };
 
-      {loaded && (
-        <img
-          src={src}
-          alt="User avatar"
-          width={size}
-          height={size}
-          className={cn("rounded-full object-cover!", className)}
-        />
-      )}
-    </>
+  const sizeClasses = getSizeClasses(size);
+
+  return (
+    <div className={cn("relative", sizeClasses, className)}>
+      {/* Skeleton - fades out when image loads */}
+      <Skeleton
+        className={cn(
+          "absolute inset-0 rounded-full ",
+          loaded ? "opacity-0" : "opacity-100"
+        )}
+      />
+
+      {/* Image - fades in when loaded */}
+      <img
+        src={src}
+        alt="User avatar"
+        width={size}
+        height={size}
+        className={cn(
+          "rounded-full object-cover  absolute inset-0 w-full h-full",
+          loaded ? "opacity-100" : "opacity-0"
+        )}
+      />
+    </div>
   );
 }

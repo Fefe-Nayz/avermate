@@ -23,9 +23,11 @@ import { useTranslations } from "next-intl";
 export default function RevokeSessionButton({
   sessionId,
   sessionToken,
+  isCurrent = false,
 }: {
   sessionId: string;
   sessionToken: string;
+  isCurrent?: boolean;
 }) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Account.SessionList");
@@ -71,14 +73,18 @@ export default function RevokeSessionButton({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive">{t("revokeDialog")}</Button>
+        {isCurrent ? (
+          <Button variant="outline">{t("signoutDialog")}</Button>
+        ) : (
+          <Button variant="outline">{t("revokeDialog")}</Button>
+        )}
       </AlertDialogTrigger>
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("titleDialog")}</AlertDialogTitle>
+          <AlertDialogTitle>{isCurrent ? t("signoutTitleDialog") : t("titleDialog")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("descriptionDialog")}
+            { isCurrent ? t("signoutDescriptionDialog") : t("descriptionDialog")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -91,7 +97,7 @@ export default function RevokeSessionButton({
               onClick={() => handleRevokeSession()}
             >
               {isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-              {t("revokeSession")}
+              {isCurrent ? t("signoutSession") : t("revokeSession")}
             </AlertDialogAction>
           </Button>
         </AlertDialogFooter>

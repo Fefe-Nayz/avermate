@@ -67,36 +67,38 @@ export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
   };
 
   return (
-    <div>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(handleSubmit)}
-          className="flex flex-col gap-4"
+    <div className="flex flex-col gap-4">
+      <div className="px-6">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <div className="w-full">
+              <FormField
+                control={form.control}
+                name="name"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Input type="text" placeholder={defaultName} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </form>
+        </Form>
+      </div>
+      <div className="flex justify-end border-t py-4 px-6">
+        <Button
+          type="submit"
+          disabled={isPending}
+          onClick={form.handleSubmit(handleSubmit)}
         >
-          <div className="w-full">
-            <FormField
-              control={form.control}
-              name="name"
-              disabled={isPending}
-              render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    <Input type="text" placeholder={defaultName} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="flex w-full justify-end">
-            <Button type="submit" variant="outline" disabled={isPending}>
-              {isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-              {t("save")}
-            </Button>
-          </div>
-        </form>
-      </Form>
+          {isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
+          {t("save")}
+        </Button>
+      </div>
     </div>
   );
 };

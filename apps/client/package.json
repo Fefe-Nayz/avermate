@@ -74,6 +74,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tw-animate-css": "^1.3.7",
+    "ua-parser-js": "^2.0.4",
     "uploadthing": "https://pkg.pr.new/pingdotgg/uploadthing@1099",
     "vaul": "^1.1.2",
     "zod": "^4.1.5",

@@ -10,15 +10,15 @@ export const CTA = () => {
 
   return (
     <LandingSection>
-      <BlurFade delay={0.3} duration={0.6} className="flex flex-col gap-2 md:gap-4 items-center">
+      <BlurFade delay={0.1} duration={0.6} className="flex flex-col gap-2 md:gap-4 items-center" inView={true}>
         <SubHeading as="h3">{t("startToday")}</SubHeading>
 
-        <Heading className="max-w-[275px] md:max-w-[550px]" as="h2" animationDelay={0.5} animationDuration={0.8}>
+        <Heading className="max-w-[275px] md:max-w-[550px]" as="h2" animationDelay={0.3} animationDuration={0.8}>
           {t("transformEfforts")}
         </Heading>
       </BlurFade>
 
-      <BlurFade delay={1.5} duration={0.6} direction="up">
+      <BlurFade delay={0.8} duration={0.6} direction="up" inView={true}>
         <GetStarted />
       </BlurFade>
     </LandingSection>

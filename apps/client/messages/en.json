@@ -102,6 +102,7 @@
       "transformEfforts": "Transform your efforts into success"
     },
     "FAQ": {
+      "title": "Frequently Asked Questions",
       "question1": "How are my data stored?",
       "answer1": "Your data is securely stored in our database.",
       "question2": "Who else can see my grades?",
@@ -340,7 +341,14 @@
         "uploadingMessage": "Please wait a few moments.",
         "cropAvatar": "Crop your avatar",
         "cancel": "Cancel",
-        "save": "Save"
+        "save": "Save",
+        "deleteAvatar": "Delete Avatar",
+        "deleteAvatarConfirm": "Are you sure you want to delete your avatar?",
+        "deleteAvatarDescription": "This action cannot be undone. Your avatar will be permanently removed.",
+        "deletingAvatar": "Deleting avatar...",
+        "deleteSuccessTitle": "Avatar Deleted",
+        "deleteSuccessMessage": "Your avatar has been deleted successfully.",
+        "deleteErrorMessage": "An error occurred while deleting the avatar."
       }
     },
     "Account": {
@@ -349,7 +357,7 @@
         "description": "Manage and monitor all your active sessions.",
         "revoke": "Revoke",
         "current": "Current",
-        "expired": "Expired",
+        "expired": "Expirée",
         "active": "Active",
         "successTitle": "Session Revoked",
         "successMessage": "The session has been successfully revoked!",
@@ -358,7 +366,13 @@
         "titleDialog": "Revoke Session",
         "descriptionDialog": "The user will be prompted to re-authenticate.",
         "cancel": "Cancel",
-        "revokeSession": "Revoke Session"
+        "revokeSession": "Revoke Session",
+        "signoutDialog": "Sign Out",
+        "signoutSession": "Sign out",
+        "signoutTitleDialog": "Sign out",
+        "signoutDescriptionDialog": "You are going to be disconnected now",
+        "currentSession": "Current Session",
+        "expire": "Expire"
       },
       "LinkedAccounts": {
         "title": "Linked Accounts",
@@ -383,7 +397,7 @@
     },
     "Settings": {
       "Theme": {
-        "title": "Appearance",
+        "title": "Theme",
         "description": "Customize the theme that will be used.",
         "themeLabel": "Theme",
         "selectPlaceholder": "Select a theme",

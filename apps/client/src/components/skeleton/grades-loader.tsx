@@ -100,7 +100,7 @@ export default function gradesLoader(t: any) {
           <TableBody>
             {Array.from({ length: 20 }, (_, i) => (
               <TableRow key={i}>
-                <TableCell>
+                <TableCell className="p-4">
                   <Skeleton className="w-full h-[20px]" />
                 </TableCell>
                 <TableCell className="text-center font-semibold">
@@ -115,7 +115,7 @@ export default function gradesLoader(t: any) {
         </Table>
 
         {/* Mobile layout */}
-        <Table className="w-full table-auto md:hidden">
+        <Table className="w-full table-auto md:hidden mt-2">
           <TableCaption>
             <div className="flex w-full justify-center">
               <Skeleton className="w-64 h-[14px]" />
@@ -127,7 +127,7 @@ export default function gradesLoader(t: any) {
               <React.Fragment key={item}>
                 {/* Subject + average row on mobile */}
                 <TableRow className="border-b">
-                  <TableCell className="w-full">
+                  <TableCell className="w-full py-4">
                     {/* Subject name skeleton */}
                     <Skeleton className="w-3/4 h-[20px] mb-1" />
                     {/* Mobile-only average skeleton */}

@@ -27,9 +27,9 @@ export const ThemeSection = () => {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
-          <Label>{t("themeLabel")}</Label>
+          <div className="px-6 grid gap-4 pb-4">
           <Select disabled>
-            <SelectTrigger>
+            <SelectTrigger className="capitalize w-full">
               <SelectValue placeholder={t("selectPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
@@ -38,6 +38,7 @@ export const ThemeSection = () => {
               <SelectItem value="dark">{t("dark")}</SelectItem>
             </SelectContent>
           </Select>
+          </div>
         </div>
       </ProfileSection>
     );
@@ -46,21 +47,22 @@ export const ThemeSection = () => {
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
-        <Label>{t("themeLabel")}</Label>
+        <div className="px-6 grid gap-4 pb-4">
 
-        <Select onValueChange={setTheme} value={theme} defaultValue={theme}>
-          <SelectTrigger className="capitalize">
-            <SelectValue placeholder={t("selectPlaceholder")} />
-          </SelectTrigger>
+          <Select onValueChange={setTheme} value={theme} defaultValue={theme}>
+            <SelectTrigger className="capitalize w-full">
+              <SelectValue placeholder={t("selectPlaceholder")} />
+            </SelectTrigger>
 
-          <SelectContent>
-            <SelectItem value="system">{t("system")}</SelectItem>
+            <SelectContent>
+              <SelectItem value="system">{t("system")}</SelectItem>
 
-            <SelectItem value="light">{t("light")}</SelectItem>
+              <SelectItem value="light">{t("light")}</SelectItem>
 
-            <SelectItem value="dark">{t("dark")}</SelectItem>
-          </SelectContent>
-        </Select>
+              <SelectItem value="dark">{t("dark")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </ProfileSection>
   );

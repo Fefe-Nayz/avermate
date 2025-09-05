@@ -21,7 +21,7 @@ export const Benefits = () => {
 
   return (
     <LandingSection>
-      <BlurFade delay={0.3} duration={0.6} className="flex flex-col gap-4 items-center">
+      <BlurFade delay={0.3} duration={0.6} className="flex flex-col gap-4 items-center" inView={true}>
         <SubHeading className="max-w-[175px]" as="h3">
           {t("stayFocused")}
         </SubHeading>
@@ -32,19 +32,19 @@ export const Benefits = () => {
       </BlurFade>
 
       <div className="grid gap-8 md:grid-cols-2">
-        <BlurFade delay={1.5} duration={0.6} direction="left" className="flex flex-col gap-4">
+        <BlurFade delay={0.8} duration={0.6} direction="left" className="flex flex-col gap-4" inView={true}>
           <h4 className="text-sm text-muted-foreground">
             {t("withoutAvermate")}
           </h4>
 
           <ul className="flex flex-col gap-2">
             {cons.map((con, index) => (
-              <motion.li 
+              <motion.li
                 key={con}
                 className="flex items-center text-red-500"
                 initial={{ opacity: 0, x: -20 }}
                 whileInView={{ opacity: 1, x: 0 }}
-                transition={{ delay: 2.0 + index * 0.1, duration: 0.4 }}
+                transition={{ delay: 1.0 + index * 0.1, duration: 0.4 }}
                 viewport={{ once: true }}
               >
                 <XMarkIcon className="size-4 mr-2" />
@@ -54,17 +54,17 @@ export const Benefits = () => {
           </ul>
         </BlurFade>
 
-        <BlurFade delay={1.7} duration={0.6} direction="right" className="flex flex-col gap-4">
+        <BlurFade delay={0.9} duration={0.6} direction="right" className="flex flex-col gap-4" inView={true}>
           <h4 className="text-sm text-muted-foreground">{t("withAvermate")}</h4>
 
           <ul className="flex flex-col gap-2">
             {benefits.map((benefit, index) => (
-              <motion.li 
+              <motion.li
                 key={benefit}
                 className="flex items-center text-emerald-500"
                 initial={{ opacity: 0, x: 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
-                transition={{ delay: 2.2 + index * 0.1, duration: 0.4 }}
+                transition={{ delay: 1.1 + index * 0.1, duration: 0.4 }}
                 viewport={{ once: true }}
               >
                 <CheckIcon className="size-4 mr-2" />

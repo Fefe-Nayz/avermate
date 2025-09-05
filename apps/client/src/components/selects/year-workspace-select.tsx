@@ -33,11 +33,11 @@ export default function YearWorkspaceSelect() {
     }, [activeId]);
 
     if (isPending || !activeId || !years) {
-        return <Skeleton className="w-[200px] h-[56px] rounded-md" />;
+        return <Skeleton className="w-[200px] h-9 rounded-md" />;
     }
 
     if (years.length === 0) {
-        return <div className="h-[56px]"></div>;
+        return <div className="h-9"></div>;
     }
 
     return (
@@ -61,7 +61,9 @@ export default function YearWorkspaceSelect() {
                     id={id}
                     className="h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2"
                 >
-                    <SelectValue placeholder={"YEAR_SELECT_PLACEHOLDER"} />
+                    <SelectValue placeholder={"YEAR_SELECT_PLACEHOLDER"}>
+                        {years.find(year => year.id === activeId)?.name}
+                    </SelectValue>
                 </SelectTrigger>
 
                 <SelectContent className="[&_*[role=option]]:ps-2 [&_*[role=option]]:pe-8 [&_*[role=option]>span]:start-auto [&_*[role=option]>span]:end-2">
@@ -80,7 +82,7 @@ export default function YearWorkspaceSelect() {
                     ))}
 
                     <SelectItem value="new">
-                        <div className="flex items-center text-blue-500">
+                        <div className="flex items-center">
                             <PlusIcon className="size-4 mr-2" />
                             <span className="block font-medium">{t("CREATE_YEAR_BUTTON_LABEL")}</span>
                         </div>

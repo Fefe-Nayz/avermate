@@ -105,7 +105,7 @@ export default function GradesTable({
       <TableFooter>
         {/* Main Average */}
         <TableRow className="hidden md:table-row" id="general-average">
-          <TableCell className="font-semibold" colSpan={2}>
+          <TableCell className="font-semibold p-4" colSpan={2}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
               className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
@@ -126,7 +126,7 @@ export default function GradesTable({
           </TableCell>
         </TableRow>
         <TableRow className="md:hidden" id="general-average-mobile">
-          <TableCell className="font-semibold text-center" colSpan={3}>
+          <TableCell className="font-semibold text-center p-4" colSpan={3}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
               className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
@@ -170,7 +170,7 @@ export default function GradesTable({
               return (
                 <React.Fragment key={ca.id}>
                   <TableRow className="hidden md:table-row" id={ca.id}>
-                    <TableCell className="font-semibold" colSpan={2}>
+                    <TableCell className="font-semibold p-4" colSpan={2}>
                       <Link
                         href={`/dashboard/subjects/${ca.id}/${periodId}`}
                         onClick={() => {
@@ -192,7 +192,7 @@ export default function GradesTable({
                   </TableRow>
                   <TableRow className="md:hidden" id={`${ca.id}-mobile`}>
                     <TableCell
-                      className="font-semibold text-center"
+                      className="font-semibold text-center p-4"
                       colSpan={3}
                     >
                       <Link

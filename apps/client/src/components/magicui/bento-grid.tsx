@@ -1,5 +1,6 @@
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { ComponentPropsWithoutRef, ReactNode } from "react";
+import { motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ const BentoCard = ({
   cta,
   ...props
 }: BentoCardProps) => (
-  <div
+  <motion.div
     key={name}
     className={cn(
       "group relative col-span-3 flex flex-col justify-between overflow-hidden rounded-xl",
@@ -53,7 +54,10 @@ const BentoCard = ({
       "transform-gpu dark:bg-background dark:[border:1px_solid_rgba(255,255,255,.1)] dark:[box-shadow:0_-20px_80px_-20px_#ffffff1f_inset]",
       className,
     )}
-    {...props}
+    initial={{ opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
+    viewport={{ once: true, margin: "-100px" }}
   >
     <div>{background}</div>
     <div className="p-4">
@@ -103,7 +107,7 @@ const BentoCard = ({
     </div>
 
     <div className="pointer-events-none absolute inset-0 transform-gpu transition-all duration-300 group-hover:bg-black/[.03] group-hover:dark:bg-neutral-800/10" />
-  </div>
+  </motion.div>
 );
 
 export { BentoCard, BentoGrid };

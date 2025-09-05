@@ -23,6 +23,7 @@ export const LanguageSection = () => {
   // We'll keep an internal state of the user's chosen language
   // so the Select shows the right value without waiting for SSR.
   const [language, setLanguage] = useState("system");
+  const [mounted, setMounted] = useState(false);
 
   // On mount, read the cookie and set initial state
   useEffect(() => {
@@ -33,6 +34,8 @@ export const LanguageSection = () => {
       // If no cookie is set, the user is in "system" mode (auto-detect).
       setLanguage("system");
     }
+    // This ensures we only render the UI after the client is hydrated
+    setMounted(true);
   }, []);
 
   // Called when the user selects a language in the dropdown
@@ -51,22 +54,44 @@ export const LanguageSection = () => {
     router.refresh();
   };
 
+  if (!mounted) {
+    // SSR or no hydration yet, avoid rendering mismatched UI
+    return (
+      <ProfileSection title={t("title")} description={t("description")}>
+        <div className="flex flex-col gap-4">
+          <div className="px-6 grid gap-4 pb-4">
+            <Select disabled>
+              <SelectTrigger className="capitalize w-full">
+                <SelectValue placeholder={t("selectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">{t("system")}</SelectItem>
+                <SelectItem value="en">{t("english")}</SelectItem>
+                <SelectItem value="fr">{t("french")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </ProfileSection>
+    );
+  }
+
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
-        <Label>{t("languageLabel")}</Label>
+        <div className="px-6 grid gap-4 pb-4">
+          <Select onValueChange={changeLanguage} value={language}>
+            <SelectTrigger className="capitalize w-full">
+              <SelectValue placeholder={t("selectPlaceholder")} />
+            </SelectTrigger>
 
-        <Select onValueChange={changeLanguage} value={language}>
-          <SelectTrigger className="capitalize">
-            <SelectValue placeholder={t("selectPlaceholder")} />
-          </SelectTrigger>
-
-          <SelectContent>
-            <SelectItem value="system">{t("system")}</SelectItem>
-            <SelectItem value="en">{t("english")}</SelectItem>
-            <SelectItem value="fr">{t("french")}</SelectItem>
-          </SelectContent>
-        </Select>
+            <SelectContent>
+              <SelectItem value="system">{t("system")}</SelectItem>
+              <SelectItem value="en">{t("english")}</SelectItem>
+              <SelectItem value="fr">{t("french")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </ProfileSection>
   );

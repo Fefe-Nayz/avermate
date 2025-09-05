@@ -81,7 +81,7 @@ function useMeasuredWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-export function DifferenceBadge({ diff }: { diff: number }) {
+export function DifferenceBadge({ diff, triggerOnView = false }: { diff: number; triggerOnView?: boolean }) {
   const [animatedDiff, setAnimatedDiff] = useState(diff);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -122,8 +122,8 @@ export function DifferenceBadge({ diff }: { diff: number }) {
             // Optional: GPU hint for smoother width animations
             willChange: "width",
           }}
-          // If you prefer layout projection, you can also keep layout
-          // layout
+        // If you prefer layout projection, you can also keep layout
+        // layout
         >
           {/* Actual content we measure. Keep padding here so it's included in measured width. */}
           <span
@@ -137,6 +137,7 @@ export function DifferenceBadge({ diff }: { diff: number }) {
               duration={2}
               className="leading-none"
               onChange={(val) => setAnimatedDiff(val)}
+              triggerOnView={triggerOnView}
             />
           </span>
         </motion.span>

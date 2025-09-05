@@ -70,6 +70,7 @@ export function BlurFade({
           delay: 0.04 + delay,
           duration,
           ease: "easeOut",
+          filter: { duration: duration * 1 },
         }}
         className={className}
         {...props}

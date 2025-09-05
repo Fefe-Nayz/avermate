@@ -213,7 +213,7 @@ export default function OverviewPage() {
                 localStorage.setItem("selectedTab", value);
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue>
                   {periods?.find((period) => period.id === selectedTab)?.name ||
                     t("fullYear")}

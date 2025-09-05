@@ -1,229 +1,244 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { motion } from "framer-motion";
-
 import Logo from "../logo";
 import { GetStarted } from "./get-started";
+import ThemeToggleButton from "../ui/theme-toggle-button";
+export const SECTIONS = [
+  { id: "home", label: "Home", href: "/" }, // sentinel
+  { id: "benefits", label: "Benefits", href: "#benefits" },
+  { id: "features", label: "Features", href: "#features" },
+  { id: "faq", label: "FAQ", href: "#faq" },
+] as const;
 
-export const Header = () => {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [activeLink, setActiveLink] = useState(0);
+/* --------------------------------------------------------------------------
+   𝗨𝘀𝗲𝗿 𝗴𝗼𝘁 𝗮 𝗺𝗮𝘅𝗶𝗺𝘂𝗺-𝗱𝗲𝗽𝘁𝗵 𝗲𝗿𝗿𝗼𝗿 + 𝗽𝗶𝗹𝗹 𝗻𝗼𝘁 𝘁𝗿𝗮𝗰𝗸𝗶𝗻𝗴.
+   We ditched the Fumadocs hook in favour of a purpose‑built, *minimal* hook that
+   cannot recurse and that closely mirrors the blog‑post algorithm the user sent.
+   -------------------------------------------------------------------------- */
 
-  const [linkWidths, setLinkWidths] = useState<number[]>([]);
-  const [linkPositions, setLinkPositions] = useState<number[]>([]);
-  const linkRefs = useRef<(HTMLLIElement | null)[]>([]);
+/* ─────────────────────────────── Section observer ─────────────────────────────── */
 
-  // Run the initial #hash scroll only once
-  const didRunInitialHashScroll = useRef(false);
+/**
+ * Observe the sentinels for each section and return the currently visible id.
+ * @param ids  Array of sentinel element ids **in the same order they appear**.
+ * @param freeze  When true the observer will keep the current id frozen.
+ */
+function useSectionObserver(ids: string[], freeze: boolean): string {
+  const [activeId, setActiveId] = useState<string>(ids[0] ?? "");
+  const entriesRef = useRef<Record<string, IntersectionObserverEntry>>({});
+  const idsRef = useRef(ids);
+  idsRef.current = ids;
+  const freezeRef = useRef(freeze);
+  freezeRef.current = freeze;
 
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    setIsScrolled(window.scrollY > 20); // initial
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Keep links stable across renders
-  const links = useMemo(
-    () => [
-      { to: "/", label: "Home" },
-      { to: "#benefits", label: "Benefits" },
-      { to: "#features", label: "Features" },
-      { to: "#faq", label: "FAQ" },
-    ],
-    []
-  );
-
-  // User-initiated navigation handler
-  const handleNavClick = (to: string, index: number) => {
-    setActiveLink(index);
-
-    if (to.startsWith("#")) {
-      // Update URL hash and smooth scroll — user intent
-      window.history.pushState(null, "", to);
-      const element = document.querySelector(to);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    } else if (to === "/") {
-      // Clear hash (Home) and smooth scroll top — user intent
-      window.history.pushState(null, "", window.location.pathname);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-    // Other routes: <Link> handles it
-  };
-
-  // Initial page load: respect existing hash exactly once
-  useEffect(() => {
-    if (didRunInitialHashScroll.current) return;
-    didRunInitialHashScroll.current = true;
-
-    const hash = window.location.hash;
-    if (hash) {
-      const linkIndex = links.findIndex((l) => l.to === hash);
-      if (linkIndex !== -1) {
-        setActiveLink(linkIndex);
-        const element = document.querySelector(hash);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }
-    } else {
-      setActiveLink(0);
-    }
-  }, [links]);
-
-  // Intersection Observer: only update highlight (NO hash change, NO scroll)
-  useEffect(() => {
-    const sections = links
-      .map((l) => (l.to.startsWith("#") ? l.to : null))
-      .filter((s): s is string => !!s);
-
-    const elements = sections
-      .map((sel) => document.querySelector(sel))
-      .filter((el): el is Element => !!el);
-
-    if (elements.length === 0) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          const sectionId = `#${entry.target.id}`;
-          const linkIndex = links.findIndex((l) => l.to === sectionId);
-          if (linkIndex !== -1) {
-            // Only aesthetic selection; do not modify history or scroll
-            setActiveLink(linkIndex);
-          }
-        });
-      },
-      {
-        threshold: 0.3,
-        rootMargin: "-80px 0px -50% 0px",
-      }
+  const recomputeActive = () => {
+    const getIndex = (id: string) => idsRef.current.findIndex((x) => x === id);
+    const visibleIds = idsRef.current.filter(
+      (id) => entriesRef.current[id]?.isIntersecting,
     );
 
-    elements.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [links]);
+    if (visibleIds.length === 1) setActiveId(visibleIds[0]);
+    else if (visibleIds.length > 1) {
+      visibleIds.sort((a, b) => getIndex(a) - getIndex(b));
+      setActiveId(visibleIds[0]);
+    } else {
+      const { scrollY } = window;
+      const maxScroll =
+        document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollY <= 0) setActiveId(idsRef.current[0]);
+      else if (scrollY >= maxScroll - 6) setActiveId(idsRef.current.at(-1)!);
+    }
+  };
 
-  // Also set initial highlight based on current scroll position (aesthetic only)
   useEffect(() => {
-    const sections = links
-      .map((l) => (l.to.startsWith("#") ? l.to : null))
-      .filter((s): s is string => !!s);
-    const elements = sections
-      .map((sel) => document.querySelector(sel))
-      .filter((el): el is HTMLElement => !!el) as HTMLElement[];
-
-    const setInitialActiveSection = () => {
-      const scrollPosition = window.scrollY + 100;
-
-      if (scrollPosition < 200) {
-        setActiveLink(0);
-        return;
-      }
-      for (let i = elements.length - 1; i >= 0; i--) {
-        const el = elements[i];
-        if (el && el.offsetTop <= scrollPosition) {
-          const id = `#${el.id}`;
-          const idx = links.findIndex((l) => l.to === id);
-          if (idx !== -1) {
-            setActiveLink(idx); // aesthetic only
-            break;
-          }
-        }
-      }
-    };
-
-    setInitialActiveSection();
-  }, [links]);
-
-  // Measure link widths/positions; recalc on resize and when links render
-  useEffect(() => {
-    const recalc = () => {
-      const widths: number[] = [];
-      const positions: number[] = [];
-      let current = 8; // left padding offset
-
-      linkRefs.current.forEach((ref, i) => {
-        const w = ref?.offsetWidth ?? 0;
-        widths[i] = w;
-        positions[i] = current;
-        current += w;
+    const callback: IntersectionObserverCallback = (entries) => {
+      entries.forEach((entry) => {
+        entriesRef.current[entry.target.id] = entry;
       });
-
-      setLinkWidths(widths);
-      setLinkPositions(positions);
+      if (!freezeRef.current) recomputeActive();
     };
 
-    recalc();
-    window.addEventListener("resize", recalc);
-    return () => window.removeEventListener("resize", recalc);
+    const observer = new IntersectionObserver(callback, {
+      rootMargin: "-80px 0px -40% 0px",
+      threshold: 0,
+    });
+
+    idsRef.current
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el)
+      .forEach((el) => observer.observe(el));
+
+    callback([] as unknown as IntersectionObserverEntry[], observer); // initial
+    return () => observer.disconnect();
   }, []);
 
+  // When freeze toggles off, recompute once.
+  useEffect(() => {
+    if (!freeze) {
+      freezeRef.current = false;
+      recomputeActive();
+    } else {
+      freezeRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freeze]);
+
+  return activeId;
+}
+
+/* ─────────────────────────────── Header component ─────────────────────────────── */
+
+export const Header = () => {
+  /* Shadow / size on scroll ---------------------------------------------------- */
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+  
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /* Active link logic ---------------------------------------------------------- */
+  const ids = useMemo(() => SECTIONS.map((s) => s.id) as string[], []);
+
+  // During programmatic scroll we freeze the observer & force a manual id.
+  const [isNavScrolling, setIsNavScrolling] = useState(false);
+  const [manualId, setManualId] = useState<string | null>(null);
+
+  const observedId = useSectionObserver(ids, isNavScrolling);
+  const activeId = manualId ?? observedId;
+  const activeIndex = useMemo(() => ids.indexOf(activeId), [ids, activeId]);
+
+  /* Link measurements for animated pill --------------------------------------- */
+  const linkRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const [linkRects, setLinkRects] = useState<{ x: number; w: number }[]>([]);
+
+  useEffect(() => {
+    const measure = () => {
+      let x = 8;
+      const rects = linkRefs.current.map((el) => {
+        const w = el?.offsetWidth ?? 0;
+        const r = { x, w };
+        x += w;
+        return r;
+      });
+      setLinkRects(rects);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  /* Smooth‑scroll navigation --------------------------------------------------- */
+  const handleNavClick = (href: string) => {
+    const id = href.startsWith("#") ? href.slice(1) : ids[0];
+
+    setManualId(id); // override observer highlight immediately
+    setIsNavScrolling(true);
+
+    const finish = () => setIsNavScrolling(false);
+
+    if (href.startsWith("#")) {
+      history.pushState(null, "", href);
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      history.pushState(null, "", location.pathname);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // Hard‑coded duration fallback (can't reliably detect end of scroll)
+    setTimeout(finish, 700);
+  };
+
+  useEffect(() => {
+    // Once scrolling has stopped *and* the observer now agrees with the
+    // manual id, we can drop the manual override without a visible jump.
+    if (!isNavScrolling && manualId && observedId === manualId) {
+      setManualId(null);
+    }
+  }, [isNavScrolling, observedId, manualId]);
+
+  /* ---------------------------------- Render --------------------------------- */
   return (
-    <header
-      className={`fixed z-50 flex justify-center transition-all duration-500 ease-in-out w-full ${isScrolled ? "mx-4 md:mx-0 top-6" : "md:mx-0 top-4 mx-0"
-        }`}
+    <motion.header
+      layoutRoot
+      className="fixed inset-x-0 z-50 flex justify-center px-4 md:px-0"
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <motion.div
-        animate={{ width: isScrolled ? "800px" : "70rem" }}
-        initial={{ width: "70rem" }}
-        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        animate={{ 
+          width: isMobile ? "100%" : isScrolled ? "50rem" : "70rem" 
+        }}
+        initial={{ 
+          width: isMobile ? "100%" : "70rem" 
+        }}
+        transition={{ duration: isMobile ? 0 : 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+        className={`${isScrolled ? "mt-6 mx-6" : "mt-4 mx-6"} ${isMobile ? "mx-4" : ""}`}
       >
         <div
-          className={`mx-auto max-w-7xl rounded-2xl transition-all duration-500 ease-in-out xl:px-0 ${isScrolled
-              ? "px-2 border border-border backdrop-blur-lg bg-background/20"
-              : "px-7 shadow-none"
-            }`}
+          className={`mx-auto rounded-2xl xl:px-0 transition-all duration-500 w-full box-border ${isScrolled
+            ? "border border-border bg-background/20 backdrop-blur-lg px-2"
+            : "border border-transparent shadow-none"}`}
         >
-          <div className="flex h-[56px] items-center justify-between p-4">
-            <Link href="/" className="flex items-center gap-3">
-              <Logo />
-            </Link>
+          <div className="flex h-14 items-center justify-between p-4">
+            {/* Logo */}
 
-            <div className="w-full hidden md:block">
-              <ul className="relative mx-auto flex w-fit rounded-full h-11 px-2 items-center justify-center">
-                {links.map(({ to, label }, index) => (
+
+            <Logo />
+
+
+            {/* Desktop nav */}
+            <nav className="hidden md:block flex-1">
+              <ul className="relative mx-auto flex h-11 w-fit items-center rounded-full px-2">
+                {SECTIONS.map((s, i) => (
                   <li
-                    key={to}
-                    ref={(el) => {
-                      linkRefs.current[index] = el;
-                    }}
-                    className="z-10 cursor-pointer h-full flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors duration-200 text-primary/60 hover:text-primary tracking-tight"
+                    key={s.id}
+                    ref={el => { linkRefs.current[i] = el; }}
+                    className="z-10 flex h-full cursor-pointer items-center justify-center px-4 py-2 text-sm font-medium tracking-tight text-primary/60 transition-colors hover:text-primary"
                     onClick={(e) => {
-                      // Prevent default behavior for hash links; handle manually
-                      if (to.startsWith("#")) e.preventDefault();
-                      handleNavClick(to, index);
+                      if (s.href.startsWith("#")) e.preventDefault();
+                      handleNavClick(s.href);
                     }}
                   >
-                    {to.startsWith("#") ? (
-                      <span>{label}</span>
-                    ) : (
-                      <Link href={to}>{label}</Link>
-                    )}
+                    {s.href.startsWith("#") ? <span>{s.label}</span> : <Link href={s.href}>{s.label}</Link>}
                   </li>
                 ))}
 
+                {/* Active pill */}
                 <motion.li
-                  className="absolute inset-0 my-1.5 rounded-full bg-accent/60 border border-border"
+                  className="absolute inset-0 my-1.5 rounded-full border border-border bg-accent/60"
                   animate={{
-                    left: linkPositions[activeLink] ?? 8,
-                    width: linkWidths[activeLink] ?? 68.86666870117188,
+                    left: linkRects[activeIndex]?.x ?? 8,
+                    width: linkRects[activeIndex]?.w ?? 68,
                   }}
-                  transition={{ damping: 30, stiffness: 400, type: "spring" }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               </ul>
-            </div>
+            </nav>
 
-            <div className="flex flex-row items-center gap-1 md:gap-3 shrink-0">
-              <GetStarted />
+            {/* RHS buttons */}
+            <div className="shrink-0 flex items-center gap-3">
+              <div className="flex items-center space-x-6">
+                <GetStarted headerStyle={true} />
+              </div>
+              <ThemeToggleButton />
             </div>
           </div>
         </div>
       </motion.div>
-    </header>
+    </motion.header>
   );
 };

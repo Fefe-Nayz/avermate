@@ -55,7 +55,7 @@ export default function FeedbackDialog({
         }
       }}
     >
-      <CredenzaTrigger>{children}</CredenzaTrigger>
+      <CredenzaTrigger asChild>{children}</CredenzaTrigger>
       <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>

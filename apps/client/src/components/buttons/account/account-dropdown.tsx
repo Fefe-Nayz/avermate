@@ -192,8 +192,8 @@ export default function AccountDropdown() {
 
 
           <FeedbackDialog>
-            <DropDrawerItem onSelect={(e) => e.preventDefault()}>
-              <div className="flex items-center gap-2">
+            <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+              <div className="flex items-center gap-2 w-full">
                 <MessagesSquareIcon className="size-4" />
                 {t("feedback")}
               </div>

@@ -14,7 +14,7 @@ export default function DashboardHeader({ hideWorkspaces }: { hideWorkspaces?: b
     //   </div>
     // </header>
 
-    <header className="flex justify-center sticky border-b px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-8">
+    <header className="sticky border-b px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-8">
       <div className="flex w-full items-center justify-between gap-8 max-w-[2000px]">
         <Logo />
 
