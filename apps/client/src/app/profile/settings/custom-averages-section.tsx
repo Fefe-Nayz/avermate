@@ -12,12 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubjects } from "@/hooks/use-subjects";
@@ -26,6 +20,7 @@ import { BookOpenIcon, PlusCircleIcon } from "lucide-react";
 import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
+import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 
 export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
   const t = useTranslations("Settings.Settings.CustomAverages");
@@ -127,7 +122,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
           {averages?.map((average) => (
             <div
               key={average.id}
-              className="bg-card text-card-foreground flex gap-6 rounded-xl border shadow-sm flex-row p-4 justify-between items-start"
+              className="bg-card text-card-foreground flex gap-6 rounded-xl border shadow-sm flex-row p-4 justify-between items-center"
             >
               <div className="flex flex-col gap-1">
                 <Label>{average.name}</Label>
@@ -139,35 +134,27 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
                           ?.name
                     )
                     .filter(Boolean)
-                    .join(" / ")}
+                    .join(", ")}
                 </span>
               </div>
               <div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                <DropDrawer>
+                  <DropDrawerTrigger asChild>
                     <Button size="icon" variant="outline">
                       <EllipsisVerticalIcon className="size-4" />
                     </Button>
-                  </DropdownMenuTrigger>
+                  </DropDrawerTrigger>
 
-                  <DropdownMenuContent className="flex flex-col items-start">
-                    {/* Update grade */}
-                    <DropdownMenuItem
-                      asChild
-                      onSelect={(e) => e.preventDefault()}
-                    >
+                  <DropDrawerContent>
+                    <DropDrawerGroup>
+                      {/* Update grade */}
                       <UpdateAverageDialog averageId={average.id} />
-                    </DropdownMenuItem>
 
-                    {/* Delete grade */}
-                    <DropdownMenuItem
-                      asChild
-                      onSelect={(e) => e.preventDefault()}
-                    >
+                      {/* Delete grade */}
                       <DeleteAverageDialog average={average} />
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropDrawerGroup>
+                  </DropDrawerContent>
+                </DropDrawer>
               </div>
             </div>
           ))}

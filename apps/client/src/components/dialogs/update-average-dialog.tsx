@@ -9,7 +9,7 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { PencilIcon } from "@heroicons/react/24/outline";
+import { BookOpenIcon, PencilIcon } from "@heroicons/react/24/outline";
 import React, { useState, useEffect } from "react";
 import { UpdateCustomAverageForm } from "../forms/update-average-form";
 import { Button } from "../ui/button";
@@ -18,6 +18,7 @@ import { z } from "zod";
 import { useAverage } from "@/hooks/use-average";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 // EXACT same shape as your UpdateCustomAverageForm expects:
 const updateCustomAverageSchema = z.object({
@@ -65,11 +66,13 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
 
   return (
     <Credenza open={open} onOpenChange={setOpen}>
-      <CredenzaTrigger asChild>
-        <Button variant="ghost">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editAverage")}
-        </Button>
+      <CredenzaTrigger className="flex items-center" asChild>
+        <DropDrawerItem asChild onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editAverage")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
       <CredenzaContentWrapper>

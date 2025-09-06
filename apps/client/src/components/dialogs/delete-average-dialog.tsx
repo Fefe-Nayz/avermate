@@ -23,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeleteAverageDialog({ average, averageId, averageName }: { average?: Average, averageId?: string, averageName?: string }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteAverage");
@@ -62,13 +63,12 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem asChild onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full text-red-500 hover:text-red-400">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>
