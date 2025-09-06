@@ -35,6 +35,7 @@ import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import React, { useEffect } from "react";
+import FormContentWrapper from "./form-content-wrapper";
 
 const updatePeriodSchema = z.object({
   name: z.string().min(1).max(64),
@@ -188,118 +189,120 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          {/* Name Field */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("namePlaceholder")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Date Range Field */}
-          <FormField
-            control={form.control}
-            name="dateRange"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("dateRange")}</FormLabel>
-                <FormControl>
-                  <div className="flex flex-col gap-2">
-                    <Popover modal>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={
-                            !field.value?.from ? "text-muted-foreground" : ""
-                          }
-                        >
-                          {field.value?.from ? (
-                            field.value.to ? (
-                              `${formatDates.formatIntermediate(
-                                field.value.from
-                              )} - ${formatDates.formatIntermediate(
-                                field.value.to
-                              )}`
-                            ) : (
-                              formatDates.formatIntermediate(field.value.from)
-                            )
-                          ) : (
-                            <span>{t("selectDateRange")}</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="center">
-                        <Calendar
-                          excludeDisabled
-                          mode="range"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          numberOfMonths={numberOfMonths}
-                          disabled={[{
-                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
-                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
-                          },
-                          {
-                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
-                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
-                          },
-                          ...periods.filter((p) => p.id !== periodId).map((period) => ({
-                            from: startOfDay(period.startAt),
-                            to: startOfDay(period.endAt),
-                          }))]}
-                          defaultMonth={field.value?.from || new Date()}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* isCumulative Switch Field */}
-          <FormField
-            control={form.control}
-            name="isCumulative"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <div className="flex flex-row gap-4 items-center">
-                  <FormLabel>{t("isCumulative")}</FormLabel>
+          <FormContentWrapper>
+            {/* Name Field */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Switch
-                      checked={field.value ?? false}
-                      onCheckedChange={field.onChange}
+                    <Input
+                      type="text"
+                      placeholder={t("namePlaceholder")}
+                      {...field}
                     />
                   </FormControl>
-                </div>
-                <FormDescription>
-                  {t("isCumulativeDescription")}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Submit Button */}
-          <Button className="w-full" type="submit" disabled={isPending}>
-            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-            {t("submit")}
-          </Button>
+            {/* Date Range Field */}
+            <FormField
+              control={form.control}
+              name="dateRange"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("dateRange")}</FormLabel>
+                  <FormControl>
+                    <div className="flex flex-col gap-2">
+                      <Popover modal>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={
+                              !field.value?.from ? "text-muted-foreground" : ""
+                            }
+                          >
+                            {field.value?.from ? (
+                              field.value.to ? (
+                                `${formatDates.formatIntermediate(
+                                  field.value.from
+                                )} - ${formatDates.formatIntermediate(
+                                  field.value.to
+                                )}`
+                              ) : (
+                                formatDates.formatIntermediate(field.value.from)
+                              )
+                            ) : (
+                              <span>{t("selectDateRange")}</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="center">
+                          <Calendar
+                            excludeDisabled
+                            mode="range"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            numberOfMonths={numberOfMonths}
+                            disabled={[{
+                              from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                              to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                            },
+                            {
+                              from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                              to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                            },
+                            ...periods.filter((p) => p.id !== periodId).map((period) => ({
+                              from: startOfDay(period.startAt),
+                              to: startOfDay(period.endAt),
+                            }))]}
+                            defaultMonth={field.value?.from || new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* isCumulative Switch Field */}
+            <FormField
+              control={form.control}
+              name="isCumulative"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <div className="flex flex-row gap-4 items-center">
+                    <FormLabel>{t("isCumulative")}</FormLabel>
+                    <FormControl>
+                      <Switch
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </div>
+                  <FormDescription>
+                    {t("isCumulativeDescription")}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Submit Button */}
+            <Button className="w-full" type="submit" disabled={isPending}>
+              {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+              {t("submit")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

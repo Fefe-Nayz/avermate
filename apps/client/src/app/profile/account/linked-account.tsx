@@ -32,7 +32,13 @@ import { useAccounts } from "@/hooks/use-accounts";
 
 type ProviderId = "google" | "microsoft";
 
-const SOCIAL_PROVIDERS: { id: ProviderId; label: string; icon: React.ComponentType }[] = [
+interface SocialProvider {
+  id: ProviderId;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const SOCIAL_PROVIDERS: SocialProvider[] = [
   { id: "google", label: "Google", icon: FaGoogle },
   { id: "microsoft", label: "Microsoft", icon: FaMicrosoft },
 ];
@@ -209,12 +215,11 @@ function ResetPasswordDialog({ children }: { children: React.ReactNode }) {
 
     try {
       setLoading(true);
-      const { error } = await authClient.changePassword({
+      await authClient.changePassword({
         currentPassword,
         newPassword,
         revokeOtherSessions: true,
       });
-      if (error) throw error;
 
       toast({ title: "Password updated", description: "You’ll need to sign in again on other devices." });
       setOpen(false);

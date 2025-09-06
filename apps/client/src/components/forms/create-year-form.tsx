@@ -32,6 +32,7 @@ import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Year } from "@/types/year";
+import FormContentWrapper from "./form-content-wrapper";
 
 export const CreateYearForm = () => {
     const formatter = useFormatter();
@@ -125,106 +126,109 @@ export const CreateYearForm = () => {
                 <form
                     noValidate
                     onSubmit={form.handleSubmit(onSubmit)}
-                    className="flex flex-col gap-8"
+                // className="flex flex-col gap-8"
                 >
-                    {/* Name Field */}
-                    <FormField
-                        control={form.control}
-                        disabled={isPending}
-                        name="name"
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_NAME_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="text"
-                                        placeholder={t("CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER")}
-                                        {...field}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <FormContentWrapper>
+                        {/* Name Field */}
+                        <FormField
+                            control={form.control}
+                            disabled={isPending}
+                            name="name"
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_NAME_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="text"
+                                            placeholder={t("CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER")}
+                                            {...field}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    {/* Date Range Field */}
-                    <FormField
-                        control={form.control}
-                        disabled={isPending}
-                        name="dateRange"
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <div className="flex flex-col gap-2">
-                                        <Popover modal>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    variant="outline"
-                                                    className={
-                                                        !field.value?.from ? "text-muted-foreground" : ""
-                                                    }
-                                                >
-                                                    {field.value?.from ? (
-                                                        field.value.to ? (
-                                                            `${formatDates.formatIntermediate(
-                                                                field.value.from
-                                                            )} - ${formatDates.formatIntermediate(
-                                                                field.value.to
-                                                            )}`
+                        {/* Date Range Field */}
+                        <FormField
+                            control={form.control}
+                            disabled={isPending}
+                            name="dateRange"
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        <div className="flex flex-col gap-2">
+                                            <Popover modal>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        className={
+                                                            !field.value?.from ? "text-muted-foreground" : ""
+                                                        }
+                                                    >
+                                                        {field.value?.from ? (
+                                                            field.value.to ? (
+                                                                `${formatDates.formatIntermediate(
+                                                                    field.value.from
+                                                                )} - ${formatDates.formatIntermediate(
+                                                                    field.value.to
+                                                                )}`
+                                                            ) : (
+                                                                formatDates.formatIntermediate(field.value.from)
+                                                            )
                                                         ) : (
-                                                            formatDates.formatIntermediate(field.value.from)
-                                                        )
-                                                    ) : (
-                                                        <span>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER")}</span>
-                                                    )}
+                                                            <span>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER")}</span>
+                                                        )}
 
-                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="center">
-                                                <Calendar
-                                                    excludeDisabled
-                                                    mode="range"
-                                                    selected={field.value}
-                                                    onSelect={field.onChange}
-                                                    numberOfMonths={numberOfMonths}
-                                                    defaultMonth={field.value?.from || new Date()}
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="center">
+                                                    <Calendar
+                                                        excludeDisabled
+                                                        mode="range"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        numberOfMonths={numberOfMonths}
+                                                        defaultMonth={field.value?.from || new Date()}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    <FormField
-                        control={form.control}
-                        name="defaultOutOf"
-                        disabled={isPending}
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="number"
-                                        placeholder={t("CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER")}
-                                        {...field}
-                                        onChange={(e) => field.onChange(e.target.value)}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                        <FormField
+                            control={form.control}
+                            name="defaultOutOf"
+                            disabled={isPending}
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        {/* @ts-ignore */}
+                                        <Input
+                                            type="number"
+                                            placeholder={t("CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER")}
+                                            {...field}
+                                            onChange={(e) => field.onChange(e.target.value)}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    {/* Submit Button */}
-                    <Button className="w-full" type="submit" disabled={isPending}>
-                        {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-                        {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
-                    </Button>
+                        {/* Submit Button */}
+                        <Button className="w-full" type="submit" disabled={isPending}>
+                            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+                            {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
+                        </Button>
+                    </FormContentWrapper>
                 </form>
             </Form>
         </div>

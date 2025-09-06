@@ -44,6 +44,7 @@ import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
 import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
 import { isEqual } from "lodash";
+import FormContentWrapper from "./form-content-wrapper";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -181,6 +182,7 @@ export function UpdateGradeForm({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
+      {/* @ts-ignore */}
       setFormData(watchedValues);
     }
   }, [watchedValues, formData, setFormData]);
@@ -270,247 +272,174 @@ export function UpdateGradeForm({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+          // className="flex flex-col gap-8"
         >
-          {/* Name */}
-          <FormField
-            control={form.control}
-            name="name"
-            disabled={isPending}
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input type="text" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Responsive Combobox for Period */}
-          <div className="grid grid-cols-2 gap-8">
+          <FormContentWrapper>
+            {/* Name */}
             <FormField
               control={form.control}
-              name="value"
+              name="name"
               disabled={isPending}
               render={({ field }) => (
                 <FormItem className="mx-1">
-                  <FormLabel>{t("grade")}</FormLabel>
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
+                    <Input type="text" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* Responsive Combobox for Period */}
+            <div className="grid grid-cols-2 gap-8">
+              <FormField
+                control={form.control}
+                name="value"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem className="mx-1">
+                    <FormLabel>{t("grade")}</FormLabel>
+                    <FormControl>
+                      {/* @ts-ignore */}
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="outOf"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem className="mx-1">
+                    <FormLabel>{t("outOf")}</FormLabel>
+                    <FormControl>
+                      {/* @ts-ignore */}
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="coefficient"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem className="col-span-2 mx-1">
+                    <FormLabel>{t("coefficient")}</FormLabel>
+                    <FormControl>
+                      {/* @ts-ignore */}
+                      <Input
+                        type="number"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
-              name="outOf"
-              disabled={isPending}
+              name="passedAt"
               render={({ field }) => (
-                <FormItem className="mx-1">
-                  <FormLabel>{t("outOf")}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="coefficient"
-              disabled={isPending}
-              render={({ field }) => (
-                <FormItem className="col-span-2 mx-1">
-                  <FormLabel>{t("coefficient")}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="passedAt"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel>{t("passedAt")}</FormLabel>
-                <Popover modal>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? formatDates.formatLong(new Date(field.value))
-                          : t("chooseDate")}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="center">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={(date) => {
-                        field.onChange(date);
-                        setIsManualPeriod(false);
-                      }}
-                      disabled={(date) =>
-                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
-                      }
-                      autoFocus
-                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* PeriodId Field */}
-          <FormField
-            control={form.control}
-            name="periodId"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel className="pointer-events-none">
-                  {t("period")}
-                </FormLabel>
-                {isDesktop ? (
-                  <Popover
-                    modal
-                    open={openPeriod}
-                    onOpenChange={(isOpen) => setOpenPeriod(isOpen)}
-                  >
-                    <FormControl>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openPeriod ? "true" : "false"}
-                          className="justify-between"
-                          disabled={isPending}
-                          onClick={() => setOpenPeriod(!openPeriod)}
-                        >
-                          {selectedPeriod
-                            ? selectedPeriod.name
-                            : selectedPeriodValue === "full-year"
-                              ? t("fullYear")
-                              : t("choosePeriod")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                    </FormControl>
-                    <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
-                      <Command>
-                        <CommandInput
-                          placeholder={t("choosePeriod")}
-                          ref={periodInputRef}
-                          value={periodInputValue}
-                          onValueChange={setPeriodInputValue}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>{t("noPeriodFound")}</CommandEmpty>
-                          <CommandGroup>
-                            {filteredPeriods?.map((period) => (
-                              <CommandItem
-                                key={period.id}
-                                value={period.name}
-                                onSelect={() => {
-                                  form.setValue("periodId", period.id, {
-                                    shouldValidate: true,
-                                  });
-                                  setIsManualPeriod(true);
-                                  setOpenPeriod(false);
-                                }}
-                              >
-                                <span>{period.name}</span>
-                                {form.getValues("periodId") === period.id && (
-                                  <Check className="ml-auto h-4 w-4" />
-                                )}
-                              </CommandItem>
-                            ))}
-                            <CommandItem
-                              key="full-year"
-                              value={t("fullYear")}
-                              onSelect={() => {
-                                form.setValue("periodId", "full-year", {
-                                  shouldValidate: true,
-                                });
-                                setIsManualPeriod(true);
-                                setOpenPeriod(false);
-                              }}
-                            >
-                              <span>{t("fullYear")}</span>
-                              {form.getValues("periodId") === "full-year" && (
-                                <Check className="ml-auto h-4 w-4" />
-                              )}
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <Drawer open={openPeriod} onOpenChange={setOpenPeriod}>
-                    <DrawerTrigger asChild>
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel>{t("passedAt")}</FormLabel>
+                  <Popover modal>
+                    <PopoverTrigger asChild>
                       <FormControl>
                         <Button
                           variant="outline"
-                          role="combobox"
-                          aria-expanded={openPeriod ? "true" : "false"}
-                          className="justify-between"
-                          disabled={isPending}
-                          onClick={() => setOpenPeriod(!openPeriod)}
+                          className={cn(
+                            "pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
                         >
-                          {selectedPeriod
-                            ? selectedPeriod.name
-                            : selectedPeriodValue === "full-year"
-                              ? t("fullYear")
-                              : t("choosePeriod")}
-                          <ChevronsUpDown className="opacity-50" />
+                          {field.value
+                            ? formatDates.formatLong(new Date(field.value))
+                            : t("chooseDate")}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
-                    </DrawerTrigger>
-                    <DrawerContent>
-                      <VisuallyHidden>
-                        <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
-                      </VisuallyHidden>
-                      <div className="mt-4 border-t p-4 overflow-scroll">
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={(date) => {
+                          field.onChange(date);
+                          setIsManualPeriod(false);
+                        }}
+                        disabled={(date) =>
+                          (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
+                        }
+                        autoFocus
+                        defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* PeriodId Field */}
+            <FormField
+              control={form.control}
+              name="periodId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel className="pointer-events-none">
+                    {t("period")}
+                  </FormLabel>
+                  {isDesktop ? (
+                    <Popover
+                      modal
+                      open={openPeriod}
+                      onOpenChange={(isOpen) => setOpenPeriod(isOpen)}
+                    >
+                      <FormControl>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openPeriod ? "true" : "false"}
+                            className="justify-between"
+                            disabled={isPending}
+                            onClick={() => setOpenPeriod(!openPeriod)}
+                          >
+                            {selectedPeriod
+                              ? selectedPeriod.name
+                              : selectedPeriodValue === "full-year"
+                                ? t("fullYear")
+                                : t("choosePeriod")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                      </FormControl>
+                      <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                         <Command>
                           <CommandInput
-                            ref={periodInputRef}
-                            autoFocus
                             placeholder={t("choosePeriod")}
-                            className="h-9"
-                            onValueChange={setPeriodInputValue}
+                            ref={periodInputRef}
                             value={periodInputValue}
+                            onValueChange={setPeriodInputValue}
+                            className="h-9"
                           />
                           <CommandList>
                             <CommandEmpty>{t("noPeriodFound")}</CommandEmpty>
@@ -552,112 +481,131 @@ export function UpdateGradeForm({
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                )}
-                <FormMessage />
-                <FormDescription>{t("periodDescription")}</FormDescription>
-              </FormItem>
-            )}
-          />
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <Drawer open={openPeriod} onOpenChange={setOpenPeriod}>
+                      <DrawerTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openPeriod ? "true" : "false"}
+                            className="justify-between"
+                            disabled={isPending}
+                            onClick={() => setOpenPeriod(!openPeriod)}
+                          >
+                            {selectedPeriod
+                              ? selectedPeriod.name
+                              : selectedPeriodValue === "full-year"
+                                ? t("fullYear")
+                                : t("choosePeriod")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DrawerTrigger>
+                      <DrawerContent>
+                        <VisuallyHidden>
+                          <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
+                        </VisuallyHidden>
+                        <div className="mt-4 border-t p-4 overflow-scroll">
+                          <Command>
+                            <CommandInput
+                              ref={periodInputRef}
+                              autoFocus
+                              placeholder={t("choosePeriod")}
+                              className="h-9"
+                              onValueChange={setPeriodInputValue}
+                              value={periodInputValue}
+                            />
+                            <CommandList>
+                              <CommandEmpty>{t("noPeriodFound")}</CommandEmpty>
+                              <CommandGroup>
+                                {filteredPeriods?.map((period) => (
+                                  <CommandItem
+                                    key={period.id}
+                                    value={period.name}
+                                    onSelect={() => {
+                                      form.setValue("periodId", period.id, {
+                                        shouldValidate: true,
+                                      });
+                                      setIsManualPeriod(true);
+                                      setOpenPeriod(false);
+                                    }}
+                                  >
+                                    <span>{period.name}</span>
+                                    {form.getValues("periodId") === period.id && (
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
+                                  </CommandItem>
+                                ))}
+                                <CommandItem
+                                  key="full-year"
+                                  value={t("fullYear")}
+                                  onSelect={() => {
+                                    form.setValue("periodId", "full-year", {
+                                      shouldValidate: true,
+                                    });
+                                    setIsManualPeriod(true);
+                                    setOpenPeriod(false);
+                                  }}
+                                >
+                                  <span>{t("fullYear")}</span>
+                                  {form.getValues("periodId") === "full-year" && (
+                                    <Check className="ml-auto h-4 w-4" />
+                                  )}
+                                </CommandItem>
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
+                  )}
+                  <FormMessage />
+                  <FormDescription>{t("periodDescription")}</FormDescription>
+                </FormItem>
+              )}
+            />
 
-          {/* Responsive Combobox for Subject */}
-          <FormField
-            control={form.control}
-            name="subjectId"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel>{t("subject")}</FormLabel>
-                {isDesktop ? (
-                  <Popover
-                    modal
-                    open={openSubject}
-                    onOpenChange={(isOpen) => setOpenSubject(isOpen)}
-                  >
-                    <FormControl>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openSubject ? "true" : "false"}
-                          className="justify-between"
-                          disabled={isPending}
-                          onClick={() => setOpenSubject(!openSubject)}
-                        >
-                          {selectedSubject
-                            ? selectedSubject.name
-                            : t("chooseSubject")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                    </FormControl>
-                    <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
-                      <Command>
-                        <CommandInput
-                          placeholder={t("chooseSubject")}
-                          ref={subjectInputRef}
-                          value={subjectInputValue}
-                          onValueChange={setSubjectInputValue}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
-                          <CommandGroup>
-                            {filteredSubjects?.map((subject) => (
-                              <CommandItem
-                                key={subject.id}
-                                value={subject.name}
-                                onSelect={() => {
-                                  form.setValue("subjectId", subject.id, {
-                                    shouldValidate: true,
-                                  });
-                                  setOpenSubject(false);
-                                }}
-                              >
-                                <span>{subject.name}</span>
-                                {form.getValues("subjectId") === subject.id && (
-                                  <Check className="ml-auto h-4 w-4" />
-                                )}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <Drawer open={openSubject} onOpenChange={setOpenSubject}>
-                    <DrawerTrigger asChild>
+            {/* Responsive Combobox for Subject */}
+            <FormField
+              control={form.control}
+              name="subjectId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel>{t("subject")}</FormLabel>
+                  {isDesktop ? (
+                    <Popover
+                      modal
+                      open={openSubject}
+                      onOpenChange={(isOpen) => setOpenSubject(isOpen)}
+                    >
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openSubject ? "true" : "false"}
-                          className="justify-between"
-                          disabled={isPending}
-                          onClick={() => setOpenSubject(!openSubject)}
-                        >
-                          {selectedSubject
-                            ? selectedSubject.name
-                            : t("chooseSubject")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openSubject ? "true" : "false"}
+                            className="justify-between"
+                            disabled={isPending}
+                            onClick={() => setOpenSubject(!openSubject)}
+                          >
+                            {selectedSubject
+                              ? selectedSubject.name
+                              : t("chooseSubject")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
                       </FormControl>
-                    </DrawerTrigger>
-                    <DrawerContent>
-                      <VisuallyHidden>
-                        <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
-                      </VisuallyHidden>
-                      <div className="mt-4 border-t p-4 overflow-scroll">
+                      <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                         <Command>
                           <CommandInput
-                            ref={subjectInputRef}
-                            autoFocus
                             placeholder={t("chooseSubject")}
-                            className="h-9"
+                            ref={subjectInputRef}
                             value={subjectInputValue}
                             onValueChange={setSubjectInputValue}
+                            className="h-9"
                           />
                           <CommandList>
                             <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
@@ -674,29 +622,88 @@ export function UpdateGradeForm({
                                   }}
                                 >
                                   <span>{subject.name}</span>
-                                  {form.getValues("subjectId") ===
-                                    subject.id && (
-                                      <Check className="ml-auto h-4 w-4" />
-                                    )}
+                                  {form.getValues("subjectId") === subject.id && (
+                                    <Check className="ml-auto h-4 w-4" />
+                                  )}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <Drawer open={openSubject} onOpenChange={setOpenSubject}>
+                      <DrawerTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openSubject ? "true" : "false"}
+                            className="justify-between"
+                            disabled={isPending}
+                            onClick={() => setOpenSubject(!openSubject)}
+                          >
+                            {selectedSubject
+                              ? selectedSubject.name
+                              : t("chooseSubject")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DrawerTrigger>
+                      <DrawerContent>
+                        <VisuallyHidden>
+                          <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
+                        </VisuallyHidden>
+                        <div className="mt-4 border-t p-4 overflow-scroll">
+                          <Command>
+                            <CommandInput
+                              ref={subjectInputRef}
+                              autoFocus
+                              placeholder={t("chooseSubject")}
+                              className="h-9"
+                              value={subjectInputValue}
+                              onValueChange={setSubjectInputValue}
+                            />
+                            <CommandList>
+                              <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
+                              <CommandGroup>
+                                {filteredSubjects?.map((subject) => (
+                                  <CommandItem
+                                    key={subject.id}
+                                    value={subject.name}
+                                    onSelect={() => {
+                                      form.setValue("subjectId", subject.id, {
+                                        shouldValidate: true,
+                                      });
+                                      setOpenSubject(false);
+                                    }}
+                                  >
+                                    <span>{subject.name}</span>
+                                    {form.getValues("subjectId") ===
+                                      subject.id && (
+                                        <Check className="ml-auto h-4 w-4" />
+                                      )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Submit Button */}
-          <Button className="w-full" type="submit" disabled={isPending}>
-            {isPending && <Loader2Icon className="animate-spin mr-2 size-4" />}
-            {t("submit")}
-          </Button>
+            {/* Submit Button */}
+            <Button className="w-full" type="submit" disabled={isPending}>
+              {isPending && <Loader2Icon className="animate-spin mr-2 size-4" />}
+              {t("submit")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

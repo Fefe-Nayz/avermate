@@ -55,6 +55,7 @@ import { handleError } from "@/utils/error-utils";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { isEqual } from "lodash";
+import FormContentWrapper from "./form-content-wrapper";
 
 dayjs.locale("fr");
 
@@ -407,80 +408,82 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          {/* Name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("customAverageName")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("customAveragePlaceholder")}
-                    {...field}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* isMainAverage Switch */}
-          <FormField
-            control={form.control}
-            name="isMainAverage"
-            render={({ field }) => (
-              <FormItem className="mx-1 flex flex-row items-center gap-4">
-                <FormLabel>{t("showOnMainPage")}</FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Subjects */}
-          <div className="flex flex-col gap-4 mx-1">
-            <FormLabel>{t("subjects")}</FormLabel>
-            <div className="flex flex-col gap-4">
-              {fields.map((fieldItem, index) =>
-                renderSubjectField(index, fieldItem)
+          <FormContentWrapper>
+            {/* Name */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("customAverageName")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder={t("customAveragePlaceholder")}
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                append({
-                  id: "",
-                  customCoefficient: null,
-                  includeChildren: false,
-                })
-              }
-              disabled={isSubmitting}
-              className="mt-2 flex items-center gap-2"
-            >
-              <PlusCircle className="h-4 w-4" />
-              {t("addSubject")}
-            </Button>
-          </div>
+            />
 
-          {/* Submit */}
-          <Button className="w-full" type="submit" disabled={isSubmitting}>
-            {isSubmitting && (
-              <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
-            )}
-            {t("createCustomAverage")}
-          </Button>
+            {/* isMainAverage Switch */}
+            <FormField
+              control={form.control}
+              name="isMainAverage"
+              render={({ field }) => (
+                <FormItem className="mx-1 flex flex-row items-center gap-4">
+                  <FormLabel>{t("showOnMainPage")}</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Subjects */}
+            <div className="flex flex-col gap-4 mx-1">
+              <FormLabel>{t("subjects")}</FormLabel>
+              <div className="flex flex-col gap-4">
+                {fields.map((fieldItem, index) =>
+                  renderSubjectField(index, fieldItem)
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  append({
+                    id: "",
+                    customCoefficient: null,
+                    includeChildren: false,
+                  })
+                }
+                disabled={isSubmitting}
+                className="mt-2 flex items-center gap-2"
+              >
+                <PlusCircle className="h-4 w-4" />
+                {t("addSubject")}
+              </Button>
+            </div>
+
+            {/* Submit */}
+            <Button className="w-full" type="submit" disabled={isSubmitting}>
+              {isSubmitting && (
+                <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
+              )}
+              {t("createCustomAverage")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

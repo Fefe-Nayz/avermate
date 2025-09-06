@@ -57,6 +57,7 @@ import { useTranslations } from "next-intl";
 import { isEqual } from "lodash";
 import { Average } from "@/types/average";
 import { ScrollArea } from "../ui/scroll-area";
+import FormContentWrapper from "./form-content-wrapper";
 
 /**
  * Reuse your 'updateCustomAverageSchema' or define it similarly.
@@ -402,50 +403,51 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          {/* Name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("averageName")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("averageNamePlaceholder")}
-                    {...field}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <FormContentWrapper>
+            {/* Name */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("averageName")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder={t("averageNamePlaceholder")}
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* isMainAverage Switch */}
-          <FormField
-            control={form.control}
-            name="isMainAverage"
-            render={({ field }) => (
-              <FormItem className="mx-1 flex flex-row items-center gap-4">
-                <FormLabel>{t("displayOnMainPage")}</FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value ?? false}
-                    onCheckedChange={field.onChange}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            {/* isMainAverage Switch */}
+            <FormField
+              control={form.control}
+              name="isMainAverage"
+              render={({ field }) => (
+                <FormItem className="mx-1 flex flex-row items-center gap-4">
+                  <FormLabel>{t("displayOnMainPage")}</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Subjects */}
-          <div className="flex flex-col gap-4 mx-1">
-            <FormLabel>{t("subjects")}</FormLabel>
+            {/* Subjects */}
+            <div className="flex flex-col gap-4 mx-1">
+              <FormLabel>{t("subjects")}</FormLabel>
               <div>
                 <div className="flex flex-col gap-4">
                   {fields.map((fieldItem, index) =>
@@ -453,31 +455,32 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
                   )}
                 </div>
               </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                append({
-                  id: "",
-                  customCoefficient: null,
-                  includeChildren: false,
-                })
-              }
-              disabled={isSubmitting}
-              className="mt-2 flex items-center gap-2"
-            >
-              <PlusCircle className="h-4 w-4" />
-              {t("addSubject")}
-            </Button>
-          </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  append({
+                    id: "",
+                    customCoefficient: null,
+                    includeChildren: false,
+                  })
+                }
+                disabled={isSubmitting}
+                className="mt-2 flex items-center gap-2"
+              >
+                <PlusCircle className="h-4 w-4" />
+                {t("addSubject")}
+              </Button>
+            </div>
 
-          {/* Submit */}
-          <Button className="w-full" type="submit" disabled={isSubmitting}>
-            {isSubmitting && (
-              <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
-            )}
-            {t("updateAverage")}
-          </Button>
+            {/* Submit */}
+            <Button className="w-full" type="submit" disabled={isSubmitting}>
+              {isSubmitting && (
+                <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
+              )}
+              {t("updateAverage")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

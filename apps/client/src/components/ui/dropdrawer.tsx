@@ -319,6 +319,7 @@ function DropDrawerContent({
                     initial="enter"
                     animate="center"
                     exit="exit"
+                    // @ts-ignore
                     transition={transition}
                     className="pb-6 space-y-1.5 w-full h-full"
                   >
@@ -347,6 +348,7 @@ function DropDrawerContent({
                     initial="enter"
                     animate="center"
                     exit="exit"
+                    // @ts-ignore
                     transition={transition}
                     className="pb-6 space-y-1.5 w-full"
                   >
@@ -393,6 +395,7 @@ function DropDrawerItem({
   onSelect,
   onClick,
   icon,
+  // @ts-ignore
   variant = "default",
   inset,
   disabled,
@@ -494,6 +497,7 @@ function DropDrawerItem({
       className={className}
       onSelect={onSelect}
       onClick={onClick as React.MouseEventHandler<HTMLDivElement>}
+      // @ts-ignore
       variant={variant}
       inset={inset}
       disabled={disabled}
