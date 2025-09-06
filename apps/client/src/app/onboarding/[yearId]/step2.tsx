@@ -5,22 +5,8 @@ import UpdateSubjectDialog from "@/components/dialogs/update-subject-dialog";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useSubjects } from "@/hooks/use-subjects";
 import { Subject } from "@/types/subject";
 import {
@@ -29,7 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 
-export default function Step2({yearId}: {yearId: string}) {
+export default function Step2({ yearId }: { yearId: string }) {
   const t = useTranslations("Onboarding.Step2");
   const { data: subjects, isError, isLoading } = useSubjects(yearId);
 
@@ -130,9 +116,8 @@ export default function Step2({yearId}: {yearId: string}) {
       .map((subject: Subject) => (
         <div
           key={subject.id}
-          className={`${
-            level > 0 ? "border-l-2 border-gray-300 pl-2 md:pl-4 " : ""
-          }`}
+          className={`${level > 0 ? "border-l-2 border-gray-300 pl-2 md:pl-4 " : ""
+            }`}
         >
           <div className="flex md:flex-row md:items-center justify-between min-w-0 pb-4 gap-4">
             <div className="flex items-center space-x-2  flex-1 min-w-0">
@@ -165,24 +150,22 @@ export default function Step2({yearId}: {yearId: string}) {
                   <PlusCircleIcon className="size-4" />
                 </Button>
               </AddSubjectDialog>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <DropDrawer>
+                <DropDrawerTrigger asChild>
                   <Button size="icon" variant="outline">
                     <EllipsisVerticalIcon className="size-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem asChild>
+                </DropDrawerTrigger>
+                <DropDrawerContent>
+                  <DropDrawerGroup>
                     <UpdateSubjectDialog subjectId={subject.id} />
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <DeleteSubjectDialog
                       subject={subject}
                       backOnDelete={false}
                     />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  </DropDrawerGroup>
+                </DropDrawerContent>
+              </DropDrawer>
             </div>
           </div>
           {renderSubjects(subjects, subject.id, level + 1)}
