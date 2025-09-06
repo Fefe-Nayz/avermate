@@ -33,9 +33,9 @@ export default function AddGradeDialog({
     outOf: undefined,
     value: undefined,
     coefficient: undefined,
-    passedAt: undefined, 
+    passedAt: undefined,
     subjectId: parentId || "",
-    periodId: null, 
+    periodId: null,
   };
 
   const [formData, setFormData] = useState<AddGradeSchema>(EMPTY_FORM_DATA);
