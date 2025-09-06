@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useYears } from '@/hooks/use-years';
 import React from 'react'
 import { useTranslations } from 'next-intl';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function DeleteYearSection({ yearId }: { yearId: string }) {
     const { data, isPending, isError } = useYears();
@@ -17,10 +18,18 @@ export default function DeleteYearSection({ yearId }: { yearId: string }) {
     if (isError || !year) return <div>{ErrorStateCard()}</div>;
 
     return (
-        <ProfileSection className="border-red-500" title={t("DELETE_YEAR_SECTION_TITLE")} description={t("DELETE_YEAR_SECTION_DESCRIPTION")}>
-            <div className="flex justify-end">
+        <Card className="border-destructive/40">
+            <CardHeader>
+                <CardTitle>
+                    {t("DELETE_YEAR_SECTION_TITLE")}
+                </CardTitle>
+                <CardDescription>
+                    {t("DELETE_YEAR_SECTION_DESCRIPTION")}
+                </CardDescription>
+            </CardHeader>
+            <div className="justify-end flex rounded-b-xl px-6 py-4 border-t border-destructive/30 bg-destructive/10">
                 <DeleteYearDialog year={year} />
             </div>
-        </ProfileSection>
+        </Card>
     )
 }
