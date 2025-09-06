@@ -82,6 +82,30 @@ app.get("/", async (c) => {
     return c.json({ years });
 });
 
+app.delete("/:yearId", async (c) => {
+    const session = c.get("session");
+    if (!session) throw new HTTPException(401);
+
+    // If email isnt verified
+    if (!session.user.emailVerified) {
+        return c.json(
+            { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+            403
+        );
+    }
+
+    const { yearId } = c.req.param();
+
+    const year = await getYearById(yearId);
+
+    if (!year) throw new HTTPException(404);
+    if (year.userId !== session.user.id) throw new HTTPException(403);
+
+    const deletedYear = await db.delete(years).where(eq(years.id, yearId)).returning().get();
+
+    return c.json({ year: deletedYear });
+});
+
 /**
  * Grades
  */
