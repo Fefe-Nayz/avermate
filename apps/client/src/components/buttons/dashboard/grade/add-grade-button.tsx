@@ -9,14 +9,14 @@ export const AddGradeButton = ({ yearId, disabled }: { yearId: string; disabled?
   return (
     <AddGradeDialog yearId={yearId}>
       <div>
-        <div className="hidden lg:flex">
+        <div className="hidden md:flex">
           <Button disabled={disabled}>
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addGrade")}
           </Button>
         </div>
 
-        <div className="flex lg:hidden">
+        <div className="flex md:hidden">
           <Button size="icon" disabled={disabled}>
             <PlusCircleIcon className="size-4" />
           </Button>

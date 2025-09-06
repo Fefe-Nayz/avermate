@@ -1,15 +1,14 @@
 "use client";
 
+import GradePageActions from "@/components/buttons/dashboard/grade-page-actions";
 import { AddGradeButton } from "@/components/buttons/dashboard/grade/add-grade-button";
-import MobileAddButtons from "@/components/buttons/dashboard/mobile-add-buttons";
+import MoreButton from "@/components/buttons/dashboard/more-button";
 import AddPeriodDialog from "@/components/dialogs/add-period-dialog";
 import AddSubjectDialog from "@/components/dialogs/add-subject-dialog";
-import YearWorkspaceSelect from "@/components/selects/year-workspace-select";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import GradesLoader from "@/components/skeleton/grades-loader";
 import GradesTable from "@/components/tables/grades-table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -25,7 +24,6 @@ import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
 import { useYears } from "@/hooks/use-years";
 import { useActiveYearStore } from "@/stores/active-year-store";
-import { PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
@@ -96,28 +94,7 @@ export default function GradesPage() {
       <div className="flex gap-2 md:gap-16 justify-between items-center min-h-9">
         <h1 className="text-xl md:text-3xl font-bold">{t("gradesTitle")}</h1>
 
-        <div className=" gap-4 hidden lg:flex">
-          <AddGradeButton yearId={activeId} />
-
-          <AddSubjectDialog yearId={activeId}>
-            <Button variant="outline">
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addSubject")}
-            </Button>
-          </AddSubjectDialog>
-
-          <AddPeriodDialog yearId={activeId}>
-            <Button variant="outline">
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addPeriod")}
-            </Button>
-          </AddPeriodDialog>
-        </div>
-
-        <div className="flex gap-2 lg:hidden">
-          <AddGradeButton yearId={activeId} />
-          <MobileAddButtons yearId={activeId} />
-        </div>
+        <GradePageActions activeId={activeId} />
       </div>
 
       <Separator />
