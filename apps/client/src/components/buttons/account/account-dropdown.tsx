@@ -8,7 +8,6 @@ import {
   ShieldCheckIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
-import { Session, User } from "better-auth/types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -21,7 +20,6 @@ import FeedbackDialog from "@/components/dialogs/feedback-dialog";
 import { useTranslations } from "next-intl";
 import EarlyBirdBadge from "./early-bird-badge";
 import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerLabel, DropDrawerSeparator, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
-import { Button } from "@/components/ui/button";
 
 export default function AccountDropdown() {
   const toaster = useToast();

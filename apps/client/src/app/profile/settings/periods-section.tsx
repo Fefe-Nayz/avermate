@@ -146,20 +146,10 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
 
                   <DropdownMenuContent className="flex flex-col items-start">
                     {/* Update period */}
-                    <DropdownMenuItem
-                      asChild
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      <UpdatePeriodDialog periodId={periodItem.id} />
-                    </DropdownMenuItem>
+                    <UpdatePeriodDialog periodId={periodItem.id} />
 
                     {/* Delete period */}
-                    <DropdownMenuItem
-                      asChild
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      <DeletePeriodDialog period={periodItem} />
-                    </DropdownMenuItem>
+                    <DeletePeriodDialog period={periodItem} />
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

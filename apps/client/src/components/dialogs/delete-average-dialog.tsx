@@ -63,8 +63,8 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <DropDrawerItem asChild onSelect={(e) => e.preventDefault()}>
-          <div className="flex items-center w-full text-red-500 hover:text-red-400">
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full text-red-500">
             <TrashIcon className="size-4 mr-2" />
             {t("delete")}
           </div>

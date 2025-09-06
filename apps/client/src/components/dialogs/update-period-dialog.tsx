@@ -19,6 +19,7 @@ import { z } from "zod";
 import { usePeriod } from "@/hooks/use-period";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 /** Match the shape from your UpdatePeriodForm. */
 const updatePeriodSchema = z.object({
@@ -68,10 +69,12 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editPeriod")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editPeriod")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
       <CredenzaContentWrapper>
