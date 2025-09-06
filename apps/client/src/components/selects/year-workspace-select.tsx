@@ -43,7 +43,7 @@ export default function YearWorkspaceSelect() {
     return (
         <div>
             <Select defaultValue={activeId} value={activeId} onValueChange={(id) => {
-                if (id === "new") return router.push("/onboarding");
+                if (id === "new") return router.push("/onboarding?canBack=true");
                 if (id !== activeId) {
                     select(id);
 
@@ -82,8 +82,8 @@ export default function YearWorkspaceSelect() {
                     ))}
 
                     <SelectItem value="new">
-                        <div className="flex items-center">
-                            <PlusIcon className="size-4 mr-2" />
+                        <div className="flex items-center text-blue-600">
+                            <PlusIcon className="size-4 mr-2 text-blue-600" />
                             <span className="block font-medium">{t("CREATE_YEAR_BUTTON_LABEL")}</span>
                         </div>
                     </SelectItem>
