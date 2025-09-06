@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button";
 import { PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-export const AddGradeButton = ({ yearId, disabled }: { yearId: string; disabled?: boolean }) => {
+export const AddGradeButton = ({ yearId, subjectId, disabled }: { yearId: string; subjectId?: string; disabled?: boolean }) => {
   const t = useTranslations("Dashboard.Pages.GradesPage"); // Initialize t
 
   return (
-    <AddGradeDialog yearId={yearId}>
+    <AddGradeDialog yearId={yearId} parentId={subjectId}>
       <div>
         <div className="hidden md:flex">
           <Button disabled={disabled}>

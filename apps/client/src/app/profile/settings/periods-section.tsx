@@ -12,12 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeriods } from "@/hooks/use-periods";
@@ -27,6 +21,7 @@ import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerTrigger } from "@/components/ui/dropdrawer";
 
 export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   const formatter = useFormatter();
@@ -137,21 +132,23 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
                 </span>
               </div>
               <div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                <DropDrawer>
+                  <DropDrawerTrigger asChild>
                     <Button size="icon" variant="outline">
                       <EllipsisVerticalIcon className="size-4" />
                     </Button>
-                  </DropdownMenuTrigger>
+                  </DropDrawerTrigger>
 
-                  <DropdownMenuContent className="flex flex-col items-start">
-                    {/* Update period */}
-                    <UpdatePeriodDialog periodId={periodItem.id} />
+                  <DropDrawerContent>
+                    <DropDrawerGroup>
+                      {/* Update period */}
+                      <UpdatePeriodDialog periodId={periodItem.id} />
 
-                    {/* Delete period */}
-                    <DeletePeriodDialog period={periodItem} />
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      {/* Delete period */}
+                      <DeletePeriodDialog period={periodItem} />
+                    </DropDrawerGroup>
+                  </DropDrawerContent>
+                </DropDrawer>
               </div>
             </div>
           ))}

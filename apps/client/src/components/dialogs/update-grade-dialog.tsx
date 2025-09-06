@@ -19,6 +19,7 @@ import { Grade } from "@/types/grade";
 import { z } from "zod";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 // Match the shape your UpdateGradeForm expects
 const updateGradeSchema = z.object({
@@ -61,10 +62,12 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editGrade")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editGrade")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
       <CredenzaContentWrapper>

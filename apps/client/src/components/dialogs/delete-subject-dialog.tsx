@@ -22,6 +22,7 @@ import {
 import { Button } from "../ui/button";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeleteSubjectDialog({
   subject,
@@ -77,13 +78,12 @@ export default function DeleteSubjectDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-          variant="ghost"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full text-red-500">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>

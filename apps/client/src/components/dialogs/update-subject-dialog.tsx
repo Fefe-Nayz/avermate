@@ -18,6 +18,7 @@ import { z } from "zod";
 import { useSubject } from "@/hooks/use-subject";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 /** match the shape from update-subject-form. */
 const updateSubjectSchema = z.object({
@@ -60,10 +61,12 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost" className="w-full flex justify-start">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editSubject")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editSubject")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
       <CredenzaContentWrapper>

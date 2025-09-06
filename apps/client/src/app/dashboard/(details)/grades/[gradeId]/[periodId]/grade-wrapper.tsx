@@ -45,7 +45,7 @@ export default function GradeWrapper({
   customAverages: Average[];
   period: Period;
   onBack: () => void; // Receive the onBack prop from the parent
-  }) {
+}) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Pages.GradeWrapper"); // Initialize t
 
@@ -108,10 +108,10 @@ export default function GradeWrapper({
           `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4`,
           get4xlColsClass(
             gradeParents().length +
-              customAverages.filter((ca) =>
-                isGradeIncludedInCustomAverage(grade, subjects, ca)
-              ).length +
-              7
+            customAverages.filter((ca) =>
+              isGradeIncludedInCustomAverage(grade, subjects, ca)
+            ).length +
+            7
           )
         )}
       >
@@ -241,7 +241,7 @@ export default function GradeWrapper({
             diff={
               subjects
                 ? gradeImpact(grade.id, grade.subjectId, subjects)
-                    ?.difference || 0
+                  ?.difference || 0
                 : 0
             }
           />

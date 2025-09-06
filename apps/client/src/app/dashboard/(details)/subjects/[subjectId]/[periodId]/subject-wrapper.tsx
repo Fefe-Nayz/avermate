@@ -36,9 +36,9 @@ import { cn } from "@/lib/utils";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { useTranslations } from "next-intl";
 import { EllipsisVerticalIcon, MinusIcon, PlusIcon } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import UpdateAverageDialog from "@/components/dialogs/update-average-dialog";
 import DeleteAverageDialog from "@/components/dialogs/delete-average-dialog";
+import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerItem, DropDrawerTrigger } from "@/components/ui/dropdrawer";
 
 function getRelevantPeriodIds(period: Period, periods: Period[]): string[] {
   if (period.id === "full-year") {
@@ -181,34 +181,24 @@ function SubjectWrapper({
           )}
           {subject.id.startsWith("ca") && (
             <div className="flex gap-2 md:gap-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <DropDrawer>
+                <DropDrawerTrigger asChild>
                   <Button size="icon" variant="outline">
                     <EllipsisVerticalIcon className="size-4" />
                   </Button>
-                </DropdownMenuTrigger>
+                </DropDrawerTrigger>
 
-                <DropdownMenuContent className="flex flex-col items-start">
-                  {/* Update grade */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
+                <DropDrawerContent>
+                  <DropDrawerGroup>
                     <UpdateAverageDialog averageId={subject.id} />
-                  </DropdownMenuItem>
 
-                  {/* Delete grade */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
                     <DeleteAverageDialog
                       averageId={subject.id}
                       averageName={subject.name}
                     />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  </DropDrawerGroup>
+                </DropDrawerContent>
+              </DropDrawer>
             </div>
           )}
         </div>
@@ -297,31 +287,21 @@ function SubjectWrapper({
         )}
         {subject.id.startsWith("ca") && (
           <div className="flex gap-2 md:gap-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="outline">
-                    <EllipsisVerticalIcon className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
+            <DropDrawer>
+              <DropDrawerTrigger asChild>
+                <Button size="icon" variant="outline">
+                  <EllipsisVerticalIcon className="size-4" />
+                </Button>
+              </DropDrawerTrigger>
 
-                <DropdownMenuContent className="flex flex-col items-start">
-                  {/* Update grade */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <UpdateAverageDialog averageId={subject.id} />
-                  </DropdownMenuItem>
+              <DropDrawerContent>
+                <DropDrawerGroup>
+                  <UpdateAverageDialog averageId={subject.id} />
+                  <DeleteAverageDialog averageId={subject.id} averageName={subject.name} />
+                </DropDrawerGroup>
 
-                  {/* Delete grade */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <DeleteAverageDialog averageId={subject.id} averageName={subject.name} />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              </DropDrawerContent>
+            </DropDrawer>
           </div>
         )}
       </div>
