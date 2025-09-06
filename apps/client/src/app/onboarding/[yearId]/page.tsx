@@ -74,19 +74,19 @@ function OnboardingContent() {
 
   return (
     <div className="flex-1 flex flex-col max-w-[2000px] mx-auto">
-      <div className="flex flex-col md:flex-row items-center justify-between p-6">
-        <div className="flex flex-col mb-4 md:mb-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-6">
+        <div className="flex flex-col mb-4 md:mb-0 w-full">
           <h1 className="md:text-3xl font-bold text-xl">
             {t(steps[currentStep].title)}
           </h1>
           <p className="text-muted-foreground text-sm">{t("setupMessage")}</p>
         </div>
 
-        <div className="flex flex-row md:items-center md:space-y-0 md:space-x-4 justify-between w-full md:justify-end md:w-auto">
+        <div className="flex flex-row md:items-center md:space-y-0 md:space-x-4 justify-between">
           {currentStep !== 0 && (
             <Button
               size="sm"
-              variant="link"
+              variant="secondary"
               onClick={handleBack}
               disabled={currentStep === 0}
             >
@@ -98,7 +98,7 @@ function OnboardingContent() {
               <ConfettiButton size="sm">{t("finish")} 🎉</ConfettiButton>
             </Link>
           ) : (
-            <Button size="sm" onClick={handleNext}>
+            <Button size="sm" className="ml-auto" onClick={handleNext}>
               {t("next")}
             </Button>
           )}
