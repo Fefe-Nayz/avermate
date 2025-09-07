@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Subject } from "@/types/subject";
 import { TrashIcon } from "@heroicons/react/24/outline";
@@ -33,7 +33,6 @@ export default function DeleteYearDialog({
 
     const { select } = useActiveYears();
     const router = useRouter();
-    const toaster = useToast();
     const queryClient = useQueryClient();
     const t = useTranslations("Dashboard.Pages.YEAR_SETTINGS_PAGE.DELETE_YEAR_SECTION");
 
@@ -45,10 +44,9 @@ export default function DeleteYearDialog({
             return data.year;
         },
         onSuccess: (year) => {
-            toaster.toast({
-                title: t("DELETE_YEAR_DIALOG_TOAST_SUCCESS_TITLE"),
-                description: t("DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION"),
-            });
+            toast.success(t("DELETE_YEAR_DIALOG_TOAST_SUCCESS_TITLE"), {
+        description: t("DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION"),
+      });
 
             setOpen(false);
 
@@ -66,11 +64,9 @@ export default function DeleteYearDialog({
             queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
         },
         onError: (error) => {
-            toaster.toast({
-                title: t("DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE"),
-                description: t("DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION"),
-                variant: "destructive",
-            });
+            toast.error(t("DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE"), {
+        description: t("DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION"),
+      });
         },
     });
 

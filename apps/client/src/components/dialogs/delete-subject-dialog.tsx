@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Subject } from "@/types/subject";
 import { TrashIcon } from "@heroicons/react/24/outline";
@@ -22,6 +22,7 @@ import {
 import { Button } from "../ui/button";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeleteSubjectDialog({
   subject,
@@ -35,8 +36,6 @@ export default function DeleteSubjectDialog({
 
   const router = useRouter();
 
-  const toaster = useToast();
-
   const queryClient = useQueryClient();
 
   const { mutate, isPending } = useMutation({
@@ -47,8 +46,7 @@ export default function DeleteSubjectDialog({
       return data.subject;
     },
     onSuccess: (subject) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription", { name: subject.name }),
       });
 
@@ -66,7 +64,7 @@ export default function DeleteSubjectDialog({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, t("error"));
+      handleError(error, t("error"));
     },
   });
 
@@ -77,13 +75,12 @@ export default function DeleteSubjectDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-          variant="ghost"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+          <div className="flex items-center w-full text-destructive">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>

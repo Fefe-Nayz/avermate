@@ -36,7 +36,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -46,6 +46,7 @@ import { handleError } from "@/utils/error-utils";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { isEqual } from "lodash";
+import FormContentWrapper from "./form-content-wrapper";
 
 interface FeedbackFormProps {
   close: () => void;
@@ -74,8 +75,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.Feedback");
-  const toaster = useToast();
-
   const [openType, setOpenType] = useState(false);
   const typeInputRef = useRef<HTMLInputElement>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -85,12 +84,12 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     subject: z.string().min(1, t("subjectRequired")).max(100, t("subjectTooLong")),
     content: z.string().min(10, t("contentMin")).max(1000, t("contentMax")),
     image: z.string().optional(),
-    email: z.string().email(t("invalidEmail")),
+    email: z.email(t("invalidEmail")),
   });
   type FeedbackSchema = z.infer<typeof feedbackSchema>;
 
   // Possibly retrieve user’s email
-  const { data } = authClient.useSession() as any;
+  const { data } = authClient.useSession();
   const defaultEmail = data?.user.email || "";
 
   const { mutate, isPending } = useMutation({
@@ -102,19 +101,20 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       return res.json();
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorSubmittingFeedback"));
+      handleError(error, errorTranslations, t("errorSubmittingFeedback"));
     },
   });
 
   // Keep original defaults from your code
   const form = useForm<FeedbackSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       type: formData.type || "Général",
@@ -124,6 +124,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       email: formData.email || defaultEmail,
     },
   });
+
 
   // On mount, reset
   useEffect(() => {
@@ -180,95 +181,40 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       <form
         noValidate
         onSubmit={form.handleSubmit(onSubmit)}
-        className="flex flex-col gap-6"
+      // className="flex flex-col gap-6"
       >
-        {/* Feedback Type */}
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem className="flex flex-col mx-1">
-              <FormLabel>{t("feedbackType")}</FormLabel>
-              {isDesktop ? (
-                <Popover modal open={openType} onOpenChange={setOpenType}>
-                  <FormControl>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openType}
-                        className={cn(
-                          "justify-between",
-                          !watchedType && "text-muted-foreground"
-                        )}
-                      >
-                        {watchedType || t("selectFeedbackType")}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                  </FormControl>
-                  <PopoverContent align="center" className="p-0 min-w-[200px]">
-                    <Command>
-                      <CommandInput
-                        ref={typeInputRef}
-                        placeholder={t("searchFeedbackType")}
-                        className="h-9"
-                      />
-                      <CommandList>
-                        <CommandEmpty>{t("noFeedbackTypeFound")}</CommandEmpty>
-                        <CommandGroup>
-                          {feedbackTypes.map((item) => (
-                            <CommandItem
-                              key={item.id}
-                              value={item.name}
-                              onSelect={() => {
-                                form.setValue("type", item.id as FeedbackSchema["type"], {
-                                  shouldValidate: true,
-                                });
-                                setOpenType(false);
-                              }}
-                            >
-                              {item.name}
-                              {watchedType === item.id && (
-                                <Check className="ml-auto h-4 w-4" />
-                              )}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <Drawer open={openType} onOpenChange={setOpenType}>
-                  <DrawerTrigger asChild>
+        <FormContentWrapper>
+          {/* Feedback Type */}
+          <FormField
+            control={form.control}
+            name="type"
+            render={({ field }) => (
+              <FormItem className="flex flex-col mx-1">
+                <FormLabel>{t("feedbackType")}</FormLabel>
+                {isDesktop ? (
+                  <Popover modal open={openType} onOpenChange={setOpenType}>
                     <FormControl>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openType}
-                        className={cn(
-                          "justify-between",
-                          !watchedType && "text-muted-foreground"
-                        )}
-                        onClick={() => setOpenType(!openType)}
-                      >
-                        {watchedType || t("selectFeedbackType")}
-                        <ChevronsUpDown className="opacity-50" />
-                      </Button>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openType}
+                          className={cn(
+                            "justify-between",
+                            !watchedType && "text-muted-foreground"
+                          )}
+                        >
+                          {watchedType || t("selectFeedbackType")}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
                     </FormControl>
-                  </DrawerTrigger>
-                  <DrawerContent>
-                    <VisuallyHidden>
-                      <DrawerTitle>{t("selectFeedbackType")}</DrawerTitle>
-                    </VisuallyHidden>
-                    <div className="mt-4 border-t p-4 overflow-scroll">
+                    <PopoverContent align="center" className="p-0 min-w-[200px]">
                       <Command>
                         <CommandInput
                           ref={typeInputRef}
                           placeholder={t("searchFeedbackType")}
                           className="h-9"
-                          autoFocus
                         />
                         <CommandList>
                           <CommandEmpty>{t("noFeedbackTypeFound")}</CommandEmpty>
@@ -293,70 +239,127 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                           </CommandGroup>
                         </CommandList>
                       </Command>
-                    </div>
-                  </DrawerContent>
-                </Drawer>
-              )}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Drawer open={openType} onOpenChange={setOpenType}>
+                    <DrawerTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openType}
+                          className={cn(
+                            "justify-between",
+                            !watchedType && "text-muted-foreground"
+                          )}
+                          onClick={() => setOpenType(!openType)}
+                        >
+                          {watchedType || t("selectFeedbackType")}
+                          <ChevronsUpDown className="opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </DrawerTrigger>
+                    <DrawerContent>
+                      <VisuallyHidden>
+                        <DrawerTitle>{t("selectFeedbackType")}</DrawerTitle>
+                      </VisuallyHidden>
+                      <div className="mt-4 border-t p-4 overflow-scroll">
+                        <Command>
+                          <CommandInput
+                            ref={typeInputRef}
+                            placeholder={t("searchFeedbackType")}
+                            className="h-9"
+                            autoFocus
+                          />
+                          <CommandList>
+                            <CommandEmpty>{t("noFeedbackTypeFound")}</CommandEmpty>
+                            <CommandGroup>
+                              {feedbackTypes.map((item) => (
+                                <CommandItem
+                                  key={item.id}
+                                  value={item.name}
+                                  onSelect={() => {
+                                    form.setValue("type", item.id as FeedbackSchema["type"], {
+                                      shouldValidate: true,
+                                    });
+                                    setOpenType(false);
+                                  }}
+                                >
+                                  {item.name}
+                                  {watchedType === item.id && (
+                                    <Check className="ml-auto h-4 w-4" />
+                                  )}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </div>
+                    </DrawerContent>
+                  </Drawer>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        {/* Subject */}
-        <FormField
-          control={form.control}
-          name="subject"
-          render={({ field }) => (
-            <FormItem className="mx-1">
-              <FormLabel>{t("subject")}</FormLabel>
-              <FormControl>
-                <Input placeholder={t("subjectPlaceholder")} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          {/* Subject */}
+          <FormField
+            control={form.control}
+            name="subject"
+            render={({ field }) => (
+              <FormItem className="mx-1">
+                <FormLabel>{t("subject")}</FormLabel>
+                <FormControl>
+                  <Input placeholder={t("subjectPlaceholder")} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        {/* Content */}
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem className="mx-1">
-              <FormLabel>{t("content")}</FormLabel>
-              <FormControl>
-                <Textarea placeholder={t("contentPlaceholder")} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+          {/* Content */}
+          <FormField
+            control={form.control}
+            name="content"
+            render={({ field }) => (
+              <FormItem className="mx-1">
+                <FormLabel>{t("content")}</FormLabel>
+                <FormControl>
+                  <Textarea placeholder={t("contentPlaceholder")} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        {/* Image */}
-        <FormField
-          control={form.control}
-          name="image"
-          render={({ field }) => (
-            <FormItem className="mx-1">
-              <FormLabel>{t("addImage")}</FormLabel>
-              <FormControl>
-                <Input
-                  type="file"
-                  accept="image/png, image/jpeg"
-                  onChange={(e) => handleImageChange(e, field.onChange)}
-                />
-              </FormControl>
-              <FormMessage />
-              {/* You can keep your original FormDescription if you had one */}
-            </FormItem>
-          )}
-        />
+          {/* Image */}
+          <FormField
+            control={form.control}
+            name="image"
+            render={({ field }) => (
+              <FormItem className="mx-1">
+                <FormLabel>{t("addImage")}</FormLabel>
+                <FormControl>
+                  <Input
+                    type="file"
+                    accept="image/png, image/jpeg"
+                    onChange={(e) => handleImageChange(e, field.onChange)}
+                  />
+                </FormControl>
+                <FormMessage />
+                {/* You can keep your original FormDescription if you had one */}
+              </FormItem>
+            )}
+          />
 
-        {/* Email field is omitted in your snippet. If needed, just put it back. */}
+          {/* Email field is omitted in your snippet. If needed, just put it back. */}
 
-        <Button type="submit" disabled={isPending}>
-          {isPending ? t("submitting") : t("submit")}
-        </Button>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? t("submitting") : t("submit")}
+          </Button>
+        </FormContentWrapper>
       </form>
     </Form>
   );

@@ -5,12 +5,6 @@ import DeletePeriodDialog from "@/components/dialogs/delete-period-dialog";
 import UpdatePeriodDialog from "@/components/dialogs/update-period-dialog";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeriods } from "@/hooks/use-periods";
@@ -21,8 +15,9 @@ import {
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 
-export default function Step1({yearId}: {yearId: string}) {
+export default function Step1({ yearId }: { yearId: string }) {
   const formatter = useFormatter();
   const t = useTranslations("Onboarding.Step1");
   const formatDates = useFormatDates(formatter);
@@ -110,28 +105,29 @@ export default function Step1({yearId}: {yearId: string}) {
             </span>
           </div>
           <div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <DropDrawer>
+              <DropDrawerTrigger asChild>
                 <Button size="icon" variant="outline">
                   <EllipsisVerticalIcon className="size-4" />
                 </Button>
-              </DropdownMenuTrigger>
+              </DropDrawerTrigger>
 
-              <DropdownMenuContent className="flex flex-col items-start">
-                {/* Update period */}
-                <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+              <DropDrawerContent>
+                <DropDrawerGroup>
+                  {/* Update period */}
                   <UpdatePeriodDialog periodId={period.id} />
-                </DropdownMenuItem>
 
-                {/* Delete period */}
-                <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                  {/* Delete period */}
                   <DeletePeriodDialog period={period} />
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropDrawerGroup>
+              </DropDrawerContent>
+
+
+            </DropDrawer>
           </div>
         </div>
-      ))}
+      ))
+      }
       <div className="flex flex-col items-center justify-center space-y-4">
         <AddPeriodDialog yearId={yearId}>
           <Button variant="outline">
@@ -140,6 +136,6 @@ export default function Step1({yearId}: {yearId: string}) {
           </Button>
         </AddPeriodDialog>
       </div>
-    </div>
+    </div >
   );
 }

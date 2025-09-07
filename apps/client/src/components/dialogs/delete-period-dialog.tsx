@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Period } from "@/types/period";
 import { TrashIcon } from "@heroicons/react/24/outline";
@@ -22,13 +22,12 @@ import {
 import { Button } from "../ui/button";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeletePeriodDialog({ period }: { period: Period }) {
   const t = useTranslations("Dashboard.Dialogs.DeletePeriod");
   const errorTranslations = useTranslations("Errors");
   const [open, setOpen] = useState(false);
-
-  const toaster = useToast();
 
   const queryClient = useQueryClient();
 
@@ -40,8 +39,7 @@ export default function DeletePeriodDialog({ period }: { period: Period }) {
       return data.period;
     },
     onSuccess: (period) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription", { name: period.name }),
       });
 
@@ -55,7 +53,7 @@ export default function DeletePeriodDialog({ period }: { period: Period }) {
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("error"));
+      handleError(error, errorTranslations, t("error"));
     },
   });
 
@@ -66,13 +64,12 @@ export default function DeletePeriodDialog({ period }: { period: Period }) {
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-          variant="ghost"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+          <div className="flex items-center w-full text-destructive">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>

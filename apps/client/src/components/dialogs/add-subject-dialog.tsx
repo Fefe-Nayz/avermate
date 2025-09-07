@@ -13,6 +13,8 @@ import { useState } from "react";
 import { AddSubjectForm } from "../forms/add-subject-form";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 export default function AddSubjectCredenza({
   children,
@@ -59,12 +61,12 @@ export default function AddSubjectCredenza({
         {children}
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {open && (
             <AddSubjectForm
               close={() => setOpen(false)}
@@ -74,8 +76,8 @@ export default function AddSubjectCredenza({
               yearId={yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

@@ -9,15 +9,16 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Average } from "@/types/average";
-import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
+import { BookOpenIcon, PencilIcon } from "@heroicons/react/24/outline";
 import React, { useState, useEffect } from "react";
 import { UpdateCustomAverageForm } from "../forms/update-average-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import { useAverage } from "@/hooks/use-average";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 // EXACT same shape as your UpdateCustomAverageForm expects:
 const updateCustomAverageSchema = z.object({
@@ -41,14 +42,7 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
     data: fetchedAverage,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["custom-averages", averageId],
-    queryFn: async () => {
-      const res = await apiClient.get(`averages/${averageId}`);
-      const data = await res.json<{ customAverage: Average }>();
-      return data.customAverage;
-    },
-  });
+  } = useAverage(averageId);
 
   // The parent keeps its form state as T | null
   const [formData, setFormData] = useState<UpdateCustomAverageData | null>(null);
@@ -73,18 +67,20 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editAverage")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editAverage")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {/* Only render the child if formData is non-null */}
           {!isPending && !isError && formData && (
             <UpdateCustomAverageForm
@@ -95,8 +91,8 @@ export default function UpdateAverageCredenza({ averageId }: { averageId: string
               yearId={fetchedAverage.yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

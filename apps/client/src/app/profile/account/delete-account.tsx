@@ -1,18 +1,23 @@
 import DeleteAccountDialog from "@/components/dialogs/delete-account-dialog";
-import { Separator } from "@/components/ui/separator";
-import ProfileSection from "../profile-section";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
 
 export default function DeleteAccount() {
   const t = useTranslations("Settings.Account.DeleteAccount");
 
   return (
-    <ProfileSection
-      title={t("title")}
-      description={t("description")}
-      className="border-red-500"
-    >
-      <DeleteAccountDialog />
-    </ProfileSection>
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle>
+          {t("title")}
+        </CardTitle>
+        <CardDescription>
+          {t("description")}
+        </CardDescription>
+      </CardHeader>
+      <div className="justifiy-center md:justify-end flex rounded-b-xl px-6 py-4 border-t border-destructive/30 bg-destructive/10 md:ms-auto">
+        <DeleteAccountDialog />
+      </div>
+    </Card>
   );
 }

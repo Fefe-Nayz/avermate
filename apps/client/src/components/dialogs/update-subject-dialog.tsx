@@ -9,15 +9,16 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Subject } from "@/types/subject";
 import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { UpdateSubjectForm } from "../forms/update-subject-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import { useSubject } from "@/hooks/use-subject";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 /** match the shape from update-subject-form. */
 const updateSubjectSchema = z.object({
@@ -37,14 +38,7 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
     data: subject,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["subjects", subjectId],
-    queryFn: async () => {
-      const res = await apiClient.get(`subjects/${subjectId}`);
-      const data = await res.json<{ subject: Subject }>();
-      return data.subject;
-    },
-  });
+  } = useSubject(subjectId);
 
   // parent-level form data
   const [formData, setFormData] = useState<TUpdateSubject | null>(null);
@@ -67,23 +61,25 @@ export default function UpdateSubjectCredenza({ subjectId }: { subjectId: string
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost" className="w-full flex justify-start">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editSubject")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editSubject")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && formData && (
             <UpdateSubjectForm yearId={subject.yearId} subjectId={subject.id} close={() => setOpen(false)} formData={formData} setFormData={setFormData as React.Dispatch<React.SetStateAction<TUpdateSubject>>} />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

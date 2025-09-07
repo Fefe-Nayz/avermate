@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { useMutation } from "@tanstack/react-query";
 import { LogOutIcon } from "lucide-react";
@@ -17,12 +17,11 @@ import {
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { DropdownMenuItem } from "../ui/dropdown-menu";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function SignOutButton() {
   const router = useRouter();
-  const toaster = useToast();
   const t = useTranslations("Header.Dropdown");
 
   const { mutate, isPending } = useMutation({
@@ -37,8 +36,7 @@ export default function SignOutButton() {
 
       router.push("/auth/sign-in");
 
-      toaster.toast({
-        title: t("signedOut"),
+      toast.success(t("signedOut"), {
         description: t("seeYouSoon"),
       });
 
@@ -56,13 +54,12 @@ export default function SignOutButton() {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <DropdownMenuItem
-          className="!text-red-500"
-          onSelect={(e) => e.preventDefault()}
-        >
-          <LogOutIcon className="size-4 mr-2" />
-          {t("signOut")}
-        </DropdownMenuItem>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+          <div className="flex items-center gap-2 text-destructive w-full">
+            <LogOutIcon className="size-4" />
+            {t("signOut")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>

@@ -12,12 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeriods } from "@/hooks/use-periods";
@@ -27,6 +21,7 @@ import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerTrigger } from "@/components/ui/dropdrawer";
 
 export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   const formatter = useFormatter();
@@ -42,9 +37,9 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
 
   if (isPeriodPending) {
     return (
-      <Card className={"p-6 w-full"}>
+      <Card className={"w-full"}>
         <div className="flex flex-col gap-6">
-          <CardHeader className="p-0">
+          <CardHeader className="pb-0">
             <CardTitle>
               <Skeleton className="w-36 h-6" />
             </CardTitle>
@@ -55,27 +50,29 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
 
           <CardContent className="p-0">
             <div className="flex flex-col gap-4">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer rounded-lg p-2"
-                >
-                  <div className="flex flex-col gap-1 w-full">
-                    <Label>
-                      <Skeleton className="md:w-64 h-6" />
-                    </Label>
-                    <span className="text-muted-foreground text-sm">
-                      <Skeleton className="w-full md:w-32 h-4" />
-                    </span>
+              <div className="px-6 grid gap-4">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="bg-card text-card-foreground flex gap-6 rounded-xl border shadow-sm flex-row p-4 justify-between items-start"
+                  >
+                    <div className="flex flex-col gap-1 w-full">
+                      <span>
+                        <Skeleton className="w-full md:w-64 h-6" />
+                      </span>
+                      <span className="text-muted-foreground text-sm">
+                        <Skeleton className="w-full md:w-32 h-4" />
+                      </span>
+                    </div>
+                    <div>
+                      <Button size="icon" variant="outline" disabled>
+                        <EllipsisVerticalIcon className="size-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Button size="icon" variant="outline" disabled>
-                      <EllipsisVerticalIcon className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <div className="flex justify-start">
+                ))}
+              </div>
+              <div className="flex justify-end border-t py-4 px-6">
                 <AddPeriodDialog yearId={yearId}>
                   <Button disabled>
                     <PlusCircleIcon className="size-4 mr-2" />
@@ -97,7 +94,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   if (period.length === 0) {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
-        <div className="flex flex-col gap-4 justify-center items-center ">
+        <div className="flex flex-col gap-4 justify-center items-center pb-6 px-6 ">
           <BookOpenIcon className="w-12 h-12" />
           <div className="flex flex-col items-center gap-1">
             <h2 className="text-xl font-semibold text-center">
@@ -106,7 +103,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
             <p className="text-center">{t("addNewPeriod")}</p>
           </div>
           <AddPeriodDialog yearId={yearId}>
-            <Button variant="outline">
+            <Button>
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addPeriod")}
             </Button>
@@ -119,50 +116,44 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
-        {period?.map((periodItem) => (
-          <div
-            key={periodItem.id}
-            className="flex items-center justify-between gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-900 cursor-pointer rounded-lg p-2"
-          >
-            <div className="flex flex-col gap-1">
-              <Label>{periodItem.name}</Label>
-              <span className="text-muted-foreground text-sm">
-                {t("from")}{" "}
-                {formatDates.formatIntermediate(new Date(periodItem.startAt))}{" "}
-                {t("to")}{" "}
-                {formatDates.formatIntermediate(new Date(periodItem.endAt))}
-              </span>
-            </div>
-            <div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="outline">
-                    <EllipsisVerticalIcon className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
+        <div className="px-6 grid gap-4">
+          {period?.map((periodItem) => (
+            <div
+              key={periodItem.id}
+              className="bg-card text-card-foreground flex gap-6 rounded-xl border shadow-sm flex-row p-4 justify-between items-start"
+            >
+              <div className="flex flex-col gap-1">
+                <Label>{periodItem.name}</Label>
+                <span className="text-muted-foreground text-sm">
+                  {t("from")}{" "}
+                  {formatDates.formatIntermediate(new Date(periodItem.startAt))}{" "}
+                  {t("to")}{" "}
+                  {formatDates.formatIntermediate(new Date(periodItem.endAt))}
+                </span>
+              </div>
+              <div>
+                <DropDrawer>
+                  <DropDrawerTrigger asChild>
+                    <Button size="icon" variant="outline">
+                      <EllipsisVerticalIcon className="size-4" />
+                    </Button>
+                  </DropDrawerTrigger>
 
-                <DropdownMenuContent className="flex flex-col items-start">
-                  {/* Update period */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <UpdatePeriodDialog periodId={periodItem.id} />
-                  </DropdownMenuItem>
+                  <DropDrawerContent>
+                    <DropDrawerGroup>
+                      {/* Update period */}
+                      <UpdatePeriodDialog periodId={periodItem.id} />
 
-                  {/* Delete period */}
-                  <DropdownMenuItem
-                    asChild
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <DeletePeriodDialog period={periodItem} />
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                      {/* Delete period */}
+                      <DeletePeriodDialog period={periodItem} />
+                    </DropDrawerGroup>
+                  </DropDrawerContent>
+                </DropDrawer>
+              </div>
             </div>
-          </div>
-        ))}
-        <div className="flex justify-start">
+          ))}
+        </div>
+        <div className="flex justify-end border-t py-4 px-6">
           <AddPeriodDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4 mr-2" />

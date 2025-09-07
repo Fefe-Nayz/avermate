@@ -10,22 +10,18 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import ProfileSection from "./profile-section";
 import { useTranslations } from "next-intl";
 
 export default function EmailSection() {
   const t = useTranslations("Settings.Profile.Email");
-  const { data: session, isPending } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-    isPending: boolean;
-  };
+  const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
     return (
-      <Card className="p-6 w-full">
+      <Card className="w-full">
         <div className="flex flex-col gap-6">
-          <CardHeader className="p-0">
+          <CardHeader className="pb-0">
             <div>
               <Skeleton className="w-36 h-6" />
             </div>
@@ -35,18 +31,19 @@ export default function EmailSection() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div>
-              <form className="flex flex-col gap-4">
-                <div className="w-full">
-                  <Skeleton className="w-full h-10" />
-                </div>
-
-                <div className="flex w-full justify-end">
-                  <Button type="submit" variant="outline" disabled={isPending}>
-                    {t("save")}
-                  </Button>
-                </div>
-              </form>
+            <div className="flex flex-col gap-4">
+              <div className="px-6">
+                <form>
+                  <div className="w-full">
+                    <Skeleton className="w-full h-8" />
+                  </div>
+                </form>
+              </div>
+              <div className="flex justify-end border-t py-4 px-6">
+                <Button type="submit" disabled={isPending}>
+                  {t("save")}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </div>

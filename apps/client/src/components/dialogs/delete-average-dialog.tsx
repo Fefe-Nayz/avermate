@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Average } from "@/types/average";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "../ui/alert-dialog";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeleteAverageDialog({ average, averageId, averageName }: { average?: Average, averageId?: string, averageName?: string }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteAverage");
@@ -30,8 +31,6 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const router = useRouter();
-  const toaster = useToast();
-
   const { mutate, isPending } = useMutation({
     mutationKey: ["average", "delete", averageId || average?.id],
     mutationFn: async () => {
@@ -40,8 +39,7 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
       return data.customAverage;
     },
     onSuccess: (deletedAverage) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription", { name: deletedAverage.name }),
       });
       setOpen(false);
@@ -51,7 +49,7 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
       queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("error"));
+      handleError(error, errorTranslations, t("error"));
     },
   });
 
@@ -62,22 +60,21 @@ export default function DeleteAverageDialog({ average, averageId, averageName }:
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+          <div className="flex items-center w-full text-destructive">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t("title", { name: average?.name || averageName })}
+            {t("title", { name: average?.name || averageName || "" })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("description", { name: average?.name || averageName })}
+            {t("description", { name: average?.name || averageName || "" })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

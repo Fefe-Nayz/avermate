@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Subject } from "@/types/subject";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { isEqual } from "lodash";
 import { ChevronUpDownIcon } from "@heroicons/react/24/outline";
+import FormContentWrapper from "./form-content-wrapper";
 
 // match the parent's updateSubjectSchema
 const updateSubjectSchema = z.object({
@@ -73,7 +74,6 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateSubject");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -105,7 +105,9 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
 
   type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
 
-  const form = useForm<UpdateSubjectSchema>({
+  const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(updateSubjectSchema),
     defaultValues: formData,
   });
@@ -124,6 +126,8 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
+      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */ }
+      {/* @ts-ignore */ }
       setFormData(watchedValues);
     }
   }, [watchedValues, formData, setFormData]);
@@ -144,8 +148,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
       return (await res.json<{ subject: Subject }>()).subject;
     },
     onSuccess: (subject) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -159,7 +162,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("updateError"));
+      handleError(error, errorTranslations, t("updateError"));
     },
   });
 
@@ -187,205 +190,134 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          <FormField
-            control={form.control}
-            name="name"
-            disabled={isPending}
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input type="text" placeholder={formData.name} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="coefficient"
-            disabled={isPending}
-            render={({ field }) => (
-              <FormItem className="col-span-2 mx-1">
-                <FormLabel>{t("coefficient")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder={(formData.coefficient / 100).toString()}
-                    {...field}
-                    disabled={isPending || isDisplaySubject}
-                    onChange={(e) => field.onChange(e.target.value)}
-                  />
-                </FormControl>
-                <FormMessage />
-                {isDisplaySubject && (
-                  <FormDescription>
-                    {t("coefficientDescription")}
-                  </FormDescription>
-                )}
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="isMainSubject"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <div className="col-span-2 flex flex-row gap-4 items-center">
-                  <FormLabel>{t("isMainSubject")}</FormLabel>
+          <FormContentWrapper>
+            <FormField
+              control={form.control}
+              name="name"
+              disabled={isPending}
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    <Input type="text" placeholder={formData.name} {...field} />
                   </FormControl>
-                </div>
-                <FormMessage />
-                <FormDescription>
-                  {t("isMainSubjectDescription")}
-                </FormDescription>
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="isDisplaySubject"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <div className="col-span-2 flex flex-row gap-4 items-center">
-                  <FormLabel>{t("isDisplaySubject")}</FormLabel>
+            <FormField
+              control={form.control}
+              name="coefficient"
+              disabled={isPending}
+              render={({ field }) => (
+                <FormItem className="col-span-2 mx-1">
+                  <FormLabel>{t("coefficient")}</FormLabel>
                   <FormControl>
-                    <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                    {/* @ts-ignore */}
+                    <Input
+                      type="number"
+                      placeholder={(formData.coefficient / 100).toString()}
+                      {...field}
+                      disabled={isPending || isDisplaySubject}
+                      onChange={(e) => field.onChange(e.target.value)}
+                    />
                   </FormControl>
-                </div>
-                <FormMessage />
-                <FormDescription>
-                  {t("isDisplaySubjectDescription")}
-                </FormDescription>
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                  {isDisplaySubject && (
+                    <FormDescription>
+                      {t("coefficientDescription")}
+                    </FormDescription>
+                  )}
+                </FormItem>
+              )}
+            />
 
-          {/* Responsive Combobox for ParentId */}
-          <FormField
-            control={form.control}
-            name="parentId"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel>
-                  {t("parentSubject")}{" "}
-                  <Badge className="ml-2">{t("optional")}</Badge>
-                </FormLabel>
-
-                {isDesktop ? (
-                  // Desktop: Popover
-                  <Popover
-                    modal
-                    open={openParent}
-                    onOpenChange={(isOpen) => setOpenParent(isOpen)}
-                  >
+            <FormField
+              control={form.control}
+              name="isMainSubject"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <div className="col-span-2 flex flex-row gap-4 items-center">
+                    <FormLabel>{t("isMainSubject")}</FormLabel>
                     <FormControl>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openParent ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenParent(!openParent)}
-                          disabled={isPending}
-                        >
-                          {field.value === null
-                            ? t("noParent")
-                            : field.value
-                              ? subjects?.find((s) => s.id === field.value)?.name
-                              : t("chooseParentSubject")}
-                          <ChevronUpDownIcon className="opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                     </FormControl>
-                    <PopoverContent
-                      className="p-0 min-w-[var(--radix-popover-trigger-width)]"
-                      align="center"
+                  </div>
+                  <FormMessage />
+                  <FormDescription>
+                    {t("isMainSubjectDescription")}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="isDisplaySubject"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <div className="col-span-2 flex flex-row gap-4 items-center">
+                    <FormLabel>{t("isDisplaySubject")}</FormLabel>
+                    <FormControl>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                  <FormDescription>
+                    {t("isDisplaySubjectDescription")}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+
+            {/* Responsive Combobox for ParentId */}
+            <FormField
+              control={form.control}
+              name="parentId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel>
+                    {t("parentSubject")}{" "}
+                    <Badge className="ml-2">{t("optional")}</Badge>
+                  </FormLabel>
+
+                  {isDesktop ? (
+                    // Desktop: Popover
+                    <Popover
+                      modal
+                      open={openParent}
+                      onOpenChange={(isOpen) => setOpenParent(isOpen)}
                     >
-                      <Command>
-                        <CommandInput
-                          ref={parentInputRef}
-                          placeholder={t("chooseParentSubject")}
-                          value={parentInputValue}
-                          onValueChange={setParentInputValue}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>{t("noSubjectsFound")}</CommandEmpty>
-                          <CommandGroup>
-                            <CommandItem
-                              value="none"
-                              onSelect={() => {
-                                form.setValue("parentId", "none", {
-                                  shouldValidate: true,
-                                });
-                                setOpenParent(false);
-                              }}
-                            >
-                              <span>{t("noParent")}</span>
-                              {form.getValues("parentId") === "none" && (
-                                <CheckIcon className="w-4 h-4 ml-auto" />
-                              )}
-                            </CommandItem>
-                            {filteredSubjects?.map((item) => (
-                              <CommandItem
-                                key={item.id}
-                                value={item.name}
-                                onSelect={() => {
-                                  form.setValue("parentId", item.id, {
-                                    shouldValidate: true,
-                                  });
-                                  setOpenParent(false);
-                                }}
-                              >
-                                <span>{item.name}</span>
-                                {form.getValues("parentId") === item.id && (
-                                  <CheckIcon className="w-4 h-4 ml-auto" />
-                                )}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  // Mobile: Drawer
-                  <Drawer open={openParent} onOpenChange={setOpenParent}>
-                    <DrawerTrigger asChild>
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openParent ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenParent(!openParent)}
-                        >
-                          {field.value === null
-                            ? t("noParent")
-                            : field.value
-                              ? subjects?.find((s) => s.id === field.value)?.name
-                              : t("chooseParentSubject")}
-                          <ChevronUpDownIcon className="opacity-50" />
-                        </Button>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openParent ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenParent(!openParent)}
+                            disabled={isPending}
+                          >
+                            {field.value === null
+                              ? t("noParent")
+                              : field.value
+                                ? subjects?.find((s) => s.id === field.value)?.name
+                                : t("chooseParentSubject")}
+                            <ChevronUpDownIcon className="opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
                       </FormControl>
-                    </DrawerTrigger>
-                    <DrawerContent>
-                      <VisuallyHidden>
-                        <DrawerTitle>{t("chooseParentSubject")}</DrawerTitle>
-                      </VisuallyHidden>
-                      <div className="mt-4 border-t p-4 overflow-scroll">
+                      <PopoverContent
+                        className="p-0 min-w-(--radix-popover-trigger-width)"
+                        align="center"
+                      >
                         <Command>
                           <CommandInput
                             ref={parentInputRef}
-                            autoFocus
                             placeholder={t("chooseParentSubject")}
                             value={parentInputValue}
                             onValueChange={setParentInputValue}
@@ -428,23 +360,98 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                )}
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    // Mobile: Drawer
+                    <Drawer open={openParent} onOpenChange={setOpenParent}>
+                      <DrawerTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openParent ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenParent(!openParent)}
+                          >
+                            {field.value === null
+                              ? t("noParent")
+                              : field.value
+                                ? subjects?.find((s) => s.id === field.value)?.name
+                                : t("chooseParentSubject")}
+                            <ChevronUpDownIcon className="opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DrawerTrigger>
+                      <DrawerContent>
+                        <VisuallyHidden>
+                          <DrawerTitle>{t("chooseParentSubject")}</DrawerTitle>
+                        </VisuallyHidden>
+                        <div className="mt-4 border-t p-4 overflow-scroll">
+                          <Command>
+                            <CommandInput
+                              ref={parentInputRef}
+                              autoFocus
+                              placeholder={t("chooseParentSubject")}
+                              value={parentInputValue}
+                              onValueChange={setParentInputValue}
+                              className="h-9"
+                            />
+                            <CommandList>
+                              <CommandEmpty>{t("noSubjectsFound")}</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="none"
+                                  onSelect={() => {
+                                    form.setValue("parentId", "none", {
+                                      shouldValidate: true,
+                                    });
+                                    setOpenParent(false);
+                                  }}
+                                >
+                                  <span>{t("noParent")}</span>
+                                  {form.getValues("parentId") === "none" && (
+                                    <CheckIcon className="w-4 h-4 ml-auto" />
+                                  )}
+                                </CommandItem>
+                                {filteredSubjects?.map((item) => (
+                                  <CommandItem
+                                    key={item.id}
+                                    value={item.name}
+                                    onSelect={() => {
+                                      form.setValue("parentId", item.id, {
+                                        shouldValidate: true,
+                                      });
+                                      setOpenParent(false);
+                                    }}
+                                  >
+                                    <span>{item.name}</span>
+                                    {form.getValues("parentId") === item.id && (
+                                      <CheckIcon className="w-4 h-4 ml-auto" />
+                                    )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
+                  )}
 
-                <FormMessage />
-                <FormDescription>
-                  {t("parentSubjectDescription")}
-                </FormDescription>
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                  <FormDescription>
+                    {t("parentSubjectDescription")}
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
 
-          <Button className="w-full" type="submit" disabled={isPending}>
-            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-            {t("submit")}
-          </Button>
+            <Button className="w-full" type="submit" disabled={isPending}>
+              {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+              {t("submit")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import { useYears } from "./use-years";
 import { useRouter } from "next/navigation";
 import { useActiveYearStore } from "@/stores/active-year-store";
-import { is } from "date-fns/locale";
 import { useQueryClient } from "@tanstack/react-query";
 
 export const useActiveYears = () => {

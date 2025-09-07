@@ -16,7 +16,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -32,12 +32,12 @@ import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Year } from "@/types/year";
+import FormContentWrapper from "./form-content-wrapper";
 
 export const CreateYearForm = () => {
     const formatter = useFormatter();
     const formatDates = useFormatDates(formatter);
     const errorTranslations = useTranslations("Errors");
-    const toaster = useToast();
     const router = useRouter();
 
     const t = useTranslations("Dashboard.Forms.CREATE_YEAR_FORM");
@@ -49,12 +49,8 @@ export const CreateYearForm = () => {
             .max(32, t("CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR")),
         dateRange: z
             .object({
-                from: z.date({
-                    required_error: t("CREATE_YEAR_FORM_START_REQUIRED_ERROR"),
-                }),
-                to: z.date({
-                    required_error: t("CREATE_YEAR_FORM_END_REQUIRED_ERROR"),
-                }),
+                from: z.date().min(1, t("CREATE_YEAR_FORM_START_REQUIRED_ERROR")),
+                to: z.date().min(1, t("CREATE_YEAR_FORM_END_REQUIRED_ERROR")),
             })
             .refine(
                 (data) =>
@@ -69,7 +65,7 @@ export const CreateYearForm = () => {
     });
 
     type CreateYearSchema = z.infer<typeof createYearSchema>;
-    
+
     const queryClient = useQueryClient();
 
     const { mutate, isPending } = useMutation({
@@ -88,8 +84,7 @@ export const CreateYearForm = () => {
             return data.year;
         },
         onSuccess: (data) => {
-            toaster.toast({
-                title: t("CREATE_YEAR_FORM_SUCCESS_TITLE"),
+            toast.success(t("CREATE_YEAR_FORM_SUCCESS_TITLE"), {
                 description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
             });
 
@@ -100,13 +95,15 @@ export const CreateYearForm = () => {
             queryClient.invalidateQueries({ queryKey: ["years"] });
         },
         onError: (error) => {
-            handleError(error, toaster, errorTranslations, "YEAR_CREATE_FAILED");
+            handleError(error, errorTranslations, "YEAR_CREATE_FAILED");
         },
     });
 
     const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
-    const form = useForm<CreateYearSchema>({
+    const form = useForm({
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         resolver: zodResolver(createYearSchema),
         defaultValues: {
             name: "",
@@ -128,104 +125,112 @@ export const CreateYearForm = () => {
                 <form
                     noValidate
                     onSubmit={form.handleSubmit(onSubmit)}
-                    className="flex flex-col gap-8"
+                // className="flex flex-col gap-8"
                 >
-                    {/* Name Field */}
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_NAME_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="text"
-                                        placeholder={t("CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER")}
-                                        {...field}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <FormContentWrapper>
+                        {/* Name Field */}
+                        <FormField
+                            control={form.control}
+                            disabled={isPending}
+                            name="name"
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_NAME_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        <Input
+                                            type="text"
+                                            placeholder={t("CREATE_YEAR_FORM_NAME_FIELD_PLACEHOLDER")}
+                                            {...field}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    {/* Date Range Field */}
-                    <FormField
-                        control={form.control}
-                        name="dateRange"
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <div className="flex flex-col gap-2">
-                                        <Popover modal>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    variant={"outline"}
-                                                    className={
-                                                        !field.value?.from ? "text-muted-foreground" : ""
-                                                    }
-                                                >
-                                                    {field.value?.from ? (
-                                                        field.value.to ? (
-                                                            `${formatDates.formatIntermediate(
-                                                                field.value.from
-                                                            )} - ${formatDates.formatIntermediate(
-                                                                field.value.to
-                                                            )}`
+                        {/* Date Range Field */}
+                        <FormField
+                            control={form.control}
+                            disabled={isPending}
+                            name="dateRange"
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        <div className="flex flex-col gap-2">
+                                            <Popover modal>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        className={
+                                                            !field.value?.from ? "text-muted-foreground" : ""
+                                                        }
+                                                    >
+                                                        {field.value?.from ? (
+                                                            field.value.to ? (
+                                                                `${formatDates.formatIntermediate(
+                                                                    field.value.from
+                                                                )} - ${formatDates.formatIntermediate(
+                                                                    field.value.to
+                                                                )}`
+                                                            ) : (
+                                                                formatDates.formatIntermediate(field.value.from)
+                                                            )
                                                         ) : (
-                                                            formatDates.formatIntermediate(field.value.from)
-                                                        )
-                                                    ) : (
-                                                        <span>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER")}</span>
-                                                    )}
+                                                            <span>{t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER")}</span>
+                                                        )}
 
-                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="center">
-                                                <Calendar
-                                                    excludeDisabled
-                                                    mode="range"
-                                                    selected={field.value}
-                                                    onSelect={field.onChange}
-                                                    numberOfMonths={numberOfMonths}
-                                                    defaultMonth={field.value?.from || new Date()}
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                                                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="center">
+                                                    <Calendar
+                                                        className="rounded-md"
+                                                        excludeDisabled
+                                                        mode="range"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        numberOfMonths={numberOfMonths}
+                                                        defaultMonth={field.value?.from || new Date()}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                        </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    <FormField
-                        control={form.control}
-                        name="defaultOutOf"
-                        disabled={isPending}
-                        render={({ field }) => (
-                            <FormItem className="mx-1">
-                                <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        type="number"
-                                        placeholder={t("CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER")}
-                                        {...field}
-                                        onChange={(e) => field.onChange(e.target.value)}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                        <FormField
+                            control={form.control}
+                            name="defaultOutOf"
+                            disabled={isPending}
+                            render={({ field }) => (
+                                <FormItem className="mx-1">
+                                    <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
+                                    <FormControl>
+                                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                        {/* @ts-ignore */}
+                                        <Input
+                                            type="number"
+                                            placeholder={t("CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER")}
+                                            {...field}
+                                            onChange={(e) => field.onChange(e.target.value)}
+                                        />
+                                    </FormControl>
+                                    <FormDescription>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION")}</FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
-                    {/* Submit Button */}
-                    <Button className="w-full" type="submit" disabled={isPending}>
-                        {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-                        {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
-                    </Button>
+                        {/* Submit Button */}
+                        <Button className="w-full" type="submit" disabled={isPending}>
+                            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+                            {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
+                        </Button>
+                    </FormContentWrapper>
                 </form>
             </Form>
         </div>

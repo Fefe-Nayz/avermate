@@ -14,6 +14,8 @@ import { useState } from "react";
 import { AddPeriodForm } from "../forms/add-period-form";
 import { useTranslations } from "next-intl";
 import { z } from "zod";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 
 export default function AddPeriodCredenza({
   children,
@@ -66,12 +68,12 @@ export default function AddPeriodCredenza({
         {children}
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && open && (
             <AddPeriodForm
               periods={periods}
@@ -81,8 +83,8 @@ export default function AddPeriodCredenza({
               yearId={yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

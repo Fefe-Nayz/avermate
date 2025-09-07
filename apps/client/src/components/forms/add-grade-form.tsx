@@ -49,7 +49,7 @@ import {
 } from "@/components/ui/popover";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { handleError } from "@/utils/error-utils";
@@ -60,18 +60,20 @@ import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
+import FormContentWrapper from "./form-content-wrapper";
 
-const addGradeSchema = z.object({
+// Initial loose schema (not used for validation, can be removed or renamed)
+const looseAddGradeSchema = z.object({
   name: z.string().min(1).optional(),
-  outOf: z.coerce.number().min(0).max(1000).optional(),
-  value: z.coerce.number().min(0).max(1000).optional(),
-  coefficient: z.coerce.number().min(0).max(1000).optional(),
+  outOf: z.number().min(0).max(1000).optional(),
+  value: z.number().min(0).max(1000).optional(),
+  coefficient: z.number().min(0).max(1000).optional(),
   passedAt: z.date().optional(),
   subjectId: z.string().min(1).max(64),
   periodId: z.string().min(1).max(64).nullable(),
 });
 
-export type AddGradeSchema = z.infer<typeof addGradeSchema>;
+export type AddGradeSchema = z.infer<typeof looseAddGradeSchema>;
 
 export function AddGradeForm({
   close,
@@ -92,7 +94,6 @@ export function AddGradeForm({
 
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddGrade");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -114,18 +115,10 @@ export function AddGradeForm({
 
   const addGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    outOf: z.coerce.number({
-      invalid_type_error: t("gradeOutOfRequired"),
-    }).min(0, t("outOfMin")).max(1000, t("outOfMax")),
-    value: z.coerce.number({
-      invalid_type_error: t("gradeValueRequired"),
-    }).min(0, t("valueMin")).max(1000, t("valueMax")),
-    coefficient: z.coerce.number({
-      invalid_type_error: t("coefficientRequired"),
-    }).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
-    passedAt: z.date({
-      required_error: t("passedAtRequired"),
-    }),
+    outOf: z.coerce.number(t("gradeOutOfRequired")).min(0, t("outOfMin")).max(1000, t("outOfMax")),
+    value: z.coerce.number(t("gradeValueRequired")).min(0, t("valueMin")).max(1000, t("valueMax")),
+    coefficient: z.coerce.number(t("coefficientRequired")).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
+    passedAt: z.date().min(1, t("passedAtRequired")),
     subjectId: z.string().min(1, t("subjectIdRequired")).max(64, t("subjectIdMax")),
     periodId: z.string().min(1, t("periodIdRequired")).max(64, t("periodIdMax")).nullable(),
   }).refine((data) => data.value <= data.outOf, {
@@ -177,8 +170,7 @@ export function AddGradeForm({
       return data;
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -191,12 +183,14 @@ export function AddGradeForm({
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorAddingGrade"));
+      handleError(error, errorTranslations, t("errorAddingGrade"));
     },
   });
 
   // 2) Now we use parent's `formData` as defaultValues
-  const form = useForm<AddGradeSchema>({
+  const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(addGradeSchema),
     defaultValues: formData,
   });
@@ -263,44 +257,22 @@ export function AddGradeForm({
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
           noValidate
         >
-          {/* Nom de la note */}
-          <FormField
-            control={form.control}
-            name="name"
-            disabled={isPending}
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("gradeName")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("gradeNamePlaceholder")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Note, Sur, et Coefficient */}
-          <div className="grid grid-cols-2 gap-8">
+          <FormContentWrapper>
+            {/* Nom de la note */}
             <FormField
               control={form.control}
-              name="value"
+              name="name"
               disabled={isPending}
               render={({ field }) => (
                 <FormItem className="mx-1">
-                  <FormLabel>{t("gradeValue")}</FormLabel>
+                  <FormLabel>{t("gradeName")}</FormLabel>
                   <FormControl>
                     <Input
-                      type="number"
-                      placeholder={t("gradeValuePlaceholder")}
+                      type="text"
+                      placeholder={t("gradeNamePlaceholder")}
                       {...field}
-                      onChange={(e) => field.onChange(e.target.value)}
                     />
                   </FormControl>
                   <FormMessage />
@@ -308,25 +280,49 @@ export function AddGradeForm({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="outOf"
-              disabled={isPending}
-              render={({ field }) => (
-                <FormItem className="mx-1">
-                  <FormLabel>{t("gradeOutOf")}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder={t("gradeOutOfPlaceholder")}
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Note, Sur, et Coefficient */}
+            <div className="grid grid-cols-2 lg:gap-8 gap-4">
+              <FormField
+                control={form.control}
+                name="value"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem className="mx-1">
+                    <FormLabel>{t("gradeValue")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder={t("gradeValuePlaceholder")}
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="outOf"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem className="mx-1">
+                    <FormLabel>{t("gradeOutOf")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder={t("gradeOutOfPlaceholder")}
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+            </div>
 
             <FormField
               control={form.control}
@@ -347,169 +343,94 @@ export function AddGradeForm({
                 </FormItem>
               )}
             />
-          </div>
 
-          {/* Date (Calendar) */}
-          <FormField
-            control={form.control}
-            name="passedAt"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel>{t("passedAt")}</FormLabel>
-                <Popover modal>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                      >
-                        {field.value
-                          ? formatDates.formatLong(new Date(field.value))
-                          : t("chooseDate")}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="center">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={(date) => {
-                        field.onChange(date);
-                        setIsManualPeriod(false); // Reset manual period selection
-                      }}
-                      disabled={(date) =>
-                        (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
-                      }
-                      autoFocus
-                      defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Responsive Combobox for Period */}
-          <FormField
-            control={form.control}
-            name="periodId"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel className="pointer-events-none">
-                  {t("period")}
-                </FormLabel>
-
-                {isDesktop ? (
-                  // Desktop: Popover
-                  <Popover
-                    modal
-                    open={openPeriod}
-                    onOpenChange={(isOpen) => setOpenPeriod(isOpen)}
-                  >
-                    <FormControl>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openPeriod ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenPeriod(!openPeriod)}
-                        >
-                          {selectedPeriod
-                            ? selectedPeriod.name
-                            : form.getValues("periodId") === "full-year"
-                              ? t("fullYear")
-                              : t("choosePeriod")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                    </FormControl>
-                    <PopoverContent
-                      className="p-0 min-w-[var(--radix-popover-trigger-width)]"
-                      align="center"
-                    >
-                      <Command>
-                        <CommandInput
-                          placeholder={t("choosePeriod")}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>{t("noPeriodFound")}</CommandEmpty>
-                          <CommandGroup>
-                            {periods?.map((period) => (
-                              <CommandItem
-                                key={period.id}
-                                value={period.name}
-                                onSelect={() => {
-                                  form.setValue("periodId", period.id, {
-                                    shouldValidate: true,
-                                  });
-                                  setIsManualPeriod(true); // Mark as manually selected
-                                  setOpenPeriod(false);
-                                }}
-                              >
-                                <span>{period.name}</span>
-                                {form.getValues("periodId") === period.id && (
-                                  <Check className="ml-auto h-4 w-4" />
-                                )}
-                              </CommandItem>
-                            ))}
-                            <CommandItem
-                              key="full-year"
-                              value={t("fullYear")}
-                              onSelect={() => {
-                                form.setValue("periodId", "full-year", {
-                                  shouldValidate: true,
-                                });
-                                setIsManualPeriod(true); // Mark as manually selected
-                                setOpenPeriod(false);
-                              }}
-                            >
-                              <span>{t("fullYear")}</span>
-                              {form.getValues("periodId") === "full-year" && (
-                                <Check className="ml-auto h-4 w-4" />
-                              )}
-                            </CommandItem>
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  // Mobile: Drawer
-                  <Drawer open={openPeriod} onOpenChange={setOpenPeriod}>
-                    <DrawerTrigger asChild>
+            {/* Date (Calendar) */}
+            <FormField
+              control={form.control}
+              name="passedAt"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel>{t("passedAt")}</FormLabel>
+                  <Popover modal>
+                    <PopoverTrigger asChild>
                       <FormControl>
                         <Button
                           variant="outline"
-                          role="combobox"
-                          aria-expanded={openPeriod ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenPeriod(!openPeriod)}
+                          className={cn(
+                            "pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
                         >
-                          {selectedPeriod
-                            ? selectedPeriod.name
-                            : form.getValues("periodId") === "full-year"
-                              ? t("fullYear")
-                              : t("choosePeriod")}
-                          <ChevronsUpDown className="opacity-50" />
+                          {field.value
+                            ? formatDates.formatLong(new Date(field.value))
+                            : t("chooseDate")}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
-                    </DrawerTrigger>
-                    <DrawerContent>
-                      <VisuallyHidden>
-                        <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
-                      </VisuallyHidden>
-                      <div className="mt-4 border-t p-4 overflow-scroll">
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        className="rounded-md"
+                        mode="single"
+                        selected={field.value}
+                        onSelect={(date) => {
+                          field.onChange(date);
+                          setIsManualPeriod(false); // Reset manual period selection
+                        }}
+                        disabled={(date) =>
+                          (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
+                        }
+                        autoFocus
+                        defaultMonth={field.value || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Responsive Combobox for Period */}
+            <FormField
+              control={form.control}
+              name="periodId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel className="pointer-events-none">
+                    {t("period")}
+                  </FormLabel>
+
+                  {isDesktop ? (
+                    // Desktop: Popover
+                    <Popover
+                      modal
+                      open={openPeriod}
+                      onOpenChange={(isOpen) => setOpenPeriod(isOpen)}
+                    >
+                      <FormControl>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openPeriod ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenPeriod(!openPeriod)}
+                          >
+                            {selectedPeriod
+                              ? selectedPeriod.name
+                              : form.getValues("periodId") === "full-year"
+                                ? t("fullYear")
+                                : t("choosePeriod")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                      </FormControl>
+                      <PopoverContent
+                        className="p-0 min-w-(--radix-popover-trigger-width)"
+                        align="center"
+                      >
                         <Command>
                           <CommandInput
-                            ref={periodInputRef}
-                            autoFocus
                             placeholder={t("choosePeriod")}
                             className="h-9"
                           />
@@ -524,7 +445,7 @@ export function AddGradeForm({
                                     form.setValue("periodId", period.id, {
                                       shouldValidate: true,
                                     });
-                                    setIsManualPeriod(true);
+                                    setIsManualPeriod(true); // Mark as manually selected
                                     setOpenPeriod(false);
                                   }}
                                 >
@@ -541,7 +462,7 @@ export function AddGradeForm({
                                   form.setValue("periodId", "full-year", {
                                     shouldValidate: true,
                                   });
-                                  setIsManualPeriod(true);
+                                  setIsManualPeriod(true); // Mark as manually selected
                                   setOpenPeriod(false);
                                 }}
                               >
@@ -553,118 +474,130 @@ export function AddGradeForm({
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                )}
-                <FormMessage />
-                <FormDescription>{t("periodDescription")}</FormDescription>
-              </FormItem>
-            )}
-          />
-
-          {/* Responsive Combobox for Subject */}
-          <FormField
-            control={form.control}
-            name="subjectId"
-            render={({ field }) => (
-              <FormItem className="flex flex-col mx-1">
-                <FormLabel className="pointer-events-none">
-                  {t("subject")}
-                </FormLabel>
-
-                {isDesktop ? (
-                  // Desktop: Popover
-                  <Popover
-                    modal
-                    open={openSubject}
-                    onOpenChange={(isOpen) => setOpenSubject(isOpen)}
-                  >
-                    <FormControl>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openSubject ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenSubject(!openSubject)}
-                        >
-                          {selectedSubject
-                            ? selectedSubject.name
-                            : t("chooseSubject")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                    </FormControl>
-                    <PopoverContent
-                      className="p-0 min-w-[var(--radix-popover-trigger-width)]"
-                      align="center"
-                    >
-                      <Command>
-                        <CommandInput
-                          placeholder={t("chooseSubject")}
-                          className="h-9"
-                        />
-                        <CommandList>
-                          <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
-                          <CommandGroup>
-                            {subjects
-                              ?.filter(
-                                (subj) => subj.isDisplaySubject === false
-                              )
-                              .slice()
-                              .sort((a, b) => a.name.localeCompare(b.name))
-                              .map((subj) => (
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    // Mobile: Drawer
+                    <Drawer open={openPeriod} onOpenChange={setOpenPeriod}>
+                      <DrawerTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openPeriod ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenPeriod(!openPeriod)}
+                          >
+                            {selectedPeriod
+                              ? selectedPeriod.name
+                              : form.getValues("periodId") === "full-year"
+                                ? t("fullYear")
+                                : t("choosePeriod")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DrawerTrigger>
+                      <DrawerContent>
+                        <VisuallyHidden>
+                          <DrawerTitle>{t("choosePeriod")}</DrawerTitle>
+                        </VisuallyHidden>
+                        <div className="mt-4 border-t p-4 overflow-scroll">
+                          <Command>
+                            <CommandInput
+                              ref={periodInputRef}
+                              autoFocus
+                              placeholder={t("choosePeriod")}
+                              className="h-9"
+                            />
+                            <CommandList>
+                              <CommandEmpty>{t("noPeriodFound")}</CommandEmpty>
+                              <CommandGroup>
+                                {periods?.map((period) => (
+                                  <CommandItem
+                                    key={period.id}
+                                    value={period.name}
+                                    onSelect={() => {
+                                      form.setValue("periodId", period.id, {
+                                        shouldValidate: true,
+                                      });
+                                      setIsManualPeriod(true);
+                                      setOpenPeriod(false);
+                                    }}
+                                  >
+                                    <span>{period.name}</span>
+                                    {form.getValues("periodId") === period.id && (
+                                      <Check className="ml-auto h-4 w-4" />
+                                    )}
+                                  </CommandItem>
+                                ))}
                                 <CommandItem
-                                  key={subj.id}
-                                  value={subj.name}
+                                  key="full-year"
+                                  value={t("fullYear")}
                                   onSelect={() => {
-                                    form.setValue("subjectId", subj.id, {
+                                    form.setValue("periodId", "full-year", {
                                       shouldValidate: true,
                                     });
-                                    setOpenSubject(false);
+                                    setIsManualPeriod(true);
+                                    setOpenPeriod(false);
                                   }}
                                 >
-                                  <span>{subj.name}</span>
-                                  {form.getValues("subjectId") ===
-                                    subj.id && (
+                                  <span>{t("fullYear")}</span>
+                                  {form.getValues("periodId") === "full-year" && (
                                     <Check className="ml-auto h-4 w-4" />
                                   )}
                                 </CommandItem>
-                              ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  // Mobile: Drawer
-                  <Drawer open={openSubject} onOpenChange={setOpenSubject}>
-                    <DrawerTrigger asChild>
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
+                  )}
+                  <FormMessage />
+                  <FormDescription>{t("periodDescription")}</FormDescription>
+                </FormItem>
+              )}
+            />
+
+            {/* Responsive Combobox for Subject */}
+            <FormField
+              control={form.control}
+              name="subjectId"
+              render={({ field }) => (
+                <FormItem className="flex flex-col mx-1">
+                  <FormLabel className="pointer-events-none">
+                    {t("subject")}
+                  </FormLabel>
+
+                  {isDesktop ? (
+                    // Desktop: Popover
+                    <Popover
+                      modal
+                      open={openSubject}
+                      onOpenChange={(isOpen) => setOpenSubject(isOpen)}
+                    >
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openSubject ? "true" : "false"}
-                          className="justify-between"
-                          onClick={() => setOpenSubject(!openSubject)}
-                        >
-                          {selectedSubject
-                            ? selectedSubject.name
-                            : t("chooseSubject")}
-                          <ChevronsUpDown className="opacity-50" />
-                        </Button>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openSubject ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenSubject(!openSubject)}
+                          >
+                            {selectedSubject
+                              ? selectedSubject.name
+                              : t("chooseSubject")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
                       </FormControl>
-                    </DrawerTrigger>
-                    <DrawerContent>
-                      <VisuallyHidden>
-                        <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
-                      </VisuallyHidden>
-                      <div className="mt-4 border-t p-4 overflow-scroll">
+                      <PopoverContent
+                        className="p-0 min-w-(--radix-popover-trigger-width)"
+                        align="center"
+                      >
                         <Command>
                           <CommandInput
-                            ref={subjectInputRef}
-                            autoFocus
                             placeholder={t("chooseSubject")}
                             className="h-9"
                           />
@@ -691,27 +624,91 @@ export function AddGradeForm({
                                     <span>{subj.name}</span>
                                     {form.getValues("subjectId") ===
                                       subj.id && (
-                                      <Check className="ml-auto h-4 w-4" />
-                                    )}
+                                        <Check className="ml-auto h-4 w-4" />
+                                      )}
                                   </CommandItem>
                                 ))}
                             </CommandGroup>
                           </CommandList>
                         </Command>
-                      </div>
-                    </DrawerContent>
-                  </Drawer>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    // Mobile: Drawer
+                    <Drawer open={openSubject} onOpenChange={setOpenSubject}>
+                      <DrawerTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openSubject ? "true" : "false"}
+                            className="justify-between"
+                            onClick={() => setOpenSubject(!openSubject)}
+                          >
+                            {selectedSubject
+                              ? selectedSubject.name
+                              : t("chooseSubject")}
+                            <ChevronsUpDown className="opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </DrawerTrigger>
+                      <DrawerContent>
+                        <VisuallyHidden>
+                          <DrawerTitle>{t("chooseSubject")}</DrawerTitle>
+                        </VisuallyHidden>
+                        <div className="mt-4 border-t p-4 overflow-scroll">
+                          <Command>
+                            <CommandInput
+                              ref={subjectInputRef}
+                              autoFocus
+                              placeholder={t("chooseSubject")}
+                              className="h-9"
+                            />
+                            <CommandList>
+                              <CommandEmpty>{t("noSubjectFound")}</CommandEmpty>
+                              <CommandGroup>
+                                {subjects
+                                  ?.filter(
+                                    (subj) => subj.isDisplaySubject === false
+                                  )
+                                  .slice()
+                                  .sort((a, b) => a.name.localeCompare(b.name))
+                                  .map((subj) => (
+                                    <CommandItem
+                                      key={subj.id}
+                                      value={subj.name}
+                                      onSelect={() => {
+                                        form.setValue("subjectId", subj.id, {
+                                          shouldValidate: true,
+                                        });
+                                        setOpenSubject(false);
+                                      }}
+                                    >
+                                      <span>{subj.name}</span>
+                                      {form.getValues("subjectId") ===
+                                        subj.id && (
+                                          <Check className="ml-auto h-4 w-4" />
+                                        )}
+                                    </CommandItem>
+                                  ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </div>
+                      </DrawerContent>
+                    </Drawer>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Submit button */}
-          <Button className="w-full" type="submit" disabled={isPending}>
-            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-            {t("submit")}
-          </Button>
+            {/* Submit button */}
+            <Button className="w-full" type="submit" disabled={isPending}>
+              {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+              {t("submit")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

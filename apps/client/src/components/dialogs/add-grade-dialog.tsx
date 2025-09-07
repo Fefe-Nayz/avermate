@@ -12,6 +12,8 @@ import {
 import { useState } from "react";
 import { AddGradeForm, AddGradeSchema } from "../forms/add-grade-form";
 import { useTranslations } from "next-intl";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
 export default function AddGradeDialog({
   children,
@@ -31,9 +33,9 @@ export default function AddGradeDialog({
     outOf: undefined,
     value: undefined,
     coefficient: undefined,
-    passedAt: undefined, 
+    passedAt: undefined,
     subjectId: parentId || "",
-    periodId: null, 
+    periodId: null,
   };
 
   const [formData, setFormData] = useState<AddGradeSchema>(EMPTY_FORM_DATA);
@@ -49,12 +51,12 @@ export default function AddGradeDialog({
       }}
     >
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {open && (
             <AddGradeForm
               close={() => setOpen(false)}
@@ -64,8 +66,8 @@ export default function AddGradeDialog({
               yearId={yearId}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

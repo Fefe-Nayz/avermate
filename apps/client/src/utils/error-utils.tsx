@@ -1,8 +1,8 @@
 import { HTTPError } from "ky";
+import { toast } from "sonner";
 
 export function handleError(
   error: unknown,
-  toaster: ReturnType<typeof import("@/hooks/use-toast").useToast>,
   t: any,
   message?: string
 ) {
@@ -20,16 +20,12 @@ export function handleError(
     const status = error.response.status;
     const errorMessage = errorMessages[status] || t("unknownError");
 
-    toaster.toast({
-      title: message || t("error"),
+    toast.error(message || t("error"), {
       description: `${errorMessage} (${status})`,
-      variant: "destructive",
     });
   } else {
-    toaster.toast({
-      title: message || t("error"),
+    toast.error(message || t("error"), {
       description: `${t("unexpectedError")} (${error})`,
-      variant: "destructive",
     });
   }
 }

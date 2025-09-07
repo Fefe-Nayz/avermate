@@ -102,6 +102,7 @@
       "transformEfforts": "Transformez vos efforts en succès"
     },
     "FAQ": {
+      "title": "Questions Fréquemment Posées",
       "question1": "Comment mes données sont elles stockées ?",
       "answer1": "Vos données sont stockées de façon sécurisée dans notre base de données.",
       "question2": "Qui d'autres peut voir mes notes ?",
@@ -340,7 +341,14 @@
         "uploadingMessage": "Veuillez patienter quelques instants.",
         "cropAvatar": "Recadrez votre avatar",
         "cancel": "Annuler",
-        "save": "Enregistrer"
+        "save": "Enregistrer",
+        "deleteAvatar": "Supprimer l'avatar",
+        "deleteAvatarConfirm": "Êtes-vous sûr de vouloir supprimer votre avatar ?",
+        "deleteAvatarDescription": "Cette action ne peut pas être annulée. Votre avatar sera définitivement supprimé.",
+        "deletingAvatar": "Suppression de l'avatar...",
+        "deleteSuccessTitle": "Avatar supprimé",
+        "deleteSuccessMessage": "Votre avatar a été supprimé avec succès.",
+        "deleteErrorMessage": "Une erreur est survenue lors de la suppression de l'avatar."
       }
     },
     "Account": {
@@ -348,7 +356,7 @@
         "title": "Active Sessions",
         "description": "Manage and monitor all your active sessions.",
         "revoke": "Revoke",
-        "current": "Current",
+        "current": "Actuelle",
         "expired": "Expired",
         "active": "Active",
         "successTitle": "Session révoquée",
@@ -358,7 +366,13 @@
         "titleDialog": "Révoquer la session",
         "descriptionDialog": "L'utilisateur sera invité à se reconnecter lors de sa prochaine visite.",
         "cancel": "Annuler",
-        "revokeSession": "Révoquer la session"
+        "revokeSession": "Révoquer la session",
+        "signoutDialog": "Se déconnecter",
+        "signoutSession": "Se déconnecter",
+        "signoutTitleDialog": "Se déconnecter",
+        "signoutDescriptionDialog": "Vous allez être déconnecté maintenant",
+        "currentSession": "Session active",
+        "expire": "Expire"
       },
       "LinkedAccounts": {
         "title": "Comptes Liés",
@@ -366,7 +380,38 @@
         "linkWithOtherServices": "Lier avec d'autres services",
         "linkingWith": "Lien en cours avec {label}...",
         "link": "Lier {label}",
-        "linkWithPassword": "Lier avec Mot de Passe"
+        "linkWithPassword": "Lier avec Mot de Passe",
+        "password": "Mot de passe",
+        "resetPassword": "Réinitialiser",
+        "setPassword": "Définir un mot de passe",
+        "sending": "Envoi en cours...",
+        "unlink": "Délier",
+        "unlinking": "Suppression du lien…",
+        "linkFailed": "Échec du lien",
+        "linkFailedDescription": "Impossible de lier le compte.",
+        "unlinked": "Délié",
+        "unlinkSuccess": "{provider} déconnecté.",
+        "unlinkFailed": "Échec de la suppression du lien",
+        "unlinkFailedDescription": "Impossible de délier. Vous pourriez avoir besoin d'au moins une méthode de connexion ou d'activer allowUnlinkingAll.",
+        "resetEmailSent": "E-mail de réinitialisation envoyé",
+        "resetEmailSentDescription": "Vérifiez votre e-mail pour les instructions de réinitialisation du mot de passe.",
+        "resetEmailFailed": "Échec de l'envoi de l'e-mail de réinitialisation",
+        "resetEmailFailedDescription": "Impossible d'envoyer l'e-mail de réinitialisation du mot de passe.",
+        "currentPassword": "Mot de passe actuel",
+        "newPassword": "Nouveau mot de passe",
+        "confirmPassword": "Confirmer le nouveau mot de passe",
+        "missingFields": "Champs manquants",
+        "missingFieldsDescription": "Veuillez remplir tous les champs.",
+        "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+        "passwordsDoNotMatchDescription": "Assurez-vous que les deux mots de passe sont identiques.",
+        "passwordTooWeakDescription": "Veuillez choisir un mot de passe plus fort.",
+        "passwordUpdated": "Mot de passe mis à jour",
+        "passwordUpdatedDescription": "Vous devrez vous reconnecter sur les autres appareils.",
+        "updateFailed": "Échec de la mise à jour",
+        "updateFailedDescription": "Impossible de changer le mot de passe.",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saving": "Enregistrement…"
       },
       "DeleteAccount": {
         "title": "Supprimer le compte",
@@ -383,7 +428,7 @@
     },
     "Settings": {
       "Theme": {
-        "title": "Apparence",
+        "title": "Thème",
         "description": "Personnalisez le thème qui sera utilisé.",
         "themeLabel": "Thème",
         "selectPlaceholder": "Sélectionnez un thème",
@@ -651,6 +696,35 @@
       }
     },
     "Forms": {
+      "UPDATE_YEAR_DATE_RANGE_FORM": {
+        "FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "START_AFTER_END_ERROR": "La date de début doit être avant la date de fin.",
+        "FIELD_YEAR_END_BEFORE_PERIOD_END_ERROR": "La date de fin de l'année doit être après la fin de toutes les périodes.",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_DESCRIPTION": "Veuillez ajuster la date de fin de l'année.",
+        "FIELD_YEAR_START_AFTER_PERIOD_START_ERROR": "La date de début de l'année doit être avant la début de toutes les périodes.",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION": "Veuillez ajuster la date de début de l'année.",
+        "TOAST_SUCCESS_TITLE": "Année mise à jour",
+        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès."
+      },
+      "UPDATE_YEAR_NAME_FORM": {
+        "FIELD_PLACEHOLDER": "Année 2024-2025",
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "NAME_MIN_LENGTH_ERROR": "Merci d'indiquer un nom.",
+        "NAME_MAX_LENGTH_ERROR": "Le nom ne peut pas dépasser 32 caractères.",
+        "TOAST_SUCCESS_TITLE": "Année mise à jour",
+        "TOAST_SUCCESS_DESC": "Le nom de l'année a été modifié avec succès."
+      },
+      "UPDATE_YEAR_DEFAULT_OUT_OF_FORM": {
+        "FIELD_PLACEHOLDER": "20",
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "DEFAULT_OUT_OF_MIN_ERROR": "Le barème doit être supérieur ou égale à 1.",
+        "DEFAULT_OUT_OF_MAX_ERROR": "Le barème doit être inférieur ou égal à 1000.",
+        "TOAST_SUCCESS_TITLE": "Année mise à jour",
+        "TOAST_SUCCESS_DESC": "Le barème par défaut de l'année a été modifié avec succès."
+      },
       "CREATE_YEAR_FORM": {
         "CREATE_YEAR_TITLE": "Créer une nouvelle année",
         "CREATE_YEAR_DESC": "Créez un espace pour organiser vos périodes, matières et notes.",
@@ -660,6 +734,7 @@
         "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Barème des moyennes par défaut",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION": "Vos moyennes seront calculées sur ce barème de référence.",
         "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Créer une nouvelle année",
         "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Merci d'indiquer un nom.",
         "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "Le nom ne peut pas dépasser 32 caractères.",
@@ -954,6 +1029,14 @@
           "DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION": "Les notes et matières associées ont été supprimées.",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE": "Erreur lors de la suppression de l'année",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION": "Une erreur s'est produite lors de la suppression de l'année. Veuillez réessayer."
+        },
+        "UPDATE_YEAR_SECTION": {
+          "UPDATE_YEAR_NAME_SECTION_TITLE": "Nom de l'année",
+          "UPDATE_YEAR_NAME_SECTION_DESCRIPTION": "Modifier le nom de l'année.",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_TITLE": "Barème des moyennes par défaut",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_DESCRIPTION": "Modifier le barème des moyennes par défaut pour cette année. Vos moyennes seront calculées sur ce barème de référence.",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_TITLE": "Durée de l'année",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_DESCRIPTION": "Modifier la date de début et de fin de l'année."
         }
       },
       "OverviewPage": {

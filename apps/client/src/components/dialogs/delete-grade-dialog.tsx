@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Grade } from "@/types/grade";
 import { TrashIcon } from "@heroicons/react/24/outline";
@@ -22,6 +22,7 @@ import {
 import { Button } from "../ui/button";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteGrade");
@@ -29,8 +30,6 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
   const [open, setOpen] = useState(false);
 
   const router = useRouter();
-
-  const toaster = useToast();
 
   const queryClient = useQueryClient();
 
@@ -42,8 +41,7 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
       return data.grade;
     },
     onSuccess: (grade) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription", { name: grade.name }),
       });
 
@@ -59,7 +57,7 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("error"));
+      handleError(error, errorTranslations, t("error"));
     },
   });
 
@@ -70,13 +68,12 @@ export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button
-          className="w-full flex justify-start text-red-500 hover:text-red-400"
-          variant="ghost"
-        >
-          <TrashIcon className="size-4 mr-2" />
-          {t("delete")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+          <div className="flex items-center w-full text-destructive">
+            <TrashIcon className="size-4 mr-2" />
+            {t("delete")}
+          </div>
+        </DropDrawerItem>
       </AlertDialogTrigger>
 
       <AlertDialogContent>

@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { UploadButton as OriginalUploadButton } from "@/components/buttons/upload-button";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,6 @@ import { useTranslations } from "next-intl";
 
 const UpdateAvatar = () => {
   const t = useTranslations("Settings.Profile.Avatar");
-  const toast = useToast();
   const router = useRouter();
 
   // State for cropping
@@ -79,8 +78,7 @@ const UpdateAvatar = () => {
       }
     } catch (error) {
       console.error("Error cropping image:", error);
-      toast.toast({
-        title: t("errorTitle"),
+      toast.error(t("errorTitle"), {
         description: t("cropError"),
       });
       setIsCropping(false);
@@ -130,8 +128,7 @@ const UpdateAvatar = () => {
         const file = files[0];
 
         if (!file.type.startsWith("image/")) {
-          toast.toast({
-            title: t("errorTitle"),
+          toast.error(t("errorTitle"), {
             description: t("invalidFileType"),
           });
           reject(new Error("Invalid file type."));
@@ -154,16 +151,14 @@ const UpdateAvatar = () => {
               }
             } catch (error) {
               console.error("Error detecting animation:", error);
-              toast.toast({
-                title: t("errorTitle"),
+              toast.error(t("errorTitle"), {
                 description: t("animationDetectionError"),
               });
               reject(new Error("Failed to detect image animation."));
             }
           } else {
             // Unable to read the file as ArrayBuffer
-            toast.toast({
-              title: t("errorTitle"),
+            toast.error(t("errorTitle"), {
               description: t("unableToReadFile"),
             });
             reject(new Error("Unable to read file."));
@@ -171,8 +166,7 @@ const UpdateAvatar = () => {
         };
         reader.onerror = (error) => {
           console.error("FileReader error:", error);
-          toast.toast({
-            title: t("errorTitle"),
+          toast.error(t("errorTitle"), {
             description: t("fileReaderError"),
           });
           reject(new Error("FileReader error."));
@@ -209,19 +203,18 @@ const UpdateAvatar = () => {
     <>
       <OriginalUploadButton
         endpoint="avatarUploader"
-        className="flex flex-col items-center w-full"
+        className="flex flex-col items-center"
         appearance={{
           button({ ready, isUploading }) {
             return buttonVariants({
               variant: "default",
-              size: "default",
-              className: `w-full ${
-                isUploading || !ready ? "opacity-50 pointer-events-none" : ""
-              }`,
+              size: "sm",
+              className: `!h-9 !w-auto px-3 mb-0 ${isUploading || !ready ? "opacity-50 pointer-events-none" : ""
+                }`,
             });
           },
           container: "flex flex-col items-center space-y-2",
-          allowedContent: "text-sm text-muted-foreground mt-1",
+          allowedContent: "hidden",
         }}
         content={{
           button({ ready, isUploading }) {
@@ -256,8 +249,7 @@ const UpdateAvatar = () => {
             await authClient.updateUser({ image: uploadedFile.url });
 
             // Show success message
-            toast.toast({
-              title: t("successTitle"),
+            toast.success(t("successTitle"), {
               description: t("successMessage"),
             });
 
@@ -267,32 +259,28 @@ const UpdateAvatar = () => {
             console.error("Failed to update avatar:", error);
 
             // Show error message
-            toast.toast({
-              title: t("errorTitle"),
+            toast.error(t("errorTitle"), {
               description: t("updateError"),
             });
           }
         }}
         onUploadError={(err) => {
           if (err.code === "TOO_LARGE") {
-            toast.toast({
-              title: t("errorTitle"),
+            toast.error(t("errorTitle"), {
               description: t("fileTooLarge"),
             });
 
             return;
           }
 
-          toast.toast({
-            title: t("errorTitle"),
+          toast.error(t("errorTitle"), {
             description: t("uploadError"),
           });
 
           console.error(err);
         }}
         onUploadBegin={() => {
-          toast.toast({
-            title: t("uploadingTitle"),
+          toast(t("uploadingTitle"), {
             description: t("uploadingMessage"),
           });
         }}

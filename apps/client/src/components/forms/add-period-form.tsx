@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Period } from "@/types/period";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,6 +35,7 @@ import { useFormatter } from "next-intl";
 import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import React, { useEffect } from "react";
+import FormContentWrapper from "./form-content-wrapper";
 
 interface AddPeriodFormProps {
   close: () => void;
@@ -73,8 +74,8 @@ export const AddPeriodForm = ({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     dateRange: z
       .object({
-        from: z.date({ required_error: t("startDateRequired") }),
-        to: z.date({ required_error: t("endDateRequired") }),
+        from: z.date().min(0, t("startDateRequired")),
+        to: z.date().min(0, t("endDateRequired")),
       })
       .refine(
         (data) =>
@@ -91,7 +92,6 @@ export const AddPeriodForm = ({
   });
   type AddPeriodSchema = z.infer<typeof addPeriodSchema>;
 
-  const toaster = useToast();
   const queryClient = useQueryClient();
 
   const { mutate, isPending } = useMutation({
@@ -108,7 +108,7 @@ export const AddPeriodForm = ({
       return await res.json();
     },
     onSuccess: () => {
-      toaster.toast({
+      toast.success(t("successDescription"), {
         description: t("successDescription"),
       });
       close();
@@ -121,14 +121,16 @@ export const AddPeriodForm = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorAddingPeriod"));
+      handleError(error, errorTranslations, t("errorAddingPeriod"));
     },
   });
 
   const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
   // Keep your original defaults here:
-  const form = useForm<AddPeriodSchema>({
+  const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(addPeriodSchema),
     defaultValues: {
       name: "",
@@ -176,10 +178,7 @@ export const AddPeriodForm = ({
       });
 
       if (overlappingPeriod) {
-        toaster.toast({
-          title: t("overlappingPeriods"),
-          variant: "destructive",
-        });
+        toast.error(t("overlappingPeriods"));
         return;
       }
     }
@@ -193,116 +192,119 @@ export const AddPeriodForm = ({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          {/* Name Field */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("namePlaceholder")}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Date Range Field */}
-          <FormField
-            control={form.control}
-            name="dateRange"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("dateRange")}</FormLabel>
-                <FormControl>
-                  <div className="flex flex-col gap-2">
-                    <Popover modal>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={
-                            !field.value?.from ? "text-muted-foreground" : ""
-                          }
-                        >
-                          {field.value?.from ? (
-                            field.value.to ? (
-                              `${formatDates.formatIntermediate(
-                                field.value.from
-                              )} - ${formatDates.formatIntermediate(
-                                field.value.to
-                              )}`
-                            ) : (
-                              formatDates.formatIntermediate(field.value.from)
-                            )
-                          ) : (
-                            <span>{t("selectDateRange")}</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="center">
-                        <Calendar
-                          excludeDisabled
-                          mode="range"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          numberOfMonths={numberOfMonths}
-                          disabled={[{
-                            from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
-                            to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
-                          },
-                          {
-                            from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
-                            to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
-                          },
-                          ...periods.map((period) => ({
-                            from: startOfDay(period.startAt),
-                            to: startOfDay(period.endAt),
-                          }))]}
-                          defaultMonth={field.value.from || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* isCumulative Switch Field */}
-          <FormField
-            control={form.control}
-            name="isCumulative"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <div className="flex flex-row gap-4 items-center">
-                  <FormLabel>{t("isCumulative")}</FormLabel>
+          <FormContentWrapper>
+            {/* Name Field */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("name")}</FormLabel>
                   <FormControl>
-                    <Switch
-                      checked={field.value ?? false}
-                      onCheckedChange={field.onChange}
+                    <Input
+                      type="text"
+                      placeholder={t("namePlaceholder")}
+                      {...field}
                     />
                   </FormControl>
-                </div>
-                <FormDescription>{t("isCumulativeDescription")}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Submit Button */}
-          <Button className="w-full" type="submit" disabled={isPending}>
-            {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-            {t("submit")}
-          </Button>
+            {/* Date Range Field */}
+            <FormField
+              control={form.control}
+              name="dateRange"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("dateRange")}</FormLabel>
+                  <FormControl>
+                    <div className="flex flex-col gap-2">
+                      <Popover modal>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={
+                              !field.value?.from ? "text-muted-foreground" : ""
+                            }
+                          >
+                            {field.value?.from ? (
+                              field.value.to ? (
+                                `${formatDates.formatIntermediate(
+                                  field.value.from
+                                )} - ${formatDates.formatIntermediate(
+                                  field.value.to
+                                )}`
+                              ) : (
+                                formatDates.formatIntermediate(field.value.from)
+                              )
+                            ) : (
+                              <span>{t("selectDateRange")}</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="center">
+                          <Calendar
+                            className="rounded-md"
+                            excludeDisabled
+                            mode="range"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            numberOfMonths={numberOfMonths}
+                            disabled={[{
+                              from: year ? new Date(new Date(year?.startDate).getTime() - 10 * 365 * 24 * 60 * 60 * 1000) : undefined,
+                              to: year ? new Date(new Date(year.startDate).getTime() - 24 * 60 * 60 * 1000) : undefined,
+                            },
+                            {
+                              from: year ? new Date(new Date(year.endDate).getTime() + 24 * 60 * 60 * 1000) : undefined,
+                              to: year ? new Date(new Date(year.endDate).getTime() + 10 * 365 * 24 * 60 * 60 * 1000) : undefined
+                            },
+                            ...periods.map((period) => ({
+                              from: startOfDay(period.startAt),
+                              to: startOfDay(period.endAt),
+                            }))]}
+                            defaultMonth={field.value.from || (year !== undefined ? (new Date() > new Date(year?.endDate) ? new Date(year.endDate) : new Date()) : new Date())}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* isCumulative Switch Field */}
+            <FormField
+              control={form.control}
+              name="isCumulative"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <div className="flex flex-row gap-4 items-center">
+                    <FormLabel>{t("isCumulative")}</FormLabel>
+                    <FormControl>
+                      <Switch
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </div>
+                  <FormDescription>{t("isCumulativeDescription")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Submit Button */}
+            <Button className="w-full" type="submit" disabled={isPending}>
+              {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
+              {t("submit")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

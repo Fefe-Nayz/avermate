@@ -9,16 +9,17 @@ import {
   CredenzaTitle,
   CredenzaTrigger,
 } from "@/components/ui/credenza";
-import { apiClient } from "@/lib/api";
-import { Period } from "@/types/period";
 import { PencilIcon } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { UpdatePeriodForm } from "../forms/update-period-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { usePeriods } from "@/hooks/use-periods";
 import { z } from "zod";
+import { usePeriod } from "@/hooks/use-period";
+import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
+import { DropDrawerItem } from "../ui/dropdrawer";
 
 /** Match the shape from your UpdatePeriodForm. */
 const updatePeriodSchema = z.object({
@@ -39,13 +40,7 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
     data: period,
     isPending,
     isError,
-  } = useQuery({
-    queryKey: ["periods", periodId],
-    queryFn: async () => {
-      const res = await apiClient.get(`periods/${periodId}`);
-      return await res.json<Period>();
-    },
-  });
+  } = usePeriod(periodId);
 
   const {
     data: periods,
@@ -74,30 +69,32 @@ export default function UpdatePeriodCredenza({ periodId }: { periodId: string })
   return (
     <Credenza open={open} onOpenChange={setOpen}>
       <CredenzaTrigger asChild>
-        <Button variant="ghost">
-          <PencilIcon className="size-4 mr-2" />
-          {t("editPeriod")}
-        </Button>
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+          <div className="flex items-center w-full">
+            <PencilIcon className="size-4 mr-2" />
+            {t("editPeriod")}
+          </div>
+        </DropDrawerItem>
       </CredenzaTrigger>
 
-      <CredenzaContent>
+      <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBody className="px-4 py-6 max-h-[100%] overflow-auto">
+        <CredenzaBodyWrapper>
           {!isPending && !isError && !isPeriodsPending && !isPeriodsError && formData && (
             <UpdatePeriodForm
-              periodId={period.id}
+              periodId={period?.id || ""}
               periods={periods}
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdatePeriodSchema>>}
-              yearId={period.yearId}
+              yearId={period?.yearId || ""}
             />
           )}
-        </CredenzaBody>
-      </CredenzaContent>
+        </CredenzaBodyWrapper>
+      </CredenzaContentWrapper>
     </Credenza>
   );
 }

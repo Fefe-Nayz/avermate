@@ -48,7 +48,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useMediaQuery } from "@/components/ui/use-media-query";
 import { useSubjects } from "@/hooks/use-subjects";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 
 import { handleError } from "@/utils/error-utils";
@@ -56,6 +56,8 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useTranslations } from "next-intl";
 import { isEqual } from "lodash";
 import { Average } from "@/types/average";
+import { ScrollArea } from "../ui/scroll-area";
+import FormContentWrapper from "./form-content-wrapper";
 
 /**
  * Reuse your 'updateCustomAverageSchema' or define it similarly.
@@ -91,12 +93,13 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateAverage");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // Prepare our local form using parent's data
-  const form = useForm<UpdateCustomAverageSchema>({
+  const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(updateCustomAverageSchema),
     defaultValues: formData,
   });
@@ -139,8 +142,7 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
       return res.json();
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -154,17 +156,15 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
       });
     },
     onError: (error: any) => {
-      handleError(error, toaster, errorTranslations, t("updateError"));
+      handleError(error, errorTranslations, t("updateError"));
     },
   });
 
   const onSubmit = (vals: UpdateCustomAverageSchema) => {
     const filtered = vals.subjects.filter((s) => s.id !== "");
     if (!filtered.length) {
-      toaster.toast({
-        title: t("errorTitle"),
+      toast.error(t("errorTitle"), {
         description: t("selectAtLeastOneSubject"),
-        variant: "destructive",
       });
       return;
     }
@@ -226,7 +226,7 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
                       </Button>
                     </PopoverTrigger>
                   </FormControl>
-                  <PopoverContent className="p-0 min-w-[var(--radix-popover-trigger-width)]">
+                  <PopoverContent className="p-0 min-w-(--radix-popover-trigger-width)">
                     <Command>
                       <CommandInput
                         placeholder={t("searchSubject")}
@@ -400,80 +400,84 @@ export const UpdateCustomAverageForm: React.FC<UpdateCustomAverageFormProps> = (
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
-          {/* Name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="mx-1">
-                <FormLabel>{t("averageName")}</FormLabel>
-                <FormControl>
-                  <Input
-                    type="text"
-                    placeholder={t("averageNamePlaceholder")}
-                    {...field}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* isMainAverage Switch */}
-          <FormField
-            control={form.control}
-            name="isMainAverage"
-            render={({ field }) => (
-              <FormItem className="mx-1 flex flex-row items-center gap-4">
-                <FormLabel>{t("displayOnMainPage")}</FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value ?? false}
-                    onCheckedChange={field.onChange}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Subjects */}
-          <div className="flex flex-col gap-4 mx-1">
-            <FormLabel>{t("subjects")}</FormLabel>
-            <div className="flex flex-col gap-4">
-              {fields.map((fieldItem, index) =>
-                renderSubjectField(index, fieldItem)
+          <FormContentWrapper>
+            {/* Name */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem className="mx-1">
+                  <FormLabel>{t("averageName")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder={t("averageNamePlaceholder")}
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                append({
-                  id: "",
-                  customCoefficient: null,
-                  includeChildren: false,
-                })
-              }
-              disabled={isSubmitting}
-              className="mt-2 flex items-center gap-2"
-            >
-              <PlusCircle className="h-4 w-4" />
-              {t("addSubject")}
-            </Button>
-          </div>
+            />
 
-          {/* Submit */}
-          <Button className="w-full" type="submit" disabled={isSubmitting}>
-            {isSubmitting && (
-              <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
-            )}
-            {t("updateAverage")}
-          </Button>
+            {/* isMainAverage Switch */}
+            <FormField
+              control={form.control}
+              name="isMainAverage"
+              render={({ field }) => (
+                <FormItem className="mx-1 flex flex-row items-center gap-4">
+                  <FormLabel>{t("displayOnMainPage")}</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Subjects */}
+            <div className="flex flex-col gap-4 mx-1">
+              <FormLabel>{t("subjects")}</FormLabel>
+              <div>
+                <div className="flex flex-col gap-4">
+                  {fields.map((fieldItem, index) =>
+                    renderSubjectField(index, fieldItem)
+                  )}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  append({
+                    id: "",
+                    customCoefficient: null,
+                    includeChildren: false,
+                  })
+                }
+                disabled={isSubmitting}
+                className="mt-2 flex items-center gap-2"
+              >
+                <PlusCircle className="h-4 w-4" />
+                {t("addSubject")}
+              </Button>
+            </div>
+
+            {/* Submit */}
+            <Button className="w-full" type="submit" disabled={isSubmitting}>
+              {isSubmitting && (
+                <Loader2Icon className="animate-spin mr-2 h-4 w-4" />
+              )}
+              {t("updateAverage")}
+            </Button>
+          </FormContentWrapper>
         </form>
       </Form>
     </div>

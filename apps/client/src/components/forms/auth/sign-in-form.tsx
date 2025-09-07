@@ -11,7 +11,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
@@ -29,7 +29,6 @@ export const SignInForm = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 
   const router = useRouter();
-  const toaster = useToast();
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.SignIn");
 
@@ -67,8 +66,7 @@ export const SignInForm = () => {
           email: data.user.email,
         });
 
-        toaster.toast({
-          title: t("emailNotVerified"),
+        toast.error(t("emailNotVerified"), {
           description: t("verificationLinkSent", { email: data.user.email }),
         });
 
@@ -81,8 +79,7 @@ export const SignInForm = () => {
       router.push("/dashboard");
 
       // Notification toast
-      toaster.toast({
-        title: t("welcomeBack", { name: data.user.name }),
+      toast.success(t("welcomeBack", { name: data.user.name }), {
         description: t("hopeYouAchievedGoals"),
       });
     },
@@ -92,20 +89,20 @@ export const SignInForm = () => {
         const status = err.status;
 
         if (status === 401) {
-          toaster.toast({
-            title: t("error"),
+          toast.error(t("error"), {
             description: t("incorrectEmailOrPassword"),
-            variant: "destructive",
           });
           return;
         }
       }
 
-      handleError(err, toaster, errorTranslations, t("signInError"));
+      handleError(err, errorTranslations, t("signInError"));
     },
   });
 
   const form = useForm<SignInSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(signInSchema),
     defaultValues: {
       password: "",
@@ -160,13 +157,13 @@ export const SignInForm = () => {
                         <Input
                           id="password"
                           className="pe-9"
-                          placeholder="********"
+                          placeholder="Password"
                           type={isVisible ? "text" : "password"}
                           {...field}
                         />
 
                         <button
-                          className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+                          className="absolute inset-y-0 end-0 flex h-full w-9 items-center justify-center rounded-e-lg text-muted-foreground/80 outline-offset-2 transition-colors hover:text-foreground focus:z-10 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring/70 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
                           type="button"
                           onClick={toggleVisibility}
                           aria-label={

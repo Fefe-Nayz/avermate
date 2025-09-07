@@ -1,48 +1,41 @@
 "use client";
 
 import { LandingSection } from "./landing-section";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api";
-import { GetSocialResponse } from "@/types/get-social-response";
 import { Skeleton } from "../ui/skeleton";
 import NumberTicker from "../ui/number-ticker";
 import { useTranslations } from "next-intl";
+import { useLandingStats } from "@/hooks/use-landing-stats";
 
 export const SocialProof = () => {
-  const { data, isError, isPending } = useQuery({
-    queryKey: ["landing"],
-    queryFn: async () => {
-      const res = await apiClient.get("landing");
-      const data = await res.json<GetSocialResponse>();
-      return data;
-    },
-  });
+  const { data, isError, isPending } = useLandingStats();
 
   const t = useTranslations("Landing.SocialProof");
 
   if (isError) {
     return (
-      <LandingSection className="!px-0 !py-0">
-        <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
-          <div className="flex flex-col items-center px-1">
-            <p className="font-extrabold text-lg md:text-2xl">0</p>
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("users")}
-            </p>
-          </div>
+      <LandingSection className="px-0! py-0!">
+        <div className="dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
+          <div className="grid grid-cols-3 max-w-screen-3xl mx-auto">
+            <div className="flex flex-col items-center px-1">
+              <p className="font-extrabold text-lg md:text-2xl">0</p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("users")}
+              </p>
+            </div>
 
-          <div className="flex flex-col items-center px-2">
-            <p className="font-extrabold text-lg md:text-2xl">0</p>
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("grades")}
-            </p>
-          </div>
+            <div className="flex flex-col items-center px-2">
+              <p className="font-extrabold text-lg md:text-2xl">0</p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("grades")}
+              </p>
+            </div>
 
-          <div className="flex flex-col items-center px-1">
-            <p className="font-extrabold text-lg md:text-2xl">0</p>
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("subjects")}
-            </p>
+            <div className="flex flex-col items-center px-1">
+              <p className="font-extrabold text-lg md:text-2xl">0</p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("subjects")}
+              </p>
+            </div>
           </div>
         </div>
       </LandingSection>
@@ -51,27 +44,35 @@ export const SocialProof = () => {
 
   if (isPending) {
     return (
-      <LandingSection className="!px-0 !py-0">
-        <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
-          <div className="flex flex-col items-center px-1">
-              <Skeleton className="w-12 h-7 md:h-8" />
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("users")}
-            </p>
-          </div>
+      <LandingSection className="px-0! py-0!">
+        <div className="dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
+          <div className="grid grid-cols-3 max-w-screen-3xl mx-auto">
+            <div className="flex flex-col items-center px-1">
+              <p className="font-extrabold text-lg md:text-2xl">
+                <NumberTicker value={0} decimalPlaces={0} duration={5} />
+              </p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("users")}
+              </p>
+            </div>
 
-          <div className="flex flex-col items-center px-2">
-              <Skeleton className="w-12 h-7 md:h-8" />
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("grades")}
-            </p>
-          </div>
+            <div className="flex flex-col items-center px-2">
+              <p className="font-extrabold text-lg md:text-2xl">
+                <NumberTicker value={0} decimalPlaces={0} duration={5} />
+              </p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("grades")}
+              </p>
+            </div>
 
-          <div className="flex flex-col items-center px-1">
-              <Skeleton className="w-12 h-7 md:h-8" />
-            <p className="text-center text-sm md:text-base text-muted-foreground">
-              {t("subjects")}
-            </p>
+            <div className="flex flex-col items-center px-1">
+              <p className="font-extrabold text-lg md:text-2xl">
+                <NumberTicker value={0} decimalPlaces={0} duration={5} />
+              </p>
+              <p className="text-center text-sm md:text-base text-muted-foreground">
+                {t("subjects")}
+              </p>
+            </div>
           </div>
         </div>
       </LandingSection>
@@ -79,33 +80,35 @@ export const SocialProof = () => {
   }
 
   return (
-    <LandingSection className="!px-0 !py-0">
-      <div className="grid dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y divide-x backdrop-blur-2xl">
-        <div className="flex flex-col items-center px-1">
-          <p className="font-extrabold text-lg md:text-2xl">
-            <NumberTicker value={data?.userCount || 0} decimalPlaces={0} duration={5} />
-          </p>
-          <p className="text-center text-sm md:text-base text-muted-foreground">
-            {t("users")}
-          </p>
-        </div>
+    <LandingSection className="px-0! py-0!">
+      <div className="dark:bg-zinc-950 grid-cols-3 w-full px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-8 border-y backdrop-blur-2xl">
+        <div className="grid grid-cols-3 max-w-screen-3xl mx-auto divide-x">
+          <div className="flex flex-col items-center px-1">
+            <p className="font-extrabold text-lg md:text-2xl">
+              <NumberTicker value={data?.userCount || 0} decimalPlaces={0} duration={5} triggerOnView={true} />
+            </p>
+            <p className="text-center text-sm md:text-base text-muted-foreground">
+              {t("users")}
+            </p>
+          </div>
 
-        <div className="flex flex-col items-center px-2">
-          <p className="font-extrabold text-lg md:text-2xl">
-            <NumberTicker value={data?.gradeCount || 0} decimalPlaces={0} duration={5} />
-          </p>
-          <p className="text-center text-sm md:text-base text-muted-foreground">
-            {t("grades")}
-          </p>
-        </div>
+          <div className="flex flex-col items-center px-2">
+            <p className="font-extrabold text-lg md:text-2xl">
+              <NumberTicker value={data?.gradeCount || 0} decimalPlaces={0} duration={5} triggerOnView={true} />
+            </p>
+            <p className="text-center text-sm md:text-base text-muted-foreground">
+              {t("grades")}
+            </p>
+          </div>
 
-        <div className="flex flex-col items-center px-1">
-          <p className="font-extrabold text-lg md:text-2xl">
-            <NumberTicker value={data?.subjectCount || 0} decimalPlaces={0} duration={5} />
-          </p>
-          <p className="text-center text-sm md:text-base text-muted-foreground">
-            {t("subjects")}
-          </p>
+          <div className="flex flex-col items-center px-1">
+            <p className="font-extrabold text-lg md:text-2xl">
+              <NumberTicker value={data?.subjectCount || 0} decimalPlaces={0} duration={5} triggerOnView={true} />
+            </p>
+            <p className="text-center text-sm md:text-base text-muted-foreground">
+              {t("subjects")}
+            </p>
+          </div>
         </div>
       </div>
     </LandingSection>

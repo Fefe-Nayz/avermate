@@ -16,7 +16,7 @@ import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
-import {useTranslations} from "next-intl";
+import { useTranslations } from "next-intl";
 
 export default function YearWorkspaceSelect() {
     const id = useId();
@@ -33,17 +33,17 @@ export default function YearWorkspaceSelect() {
     }, [activeId]);
 
     if (isPending || !activeId || !years) {
-        return <Skeleton className="w-[200px] h-[56px] rounded-md" />;
+        return <Skeleton className="w-[200px] h-9 rounded-md" />;
     }
 
     if (years.length === 0) {
-        return <div className="h-[56px]"></div>;
+        return <div className="h-9"></div>;
     }
 
     return (
-        <div className="*:not-first:mt-2">
+        <div>
             <Select defaultValue={activeId} value={activeId} onValueChange={(id) => {
-                if (id === "new") return router.push("/onboarding");
+                if (id === "new") return router.push("/onboarding?canBack=true");
                 if (id !== activeId) {
                     select(id);
 
@@ -59,9 +59,11 @@ export default function YearWorkspaceSelect() {
             }}>
                 <SelectTrigger
                     id={id}
-                    className="h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2 [&>span_img]:shrink-0"
+                    className="h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2"
                 >
-                    <SelectValue placeholder={"YEAR_SELECT_PLACEHOLDER"} />
+                    <SelectValue placeholder={"YEAR_SELECT_PLACEHOLDER"}>
+                        {years.find(year => year.id === activeId)?.name}
+                    </SelectValue>
                 </SelectTrigger>
 
                 <SelectContent className="[&_*[role=option]]:ps-2 [&_*[role=option]]:pe-8 [&_*[role=option]>span]:start-auto [&_*[role=option]>span]:end-2">
@@ -80,8 +82,8 @@ export default function YearWorkspaceSelect() {
                     ))}
 
                     <SelectItem value="new">
-                        <div className="flex items-center text-blue-500">
-                            <PlusIcon className="size-4 mr-2" />
+                        <div className="flex items-center text-blue-600">
+                            <PlusIcon className="size-4 mr-2 text-blue-600" />
                             <span className="block font-medium">{t("CREATE_YEAR_BUTTON_LABEL")}</span>
                         </div>
                     </SelectItem>

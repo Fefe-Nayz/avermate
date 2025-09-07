@@ -102,6 +102,7 @@
       "transformEfforts": "Transform your efforts into success"
     },
     "FAQ": {
+      "title": "Frequently Asked Questions",
       "question1": "How are my data stored?",
       "answer1": "Your data is securely stored in our database.",
       "question2": "Who else can see my grades?",
@@ -340,7 +341,14 @@
         "uploadingMessage": "Please wait a few moments.",
         "cropAvatar": "Crop your avatar",
         "cancel": "Cancel",
-        "save": "Save"
+        "save": "Save",
+        "deleteAvatar": "Delete Avatar",
+        "deleteAvatarConfirm": "Are you sure you want to delete your avatar?",
+        "deleteAvatarDescription": "This action cannot be undone. Your avatar will be permanently removed.",
+        "deletingAvatar": "Deleting avatar...",
+        "deleteSuccessTitle": "Avatar Deleted",
+        "deleteSuccessMessage": "Your avatar has been deleted successfully.",
+        "deleteErrorMessage": "An error occurred while deleting the avatar."
       }
     },
     "Account": {
@@ -349,7 +357,7 @@
         "description": "Manage and monitor all your active sessions.",
         "revoke": "Revoke",
         "current": "Current",
-        "expired": "Expired",
+        "expired": "Expirée",
         "active": "Active",
         "successTitle": "Session Revoked",
         "successMessage": "The session has been successfully revoked!",
@@ -358,7 +366,13 @@
         "titleDialog": "Revoke Session",
         "descriptionDialog": "The user will be prompted to re-authenticate.",
         "cancel": "Cancel",
-        "revokeSession": "Revoke Session"
+        "revokeSession": "Revoke Session",
+        "signoutDialog": "Sign Out",
+        "signoutSession": "Sign out",
+        "signoutTitleDialog": "Sign out",
+        "signoutDescriptionDialog": "You are going to be disconnected now",
+        "currentSession": "Current Session",
+        "expire": "Expire"
       },
       "LinkedAccounts": {
         "title": "Linked Accounts",
@@ -366,7 +380,38 @@
         "linkWithOtherServices": "Link with other services",
         "linkingWith": "Linking with {label}...",
         "link": "Link {label}",
-        "linkWithPassword": "Link with Password"
+        "linkWithPassword": "Link with Password",
+        "password": "Password",
+        "resetPassword": "Reset",
+        "setPassword": "Set password",
+        "sending": "Sending...",
+        "unlink": "Unlink",
+        "unlinking": "Unlinking…",
+        "linkFailed": "Link failed",
+        "linkFailedDescription": "Could not link the account.",
+        "unlinked": "Unlinked",
+        "unlinkSuccess": "{provider} disconnected.",
+        "unlinkFailed": "Unlink failed",
+        "unlinkFailedDescription": "Unable to unlink. You may need at least one sign-in method or enable allowUnlinkingAll.",
+        "resetEmailSent": "Reset email sent",
+        "resetEmailSentDescription": "Check your email for password reset instructions.",
+        "resetEmailFailed": "Failed to send reset email",
+        "resetEmailFailedDescription": "Could not send password reset email.",
+        "currentPassword": "Current password",
+        "newPassword": "New password",
+        "confirmPassword": "Confirm new password",
+        "missingFields": "Missing fields",
+        "missingFieldsDescription": "Please fill all fields.",
+        "passwordsDoNotMatch": "Passwords do not match",
+        "passwordsDoNotMatchDescription": "Make sure both passwords are identical.",
+        "passwordTooWeakDescription": "Please choose a stronger password.",
+        "passwordUpdated": "Password updated",
+        "passwordUpdatedDescription": "You'll need to sign in again on other devices.",
+        "updateFailed": "Update failed",
+        "updateFailedDescription": "Could not change the password.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving…"
       },
       "DeleteAccount": {
         "title": "Delete Account",
@@ -383,7 +428,7 @@
     },
     "Settings": {
       "Theme": {
-        "title": "Appearance",
+        "title": "Theme",
         "description": "Customize the theme that will be used.",
         "themeLabel": "Theme",
         "selectPlaceholder": "Select a theme",
@@ -660,6 +705,7 @@
         "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Select the start and end date.",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Default grading scale",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION": "Your averages will be calculated using this reference scale.",
         "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Create new year",
         "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Please enter a name.",
         "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "The name cannot exceed 32 characters.",
@@ -670,6 +716,35 @@
         "CREATE_YEAR_FORM_OUT_OF_MAX_ERROR": "The default grading scale cannot exceed 1000.",
         "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Year created successfully!",
         "CREATE_YEAR_FORM_SUCCESS_DESC": "Your new year has been created."
+      },
+      "UPDATE_YEAR_NAME_FORM": {
+        "FIELD_PLACEHOLDER": "Year 2024-2025",
+        "SUBMIT_BUTTON_LABEL": "Save",
+        "NAME_MIN_LENGTH_ERROR": "Please enter a name.",
+        "NAME_MAX_LENGTH_ERROR": "The name cannot exceed 32 characters.",
+        "TOAST_SUCCESS_TITLE": "Year updated",
+        "TOAST_SUCCESS_DESC": "The year name has been successfully updated."
+      },
+      "UPDATE_YEAR_DEFAULT_OUT_OF_FORM": {
+        "FIELD_PLACEHOLDER": "100",
+        "SUBMIT_BUTTON_LABEL": "Save",
+        "DEFAULT_OUT_OF_MIN_ERROR": "The grading scale must be greater than or equal to 1.",
+        "DEFAULT_OUT_OF_MAX_ERROR": "The grading scale must be less than or equal to 1000.",
+        "TOAST_SUCCESS_TITLE": "Year updated",
+        "TOAST_SUCCESS_DESC": "The year's default grading scale has been successfully updated."
+      },
+      "UPDATE_YEAR_DATE_RANGE_FORM": {
+        "FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "START_AFTER_END_ERROR": "La date de début doit être avant la date de fin.",
+        "FIELD_YEAR_END_BEFORE_PERIOD_END_ERROR": "La date de fin de l'année doit être après la fin de toutes les périodes.",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_DESCRIPTION": "Veuillez ajuster la date de fin de l'année.",
+        "FIELD_YEAR_START_AFTER_PERIOD_START_ERROR": "La date de début de l'année doit être avant la début de toutes les périodes.",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION": "Veuillez ajuster la date de début de l'année.",
+        "TOAST_SUCCESS_TITLE": "Année mise à jour",
+        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès."
       },
       "AddAverage": {
         "errorCreating": "Error creating custom average.",
@@ -954,6 +1029,14 @@
           "DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION": "Associated grades and subjects have been deleted.",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE": "Error deleting year",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION": "An error occurred while deleting the year. Please try again."
+        },
+        "UPDATE_YEAR_SECTION": {
+          "UPDATE_YEAR_NAME_SECTION_TITLE": "Year Name",
+          "UPDATE_YEAR_NAME_SECTION_DESCRIPTION": "Edit the name of the year.",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_TITLE": "Default Grading Scale",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_DESCRIPTION": "Edit the default grading scale for this year. Your averages will be calculated using this reference scale.",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_TITLE": "Year Duration",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_DESCRIPTION": "Edit the start and end date of the year."
         }
       },
       "OverviewPage": {

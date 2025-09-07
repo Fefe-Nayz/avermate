@@ -1,9 +1,8 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Session } from "better-auth/types";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -24,19 +23,18 @@ import { useTranslations } from "next-intl";
 export default function RevokeSessionButton({
   sessionId,
   sessionToken,
+  isCurrent = false,
 }: {
   sessionId: string;
   sessionToken: string;
+  isCurrent?: boolean;
 }) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Account.SessionList");
 
-  const toaster = useToast();
   const router = useRouter();
 
-  const { data: currentSession } = authClient.useSession() as unknown as {
-    data: { session: Session };
-  };
+  const { data: currentSession } = authClient.useSession();
 
   const queryClient = useQueryClient();
 
@@ -50,8 +48,7 @@ export default function RevokeSessionButton({
     },
     onSuccess: () => {
       // Send a notification toast
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage"),
       });
 
@@ -60,7 +57,7 @@ export default function RevokeSessionButton({
       }
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions-list"] });
@@ -74,14 +71,18 @@ export default function RevokeSessionButton({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive">{t("revokeDialog")}</Button>
+        {isCurrent ? (
+          <Button variant="outline">{t("signoutDialog")}</Button>
+        ) : (
+          <Button variant="outline">{t("revokeDialog")}</Button>
+        )}
       </AlertDialogTrigger>
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("titleDialog")}</AlertDialogTitle>
+          <AlertDialogTitle>{isCurrent ? t("signoutTitleDialog") : t("titleDialog")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("descriptionDialog")}
+            {isCurrent ? t("signoutDescriptionDialog") : t("descriptionDialog")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -94,7 +95,7 @@ export default function RevokeSessionButton({
               onClick={() => handleRevokeSession()}
             >
               {isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
-              {t("revokeSession")}
+              {isCurrent ? t("signoutSession") : t("revokeSession")}
             </AlertDialogAction>
           </Button>
         </AlertDialogFooter>

@@ -11,13 +11,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
-import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Average } from "@/types/average";
-import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average } from "@/utils/average";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
@@ -31,6 +28,7 @@ import {
   addGeneralAverageToSubjects,
   buildGeneralAverageSubject,
 } from "@/utils/average";
+import { usePeriod } from "@/hooks/use-period";
 
 export default function GradesTable({
   subjects,
@@ -48,17 +46,7 @@ export default function GradesTable({
     data: period,
     isError: isPeriodError,
     isPending: isPeriodPending,
-  } = useQuery({
-    queryKey: ["periods", periodId],
-    queryFn: async () => {
-      if (periodId === "full-year") {
-        return null;
-      }
-      const res = await apiClient.get(`periods/${periodId}`);
-      const data = await res.json<Period>();
-      return data;
-    },
-  });
+  } = usePeriod(periodId);
 
   useEffect(() => {
     if (window.location.hash) {
@@ -117,7 +105,7 @@ export default function GradesTable({
       <TableFooter>
         {/* Main Average */}
         <TableRow className="hidden md:table-row" id="general-average">
-          <TableCell className="font-semibold" colSpan={2}>
+          <TableCell className="font-semibold p-4" colSpan={2}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
               className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
@@ -138,7 +126,7 @@ export default function GradesTable({
           </TableCell>
         </TableRow>
         <TableRow className="md:hidden" id="general-average-mobile">
-          <TableCell className="font-semibold text-center" colSpan={3}>
+          <TableCell className="font-semibold text-center p-4" colSpan={3}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
               className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
@@ -152,7 +140,7 @@ export default function GradesTable({
               }}
             >
               {t("overallAverage")}</Link>: {overallAverage}
-            
+
           </TableCell>
         </TableRow>
 
@@ -160,21 +148,21 @@ export default function GradesTable({
         {customAverages && customAverages.length > 0 && (
           <>
             {customAverages.map((ca) => {
-                const subjectsToGive = () => {
-                  const customAverageId = ca.id;
-                  const customAverage = customAverageId
-                    ? customAverages?.find((ca) => ca.id === customAverageId)
-                    : undefined;
-              
+              const subjectsToGive = () => {
+                const customAverageId = ca.id;
+                const customAverage = customAverageId
+                  ? customAverages?.find((ca) => ca.id === customAverageId)
+                  : undefined;
 
-                      return addGeneralAverageToSubjects(subjects, customAverage);
-                  }
-                    const subjectVirtual = () => {
-                      return (
-                        subjectsToGive().find((s) => s.id === ca.id) ||
-                        buildGeneralAverageSubject()
-                      );
-                    };
+
+                return addGeneralAverageToSubjects(subjects, customAverage);
+              }
+              const subjectVirtual = () => {
+                return (
+                  subjectsToGive().find((s) => s.id === ca.id) ||
+                  buildGeneralAverageSubject()
+                );
+              };
               const customAvgVal = (average(subjectVirtual()?.id, subjectsToGive()));
               const customAvg =
                 customAvgVal !== null ? customAvgVal.toFixed(2) : "—";
@@ -182,7 +170,7 @@ export default function GradesTable({
               return (
                 <React.Fragment key={ca.id}>
                   <TableRow className="hidden md:table-row" id={ca.id}>
-                    <TableCell className="font-semibold" colSpan={2}>
+                    <TableCell className="font-semibold p-4" colSpan={2}>
                       <Link
                         href={`/dashboard/subjects/${ca.id}/${periodId}`}
                         onClick={() => {
@@ -204,7 +192,7 @@ export default function GradesTable({
                   </TableRow>
                   <TableRow className="md:hidden" id={`${ca.id}-mobile`}>
                     <TableCell
-                      className="font-semibold text-center"
+                      className="font-semibold text-center p-4"
                       colSpan={3}
                     >
                       <Link
@@ -305,7 +293,8 @@ function renderSubjects(
               style={getIndentationLinesStyle(subject.depth)}
               className={cn(
                 "font-medium relative",
-                getPaddingClass(subject.depth)
+                getPaddingClass(subject.depth),
+                "py-4"
               )}
             >
               <Link

@@ -25,9 +25,9 @@ const PrivacyPolicy = () => {
       <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
         {t("title")}
       </h1>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("lastUpdated")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("intro.p1")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("intro.p2")}</p>
+      <p className="leading-7 not-first:mt-6">{t("lastUpdated")}</p>
+      <p className="leading-7 not-first:mt-6">{t("intro.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("intro.p2")}</p>
 
       <h2 className="mt-10 scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
         {t("interpretationDefinitions.title")}
@@ -35,13 +35,13 @@ const PrivacyPolicy = () => {
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("interpretationDefinitions.interpretationTitle")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("interpretationDefinitions.interpretationText")}
       </p>
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("interpretationDefinitions.definitionsTitle")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("interpretationDefinitions.definitionsIntro")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">
@@ -133,7 +133,7 @@ const PrivacyPolicy = () => {
       <h4 className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight">
         {t("collectingUsingData.personalDataTitle")}
       </h4>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("collectingUsingData.personalDataP1")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">
@@ -151,23 +151,23 @@ const PrivacyPolicy = () => {
       <h4 className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight">
         {t("collectingUsingData.usageDataTitle")}
       </h4>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("collectingUsingData.usageDataP1")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("collectingUsingData.usageDataP2")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("collectingUsingData.usageDataP3")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("collectingUsingData.usageDataP4")}
       </p>
 
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("useOfPersonalData.title")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("useOfPersonalData.p1")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">
@@ -228,7 +228,7 @@ const PrivacyPolicy = () => {
           </p>
         </li>
       </ul>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("useOfPersonalData.p2")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">
@@ -267,33 +267,33 @@ const PrivacyPolicy = () => {
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("retention.title")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("retention.p1")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("retention.p2")}
       </p>
 
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("transfer.title")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("transfer.p1")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("transfer.p2")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("transfer.p3")}</p>
+      <p className="leading-7 not-first:mt-6">{t("transfer.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("transfer.p2")}</p>
+      <p className="leading-7 not-first:mt-6">{t("transfer.p3")}</p>
 
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("deleteData.title")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("deleteData.p1")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("deleteData.p2")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("deleteData.p3")}
       </p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("deleteData.p4")}
       </p>
 
@@ -303,21 +303,21 @@ const PrivacyPolicy = () => {
       <h4 className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight">
         {t("disclosure.businessTitle")}
       </h4>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("disclosure.businessText")}
       </p>
 
       <h4 className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight">
         {t("disclosure.lawTitle")}
       </h4>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("disclosure.lawText")}
       </p>
 
       <h4 className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight">
         {t("disclosure.otherTitle")}
       </h4>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("disclosure.otherText")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">
@@ -331,31 +331,31 @@ const PrivacyPolicy = () => {
       <h3 className="mt-8 scroll-m-20 text-2xl font-semibold tracking-tight">
         {t("security.title")}
       </h3>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("security.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("security.p1")}</p>
 
       <h2 className="mt-10 scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
         {t("children.title")}
       </h2>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("children.p1")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("children.p2")}</p>
+      <p className="leading-7 not-first:mt-6">{t("children.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("children.p2")}</p>
 
       <h2 className="mt-10 scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
         {t("links.title")}
       </h2>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("links.p1")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("links.p2")}</p>
+      <p className="leading-7 not-first:mt-6">{t("links.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("links.p2")}</p>
 
       <h2 className="mt-10 scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
         {t("changes.title")}
       </h2>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("changes.p1")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("changes.p2")}</p>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">{t("changes.p3")}</p>
+      <p className="leading-7 not-first:mt-6">{t("changes.p1")}</p>
+      <p className="leading-7 not-first:mt-6">{t("changes.p2")}</p>
+      <p className="leading-7 not-first:mt-6">{t("changes.p3")}</p>
 
       <h2 className="mt-10 scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
         {t("contactUs.title")}
       </h2>
-      <p className="leading-7 [&:not(:first-child)]:mt-6">
+      <p className="leading-7 not-first:mt-6">
         {t("contactUs.text")}
       </p>
       <ul className="my-6 ml-6 list-disc [&>li]:mt-2">

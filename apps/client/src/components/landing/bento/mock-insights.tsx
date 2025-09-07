@@ -1,4 +1,6 @@
-import { DifferenceBadge } from "@/app/dashboard/grades/[gradeId]/difference-badge";
+"use client";
+
+import { DifferenceBadge } from "@/app/dashboard/(details)/grades/[gradeId]/difference-badge";
 import DataCard from "@/components/dashboard/data-card";
 import GradeValue from "@/components/dashboard/grade-value";
 import {
@@ -19,7 +21,7 @@ export const MockInsights = () => {
         description={t("obtainedGradeDescription")}
         icon={SparklesIcon}
       >
-        <GradeValue outOf={2000} value={1650} />
+        <GradeValue outOf={2000} value={1650} triggerOnView={true} />
       </DataCard>
 
       <DataCard
@@ -27,7 +29,7 @@ export const MockInsights = () => {
         description={t("impactOnOverallAverageDescription")}
         icon={ArrowUpCircleIcon}
       >
-        <DifferenceBadge diff={0.358} />
+        <DifferenceBadge diff={0.358} triggerOnView={true} />
       </DataCard>
 
       <DataCard
@@ -36,7 +38,7 @@ export const MockInsights = () => {
         description={t("impactOnMathAverageDescription")}
         icon={ArrowUpCircleIcon}
       >
-        <DifferenceBadge diff={2.387} />
+        <DifferenceBadge diff={2.387} triggerOnView={true} />
       </DataCard>
 
       <DataCard

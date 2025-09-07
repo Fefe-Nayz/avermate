@@ -4,7 +4,8 @@ import "./globals.css";
 
 import { AprilFools } from "@/components/april-fools";
 import { ThemeColorMetaTag } from "@/components/color";
-import { Toaster } from "@/components/ui/toaster";
+// import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils";
 import ThemeProvider from "@/providers/theme-provider";
 import { Viewport } from "next";
@@ -51,16 +52,16 @@ export default async function RootLayout({
           data-website-id="0911750a-9051-4ad2-9296-95acd91b78a4"
         /> */}
       </head>
-      <body className={cn("", gabarito.className)}>
+      <body className={cn("", gabarito.className)} >
         <QueryProvider>
           <ThemeProvider>
             <ThemeColorMetaTag />
             <NextIntlClientProvider locale={locale} messages={messages}>
               <AprilFools />
-              <div data-vaul-drawer-wrapper="" className="bg-background">
+              <div data-vaul-drawer-wrapper="" className="bg-background scrollbar-hide" >
                 {children}
               </div>
-              <Toaster />
+              <Toaster richColors/>
             </NextIntlClientProvider>
           </ThemeProvider>
         </QueryProvider>

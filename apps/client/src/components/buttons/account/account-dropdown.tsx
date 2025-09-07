@@ -1,15 +1,6 @@
 "use client";
-
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import {
   Cog6ToothIcon,
@@ -17,7 +8,6 @@ import {
   ShieldCheckIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
-import { Session, User } from "better-auth/types";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -25,21 +15,18 @@ import { LuGithub } from "react-icons/lu";
 import SignOutButton from "../sign-out-button";
 import ThemeSwitchButton from "../theme-switch-button";
 import Avatar from "./avatar";
-import { MessageSquareIcon } from "lucide-react";
+import { MessageSquareIcon, MessagesSquareIcon, Moon, Sun } from "lucide-react";
 import FeedbackDialog from "@/components/dialogs/feedback-dialog";
 import { useTranslations } from "next-intl";
 import EarlyBirdBadge from "./early-bird-badge";
+import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerLabel, DropDrawerSeparator, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 
 export default function AccountDropdown() {
-  const toaster = useToast();
   const t = useTranslations("Header.Dropdown");
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data, isPending } = authClient.useSession() as unknown as {
-    data: { user: User; session: Session };
-    isPending: boolean;
-  };
+  const { data, isPending } = authClient.useSession();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -53,8 +40,7 @@ export default function AccountDropdown() {
     if (!data && !localStorage.getItem("isSigningOut")) {
       router.push("/auth/sign-in");
 
-      toaster.toast({
-        title: t("notLoggedInTitle"),
+      toast.error(t("notLoggedInTitle"), {
         description: t("notLoggedInDescription"),
       });
 
@@ -64,6 +50,8 @@ export default function AccountDropdown() {
       return;
     }
 
+    if (!data) return;
+
     // Not verified
     if (!data.user.emailVerified) {
       // Send a verification link
@@ -71,8 +59,7 @@ export default function AccountDropdown() {
         email: data.user.email,
       });
 
-      toaster.toast({
-        title: t("emailNotVerifiedTitle"),
+      toast.error(t("emailNotVerifiedTitle"), {
         description: t("emailNotVerifiedDescription", {
           email: data.user.email,
         }),
@@ -85,19 +72,19 @@ export default function AccountDropdown() {
 
   if (!data && !isPending) {
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger>
+      <DropDrawer>
+        <DropDrawerTrigger>
           <div className="p-2">
             <Skeleton className="size-8 rounded-full" />
           </div>
-        </DropdownMenuTrigger>
-      </DropdownMenu>
+        </DropDrawerTrigger>
+      </DropDrawer>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger>
+    <DropDrawer>
+      <DropDrawerTrigger>
         <div className="p-2">
           {isPending ? (
             <Skeleton className="size-8 rounded-full" />
@@ -113,75 +100,108 @@ export default function AccountDropdown() {
             />
           )}
         </div>
-      </DropdownMenuTrigger>
+      </DropDrawerTrigger>
 
-      <DropdownMenuContent className="mr-4">
-        <DropdownMenuLabel className="flex gap-2 items-center">
-          <Avatar
-            size={32}
-            src={
-              data?.user?.image
-                ? data?.user?.image
-                : `https://avatar.vercel.sh/${data?.user?.id}?size=32`
-            }
-            className="rounded-full size-8"
-          />
-          <div className="flex flex-col">
-            <h1>{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
-            <p className="text-muted-foreground font-medium ">
-              {data?.user?.email}
-            </p>
+      <DropDrawerContent className="mr-4">
+        <DropDrawerLabel>
+          <div className="flex flex-col items-center py-6 sm:items-start sm:py-0">
+            <div className="flex gap-2 items-center">
+              <Avatar
+                size={32}
+                src={
+                  data?.user?.image
+                    ? data?.user?.image
+                    : `https://avatar.vercel.sh/${data?.user?.id}?size=32`
+                }
+                className="rounded-full size-8"
+              />
+              <div className="flex flex-col items-start">
+                <h1 className="text-white font-semibold">{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
+                <p className="text-muted-foreground font-medium ">
+                  {data?.user?.email}
+                </p>
+              </div>
+            </div>
           </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        </DropDrawerLabel>
+
+        <DropDrawerSeparator />
+
+        <DropDrawerGroup>
           <Link href={`/profile`} onClick={handleClick}>
-            <UserIcon className="size-4 mr-2" />
-            {t("profile")}
+            <DropDrawerItem>
+              <div className="flex items-center gap-2">
+                <UserIcon className="size-4" />
+                {t("profile")}
+              </div>
+            </DropDrawerItem>
           </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
+
           <Link href={`/profile/account`} onClick={handleClick}>
-            <ShieldCheckIcon className="size-4 mr-2" />
-            {t("account")}
+            <DropDrawerItem>
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="size-4" />
+                {t("account")}
+              </div>
+            </DropDrawerItem>
           </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          {/* Pass current page as 'from' parameter */}
+
           <Link href={`/profile/settings`} onClick={handleClick}>
-            <Cog6ToothIcon className="size-4 mr-2" />
-            {t("settings")}
+            <DropDrawerItem>
+              <div className="flex items-center gap-2">
+                <Cog6ToothIcon className="size-4" />
+                {t("settings")}
+              </div>
+            </DropDrawerItem>
           </Link>
-        </DropdownMenuItem>
-        <DropdownMenuLabel>{t("appearance")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <ThemeSwitchButton />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
+        </DropDrawerGroup>
+
+        {/* <DropDrawerLabel>{t("appearance")}</DropDrawerLabel> */}
+
+        <DropDrawerSeparator />
+
+        <DropDrawerGroup>
+          <ThemeSwitchButton />
+        </DropDrawerGroup>
+
+        <DropDrawerSeparator />
+        <DropDrawerGroup>
+
           <Link href="https://github.com/nayzflux/avermate">
-            <LuGithub className="size-4 mr-2" />
-            {t("github")}
+            <DropDrawerItem>
+              <div className="flex items-center gap-2">
+                <LuGithub className="size-4" />
+                {t("github")}
+              </div>
+            </DropDrawerItem>
           </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="https://discord.gg/DSCMg3MUzu">
-            <LifebuoyIcon className="size-4 mr-2" />
-            {t("support")}
+
+          <Link href="https://discord.gg/DSCMg3MUzu#">
+            <DropDrawerItem>
+              <div className="flex items-center gap-2">
+                <LifebuoyIcon className="size-4" />
+                {t("support")}
+              </div>
+            </DropDrawerItem>
           </Link>
-        </DropdownMenuItem>
-        <FeedbackDialog>
-          <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-            <span>
-              <MessageSquareIcon className="size-4 mr-2" />
-              {t("feedback")}
-            </span>
-          </DropdownMenuItem>
-        </FeedbackDialog>
 
-        <DropdownMenuSeparator />
 
-        <SignOutButton />
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <FeedbackDialog>
+            <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+              <div className="flex items-center gap-2 w-full">
+                <MessagesSquareIcon className="size-4" />
+                {t("feedback")}
+              </div>
+            </DropDrawerItem>
+          </FeedbackDialog>
+        </DropDrawerGroup>
+
+        <DropDrawerSeparator />
+
+        <DropDrawerGroup>
+          <SignOutButton />
+        </DropDrawerGroup>
+      </DropDrawerContent>
+    </DropDrawer>
   );
 }

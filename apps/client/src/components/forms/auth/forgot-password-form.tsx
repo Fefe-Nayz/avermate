@@ -10,7 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
@@ -24,7 +24,6 @@ import { z } from "zod";
 
 export const ForgotPasswordForm = () => {
   const router = useRouter();
-  const toaster = useToast();
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.Forgot");
 
@@ -48,8 +47,7 @@ export const ForgotPasswordForm = () => {
       return data;
     },
     onSuccess: (data) => {
-      toaster.toast({
-        title: t("resetEmailSent"),
+      toast.success(t("resetEmailSent"), {
         description: t("checkEmailForInstructions"),
       });
     },
@@ -57,7 +55,6 @@ export const ForgotPasswordForm = () => {
     onError: (error) => {
       handleError(
         error,
-        toaster,
         errorTranslations,
         t("errorSendingResetEmail")
       );
@@ -65,6 +62,8 @@ export const ForgotPasswordForm = () => {
   });
 
   const form = useForm<ForgotPasswordSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
       email: "",

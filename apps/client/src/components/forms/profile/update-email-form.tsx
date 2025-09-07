@@ -9,7 +9,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
@@ -27,8 +27,6 @@ export const UpdateEmailForm = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Profile.Email");
-  const toaster = useToast();
-
   const updateEmailSchema = z.object({
     email: z
       .string()
@@ -50,18 +48,19 @@ export const UpdateEmailForm = ({
     },
     onSuccess: ({ data, newEmail }) => {
       // Send toast notification
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage", { email: newEmail }),
       });
     },
 
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
   });
 
-  const form = useForm<UpdateEmailSchema>({
+  const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     resolver: zodResolver(updateEmailSchema),
     defaultValues: {
       email: defaultEmail,
@@ -73,36 +72,38 @@ export const UpdateEmailForm = ({
   };
 
   return (
-    <div>
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit(handleSubmit)}
-          className="flex flex-col gap-4"
+    <div className="flex flex-col gap-4">
+      <div className="px-6">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)}>
+            <div className="w-full">
+              <FormField
+                control={form.control}
+                name="email"
+                disabled={isPending}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Input type="text" placeholder={defaultEmail} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </form>
+        </Form>
+      </div>
+      <div className="flex justify-end border-t py-4 px-6">
+        <Button
+          type="submit"
+          disabled={isPending}
+          onClick={form.handleSubmit(handleSubmit)}
         >
-          <div className="w-full">
-            <FormField
-              control={form.control}
-              name="email"
-              disabled={isPending}
-              render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    <Input type="text" placeholder={defaultEmail} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="flex w-full justify-end">
-            <Button type="submit" variant="outline" disabled={isPending}>
-              {isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-              {t("save")}
-            </Button>
-          </div>
-        </form>
-      </Form>
+          {isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
+          {t("save")}
+        </Button>
+      </div>
     </div>
   );
 };

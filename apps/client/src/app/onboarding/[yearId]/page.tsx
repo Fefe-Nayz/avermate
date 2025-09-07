@@ -6,22 +6,17 @@ import Step1 from "./step1";
 import Step2 from "./step2";
 import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth";
-import { Session, User } from "better-auth/types";
 import { Stepper } from "./stepper";
-import { Rocket } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ConfettiButton } from "@/components/ui/confetti";
+import { ConfettiButton } from "@/components/magicui/confetti";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useActiveYearStore } from "@/stores/active-year-store";
 import { useActiveYears } from "@/hooks/use-active-year";
 
 const stepIds = ["matieres", "periodes"];
 const steps = [
-  // { title: "welcome" as const, component: WelcomeScreen, id: "welcome" },
   { title: "matieres" as const, component: Step2, id: "matieres" },
   { title: "periodes" as const, component: Step1, id: "periodes" },
-  // { title: "notes" as const, component: Step3, id: "notes" },
 ];
 
 function OnboardingContent() {
@@ -38,10 +33,6 @@ function OnboardingContent() {
 
   const [currentStep, setCurrentStep] = useState(getStepIndexFromParams());
   const [isAnimating, setIsAnimating] = useState(false); // Track animation state
-
-  const { data: session } = authClient.useSession() as unknown as {
-    data: { session: Session; user: User };
-  };
 
   const { select } = useActiveYears();
 
@@ -83,19 +74,19 @@ function OnboardingContent() {
 
   return (
     <div className="flex-1 flex flex-col max-w-[2000px] mx-auto">
-      <div className="flex flex-col md:flex-row items-center justify-between p-6">
-        <div className="flex flex-col mb-4 md:mb-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-6">
+        <div className="flex flex-col mb-4 md:mb-0 w-full">
           <h1 className="md:text-3xl font-bold text-xl">
             {t(steps[currentStep].title)}
           </h1>
           <p className="text-muted-foreground text-sm">{t("setupMessage")}</p>
         </div>
 
-        <div className="flex flex-row md:items-center md:space-y-0 md:space-x-4 justify-between w-full md:justify-end md:w-auto">
+        <div className="flex flex-row md:items-center md:space-y-0 md:space-x-4 justify-between">
           {currentStep !== 0 && (
             <Button
               size="sm"
-              variant="link"
+              variant="secondary"
               onClick={handleBack}
               disabled={currentStep === 0}
             >
@@ -107,7 +98,7 @@ function OnboardingContent() {
               <ConfettiButton size="sm">{t("finish")} 🎉</ConfettiButton>
             </Link>
           ) : (
-            <Button size="sm" onClick={handleNext}>
+            <Button size="sm" className="ml-auto" onClick={handleNext}>
               {t("next")}
             </Button>
           )}

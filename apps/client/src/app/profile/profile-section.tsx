@@ -20,9 +20,9 @@ export default function ProfileSection({
   className?: string;
 }) {
   return (
-    <Card className={cn("p-6 w-full", className)}>
+    <Card className={cn("w-full", className)}>
       <div className="flex flex-col gap-6">
-        <CardHeader className="p-0">
+        <CardHeader className="pb-0">
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
