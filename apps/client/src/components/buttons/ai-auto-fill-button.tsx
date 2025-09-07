@@ -8,15 +8,16 @@ import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 
-export default function AiAutoFillButton() {
+export default function AiAutoFillButton({ yearId }: { yearId: string }) {
     const { isPending, isError, mutate } = useMutation({
         mutationKey: ['ai-auto-fill'],
         mutationFn: async (file: File) => {
             const formData = new FormData();
             formData.append('file', file);
 
-            const response = await apiClient.post("ai-auto-fill", {
+            const response = await apiClient.post(`ai-auto-fill?yearId=${yearId}`, {
                 body: formData,
+                timeout: 1.5 * 60 * 1000,
             });
 
             return response.json<{ value: number; out_of: number; name: number; passed_at: number }>();

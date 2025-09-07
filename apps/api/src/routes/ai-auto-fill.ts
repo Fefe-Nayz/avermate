@@ -1,10 +1,10 @@
 import { db } from "@/db";
-import { featureFlags, usages } from "@/db/schema";
+import { featureFlags, subjects, usages, years } from "@/db/schema";
 import type { Session, User } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { limitable } from "@/lib/limitable";
 import { aiClient } from "@/lib/openai";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getConnInfo } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
@@ -157,6 +157,46 @@ router.post("/", async (c) => {
         );
     }
 
+    const yearId = c.req.query("yearId");
+
+    if (!yearId) {
+        return c.json(
+            {
+                code: "ERR_NO_YEAR_ID",
+                message: "No yearId provided",
+            },
+            400
+        );
+    }
+
+    const year = await db.query.years.findFirst({
+        where: and(eq(years.id, yearId), eq(years.userId, session.user.id))
+    });
+
+    if (!year) {
+        return c.json(
+            {
+                code: "ERR_INVALID_YEAR_ID",
+                message: "Invalid yearId",
+            },
+            400
+        );
+    }
+
+    const yearSubjects = await db.query.subjects.findMany({
+        where: and(eq(subjects.yearId, yearId), eq(subjects.userId, session.user.id))
+    });
+
+    let i = 0;
+    const subjectsMap = new Map<string, { id: string; name: string }>();
+    const subjetsList = [];
+    for (const subject of yearSubjects) {
+        if (subject.isDisplaySubject) continue;
+        subjectsMap.set(`${i}`, { id: subject.id, name: subject.name });
+        subjetsList.push({ id: `${i}`, name: subject.name });
+        i++;
+    }
+
     // Handle request
     const ext = path.extname(file.name);
     const base64Image = (await file.bytes()).toBase64()
@@ -170,10 +210,18 @@ router.post("/", async (c) => {
         "input": [
             {
                 "role": "user",
+                "content": `Voici une liste des mes matières: ${JSON.stringify(subjetsList)}`,
+            },
+            {
+                "role": "user",
+                "content": `Voici le barème de notation par défaut pour cette année: /${year.defaultOutOf / 100}`,
+            },
+            {
+                "role": "user",
                 "content": [
                     {
                         "type": "input_image",
-                        "detail": "low",
+                        "detail": "high",
                         "image_url": dataUrl
                     }
                 ]
@@ -189,7 +237,14 @@ router.post("/", async (c) => {
     console.log(`Total cost: ${((response.usage?.input_tokens || 0) / (10 ** 6)) * 0.050 + ((response.usage?.output_tokens || 0) / (10 ** 6)) * 0.400}$`);
     console.log("==========================================================");
 
-    return c.json(JSON.parse(response.output_text || "{}"));
+    const json = JSON.parse(response.output_text || "{}");
+
+    const subjectId = json.subject_id ? subjectsMap.get(json.subject_id)?.id || null : null;
+
+    return c.json({
+        ...json,
+        subjectId,
+    });
 });
 
 export default router;

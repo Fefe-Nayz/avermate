@@ -65,7 +65,7 @@ export default function AddGradeDialog({
                 setFormData={setFormData}
                 yearId={yearId}
               />
-              <AiAutoFillButton />
+              <AiAutoFillButton yearId={yearId} />
             </>
           )}
         </CredenzaBody>
