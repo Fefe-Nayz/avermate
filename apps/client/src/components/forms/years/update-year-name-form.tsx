@@ -22,15 +22,15 @@ export function UpdateYearNameForm({
   defaultName?: string;
 }) {
   const errorTranslations = useTranslations("Errors");
-  const t = useTranslations("Dashboard.Forms.UpdateYearName");
+  const t = useTranslations("Dashboard.Forms.UPDATE_YEAR_NAME_FORM");
   const toaster = useToast();
   const queryClient = useQueryClient();
 
   const schema = z.object({
     name: z
       .string()
-      .min(1, { message: t("nameMinLength", { default: "Required" }) })
-      .max(32, { message: t("nameMaxLength", { default: "Too long" }) }),
+      .min(1, { message: t("NAME_MIN_LENGTH_ERROR") })
+      .max(32, { message: t("NAME_MAX_LENGTH_ERROR") }),
   });
   type Schema = z.infer<typeof schema>;
 
@@ -44,8 +44,8 @@ export function UpdateYearNameForm({
     },
     onSuccess: () => {
       toaster.toast({
-        title: t("successTitle", { default: "Updated" }),
-        description: t("successMessage", { default: "Year name updated" }),
+        title: t("TOAST_SUCCESS_TITLE"),
+        description: t("TOAST_SUCCESS_DESC"),
       });
     },
     onSettled: () => {
@@ -91,7 +91,7 @@ export function UpdateYearNameForm({
       <div className="flex justify-end border-t py-4 px-6">
         <Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
           {isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-          {t("save", { default: "Save" })}
+          {t("SUBMIT_BUTTON_LABEL")}
         </Button>
       </div>
     </div>

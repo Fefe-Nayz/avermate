@@ -686,6 +686,22 @@
         "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Year created successfully!",
         "CREATE_YEAR_FORM_SUCCESS_DESC": "Your new year has been created."
       },
+      "UPDATE_YEAR_NAME_FORM": {
+        "FIELD_PLACEHOLDER": "Year 2024-2025",
+        "SUBMIT_BUTTON_LABEL": "Save",
+        "NAME_MIN_LENGTH_ERROR": "Please enter a name.",
+        "NAME_MAX_LENGTH_ERROR": "The name cannot exceed 32 characters.",
+        "TOAST_SUCCESS_TITLE": "Year updated",
+        "TOAST_SUCCESS_DESC": "The year name has been successfully updated."
+      },
+      "UPDATE_YEAR_DEFAULT_OUT_OF_FORM": {
+        "FIELD_PLACEHOLDER": "100",
+        "SUBMIT_BUTTON_LABEL": "Save",
+        "DEFAULT_OUT_OF_MIN_ERROR": "The grading scale must be greater than or equal to 1.",
+        "DEFAULT_OUT_OF_MAX_ERROR": "The grading scale must be less than or equal to 1000.",
+        "TOAST_SUCCESS_TITLE": "Year updated",
+        "TOAST_SUCCESS_DESC": "The year's default grading scale has been successfully updated."
+      },
       "AddAverage": {
         "errorCreating": "Error creating custom average.",
         "successTitle": "Custom average created successfully!",
@@ -969,6 +985,14 @@
           "DELETE_YEAR_DIALOG_TOAST_SUCCESS_DESCRIPTION": "Associated grades and subjects have been deleted.",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_TITLE": "Error deleting year",
           "DELETE_YEAR_DIALOG_TOAST_ERROR_DESCRIPTION": "An error occurred while deleting the year. Please try again."
+        },
+        "UPDATE_YEAR_SECTION": {
+          "UPDATE_YEAR_NAME_SECTION_TITLE": "Year Name",
+          "UPDATE_YEAR_NAME_SECTION_DESCRIPTION": "Edit the name of the year.",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_TITLE": "Default Grading Scale",
+          "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_DESCRIPTION": "Edit the default grading scale for this year. Your averages will be calculated using this reference scale.",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_TITLE": "Year Duration",
+          "UPDATE_YEAR_DATE_RANGE_SECTION_DESCRIPTION": "Edit the start and end date of the year."
         }
       },
       "OverviewPage": {

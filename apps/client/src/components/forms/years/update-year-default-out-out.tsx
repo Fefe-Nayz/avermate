@@ -22,15 +22,15 @@ export function UpdateYearDefaultOutOfForm({
 	defaultOutOf?: number;
 }) {
 	const errorTranslations = useTranslations("Errors");
-	const t = useTranslations("Dashboard.Forms.UpdateYearDefaultOutOf");
+	const t = useTranslations("Dashboard.Forms.UPDATE_YEAR_DEFAULT_OUT_OF_FORM");
 	const toaster = useToast();
 	const queryClient = useQueryClient();
 
 	const schema = z.object({
 		outOf: z.coerce
 			.number()
-			.min(0, { message: t("min", { default: "Too small" }) })
-			.max(1000, { message: t("max", { default: "Too big" }) }),
+			.min(1, { message: t("DEFAULT_OUT_OF_MIN_ERROR") })
+			.max(1000, { message: t("DEFAULT_OUT_OF_MAX_ERROR") }),
 	});
 	type Schema = z.infer<typeof schema>;
 
@@ -44,8 +44,8 @@ export function UpdateYearDefaultOutOfForm({
 		},
 		onSuccess: () => {
 			toaster.toast({
-				title: t("successTitle", { default: "Updated" }),
-				description: t("successMessage", { default: "Default out of updated" }),
+				title: t("TOAST_SUCCESS_TITLE"),
+				description: t("TOAST_SUCCESS_DESC"),
 			});
 		},
 		onSettled: () => {
@@ -59,13 +59,13 @@ export function UpdateYearDefaultOutOfForm({
 		},
 	});
 
-		const form = useForm({
+	const form = useForm({
 		// @ts-ignore
 		resolver: zodResolver(schema),
-			defaultValues: { outOf: defaultOutOf != null ? Math.round(defaultOutOf / 100) : 20 },
+		defaultValues: { outOf: defaultOutOf != null ? Math.round(defaultOutOf / 100) : 20 },
 	});
 
-		const onSubmit = (values: Schema) => mutate(values as Schema);
+	const onSubmit = (values: Schema) => mutate(values as Schema);
 
 	return (
 		<div className="flex flex-col gap-4">
@@ -81,7 +81,7 @@ export function UpdateYearDefaultOutOfForm({
 									<FormItem>
 										<FormControl>
 											{/* @ts-ignore */}
-											<Input type="number" placeholder={String(defaultOutOf ?? 20)} {...field} onChange={(e) => field.onChange(e.target.value)} />
+											<Input type="number" placeholder={t("FIELD_PLACEHOLDER")} {...field} onChange={(e) => field.onChange(e.target.value)} />
 										</FormControl>
 										<FormMessage />
 									</FormItem>
@@ -94,7 +94,7 @@ export function UpdateYearDefaultOutOfForm({
 			<div className="flex justify-end border-t py-4 px-6">
 				<Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
 					{isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
-					{t("save", { default: "Save" })}
+					{t("SUBMIT_BUTTON_LABEL")}
 				</Button>
 			</div>
 		</div>
