@@ -667,7 +667,16 @@
     "Forms": {
       "UPDATE_YEAR_DATE_RANGE_FORM": {
         "FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
-        "SUBMIT_BUTTON_LABEL": "Sauvegarder"
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "START_AFTER_END_ERROR": "La date de début doit être avant la date de fin.",
+        "FIELD_YEAR_END_BEFORE_PERIOD_END_ERROR": "La date de fin de l'année doit être après la fin de toutes les périodes.",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_DESCRIPTION": "Veuillez ajuster la date de fin de l'année.",
+        "FIELD_YEAR_START_AFTER_PERIOD_START_ERROR": "La date de début de l'année doit être avant la début de toutes les périodes.",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE": "Erreur",
+        "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION": "Veuillez ajuster la date de début de l'année.",
+        "TOAST_SUCCESS_TITLE": "Année mise à jour",
+        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès."
       },
       "UPDATE_YEAR_NAME_FORM": {
         "FIELD_PLACEHOLDER": "Année 2024-2025",

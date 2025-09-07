@@ -31,7 +31,7 @@ export function UpdateYearDateRangeForm({
     defaultTo?: Date;
 }) {
     const errorTranslations = useTranslations("Errors");
-    const t = useTranslations("Dashboard.Forms.UpdateYearDateRange");
+    const t = useTranslations("Dashboard.Forms.UPDATE_YEAR_DATE_RANGE_FORM");
     const toaster = useToast();
     const queryClient = useQueryClient();
     const formatter = useFormatter();
@@ -45,7 +45,7 @@ export function UpdateYearDateRangeForm({
             .object({ from: z.date(), to: z.date() })
             .refine(
                 (data) => isBefore(data.from, data.to) || data.from.getTime() === data.to.getTime(),
-                { message: t("dateRangeError", { default: "Start must be before End" }), path: ["to"] }
+                { message: t("START_AFTER_END_ERROR"), path: ["to"] }
             ),
     });
     type Schema = z.infer<typeof schema>;
@@ -60,8 +60,8 @@ export function UpdateYearDateRangeForm({
         },
         onSuccess: () => {
             toaster.toast({
-                title: t("successTitle", { default: "Updated" }),
-                description: t("successMessage", { default: "Dates updated" }),
+                title: t("TOAST_SUCCESS_TITLE"),
+                description: t("TOAST_SUCCESS_DESC"),
             });
         },
         onSettled: () => {
@@ -76,13 +76,13 @@ export function UpdateYearDateRangeForm({
                     const json = await error.response.json();
                     if (json?.code === "YEAR_START_AFTER_PERIOD_START_ERR") {
                         toaster.toast({
-                            title: "YEAR_UPDATE_FORM_TOAST_YEAR_START_AFTER_PERIOD_START_ERR_TITLE",
-                            description: "YEAR_UPDATE_FORM_TOAST_YEAR_START_AFTER_PERIOD_START_ERR_DESCRIPTION",
+                            title: t("TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE"),
+                            description: t("TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION"),
                             variant: "destructive",
                         });
 
                         form.setError("dateRange", {
-                            message: "YEAR_UPDATE_FORM_TOAST_YEAR_START_AFTER_PERIOD_START_ERR_DESCRIPTION",
+                            message: t("FIELD_YEAR_START_AFTER_PERIOD_START_ERROR"),
                         });
 
                         return;
@@ -90,13 +90,13 @@ export function UpdateYearDateRangeForm({
 
                     if (json?.code === "YEAR_END_BEFORE_PERIOD_END_ERR") {
                         toaster.toast({
-                            title: "YEAR_UPDATE_FORM_TOAST_YEAR_END_BEFORE_PERIOD_END_ERR_TITLE",
-                            description: "YEAR_UPDATE_FORM_TOAST_YEAR_END_BEFORE_PERIOD_END_ERR_DESCRIPTION",
+                            title: t("TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE"),
+                            description: t("TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_DESCRIPTION"),
                             variant: "destructive",
                         });
 
                         form.setError("dateRange", {
-                            message: "YEAR_UPDATE_FORM_TOAST_YEAR_END_BEFORE_PERIOD_END_ERR_DESCRIPTION",
+                            message: t("FIELD_YEAR_END_BEFORE_PERIOD_END_ERROR"),
                         });
 
                         return;
@@ -151,7 +151,7 @@ export function UpdateYearDateRangeForm({
                                                                     formatDates.formatIntermediate(field.value.from)
                                                                 )
                                                             ) : (
-                                                                <span>{"PLACEHOLDER"}</span>
+                                                                <span>{t("FIELD_PLACEHOLDER")}</span>
                                                             )}
                                                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                                         </Button>
@@ -180,7 +180,7 @@ export function UpdateYearDateRangeForm({
             <div className="flex justify-end border-t py-4 px-6">
                 <Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
                     {isPending && <Loader2Icon className="animate-spin h-4 w-4 mr-2" />}
-                    {"UPDATE_YEAR_DATE_FORM_SAVE_BUTTON_LABEL"}
+                    {t("SUBMIT_BUTTON_LABEL")}
                 </Button>
             </div>
         </div>
