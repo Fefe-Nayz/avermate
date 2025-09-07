@@ -218,6 +218,7 @@ export const CreateYearForm = () => {
                                             onChange={(e) => field.onChange(e.target.value)}
                                         />
                                     </FormControl>
+                                    <FormDescription>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION")}</FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )}

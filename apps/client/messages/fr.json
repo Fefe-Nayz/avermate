@@ -665,6 +665,10 @@
       }
     },
     "Forms": {
+      "UPDATE_YEAR_DATE_RANGE_FORM": {
+        "FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
+        "SUBMIT_BUTTON_LABEL": "Sauvegarder"
+      },
       "CREATE_YEAR_FORM": {
         "CREATE_YEAR_TITLE": "Créer une nouvelle année",
         "CREATE_YEAR_DESC": "Créez un espace pour organiser vos périodes, matières et notes.",
@@ -674,6 +678,7 @@
         "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Barème des moyennes par défaut",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION": "Vos moyennes seront calculées sur ce barème de référence.",
         "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Créer une nouvelle année",
         "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Merci d'indiquer un nom.",
         "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "Le nom ne peut pas dépasser 32 caractères.",

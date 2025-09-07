@@ -674,6 +674,7 @@
         "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER": "Select the start and end date.",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL": "Default grading scale",
         "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER": "20",
+        "CREATE_YEAR_FORM_OUT_OF_FIELD_DESCRIPTION": "Your averages will be calculated using this reference scale.",
         "CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Create new year",
         "CREATE_YEAR_FORM_NAME_REQUIRED_ERROR": "Please enter a name.",
         "CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR": "The name cannot exceed 32 characters.",

@@ -54,6 +54,10 @@ app.post("/", zValidator("json", createYearSchema), async (c) => {
 
     const { name, startDate, endDate, defaultOutOf } = c.req.valid("json");
 
+    if (startDate > endDate) {
+        return c.json({ code: "START_DATE_AFTER_END_DATE_ERR", message: "Start date must be before end date" }, 400);
+    }
+
     const year = await db.insert(years).values({
         name,
         startDate,
@@ -80,6 +84,61 @@ app.get("/", async (c) => {
     const years = await getAllYearByUserId(session.user.id);
 
     return c.json({ years });
+});
+
+app.patch("/:yearId", zValidator("json", createYearSchema.partial()), async (c) => {
+    const session = c.get("session");
+    if (!session) throw new HTTPException(401);
+
+    // If email isnt verified
+    if (!session.user.emailVerified) {
+        return c.json(
+            { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+            403
+        );
+    }
+
+    const { yearId } = c.req.param();
+
+    const year = await getYearById(yearId);
+
+    if (!year) throw new HTTPException(404);
+    if (year.userId !== session.user.id) throw new HTTPException(403);
+
+    const data = c.req.valid("json");
+
+    if (data.endDate && !data.startDate) {
+        if (year.startDate > data.endDate) {
+            return c.json({ code: "START_DATE_AFTER_END_DATE_ERR", message: "Start date must be before end date" }, 400);
+        }
+    }
+
+    if (data.startDate && !data.endDate) {
+        if (data.startDate > year.endDate) {
+            return c.json({ code: "START_DATE_AFTER_END_DATE_ERR", message: "Start date must be before end date" }, 400);
+        }
+    }
+
+    if (data.startDate || data.endDate) {
+        const yearPeriods = await db.query.periods.findMany({
+            where: eq(periods.yearId, year.id),
+            orderBy: asc(periods.startAt),
+        });
+
+        for (const period of yearPeriods) {
+            if (data.startDate && period.startAt < data.startDate) {
+                return c.json({ code: "YEAR_START_AFTER_PERIOD_START_ERR", message: `Year cannot start after period ${period.name}` }, 400);
+            }
+
+            if (data.endDate && period.endAt > data.endDate) {
+                return c.json({ code: "YEAR_END_BEFORE_PERIOD_END_ERR", message: `Year cannot end before period ${period.name}` }, 400);
+            }
+        }
+    }
+
+    const updatedYear = await db.update(years).set(data).where(eq(years.id, yearId)).returning().get();
+
+    return c.json({ year: updatedYear });
 });
 
 app.delete("/:yearId", async (c) => {
