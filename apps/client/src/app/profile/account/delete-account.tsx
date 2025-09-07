@@ -15,7 +15,7 @@ export default function DeleteAccount() {
           {t("description")}
         </CardDescription>
       </CardHeader>
-      <div className="justify-end flex rounded-b-xl px-6 py-4 border-t border-destructive/30 bg-destructive/10">
+      <div className="justifiy-center md:justify-end flex rounded-b-xl px-6 py-4 border-t border-destructive/30 bg-destructive/10 md:ms-auto">
         <DeleteAccountDialog />
       </div>
     </Card>

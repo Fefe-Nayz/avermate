@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Grade } from "@/types/grade";
@@ -79,7 +79,6 @@ export function UpdateGradeForm({
 }: UpdateGradeFormProps) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateGrade");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const formatter = useFormatter();
@@ -142,8 +141,7 @@ export function UpdateGradeForm({
       return (await res.json<{ grade: Grade }>()).grade;
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -158,7 +156,7 @@ export function UpdateGradeForm({
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("updateError"));
+      handleError(error, errorTranslations, t("updateError"));
     },
   });
 

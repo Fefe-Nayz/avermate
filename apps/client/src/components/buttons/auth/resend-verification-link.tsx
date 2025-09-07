@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
@@ -12,7 +12,6 @@ import { useTranslations } from "next-intl";
 const ResendVerificationLink = ({ email }: { email: string }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.Verify");
-  const toaster = useToast();
 
   const { mutate, isPending } = useMutation({
     mutationKey: ["verify-email"],
@@ -23,13 +22,12 @@ const ResendVerificationLink = ({ email }: { email: string }) => {
       });
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("linkResent"),
+      toast.success(t("linkResent"), {
         description: t("linkResentDescription", { email }),
       });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorSendingLink"));
+      handleError(error, errorTranslations, t("errorSendingLink"));
     },
   });
 

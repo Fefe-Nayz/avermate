@@ -13,7 +13,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { apiClient } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,7 +25,6 @@ import { handleError } from "@/utils/error-utils";
 const DeleteAvatar = ({ disabled = false }: { disabled?: boolean }) => {
     const errorTranslations = useTranslations("Errors");
     const t = useTranslations("Settings.Profile.Avatar");
-    const toast = useToast();
     const router = useRouter();
 
     const queryClient = useQueryClient();
@@ -41,8 +40,7 @@ const DeleteAvatar = ({ disabled = false }: { disabled?: boolean }) => {
             // Update user profile to remove the avatar
             await authClient.updateUser({ image: null });
 
-            toast.toast({
-                title: t("deleteSuccessTitle"),
+            toast.success(t("deleteSuccessTitle"), {
                 description: t("deleteSuccessMessage"),
             });
 
@@ -50,7 +48,7 @@ const DeleteAvatar = ({ disabled = false }: { disabled?: boolean }) => {
             router.refresh();
         },
         onError: (error) => {
-            handleError(error, toast, errorTranslations, t("deleteErrorMessage"));
+            handleError(error, errorTranslations, t("deleteErrorMessage"));
         },
         onSettled: () => {
             queryClient.cancelQueries();

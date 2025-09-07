@@ -38,6 +38,9 @@ export default function LandingPage() {
             // light-only tweaks
             edgeLift={1.0}
             bgColor={[1, 1, 1]} // page bg; omit/adjust if not pure white
+            // mobile-friendly minimum sizes
+            minWidth={1200}
+            minHeight={800}
           />
         </div>
       )}

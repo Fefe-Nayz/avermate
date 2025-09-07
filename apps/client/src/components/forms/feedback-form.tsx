@@ -36,7 +36,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { Check, ChevronsUpDown } from "lucide-react";
@@ -75,8 +75,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.Feedback");
-  const toaster = useToast();
-
   const [openType, setOpenType] = useState(false);
   const typeInputRef = useRef<HTMLInputElement>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -103,14 +101,13 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       return res.json();
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorSubmittingFeedback"));
+      handleError(error, errorTranslations, t("errorSubmittingFeedback"));
     },
   });
 

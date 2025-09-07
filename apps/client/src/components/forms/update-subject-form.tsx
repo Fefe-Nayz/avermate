@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Subject } from "@/types/subject";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -74,7 +74,6 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdateSubject");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -126,7 +125,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
-      {/* @ts-ignore */}
+      {/* @ts-ignore */ }
       setFormData(watchedValues);
     }
   }, [watchedValues, formData, setFormData]);
@@ -147,8 +146,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
       return (await res.json<{ subject: Subject }>()).subject;
     },
     onSuccess: (subject) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -162,7 +160,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("updateError"));
+      handleError(error, errorTranslations, t("updateError"));
     },
   });
 

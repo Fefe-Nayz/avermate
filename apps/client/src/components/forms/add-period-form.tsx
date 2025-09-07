@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Period } from "@/types/period";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -92,7 +92,6 @@ export const AddPeriodForm = ({
   });
   type AddPeriodSchema = z.infer<typeof addPeriodSchema>;
 
-  const toaster = useToast();
   const queryClient = useQueryClient();
 
   const { mutate, isPending } = useMutation({
@@ -109,7 +108,7 @@ export const AddPeriodForm = ({
       return await res.json();
     },
     onSuccess: () => {
-      toaster.toast({
+      toast.success(t("successDescription"), {
         description: t("successDescription"),
       });
       close();
@@ -122,7 +121,7 @@ export const AddPeriodForm = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorAddingPeriod"));
+      handleError(error, errorTranslations, t("errorAddingPeriod"));
     },
   });
 
@@ -178,10 +177,7 @@ export const AddPeriodForm = ({
       });
 
       if (overlappingPeriod) {
-        toaster.toast({
-          title: t("overlappingPeriods"),
-          variant: "destructive",
-        });
+        toast.error(t("overlappingPeriods"));
         return;
       }
     }

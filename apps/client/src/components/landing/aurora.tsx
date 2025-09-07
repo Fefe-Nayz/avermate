@@ -178,6 +178,9 @@ interface AuroraProps {
   // light-mode only knobs
   bgColor?: [number, number, number];
   edgeLift?: number;
+  // responsive control
+  minWidth?: number;           // minimum width for aurora calculations
+  minHeight?: number;          // minimum height for aurora calculations
 }
 
 export default function Aurora(props: AuroraProps) {
@@ -190,6 +193,8 @@ export default function Aurora(props: AuroraProps) {
     dark = false,
     bgColor,
     edgeLift = 1.0,
+    minWidth = 800,   // default minimum width for aurora calculations
+    minHeight = 600,  // default minimum height for aurora calculations
   } = props;
 
   const propsRef = useRef(props);
@@ -216,11 +221,19 @@ export default function Aurora(props: AuroraProps) {
 
     const resize = () => {
       if (!ctn) return;
-      const width = ctn.offsetWidth;
-      const height = ctn.offsetHeight;
-      renderer.setSize(width, height);
+      const actualWidth = ctn.offsetWidth;
+      const actualHeight = ctn.offsetHeight;
+
+      // Use minimum dimensions for aurora calculations to prevent squishing
+      const auroraWidth = Math.max(actualWidth, minWidth);
+      const auroraHeight = Math.max(actualHeight, minHeight);
+
+      // Set canvas to actual container size
+      renderer.setSize(actualWidth, actualHeight);
+
       if (program) {
-        program.uniforms.uResolution.value = [width, height];
+        // Use aurora dimensions for effect calculations
+        program.uniforms.uResolution.value = [auroraWidth, auroraHeight];
       }
     };
 
@@ -248,7 +261,7 @@ export default function Aurora(props: AuroraProps) {
       uTime: { value: 0 },
       uAmplitude: { value: amplitude },
       uColorStops: { value: colorStopsArray },
-      uResolution: { value: [ctn.offsetWidth, ctn.offsetHeight] },
+      uResolution: { value: [Math.max(ctn.offsetWidth, minWidth), Math.max(ctn.offsetHeight, minHeight)] },
       uBlend: { value: blend },
     };
 

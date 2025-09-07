@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { Subject } from "@/types/subject";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, ChevronsUpDownIcon, Loader2Icon } from "lucide-react";
@@ -78,7 +78,6 @@ export const AddSubjectForm = ({
 }: AddSubjectFormProps) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.AddSubject");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { data: subjects } = useSubjects(yearId);
@@ -128,8 +127,7 @@ export const AddSubjectForm = ({
       return json.subject;
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -142,7 +140,7 @@ export const AddSubjectForm = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorAddingSubject"));
+      handleError(error, errorTranslations, t("errorAddingSubject"));
     },
   });
 

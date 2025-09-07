@@ -395,13 +395,13 @@ function DropDrawerItem({
   onSelect,
   onClick,
   icon,
-  // @ts-ignore
   variant = "default",
   inset,
   disabled,
   ...props
 }: React.ComponentProps<typeof DropdownMenuItem> & {
   icon?: React.ReactNode;
+  variant?: "default" | "destructive";
 }) {
   const { isMobile } = useDropDrawerContext();
 
@@ -497,8 +497,6 @@ function DropDrawerItem({
       className={className}
       onSelect={onSelect}
       onClick={onClick as React.MouseEventHandler<HTMLDivElement>}
-      // @ts-ignore
-      variant={variant}
       inset={inset}
       disabled={disabled}
       {...props}

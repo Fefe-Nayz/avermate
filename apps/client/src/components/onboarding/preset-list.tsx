@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Preset } from "@/types/get-preset-response";
@@ -34,7 +34,6 @@ export const PresetList = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Onboarding.Step2.Presets");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const [loadingPresetId, setLoadingPresetId] = useState<string | null>(null);
 
@@ -58,8 +57,7 @@ export const PresetList = ({
       return data;
     },
     onSuccess: (data) => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
 
@@ -74,7 +72,7 @@ export const PresetList = ({
       setLoadingPresetId(null);
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorDescription"));
+      handleError(error, errorTranslations, t("errorDescription"));
 
       // Reset loading state
       setLoadingPresetId(null);

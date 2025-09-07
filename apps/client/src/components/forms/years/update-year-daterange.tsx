@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { handleError } from "@/utils/error-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,7 +32,6 @@ export function UpdateYearDateRangeForm({
 }) {
     const errorTranslations = useTranslations("Errors");
     const t = useTranslations("Dashboard.Forms.UPDATE_YEAR_DATE_RANGE_FORM");
-    const toaster = useToast();
     const queryClient = useQueryClient();
     const formatter = useFormatter();
     const formatDates = useFormatDates(formatter);
@@ -59,8 +58,7 @@ export function UpdateYearDateRangeForm({
             return res.json();
         },
         onSuccess: () => {
-            toaster.toast({
-                title: t("TOAST_SUCCESS_TITLE"),
+            toast.success(t("TOAST_SUCCESS_TITLE"), {
                 description: t("TOAST_SUCCESS_DESC"),
             });
         },
@@ -75,10 +73,8 @@ export function UpdateYearDateRangeForm({
                 if (error.response.status === 400) {
                     const json = await error.response.json();
                     if (json?.code === "YEAR_START_AFTER_PERIOD_START_ERR") {
-                        toaster.toast({
-                            title: t("TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE"),
+                        toast.error(t("TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE"), {
                             description: t("TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION"),
-                            variant: "destructive",
                         });
 
                         form.setError("dateRange", {
@@ -89,10 +85,8 @@ export function UpdateYearDateRangeForm({
                     }
 
                     if (json?.code === "YEAR_END_BEFORE_PERIOD_END_ERR") {
-                        toaster.toast({
-                            title: t("TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE"),
+                        toast.error(t("TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE"), {
                             description: t("TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_DESCRIPTION"),
-                            variant: "destructive",
                         });
 
                         form.setError("dateRange", {
@@ -104,7 +98,7 @@ export function UpdateYearDateRangeForm({
                 }
             }
 
-            handleError(error, toaster, errorTranslations, t("errorMessage", { default: "Update failed" }));
+            handleError(error, errorTranslations, t("errorMessage", { default: "Update failed" }));
         },
     });
 

@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { handleError } from "@/utils/error-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +23,6 @@ export function UpdateYearNameForm({
 }) {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UPDATE_YEAR_NAME_FORM");
-  const toaster = useToast();
   const queryClient = useQueryClient();
 
   const schema = z.object({
@@ -43,8 +42,7 @@ export function UpdateYearNameForm({
       return res.json();
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("TOAST_SUCCESS_TITLE"),
+      toast.success(t("TOAST_SUCCESS_TITLE"), {
         description: t("TOAST_SUCCESS_DESC"),
       });
     },
@@ -53,7 +51,7 @@ export function UpdateYearNameForm({
       queryClient.invalidateQueries({ queryKey: ["years"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage", { default: "Update failed" }));
+      handleError(error, errorTranslations, t("errorMessage", { default: "Update failed" }));
     },
   });
 

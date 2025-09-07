@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Period } from "@/types/period";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -71,7 +71,6 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Forms.UpdatePeriod");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const formatDates = useFormatDates(useFormatter());
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -113,8 +112,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
       return json.period;
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
 
@@ -129,7 +127,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("updateError"));
+      handleError(error, errorTranslations, t("updateError"));
     },
   });
 
@@ -174,7 +172,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
     });
 
     if (overlapping) {
-      toaster.toast({ title: t("overlapTitle"), variant: "destructive" });
+      toast.error(t("overlapTitle"));
       return;
     }
 

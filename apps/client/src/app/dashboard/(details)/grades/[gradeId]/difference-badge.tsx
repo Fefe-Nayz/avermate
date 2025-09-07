@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { motion, MotionConfig } from "motion/react";
 import { useCanAnimate } from "@number-flow/react";
@@ -84,18 +84,33 @@ function useMeasuredWidth<T extends HTMLElement>() {
 export function DifferenceBadge({ diff, triggerOnView = false }: { diff: number; triggerOnView?: boolean }) {
   const [animatedDiff, setAnimatedDiff] = useState(diff);
   const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const [mounted, setMounted] = useState(false);
   const canAnimate = useCanAnimate();
 
+  // Fix hydration issue by only applying theme-based colors after mounting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Use a stable theme value during SSR and until mounted
+  const isDark = mounted ? resolvedTheme === "dark" : false;
+
   const ratio = getRatioFromDiff(animatedDiff, 1);
-  const textColor = interpolateColorFromStops(
-    isDark ? DARK_TEXT_GRADIENT_STOPS : LIGHT_TEXT_GRADIENT_STOPS,
-    ratio
-  );
-  const backgroundColor = interpolateColorFromStops(
-    isDark ? DARK_BACKGROUND_GRADIENT_STOPS : LIGHT_BACKGROUND_GRADIENT_STOPS,
-    ratio
-  );
+
+  // Only calculate theme-specific colors after mounting to prevent hydration mismatch
+  const textColor = mounted
+    ? interpolateColorFromStops(
+      isDark ? DARK_TEXT_GRADIENT_STOPS : LIGHT_TEXT_GRADIENT_STOPS,
+      ratio
+    )
+    : "rgb(100, 100, 100)"; // neutral gray fallback for SSR
+
+  const backgroundColor = mounted
+    ? interpolateColorFromStops(
+      isDark ? DARK_BACKGROUND_GRADIENT_STOPS : LIGHT_BACKGROUND_GRADIENT_STOPS,
+      ratio
+    )
+    : "rgb(240, 240, 240)"; // neutral light gray fallback for SSR
 
   // Measure the REAL content (sign + NumberTicker) and animate wrapper width to it.
   const [contentRef, contentWidth] = useMeasuredWidth<HTMLSpanElement>();

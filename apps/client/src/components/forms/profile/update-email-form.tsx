@@ -9,7 +9,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
@@ -27,8 +27,6 @@ export const UpdateEmailForm = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Profile.Email");
-  const toaster = useToast();
-
   const updateEmailSchema = z.object({
     email: z
       .string()
@@ -50,14 +48,13 @@ export const UpdateEmailForm = ({
     },
     onSuccess: ({ data, newEmail }) => {
       // Send toast notification
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage", { email: newEmail }),
       });
     },
 
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
   });
 

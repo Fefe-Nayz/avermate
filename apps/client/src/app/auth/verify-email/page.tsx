@@ -2,7 +2,7 @@
 
 import ResendVerificationLink from "@/components/buttons/auth/resend-verification-link";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
@@ -11,7 +11,6 @@ import { usePollingSession } from "@/hooks/use-polling-session";
 const VerifyEmailPage = () => {
   const t = useTranslations("Auth.Verify");
   const router = useRouter();
-  const toaster = useToast();
 
   // Get session update
   const {
@@ -27,8 +26,7 @@ const VerifyEmailPage = () => {
       router.push("/onboarding");
 
       // Send toast notification
-      toaster.toast({
-        title: t("welcomeBack", { name: session.user.name }),
+      toast.success(t("welcomeBack", { name: session.user.name }), {
         description: t("hopeYouAchievedGoals"),
       });
     }

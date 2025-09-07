@@ -9,7 +9,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { handleError } from "@/utils/error-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,8 +22,6 @@ import { z } from "zod";
 export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Profile.Name");
-  const toaster = useToast();
-
   const updateNameSchema = z.object({
     name: z
       .string()
@@ -43,14 +41,13 @@ export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
     },
     onSuccess: () => {
       // Send a notification toast
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage"),
       });
     },
 
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
   });
 

@@ -16,7 +16,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,7 +38,6 @@ export const CreateYearForm = () => {
     const formatter = useFormatter();
     const formatDates = useFormatDates(formatter);
     const errorTranslations = useTranslations("Errors");
-    const toaster = useToast();
     const router = useRouter();
 
     const t = useTranslations("Dashboard.Forms.CREATE_YEAR_FORM");
@@ -85,10 +84,9 @@ export const CreateYearForm = () => {
             return data.year;
         },
         onSuccess: (data) => {
-            toaster.toast({
-                title: t("CREATE_YEAR_FORM_SUCCESS_TITLE"),
-                description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
-            });
+            toast.success(t("CREATE_YEAR_FORM_SUCCESS_TITLE"), {
+        description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
+      });
 
             router.push(`/onboarding/${data.id}`);
         },
@@ -97,7 +95,7 @@ export const CreateYearForm = () => {
             queryClient.invalidateQueries({ queryKey: ["years"] });
         },
         onError: (error) => {
-            handleError(error, toaster, errorTranslations, "YEAR_CREATE_FAILED");
+            handleError(error, errorTranslations, "YEAR_CREATE_FAILED");
         },
     });
 

@@ -49,7 +49,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { useMediaQuery } from "@/components/ui/use-media-query";
 import { useSubjects } from "@/hooks/use-subjects";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { handleError } from "@/utils/error-utils";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -112,7 +112,6 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
 }) => {
   const t = useTranslations("Dashboard.Forms.AddAverage");
   const errorTranslations = useTranslations("Errors");
-  const toaster = useToast();
   const queryClient = useQueryClient();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { data: subjects } = useSubjects(yearId);
@@ -153,8 +152,7 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
       return await res.json();
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successDescription"),
       });
       close();
@@ -164,17 +162,15 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
       queryClient.invalidateQueries({ queryKey: ["custom-averages"] });
     },
     onError: (error: any) => {
-      handleError(error, toaster, errorTranslations, t("errorCreating"));
+      handleError(error, errorTranslations, t("errorCreating"));
     },
   });
 
   const onSubmit = (vals: AddCustomAverageSchema) => {
     const filtered = vals.subjects.filter((s) => s.id !== "");
     if (!filtered.length) {
-      toaster.toast({
-        title: t("error"),
+      toast.error(t("error"), {
         description: t("selectAtLeastOneSubject"),
-        variant: "destructive",
       });
       return;
     }

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import { handleError } from "@/utils/error-utils";
@@ -34,7 +34,6 @@ export default function ErrorComponent({
   const errorTranslation = useTranslations("ErrorPages.Error");
   const t = useTranslations("ErrorPages.Error");
 
-  const toaster = useToast();
   const hasSentRef = useRef(false);
 
   const { data: session } = authClient.useSession();
@@ -86,13 +85,12 @@ User Name: ${session?.user?.name || "Not logged in"}
       });
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("errorReportSentTitle"),
+      toast.success(t("errorReportSentTitle"), {
         description: t("errorReportSentDescription"),
       });
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslation, ("errorSubmittingReport"));
+      handleError(error, errorTranslation, ("errorSubmittingReport"));
     },
   });
 

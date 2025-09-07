@@ -12,30 +12,17 @@ import { PlusCircleIcon } from "lucide-react";
 
 export default function subjectLoader(t: any) {
 
-  const chartConfig = {};
+  const chartConfig = {
+    average: {
+      label: "Average",
+      color: "hsl(var(--primary))",
+    },
+  };
 
-  const chartData = [
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-  ];
+  const chartData = Array.from({ length: 20 }, (_, i) => ({
+    date: `2024-${String(Math.floor(i / 4) + 1).padStart(2, '0')}-${String((i % 4) * 7 + 1).padStart(2, '0')}`,
+    average: 10 + Math.random() * 8, // Random values between 10-18 for skeleton
+  }));
 
   return (
     <div className="flex flex-col gap-4 md:gap-8 m-auto max-w-[2000px]">
@@ -105,7 +92,7 @@ export default function subjectLoader(t: any) {
                 axisLine={false}
                 tickMargin={8}
                 tick={
-                  <text className="text-muted-foreground animate-pulse-dimmer rounded-md bg-primary/10 tracking-[-4px] text-lg select-none">
+                  <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
                     ■■■
                   </text>
                 }
@@ -117,7 +104,7 @@ export default function subjectLoader(t: any) {
                 tickMargin={8}
                 tickCount={5}
                 tick={
-                  <text className="text-muted-foreground animate-pulse-dimmer rounded-md bg-primary/10 tracking-[-4px] text-lg select-none">
+                  <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
                     ■■
                   </text>
                 }
@@ -126,8 +113,8 @@ export default function subjectLoader(t: any) {
               <Line
                 dataKey="average"
                 type="monotone"
-                fill="url(#fillAverage)"
-                stroke="#2662d9"
+                fill=""
+                stroke=""
                 dot={false}
                 strokeWidth={3}
                 connectNulls={true}

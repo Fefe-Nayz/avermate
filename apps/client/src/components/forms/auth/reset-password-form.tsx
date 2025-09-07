@@ -10,7 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { handleError } from "@/utils/error-utils";
@@ -28,7 +28,6 @@ export const ResetPasswordForm = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 
   const router = useRouter();
-  const toaster = useToast();
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.Reset");
 
@@ -66,14 +65,13 @@ export const ResetPasswordForm = () => {
       router.push("/auth/sign-in");
 
       // Toast notification
-      toaster.toast({
-        title: t("passwordReset"),
+      toast.success(t("passwordReset"), {
         description: t("passwordResetSuccess"),
       });
     },
 
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorResettingPassword"));
+      handleError(error, errorTranslations, t("errorResettingPassword"));
     },
   });
 

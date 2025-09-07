@@ -10,7 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,6 @@ export const SignUpForm = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 
   const router = useRouter();
-  const toaster = useToast();
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Auth.SignUp");
 
@@ -85,8 +84,7 @@ export const SignUpForm = () => {
     },
     onSuccess: (data) => {
       if (!data.user.emailVerified) {
-        toaster.toast({
-          title: t("emailNotVerified"),
+        toast.error(t("emailNotVerified"), {
           description: t("verificationLinkSent", { email: data.user.email || "" }),
         });
 
@@ -97,7 +95,7 @@ export const SignUpForm = () => {
     },
 
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("signUpError"));
+      handleError(error, errorTranslations, t("signUpError"));
     },
   });
 
@@ -254,7 +252,7 @@ export const SignUpForm = () => {
                         )}
                         style={{
                           width: `${getPasswordStrength(form.getValues("password"))
-                              .entropy * 100
+                            .entropy * 100
                             }%`,
                         }}
                       ></div>

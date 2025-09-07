@@ -23,11 +23,22 @@ import { ChartContainer } from "../ui/chart";
 import { Skeleton } from "../ui/skeleton";
 
 export default function dashboardLoader() {
-  const chartConfig = {};
+  const chartConfig = {
+    average: {
+      label: "Average",
+      color: "hsl(var(--primary))",
+    },
+  };
 
-  const chartData = [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}];
+  const chartData = Array.from({ length: 10 }, (_, i) => ({
+    date: `2024-0${Math.floor(i / 3) + 1}-${(i % 3) + 1}0`,
+    average: 12 + Math.random() * 6, // Random values between 12-18 for skeleton
+  }));
 
-  const radarData = [{ average: 15 }, {}, {}, {}, {}, {}];
+  const radarData = Array.from({ length: 6 }, (_, i) => ({
+    subject: `Subject ${i + 1}`,
+    average: 10 + Math.random() * 8, // Random values between 10-18 for skeleton
+  }));
 
   return (
     <main className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
@@ -108,14 +119,29 @@ export default function dashboardLoader() {
                       className="h-[302px] w-full"
                     >
                       <AreaChart data={chartData} margin={{ left: -30 }}>
+                        <defs>
+                          <linearGradient id="fillAverage" x1="0" y1="0" x2="0" y2="1">
+                            <stop
+                              offset="5%"
+                              stopColor="hsl(var(--primary))"
+                              stopOpacity={0.8}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor="hsl(var(--primary))"
+                              stopOpacity={0.1}
+                            />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid vertical={false} />
                         <XAxis
+                          dataKey="date"
                           tickLine={false}
                           axisLine={false}
                           tickMargin={8}
                           tickCount={10}
                           tick={
-                            <text className="text-muted-foreground animate-pulse-dimmer rounded-md bg-primary/10 tracking-[-4px] text-lg select-none">
+                            <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
                               ■■■
                             </text>
                           }
@@ -127,7 +153,7 @@ export default function dashboardLoader() {
                           tickMargin={8}
                           tickCount={5}
                           tick={
-                            <text className="text-muted-foreground animate-pulse-dimmer rounded-md bg-primary/10 tracking-[-4px] text-lg select-none">
+                            <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
                               ■■
                             </text>
                           }
@@ -135,8 +161,10 @@ export default function dashboardLoader() {
                         <Area
                           dataKey="average"
                           type="monotone"
-                          fill="url(#fillAverage)"
+                          fill=""
                           stroke=""
+                          strokeWidth={2}
+                          fillOpacity={0}
                           connectNulls={true}
                         />
                       </AreaChart>
@@ -160,13 +188,13 @@ export default function dashboardLoader() {
                       <RadarChart data={radarData} outerRadius="90%">
                         <PolarGrid />
                         <PolarAngleAxis
-                          dataKey={"subject"}
+                          dataKey="subject"
                           tick={
                             <text
                               textAnchor="middle"
                               fontSize={12}
                               fill="#a1a1aa"
-                              className="text-muted-foreground animate-pulse-dimmer rounded-md bg-primary/10 tracking-[-4px] text-lg select-none"
+                              className="text-muted-foreground animate-pulse rounded-md bg-primary/10 text-lg select-none fill-primary/10!"
                             >
                               ▬▬
                             </text>
@@ -177,6 +205,7 @@ export default function dashboardLoader() {
                           stroke=""
                           fill=""
                           fillOpacity={0}
+                          strokeWidth={2}
                         />
                       </RadarChart>
                     </ChartContainer>

@@ -4,8 +4,8 @@ import "./globals.css";
 
 import { AprilFools } from "@/components/april-fools";
 import { ThemeColorMetaTag } from "@/components/color";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner"
+// import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils";
 import ThemeProvider from "@/providers/theme-provider";
 import { Viewport } from "next";
@@ -61,8 +61,7 @@ export default async function RootLayout({
               <div data-vaul-drawer-wrapper="" className="bg-background scrollbar-hide" >
                 {children}
               </div>
-              <Toaster />
-              <Sonner richColors/>
+              <Toaster richColors/>
             </NextIntlClientProvider>
           </ThemeProvider>
         </QueryProvider>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { QueryClient, useMutation } from "@tanstack/react-query";
 import { User } from "better-auth/types";
@@ -29,8 +29,6 @@ export default function DeleteAccountDialog() {
 
   const router = useRouter();
 
-  const toaster = useToast();
-
   const queryClient = new QueryClient();
 
   const { data: session } = authClient.useSession();
@@ -42,8 +40,7 @@ export default function DeleteAccountDialog() {
       return { message, success };
     },
     onSuccess: () => {
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage"),
       });
 
@@ -59,7 +56,7 @@ export default function DeleteAccountDialog() {
       localStorage.clear();
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
   });
 

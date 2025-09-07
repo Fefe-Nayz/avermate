@@ -1,6 +1,6 @@
 "use client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import {
   Cog6ToothIcon,
@@ -22,7 +22,6 @@ import EarlyBirdBadge from "./early-bird-badge";
 import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerLabel, DropDrawerSeparator, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 
 export default function AccountDropdown() {
-  const toaster = useToast();
   const t = useTranslations("Header.Dropdown");
   const router = useRouter();
   const pathname = usePathname();
@@ -41,8 +40,7 @@ export default function AccountDropdown() {
     if (!data && !localStorage.getItem("isSigningOut")) {
       router.push("/auth/sign-in");
 
-      toaster.toast({
-        title: t("notLoggedInTitle"),
+      toast.error(t("notLoggedInTitle"), {
         description: t("notLoggedInDescription"),
       });
 
@@ -61,8 +59,7 @@ export default function AccountDropdown() {
         email: data.user.email,
       });
 
-      toaster.toast({
-        title: t("emailNotVerifiedTitle"),
+      toast.error(t("emailNotVerifiedTitle"), {
         description: t("emailNotVerifiedDescription", {
           email: data.user.email,
         }),

@@ -24,7 +24,7 @@ export const Heading = ({
       duration={animationDuration}
       once
       className={cn(
-        "text-2xl md:text-5xl font-extrabold max-w-[220px] md:max-w-[450px] text-center",
+        "text-2xl md:text-5xl font-extrabold max-w-[220px] md:max-w-[450px] text-center leading-tight overflow-visible",
         className
       )}
       segmentClassName="text-transparent bg-clip-text bg-gradient-to-b from-zinc-800 to-zinc-600 dark:from-zinc-200 dark:via-zinc-100 dark:to-zinc-400"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -32,7 +32,6 @@ export default function RevokeSessionButton({
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Settings.Account.SessionList");
 
-  const toaster = useToast();
   const router = useRouter();
 
   const { data: currentSession } = authClient.useSession();
@@ -49,8 +48,7 @@ export default function RevokeSessionButton({
     },
     onSuccess: () => {
       // Send a notification toast
-      toaster.toast({
-        title: t("successTitle"),
+      toast.success(t("successTitle"), {
         description: t("successMessage"),
       });
 
@@ -59,7 +57,7 @@ export default function RevokeSessionButton({
       }
     },
     onError: (error) => {
-      handleError(error, toaster, errorTranslations, t("errorMessage"));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions-list"] });
@@ -84,7 +82,7 @@ export default function RevokeSessionButton({
         <AlertDialogHeader>
           <AlertDialogTitle>{isCurrent ? t("signoutTitleDialog") : t("titleDialog")}</AlertDialogTitle>
           <AlertDialogDescription>
-            { isCurrent ? t("signoutDescriptionDialog") : t("descriptionDialog")}
+            {isCurrent ? t("signoutDescriptionDialog") : t("descriptionDialog")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
