@@ -156,7 +156,7 @@ export const SignInForm = () => {
                         <Input
                           id="password"
                           className="pe-9"
-                          placeholder="********"
+                          placeholder="Password"
                           type={isVisible ? "text" : "password"}
                           {...field}
                         />

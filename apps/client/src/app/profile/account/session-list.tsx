@@ -69,7 +69,7 @@ export default function SessionList() {
                 <Skeleton className="w-32 h-5 mb-1" />
                 <Skeleton className="w-48 h-3" />
               </div>
-              <Button variant="outline" disabled className="h-8 rounded-md gap-1.5 px-3 ms-auto">
+              <Button variant="outline" disabled >
                 {t("revoke")}
               </Button>
             </div>

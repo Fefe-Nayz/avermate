@@ -369,6 +369,7 @@ export function AddGradeForm({
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="center">
                       <Calendar
+                        className="rounded-md"
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {

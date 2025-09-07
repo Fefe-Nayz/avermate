@@ -244,6 +244,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="center">
                           <Calendar
+                            className="rounded-md"
                             excludeDisabled
                             mode="range"
                             selected={field.value}
