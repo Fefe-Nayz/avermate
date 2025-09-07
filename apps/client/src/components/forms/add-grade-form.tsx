@@ -189,6 +189,7 @@ export function AddGradeForm({
 
   // 2) Now we use parent's `formData` as defaultValues
   const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(addGradeSchema),
     defaultValues: formData,

@@ -145,6 +145,7 @@ export const AddSubjectForm = ({
   });
 
   const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(addSubjectSchema),
     defaultValues: {
@@ -165,7 +166,8 @@ export const AddSubjectForm = ({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
-      {/* @ts-ignore */ }
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
       setFormData(watchedValues);
     }
   }, [watchedValues, formData, setFormData]);
@@ -221,6 +223,7 @@ export const AddSubjectForm = ({
                 <FormItem className="col-span-2 mx-1">
                   <FormLabel>{t("coefficient")}</FormLabel>
                   <FormControl>
+                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                     {/* @ts-ignore */}
                     <Input
                       type="number"

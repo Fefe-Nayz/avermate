@@ -105,6 +105,7 @@ export const ResetPasswordForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<ResetPasswordSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
@@ -181,7 +182,7 @@ export const ResetPasswordForm = () => {
                         initial={{ width: "0%" }}
                         animate={{
                           width: `${getPasswordStrength(form.getValues("password"))
-                              .entropy * 100
+                            .entropy * 100
                             }%`,
                         }}
                         transition={{

@@ -165,6 +165,7 @@ export function UpdateGradeForm({
 
   // Setup our form with parent's data
   const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(updateGradeSchema),
     defaultValues: formData,
@@ -180,7 +181,8 @@ export function UpdateGradeForm({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
-      {/* @ts-ignore */}
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       setFormData(watchedValues);
     }
   }, [watchedValues, formData, setFormData]);
@@ -270,7 +272,7 @@ export function UpdateGradeForm({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          // className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
           <FormContentWrapper>
             {/* Name */}
@@ -299,6 +301,7 @@ export function UpdateGradeForm({
                   <FormItem className="mx-1">
                     <FormLabel>{t("grade")}</FormLabel>
                     <FormControl>
+                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment  */}
                       {/* @ts-ignore */}
                       <Input
                         type="number"
@@ -319,6 +322,7 @@ export function UpdateGradeForm({
                   <FormItem className="mx-1">
                     <FormLabel>{t("outOf")}</FormLabel>
                     <FormControl>
+                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                       {/* @ts-ignore */}
                       <Input
                         type="number"
@@ -339,6 +343,7 @@ export function UpdateGradeForm({
                   <FormItem className="col-span-2 mx-1">
                     <FormLabel>{t("coefficient")}</FormLabel>
                     <FormControl>
+                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                       {/* @ts-ignore */}
                       <Input
                         type="number"

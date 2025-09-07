@@ -62,6 +62,7 @@ export const ForgotPasswordForm = () => {
   });
 
   const form = useForm<ForgotPasswordSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {

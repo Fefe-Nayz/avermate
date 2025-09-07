@@ -85,8 +85,8 @@ export const CreateYearForm = () => {
         },
         onSuccess: (data) => {
             toast.success(t("CREATE_YEAR_FORM_SUCCESS_TITLE"), {
-        description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
-      });
+                description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
+            });
 
             router.push(`/onboarding/${data.id}`);
         },
@@ -102,6 +102,7 @@ export const CreateYearForm = () => {
     const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
     const form = useForm({
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         resolver: zodResolver(createYearSchema),
         defaultValues: {
@@ -209,6 +210,7 @@ export const CreateYearForm = () => {
                                 <FormItem className="mx-1">
                                     <FormLabel>{t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}</FormLabel>
                                     <FormControl>
+                                        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                                         {/* @ts-ignore */}
                                         <Input
                                             type="number"

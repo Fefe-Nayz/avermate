@@ -118,6 +118,7 @@ export const AddAverageForm: React.FC<AddAverageFormProps> = ({
   const localizedSchema = getLocalizedSchema(t);
 
   const form = useForm<AddCustomAverageSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(localizedSchema),
     defaultValues: formData,

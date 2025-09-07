@@ -113,6 +113,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   // Keep original defaults from your code
   const form = useForm<FeedbackSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(feedbackSchema),
     defaultValues: {

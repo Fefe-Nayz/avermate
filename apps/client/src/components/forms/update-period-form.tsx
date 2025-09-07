@@ -132,6 +132,7 @@ export const UpdatePeriodForm: React.FC<UpdatePeriodFormProps> = ({
   });
 
   const form = useForm<UpdatePeriodSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(updatePeriodSchema),
     defaultValues: formData,

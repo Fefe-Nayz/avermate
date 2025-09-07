@@ -319,6 +319,7 @@ function DropDrawerContent({
                     initial="enter"
                     animate="center"
                     exit="exit"
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     transition={transition}
                     className="pb-6 space-y-1.5 w-full h-full"
@@ -348,6 +349,7 @@ function DropDrawerContent({
                     initial="enter"
                     animate="center"
                     exit="exit"
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
                     transition={transition}
                     className="pb-6 space-y-1.5 w-full"
@@ -676,9 +678,9 @@ interface SubmenuContextType {
 
 const SubmenuContext = React.createContext<SubmenuContextType>({
   activeSubmenu: null,
-  setActiveSubmenu: () => {},
+  setActiveSubmenu: () => { },
   submenuTitle: null,
-  setSubmenuTitle: () => {},
+  setSubmenuTitle: () => { },
   navigateToSubmenu: undefined,
   registerSubmenuContent: undefined,
 });

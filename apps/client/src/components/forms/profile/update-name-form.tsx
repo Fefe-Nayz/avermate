@@ -52,6 +52,7 @@ export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
   });
 
   const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(updateNameSchema),
     defaultValues: {

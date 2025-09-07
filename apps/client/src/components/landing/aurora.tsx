@@ -217,29 +217,6 @@ export default function Aurora(props: AuroraProps) {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.canvas.style.backgroundColor = 'transparent';
 
-    let program: Program | undefined;
-
-    const resize = () => {
-      if (!ctn) return;
-      const actualWidth = ctn.offsetWidth;
-      const actualHeight = ctn.offsetHeight;
-
-      // Use minimum dimensions for aurora calculations to prevent squishing
-      const auroraWidth = Math.max(actualWidth, minWidth);
-      const auroraHeight = Math.max(actualHeight, minHeight);
-
-      // Set canvas to actual container size
-      renderer.setSize(actualWidth, actualHeight);
-
-      if (program) {
-        // Use aurora dimensions for effect calculations
-        program.uniforms.uResolution.value = [auroraWidth, auroraHeight];
-      }
-    };
-
-    setTimeout(resize, 0);
-    window.addEventListener('resize', resize);
-
     const geometry = new Triangle(gl);
     if ((geometry as any).attributes?.uv) {
       delete (geometry as any).attributes.uv;
@@ -271,14 +248,33 @@ export default function Aurora(props: AuroraProps) {
       uniforms.uEdgeLift = { value: edgeLift };
     }
 
-    program = new Program(gl, {
+    const program = new Program(gl, {
       vertex: VERT,
       fragment,
       uniforms,
     });
 
+    const resize = () => {
+      if (!ctn) return;
+      const actualWidth = ctn.offsetWidth;
+      const actualHeight = ctn.offsetHeight;
+
+      // Use minimum dimensions for aurora calculations to prevent squishing
+      const auroraWidth = Math.max(actualWidth, minWidth);
+      const auroraHeight = Math.max(actualHeight, minHeight);
+
+      // Set canvas to actual container size
+      renderer.setSize(actualWidth, actualHeight);
+
+      // Use aurora dimensions for effect calculations
+      program.uniforms.uResolution.value = [auroraWidth, auroraHeight];
+    };
+
     const mesh = new Mesh(gl, { geometry, program });
     ctn.appendChild(gl.canvas);
+
+    setTimeout(resize, 0);
+    window.addEventListener('resize', resize);
 
     let animateId = 0;
     const update = (t: number) => {

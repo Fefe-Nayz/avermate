@@ -106,6 +106,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
   type UpdateSubjectSchema = z.infer<typeof updateSubjectSchema>;
 
   const form = useForm({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(updateSubjectSchema),
     defaultValues: formData,
@@ -125,6 +126,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
+      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */ }
       {/* @ts-ignore */ }
       setFormData(watchedValues);
     }
@@ -214,6 +216,7 @@ export const UpdateSubjectForm: React.FC<UpdateSubjectFormProps> = ({
                 <FormItem className="col-span-2 mx-1">
                   <FormLabel>{t("coefficient")}</FormLabel>
                   <FormControl>
+                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                     {/* @ts-ignore */}
                     <Input
                       type="number"

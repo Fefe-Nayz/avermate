@@ -103,6 +103,7 @@ export function UpdateYearDateRangeForm({
     });
 
     const form = useForm<Schema>({
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         resolver: zodResolver(schema),
         defaultValues: {

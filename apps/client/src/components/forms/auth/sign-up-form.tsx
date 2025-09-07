@@ -129,6 +129,7 @@ export const SignUpForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<SignUpSchema>({
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     resolver: zodResolver(signUpSchema),
     defaultValues: {
@@ -271,7 +272,7 @@ export const SignUpForm = () => {
                         initial={{ width: "0%" }}
                         animate={{
                           width: `${getPasswordStrength(form.getValues("password"))
-                              .entropy * 100
+                            .entropy * 100
                             }%`,
                         }}
                         transition={{
