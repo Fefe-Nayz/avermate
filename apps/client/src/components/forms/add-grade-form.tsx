@@ -115,10 +115,10 @@ export function AddGradeForm({
 
   const addGradeSchema = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
-    outOf: z.coerce.number(t("gradeOutOfRequired")).min(0, t("outOfMin")).max(1000, t("outOfMax")),
-    value: z.coerce.number(t("gradeValueRequired")).min(0, t("valueMin")).max(1000, t("valueMax")),
-    coefficient: z.coerce.number(t("coefficientRequired")).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
-    passedAt: z.date().min(1, t("passedAtRequired")),
+    outOf: z.coerce.number({ message: t("gradeOutOfRequired") }).min(0, t("outOfMin")).max(1000, t("outOfMax")),
+    value: z.coerce.number({ message: t("gradeValueRequired") }).min(0, t("valueMin")).max(1000, t("valueMax")),
+    coefficient: z.coerce.number({ message: t("coefficientRequired") }).min(0, t("coefficientMin")).max(1000, t("coefficientMax")),
+    passedAt: z.date().min(new Date(0), t("passedAtRequired")),
     subjectId: z.string().min(1, t("subjectIdRequired")).max(64, t("subjectIdMax")),
     periodId: z.string().min(1, t("periodIdRequired")).max(64, t("periodIdMax")).nullable(),
   }).refine((data) => data.value <= data.outOf, {
