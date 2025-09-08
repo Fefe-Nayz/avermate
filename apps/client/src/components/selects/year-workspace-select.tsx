@@ -7,6 +7,7 @@ import { Skeleton } from "../ui/skeleton";
 import { formatDate } from "@/utils/format";
 import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
 import { useTranslations } from "next-intl";
@@ -19,6 +20,7 @@ import {
     SelectDrawerSeparator
 } from "@/components/ui/selectdrawer";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function YearWorkspaceSelect() {
     const id = useId();
@@ -29,6 +31,7 @@ export default function YearWorkspaceSelect() {
     const t = useTranslations("Dashboard.Buttons");
 
     const router = useRouter();
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         console.log("Active ID changed from select:", activeId);
@@ -90,12 +93,26 @@ export default function YearWorkspaceSelect() {
                     <SelectDrawerSeparator />
 
                     <SelectDrawerGroup>
-                        <SelectDrawerItem value="new">
-                            <div className="flex items-center text-blue-600">
+                        {isMobile ? (
+                            <Link
+                                href="/onboarding?canBack=true"
+                                className="flex items-center px-4 py-3 hover:bg-accent hover:text-accent-foreground rounded-md"
+                            >
                                 <PlusIcon className="size-4 mr-2 text-blue-600" />
-                                <span className="block font-medium">{t("CREATE_YEAR_BUTTON_LABEL")}</span>
-                            </div>
-                        </SelectDrawerItem>
+                                <span className="block font-medium text-blue-600">
+                                    {t("CREATE_YEAR_BUTTON_LABEL")}
+                                </span>
+                            </Link>
+                        ) : (
+                            <SelectDrawerItem value="new">
+                                <div className="flex items-center text-blue-600">
+                                    <PlusIcon className="size-4 mr-2 text-blue-600" />
+                                    <span className="block font-medium">
+                                        {t("CREATE_YEAR_BUTTON_LABEL")}
+                                    </span>
+                                </div>
+                            </SelectDrawerItem>
+                        )}
                     </SelectDrawerGroup>
                 </SelectDrawerContent>
             </SelectDrawer>

@@ -60,6 +60,7 @@ const Drawer = ({
   const hasPushedRef = React.useRef(false)
   const skipProgrammaticPopOnCloseRef = React.useRef(false)
   const wasOpenRef = React.useRef(false)
+  const linkNavigationRef = React.useRef(false)
 
   const registerOpen = React.useCallback(() => {
     if (!isMobile) return
@@ -95,9 +96,12 @@ const Drawer = ({
     if (!isMobile) return
     if (typeof window === "undefined") return
     if (!hasPushedRef.current) return
-    if (skipProgrammaticPopOnCloseRef.current) {
+    if (skipProgrammaticPopOnCloseRef.current || linkNavigationRef.current) {
       // Closed due to user back: history already popped
+      // Or closed because user clicked a link that navigates away
       hasPushedRef.current = false
+      // reset link flag after consuming
+      linkNavigationRef.current = false
       return
     }
     // Closed programmatically: consume the pushed entry and suppress global handler
@@ -126,6 +130,25 @@ const Drawer = ({
     }
     wasOpenRef.current = open
   }, [open, isMobile, registerOpen, unregisterCloseHandlerAndStack, consumeHistoryIfNeeded])
+
+  // While open on mobile, capture clicks on anchor links (<a href>) to avoid
+  // calling history.back() during close, which can cancel navigation.
+  React.useEffect(() => {
+    if (!isMobile || !open) return
+    const onClickCapture = (e: MouseEvent) => {
+      const target = e.target as Element | null
+      if (!target) return
+      const anchor = target.closest && target.closest('a[href]')
+      if (!anchor) return
+      // Ignore pure hash links
+      const href = (anchor as HTMLAnchorElement).getAttribute('href') || ''
+      if (href.startsWith('#')) return
+      // Mark that a link navigation is happening
+      linkNavigationRef.current = true
+    }
+    window.addEventListener('click', onClickCapture, true)
+    return () => window.removeEventListener('click', onClickCapture, true)
+  }, [isMobile, open])
 
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
