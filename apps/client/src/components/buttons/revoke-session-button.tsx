@@ -72,9 +72,9 @@ export default function RevokeSessionButton({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         {isCurrent ? (
-          <Button variant="outline">{t("signoutDialog")}</Button>
+          <Button variant="outline" className="w-full">{t("signoutDialog")}</Button>
         ) : (
-          <Button variant="outline">{t("revokeDialog")}</Button>
+          <Button variant="outline" className="w-full">{t("revokeDialog")}</Button>
         )}
       </AlertDialogTrigger>
 

@@ -102,9 +102,9 @@ export default function AccountDropdown() {
         </div>
       </DropDrawerTrigger>
 
-      <DropDrawerContent className="mr-4">
+      <DropDrawerContent>
         <DropDrawerLabel>
-          <div className="flex flex-col items-center py-6 sm:items-start sm:py-0">
+          <div className="flex flex-col items-center py-3 sm:items-start sm:py-0">
             <div className="flex gap-2 items-center">
               <Avatar
                 size={32}
@@ -116,7 +116,7 @@ export default function AccountDropdown() {
                 className="rounded-full size-8"
               />
               <div className="flex flex-col items-start">
-                <h1 className="text-white font-semibold">{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
+                <h1 className="text-foreground font-semibold">{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
                 <p className="text-muted-foreground font-medium ">
                   {data?.user?.email}
                 </p>
@@ -187,7 +187,7 @@ export default function AccountDropdown() {
 
 
           <FeedbackDialog>
-            <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
+            <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()}>
               <div className="flex items-center gap-2 w-full">
                 <MessagesSquareIcon className="size-4" />
                 {t("feedback")}

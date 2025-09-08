@@ -5,12 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectDrawer,
+  SelectDrawerContent,
+  SelectDrawerGroup,
+  SelectDrawerItem,
+  SelectDrawerTrigger,
+} from "@/components/ui/selectdrawer";
 import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
 
@@ -60,16 +60,18 @@ export const LanguageSection = () => {
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
           <div className="px-6 grid gap-4 pb-4">
-            <Select disabled>
-              <SelectTrigger className="capitalize w-full">
-                <SelectValue placeholder={t("selectPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">{t("system")}</SelectItem>
-                <SelectItem value="en">{t("english")}</SelectItem>
-                <SelectItem value="fr">{t("french")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <SelectDrawer disabled>
+              <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
+                {/* Loading state - show placeholder */}
+              </SelectDrawerTrigger>
+              <SelectDrawerContent>
+                <SelectDrawerGroup>
+                  <SelectDrawerItem value="system">{t("system")}</SelectDrawerItem>
+                  <SelectDrawerItem value="en">{t("english")}</SelectDrawerItem>
+                  <SelectDrawerItem value="fr">{t("french")}</SelectDrawerItem>
+                </SelectDrawerGroup>
+              </SelectDrawerContent>
+            </SelectDrawer>
           </div>
         </div>
       </ProfileSection>
@@ -80,17 +82,19 @@ export const LanguageSection = () => {
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
         <div className="px-6 grid gap-4 pb-4">
-          <Select onValueChange={changeLanguage} value={language}>
-            <SelectTrigger className="capitalize w-full">
-              <SelectValue placeholder={t("selectPlaceholder")} />
-            </SelectTrigger>
+          <SelectDrawer onValueChange={changeLanguage} value={language}>
+            <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
+              {language === "system" ? t("system") : language === "en" ? t("english") : t("french")}
+            </SelectDrawerTrigger>
 
-            <SelectContent>
-              <SelectItem value="system">{t("system")}</SelectItem>
-              <SelectItem value="en">{t("english")}</SelectItem>
-              <SelectItem value="fr">{t("french")}</SelectItem>
-            </SelectContent>
-          </Select>
+            <SelectDrawerContent title={t("title")}>
+              <SelectDrawerGroup>
+                <SelectDrawerItem value="system">{t("system")}</SelectDrawerItem>
+                <SelectDrawerItem value="en">{t("english")}</SelectDrawerItem>
+                <SelectDrawerItem value="fr">{t("french")}</SelectDrawerItem>
+              </SelectDrawerGroup>
+            </SelectDrawerContent>
+          </SelectDrawer>
         </div>
       </div>
     </ProfileSection>

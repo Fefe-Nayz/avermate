@@ -6,12 +6,12 @@ import DashboardLoader from "@/components/skeleton/dashboard-loader";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectDrawer,
+  SelectDrawerContent,
+  SelectDrawerGroup,
+  SelectDrawerItem,
+  SelectDrawerTrigger,
+} from "@/components/ui/selectdrawer";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
@@ -206,28 +206,28 @@ export default function OverviewPage() {
           </div>
 
           <div className="flex md:hidden">
-            <Select
+            <SelectDrawer
               value={selectedTab}
               onValueChange={(value) => {
                 setSelectedTab(value);
                 localStorage.setItem("selectedTab", value);
               }}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  {periods?.find((period) => period.id === selectedTab)?.name ||
-                    t("fullYear")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {periods?.map((period) => (
-                  <SelectItem key={period.id} value={period.id}>
-                    {t("periodName", { name: period.name })}
-                  </SelectItem>
-                ))}
-                <SelectItem value="full-year">{t("fullYear")}</SelectItem>
-              </SelectContent>
-            </Select>
+              <SelectDrawerTrigger className="w-full">
+                {periods?.find((period) => period.id === selectedTab)?.name ||
+                  t("fullYear")}
+              </SelectDrawerTrigger>
+              <SelectDrawerContent title="Select Period">
+                <SelectDrawerGroup>
+                  {periods?.map((period) => (
+                    <SelectDrawerItem key={period.id} value={period.id}>
+                      {t("periodName", { name: period.name })}
+                    </SelectDrawerItem>
+                  ))}
+                </SelectDrawerGroup>
+                <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
+              </SelectDrawerContent>
+            </SelectDrawer>
           </div>
 
           {periods &&

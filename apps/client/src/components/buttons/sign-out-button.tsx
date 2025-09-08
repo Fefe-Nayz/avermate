@@ -54,7 +54,7 @@ export default function SignOutButton() {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
           <div className="flex items-center gap-2 text-destructive w-full">
             <LogOutIcon className="size-4" />
             {t("signOut")}

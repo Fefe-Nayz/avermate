@@ -460,13 +460,13 @@ function DropDrawerItem({
         data-inset={inset}
         data-disabled={disabled}
         className={cn(
-          "flex cursor-pointer items-center justify-between px-4 py-4",
+          "flex cursor-pointer items-center justify-between px-4 py-4 transition-colors group",
           // Only apply margin, background and rounded corners if not in a group
-          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md",
+          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15 active:!bg-primary/25 dark:active:!bg-primary/25",
           // For items in a group, don't add background but add more padding
-          isInsideGroup && "bg-transparent py-4",
+          isInsideGroup && "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10 active:!bg-primary/20 dark:active:!bg-primary/20",
           inset && "pl-8",
-          variant === "destructive" && "text-destructive dark:text-destructive",
+          variant === "destructive" && "text-destructive dark:text-destructive hover:!bg-destructive/20 dark:hover:!bg-destructive/20 active:!bg-destructive/30 dark:active:!bg-destructive/30",
           disabled && "pointer-events-none opacity-50",
           className
         )}
@@ -899,11 +899,11 @@ function DropDrawerSubTrigger({
         data-slot="drop-drawer-sub-trigger"
         data-inset={inset}
         className={cn(
-          "flex cursor-pointer items-center justify-between px-4 py-4",
+          "flex cursor-pointer items-center justify-between px-4 py-4 transition-colors",
           // Only apply margin, background and rounded corners if not in a group
-          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md",
+          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15",
           // For items in a group, don't add background but add more padding
-          isInsideGroup && "bg-transparent py-4",
+          isInsideGroup && "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10",
           inset && "pl-8",
           className
         )}

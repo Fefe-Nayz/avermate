@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { FaGoogle, FaMicrosoft } from "react-icons/fa";
 import { KeyRoundIcon, Link as LinkIcon, Eye, EyeOff } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 import ProfileSection from "../profile-section";
 import { Button } from "@/components/ui/button";
@@ -91,15 +91,13 @@ export default function LinkedAccount() {
 
     try {
       setSendingPasswordReset(true);
-      await authClient.forgetPassword({
+      await authClient.requestPasswordReset({
         email: session.user.email,
         redirectTo: `${env.NEXT_PUBLIC_CLIENT_URL}/auth/reset-password`,
       });
       toast.success(t("resetEmailSent"), {
         description: t("resetEmailSentDescription"),
       });
-      // Redirect to reset password page
-      window.location.href = "/auth/reset-password";
     } catch (error: any) {
       toast.error(t("resetEmailFailed"), {
         description: error?.message ?? t("resetEmailFailedDescription"),
@@ -178,13 +176,24 @@ export default function LinkedAccount() {
               )}
             </div>
 
-            {hasPassword && (
-              <CollapsibleContent>
-                <div className="px-4 pb-4 border-t bg-muted/30">
-                  <PasswordResetForm onClose={() => setIsPasswordResetOpen(false)} />
-                </div>
-              </CollapsibleContent>
-            )}
+            <AnimatePresence>
+              {hasPassword && isPasswordResetOpen && (
+                <CollapsibleContent forceMount>
+                  <motion.div
+                    className="px-4 pb-4 border-t bg-muted/30 overflow-hidden"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{
+                      duration: 0.3,
+                      ease: [0.4, 0.0, 0.2, 1],
+                    }}
+                  >
+                    <PasswordResetForm onClose={() => setIsPasswordResetOpen(false)} />
+                  </motion.div>
+                </CollapsibleContent>
+              )}
+            </AnimatePresence>
           </div>
         </Collapsible>
 

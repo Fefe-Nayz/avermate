@@ -11,12 +11,12 @@ import GradesTable from "@/components/tables/grades-table";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectDrawer,
+  SelectDrawerContent,
+  SelectDrawerGroup,
+  SelectDrawerItem,
+  SelectDrawerTrigger,
+} from "@/components/ui/selectdrawer";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
@@ -134,7 +134,7 @@ export default function GradesPage() {
           </ScrollArea>
         </div>
         <div className="flex md:hidden">
-          <Select
+          <SelectDrawer
             value={selectedTab}
             onValueChange={(value) => {
               //delete url anchor
@@ -143,21 +143,21 @@ export default function GradesPage() {
               localStorage.setItem("selectedTab", value);
             }}
           >
-            <SelectTrigger className="w-full">
-              <SelectValue>
-                {periods?.find((period) => period.id === selectedTab)?.name ||
-                  t("fullYear")}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {periods?.map((period) => (
-                <SelectItem key={period.id} value={period.id}>
-                  {period.name}
-                </SelectItem>
-              ))}
-              <SelectItem value="full-year">{t("fullYear")}</SelectItem>
-            </SelectContent>
-          </Select>
+            <SelectDrawerTrigger className="w-full">
+              {periods?.find((period) => period.id === selectedTab)?.name ||
+                t("fullYear")}
+            </SelectDrawerTrigger>
+            <SelectDrawerContent title="Select Period">
+              <SelectDrawerGroup>
+                {periods?.map((period) => (
+                  <SelectDrawerItem key={period.id} value={period.id}>
+                    {period.name}
+                  </SelectDrawerItem>
+                ))}
+                <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
+              </SelectDrawerGroup>
+            </SelectDrawerContent>
+          </SelectDrawer>
         </div>
 
         {periods &&

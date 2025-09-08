@@ -2,12 +2,12 @@
 
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SelectDrawer,
+  SelectDrawerContent,
+  SelectDrawerGroup,
+  SelectDrawerItem,
+  SelectDrawerTrigger,
+} from "@/components/ui/selectdrawer";
 import { useTheme } from "next-themes";
 import ProfileSection from "../profile-section";
 import { useEffect, useState } from "react";
@@ -28,16 +28,18 @@ export const ThemeSection = () => {
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
           <div className="px-6 grid gap-4 pb-4">
-          <Select disabled>
-            <SelectTrigger className="capitalize w-full">
-              <SelectValue placeholder={t("selectPlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system">{t("system")}</SelectItem>
-              <SelectItem value="light">{t("light")}</SelectItem>
-              <SelectItem value="dark">{t("dark")}</SelectItem>
-            </SelectContent>
-          </Select>
+            <SelectDrawer disabled>
+              <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
+                {/* Loading state - show placeholder */}
+              </SelectDrawerTrigger>
+              <SelectDrawerContent>
+                <SelectDrawerGroup>
+                  <SelectDrawerItem value="system">{t("system")}</SelectDrawerItem>
+                  <SelectDrawerItem value="light">{t("light")}</SelectDrawerItem>
+                  <SelectDrawerItem value="dark">{t("dark")}</SelectDrawerItem>
+                </SelectDrawerGroup>
+              </SelectDrawerContent>
+            </SelectDrawer>
           </div>
         </div>
       </ProfileSection>
@@ -48,20 +50,19 @@ export const ThemeSection = () => {
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
         <div className="px-6 grid gap-4 pb-4">
+          <SelectDrawer onValueChange={setTheme} value={theme} defaultValue={theme}>
+            <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
+              {theme === "system" ? t("system") : theme === "light" ? t("light") : t("dark")}
+            </SelectDrawerTrigger>
 
-          <Select onValueChange={setTheme} value={theme} defaultValue={theme}>
-            <SelectTrigger className="capitalize w-full">
-              <SelectValue placeholder={t("selectPlaceholder")} />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="system">{t("system")}</SelectItem>
-
-              <SelectItem value="light">{t("light")}</SelectItem>
-
-              <SelectItem value="dark">{t("dark")}</SelectItem>
-            </SelectContent>
-          </Select>
+            <SelectDrawerContent title={t("title")}>
+              <SelectDrawerGroup>
+                <SelectDrawerItem value="system">{t("system")}</SelectDrawerItem>
+                <SelectDrawerItem value="light">{t("light")}</SelectDrawerItem>
+                <SelectDrawerItem value="dark">{t("dark")}</SelectDrawerItem>
+              </SelectDrawerGroup>
+            </SelectDrawerContent>
+          </SelectDrawer>
         </div>
       </div>
     </ProfileSection>

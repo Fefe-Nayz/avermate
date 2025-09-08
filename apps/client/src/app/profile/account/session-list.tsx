@@ -99,57 +99,59 @@ export default function SessionList() {
           {sessions?.map((session) => (
             <div
               key={session.id}
-              className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3"
+              className="bg-card text-card-foreground flex flex-col md:flex-row rounded-xl border shadow-sm items-start md:items-center gap-3 px-4 py-3"
             >
-              {(() => {
-                const parser = UAParser(session.userAgent as string);
-                return (parser.device.type === "mobile" || parser.device.type === "tablet") ?
-                  <SmartphoneIcon className="size-4" /> :
-                  <LaptopIcon className="size-4" />;
-              })()}
-              <div className="flex flex-col flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm">
-                    {currentSession?.session?.id === session.id
-                      ? t("currentSession")
-                      : (session.ipAddress || "127.0.0.1")}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs font-medium",
-                      currentSession?.session?.id === session.id
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-800 dark:text-emerald-300"
-                        : session.expiresAt < new Date()
-                          ? "bg-red-50 border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300"
-                          : "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300"
-                    )}
-                  >
-                    {currentSession?.session?.id === session.id
-                      ? t("current")
-                      : session.expiresAt < new Date()
-                        ? t("expired")
-                        : t("active")}
-                  </Badge>
-                  {session.expiresAt > new Date() && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                      {t("expire")} {formatDates.formatRelative(new Date(session.expiresAt))}
-                    </Badge>
-                  )}
-                </div>
-                <span className="text-muted-foreground text-xs">
-                  {session.userAgent && (
-                    <span>
-                      {(() => {
-                        const parser = UAParser(session.userAgent as string);
-                        return `${parser.os.name}, ${parser.browser.name}`;
-                      })()}
+              <div className="flex items-center gap-3 flex-1 w-full md:w-auto">
+                {(() => {
+                  const parser = UAParser(session.userAgent as string);
+                  return (parser.device.type === "mobile" || parser.device.type === "tablet") ?
+                    <SmartphoneIcon className="size-4" /> :
+                    <LaptopIcon className="size-4" />;
+                })()}
+                <div className="flex flex-col flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">
+                      {currentSession?.session?.id === session.id
+                        ? t("currentSession")
+                        : (session.ipAddress || "127.0.0.1")}
                     </span>
-                  )}
-                  {session.ipAddress && <span>, {session.ipAddress}</span>}
-                </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs font-medium",
+                        currentSession?.session?.id === session.id
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-800 dark:text-emerald-300"
+                          : session.expiresAt < new Date()
+                            ? "bg-red-50 border-red-200 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300"
+                            : "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300"
+                      )}
+                    >
+                      {currentSession?.session?.id === session.id
+                        ? t("current")
+                        : session.expiresAt < new Date()
+                          ? t("expired")
+                          : t("active")}
+                    </Badge>
+                    {session.expiresAt > new Date() && (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                        {t("expire")} {formatDates.formatRelative(new Date(session.expiresAt))}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-muted-foreground text-xs">
+                    {session.userAgent && (
+                      <span>
+                        {(() => {
+                          const parser = UAParser(session.userAgent as string);
+                          return `${parser.os.name}, ${parser.browser.name}`;
+                        })()}
+                      </span>
+                    )}
+                    {session.ipAddress && <span>, {session.ipAddress}</span>}
+                  </span>
+                </div>
               </div>
-              <div className="ms-auto">
+              <div className="w-full md:w-auto md:ms-auto">
                 <RevokeSessionButton
                   sessionId={session.id}
                   sessionToken={session.token}
