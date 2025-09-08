@@ -142,7 +142,7 @@ export default function OverviewPage() {
       (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
     );
 
-  const linkedProviders = new Set(accounts?.map((acc) => acc.provider));
+  const linkedProviders = new Set(accounts?.map((acc) => acc.providerId));
 
   //todo implement a custom field
   if (
