@@ -68,12 +68,12 @@ export default function YearWorkspaceSelect() {
                     className={cn(
                         "h-auto ps-2 text-left [&>span]:flex [&>span]:items-center [&>span]:gap-2"
                     )}
-                    placeholder="Select a year"
+                    placeholder={t("SELECT_YEAR_PLACEHOLDER")}
                 >
                     {years.find(year => year.id === activeId)?.name}
                 </SelectDrawerTrigger>
 
-                <SelectDrawerContent title="Select Year">
+                <SelectDrawerContent title={t("SELECT_YEAR_TITLE")}>
                     <SelectDrawerGroup>
                         {years.map((year) => (
                             <SelectDrawerItem value={year.id} key={year.id}>

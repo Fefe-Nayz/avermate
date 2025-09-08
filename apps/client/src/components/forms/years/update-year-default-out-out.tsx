@@ -53,7 +53,7 @@ export function UpdateYearDefaultOutOfForm({
 			queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
 		},
 		onError: (error) => {
-			handleError(error, errorTranslations, t("errorMessage", { default: "Update failed" }));
+			handleError(error, errorTranslations, t("errorMessage"));
 		},
 	});
 

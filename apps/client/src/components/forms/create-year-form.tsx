@@ -34,13 +34,28 @@ import { useRouter } from "next/navigation";
 import { Year } from "@/types/year";
 import FormContentWrapper from "./form-content-wrapper";
 
-export const CreateYearForm = () => {
+export const CreateYearForm = ({
+    onYearCreated,
+    yearId,
+    initialData
+}: {
+    onYearCreated?: (yearId: string) => void;
+    yearId?: string;
+    initialData?: {
+        name: string;
+        startDate: string;
+        endDate: string;
+        defaultOutOf: number;
+    };
+}) => {
     const formatter = useFormatter();
     const formatDates = useFormatDates(formatter);
     const errorTranslations = useTranslations("Errors");
     const router = useRouter();
 
     const t = useTranslations("Dashboard.Forms.CREATE_YEAR_FORM");
+
+    const isUpdating = !!yearId && !!initialData;
 
     const createYearSchema = z.object({
         name: z
@@ -69,26 +84,51 @@ export const CreateYearForm = () => {
     const queryClient = useQueryClient();
 
     const { mutate, isPending } = useMutation({
-        mutationKey: ["create-year"],
+        mutationKey: [isUpdating ? "update-year" : "create-year", yearId],
         mutationFn: async ({ name, dateRange, defaultOutOf }: CreateYearSchema) => {
-            const res = await apiClient.post("years", {
-                json: {
-                    name,
-                    startDate: dateRange.from,
-                    endDate: dateRange.to,
-                    defaultOutOf,
-                },
-            });
-
-            const data = await res.json() as { year: Year };
-            return data.year;
+            if (isUpdating && yearId) {
+                // Update existing year
+                const res = await apiClient.patch(`years/${yearId}`, {
+                    json: {
+                        name,
+                        startDate: dateRange.from,
+                        endDate: dateRange.to,
+                        defaultOutOf,
+                    },
+                });
+                const data = await res.json() as { year: Year };
+                return data.year;
+            } else {
+                // Create new year
+                const res = await apiClient.post("years", {
+                    json: {
+                        name,
+                        startDate: dateRange.from,
+                        endDate: dateRange.to,
+                        defaultOutOf,
+                    },
+                });
+                const data = await res.json() as { year: Year };
+                return data.year;
+            }
         },
         onSuccess: (data) => {
-            toast.success(t("CREATE_YEAR_FORM_SUCCESS_TITLE"), {
-                description: t("CREATE_YEAR_FORM_SUCCESS_DESC"),
-            });
+            toast.success(
+                isUpdating
+                    ? t("UPDATE_YEAR_FORM_SUCCESS_TITLE")
+                    : t("CREATE_YEAR_FORM_SUCCESS_TITLE"),
+                {
+                    description: isUpdating
+                        ? t("UPDATE_YEAR_FORM_SUCCESS_DESC")
+                        : t("CREATE_YEAR_FORM_SUCCESS_DESC"),
+                }
+            );
 
-            router.push(`/onboarding/${data.id}`);
+            if (onYearCreated) {
+                onYearCreated(data.id);
+            } else if (!isUpdating) {
+                router.push(`/onboarding/${data.id}`);
+            }
         },
         onSettled: () => {
             queryClient.cancelQueries();
@@ -106,12 +146,12 @@ export const CreateYearForm = () => {
         // @ts-ignore
         resolver: zodResolver(createYearSchema),
         defaultValues: {
-            name: "",
+            name: initialData?.name || "",
             dateRange: {
-                from: undefined,
-                to: undefined,
+                from: initialData?.startDate ? new Date(initialData.startDate) : undefined,
+                to: initialData?.endDate ? new Date(initialData.endDate) : undefined,
             },
-            defaultOutOf: 20,
+            defaultOutOf: initialData?.defaultOutOf ? initialData.defaultOutOf / 100 : 20,
         },
     });
 
@@ -228,7 +268,10 @@ export const CreateYearForm = () => {
                         {/* Submit Button */}
                         <Button className="w-full" type="submit" disabled={isPending}>
                             {isPending && <Loader2Icon className="animate-spin mr-2 h-4 w-4" />}
-                            {t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")}
+                            {isUpdating
+                                ? t("UPDATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")
+                                : t("CREATE_YEAR_FORM_SUBMIT_BUTTON_LABEL")
+                            }
                         </Button>
                     </FormContentWrapper>
                 </form>

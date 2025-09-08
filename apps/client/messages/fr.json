@@ -215,7 +215,8 @@
     "badRequest": "Une erreur s'est produite. Veuillez réessayer plus tard.",
     "unknownError": "Une erreur inconnue s'est produite.",
     "error": "Erreur",
-    "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer plus tard."
+    "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer plus tard.",
+    "getStarted": "Commencer"
   },
   "Onboarding": {
     "welcomeTitle": "Bienvenue sur Avermate",
@@ -229,6 +230,7 @@
     "periodes": "Périodes",
     "matieres": "Matières",
     "notes": "Notes",
+    "year": "Année",
     "Welcome": {
       "welcomeTitle": "Bienvenue sur Avermate",
       "welcomeMessage": "Nous sommes ravis de vous accueillir à bord. Préparez-vous à décoller vers une expérience exceptionnelle !",
@@ -253,7 +255,9 @@
       "resetAccountText": "Nous avons détecté que vous avez des données existantes. Si vous souhaitez redémarrer à zéro, vous pouvez réinitialiser votre compte.",
       "resetAccountError": "Une erreur s'est produite lors de la réinitialisation de votre compte. Veuillez réessayer plus tard.",
       "accountResetSuccess": "Compte réinitialisé avec succès !",
-      "accountResetDescription": "Votre compte a été réinitialisé avec succès !"
+      "accountResetDescription": "Votre compte a été réinitialisé avec succès !",
+      "createYear": "Créez votre année",
+      "getStarted": "Commencer"
     },
     "Step1": {
       "title": "Périodes",
@@ -261,7 +265,8 @@
       "periodsDescription": "Les périodes, <bold>facultatives</bold>, sont des intervalles de temps (année scolaire, semestre, trimestre, etc.) pour regrouper vos notes. Sans elles, toutes vos notes sont regroupées dans une seule section.",
       "addPeriod": "Ajouter une période",
       "from": "Du",
-      "to": "au"
+      "to": "au",
+      "needsYearFirst": "Veuillez créer une année avant de mettre en place des périodes."
     },
     "Step2": {
       "title": "Matières",
@@ -281,13 +286,15 @@
         "search": "Rechercher des préréglages...",
         "noPresets": "Aucun préréglage trouvé.",
         "noSearchResults": "Aucun préréglage trouvé pour {search}."
-      }
+      },
+      "needsYearFirst": "Veuillez créer une année avant de mettre en place des sujets."
     },
     "Step3": {
       "title": "Notes",
       "addNewGrade": "Ajouter une nouvelle note",
       "noSubjectsMessage": "Il semble que vous n'ayez pas encore ajouté de matières. Veuillez ajouter des matières pour pouvoir ajouter des notes.",
-      "addSubject": "Ajouter une matière"
+      "addSubject": "Ajouter une matière",
+      "backToSettings": "Retour aux paramètres"
     }
   },
   "Settings": {
@@ -560,7 +567,9 @@
       },
       "SubjectMoreButton": {
         "addGrade": "Ajouter une note"
-      }
+      },
+      "SELECT_YEAR_PLACEHOLDER": "Sélectionnez une année",
+      "SELECT_YEAR_TITLE": "Sélectionnez une année"
     },
     "Charts": {
       "GlobalAverageChart": {
@@ -707,7 +716,8 @@
         "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE": "Erreur",
         "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION": "Veuillez ajuster la date de début de l'année.",
         "TOAST_SUCCESS_TITLE": "Année mise à jour",
-        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès."
+        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès.",
+        "errorMessage": "Il y a eu un problème lors de la mise à jour de la plage de dates de l'année"
       },
       "UPDATE_YEAR_NAME_FORM": {
         "FIELD_PLACEHOLDER": "Année 2024-2025",
@@ -715,7 +725,8 @@
         "NAME_MIN_LENGTH_ERROR": "Merci d'indiquer un nom.",
         "NAME_MAX_LENGTH_ERROR": "Le nom ne peut pas dépasser 32 caractères.",
         "TOAST_SUCCESS_TITLE": "Année mise à jour",
-        "TOAST_SUCCESS_DESC": "Le nom de l'année a été modifié avec succès."
+        "TOAST_SUCCESS_DESC": "Le nom de l'année a été modifié avec succès.",
+        "errorMessage": "Il y a eu un problème lors de la mise à jour du nom de l'année"
       },
       "UPDATE_YEAR_DEFAULT_OUT_OF_FORM": {
         "FIELD_PLACEHOLDER": "20",
@@ -723,7 +734,8 @@
         "DEFAULT_OUT_OF_MIN_ERROR": "Le barème doit être supérieur ou égale à 1.",
         "DEFAULT_OUT_OF_MAX_ERROR": "Le barème doit être inférieur ou égal à 1000.",
         "TOAST_SUCCESS_TITLE": "Année mise à jour",
-        "TOAST_SUCCESS_DESC": "Le barème par défaut de l'année a été modifié avec succès."
+        "TOAST_SUCCESS_DESC": "Le barème par défaut de l'année a été modifié avec succès.",
+        "errorMessage": "Il y a eu un problème lors de la mise à jour de l'échelle de notation de l'année"
       },
       "CREATE_YEAR_FORM": {
         "CREATE_YEAR_TITLE": "Créer une nouvelle année",
@@ -744,7 +756,12 @@
         "CREATE_YEAR_FORM_OUT_OF_MIN_ERROR": "Le barème des moyennes par défaut doit être au moins 0.",
         "CREATE_YEAR_FORM_OUT_OF_MAX_ERROR": "Le barème des moyennes par défaut ne peut pas dépasser 1000.",
         "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Année créée avec succès !",
-        "CREATE_YEAR_FORM_SUCCESS_DESC": "Votre nouvelle année a été créée."
+        "CREATE_YEAR_FORM_SUCCESS_DESC": "Votre nouvelle année a été créée.",
+        "UPDATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Mettre à jour l'année",
+        "UPDATE_YEAR_FORM_SUCCESS_TITLE": "Année mise à jour avec succès",
+        "UPDATE_YEAR_FORM_SUCCESS_DESC": "L'année a été mise à jour",
+        "UPDATE_YEAR_TITLE": "Mettre à jour l'année",
+        "UPDATE_YEAR_DESC": "Modifiez votre espace de travail"
       },
       "AddAverage": {
         "errorCreating": "Erreur lors de la création de la moyenne personnalisée.",
@@ -1037,13 +1054,24 @@
           "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_DESCRIPTION": "Modifier le barème des moyennes par défaut pour cette année. Vos moyennes seront calculées sur ce barème de référence.",
           "UPDATE_YEAR_DATE_RANGE_SECTION_TITLE": "Durée de l'année",
           "UPDATE_YEAR_DATE_RANGE_SECTION_DESCRIPTION": "Modifier la date de début et de fin de l'année."
-        }
+        },
+        "GRADES_SECTION": {
+          "GRADES_SECTION_TITLE": "Ajouter des notes rapidement",
+          "GRADES_SECTION_DESCRIPTION": "Ajoutez plusieurs notes à la fois pour toutes vos metières dans une interface optimisée.",
+          "GRADES_SECTION_BUTTON": "Gérer les notes"
+        },
+        "save": "Sauvegarder",
+        "addPeriod": "Ajouter une période",
+        "addCustomAverage": "Ajouter une moyenne personnalisée",
+        "GRADES_SECTION_BUTTON": "Gérer les notes",
+        "DELETE_YEAR_DIALOG_OPEN_BUTTON": "Supprimer"
       },
       "OverviewPage": {
         "overviewTitle": "Vue d'ensemble",
         "greeting": "Bonjour {name}",
         "fullYear": "Toute l'année",
-        "periodName": "{name}"
+        "periodName": "{name}",
+        "selectPeriod": "Sélectionner une période"
       },
       "GradesPage": {
         "gradesTitle": "Vos notes",
@@ -1051,7 +1079,8 @@
         "addSubject": "Ajouter une matière",
         "addPeriod": "Ajouter une période",
         "fullYear": "Toute l'année",
-        "periodName": "{name}"
+        "periodName": "{name}",
+        "selectPeriod": "Sélectionner une période"
       },
       "SubjectWrapper": {
         "back": "Retour",

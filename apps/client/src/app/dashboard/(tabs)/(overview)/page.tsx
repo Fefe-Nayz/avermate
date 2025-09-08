@@ -217,7 +217,7 @@ export default function OverviewPage() {
                 {periods?.find((period) => period.id === selectedTab)?.name ||
                   t("fullYear")}
               </SelectDrawerTrigger>
-              <SelectDrawerContent title="Select Period">
+              <SelectDrawerContent title={t("selectPeriod")}>
                 <SelectDrawerGroup>
                   {periods?.map((period) => (
                     <SelectDrawerItem key={period.id} value={period.id}>

@@ -16,6 +16,7 @@ import {
     Select,
     SelectContent,
     SelectItem,
+    SelectSeparator as BaseSelectSeparator,
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
@@ -215,7 +216,7 @@ function SelectDrawerGroup({
 function SelectDrawerSeparator({
     className,
     ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<typeof BaseSelectSeparator>) {
     const { isMobile } = useSelectDrawerContext();
 
     if (isMobile) {
@@ -223,6 +224,14 @@ function SelectDrawerSeparator({
             <div
                 className={cn("h-2", className)}
                 {...props}
+            />
+        );
+    } else {
+        // On desktop, mirror the dropdown separator style
+        return (
+            <BaseSelectSeparator
+                className={cn("bg-muted", className)}
+                {...(props as any)}
             />
         );
     }

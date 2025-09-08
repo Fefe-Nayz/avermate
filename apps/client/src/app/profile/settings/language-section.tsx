@@ -49,9 +49,11 @@ export const LanguageSection = () => {
     }
     setLanguage(lang);
 
-    // Force a server refresh so that next-intl picks up the new language
-    // on the server side → no flicker
-    router.refresh();
+    // On mobile, the drawer consumes a history entry on close which can
+    // race with router.refresh(). Defer the refresh slightly so it runs
+    // after the drawer finishes closing, ensuring the new locale applies
+    // immediately without requiring a manual reload.
+    setTimeout(() => router.refresh(), 50);
   };
 
   if (!mounted) {

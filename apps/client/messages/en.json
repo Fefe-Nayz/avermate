@@ -215,7 +215,8 @@
     "badRequest": "An error occurred. Please try again later.",
     "unknownError": "An unknown error occurred.",
     "error": "Error",
-    "unexpectedError": "An unexpected error occurred. Please try again later."
+    "unexpectedError": "An unexpected error occurred. Please try again later.",
+    "getStarted": "Get Started"
   },
   "Onboarding": {
     "welcomeTitle": "Welcome to Avermate",
@@ -229,6 +230,7 @@
     "periodes": "Periods",
     "matieres": "Subjects",
     "notes": "Grades",
+    "year": "Year",
     "Welcome": {
       "welcomeTitle": "Welcome to Avermate",
       "welcomeMessage": "We are thrilled to have you on board. Get ready to embark on an exceptional experience!",
@@ -253,7 +255,9 @@
       "resetAccountText": "We have detected that you have existing data. If you want to restart from scratch, you can reset your account.",
       "resetAccountError": "An error occurred while resetting your account. Please try again later.",
       "accountResetSuccess": "Account reset successfully!",
-      "accountResetDescription": "Your account has been successfully reset!"
+      "accountResetDescription": "Your account has been successfully reset!",
+      "createYear": "Create your year",
+      "getStarted": "Get Started"
     },
     "Step1": {
       "title": "Periods",
@@ -261,7 +265,8 @@
       "periodsDescription": "Periods, which are <bold>optional</bold>, are time intervals (school year, semester, trimester, etc.) to group your grades. Without them, all your grades are grouped in a single section.",
       "addPeriod": "Add a period",
       "from": "From",
-      "to": "to"
+      "to": "to",
+      "needsYearFirst": "Please create a year first before setting up periods."
     },
     "Step2": {
       "title": "Subjects",
@@ -281,13 +286,15 @@
         "search": "Search presets...",
         "noPresets": "No presets found.",
         "noSearchResults": "No presets found for {search}."
-      }
+      },
+      "needsYearFirst": "Please create a year first before setting up subjects."
     },
     "Step3": {
       "title": "Grades",
       "addNewGrade": "Add a new grade",
       "noSubjectsMessage": "It seems you haven't added any subjects yet. Please add subjects to be able to add grades.",
-      "addSubject": "Add a subject"
+      "addSubject": "Add a subject",
+      "backToSettings": "Back to settings"
     }
   },
   "Settings": {
@@ -560,7 +567,9 @@
       },
       "SubjectMoreButton": {
         "addGrade": "Add Grade"
-      }
+      },
+      "SELECT_YEAR_PLACEHOLDER": "Select a year",
+      "SELECT_YEAR_TITLE": "Select Year"
     },
     "Charts": {
       "GlobalAverageChart": {
@@ -715,7 +724,12 @@
         "CREATE_YEAR_FORM_OUT_OF_MIN_ERROR": "The default grading scale must be at least 0.",
         "CREATE_YEAR_FORM_OUT_OF_MAX_ERROR": "The default grading scale cannot exceed 1000.",
         "CREATE_YEAR_FORM_SUCCESS_TITLE": "🚀 Year created successfully!",
-        "CREATE_YEAR_FORM_SUCCESS_DESC": "Your new year has been created."
+        "CREATE_YEAR_FORM_SUCCESS_DESC": "Your new year has been created.",
+        "UPDATE_YEAR_FORM_SUBMIT_BUTTON_LABEL": "Update Year",
+        "UPDATE_YEAR_FORM_SUCCESS_TITLE": "Year updated successfully",
+        "UPDATE_YEAR_FORM_SUCCESS_DESC": "The year has been updated",
+        "UPDATE_YEAR_TITLE": "Update the year",
+        "UPDATE_YEAR_DESC": "Edit your workspace"
       },
       "UPDATE_YEAR_NAME_FORM": {
         "FIELD_PLACEHOLDER": "Year 2024-2025",
@@ -723,7 +737,8 @@
         "NAME_MIN_LENGTH_ERROR": "Please enter a name.",
         "NAME_MAX_LENGTH_ERROR": "The name cannot exceed 32 characters.",
         "TOAST_SUCCESS_TITLE": "Year updated",
-        "TOAST_SUCCESS_DESC": "The year name has been successfully updated."
+        "TOAST_SUCCESS_DESC": "The year name has been successfully updated.",
+        "errorMessage": "There was an issue when updating the year's name"
       },
       "UPDATE_YEAR_DEFAULT_OUT_OF_FORM": {
         "FIELD_PLACEHOLDER": "100",
@@ -731,11 +746,12 @@
         "DEFAULT_OUT_OF_MIN_ERROR": "The grading scale must be greater than or equal to 1.",
         "DEFAULT_OUT_OF_MAX_ERROR": "The grading scale must be less than or equal to 1000.",
         "TOAST_SUCCESS_TITLE": "Year updated",
-        "TOAST_SUCCESS_DESC": "The year's default grading scale has been successfully updated."
+        "TOAST_SUCCESS_DESC": "The year's default grading scale has been successfully updated.",
+        "errorMessage": "There was an issue when updating the year's grading scale"
       },
       "UPDATE_YEAR_DATE_RANGE_FORM": {
         "FIELD_PLACEHOLDER": "Sélectionnez la date de début et de fin.",
-        "SUBMIT_BUTTON_LABEL": "Sauvegarder",
+        "SUBMIT_BUTTON_LABEL": "Save",
         "START_AFTER_END_ERROR": "La date de début doit être avant la date de fin.",
         "FIELD_YEAR_END_BEFORE_PERIOD_END_ERROR": "La date de fin de l'année doit être après la fin de toutes les périodes.",
         "TOAST_YEAR_END_BEFORE_PERIOD_END_ERROR_TITLE": "Erreur",
@@ -744,7 +760,8 @@
         "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_TITLE": "Erreur",
         "TOAST_YEAR_START_AFTER_PERIOD_START_ERROR_DESCRIPTION": "Veuillez ajuster la date de début de l'année.",
         "TOAST_SUCCESS_TITLE": "Année mise à jour",
-        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès."
+        "TOAST_SUCCESS_DESC": "La date de début et de fin de l'année a été modifiée avec succès.",
+        "errorMessage": "There was an issue when updating the year's date range"
       },
       "AddAverage": {
         "errorCreating": "Error creating custom average.",
@@ -1037,13 +1054,24 @@
           "UPDATE_YEAR_DEFAULT_OUT_OF_SECTION_DESCRIPTION": "Edit the default grading scale for this year. Your averages will be calculated using this reference scale.",
           "UPDATE_YEAR_DATE_RANGE_SECTION_TITLE": "Year Duration",
           "UPDATE_YEAR_DATE_RANGE_SECTION_DESCRIPTION": "Edit the start and end date of the year."
-        }
+        },
+        "GRADES_SECTION": {
+          "GRADES_SECTION_TITLE": "Quick Add Grades",
+          "GRADES_SECTION_DESCRIPTION": "Add multiple grades at once for all your subjects in an optimized page.",
+          "GRADES_SECTION_BUTTON": "Manage grades"
+        },
+        "save": "Save",
+        "addPeriod": "Add a period",
+        "addCustomAverage": "Add a custom average",
+        "GRADES_SECTION_BUTTON": "Manage grades",
+        "DELETE_YEAR_DIALOG_OPEN_BUTTON": "Delete"
       },
       "OverviewPage": {
         "overviewTitle": "Overview",
         "greeting": "Hello {name}!",
         "fullYear": "Full Year",
-        "periodName": "{name}"
+        "periodName": "{name}",
+        "selectPeriod": "Select Period"
       },
       "GradesPage": {
         "gradesTitle": "Your Grades",
@@ -1051,7 +1079,8 @@
         "addSubject": "Add Subject",
         "addPeriod": "Add Period",
         "fullYear": "Full Year",
-        "periodName": "{name}"
+        "periodName": "{name}",
+        "selectPeriod": "Select Period"
       },
       "SubjectWrapper": {
         "back": "Back",

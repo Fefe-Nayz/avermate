@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import ProfileSection from "../profile-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { Input } from "@/components/ui/input";
@@ -113,26 +113,42 @@ export default function LinkedAccount() {
   if (isPending || isPendingSession) {
     return (
       <Card className="w-full">
-        <div className="flex flex-col gap-6">
-          <CardHeader className="pb-0">
+        <div className="flex flex-col gap-5">
+          <CardHeader className="pb-0 grow self-start">
             <CardTitle>
-              <Skeleton className="w-36 h-6" />
+              <Skeleton className="w-full md:w-32 h-6" />
             </CardTitle>
-            <div>
-              <Skeleton className="w-40 h-4" />
-            </div>
+            <CardDescription>
+              <Skeleton className="w-full md:w-64 h-4" />
+            </CardDescription>
           </CardHeader>
 
-          <CardContent className="px-6 grid gap-4 pb-6">
-            <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
-              <Skeleton className="size-4 rounded-full" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="ms-auto h-8 w-20 rounded-md" />
-            </div>
-            <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
-              <Skeleton className="size-4 rounded-full" />
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="ms-auto h-8 w-24 rounded-md" />
+          <CardContent className="p-0">
+            <div className="px-6 grid gap-4 pb-6">
+              {/* Password row skeleton */}
+              <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
+                <Skeleton className="size-4 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+                <Button className="ms-auto" disabled>
+                  {t("link", { label: "" })}
+                </Button>
+              </div>
+
+              {/* Provider rows skeleton (google then microsoft) */}
+              <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
+                <Skeleton className="size-4 rounded-full" />
+                <Skeleton className="h-4 w-20" />
+                <Button className="ms-auto" disabled>
+                  {t("link", { label: "" })}
+                </Button>
+              </div>
+              <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
+                <Skeleton className="size-4 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+                <Button className="ms-auto" disabled>
+                  {t("link", { label: "" })}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </div>

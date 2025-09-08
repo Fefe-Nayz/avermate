@@ -51,7 +51,7 @@ export function UpdateYearNameForm({
       queryClient.invalidateQueries({ queryKey: ["years"] });
     },
     onError: (error) => {
-      handleError(error, errorTranslations, t("errorMessage", { default: "Update failed" }));
+      handleError(error, errorTranslations, t("errorMessage"));
     },
   });
 

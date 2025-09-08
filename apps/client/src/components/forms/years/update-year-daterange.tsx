@@ -98,7 +98,7 @@ export function UpdateYearDateRangeForm({
                 }
             }
 
-            handleError(error, errorTranslations, t("errorMessage", { default: "Update failed" }));
+            handleError(error, errorTranslations, t("errorMessage"));
         },
     });
 
