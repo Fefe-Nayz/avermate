@@ -11,7 +11,6 @@ WORKDIR /app
 
 COPY package.json package.json
 COPY bun.lock bun.lock
-COPY patches/ ./patches/
 COPY ./apps/client/package.json ./apps/client/package.json
 
 COPY . .  
@@ -19,15 +18,8 @@ COPY . .
 RUN bun install --force
 RUN bun add zod@latest
 
-# remove @T@aad4350a3a656adb@@@1 in the bun install cache folder
-RUN rm -rf /root/.bun/install/cache/@T@aad4350a3a656adb@@@1
-
 # install 
-RUN bun i https://pkg.pr.new/pingdotgg/uploadthing@1099
-
-RUN bun run patch-package
-
-RUN cd ./apps/client/ && bun install && bun run patch-package
+RUN cd ./apps/client/ && bun install
 
 # Rebuild the source code only when needed
 FROM base AS builder
