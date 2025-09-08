@@ -15,7 +15,7 @@ import { UpdatePeriodForm } from "../forms/update-period-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { usePeriods } from "@/hooks/use-periods";
-import { z } from "zod";
+import * as z from "zod";
 import { usePeriod } from "@/hooks/use-period";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";

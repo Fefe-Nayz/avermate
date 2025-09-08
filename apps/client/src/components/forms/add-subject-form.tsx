@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Subject } from "@/types/subject";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, ChevronsUpDownIcon, Loader2Icon } from "lucide-react";
-import { z } from "zod";
+import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { Badge } from "@/components/ui/badge";

@@ -16,7 +16,7 @@ import { UpdateGradeForm } from "../forms/update-grade-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { Grade } from "@/types/grade";
-import { z } from "zod";
+import * as z from "zod";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 import { DropDrawerItem } from "../ui/dropdrawer";

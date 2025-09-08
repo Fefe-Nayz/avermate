@@ -23,7 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isBefore } from "date-fns";
 import { CalendarIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 import { Calendar } from "../ui/calendar";
 import { useMediaQuery } from "../ui/use-media-query";
 import { handleError } from "@/utils/error-utils";

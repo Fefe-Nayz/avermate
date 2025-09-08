@@ -50,8 +50,8 @@ export default function LinkedAccount() {
   const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
   const [sendingPasswordReset, setSendingPasswordReset] = useState(false);
 
-  const linkedProviders = new Set(accounts?.map((a) => a.provider));
-  const hasPassword = accounts?.some((a) => a.provider === "credential");
+  const linkedProviders = new Set(accounts?.map((a) => a.providerId));
+  const hasPassword = accounts?.some((a) => a.providerId === "credential");
 
   async function handleLinkAccount(provider: ProviderId) {
     try {
