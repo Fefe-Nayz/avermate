@@ -17,6 +17,7 @@ COPY ./apps/client/package.json ./apps/client/package.json
 COPY . .  
 
 RUN bun install --force
+RUN bun add zod@latest
 
 # remove @T@aad4350a3a656adb@@@1 in the bun install cache folder
 RUN rm -rf /root/.bun/install/cache/@T@aad4350a3a656adb@@@1
