@@ -12,7 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import React from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 
 export function UpdateYearDefaultOutOfForm({
 	yearId,

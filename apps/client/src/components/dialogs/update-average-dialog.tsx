@@ -14,7 +14,7 @@ import React, { useState, useEffect } from "react";
 import { UpdateCustomAverageForm } from "../forms/update-average-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 import { useAverage } from "@/hooks/use-average";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";

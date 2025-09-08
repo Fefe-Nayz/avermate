@@ -10,7 +10,7 @@ import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
 import { Check, ChevronsUpDown, Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);

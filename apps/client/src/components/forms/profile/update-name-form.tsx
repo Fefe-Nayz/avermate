@@ -17,7 +17,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 
 export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
   const errorTranslations = useTranslations("Errors");

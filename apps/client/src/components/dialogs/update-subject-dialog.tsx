@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { UpdateSubjectForm } from "../forms/update-subject-form";
 import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 import { useSubject } from "@/hooks/use-subject";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";

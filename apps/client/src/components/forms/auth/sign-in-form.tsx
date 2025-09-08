@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 
 export const SignInForm = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);

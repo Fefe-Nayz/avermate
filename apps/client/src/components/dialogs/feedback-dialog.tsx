@@ -12,7 +12,7 @@ import {
 import { useState } from "react";
 import { FeedbackForm } from "../forms/feedback-form";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 

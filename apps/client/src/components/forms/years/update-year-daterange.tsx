@@ -14,7 +14,7 @@ import { useFormatter } from "next-intl";
 import { useTranslations } from "next-intl";
 import React from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import * as z from "zod";
 import { Calendar } from "@/components/ui/calendar";
 import { useMediaQuery } from "@/components/ui/use-media-query";
 import { useFormatDates } from "@/utils/format";

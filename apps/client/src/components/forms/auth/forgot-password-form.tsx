@@ -20,7 +20,7 @@ import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { useTranslations } from "next-intl";
-import { z } from "zod";
+import * as z from "zod";
 
 export const ForgotPasswordForm = () => {
   const router = useRouter();

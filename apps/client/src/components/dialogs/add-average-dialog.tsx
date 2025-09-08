@@ -13,7 +13,7 @@ import { useState } from "react";
 import { AddAverageForm } from "../forms/add-average-form";
 import { useTranslations } from "next-intl";
 
-import { z } from "zod";
+import * as z from "zod";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 const addCustomAverageSchema = z.object({
