@@ -224,8 +224,8 @@ export default function OverviewPage() {
                       {t("periodName", { name: period.name })}
                     </SelectDrawerItem>
                   ))}
+                  <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
                 </SelectDrawerGroup>
-                <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
               </SelectDrawerContent>
             </SelectDrawer>
           </div>
