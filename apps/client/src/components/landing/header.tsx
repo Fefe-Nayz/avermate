@@ -2,15 +2,19 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 import Logo from "../logo";
 import { GetStarted } from "./get-started";
 import ThemeToggleButton from "../ui/theme-toggle-button";
-export const SECTIONS = [
-  { id: "home", label: "Home", href: "/" }, // sentinel
-  { id: "benefits", label: "Benefits", href: "#benefits" },
-  { id: "features", label: "Features", href: "#features" },
-  { id: "faq", label: "FAQ", href: "#faq" },
+
+const SECTION_IDS = [
+  { id: "home", href: "/" }, // sentinel
+  { id: "benefits", href: "#benefits" },
+  { id: "features", href: "#features" },
+  { id: "faq", href: "#faq" },
 ] as const;
+
+export { SECTION_IDS };
 
 /* --------------------------------------------------------------------------
    𝗨𝘀𝗲𝗿 𝗴𝗼𝘁 𝗮 𝗺𝗮𝘅𝗶𝗺𝘂𝗺-𝗱𝗲𝗽𝘁𝗵 𝗲𝗿𝗿𝗼𝗿 + 𝗽𝗶𝗹𝗹 𝗻𝗼𝘁 𝘁𝗿𝗮𝗰𝗸𝗶𝗻𝗴.
@@ -91,17 +95,27 @@ function useSectionObserver(ids: string[], freeze: boolean): string {
 /* ─────────────────────────────── Header component ─────────────────────────────── */
 
 export const Header = () => {
+  const t = useTranslations("Landing.Header");
+
+  // Create sections with localized labels
+  const SECTIONS = useMemo(() => [
+    { id: "home", label: t("home"), href: "/" },
+    { id: "benefits", label: t("benefits"), href: "#benefits" },
+    { id: "features", label: t("features"), href: "#features" },
+    { id: "faq", label: t("faq"), href: "#faq" },
+  ], [t]);
+
   /* Shadow / size on scroll ---------------------------------------------------- */
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
-  
+
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 20);
     onScroll();
@@ -110,7 +124,7 @@ export const Header = () => {
   }, []);
 
   /* Active link logic ---------------------------------------------------------- */
-  const ids = useMemo(() => SECTIONS.map((s) => s.id) as string[], []);
+  const ids = useMemo(() => SECTIONS.map((s) => s.id) as string[], [SECTIONS]);
 
   // During programmatic scroll we freeze the observer & force a manual id.
   const [isNavScrolling, setIsNavScrolling] = useState(false);
@@ -179,11 +193,11 @@ export const Header = () => {
       transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <motion.div
-        animate={{ 
-          width: isMobile ? "100%" : isScrolled ? "50rem" : "70rem" 
+        animate={{
+          width: isMobile ? "100%" : isScrolled ? "50rem" : "70rem"
         }}
-        initial={{ 
-          width: isMobile ? "100%" : "70rem" 
+        initial={{
+          width: isMobile ? "100%" : "70rem"
         }}
         transition={{ duration: isMobile ? 0 : 0.3, ease: [0.25, 0.1, 0.25, 1] }}
         className={`${isScrolled ? "mt-6 mx-6" : "mt-4 mx-6"} ${isMobile ? "mx-4" : ""}`}
