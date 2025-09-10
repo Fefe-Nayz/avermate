@@ -4,9 +4,9 @@
   },
   "Landing": {
     "Header": {
-      "home": "Accueil",
-      "benefits": "Avantages",
-      "features": "Fonctionnalités",
+      "home": "Home",
+      "benefits": "Benefits",
+      "features": "Features",
       "faq": "FAQ"
     },
     "Headline": {
