@@ -1,8 +1,11 @@
 import { cn } from "@/lib/utils";
 import { AnimatedGradientText } from "@/components/magicui/animated-gradient-text";
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export function AnimatedGradientTextDemo() {
+  const t = useTranslations("Landing.Headline");
+
   return (
     <div className="group relative mx-auto flex items-center justify-center rounded-full px-4 py-1.5 shadow-[inset_0_-8px_10px_#8fdfff1f] transition-shadow duration-500 ease-out hover:shadow-[inset_0_-5px_10px_#8fdfff3f] ">
       <span
@@ -20,7 +23,7 @@ export function AnimatedGradientTextDemo() {
       />
       🎉 <hr className="mx-2 h-4 w-px shrink-0 bg-neutral-500" />
       <AnimatedGradientText className="text-sm font-medium">
-        Introducing Avermate V1.5
+        {t("news")}
       </AnimatedGradientText>
       <ChevronRight
         className="ml-1 size-4 stroke-neutral-500 transition-transform
