@@ -3,6 +3,12 @@
     "EARLY_BIRD_BADGE_LABEL": "OG"
   },
   "Landing": {
+    "Header": {
+      "home": "Accueil",
+      "benefits": "Avantages",
+      "features": "Fonctionnalités",
+      "faq": "FAQ"
+    },
     "Headline": {
       "title": "Take control of your grades",
       "subtitle": "Get an instant and accurate overview of your grades and averages. Track your progress in real time to achieve your goals.",
