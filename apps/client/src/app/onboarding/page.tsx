@@ -1,23 +1,61 @@
 "use client";
 
-import { CreateYearForm } from '@/components/forms/create-year-form'
-import { useTranslations } from 'next-intl';
-import React from 'react'
+import React, { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useHasExistingData } from "@/hooks/use-has-existing-data";
+import NewUserOnboarding from "@/components/onboarding/new-user-onboarding";
+import ExistingUserOnboarding from "@/components/onboarding/existing-user-onboarding";
+import { Loader2Icon } from "lucide-react";
 
-export default function YearCreationPage() {
-    const t = useTranslations("Dashboard.Forms.CREATE_YEAR_FORM");
+function OnboardingContent() {
+  const hasExistingData = useHasExistingData();
+  const searchParams = useSearchParams();
+  const [initialUserType, setInitialUserType] = React.useState<
+    "new" | "existing" | null
+  >(null);
 
+  // Lock in the user type on first load - don't let it change during onboarding
+  React.useEffect(() => {
+    if (hasExistingData !== undefined && initialUserType === null) {
+      // Check if we have the newuseronboarding flag - if so, force new user flow
+      const isNewUserOnboarding =
+        searchParams.get("newuseronboarding") === "true";
+
+      if (isNewUserOnboarding) {
+        setInitialUserType("new");
+      } else {
+        setInitialUserType(hasExistingData ? "existing" : "new");
+      }
+    }
+  }, [hasExistingData, initialUserType, searchParams]);
+
+  if (initialUserType === null) {
     return (
-        <main className="flex justify-center">
-            <div className="flex flex-col gap-8 w-full max-w-[650px]">
-                <div className="flex flex-col gap-2">
-                    <p className="text-3xl md:text-4xl font-bold">{t("CREATE_YEAR_TITLE")}</p>
+      <div className="flex items-center justify-center h-full">
+        <Loader2Icon className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-                    <p className="flex flex-col gap-0.5 text-sm md:text-base text-muted-foreground">{t("CREATE_YEAR_DESC")}</p>
-                </div>
+  // New user gets welcome screen + full onboarding
+  if (initialUserType === "new") {
+    return <NewUserOnboarding />;
+  }
 
-                <CreateYearForm />
-            </div>
-        </main>
-    )
+  // Existing user creating new year (no welcome screen)
+  return <ExistingUserOnboarding yearId="new" />;
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-full">
+          <Loader2Icon className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <OnboardingContent />
+    </Suspense>
+  );
 }

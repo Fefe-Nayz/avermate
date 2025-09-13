@@ -1,17 +1,14 @@
 "use client";
 
 import { Suspense } from "react";
-import { useParams } from "next/navigation";
-import { Loader2Icon } from "lucide-react";
 import ExistingUserOnboarding from "@/components/onboarding/existing-user-onboarding";
+import { Loader2Icon } from "lucide-react";
 
-function YearOnboardingContent() {
-  const { yearId } = useParams() as { yearId: string };
-
-  return <ExistingUserOnboarding yearId={yearId} />;
+function NewYearOnboardingContent() {
+  return <ExistingUserOnboarding yearId="new" />;
 }
 
-export default function YearOnboardingPage() {
+export default function NewYearOnboardingPage() {
   return (
     <Suspense
       fallback={
@@ -20,7 +17,7 @@ export default function YearOnboardingPage() {
         </div>
       }
     >
-      <YearOnboardingContent />
+      <NewYearOnboardingContent />
     </Suspense>
   );
 }
