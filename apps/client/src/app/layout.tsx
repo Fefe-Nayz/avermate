@@ -45,6 +45,7 @@ export default async function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#09090b" />
+        <meta name="google" content="notranslate">
         {/* Disable analytics */}
         {/* <Script
           defer
