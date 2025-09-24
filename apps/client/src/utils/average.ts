@@ -917,7 +917,8 @@ export function averageOverTime(
   const normalizedStartDate = startOfDay(
     isFullYear ? new Date(period.startAt) : earliestStart
   );
-  const normalizedEndDate = startOfDay(new Date(period.endAt));
+  const periodEndAt = new Date(period.endAt);
+  const normalizedEndDate = periodEndAt.getTime() > Date.now() ? startOfDay(new Date()) : startOfDay(new Date(period.endAt));
 
   // Create the day-by-day date range
   const dates = createDateRange(normalizedStartDate, normalizedEndDate, 1);
