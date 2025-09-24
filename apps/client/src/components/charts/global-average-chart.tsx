@@ -188,10 +188,7 @@ export default function GlobalAverageChart({
   // Calculate the average grades over time
   const averages = averageOverTime(subjects, undefined, period, periods);
 
-  const chartData = periodEndAt.getTime() >= Date.now() ? [{date: periodEndAt.toISOString(), average: averages[average.length - 1]}, ...dates.map((date, index) => ({
-    date: date.toISOString(),
-    average: averages[index],
-  }))] : dates.map((date, index) => ({
+  const chartData = dates.map((date, index) => ({
     date: date.toISOString(),
     average: averages[index],
   }));
