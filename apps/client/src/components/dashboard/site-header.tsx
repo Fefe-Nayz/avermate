@@ -44,7 +44,7 @@ import { Fragment, useCallback, useMemo } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import YearWorkspaceSelect from "../selects/year-workspace-select";
 
-export function SiteHeader({}: {}) {
+export function SiteHeader() {
   // const setThemeAnimated = useAnimatedThemeSetter(undefined, "top-right");
   const pathname = usePathname();
   // const isMobile = useIsMobile();
