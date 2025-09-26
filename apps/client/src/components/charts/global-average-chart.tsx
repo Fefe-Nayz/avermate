@@ -171,7 +171,8 @@ export default function GlobalAverageChart({
   const formatDates = useFormatDates(formatter);
 
   // Calculate the start and end dates
-  const endDate = new Date(period.endAt);
+  const periodEndAt = new Date(period.endAt);
+  const endDate = periodEndAt.getTime() >= Date.now() ? new Date() : periodEndAt;
   const startDate = getCumulativeStartDate(periods, period);
 
   // Generate an array of dates
