@@ -189,7 +189,7 @@ export default function SubjectAverageChart({
 
   const { childrenAverage, chartData, chartConfig } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
-    const endDate = new Date(period.endAt);
+    const endDate = new Date() < new Date(period.endAt) ? new Date() : new Date(period.endAt);
     const startDate = getCumulativeStartDate(periods, period);
 
     const dates: Date[] = [];
