@@ -1,36 +1,36 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Drawer as DrawerPrimitive } from "vaul"
+import * as React from "react";
+import { Drawer as DrawerPrimitive } from "vaul";
 
-import { cn } from "@/lib/utils"
-import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Global manager to coordinate nested drawers on mobile.
-let __drawerNextId = 1
-const __drawerOpenStack: number[] = [] // stack of open drawer ids
-const __drawerCloseFromBack = new Map<number, () => void>()
-let __drawerPopListenerInitialized = false
-let __drawerSuppressNextPop = false
+let __drawerNextId = 1;
+const __drawerOpenStack: number[] = []; // stack of open drawer ids
+const __drawerCloseFromBack = new Map<number, () => void>();
+let __drawerPopListenerInitialized = false;
+let __drawerSuppressNextPop = false;
 
 function __ensureGlobalPopListener() {
-  if (typeof window === "undefined") return
-  if (__drawerPopListenerInitialized) return
+  if (typeof window === "undefined") return;
+  if (__drawerPopListenerInitialized) return;
   const onPop = (ev: PopStateEvent) => {
     if (__drawerSuppressNextPop) {
       // Ignore programmatic pops triggered to consume our own pushState
-      __drawerSuppressNextPop = false
-      return
+      __drawerSuppressNextPop = false;
+      return;
     }
     // User-initiated back: close the top-most open drawer, if any
-    const topId = __drawerOpenStack[__drawerOpenStack.length - 1]
+    const topId = __drawerOpenStack[__drawerOpenStack.length - 1];
     if (topId != null) {
-      const close = __drawerCloseFromBack.get(topId)
-      if (close) close()
+      const close = __drawerCloseFromBack.get(topId);
+      if (close) close();
     }
-  }
-  window.addEventListener("popstate", onPop)
-  __drawerPopListenerInitialized = true
+  };
+  window.addEventListener("popstate", onPop);
+  __drawerPopListenerInitialized = true;
 }
 
 // Intercept mobile back gesture to close the drawer first.
@@ -42,126 +42,136 @@ const Drawer = ({
   onOpenChange: userOnOpenChange,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) => {
-  const isMobile = useIsMobile()
+  const isMobile = useIsMobile();
 
   // Support controlled and uncontrolled usage
-  const isControlled = controlledOpen !== undefined
+  const isControlled = controlledOpen !== undefined;
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(
     () => defaultOpen ?? false
-  )
-  const open = isControlled ? controlledOpen! : uncontrolledOpen
+  );
+  const open = isControlled ? controlledOpen! : uncontrolledOpen;
 
   // History + nesting management
-  const idRef = React.useRef<number>(0)
+  const idRef = React.useRef<number>(0);
   if (idRef.current === 0) {
-    idRef.current = __drawerNextId++
+    idRef.current = __drawerNextId++;
   }
-  const drawerId = idRef.current
-  const hasPushedRef = React.useRef(false)
-  const skipProgrammaticPopOnCloseRef = React.useRef(false)
-  const wasOpenRef = React.useRef(false)
-  const linkNavigationRef = React.useRef(false)
+  const drawerId = idRef.current;
+  const hasPushedRef = React.useRef(false);
+  const skipProgrammaticPopOnCloseRef = React.useRef(false);
+  const wasOpenRef = React.useRef(false);
+  const linkNavigationRef = React.useRef(false);
 
   const registerOpen = React.useCallback(() => {
-    if (!isMobile) return
-    if (typeof window === "undefined") return
-    if (hasPushedRef.current) return
-    __ensureGlobalPopListener()
+    if (!isMobile) return;
+    if (typeof window === "undefined") return;
+    if (hasPushedRef.current) return;
+    __ensureGlobalPopListener();
     try {
-      window.history.pushState({ __drawer: true, id: drawerId }, "", window.location.href)
-      hasPushedRef.current = true
-      __drawerOpenStack.push(drawerId)
+      window.history.pushState(
+        { __drawer: true, id: drawerId },
+        "",
+        window.location.href
+      );
+      hasPushedRef.current = true;
+      __drawerOpenStack.push(drawerId);
       __drawerCloseFromBack.set(drawerId, () => {
         // Mark that this close originates from a back gesture
-        skipProgrammaticPopOnCloseRef.current = true
+        skipProgrammaticPopOnCloseRef.current = true;
         if (isControlled) {
-          userOnOpenChange?.(false)
+          userOnOpenChange?.(false);
         } else {
-          setUncontrolledOpen(false)
+          setUncontrolledOpen(false);
         }
-      })
+      });
     } catch {
       // ignore
     }
-  }, [drawerId, isControlled, isMobile, userOnOpenChange])
+  }, [drawerId, isControlled, isMobile, userOnOpenChange]);
 
   const unregisterCloseHandlerAndStack = React.useCallback(() => {
     // Remove id from stack wherever it is
-    const idx = __drawerOpenStack.lastIndexOf(drawerId)
-    if (idx !== -1) __drawerOpenStack.splice(idx, 1)
-    __drawerCloseFromBack.delete(drawerId)
-  }, [drawerId])
+    const idx = __drawerOpenStack.lastIndexOf(drawerId);
+    if (idx !== -1) __drawerOpenStack.splice(idx, 1);
+    __drawerCloseFromBack.delete(drawerId);
+  }, [drawerId]);
 
   const consumeHistoryIfNeeded = React.useCallback(() => {
-    if (!isMobile) return
-    if (typeof window === "undefined") return
-    if (!hasPushedRef.current) return
+    if (!isMobile) return;
+    if (typeof window === "undefined") return;
+    if (!hasPushedRef.current) return;
     if (skipProgrammaticPopOnCloseRef.current || linkNavigationRef.current) {
       // Closed due to user back: history already popped
       // Or closed because user clicked a link that navigates away
-      hasPushedRef.current = false
+      hasPushedRef.current = false;
       // reset link flag after consuming
-      linkNavigationRef.current = false
-      return
+      linkNavigationRef.current = false;
+      return;
     }
     // Closed programmatically: consume the pushed entry and suppress global handler
-    __drawerSuppressNextPop = true
+    __drawerSuppressNextPop = true;
     try {
-      window.history.back()
+      window.history.back();
     } catch {
       // ignore
     } finally {
-      hasPushedRef.current = false
+      hasPushedRef.current = false;
     }
-  }, [isMobile])
+  }, [isMobile]);
 
   // Sync side effects when open changes (mobile only)
   React.useEffect(() => {
-    if (!isMobile) return
+    if (!isMobile) return;
     if (open && !wasOpenRef.current) {
-      registerOpen()
+      registerOpen();
     }
     if (!open && wasOpenRef.current) {
       // Closing path
-      unregisterCloseHandlerAndStack()
-      consumeHistoryIfNeeded()
+      unregisterCloseHandlerAndStack();
+      consumeHistoryIfNeeded();
       // Reset the back-origin flag after handling close
-      skipProgrammaticPopOnCloseRef.current = false
+      skipProgrammaticPopOnCloseRef.current = false;
     }
-    wasOpenRef.current = open
-  }, [open, isMobile, registerOpen, unregisterCloseHandlerAndStack, consumeHistoryIfNeeded])
+    wasOpenRef.current = open;
+  }, [
+    open,
+    isMobile,
+    registerOpen,
+    unregisterCloseHandlerAndStack,
+    consumeHistoryIfNeeded,
+  ]);
 
   // While open on mobile, capture clicks on anchor links (<a href>) to avoid
   // calling history.back() during close, which can cancel navigation.
   React.useEffect(() => {
-    if (!isMobile || !open) return
+    if (!isMobile || !open) return;
     const onClickCapture = (e: MouseEvent) => {
-      const target = e.target as Element | null
-      if (!target) return
-      const anchor = target.closest && target.closest('a[href]')
-      if (!anchor) return
+      const target = e.target as Element | null;
+      if (!target) return;
+      const anchor = target.closest && target.closest("a[href]");
+      if (!anchor) return;
       // Ignore pure hash links
-      const href = (anchor as HTMLAnchorElement).getAttribute('href') || ''
-      if (href.startsWith('#')) return
+      const href = (anchor as HTMLAnchorElement).getAttribute("href") || "";
+      if (href.startsWith("#")) return;
       // Mark that a link navigation is happening
-      linkNavigationRef.current = true
-    }
-    window.addEventListener('click', onClickCapture, true)
-    return () => window.removeEventListener('click', onClickCapture, true)
-  }, [isMobile, open])
+      linkNavigationRef.current = true;
+    };
+    window.addEventListener("click", onClickCapture, true);
+    return () => window.removeEventListener("click", onClickCapture, true);
+  }, [isMobile, open]);
 
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
       // First, forward to user's handler
-      userOnOpenChange?.(next)
+      userOnOpenChange?.(next);
       // Then, update internal state if uncontrolled
       if (!isControlled) {
-        setUncontrolledOpen(next)
+        setUncontrolledOpen(next);
       }
       // Side effects are handled by the effect watching `open`
     },
     [isControlled, userOnOpenChange]
-  )
+  );
 
   return (
     <DrawerPrimitive.Root
@@ -171,15 +181,15 @@ const Drawer = ({
       defaultOpen={defaultOpen}
       {...props}
     />
-  )
-}
-Drawer.displayName = "Drawer"
+  );
+};
+Drawer.displayName = "Drawer";
 
-const DrawerTrigger = DrawerPrimitive.Trigger
+const DrawerTrigger = DrawerPrimitive.Trigger;
 
-const DrawerPortal = DrawerPrimitive.Portal
+const DrawerPortal = DrawerPrimitive.Portal;
 
-const DrawerClose = DrawerPrimitive.Close
+const DrawerClose = DrawerPrimitive.Close;
 
 const DrawerOverlay = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Overlay>,
@@ -190,8 +200,8 @@ const DrawerOverlay = React.forwardRef<
     className={cn("fixed inset-0 z-50 bg-black/80", className)}
     {...props}
   />
-))
-DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
+));
+DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName;
 
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
@@ -211,8 +221,8 @@ const DrawerContent = React.forwardRef<
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>
-))
-DrawerContent.displayName = "DrawerContent"
+));
+DrawerContent.displayName = "DrawerContent";
 
 const DrawerHeader = ({
   className,
@@ -222,8 +232,8 @@ const DrawerHeader = ({
     className={cn("grid gap-1.5 p-4 text-center sm:text-left", className)}
     {...props}
   />
-)
-DrawerHeader.displayName = "DrawerHeader"
+);
+DrawerHeader.displayName = "DrawerHeader";
 
 const DrawerFooter = ({
   className,
@@ -233,8 +243,8 @@ const DrawerFooter = ({
     className={cn("mt-auto flex flex-col gap-2 p-4", className)}
     {...props}
   />
-)
-DrawerFooter.displayName = "DrawerFooter"
+);
+DrawerFooter.displayName = "DrawerFooter";
 
 const DrawerTitle = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Title>,
@@ -248,8 +258,8 @@ const DrawerTitle = React.forwardRef<
     )}
     {...props}
   />
-))
-DrawerTitle.displayName = DrawerPrimitive.Title.displayName
+));
+DrawerTitle.displayName = DrawerPrimitive.Title.displayName;
 
 const DrawerDescription = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Description>,
@@ -260,8 +270,8 @@ const DrawerDescription = React.forwardRef<
     className={cn("text-sm text-muted-foreground", className)}
     {...props}
   />
-))
-DrawerDescription.displayName = DrawerPrimitive.Description.displayName
+));
+DrawerDescription.displayName = DrawerPrimitive.Description.displayName;
 
 export {
   Drawer,
@@ -274,4 +284,4 @@ export {
   DrawerFooter,
   DrawerTitle,
   DrawerDescription,
-}
+};

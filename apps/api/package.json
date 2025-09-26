@@ -26,11 +26,15 @@
     "zod": "^3.23.8"
   },
   "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc -b",
+    "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "bun run --hot src/index.ts ",
     "start": "bun run src/index.ts",
     "db:push": "bunx drizzle-kit push",
     "db:studio": "bunx drizzle-kit studio",
-    "db:dev": "bunx turso dev --db-file dev.db",
-    "db:generate": "bunx drizzle-kit generate"
+    "db:local": "bunx turso dev --db-file dev.db",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   }
 }

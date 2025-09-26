@@ -1,12 +1,17 @@
 {
   "name": "avermate",
   "private": true,
+  "packageManager": "bun@1.2.22",
   "scripts": {
-    "db:studio": "cd apps/api && bun run db:studio",
-    "db:push": "cd apps/api && bun run db:push",
-    "db:dev": "cd apps/api && bun run db:dev",
-    "api:dev": "cd apps/api && bun run dev",
-    "client:dev": "cd apps/client && bun run dev"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:client": "turbo -F client dev",
+    "dev:api": "turbo -F api dev",
+    "db:push": "turbo -F api db:push",
+    "db:studio": "turbo -F api db:studio",
+    "db:generate": "turbo -F api db:generate",
+    "db:migrate": "turbo -F api db:migrate"
   },
   "workspaces": [
     "apps/*",
@@ -18,5 +23,8 @@
   "overrides": {
     "@reduxjs/toolkit": "2.2.6",
     "react-redux": "9.1.2"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6"
   }
 }
