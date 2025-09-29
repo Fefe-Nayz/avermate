@@ -79,7 +79,7 @@ export default function YearWorkspaceSelect() {
                             <SelectDrawerItem value={year.id} key={year.id}>
                                 <span className="flex items-center gap-2 mr-2">
                                     <span className="mr-2">
-                                        <span className="block font-medium">{year.name}</span>
+                                        <span className="block font-medium text-start">{year.name}</span>
 
                                         <span className="text-muted-foreground mt-0.5 block text-xs">
                                             {formatDate(new Date(year.startDate))} - {formatDate(new Date(year.endDate))}
