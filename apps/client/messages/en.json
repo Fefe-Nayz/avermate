@@ -635,6 +635,15 @@
         "grades": "Grades",
         "overallAverage": "Overall Average",
         "average": "Average"
+      },
+      "SUBJECT_GRADES_TABLE": {
+        "HEADER_NAME": "Name",
+        "HEADER_GRADE": "Grade",
+        "HEADER_PASSED_AT": "Passed At",
+        "FILTER_NAME_PLACEHOLDER": "Filter by name...",
+        "FILTER_NO_RESULTS": "No results found.",
+        "BUTTON_PREVIOUS": "Previous",
+        "BUTTON_NEXT": "Next"
       }
     },
     "Dialogs": {

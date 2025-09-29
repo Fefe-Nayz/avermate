@@ -635,6 +635,15 @@
         "grades": "Notes",
         "overallAverage": "Moyenne générale",
         "average": "Moyenne"
+      },
+      "SUBJECT_GRADES_TABLE": {
+        "HEADER_NAME": "Nom",
+        "HEADER_GRADE": "Note",
+        "HEADER_PASSED_AT": "Passé le",
+        "FILTER_NAME_PLACEHOLDER": "Chercher par nom...",
+        "FILTER_NO_RESULTS": "Aucun résultat trouvé.",
+        "BUTTON_PREVIOUS": "Précédent",
+        "BUTTON_NEXT": "Suivant"
       }
     },
     "Dialogs": {
