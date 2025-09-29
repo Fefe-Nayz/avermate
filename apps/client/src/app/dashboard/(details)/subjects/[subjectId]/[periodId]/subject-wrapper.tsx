@@ -511,7 +511,7 @@ function SubjectWrapper({
       </div>
 
       {/* Grades List */}
-      {!isVirtualSubject && (
+      {(!isVirtualSubject && !subject.isDisplaySubject) && (
         <>
           <Separator />
           <SubjectGradesTable grades={grades} />

@@ -41,6 +41,7 @@ import GradeMoreButton from "../buttons/dashboard/grade/grade-more-button"
 import { useFormatter, useTranslations } from "next-intl"
 import { useFormatDates } from "@/utils/format"
 import { format } from "path"
+import Link from "next/link"
 
 export const columns: ColumnDef<PartialGrade>[] = [
     // {
@@ -81,8 +82,7 @@ export const columns: ColumnDef<PartialGrade>[] = [
                 </Button>
             )
         },
-        cell: ({ row }) => <p className="truncate text-ellipsis max-w-[160px] md:max-w-[300px] xl:max-w-full">{row.getValue("name")}
-        </p>,
+        cell: ({ row }) => <Link href={`/dashboard/grades/${row.original.id}/${row.original.periodId}`}><p className="font-semibold underline truncate text-ellipsis max-w-[160px] md:max-w-[300px] xl:max-w-full">{row.getValue("name")}</p></Link>,
     },
     {
         accessorKey: "grade",
