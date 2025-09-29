@@ -53,13 +53,15 @@ export default function DeleteSubjectDialog({
       setOpen(false);
 
       if (backOnDelete) {
-        router.back();
+        router.push("/dashboard/grades");
       }
     },
     onSettled: () => {
       queryClient.cancelQueries();
       queryClient.invalidateQueries({ queryKey: ["subjects"] });
-      queryClient.invalidateQueries({ queryKey: ["subjects", "organized-by-periods"] });
+      queryClient.invalidateQueries({
+        queryKey: ["subjects", "organized-by-periods"],
+      });
       queryClient.invalidateQueries({ queryKey: ["recent-grades"] });
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
@@ -75,7 +77,11 @@ export default function DeleteSubjectDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <DropDrawerItem className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4" onSelect={(e) => e.preventDefault()} variant="destructive">
+        <DropDrawerItem
+          className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!bg-transparent max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4"
+          onSelect={(e) => e.preventDefault()}
+          variant="destructive"
+        >
           <div className="flex items-center w-full text-destructive">
             <TrashIcon className="size-4 mr-2" />
             {t("delete")}

@@ -15,9 +15,9 @@ export function useScrollDirection() {
       const scrollY = window.scrollY;
 
       setScrollY(scrollY);
-      setIsAtTop(scrollY < 10);
+      setIsAtTop(scrollY < 20);
 
-      if (Math.abs(scrollY - lastScrollY) < 10) {
+      if (Math.abs(scrollY - lastScrollY) < 20) {
         ticking = false;
         return;
       }

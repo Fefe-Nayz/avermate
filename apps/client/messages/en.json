@@ -245,7 +245,7 @@
       "welcomeTitle": "Welcome to Avermate",
       "welcomeMessage": "We are thrilled to have you on board. Get ready to embark on an exceptional experience!",
       "whatToExpectTitle": "What to expect:",
-      "createYear": "Create your academic year",
+      "createYear": "Create your year",
       "createSubjects": "Create your subjects",
       "createPeriods": "Create your periods",
       "addGrades": "Add your first grades",
@@ -267,7 +267,6 @@
       "resetAccountError": "An error occurred while resetting your account. Please try again later.",
       "accountResetSuccess": "Account reset successfully!",
       "accountResetDescription": "Your account has been successfully reset!",
-      "createYear": "Create your year",
       "getStarted": "Get Started",
       "installAppMessageIOS": "Install Avermate as an app for the best experience",
       "installAppButtonIOS": "Install App",
@@ -611,7 +610,9 @@
     "Nav": {
       "overview": "Overview",
       "grades": "Grades",
-      "YEAR_SETTINGS_PAGE_TITLE": "Year settings"
+      "YEAR_SETTINGS_PAGE_TITLE": "Year settings",
+      "settings": "Settings",
+      "addGrade": "Add"
     },
     "Loader": {
       "GradeLoader": {
@@ -1128,7 +1129,8 @@
         "worstGradeDescription": "Your worst performance in {name} (during {periodName})",
         "notAvailable": "N/A",
         "averageEvolution": "Average Evolution",
-        "generalAverage": "General Average"
+        "generalAverage": "General Average",
+        "impactSectionTitle": "Impacts of the subject"
       },
       "GradeWrapper": {
         "back": "Back",
@@ -1150,7 +1152,11 @@
         "passDateDescription": "The date when this evaluation was taken",
         "addedDateTitle": "Added Date",
         "addedDateDescription": "The date when this evaluation was added",
-        "fullYear": "the full year"
+        "fullYear": "the full year",
+        "impactSectionTitle": "Impacts of the grade"
+      },
+      "SETTINGS_PAGE": {
+        "SETTINGS_PAGE_TITLE": "Settings"
       }
     }
   },
@@ -1369,5 +1375,6 @@
         "email": "By email: noreply@avermate.fr"
       }
     }
-  }
+  },
+  "details": "Details"
 }

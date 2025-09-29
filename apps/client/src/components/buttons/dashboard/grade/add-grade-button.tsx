@@ -3,7 +3,15 @@ import { Button } from "@/components/ui/button";
 import { PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-export const AddGradeButton = ({ yearId, subjectId, disabled }: { yearId: string; subjectId?: string; disabled?: boolean }) => {
+export const AddGradeButton = ({
+  yearId,
+  subjectId,
+  disabled,
+}: {
+  yearId: string;
+  subjectId?: string;
+  disabled?: boolean;
+}) => {
   const t = useTranslations("Dashboard.Pages.GradesPage"); // Initialize t
 
   return (

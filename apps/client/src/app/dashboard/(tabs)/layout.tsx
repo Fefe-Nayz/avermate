@@ -1,3 +1,5 @@
+"use client";
+
 import DashboardHeader from "@/components/dashboard/dashboard-header";
 import DashboardNav from "@/components/nav/dashboard-nav";
 import { ReactNode } from "react";
@@ -15,7 +17,7 @@ export default function AuthenticatedLayout({
       <DashboardNav />
 
       {/* Page */}
-      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16">
+      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-0">
         {children}
       </div>
     </div>

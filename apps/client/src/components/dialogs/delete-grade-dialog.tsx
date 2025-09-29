@@ -47,7 +47,7 @@ export default function DeleteGradeDialog({ grade }: { grade: PartialGrade }) {
 
       setOpen(false);
 
-      router.back();
+      router.push("/dashboard/grades");
     },
     onSettled: () => {
       queryClient.cancelQueries();

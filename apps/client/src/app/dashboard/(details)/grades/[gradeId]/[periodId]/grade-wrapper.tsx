@@ -103,18 +103,8 @@ export default function GradeWrapper({
 
       <Separator />
 
-      <div
-        className={cn(
-          `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4`,
-          get4xlColsClass(
-            gradeParents().length +
-            customAverages.filter((ca) =>
-              isGradeIncludedInCustomAverage(grade, subjects, ca)
-            ).length +
-            7
-          )
-        )}
-      >
+      {/* Basic Information Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 md:gap-4">
         <DataCard
           title={t("scoreObtainedTitle")}
           description={t("scoreObtainedDescription", {
@@ -144,28 +134,30 @@ export default function GradeWrapper({
         </DataCard>
 
         <DataCard
-          title={t("impactOverallAverageTitle")}
-          description={t("impactOverallAverageDescription", {
-            periodName: period?.name
-          })}
-          icon={
-            subjects
-              ? (gradeImpact(grade.id, undefined, subjects)?.difference ?? 0) >= 0
-                ? ArrowUpCircleIcon
-                : ArrowDownCircleIcon
-              : ArrowUpCircleIcon
-          }
+          title={t("passDateTitle")}
+          description={t("passDateDescription")}
+          icon={CalendarIcon}
         >
-          <DifferenceBadge
-            diff={
-              subjects
-                ? gradeImpact(grade.id, undefined, subjects)?.difference || 0
-                : 0
-            }
-          />
+          <p className="texl-xl md:text-3xl font-bold">
+            {useFormatDates(formatter).formatIntermediate(
+              new Date(grade.passedAt)
+            )}
+          </p>
         </DataCard>
 
-        {/* For each custom average, display a card if the grade is included */}
+        <DataCard
+          title={t("addedDateTitle")}
+          description={t("addedDateDescription")}
+          icon={CalendarIcon}
+        >
+          <p className="texl-xl md:text-3xl font-bold">
+            {useFormatDates(formatter).formatIntermediate(
+              new Date(grade.createdAt)
+            )}
+          </p>
+        </DataCard>
+
+        {/* Custom averages integrated with basic info as requested */}
         {customAverages.map((ca) => {
           // Check if this grade is part of the custom average
           if (!isGradeIncludedInCustomAverage(grade, subjects, ca)) {
@@ -196,18 +188,23 @@ export default function GradeWrapper({
             </DataCard>
           );
         })}
+      </div>
 
-        {gradeParents().map((parent: Subject) => (
+      {/* Impact Cards Section */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-medium text-muted-foreground">
+          {t("impactSectionTitle")}
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
           <DataCard
-            key={parent.id}
-            title={t("impactParentAverageTitle", { name: parent.name })}
-            description={t("impactParentAverageDescription", {
-              parentName: parent.name,
+            title={t("impactOverallAverageTitle")}
+            description={t("impactOverallAverageDescription", {
               periodName: period?.name,
             })}
             icon={
               subjects
-                ? (gradeImpact(grade.id, parent.id, subjects)?.difference ?? 0) >= 0
+                ? (gradeImpact(grade.id, undefined, subjects)?.difference ??
+                    0) >= 0
                   ? ArrowUpCircleIcon
                   : ArrowDownCircleIcon
                 : ArrowUpCircleIcon
@@ -216,60 +213,65 @@ export default function GradeWrapper({
             <DifferenceBadge
               diff={
                 subjects
-                  ? gradeImpact(grade.id, parent.id, subjects)?.difference || 0
+                  ? gradeImpact(grade.id, undefined, subjects)?.difference || 0
                   : 0
               }
             />
           </DataCard>
-        ))}
 
-        <DataCard
-          title={t("impactSubjectAverageTitle", { name: grade.subject.name })}
-          description={t("impactSubjectAverageDescription", {
-            name: grade.subject.name,
-            periodName: period?.name,
-          })}
-          icon={
-            subjects
-              ? (gradeImpact(grade.id, grade.subjectId, subjects)?.difference ?? 0) >= 0
-                ? ArrowUpCircleIcon
-                : ArrowDownCircleIcon
-              : ArrowUpCircleIcon
-          }
-        >
-          <DifferenceBadge
-            diff={
+          {gradeParents().map((parent: Subject) => (
+            <DataCard
+              key={parent.id}
+              title={t("impactParentAverageTitle", { name: parent.name })}
+              description={t("impactParentAverageDescription", {
+                parentName: parent.name,
+                periodName: period?.name,
+              })}
+              icon={
+                subjects
+                  ? (gradeImpact(grade.id, parent.id, subjects)?.difference ??
+                      0) >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                  : ArrowUpCircleIcon
+              }
+            >
+              <DifferenceBadge
+                diff={
+                  subjects
+                    ? gradeImpact(grade.id, parent.id, subjects)?.difference ||
+                      0
+                    : 0
+                }
+              />
+            </DataCard>
+          ))}
+
+          <DataCard
+            title={t("impactSubjectAverageTitle", { name: grade.subject.name })}
+            description={t("impactSubjectAverageDescription", {
+              name: grade.subject.name,
+              periodName: period?.name,
+            })}
+            icon={
               subjects
-                ? gradeImpact(grade.id, grade.subjectId, subjects)
-                  ?.difference || 0
-                : 0
+                ? (gradeImpact(grade.id, grade.subjectId, subjects)
+                    ?.difference ?? 0) >= 0
+                  ? ArrowUpCircleIcon
+                  : ArrowDownCircleIcon
+                : ArrowUpCircleIcon
             }
-          />
-        </DataCard>
-
-        <DataCard
-          title={t("passDateTitle")}
-          description={t("passDateDescription")}
-          icon={CalendarIcon}
-        >
-          <p className="texl-xl md:text-3xl font-bold">
-            {useFormatDates(formatter).formatIntermediate(
-              new Date(grade.passedAt)
-            )}
-          </p>
-        </DataCard>
-
-        <DataCard
-          title={t("addedDateTitle")}
-          description={t("addedDateDescription")}
-          icon={CalendarIcon}
-        >
-          <p className="texl-xl md:text-3xl font-bold">
-            {useFormatDates(formatter).formatIntermediate(
-              new Date(grade.createdAt)
-            )}
-          </p>
-        </DataCard>
+          >
+            <DifferenceBadge
+              diff={
+                subjects
+                  ? gradeImpact(grade.id, grade.subjectId, subjects)
+                      ?.difference || 0
+                  : 0
+              }
+            />
+          </DataCard>
+        </div>
       </div>
     </div>
   );

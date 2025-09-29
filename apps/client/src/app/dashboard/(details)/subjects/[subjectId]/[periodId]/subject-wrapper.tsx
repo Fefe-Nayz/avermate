@@ -38,7 +38,13 @@ import { useTranslations } from "next-intl";
 import { EllipsisVerticalIcon, MinusIcon, PlusIcon } from "lucide-react";
 import UpdateAverageDialog from "@/components/dialogs/update-average-dialog";
 import DeleteAverageDialog from "@/components/dialogs/delete-average-dialog";
-import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerItem, DropDrawerTrigger } from "@/components/ui/dropdrawer";
+import {
+  DropDrawer,
+  DropDrawerContent,
+  DropDrawerGroup,
+  DropDrawerItem,
+  DropDrawerTrigger,
+} from "@/components/ui/dropdrawer";
 import { SubjectGradesTable } from "@/components/tables/subject-grades-table";
 import { Grade, PartialGrade } from "@/types/grade";
 
@@ -71,7 +77,7 @@ function SubjectWrapper({
   customAverageImpact,
   onBack,
   periods,
-  grades
+  grades,
 }: {
   subjects: Subject[];
   subject: Subject;
@@ -239,7 +245,7 @@ function SubjectWrapper({
               </Button>
             </AddGradeDialog>
           ) : (
-            <AddGradeDialog yearId={subject.yearId} >
+            <AddGradeDialog yearId={subject.yearId}>
               <Button variant="outline">
                 <PlusCircleIcon className="size-4 mr-2" />
                 {t("addGrade")}
@@ -301,9 +307,11 @@ function SubjectWrapper({
               <DropDrawerContent>
                 <DropDrawerGroup>
                   <UpdateAverageDialog averageId={subject.id} />
-                  <DeleteAverageDialog averageId={subject.id} averageName={subject.name} />
+                  <DeleteAverageDialog
+                    averageId={subject.id}
+                    averageName={subject.name}
+                  />
                 </DropDrawerGroup>
-
               </DropDrawerContent>
             </DropDrawer>
           </div>
@@ -312,27 +320,8 @@ function SubjectWrapper({
 
       <Separator />
 
-      {/* Main Data Cards */}
-      <div
-        className={cn(
-          `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4`,
-          get4xlColsClass(
-            subject.id === "general-average"
-              ? 3
-              : subject.id.startsWith("ca")
-                ? 4
-                : 5 +
-                customAverages.filter((ca) =>
-                  isSubjectIncludedInCustomAverage(
-                    subject,
-                    subjects,
-                    buildCustomConfig(ca)
-                  )
-                ).length +
-                parentSubjects().length
-          )
-        )}
-      >
+      {/* Basic Information Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 md:gap-4">
         {/* Subject Average */}
         <DataCard
           title={t("averageTitle")}
@@ -361,94 +350,6 @@ function SubjectWrapper({
           </DataCard>
         )}
 
-        {/* Custom Averages if subject is included */}
-        {customAverages.map((ca) => {
-          const configMap = buildCustomConfig(ca);
-          if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
-            return null;
-          }
-
-          const impact = subjectImpact(subject.id, undefined, subjects, ca);
-          return (
-            <DataCard
-              key={ca.id}
-              title={t("customImpactTitle", { name: ca.name })}
-              description={t("customImpactDescription", {
-                name: subject.name,
-                customName: ca.name,
-                periodName: period?.name,
-              })}
-              icon={
-                impact?.difference && impact.difference >= 0 ? ArrowUpCircleIcon : ArrowDownCircleIcon
-              }
-            >
-              <DifferenceBadge diff={impact?.difference || 0} />
-            </DataCard>
-          );
-        })}
-
-        {/* Subject Impact on overall average */}
-        {subject.id !== "general-average" && (
-          <DataCard
-            title={t("impactTitle")}
-            description={t("impactDescription", {
-              name: subject?.name,
-              periodName: period?.name,
-            })}
-            icon={
-              subject.id.startsWith("ca")
-                ? customAverageImpact && customAverageImpact >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-                : subjects
-                  ? (subjectImpact(subject.id, undefined, subjects)?.difference ?? 0) >= 0
-                    ? ArrowUpCircleIcon
-                    : ArrowDownCircleIcon
-                  : ArrowUpCircleIcon
-            }
-          >
-            <DifferenceBadge
-              diff={
-                subject.id.startsWith("ca")
-                  ? customAverageImpact || 0
-                  : subjects
-                    ? subjectImpact(subject.id, undefined, subjects)
-                      ?.difference || 0
-                    : 0
-              }
-            />
-          </DataCard>
-        )}
-
-        {/* Parent Subjects (impact on them) */}
-        {parentSubjects().map((parent) => (
-          <DataCard
-            key={parent.id}
-            title={t("parentImpactTitle", { name: parent.name })}
-            description={t("parentImpactDescription", {
-              name: subject?.name,
-              parentName: parent.name,
-              periodName: period?.name,
-            })}
-            icon={
-              subjects
-                ? (subjectImpact(subject.id, parent.id, subjects)?.difference ?? 0) >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-                : ArrowUpCircleIcon
-            }
-          >
-            <DifferenceBadge
-              diff={
-                subjects
-                  ? subjectImpact(subject.id, parent.id, subjects)
-                    ?.difference || 0
-                  : 0
-              }
-            />
-          </DataCard>
-        ))}
-
         {/* Best Grade */}
         <DataCard
           title={t("bestGradeTitle")}
@@ -464,7 +365,10 @@ function SubjectWrapper({
           {(() => {
             const bestGradeObj = getBestGradeInSubject(subjects, subject.id);
             return bestGradeObj?.grade !== undefined ? (
-              <GradeValue value={bestGradeObj.grade} outOf={bestGradeObj.outOf} />
+              <GradeValue
+                value={bestGradeObj.grade}
+                outOf={bestGradeObj.outOf}
+              />
             ) : (
               t("notAvailable")
             );
@@ -484,17 +388,117 @@ function SubjectWrapper({
           icon={MinusIcon}
         >
           {(() => {
-            const worstGradeObj = getWorstGradeInSubject(
-              subjects,
-              subject.id
-            );
+            const worstGradeObj = getWorstGradeInSubject(subjects, subject.id);
             return worstGradeObj?.grade !== undefined ? (
-              <GradeValue value={worstGradeObj.grade} outOf={worstGradeObj.outOf} />
+              <GradeValue
+                value={worstGradeObj.grade}
+                outOf={worstGradeObj.outOf}
+              />
             ) : (
               t("notAvailable")
             );
           })()}
         </DataCard>
+
+        {/* Custom averages integrated with basic info as requested */}
+        {customAverages.map((ca) => {
+          const configMap = buildCustomConfig(ca);
+          if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
+            return null;
+          }
+
+          const impact = subjectImpact(subject.id, undefined, subjects, ca);
+          return (
+            <DataCard
+              key={ca.id}
+              title={t("customImpactTitle", { name: ca.name })}
+              description={t("customImpactDescription", {
+                name: subject.name,
+                customName: ca.name,
+                periodName: period?.name,
+              })}
+              icon={
+                impact?.difference && impact.difference >= 0
+                  ? ArrowUpCircleIcon
+                  : ArrowDownCircleIcon
+              }
+            >
+              <DifferenceBadge diff={impact?.difference || 0} />
+            </DataCard>
+          );
+        })}
+      </div>
+
+      {/* Impact Cards Section */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-medium text-muted-foreground">
+          {t("impactSectionTitle")}
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
+          {/* Subject Impact on overall average */}
+          {subject.id !== "general-average" && (
+            <DataCard
+              title={t("impactTitle")}
+              description={t("impactDescription", {
+                name: subject?.name,
+                periodName: period?.name,
+              })}
+              icon={
+                subject.id.startsWith("ca")
+                  ? customAverageImpact && customAverageImpact >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                  : subjects
+                    ? (subjectImpact(subject.id, undefined, subjects)
+                        ?.difference ?? 0) >= 0
+                      ? ArrowUpCircleIcon
+                      : ArrowDownCircleIcon
+                    : ArrowUpCircleIcon
+              }
+            >
+              <DifferenceBadge
+                diff={
+                  subject.id.startsWith("ca")
+                    ? customAverageImpact || 0
+                    : subjects
+                      ? subjectImpact(subject.id, undefined, subjects)
+                          ?.difference || 0
+                      : 0
+                }
+              />
+            </DataCard>
+          )}
+
+          {/* Parent Subjects (impact on them) */}
+          {parentSubjects().map((parent) => (
+            <DataCard
+              key={parent.id}
+              title={t("parentImpactTitle", { name: parent.name })}
+              description={t("parentImpactDescription", {
+                name: subject?.name,
+                parentName: parent.name,
+                periodName: period?.name,
+              })}
+              icon={
+                subjects
+                  ? (subjectImpact(subject.id, parent.id, subjects)
+                      ?.difference ?? 0) >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                  : ArrowUpCircleIcon
+              }
+            >
+              <DifferenceBadge
+                diff={
+                  subjects
+                    ? subjectImpact(subject.id, parent.id, subjects)
+                        ?.difference || 0
+                    : 0
+                }
+              />
+            </DataCard>
+          ))}
+        </div>
       </div>
 
       <Separator />
@@ -511,14 +515,12 @@ function SubjectWrapper({
       </div>
 
       {/* Grades List */}
-      {(!isVirtualSubject && !subject.isDisplaySubject) && (
+      {!isVirtualSubject && !subject.isDisplaySubject && (
         <>
           <Separator />
           <SubjectGradesTable grades={grades} />
         </>
       )}
-
-
     </div>
   );
 }

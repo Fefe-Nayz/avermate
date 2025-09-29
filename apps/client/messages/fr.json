@@ -245,7 +245,7 @@
       "welcomeTitle": "Bienvenue sur Avermate",
       "welcomeMessage": "Nous sommes ravis de vous accueillir à bord. Préparez-vous à décoller vers une expérience exceptionnelle !",
       "whatToExpectTitle": "Ce qui vous attend :",
-      "createYear": "Création de votre année scolaire",
+      "createYear": "Créez votre année",
       "createSubjects": "Création de vos matières",
       "createPeriods": "Création de vos périodes",
       "addGrades": "Ajout de vos premières notes",
@@ -267,7 +267,6 @@
       "resetAccountError": "Une erreur s'est produite lors de la réinitialisation de votre compte. Veuillez réessayer plus tard.",
       "accountResetSuccess": "Compte réinitialisé avec succès !",
       "accountResetDescription": "Votre compte a été réinitialisé avec succès !",
-      "createYear": "Créez votre année",
       "getStarted": "Commencer",
       "installAppMessageIOS": "Installez Avermate comme application pour une meilleure expérience",
       "installAppButtonIOS": "Installer l'App",
@@ -611,7 +610,9 @@
     "Nav": {
       "overview": "Vue d'ensemble",
       "grades": "Notes",
-      "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année"
+      "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année",
+      "settings": "Paramètres",
+      "addGrade": "Ajouter"
     },
     "Loader": {
       "GradeLoader": {
@@ -1128,7 +1129,8 @@
         "worstGradeDescription": "Votre moins bonne performance en {name} (pendant {periodName})",
         "notAvailable": "N/A",
         "averageEvolution": "Evolution de la moyenne",
-        "generalAverage": "Moyenne générale"
+        "generalAverage": "Moyenne générale",
+        "impactSectionTitle": "Impacts de la matière"
       },
       "GradeWrapper": {
         "back": "Retour",
@@ -1150,7 +1152,11 @@
         "passDateDescription": "La date de passage de cette évaluation",
         "addedDateTitle": "Date d'ajout",
         "addedDateDescription": "La date d'ajout de cette évaluation",
-        "fullYear": "Toute l'année"
+        "fullYear": "Toute l'année",
+        "impactSectionTitle": "Impacts de la note"
+      },
+      "SETTINGS_PAGE": {
+        "SETTINGS_PAGE_TITLE": "Paramètres"
       }
     }
   },
@@ -1369,5 +1375,6 @@
         "email": "Par e-mail : noreply@avermate.fr"
       }
     }
-  }
+  },
+  "details": "Détails"
 }
