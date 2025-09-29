@@ -216,6 +216,7 @@ export default function SubjectPage() {
       customAverageImpact={calculateCustomAverageImpact()}
       onBack={handleBack}
       periods={sortedPeriods}
+      grades={subject?.grades || []}
     />
   );
 }

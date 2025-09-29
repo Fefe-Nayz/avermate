@@ -2,7 +2,7 @@
 
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
-import { Grade } from "@/types/grade";
+import { Grade, PartialGrade } from "@/types/grade";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon } from "lucide-react";
@@ -24,7 +24,7 @@ import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
 import { DropDrawerItem } from "../ui/dropdrawer";
 
-export default function DeleteGradeDialog({ grade }: { grade: Grade }) {
+export default function DeleteGradeDialog({ grade }: { grade: PartialGrade }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteGrade");
   const errorTranslations = useTranslations("Errors");
   const [open, setOpen] = useState(false);

@@ -4,10 +4,10 @@ import DeleteGradeDialog from "@/components/dialogs/delete-grade-dialog";
 import UpdateGradeDialog from "@/components/dialogs/update-grade-dialog";
 import { Button } from "@/components/ui/button";
 import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
-import { Grade } from "@/types/grade";
+import { Grade, PartialGrade } from "@/types/grade";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 
-export default function GradeMoreButton({ grade }: { grade: Grade }) {
+export default function GradeMoreButton({ grade }: { grade: PartialGrade }) {
   return (
     <DropDrawer>
       <DropDrawerTrigger asChild>

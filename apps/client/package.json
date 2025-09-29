@@ -44,6 +44,7 @@
     "@t3-oss/env-nextjs": "^0.13.8",
     "@tabler/icons-react": "^3.35.0",
     "@tanstack/react-query": "^5.62.7",
+    "@tanstack/react-table": "^8.21.3",
     "@types/canvas-confetti": "^1.9.0",
     "@types/js-cookie": "^3.0.6",
     "@types/lodash": "^4.17.13",

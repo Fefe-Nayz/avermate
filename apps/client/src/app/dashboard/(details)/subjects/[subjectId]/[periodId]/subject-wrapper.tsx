@@ -39,6 +39,8 @@ import { EllipsisVerticalIcon, MinusIcon, PlusIcon } from "lucide-react";
 import UpdateAverageDialog from "@/components/dialogs/update-average-dialog";
 import DeleteAverageDialog from "@/components/dialogs/delete-average-dialog";
 import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerItem, DropDrawerTrigger } from "@/components/ui/dropdrawer";
+import { SubjectGradesTable } from "@/components/tables/subject-grades-table";
+import { Grade, PartialGrade } from "@/types/grade";
 
 function getRelevantPeriodIds(period: Period, periods: Period[]): string[] {
   if (period.id === "full-year") {
@@ -69,6 +71,7 @@ function SubjectWrapper({
   customAverageImpact,
   onBack,
   periods,
+  grades
 }: {
   subjects: Subject[];
   subject: Subject;
@@ -77,6 +80,7 @@ function SubjectWrapper({
   customAverageImpact?: number | null;
   onBack: () => void;
   periods: Period[];
+  grades: PartialGrade[];
 }) {
   const t = useTranslations("Dashboard.Pages.SubjectWrapper");
 
@@ -505,6 +509,16 @@ function SubjectWrapper({
           periods={periods}
         />
       </div>
+
+      {/* Grades List */}
+      {(!isVirtualSubject && !subject.isDisplaySubject) && (
+        <>
+          <Separator />
+          <SubjectGradesTable grades={grades} />
+        </>
+      )}
+
+
     </div>
   );
 }
