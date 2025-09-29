@@ -73,7 +73,7 @@ export default function YearWorkspaceSelect() {
                     {years.find(year => year.id === activeId)?.name}
                 </SelectDrawerTrigger>
 
-                <SelectDrawerContent title={t("SELECT_YEAR_TITLE")}>
+                <SelectDrawerContent title={t("SELECT_YEAR_TITLE")} align="end">
                     <SelectDrawerGroup>
                         {years.map((year) => (
                             <SelectDrawerItem value={year.id} key={year.id}>

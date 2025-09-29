@@ -1,8 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import * as React from "react";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 
 import {
   Drawer,
@@ -299,6 +301,7 @@ function DropDrawerContent({
                   <button
                     onClick={goBack}
                     className="hover:bg-muted/50 rounded-full p-1"
+                    aria-label="Go back"
                   >
                     <ChevronLeftIcon className="h-5 w-5" />
                   </button>
@@ -462,11 +465,14 @@ function DropDrawerItem({
         className={cn(
           "flex cursor-pointer items-center justify-between px-4 py-4 transition-colors group",
           // Only apply margin, background and rounded corners if not in a group
-          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15 active:!bg-primary/25 dark:active:!bg-primary/25",
+          !isInsideGroup &&
+            "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15 active:!bg-primary/25 dark:active:!bg-primary/25",
           // For items in a group, don't add background but add more padding
-          isInsideGroup && "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10 active:!bg-primary/20 dark:active:!bg-primary/20",
+          isInsideGroup &&
+            "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10 active:!bg-primary/20 dark:active:!bg-primary/20",
           inset && "pl-8",
-          variant === "destructive" && "text-destructive dark:text-destructive hover:!bg-destructive/20 dark:hover:!bg-destructive/20 active:!bg-destructive/30 dark:active:!bg-destructive/30",
+          variant === "destructive" &&
+            "text-destructive dark:text-destructive hover:!bg-destructive/20 dark:hover:!bg-destructive/20 active:!bg-destructive/30 dark:active:!bg-destructive/30",
           disabled && "pointer-events-none opacity-50",
           className
         )}
@@ -678,9 +684,9 @@ interface SubmenuContextType {
 
 const SubmenuContext = React.createContext<SubmenuContextType>({
   activeSubmenu: null,
-  setActiveSubmenu: () => { },
+  setActiveSubmenu: () => {},
   submenuTitle: null,
-  setSubmenuTitle: () => { },
+  setSubmenuTitle: () => {},
   navigateToSubmenu: undefined,
   registerSubmenuContent: undefined,
 });
@@ -901,9 +907,11 @@ function DropDrawerSubTrigger({
         className={cn(
           "flex cursor-pointer items-center justify-between px-4 py-4 transition-colors",
           // Only apply margin, background and rounded corners if not in a group
-          !isInsideGroup && "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15",
+          !isInsideGroup &&
+            "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15",
           // For items in a group, don't add background but add more padding
-          isInsideGroup && "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10",
+          isInsideGroup &&
+            "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10",
           inset && "pl-8",
           className
         )}
@@ -958,8 +966,82 @@ function DropDrawerSubContent({
   );
 }
 
+const DropDrawerCheckboxItem = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
+    inset?: boolean;
+  }
+>(
+  (
+    {
+      className,
+      children,
+      checked,
+      inset,
+      onCheckedChange,
+      onSelect,
+      ...props
+    },
+    ref
+  ) => {
+    const { isMobile } = useDropDrawerContext();
+
+    // Handle both onCheckedChange and onSelect for compatibility
+    const handleClick = () => {
+      if (onCheckedChange) {
+        onCheckedChange(!checked);
+      }
+      if (onSelect) {
+        onSelect({} as any);
+      }
+    };
+
+    if (isMobile) {
+      return (
+        <div
+          ref={ref}
+          data-slot="drop-drawer-checkbox-item"
+          className={cn(
+            // Mobile styling - transparent background, no margins, no rounded corners
+            "w-full !bg-transparent !mx-0 !my-0 !rounded-none py-4",
+            // Checkbox functionality with hover and pressed states
+            "relative flex cursor-pointer select-none items-center text-sm outline-none transition-colors",
+            "hover:!bg-primary/10 active:!bg-primary/20",
+            "focus:bg-accent focus:text-accent-foreground",
+            "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            inset && "pl-8",
+            className
+          )}
+          data-disabled={props.disabled}
+          onClick={handleClick}
+        >
+          <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+            {checked && <CheckIcon className="h-4 w-4" />}
+          </span>
+          <div className="flex items-center w-full ml-6">{children}</div>
+        </div>
+      );
+    }
+
+    return (
+      <DropdownMenuCheckboxItem
+        ref={ref}
+        className={className}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        onSelect={onSelect}
+        {...props}
+      >
+        {children}
+      </DropdownMenuCheckboxItem>
+    );
+  }
+);
+DropDrawerCheckboxItem.displayName = "DropDrawerCheckboxItem";
+
 export {
   DropDrawer,
+  DropDrawerCheckboxItem,
   DropDrawerContent,
   DropDrawerFooter,
   DropDrawerGroup,
