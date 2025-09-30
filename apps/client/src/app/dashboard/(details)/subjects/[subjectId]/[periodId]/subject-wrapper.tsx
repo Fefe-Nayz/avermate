@@ -400,33 +400,7 @@ function SubjectWrapper({
           })()}
         </DataCard>
 
-        {/* Custom averages integrated with basic info as requested */}
-        {customAverages.map((ca) => {
-          const configMap = buildCustomConfig(ca);
-          if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
-            return null;
-          }
-
-          const impact = subjectImpact(subject.id, undefined, subjects, ca);
-          return (
-            <DataCard
-              key={ca.id}
-              title={t("customImpactTitle", { name: ca.name })}
-              description={t("customImpactDescription", {
-                name: subject.name,
-                customName: ca.name,
-                periodName: period?.name,
-              })}
-              icon={
-                impact?.difference && impact.difference >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-              }
-            >
-              <DifferenceBadge diff={impact?.difference || 0} />
-            </DataCard>
-          );
-        })}
+ 
       </div>
 
       {/* Impact Cards Section */}
@@ -468,6 +442,34 @@ function SubjectWrapper({
               />
             </DataCard>
           )}
+
+       {/* Custom averages integrated with basic info as requested */}
+        {customAverages.map((ca) => {
+          const configMap = buildCustomConfig(ca);
+          if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
+            return null;
+          }
+
+          const impact = subjectImpact(subject.id, undefined, subjects, ca);
+          return (
+            <DataCard
+              key={ca.id}
+              title={t("customImpactTitle", { name: ca.name })}
+              description={t("customImpactDescription", {
+                name: subject.name,
+                customName: ca.name,
+                periodName: period?.name,
+              })}
+              icon={
+                impact?.difference && impact.difference >= 0
+                  ? ArrowUpCircleIcon
+                  : ArrowDownCircleIcon
+              }
+            >
+              <DifferenceBadge diff={impact?.difference || 0} />
+            </DataCard>
+          );
+        })}
 
           {/* Parent Subjects (impact on them) */}
           {parentSubjects().map((parent) => (
