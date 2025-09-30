@@ -17,7 +17,7 @@ export default function AuthenticatedLayout({
       <DashboardNav />
 
       {/* Page */}
-      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-0">
+      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-16">
         {children}
       </div>
     </div>

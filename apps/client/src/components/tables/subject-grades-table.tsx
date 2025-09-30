@@ -18,6 +18,9 @@ import {
   ChevronDown,
   MoreHorizontal,
   Columns3CogIcon,
+  ChevronLeft,
+  ChevronRight,
+  Search,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -92,7 +95,7 @@ function makeColumns(
         <Link
           href={`/dashboard/grades/${row.original.id}/${row.original.periodId}`}
         >
-          <p className="font-semibold underline truncate text-ellipsis max-w-[160px] md:max-w-[300px] xl:max-w-full">
+          <p className="font-semibold underline truncate text-ellipsis max-w-[100px] md:max-w-[200px] xl:max-w-[300px]">
             {row.getValue("name")}
           </p>
         </Link>
@@ -217,7 +220,9 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
     setColumnVisibility((prev) => ({ ...prev, passedAt: !isUnder400px }));
   }, [isUnder400px, userOverrodePassedAt]);
 
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>([
+    { id: "passedAt", desc: true },
+  ]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
@@ -240,14 +245,17 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
   return (
     <div className="w-full">
       <div className="flex items-center py-4 gap-2">
-        <Input
-          placeholder={t("FILTER_NAME_PLACEHOLDER")}
-          value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn("name")?.setFilterValue(event.target.value)
-          }
-          className={`flex-1 ${isMobile ? "max-w-none" : "max-w-sm md:max-w-[40%]"}`}
-        />
+        <div className={`relative flex-1 ${isMobile ? "max-w-none" : "max-w-sm md:max-w-[40%]"}`}>
+          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder={t("FILTER_NAME_PLACEHOLDER")}
+            value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn("name")?.setFilterValue(event.target.value)
+            }
+            className="pl-8"
+          />
+        </div>
         <DropDrawer>
           <DropDrawerTrigger asChild>
             <Button
@@ -259,8 +267,8 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
             </Button>
           </DropDrawerTrigger>
           <DropDrawerContent align="end">
-            <DropDrawerLabel className="block md:hidden">
-              <h1 className="text-foreground font-semibold">{t("COLUMNS")}</h1>
+            <DropDrawerLabel className="block md:hidden text-lg font-semibold leading-none tracking-tight text-foreground">
+              {t("COLUMNS")}
             </DropDrawerLabel>
             <DropDrawerGroup>
               {table
@@ -338,29 +346,31 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
         </Table>
       </div>
 
-      <div className="flex items-center justify-end space-x-2 py-4">
+      <div className="flex items-center justify-end gap-2 py-4">
         {/* <div className="text-muted-foreground flex-1 text-sm">
                     {table.getFilteredSelectedRowModel().rows.length} of{" "}
                     {table.getFilteredRowModel().rows.length} row(s) selected.
                 </div> */}
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            {t("BUTTON_PREVIOUS")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            {t("BUTTON_NEXT")}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+          className={isMobile ? "flex-1" : ""}
+        >
+          <ChevronLeft className="h-4 w-4" />
+          {t("BUTTON_PREVIOUS")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+          className={isMobile ? "flex-1" : ""}
+        >
+          {t("BUTTON_NEXT")}
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );

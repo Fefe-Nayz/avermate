@@ -45,7 +45,7 @@ export default function ProfileLayout({
     <div className="flex flex-col shadow-[0px_4px_64px_0px_rgba(255,255,255,0.05)_inset] min-h-screen h-full">
       <DashboardHeader />
       {showNav && <DashboardNav />}
-      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-0">
+      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-16">
         {/* Pass the handleBack function to ProfileNav */}
         <div className="flex flex-col sm:flex-row gap-4 md:gap-8 m-auto max-w-[2000px] ">
           <ProfileNav onBack={handleBack} />

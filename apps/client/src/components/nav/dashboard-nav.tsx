@@ -96,7 +96,7 @@ export default function DashboardNav() {
           style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
         >
           {/* Align bottoms so the center can be taller than the sides */}
-          <div className="flex justify-center px-2 py-2 gap-1">
+          <div className="flex justify-center px-2 py-1.5 gap-1">
             {/* Left navigation buttons - equal width; equal height within the group */}
             <div className="flex flex-1 basis-0 min-w-0 gap-1 items-stretch">
               {routes.slice(0, 2).map((route) => {
@@ -112,13 +112,13 @@ export default function DashboardNav() {
                     <div
                       className={cn(
                         // compact side tabs
-                        "flex flex-col items-center justify-center rounded-lg transition-all w-full min-h-[56px] px-2 py-1.5",
+                        "flex flex-col items-center justify-center rounded-lg transition-all w-full min-h-[48px] px-2 py-1",
                         isActive
                           ? "bg-accent text-accent-foreground"
                           : "hover:bg-accent hover:text-accent-foreground"
                       )}
                     >
-                      <Icon className="size-4 mb-1 flex-shrink-0" />
+                      <Icon className="size-4 mb-0.5 flex-shrink-0" />
                       <span className="text-[10px] font-medium text-center leading-tight whitespace-normal break-words w-full">
                         {route.label}
                       </span>
@@ -128,15 +128,12 @@ export default function DashboardNav() {
               })}
             </div>
 
-            {/* Add Grade Button - Center, intentionally bigger */}
+            {/* Add Grade Button - Center */}
             {activeId && (
               <AddGradeDialog yearId={activeId}>
-                <div className="flex flex-col items-center justify-center mx-1">
-                  <div className="flex flex-col items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all min-w-[72px] min-h-[68px] px-3 py-2">
-                    <Plus className="size-5 mb-1 flex-shrink-0" />
-                    <span className="text-[10px] font-medium text-center leading-tight">
-                      {t("addGrade")}
-                    </span>
+                <div className="flex flex-col items-center justify-center mx-0.5">
+                  <div className="flex flex-col items-center justify-center rounded-full transition-all size-[52px] bg-foreground text-background hover:bg-foreground/80">
+                    <Plus className="size-5 flex-shrink-0" />
                   </div>
                 </div>
               </AddGradeDialog>
@@ -157,13 +154,13 @@ export default function DashboardNav() {
                     <div
                       className={cn(
                         // compact side tabs
-                        "flex flex-col items-center justify-center rounded-lg transition-all w-full min-h-[56px] px-2 py-1.5",
+                        "flex flex-col items-center justify-center rounded-lg transition-all w-full min-h-[48px] px-2 py-1",
                         isActive
                           ? "bg-accent text-accent-foreground"
                           : "hover:bg-accent hover:text-accent-foreground"
                       )}
                     >
-                      <Icon className="size-4 mb-1 flex-shrink-0" />
+                      <Icon className="size-4 mb-0.5 flex-shrink-0" />
                       <span className="text-[10px] font-medium text-center leading-tight whitespace-normal break-words w-full">
                         {route.label}
                       </span>
@@ -178,7 +175,7 @@ export default function DashboardNav() {
 
       {/* Desktop navbar - horizontal navigation */}
       <nav className="sticky px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 pt-4 hidden md:block">
-        <div className="flex items-center justify-between border-b mx-auto max-w-[2000px]">
+        <div className="flex items-center border-b mx-auto max-w-[2000px]">
           <ul className="flex items-center">
             {routes.slice(0, 3).map((route) => {
               const Icon = route.icon;
@@ -202,37 +199,6 @@ export default function DashboardNav() {
               );
             })}
           </ul>
-
-          <div className="flex items-center gap-2">
-            {/* Settings Button */}
-            <Link
-              href="/profile/settings"
-              className={cn(
-                "flex items-center gap-2 p-4 text-sm border-b-2 border-transparent hover:border-black dark:hover:border-white transition-all",
-                getIsActiveRoute(
-                  routes.find((r) => r.path === "/profile/settings")!,
-                  path
-                ) && "border-black dark:border-white"
-              )}
-            >
-              <Settings className="size-4 flex-shrink-0" />
-              <span className="whitespace-normal break-words">
-                {t("settings")}
-              </span>
-            </Link>
-
-            {/* Add Grade Button - Primary styling, triggers dialog */}
-            {activeId && (
-              <AddGradeDialog yearId={activeId}>
-                <div className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-3 rounded-md text-sm font-medium transition-all ml-4 cursor-pointer">
-                  <Plus className="size-4 mr-2 inline flex-shrink-0" />
-                  <span className="whitespace-normal break-words">
-                    {t("addGrade")}
-                  </span>
-                </div>
-              </AddGradeDialog>
-            )}
-          </div>
         </div>
       </nav>
     </>
