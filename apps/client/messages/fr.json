@@ -644,7 +644,8 @@
         "FILTER_NAME_PLACEHOLDER": "Chercher par nom...",
         "FILTER_NO_RESULTS": "Aucun résultat trouvé.",
         "BUTTON_PREVIOUS": "Précédent",
-        "BUTTON_NEXT": "Suivant"
+        "BUTTON_NEXT": "Suivant",
+        "COLUMNS": "Colones",
       }
     },
     "Dialogs": {
