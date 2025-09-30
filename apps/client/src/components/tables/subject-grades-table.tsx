@@ -45,7 +45,6 @@ import {
   DropDrawerGroup,
   DropDrawerItem,
   DropDrawerTrigger,
-  DropDrawerLabel,
 } from "@/components/ui/dropdrawer";
 
 // Build columns with a factory so hooks stay inside components
@@ -258,8 +257,7 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
               {!isMobile && <span className="ml-2">{t("COLUMNS")}</span>}
             </Button>
           </DropDrawerTrigger>
-          <DropDrawerContent align="end">
-            <DropDrawerLabel>{t("COLUMNS")}</DropDrawerLabel>
+          <DropDrawerContent align="end" title={t("COLUMNS")}>
             <DropDrawerGroup>
               {table
                 .getAllColumns()
