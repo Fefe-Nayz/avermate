@@ -64,22 +64,24 @@ export default function DashboardHeader({
       <div className="flex justify-center px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96">
         <div className="flex w-full items-center justify-between gap-8 max-w-[2000px]">
           {/* Left side - Logo and Title (on mobile) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <Logo />
             {showTitle && (
-              <h1 className="text-lg font-semibold text-foreground truncate">
+              <h1 className="text-lg font-semibold text-foreground truncate min-w-0 flex-1">
                 {pageTitle}
               </h1>
             )}
           </div>
 
           {/* Right side - Controls */}
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-shrink-0">
             {!hideWorkspaces && (
               <div
                 className={cn(
-                  "transition-opacity duration-300",
-                  isCompact ? "opacity-0 pointer-events-none" : "opacity-100"
+                  "transition-all duration-300 overflow-hidden",
+                  isCompact
+                    ? "w-0 opacity-0 pointer-events-none"
+                    : "w-auto opacity-100"
                 )}
               >
                 <YearWorkspaceSelect />

@@ -985,6 +985,7 @@ const DropDrawerCheckboxItem = React.forwardRef<
     ref
   ) => {
     const { isMobile } = useDropDrawerContext();
+    const { itemRef, isInsideGroup } = useIsInGroup(isMobile);
 
     // Handle both onCheckedChange and onSelect for compatibility
     const handleClick = () => {
@@ -999,26 +1000,46 @@ const DropDrawerCheckboxItem = React.forwardRef<
     if (isMobile) {
       return (
         <div
-          ref={ref}
+          ref={(el) => {
+            // Set the internal ref for group detection
+            if (itemRef) {
+              (
+                itemRef as React.MutableRefObject<HTMLDivElement | null>
+              ).current = el;
+            }
+            // Handle forwarded ref
+            if (typeof ref === "function") {
+              ref(el);
+            } else if (ref) {
+              (ref as React.MutableRefObject<HTMLDivElement | null>).current =
+                el;
+            }
+          }}
           data-slot="drop-drawer-checkbox-item"
           className={cn(
-            // Mobile styling - transparent background, no margins, no rounded corners
-            "w-full !bg-transparent !mx-0 !my-0 !rounded-none py-4",
-            // Checkbox functionality with hover and pressed states
-            "relative flex cursor-pointer select-none items-center text-sm outline-none transition-colors",
+            // Mobile styling - match DropDrawerItem styling exactly
+            "flex cursor-pointer items-center justify-between px-4 py-4 transition-colors group",
+            // Only apply margin, background and rounded corners if not in a group
+            !isInsideGroup &&
+              "bg-accent dark:bg-accent mx-2 my-1.5 rounded-md hover:!bg-primary/15 dark:hover:!bg-primary/15 active:!bg-primary/25 dark:active:!bg-primary/25",
+            // For items in a group, don't add background but add more padding
+            isInsideGroup &&
+              "bg-transparent py-4 hover:!bg-primary/10 dark:hover:!bg-primary/10 active:!bg-primary/20 dark:active:!bg-primary/20",
+            inset && "pl-8",
             "hover:!bg-primary/10 active:!bg-primary/20",
             "focus:bg-accent focus:text-accent-foreground",
             "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-            inset && "pl-8",
             className
           )}
           data-disabled={props.disabled}
           onClick={handleClick}
         >
-          <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-            {checked && <CheckIcon className="h-4 w-4" />}
-          </span>
-          <div className="flex items-center w-full ml-6">{children}</div>
+          <div className="flex items-center gap-2">
+            <span className="flex h-3.5 w-3.5 items-center justify-center">
+              {checked && <CheckIcon className="h-4 w-4" />}
+            </span>
+            <div>{children}</div>
+          </div>
         </div>
       );
     }
@@ -1038,6 +1059,48 @@ const DropDrawerCheckboxItem = React.forwardRef<
   }
 );
 DropDrawerCheckboxItem.displayName = "DropDrawerCheckboxItem";
+
+// Helper function to check if element is inside a group (shared logic)
+function useIsInGroup(isMobile: boolean) {
+  // Define hooks outside of conditionals to follow React rules
+  // Check if this item is inside a group by looking at parent elements
+  const isInGroup = React.useCallback(
+    (element: HTMLElement | null): boolean => {
+      if (!element) return false;
+
+      // Check if any parent has a data-drop-drawer-group attribute
+      let parent = element.parentElement;
+      while (parent) {
+        if (parent.hasAttribute("data-drop-drawer-group")) {
+          return true;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    },
+    []
+  );
+
+  // Create a ref to check if the item is in a group
+  const itemRef = React.useRef<HTMLDivElement>(null);
+  const [isInsideGroup, setIsInsideGroup] = React.useState(false);
+
+  React.useEffect(() => {
+    // Only run this effect in mobile mode
+    if (!isMobile) return;
+
+    // Use a short timeout to ensure the DOM is fully rendered
+    const timer = setTimeout(() => {
+      if (itemRef.current) {
+        setIsInsideGroup(isInGroup(itemRef.current));
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [isInGroup, isMobile]);
+
+  return { itemRef, isInsideGroup };
+}
 
 export {
   DropDrawer,

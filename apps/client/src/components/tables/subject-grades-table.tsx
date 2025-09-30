@@ -44,6 +44,7 @@ import {
   DropDrawerContent,
   DropDrawerGroup,
   DropDrawerItem,
+  DropDrawerLabel,
   DropDrawerTrigger,
 } from "@/components/ui/dropdrawer";
 
@@ -257,7 +258,10 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
               {!isMobile && <span className="ml-2">{t("COLUMNS")}</span>}
             </Button>
           </DropDrawerTrigger>
-          <DropDrawerContent align="end" title={t("COLUMNS")}>
+          <DropDrawerContent align="end">
+            <DropDrawerLabel className="block md:hidden">
+              <h1 className="text-foreground font-semibold">{t("COLUMNS")}</h1>
+            </DropDrawerLabel>
             <DropDrawerGroup>
               {table
                 .getAllColumns()
