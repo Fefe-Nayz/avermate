@@ -16,18 +16,7 @@ import {
 import AddGradeDialog from "@/components/dialogs/add-grade-dialog";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-
-// Portal component for rendering navbar outside vaul wrapper
-function BodyPortal({ children }: { children: React.ReactNode }) {
-  const [mountNode, setMountNode] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setMountNode(document.body);
-  }, []);
-
-  return mountNode ? createPortal(children, mountNode) : null;
-}
+import { BodyPortal } from "@/components/portal/body-portal";
 
 export default function DashboardNav() {
   const t = useTranslations("Dashboard.Nav");

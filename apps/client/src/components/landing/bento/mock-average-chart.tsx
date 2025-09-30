@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { useLocalizedSubjects } from "@/data/mock";
 import { average, averageOverTime } from "@/utils/average";
 import { useFormatDates } from "@/utils/format";
+import { calculateYAxisDomain } from "@/utils/chart";
 import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
@@ -89,12 +90,12 @@ const renderPolarAngleAxis = (props: TickProps) => {
     window.innerWidth < 450
       ? 5
       : window.innerWidth < 1024
-      ? 10
-      : window.innerWidth < 1300
-      ? 5
-      : window.innerWidth < 2100
-      ? 9
-      : 12;
+        ? 10
+        : window.innerWidth < 1300
+          ? 5
+          : window.innerWidth < 2100
+            ? 9
+            : 12;
 
   const value = props.payload?.value ?? "";
   const truncatedLabel =
@@ -148,22 +149,48 @@ export const MockAverageChart = () => {
   const endDate = new Date(period.endAt);
   const startDate = new Date(period.startAt);
 
-  // Generate an array of dates
+  // Generate an array of dates (weekly intervals for better visual span)
   const dates = [];
   for (
     let dt = new Date(startDate);
     dt <= endDate;
-    dt.setDate(dt.getDate() + 1)
+    dt.setDate(dt.getDate() + 7) // Weekly intervals instead of daily
   ) {
     dates.push(new Date(dt));
   }
 
-  // Calculate the average grades over time
-  const averages = averageOverTime(localizedSubjects, undefined, period, []);
+  // Ensure we include the end date
+  if (dates[dates.length - 1] < endDate) {
+    dates.push(new Date(endDate));
+  }
+
+  // Generate sample average data for each week to ensure full coverage
+  const generateSampleAverages = (dates: Date[]) => {
+    const baseline = 11; // Starting average
+    const target = 14; // Target average by end of year
+    const variation = 1.5; // Random variation range
+
+    return dates.map((date, index) => {
+      // Calculate progress through the year (0 to 1)
+      const totalWeeks = dates.length;
+      const progress = index / (totalWeeks - 1);
+
+      // Linear progression from baseline to target
+      const baseAverage = baseline + (target - baseline) * progress;
+
+      // Add random variation
+      const randomVariation = (Math.random() - 0.5) * variation;
+
+      // Ensure average stays within reasonable bounds (8-18)
+      return Math.max(8, Math.min(18, baseAverage + randomVariation));
+    });
+  };
+
+  const sampleAverages = generateSampleAverages(dates);
 
   const chartData = dates.map((date, index) => ({
     date: date.toISOString(),
-    average: averages[index],
+    average: sampleAverages[index],
   }));
 
   const chartConfig = {
@@ -172,6 +199,9 @@ export const MockAverageChart = () => {
       color: "#2662d9",
     },
   };
+
+  // Calculate Y-axis domain based on settings
+  const yAxisDomain = calculateYAxisDomain(chartData);
 
   // Calculate average grades per subject for radar chart, only if it is a main subject
   const subjectAverages = localizedSubjects
@@ -260,7 +290,7 @@ export const MockAverageChart = () => {
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  domain={[0, 20]}
+                  domain={yAxisDomain}
                   tickMargin={8}
                   tickCount={5}
                 />

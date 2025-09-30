@@ -139,8 +139,9 @@ export default function GradesTable({
                 );
               }}
             >
-              {t("overallAverage")}</Link>: {overallAverage}
-
+              {t("overallAverage")}
+            </Link>
+            : {overallAverage}
           </TableCell>
         </TableRow>
 
@@ -154,16 +155,18 @@ export default function GradesTable({
                   ? customAverages?.find((ca) => ca.id === customAverageId)
                   : undefined;
 
-
                 return addGeneralAverageToSubjects(subjects, customAverage);
-              }
+              };
               const subjectVirtual = () => {
                 return (
                   subjectsToGive().find((s) => s.id === ca.id) ||
                   buildGeneralAverageSubject()
                 );
               };
-              const customAvgVal = (average(subjectVirtual()?.id, subjectsToGive()));
+              const customAvgVal = average(
+                subjectVirtual()?.id,
+                subjectsToGive()
+              );
               const customAvg =
                 customAvgVal !== null ? customAvgVal.toFixed(2) : "—";
 
@@ -302,7 +305,10 @@ function renderSubjects(
                 onClick={() => {
                   const currentPath =
                     pathname + window.location.search || "/dashboard";
-                  localStorage.setItem("backFromGradeOrSubject", `${currentPath}#${subject.id}`);
+                  localStorage.setItem(
+                    "backFromGradeOrSubject",
+                    `${currentPath}#${subject.id}`
+                  );
                 }}
                 className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
               >
@@ -314,7 +320,7 @@ function renderSubjects(
 
               {/* Mobile-only average display */}
               <div className="md:hidden mt-1 text-sm text-muted-foreground">
-                {t("average")}: {" "}
+                {t("average")}:{" "}
                 <span className="font-bold text-foreground">{subjAverage}</span>
               </div>
             </TableCell>

@@ -30,7 +30,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
-      yearId: ""
+      yearId: "",
     },
     {
       id: "sub_ll8ou2dywa65",
@@ -43,7 +43,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
-      yearId: ""
+      yearId: "",
     },
     {
       id: "sub_62sj3aw31h0c",
@@ -56,7 +56,7 @@ export const useLocalizedSubjects = () => {
       createdAt: new Date(),
       userId: "u_8d9m6qgq2xf5",
       grades: [],
-      yearId: ""
+      yearId: "",
     },
     {
       id: "sub_9dp4yngnpw5w",

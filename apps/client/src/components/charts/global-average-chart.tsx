@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average, averageOverTime } from "@/utils/average";
+import { calculateYAxisDomain } from "@/utils/chart";
 import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 import {
   Area,
@@ -76,7 +77,10 @@ interface ChartDataPoint {
   average: number | null;
 }
 
-function findNearestDatum(data: ChartDataPoint[], targetDate: string): ChartDataPoint | null {
+function findNearestDatum(
+  data: ChartDataPoint[],
+  targetDate: string
+): ChartDataPoint | null {
   let nearestDatum: ChartDataPoint | null = null;
   let minDiff = Infinity;
   const targetTime = new Date(targetDate).getTime();
@@ -96,11 +100,7 @@ function findNearestDatum(data: ChartDataPoint[], targetDate: string): ChartData
   return nearestDatum;
 }
 
-function GlobalActiveDot({
-  chartData,
-}: {
-  chartData: ChartDataPoint[];
-}) {
+function GlobalActiveDot({ chartData }: { chartData: ChartDataPoint[] }) {
   const activeLabel = useActiveTooltipLabel();
   if (!activeLabel) return null;
 
@@ -172,7 +172,8 @@ export default function GlobalAverageChart({
 
   // Calculate the start and end dates
   const periodEndAt = new Date(period.endAt);
-  const endDate = periodEndAt.getTime() >= Date.now() ? new Date() : periodEndAt;
+  const endDate =
+    periodEndAt.getTime() >= Date.now() ? new Date() : periodEndAt;
   const startDate = getCumulativeStartDate(periods, period);
 
   // Generate an array of dates
@@ -200,6 +201,9 @@ export default function GlobalAverageChart({
     },
   };
 
+  // Calculate Y-axis domain based on settings
+  const yAxisDomain = calculateYAxisDomain(chartData);
+
   // Calculate average grades per subject for radar chart
   const subjectAverages = subjects
     .filter((subject) => subject.isMainSubject)
@@ -218,37 +222,38 @@ export default function GlobalAverageChart({
     const y = Number(props.y ?? 0);
     const cx = Number(props.cx ?? 0);
     const cy = Number(props.cy ?? 0);
-    const value = props.payload?.value ?? '';
-    
+    const value = props.payload?.value ?? "";
+
     const radius = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
     const angle = Math.atan2(y - cy, x - cx);
-  
+
     const truncateLength =
       window.innerWidth < 450
         ? 5
         : window.innerWidth < 1024
-        ? 10
-        : window.innerWidth < 1300
-        ? 5
-        : window.innerWidth < 2100
-        ? 9
-        : 12;
-  
-    const truncatedLabel = value.length > truncateLength
-      ? `${value.slice(0, truncateLength)}...`
-      : value;
-  
+          ? 10
+          : window.innerWidth < 1300
+            ? 5
+            : window.innerWidth < 2100
+              ? 9
+              : 12;
+
+    const truncatedLabel =
+      value.length > truncateLength
+        ? `${value.slice(0, truncateLength)}...`
+        : value;
+
     const labelRadius = radius - truncatedLabel.length * 3 + 10;
     const nx = cx + labelRadius * Math.cos(angle);
     const ny = cy + labelRadius * Math.sin(angle);
     let rotation = (angle * 180) / Math.PI;
-  
+
     if (rotation > 90) {
       rotation -= 180;
     } else if (rotation < -90) {
       rotation += 180;
     }
-  
+
     return (
       <text
         x={nx}
@@ -261,7 +266,7 @@ export default function GlobalAverageChart({
         {truncatedLabel}
       </text>
     );
-  }
+  };
 
   // Handle if there are no subjects
   if (subjects.length === 0) {
@@ -316,7 +321,7 @@ export default function GlobalAverageChart({
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  domain={[0, 20]}
+                  domain={yAxisDomain}
                   tickMargin={8}
                   tickCount={5}
                 />

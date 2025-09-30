@@ -480,6 +480,12 @@
         "english": "Anglais",
         "french": "Français"
       },
+      "ChartSettings": {
+        "title": "Paramètres des graphiques",
+        "description": "Personnalisez l'affichage de vos graphiques.",
+        "autoZoomYAxis": "Zoom automatique de l'axe Y",
+        "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge."
+      },
       "CustomAverages": {
         "title": "Moyennes personnalisées",
         "description": "Gérez vos moyennes personnalisées",
@@ -498,6 +504,16 @@
         "confirmReset": "Oui, réinitialiser le compte",
         "resetAccountDescription": "Cela supprimera définitivement toutes vos périodes, matières, notes et moyennes personnalisées. Cette action ne peut pas être annulée.",
         "resetAccountTitle": "Réinitialiser votre compte"
+      },
+      "SeasonalThemes": {
+        "title": "Thèmes saisonniers",
+        "description": "Activez ou désactivez les thèmes saisonniers qui s'appliquent automatiquement lors de dates spéciales.",
+        "enableSeasonalThemes": "Activer les thèmes saisonniers",
+        "enableSeasonalThemesDescription": "Applique automatiquement des thèmes spéciaux lors des vacances et occasions spéciales.",
+        "availableThemes": "Thèmes disponibles",
+        "active": "Actif",
+        "inactive": "Inactif",
+        "noteAprilFools": "Note : Le thème du 1er avril ne peut pas être désactivé et s'activera toujours le 1er avril."
       }
     },
     "About": {

@@ -9,6 +9,7 @@ import {
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { averageOverTime, getChildren } from "@/utils/average";
+import { calculateYAxisDomain } from "@/utils/chart";
 import React from "react";
 import {
   CartesianGrid,
@@ -126,7 +127,7 @@ function SubjectActiveDot({
   return (
     <ReferenceDot
       x={nearestDatum.date}
-      y={typeof value === 'number' ? value : undefined}
+      y={typeof value === "number" ? value : undefined}
       r={4}
       fill={fill}
       strokeWidth={0}
@@ -156,7 +157,9 @@ function CustomTooltipContent({
     };
   });
 
-  const validEntries = payload.filter((entry) => entry.value !== null && entry.value !== undefined);
+  const validEntries = payload.filter(
+    (entry) => entry.value !== null && entry.value !== undefined
+  );
 
   return (
     <ChartTooltipContent
@@ -164,7 +167,7 @@ function CustomTooltipContent({
       label={formatDates.formatShort(new Date(label))}
       payload={validEntries.map((entry) => ({
         name: entry.name,
-        value: typeof entry.value === 'number' ? entry.value.toFixed(2) : 'N/A',
+        value: typeof entry.value === "number" ? entry.value.toFixed(2) : "N/A",
         color: entry.color,
         payload: null,
       }))}
@@ -187,9 +190,10 @@ export default function SubjectAverageChart({
   const t = useTranslations("Dashboard.Charts.SubjectAverageChart");
   const formatDates = useFormatDates(formatter);
 
-  const { childrenAverage, chartData, chartConfig } = (() => {
+  const { childrenAverage, chartData, chartConfig, yAxisDomain } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
-    const endDate = new Date() < new Date(period.endAt) ? new Date() : new Date(period.endAt);
+    const endDate =
+      new Date() < new Date(period.endAt) ? new Date() : new Date(period.endAt);
     const startDate = getCumulativeStartDate(periods, period);
 
     const dates: Date[] = [];
@@ -243,7 +247,10 @@ export default function SubjectAverageChart({
       ),
     };
 
-    return { childrenAverage, chartData, chartConfig };
+    // Calculate Y-axis domain based on all numeric values in chartData
+    const yAxisDomain = calculateYAxisDomain(chartData, 0, 20, "all");
+
+    return { childrenAverage, chartData, chartConfig, yAxisDomain };
   })();
 
   return (
@@ -257,12 +264,14 @@ export default function SubjectAverageChart({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(value) => formatDates.formatShort(new Date(value))}
+              tickFormatter={(value) =>
+                formatDates.formatShort(new Date(value))
+              }
             />
             <YAxis
               tickLine={false}
               axisLine={false}
-              domain={[0, 20]}
+              domain={yAxisDomain}
               tickMargin={8}
               tickCount={5}
             />

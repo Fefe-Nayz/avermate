@@ -480,6 +480,12 @@
         "english": "English",
         "french": "French"
       },
+      "ChartSettings": {
+        "title": "Chart Settings",
+        "description": "Customize how your charts are displayed.",
+        "autoZoomYAxis": "Auto-zoom Y-axis",
+        "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin."
+      },
       "CustomAverages": {
         "title": "Custom Averages",
         "description": "Manage your custom averages",
@@ -498,6 +504,16 @@
         "confirmReset": "Yes, reset account",
         "resetAccountDescription": "This will permanently delete all your periods, subjects, grades, and custom averages. This action cannot be undone.",
         "resetAccountTitle": "Reset your account"
+      },
+      "SeasonalThemes": {
+        "title": "Seasonal Themes",
+        "description": "Enable or disable seasonal themes that automatically activate on special dates.",
+        "enableSeasonalThemes": "Enable Seasonal Themes",
+        "enableSeasonalThemesDescription": "Automatically apply special themes on holidays and special occasions.",
+        "availableThemes": "Available Themes",
+        "active": "Active",
+        "inactive": "Inactive",
+        "noteAprilFools": "Note: April Fools theme cannot be disabled and will always activate on April 1st."
       }
     },
     "About": {
