@@ -257,7 +257,7 @@ export default function SubjectAverageChart({
     <Card className="p-4">
       <ChartContainer config={chartConfig} className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ left: -30 }}>
+          <LineChart data={chartData} margin={{ left: -20 }}>
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"

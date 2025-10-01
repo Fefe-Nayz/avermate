@@ -276,7 +276,7 @@ export const MockAverageChart = () => {
               {t("visualizeOverallAverage")}
             </CardDescription>
             <ChartContainer config={chartConfig} className="h-[302px] w-full">
-              <AreaChart data={chartData} margin={{ left: -30 }}>
+              <AreaChart data={chartData} margin={{ left: -20 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis
                   dataKey="date"
