@@ -176,6 +176,12 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const watchedType = form.watch("type");
 
+    useEffect(() => {
+      if (!isDesktop && openType) {
+        setTimeout(() => typeInputRef.current?.focus(), 350);
+      }
+    }, [openType, isDesktop]);
+
   return (
     <Form {...form}>
       <form
@@ -209,7 +215,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                         </Button>
                       </PopoverTrigger>
                     </FormControl>
-                    <PopoverContent align="center" className="p-0 min-w-[200px]">
+                    <PopoverContent align="center" className="p-0 min-w-(--radix-popover-trigger-width)">
                       <Command>
                         <CommandInput
                           ref={typeInputRef}

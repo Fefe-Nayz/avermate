@@ -1,3 +1,4 @@
+- Fix regression, keep dialog/sheet open when screen size changes
 - Refactor the settings cards to use the same unified card component
 - Refactor the loading state of every component to be in a separated component
 - Re-order the codebase/component directory/file structure

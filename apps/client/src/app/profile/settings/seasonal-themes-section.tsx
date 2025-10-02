@@ -78,7 +78,7 @@ export const SeasonalThemesSection = () => {
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
           <div className="px-6 grid gap-4 pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <Label className="text-sm font-medium">
                   {t("enableSeasonalThemes")}
@@ -87,7 +87,7 @@ export const SeasonalThemesSection = () => {
                   {t("enableSeasonalThemesDescription")}
                 </p>
               </div>
-              <Switch disabled />
+              <Switch disabled checked />
             </div>
           </div>
         </div>
@@ -99,7 +99,7 @@ export const SeasonalThemesSection = () => {
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
         <div className="px-6 grid gap-4 pb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
               <Label className="text-sm font-medium">
                 {t("enableSeasonalThemes")}
