@@ -6,34 +6,64 @@ import Logo from "@/components/logo";
 import YearWorkspaceSelect from "../selects/year-workspace-select";
 import { useScrollDirection } from "@/hooks/use-scroll-direction";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { usePathname } from "next/navigation";
+import { usePathname, useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { BodyPortal } from "@/components/portal/body-portal";
+import { useGrade } from "@/hooks/use-grade";
+import { useSubject } from "@/hooks/use-subject";
 
 interface DashboardHeaderProps {
   hideWorkspaces?: boolean;
 }
 
-const getPageTitle = (pathname: string, t: any) => {
+const getPageTitle = (pathname: string, t: any, grade?: any, subject?: any) => {
   if (pathname === "/dashboard") {
     return t("Dashboard.Pages.OverviewPage.overviewTitle");
   }
   if (pathname === "/dashboard/grades") {
     return t("Dashboard.Pages.GradesPage.gradesTitle");
   }
+
+  // Handle grade details pages
+  if (pathname.startsWith("/dashboard/grades/") && grade) {
+    return grade.name;
+  }
+
+  // Handle subject details pages
+  if (pathname.startsWith("/dashboard/subjects/") && subject) {
+    return subject.name;
+  }
+
   if (
     pathname.startsWith("/dashboard/grades/") ||
     pathname.startsWith("/dashboard/subjects/")
   ) {
     return t("details");
   }
+
   if (pathname === "/dashboard/settings") {
     return t("Dashboard.Pages.YEAR_SETTINGS_PAGE.YEAR_SETTINGS_PAGE_TITLE");
   }
+
+  // Handle profile/settings pages
+  if (pathname === "/profile") {
+    return t("Settings.Nav.profile");
+  }
+  if (pathname === "/profile/account") {
+    return t("Settings.Nav.accountSecurity");
+  }
+  if (pathname === "/profile/settings") {
+    return t("Settings.Nav.settings");
+  }
+  if (pathname === "/profile/about") {
+    return t("Settings.Nav.about");
+  }
+
   if (pathname.startsWith("/profile")) {
     return t("Dashboard.Pages.SETTINGS_PAGE.SETTINGS_PAGE_TITLE");
   }
+
   return t("Dashboard.Pages.OverviewPage.overviewTitle");
 };
 
@@ -42,14 +72,23 @@ export default function DashboardHeader({
 }: DashboardHeaderProps) {
   const { scrollDirection, isAtTop } = useScrollDirection();
   const pathname = usePathname();
+  const params = useParams();
   const t = useTranslations();
   const isMobile = useIsMobile();
+
+  // Get grade data if we're on a grade details page
+  const gradeId = params?.gradeId as string;
+  const grade = useGrade(gradeId || "");
+
+  // Get subject data if we're on a subject details page
+  const subjectId = params?.subjectId as string;
+  const subject = useSubject(subjectId || "", false);
 
   // Header scroll behavior only on mobile
   const isCompact = isMobile && scrollDirection === "down";
   // Show title on mobile when scrolled down (not at top)
   const showTitle = isMobile && !isAtTop;
-  const pageTitle = getPageTitle(pathname, t);
+  const pageTitle = getPageTitle(pathname, t, grade.data, subject.data);
 
   // Measure the rendered header height so we can insert a spacer in flow on mobile
   const headerRef = React.useRef<HTMLDivElement | null>(null);
@@ -105,15 +144,12 @@ export default function DashboardHeader({
     </div>
   );
 
-  // Desktop: original sticky, in-flow (no portal)
+  // Desktop: original in-flow (no portal, no sticky)
   if (!isMobile) {
     return (
       <header
         ref={headerRef}
-        className={cn(
-          "border-b transition-all duration-300",
-          "py-4 sm:py-8 sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-        )}
+        className={cn("border-b transition-all duration-300", "py-4 sm:py-8")}
       >
         {HeaderInner}
       </header>

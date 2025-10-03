@@ -1,7 +1,5 @@
 - Fix regression, keep dialog/sheet open when screen size changes
-- in mobile header, show the selected subject/grade name
-- fix impact of custom subject not in impact category for grades
-- Refactor the settings layout, first greeted with a settings section list on mobile with a search bar and then can navigate in the category, with title in header. on pc, the categories are on the right and the general tab is selected by default 
+- Refactor the settings layout, first greeted with a settings section list on mobile with a search bar and then can navigate in the category. on pc, the categories are on the right and the general tab is selected by default 
 - Refactor the settings cards to use the same unified card component
 - Refactor the loading state of every component to be in a separated component
 - Re-order the codebase/component directory/file structure
