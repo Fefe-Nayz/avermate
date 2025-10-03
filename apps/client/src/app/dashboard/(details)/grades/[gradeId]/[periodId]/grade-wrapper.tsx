@@ -156,7 +156,7 @@ export default function GradeWrapper({
             )}
           </p>
         </DataCard>
-
+      </div>
 
       {/* Impact Cards Section */}
       <div className="space-y-2">
@@ -218,7 +218,7 @@ export default function GradeWrapper({
             </DataCard>
           );
         })}
-      </div>
+      
 
 
           {gradeParents().map((parent: Subject) => (
