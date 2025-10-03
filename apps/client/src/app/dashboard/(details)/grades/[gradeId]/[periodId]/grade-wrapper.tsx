@@ -157,6 +157,36 @@ export default function GradeWrapper({
           </p>
         </DataCard>
 
+
+      {/* Impact Cards Section */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-medium text-muted-foreground">
+          {t("impactSectionTitle")}
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
+          <DataCard
+            title={t("impactOverallAverageTitle")}
+            description={t("impactOverallAverageDescription", {
+              periodName: period?.name,
+            })}
+            icon={
+              subjects
+                ? (gradeImpact(grade.id, undefined, subjects)?.difference ??
+                    0) >= 0
+                  ? ArrowUpCircleIcon
+                  : ArrowDownCircleIcon
+                : ArrowUpCircleIcon
+            }
+          >
+            <DifferenceBadge
+              diff={
+                subjects
+                  ? gradeImpact(grade.id, undefined, subjects)?.difference || 0
+                  : 0
+              }
+            />
+          </DataCard>
+
         {/* Custom averages integrated with basic info as requested */}
         {customAverages.map((ca) => {
           // Check if this grade is part of the custom average
@@ -190,34 +220,6 @@ export default function GradeWrapper({
         })}
       </div>
 
-      {/* Impact Cards Section */}
-      <div className="space-y-2">
-        <h3 className="text-lg font-medium text-muted-foreground">
-          {t("impactSectionTitle")}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-4">
-          <DataCard
-            title={t("impactOverallAverageTitle")}
-            description={t("impactOverallAverageDescription", {
-              periodName: period?.name,
-            })}
-            icon={
-              subjects
-                ? (gradeImpact(grade.id, undefined, subjects)?.difference ??
-                    0) >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-                : ArrowUpCircleIcon
-            }
-          >
-            <DifferenceBadge
-              diff={
-                subjects
-                  ? gradeImpact(grade.id, undefined, subjects)?.difference || 0
-                  : 0
-              }
-            />
-          </DataCard>
 
           {gradeParents().map((parent: Subject) => (
             <DataCard
