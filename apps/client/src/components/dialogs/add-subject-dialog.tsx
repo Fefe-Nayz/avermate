@@ -47,6 +47,11 @@ export default function AddSubjectCredenza({
 
   const [formData, setFormData] = useState<TAddSubject>(EMPTY_FORM_DATA);
 
+  const close = () => {
+    setOpen(false);
+    setFormData(EMPTY_FORM_DATA);
+  }
+
   return (
     <Credenza
       open={open}
@@ -69,7 +74,7 @@ export default function AddSubjectCredenza({
         <CredenzaBodyWrapper>
           {open && (
             <AddSubjectForm
-              close={() => setOpen(false)}
+              close={() => close()}
               parentId={parentId}
               formData={formData}
               setFormData={setFormData}

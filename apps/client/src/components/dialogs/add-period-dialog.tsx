@@ -53,6 +53,11 @@ export default function AddPeriodCredenza({
 
   const [formData, setFormData] = useState<AddPeriodSchema>(EMPTY_FORM_DATA);
 
+  const close = () => {
+    setOpen(false);
+    setFormData(EMPTY_FORM_DATA);
+  }
+
   return (
     <Credenza
       open={open}
@@ -77,7 +82,7 @@ export default function AddPeriodCredenza({
           {!isPending && !isError && open && (
             <AddPeriodForm
               periods={periods}
-              close={() => setOpen(false)}
+              close={() => close()}
               formData={formData}
               setFormData={setFormData}
               yearId={yearId}

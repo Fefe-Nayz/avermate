@@ -40,6 +40,11 @@ export default function AddAverageDialog({ children, yearId }: { children: React
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState<AddCustomAverageSchema>(EMPTY_FORM_DATA);
 
+  const close = () => {
+    setOpen(false);
+    setFormData(EMPTY_FORM_DATA);
+  }
+
   return (
     <Credenza
       open={open}
@@ -59,7 +64,7 @@ export default function AddAverageDialog({ children, yearId }: { children: React
         <CredenzaBodyWrapper>
           {open && (
             <AddAverageForm
-              close={() => setOpen(false)}
+              close={() => close()}
               formData={formData}
               setFormData={setFormData}
               yearId={yearId}
