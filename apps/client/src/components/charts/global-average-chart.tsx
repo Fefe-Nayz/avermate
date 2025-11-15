@@ -17,7 +17,7 @@ import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average, averageOverTime } from "@/utils/average";
 import { calculateYAxisDomain } from "@/utils/chart";
-import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 import {
   Area,
   AreaChart,
@@ -39,6 +39,7 @@ import { Button } from "../ui/button";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { GradeEmptyState } from "../empty-states/grade-empty-state";
 
 export interface TickProps {
   x?: number | string;
@@ -130,15 +131,13 @@ function CustomTooltipContent({
   chartData: ChartDataPoint[];
   formatDates: ReturnType<typeof useFormatDates>;
 }) {
-  if (!active || !label) return null;
-
-  const nearestDatum = findNearestDatum(chartData, label);
+  const nearestDatum = label ? findNearestDatum(chartData, label) : undefined;
   const value = nearestDatum?.average ?? null;
 
   return (
     <ChartTooltipContent
-      active={true}
-      label={formatDates.formatShort(new Date(label))}
+      active={active && !!label}
+      label={label ? formatDates.formatShort(new Date(label)) : undefined}
       payload={
         value !== null
           ? [
@@ -146,6 +145,7 @@ function CustomTooltipContent({
                 name: "Global Average",
                 value: value.toFixed(2),
                 color: "#2662d9",
+                dataKey: "global-average",
                 payload: null,
               },
             ]
@@ -231,12 +231,12 @@ export default function GlobalAverageChart({
       window.innerWidth < 450
         ? 5
         : window.innerWidth < 1024
-          ? 10
-          : window.innerWidth < 1300
-            ? 5
-            : window.innerWidth < 2100
-              ? 9
-              : 12;
+        ? 10
+        : window.innerWidth < 1300
+        ? 5
+        : window.innerWidth < 2100
+        ? 9
+        : 12;
 
     const truncatedLabel =
       value.length > truncateLength
@@ -270,28 +270,12 @@ export default function GlobalAverageChart({
 
   // Handle if there are no subjects
   if (subjects.length === 0) {
-    return <SubjectEmptyState />;
+    return <SubjectEmptyState className="col-span-full" />;
   }
 
   // If all the averages are null
   if (chartData.every((data) => data.average === null)) {
-    return (
-      <Card className="lg:col-span-5 flex flex-col justify-center items-center p-6 gap-8 w-full h-full">
-        <BookOpenIcon className="w-12 h-12" />
-        <div className="flex flex-col items-center gap-1">
-          <h2 className="text-xl font-semibold text-center">
-            {t("noGradesTitle")}
-          </h2>
-          <p className="text-center">{t("noGradesDescription")}</p>
-        </div>
-        <AddGradeDialog yearId={yearId}>
-          <Button variant="outline">
-            <PlusCircleIcon className="size-4 mr-2" />
-            {t("addGrade")}
-          </Button>
-        </AddGradeDialog>
-      </Card>
-    );
+    return <GradeEmptyState className="col-span-full" yearId={yearId} />;
   }
 
   return (

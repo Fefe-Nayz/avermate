@@ -109,9 +109,9 @@ export default function GradesPage() {
           localStorage.setItem("selectedTab", value);
         }}
       >
-        <div className="hidden md:flex gap-4">
+        <div className="hidden md:block">
           <ScrollArea>
-            <div className="w-full relative h-10">
+            <div className="w-full relative h-12">
               <TabsList className="flex">
                 {periods &&
                   periods.length > 0 &&
@@ -133,6 +133,7 @@ export default function GradesPage() {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
+
         <div className="flex md:hidden">
           <SelectDrawer
             value={selectedTab}
@@ -154,7 +155,9 @@ export default function GradesPage() {
                     {period.name}
                   </SelectDrawerItem>
                 ))}
-                <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
+                <SelectDrawerItem value="full-year">
+                  {t("fullYear")}
+                </SelectDrawerItem>
               </SelectDrawerGroup>
             </SelectDrawerContent>
           </SelectDrawer>
@@ -180,7 +183,11 @@ export default function GradesPage() {
               </TabsContent>
             ))}
         <TabsContent value="full-year">
-          <GradesTable yearId={activeId} subjects={subjects} periodId="full-year" />
+          <GradesTable
+            yearId={activeId}
+            subjects={subjects}
+            periodId="full-year"
+          />
         </TabsContent>
       </Tabs>
     </main>

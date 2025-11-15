@@ -10,4 +10,5 @@ export const usePeriods = (yearId: string) =>
       const data = await res.json<GetPeriodsResponse>();
       return data.periods;
     },
+    enabled: !!yearId && yearId !== "none",
   });

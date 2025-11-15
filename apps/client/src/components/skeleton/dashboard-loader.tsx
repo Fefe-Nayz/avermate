@@ -55,8 +55,8 @@ export default function dashboardLoader() {
 
       {/* Statistiques */}
       <Tabs>
-        <div className="flex flex-col gap-4">
-          <ScrollArea className="h-9">
+        <div className="flex flex-col gap-2 md:gap-4">
+          <ScrollArea className="h-10">
             <div className="flex w-full">
               <Skeleton className="flex md:hidden h-9 w-full" />
 
@@ -120,7 +120,13 @@ export default function dashboardLoader() {
                     >
                       <AreaChart data={chartData} margin={{ left: -30 }}>
                         <defs>
-                          <linearGradient id="fillAverage" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient
+                            id="fillAverage"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
                             <stop
                               offset="5%"
                               stopColor="hsl(var(--primary))"
@@ -140,11 +146,15 @@ export default function dashboardLoader() {
                           axisLine={false}
                           tickMargin={8}
                           tickCount={10}
-                          tick={
-                            <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
+                          tick={({ x, y }) => (
+                            <text
+                              x={x}
+                              y={y}
+                              className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!"
+                            >
                               ■■■
                             </text>
-                          }
+                          )}
                         />
                         <YAxis
                           tickLine={false}
@@ -152,17 +162,21 @@ export default function dashboardLoader() {
                           domain={[0, 20]}
                           tickMargin={8}
                           tickCount={5}
-                          tick={
-                            <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
+                          tick={({ x, y }) => (
+                            <text
+                              x={x}
+                              y={y}
+                              className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!"
+                            >
                               ■■
                             </text>
-                          }
+                          )}
                         />
                         <Area
                           dataKey="average"
                           type="monotone"
-                          fill=""
-                          stroke=""
+                          fill="transparent"
+                          stroke="transparent"
                           strokeWidth={2}
                           fillOpacity={0}
                           connectNulls={true}
@@ -189,21 +203,23 @@ export default function dashboardLoader() {
                         <PolarGrid />
                         <PolarAngleAxis
                           dataKey="subject"
-                          tick={
+                          tick={({ x, y, textAnchor }) => (
                             <text
-                              textAnchor="middle"
+                              x={x}
+                              y={y}
+                              textAnchor={textAnchor}
                               fontSize={12}
                               fill="#a1a1aa"
                               className="text-muted-foreground animate-pulse rounded-md bg-primary/10 text-lg select-none fill-primary/10!"
                             >
                               ▬▬
                             </text>
-                          }
+                          )}
                         />
                         <Radar
                           dataKey="average"
-                          stroke=""
-                          fill=""
+                          stroke="transparent"
+                          fill="transparent"
                           fillOpacity={0}
                           strokeWidth={2}
                         />

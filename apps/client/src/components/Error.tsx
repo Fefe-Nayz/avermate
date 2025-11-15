@@ -90,7 +90,7 @@ User Name: ${session?.user?.name || "Not logged in"}
       });
     },
     onError: (error) => {
-      handleError(error, errorTranslation, ("errorSubmittingReport"));
+      handleError(error, errorTranslation, "errorSubmittingReport");
     },
   });
 

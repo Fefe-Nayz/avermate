@@ -92,6 +92,10 @@ ${colorConfig
   })
   .join("\n")}
 }
+
+${prefix} [data-chart=${id}] .recharts-tooltip-wrapper {
+  transition: transform 200ms ease-out !important;
+}
 `
           )
           .join("\n"),
@@ -102,26 +106,32 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
-type FormatterFunction = (value: any, name: string, item: any, index: number) => React.ReactNode;
+type FormatterFunction = (
+  value: number | string,
+  name: string,
+  item: ChartPayload,
+  index: number
+) => React.ReactNode;
 
 interface ChartPayload {
-  value: any;
+  value: number | string;
   name?: string;
   dataKey?: string;
-  payload?: any;
+  payload?: Record<string, unknown> | null;
   color?: string;
   fill?: string;
+  [key: string]: unknown;
 }
 
 type TooltipProps = {
   active?: boolean;
   payload?: ChartPayload[];
-  label?: any;
+  label?: React.ReactNode;
   className?: string;
   indicator?: "line" | "dot" | "dashed";
   hideLabel?: boolean;
   hideIndicator?: boolean;
-  labelFormatter?: (value: any) => any;
+  labelFormatter?: (value: unknown) => React.ReactNode;
   labelClassName?: string;
   formatter?: FormatterFunction;
   color?: string;
@@ -186,11 +196,7 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipProps>(
       labelKey,
     ]);
 
-    if (!active || !payload?.length) {
-      return null;
-    }
-
-    const nestLabel = payload.length === 1 && indicator !== "dot";
+    const nestLabel = payload && payload.length === 1 && indicator !== "dot";
 
     return (
       <div
@@ -199,10 +205,14 @@ const ChartTooltipContent = React.forwardRef<HTMLDivElement, TooltipProps>(
           "grid min-w-32 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
           className
         )}
+        style={{
+          visibility:
+            !active || !payload || payload.length === 0 ? "hidden" : "visible",
+        }}
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {payload?.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`;
             const itemConfig = getPayloadConfigFromPayload(config, item, key);
             const indicatorColor = color || item?.payload?.fill || item.color;
@@ -280,7 +290,7 @@ type ChartLegendItem = {
   id?: string;
   type?: string;
   color?: string;
-  payload?: any;
+  payload?: Record<string, unknown> | null;
   dataKey?: string;
 };
 
@@ -292,7 +302,11 @@ const ChartLegendContent = React.forwardRef<
     hideIcon?: boolean;
     nameKey?: string;
   }
->(({ className, hideIcon = false, payload, verticalAlign = "bottom", nameKey }, ref) => {
+>(
+  (
+    { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },
+    ref
+  ) => {
     const { config } = useChart();
 
     if (!payload?.length) {
@@ -342,7 +356,7 @@ ChartLegendContent.displayName = "ChartLegend";
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
-  payload: Record<string, any> | null,
+  payload: Record<string, unknown> | null,
   key: string
 ) {
   if (!payload || typeof payload !== "object") {
@@ -351,24 +365,22 @@ function getPayloadConfigFromPayload(
 
   const payloadPayload =
     payload.payload && typeof payload.payload === "object"
-      ? payload.payload
+      ? (payload.payload as Record<string, unknown>)
       : undefined;
 
   let configLabelKey: string = key;
 
   if (key in payload && typeof payload[key] === "string") {
-    configLabelKey = payload[key];
+    configLabelKey = payload[key] as string;
   } else if (
     payloadPayload &&
     key in payloadPayload &&
     typeof payloadPayload[key] === "string"
   ) {
-    configLabelKey = payloadPayload[key];
+    configLabelKey = payloadPayload[key] as string;
   }
 
-  return configLabelKey in config
-    ? config[configLabelKey]
-    : config[key];
+  return configLabelKey in config ? config[configLabelKey] : config[key];
 }
 
 export {

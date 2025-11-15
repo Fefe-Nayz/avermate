@@ -156,7 +156,7 @@ function makeColumns(
         const grade = row.original;
         return (
           <div className="flex justify-end">
-            <GradeMoreButton grade={grade} />
+            <GradeMoreButton grade={grade} shouldBackOnDelete={false} />
           </div>
         );
       },
@@ -173,7 +173,7 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
   const formatPassedAtRef = React.useRef<(d: unknown) => string>(() => "");
   React.useEffect(() => {
     formatPassedAtRef.current = (d: unknown) =>
-      formatDates.formatIntermediate(d as any);
+      formatDates.formatIntermediate(d as Date);
   }, [formatDates]);
 
   const isMobile = useIsMobile();
@@ -245,7 +245,11 @@ export function SubjectGradesTable({ grades }: { grades: PartialGrade[] }) {
   return (
     <div className="w-full">
       <div className="flex items-center py-4 gap-2">
-        <div className={`relative flex-1 ${isMobile ? "max-w-none" : "max-w-sm md:max-w-[40%]"}`}>
+        <div
+          className={`relative flex-1 ${
+            isMobile ? "max-w-none" : "max-w-sm md:max-w-[40%]"
+          }`}
+        >
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("FILTER_NAME_PLACEHOLDER")}

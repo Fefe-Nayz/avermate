@@ -16,12 +16,18 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePeriods } from "@/hooks/use-periods";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
-import { BookOpenIcon, PlusCircleIcon } from "lucide-react";
+import { PlusCircleIcon } from "lucide-react";
 import ProfileSection from "../profile-section";
+import { PeriodEmptyState } from "@/components/empty-states/period-empty-state";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
-import { DropDrawer, DropDrawerContent, DropDrawerGroup, DropDrawerTrigger } from "@/components/ui/dropdrawer";
+import {
+  DropDrawer,
+  DropDrawerContent,
+  DropDrawerGroup,
+  DropDrawerTrigger,
+} from "@/components/ui/dropdrawer";
 
 export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   const formatter = useFormatter();
@@ -75,7 +81,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
               <div className="flex justify-end border-t py-4 px-6">
                 <AddPeriodDialog yearId={yearId}>
                   <Button disabled>
-                    <PlusCircleIcon className="size-4 mr-2" />
+                    <PlusCircleIcon className="size-4" />
                     {t("addPeriod")}
                   </Button>
                 </AddPeriodDialog>
@@ -94,21 +100,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   if (period.length === 0) {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
-        <div className="flex flex-col gap-4 justify-center items-center pb-6 px-6 ">
-          <BookOpenIcon className="w-12 h-12" />
-          <div className="flex flex-col items-center gap-1">
-            <h2 className="text-xl font-semibold text-center">
-              {t("noPeriods")}
-            </h2>
-            <p className="text-center">{t("addNewPeriod")}</p>
-          </div>
-          <AddPeriodDialog yearId={yearId}>
-            <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addPeriod")}
-            </Button>
-          </AddPeriodDialog>
-        </div>
+        <PeriodEmptyState yearId={yearId} className="mx-6 mb-6" />
       </ProfileSection>
     );
   }
@@ -156,7 +148,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
         <div className="flex justify-end border-t py-4 px-6">
           <AddPeriodDialog yearId={yearId}>
             <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
+              <PlusCircleIcon className="size-4" />
               {t("addPeriod")}
             </Button>
           </AddPeriodDialog>

@@ -27,10 +27,10 @@ import {
   ArrowLeftIcon,
   ArrowUpCircleIcon,
   BookOpenIcon,
-  PlusCircleIcon,
   SparklesIcon,
   VariableIcon,
 } from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
 import SubjectAverageChart from "./subject-average-chart";
 import { cn } from "@/lib/utils";
 import ErrorStateCard from "@/components/skeleton/error-card";
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dropdrawer";
 import { SubjectGradesTable } from "@/components/tables/subject-grades-table";
 import { Grade, PartialGrade } from "@/types/grade";
+import { GradeEmptyState } from "@/components/empty-states/grade-empty-state";
 
 function getRelevantPeriodIds(period: Period, periods: Period[]): string[] {
   if (period.id === "full-year") {
@@ -229,30 +230,7 @@ function SubjectWrapper({
         )}
 
         {/* Empty state */}
-        <Card className="lg:col-span-5 flex flex-col justify-center items-center p-6 gap-8 w-full h-full">
-          <BookOpenIcon className="w-12 h-12" />
-          <div className="flex flex-col items-center gap-1">
-            <h2 className="text-xl font-semibold text-center">
-              {t("noGradesTitle")}
-            </h2>
-            <p className="text-center">{t("noGradesMessage")}</p>
-          </div>
-          {!subject.isDisplaySubject ? (
-            <AddGradeDialog yearId={subject.yearId} parentId={subject.id}>
-              <Button variant="outline">
-                <PlusCircleIcon className="size-4 mr-2" />
-                {t("addGradeInSubject", { name: subject.name })}
-              </Button>
-            </AddGradeDialog>
-          ) : (
-            <AddGradeDialog yearId={subject.yearId}>
-              <Button variant="outline">
-                <PlusCircleIcon className="size-4 mr-2" />
-                {t("addGrade")}
-              </Button>
-            </AddGradeDialog>
-          )}
-        </Card>
+        <GradeEmptyState yearId={subject.yearId} parentId={subject.id} subjectName={subject.name} />
       </div>
     );
   }

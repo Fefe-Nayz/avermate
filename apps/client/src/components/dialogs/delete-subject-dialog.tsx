@@ -30,7 +30,8 @@ export default function DeleteSubjectDialog({
 }: {
   subject: Subject;
   backOnDelete?: boolean;
-}) {
+  }) {
+    const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Dashboard.Dialogs.DeleteSubject");
   const [open, setOpen] = useState(false);
 
@@ -66,7 +67,7 @@ export default function DeleteSubjectDialog({
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     },
     onError: (error) => {
-      handleError(error, t("error"));
+      handleError(error, errorTranslations, t("error"));
     },
   });
 

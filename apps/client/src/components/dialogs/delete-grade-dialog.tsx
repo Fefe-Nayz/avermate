@@ -24,7 +24,7 @@ import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
 import { DropDrawerItem } from "../ui/dropdrawer";
 
-export default function DeleteGradeDialog({ grade }: { grade: PartialGrade }) {
+export default function DeleteGradeDialog({ grade, shouldBackOnDelete = true }: { grade: PartialGrade, shouldBackOnDelete?: boolean }) {
   const t = useTranslations("Dashboard.Dialogs.DeleteGrade");
   const errorTranslations = useTranslations("Errors");
   const [open, setOpen] = useState(false);
@@ -47,7 +47,9 @@ export default function DeleteGradeDialog({ grade }: { grade: PartialGrade }) {
 
       setOpen(false);
 
-      router.push("/dashboard/grades");
+      if (shouldBackOnDelete) {
+        router.push("/dashboard/grades");
+      }
     },
     onSettled: () => {
       queryClient.cancelQueries();

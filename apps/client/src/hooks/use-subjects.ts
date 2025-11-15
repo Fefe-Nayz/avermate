@@ -7,13 +7,15 @@ import { Grade } from "@/types/grade";
 function modifyGradeForAprilFools(grade: Grade): Grade {
   // Create a deep copy to avoid modifying the original
   const modifiedGrade = JSON.parse(JSON.stringify(grade)) as Grade;
-  
+
   // Apply April Fools modifications - generate a random low grade between 0 and 8
   if (modifiedGrade.value !== undefined && modifiedGrade.outOf !== undefined) {
-    const randomLowValue = Math.floor(Math.random() * (modifiedGrade.outOf / 2)); // Random value between 0 and half of the outOf value
+    const randomLowValue = Math.floor(
+      Math.random() * (modifiedGrade.outOf / 2)
+    ); // Random value between 0 and half of the outOf value
     modifiedGrade.value = randomLowValue;
-}
-  
+  }
+
   return modifiedGrade;
 }
 
@@ -32,16 +34,21 @@ export const useSubjects = (yearId: string) =>
 
       if (isAprilFoolsDay()) {
         // Apply April Fools modifications to each subject's grades
-        return data.subjects.map(subject => {
+        return data.subjects.map((subject) => {
           return {
             ...subject,
-            grades: subject.grades.map(grade => {
+            grades: subject.grades.map((grade) => {
               // Create a Grade object that can be passed to the modifier function
               const fullGrade: Grade = {
                 ...grade,
-                subject: { id: subject.id, name: subject.name, isDisplaySubject: subject.isDisplaySubject, isMainSubject: subject.isMainSubject }
+                subject: {
+                  id: subject.id,
+                  name: subject.name,
+                  isDisplaySubject: subject.isDisplaySubject,
+                  isMainSubject: subject.isMainSubject,
+                },
               } as Grade;
-              
+
               return modifyGradeForAprilFools(fullGrade);
             }),
           };
@@ -50,4 +57,5 @@ export const useSubjects = (yearId: string) =>
 
       return data.subjects;
     },
+    enabled: !!yearId && yearId !== "none",
   });

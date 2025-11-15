@@ -116,11 +116,15 @@ export default function subjectLoader(t: any) {
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                tick={
-                  <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
+                tick={({ x, y }) => (
+                  <text
+                    x={x}
+                    y={y}
+                    className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!"
+                  >
                     ■■■
                   </text>
-                }
+                )}
               />
               <YAxis
                 tickLine={false}
@@ -128,18 +132,22 @@ export default function subjectLoader(t: any) {
                 domain={[0, 20]}
                 tickMargin={8}
                 tickCount={5}
-                tick={
-                  <text className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!">
+                tick={({ x, y }) => (
+                  <text
+                    x={x}
+                    y={y}
+                    className="text-muted-foreground animate-pulse rounded-md bg-primary/10 tracking-[-2.5px] text-lg select-none fill-primary/10!"
+                  >
                     ■■
                   </text>
-                }
+                )}
               />
 
               <Line
                 dataKey="average"
                 type="monotone"
-                fill=""
-                stroke=""
+                fill="transparent"
+                stroke="transparent"
                 dot={false}
                 strokeWidth={3}
                 connectNulls={true}
@@ -174,8 +182,7 @@ export default function subjectLoader(t: any) {
                 <div className="h-12 px-4 text-left align-middle font-medium flex items-center flex-1">
                   <Skeleton className="h-6 w-24" />
                 </div>
-                <div className="h-12 px-4 text-left align-middle font-medium flex items-center w-16">
-                </div>
+                <div className="h-12 px-4 text-left align-middle font-medium flex items-center w-16"></div>
               </div>
             </div>
             {/* Table Body */}

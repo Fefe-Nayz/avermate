@@ -143,10 +143,10 @@ function CustomTooltipContent({
   chartConfig,
   formatDates,
 }: CustomTooltipContentProps) {
-  if (!active || !label) return null;
-
   const payload = Object.entries(chartConfig).map(([dataKey, config]) => {
-    const nearestDatum = findNearestDatum(chartData, label, dataKey);
+    const nearestDatum = label
+      ? findNearestDatum(chartData, label, dataKey)
+      : undefined;
     const value = nearestDatum?.[dataKey];
     return {
       dataKey,
@@ -163,12 +163,13 @@ function CustomTooltipContent({
 
   return (
     <ChartTooltipContent
-      active={true}
-      label={formatDates.formatShort(new Date(label))}
+      active={active && !!label}
+      label={label ? formatDates.formatShort(new Date(label)) : undefined}
       payload={validEntries.map((entry) => ({
         name: entry.name,
         value: typeof entry.value === "number" ? entry.value.toFixed(2) : "N/A",
         color: entry.color,
+        dataKey: entry.dataKey,
         payload: null,
       }))}
     />

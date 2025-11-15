@@ -21,7 +21,8 @@ import { useLocalizedSubjects } from "@/data/mock";
 import { average, averageOverTime } from "@/utils/average";
 import { useFormatDates } from "@/utils/format";
 import { calculateYAxisDomain } from "@/utils/chart";
-import { BookOpenIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 import {
@@ -56,21 +57,17 @@ const CustomTooltipContent: React.FC<CustomTooltipProps> = ({
   className,
   valueFormatter = (value) => value.toString(),
 }) => {
-  if (!active || !payload?.length) {
-    return null;
-  }
-
   return (
     <BaseChartTooltipContent
-      active={active}
-      payload={payload.map((item) => ({
+      active={active && !!payload?.length}
+      payload={payload?.map((item) => ({
         name: item.name,
         value:
           typeof item.value === "number"
             ? valueFormatter(item.value)
             : item.value,
         color: item.color,
-      }))}
+      })) || []}
       label={label}
       className={className}
     />
