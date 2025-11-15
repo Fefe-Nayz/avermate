@@ -16,10 +16,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubjects } from "@/hooks/use-subjects";
 import { Subject } from "@/types/subject";
-import {
-  EllipsisVerticalIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface SubjectsStepProps {

@@ -16,11 +16,18 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubjects } from "@/hooks/use-subjects";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
-import { BookOpenIcon, PlusCircleIcon } from "lucide-react";
+import { PlusCircleIcon } from "lucide-react";
 import ProfileSection from "../profile-section";
+import { CustomAverageEmptyState } from "@/components/empty-states/custom-average-empty-state";
 import { useTranslations } from "next-intl";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
-import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
+import {
+  DropDrawer,
+  DropDrawerTrigger,
+  DropDrawerContent,
+  DropDrawerItem,
+  DropDrawerGroup,
+} from "@/components/ui/dropdrawer";
 
 export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
   const t = useTranslations("Settings.Settings.CustomAverages");
@@ -77,7 +84,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
               <div className="flex justify-end border-t py-4 px-6">
                 <AddAverageDialog yearId={yearId}>
                   <Button disabled>
-                    <PlusCircleIcon className="size-4 mr-2" />
+                    <PlusCircleIcon className="size-4" />
                     {t("addCustomAverage")}
                   </Button>
                 </AddAverageDialog>
@@ -96,21 +103,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
   if (averages.length == 0) {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
-        <div className="flex flex-col gap-4 justify-center items-center pb-6 px-6 ">
-          <BookOpenIcon className="w-12 h-12" />
-          <div className="flex flex-col items-center gap-1">
-            <h2 className="text-xl font-semibold text-center">
-              {t("noCustomAverages")}
-            </h2>
-            <p className="text-center">{t("addNewCustomAverage")}</p>
-          </div>
-          <AddAverageDialog yearId={yearId}>
-            <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addCustomAverage")}
-            </Button>
-          </AddAverageDialog>
-        </div>
+        <CustomAverageEmptyState yearId={yearId} className="mx-6 mb-6" />
       </ProfileSection>
     );
   }
@@ -162,7 +155,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
         <div className="flex justify-end border-t py-4 px-6">
           <AddAverageDialog yearId={yearId}>
             <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
+              <PlusCircleIcon className="size-4" />
               {t("addCustomAverage")}
             </Button>
           </AddAverageDialog>

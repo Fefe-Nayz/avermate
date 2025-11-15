@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { PlusCircleIcon } from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 export default function AddSubjectButton() {

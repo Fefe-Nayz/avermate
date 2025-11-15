@@ -6,7 +6,7 @@ export default function DeleteAccount() {
   const t = useTranslations("Settings.Account.DeleteAccount");
 
   return (
-    <Card className="border-destructive/40">
+    <Card className="border-destructive/40 pb-0">
       <CardHeader>
         <CardTitle>
           {t("title")}

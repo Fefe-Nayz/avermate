@@ -2,11 +2,8 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import React from "react";
 import { Skeleton } from "../ui/skeleton";
-
-import {
-  EllipsisVerticalIcon,
-  PlusCircleIcon,
-} from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
+import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import { Button } from "../ui/button";
 import { ScrollArea, ScrollBar } from "../ui/scroll-area";
 import {

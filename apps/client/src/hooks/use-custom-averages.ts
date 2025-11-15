@@ -10,4 +10,5 @@ export const useCustomAverages = (yearId: string) =>
       const data = await res.json<{ customAverages: Average[] }>();
       return data.customAverages;
     },
+    enabled: !!yearId && yearId !== "none",
   });

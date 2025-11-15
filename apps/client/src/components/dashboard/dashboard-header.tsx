@@ -12,12 +12,19 @@ import { cn } from "@/lib/utils";
 import { BodyPortal } from "@/components/portal/body-portal";
 import { useGrade } from "@/hooks/use-grade";
 import { useSubject } from "@/hooks/use-subject";
+import { Grade } from "@/types/grade";
+import { Subject } from "@/types/subject";
 
 interface DashboardHeaderProps {
   hideWorkspaces?: boolean;
 }
 
-const getPageTitle = (pathname: string, t: any, grade?: any, subject?: any) => {
+const getPageTitle = (
+  pathname: string,
+  t: any,
+  grade?: Grade,
+  subject?: Subject
+) => {
   if (pathname === "/dashboard") {
     return t("Dashboard.Pages.OverviewPage.overviewTitle");
   }
@@ -60,9 +67,10 @@ const getPageTitle = (pathname: string, t: any, grade?: any, subject?: any) => {
     return t("Settings.Nav.about");
   }
 
-  if (pathname.startsWith("/profile")) {
-    return t("Dashboard.Pages.SETTINGS_PAGE.SETTINGS_PAGE_TITLE");
+  if (pathname === "/dashboard/settings/grades") {
+    return t("Dashboard.Pages.GRADES_SECTION.GRADES_SECTION_TITLE");
   }
+
 
   return t("Dashboard.Pages.OverviewPage.overviewTitle");
 };
@@ -76,19 +84,21 @@ export default function DashboardHeader({
   const t = useTranslations();
   const isMobile = useIsMobile();
 
-  // Get grade data if we're on a grade details page
-  const gradeId = params?.gradeId as string;
-  const grade = useGrade(gradeId || "");
+  const gradeId = params?.gradeId as string | undefined;
+  const subjectId = params?.subjectId as string | undefined;
 
-  // Get subject data if we're on a subject details page
-  const subjectId = params?.subjectId as string;
-  const subject = useSubject(subjectId || "", false);
+  // Get grade and subject data (hooks handle undefined IDs gracefully)
+  const gradeQuery = useGrade(gradeId);
+  const subjectQuery = useSubject(subjectId, false);
+
+  const grade = gradeQuery?.data;
+  const subject = subjectQuery?.data;
 
   // Header scroll behavior only on mobile
   const isCompact = isMobile && scrollDirection === "down";
   // Show title on mobile when scrolled down (not at top)
   const showTitle = isMobile && !isAtTop;
-  const pageTitle = getPageTitle(pathname, t, grade.data, subject.data);
+  const pageTitle = getPageTitle(pathname, t, grade, subject);
 
   // Measure the rendered header height so we can insert a spacer in flow on mobile
   const headerRef = React.useRef<HTMLDivElement | null>(null);

@@ -6,7 +6,6 @@ import {
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Skeleton } from "../ui/skeleton";
-import { useTranslations } from "next-intl";
 
 export default function gradeLoader(t: any) {
 

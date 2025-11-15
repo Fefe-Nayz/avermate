@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import 'dayjs/locale/fr'
 
-import { DateTimeFormatOptions } from 'use-intl';
+import { type DateTimeFormatOptions } from 'next-intl';
 
 dayjs.locale('fr');
 

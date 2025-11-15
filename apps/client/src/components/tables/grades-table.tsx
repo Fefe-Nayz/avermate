@@ -63,10 +63,10 @@ export default function GradesTable({
     isPending: isCustomAveragesPending,
   } = useCustomAverages(yearId);
 
-  // Loading State
-  if (isPeriodPending || isCustomAveragesPending) {
-    return <LoadingTable />;
-  }
+  // // Loading State
+  // if (isPeriodPending || isCustomAveragesPending || true) {
+  //   return <LoadingTable />;
+  // }
 
   // Error State
   if (isPeriodError || isCustomAveragesError) {

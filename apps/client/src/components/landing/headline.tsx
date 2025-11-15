@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { LandingSection } from "./landing-section";
 import { DiscoverFeaturesButton } from "../buttons/discover-features-button";
 import { Heading } from "../texts/heading";
@@ -14,7 +15,10 @@ export const Headline = () => {
 
   return (
     <LandingSection className="overflow-hidden relative pt-32!">
-      <div className="flex flex-col gap-8 md:gap-16 items-center relative z-10" id="home">
+      <div
+        className="flex flex-col gap-8 md:gap-16 items-center relative z-10"
+        id="home"
+      >
         {/* New Avermate Badge */}
         <BlurFade delay={0.1} duration={0.4} direction="down">
           <AnimatedGradientTextDemo />
@@ -89,43 +93,46 @@ export const Headline = () => {
             relative z-10 flex w-full overflow-visible rounded-xl
             bg-background/90 shadow-2xl
             border border-border/80 dark:border-border/20 dark:border-t-border/40
-
           "
                   >
                     {/* Desktop Dark */}
-                    <img
+                    <Image
                       src="/images/landing/main-desktop-dark.png"
                       alt="Dashboard Desktop Dark"
                       className="hidden dark-desktop:block w-full rounded-xl"
-                      loading="lazy"
-                      decoding="async"
+                      width={1922}
+                      height={1104}
+                      priority
                     />
 
                     {/* Desktop Light */}
-                    <img
+                    <Image
                       src="/images/landing/main-desktop-light.png"
                       alt="Dashboard Desktop Light"
                       className="hidden light-desktop:block dark:hidden w-full rounded-xl"
-                      loading="lazy"
-                      decoding="async"
+                      width={1922}
+                      height={1104}
+                      priority
                     />
 
                     {/* Mobile Dark */}
-                    <img
+                    <Image
                       src="/images/landing/main-mobile-dark.png"
                       alt="Dashboard Mobile Dark"
                       className="hidden dark-mobile:block w-full rounded-xl shadow-lg"
-                      loading="lazy"
-                      decoding="async"
+                      width={1284}
+                      height={6960}
+                      priority
                     />
 
                     {/* Mobile Light */}
-                    <img
+                    <Image
                       src="/images/landing/main-mobile-light.png"
                       alt="Dashboard Mobile Light"
                       className="hidden light-mobile:block dark:hidden w-full rounded-xl shadow-lg"
-                      loading="lazy"
-                      decoding="async"
+                      width={1284}
+                      height={6960}
+                      priority
                     />
                   </div>
                 </div>

@@ -1,27 +1,38 @@
 "use client";
-
+import { IconBookOff } from "@tabler/icons-react";
 import { OnboardingButton } from "@/components/buttons/dashboard/onboarding-button";
-import { Card } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { cn } from "@/lib/utils";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { BookOpenIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-export const SubjectEmptyState = () => {
+export const SubjectEmptyState = ({ className }: { className?: string }) => {
   const t = useTranslations("Dashboard.EmptyStates.SubjectEmptyState");
 
   const { activeId } = useActiveYearStore();
 
   return (
-    <Card className="lg:col-span-10 flex flex-col justify-center items-center p-6 gap-8 w-full h-[400px] xl:h-[600px]">
-      <BookOpenIcon className="w-12 h-12" />
-      <div className="flex flex-col items-center gap-1">
-        <h2 className="text-xl font-semibold text-center">
-          {t("noSubjectsTitle")}
-        </h2>
-        <p className="text-center">{t("noSubjectsDescription")}</p>
-      </div>
-
-      <OnboardingButton yearId={activeId} />
-    </Card>
+    <Empty
+      className={cn("border border-dashed", className)}
+    >
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <IconBookOff />
+        </EmptyMedia>
+        <EmptyTitle>{t("noSubjectsTitle")}</EmptyTitle>
+        <EmptyDescription>{t("noSubjectsDescription")}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <OnboardingButton yearId={activeId} />
+      </EmptyContent>
+    </Empty>
   );
 };

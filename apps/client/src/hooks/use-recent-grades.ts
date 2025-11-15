@@ -16,4 +16,5 @@ export const useRecentGrades = (yearId: string) =>
 
       return data.grades;
     },
+    enabled: !!yearId && yearId !== "none",
   });

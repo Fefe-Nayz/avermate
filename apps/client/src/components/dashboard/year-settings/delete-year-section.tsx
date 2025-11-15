@@ -18,7 +18,7 @@ export default function DeleteYearSection({ yearId }: { yearId: string }) {
     if (isError || !year) return <div>{ErrorStateCard()}</div>;
 
     return (
-        <Card className="border-destructive/40">
+        <Card className="border-destructive/40 pb-0">
             <CardHeader>
                 <CardTitle>
                     {t("DELETE_YEAR_SECTION_TITLE")}

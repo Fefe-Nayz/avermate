@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { Benefits } from "@/components/landing/benefits";
 import { CTA } from "@/components/landing/cta";
 import { FAQ } from "@/components/landing/faq";
@@ -8,6 +8,7 @@ import { SocialProof } from "@/components/landing/social-proof";
 import Aurora from "@/components/landing/aurora";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 
 export default function LandingPage() {
   const { resolvedTheme } = useTheme();
@@ -21,55 +22,45 @@ export default function LandingPage() {
 
   return (
     <div className="relative">
-      {/* Aurora Background */}
       {mounted && (
-        <div className="absolute top-0 left-0 w-full h-[100vh] z-0 pointer-events-none overflow-hidden">
-          {/* Dark mode aurora - better darker colors */}
-          <Aurora
-            dark={dark}
-            colorStops={
-              dark
-                ? ['#4338CA', '#059669', '#7C3AED']                // your dark palette
-                : ['#BEE3FF', '#D9FFB5', '#EBD3FF']                  // pastel light palette
-            }
-            speed={0.8}
-            blend={dark ? 0.4 : 0.6}
-            amplitude={dark ? 1.2 : 1.0}
-            // light-only tweaks
-            edgeLift={1.0}
-            bgColor={[1, 1, 1]} // page bg; omit/adjust if not pure white
-            // mobile-friendly minimum sizes
-            minWidth={1200}
-            minHeight={800}
-          />
-        </div>
+      <motion.div
+        className="absolute top-0 left-0 w-full h-[100vh] z-0 pointer-events-none overflow-hidden"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5, duration: 1, ease: "easeInOut" }}
+      >
+        <Aurora
+          dark={dark}
+          colorStops={
+            dark
+              ? ["#4338CA", "#059669", "#7C3AED"]
+              : ["#BEE3FF", "#D9FFB5", "#EBD3FF"]
+          }
+          speed={0.8}
+          blend={dark ? 0.4 : 0.6}
+          amplitude={dark ? 1.2 : 1.0}
+          edgeLift={1.0}
+          bgColor={[1, 1, 1]}
+          minWidth={1200}
+          minHeight={800}
+        />
+      </motion.div>
       )}
-
-      {/* Content */}
       <div className="relative z-10">
-        {/* Headline */}
-        {/* CTA */}
         <Headline />
 
-        {/* Social Proof */}
         <SocialProof />
 
-        {/* Problems & Solutions */}
         <section id="benefits">
           <Benefits />
         </section>
 
-        {/* Features */}
         <section id="features">
           <Product />
         </section>
 
-        {/* Demo */}
         <section id="faq" className="pb-64">
-          {/* CTA */}
           <CTA />
-
-          {/* FAQ */}
 
           <FAQ />
         </section>

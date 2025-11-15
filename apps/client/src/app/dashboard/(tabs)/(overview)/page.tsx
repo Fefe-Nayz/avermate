@@ -38,8 +38,6 @@ export default function OverviewPage() {
 
   const router = useRouter();
 
-  const [selectedTab, setSelectedTab] = useState<string | null>(null);
-
   const { activeId } = useActiveYearStore();
   const { data: years } = useYears();
   const active = years?.find((year) => year.id === activeId);
@@ -83,25 +81,46 @@ export default function OverviewPage() {
     isPending: isCustomAveragesPending,
   } = useCustomAverages(activeId);
 
-  useEffect(() => {
-    if (!periods) return;
+  // Track user's manual tab selection
+  const [userSelectedTab, setUserSelectedTab] = useState<string | null>(null);
 
-    const savedTab = localStorage.getItem("selectedTab");
+  // Derive the selected tab value
+  const selectedTab =
+    userSelectedTab ??
+    (() => {
+      if (!periods) return null;
 
-    const savedTabExists = periods.find((period) => period.id === savedTab);
+      const savedTab = localStorage.getItem("selectedTab");
+      const savedTabExists = periods.find((period) => period.id === savedTab);
 
-    if (savedTabExists) {
-      setSelectedTab(savedTab);
-    } else {
-      const defaultTab =
+      if (savedTabExists) {
+        return savedTab;
+      }
+
+      return (
         periods.find(
           (period) =>
             new Date(period.startAt) <= new Date() &&
             new Date(period.endAt) >= new Date()
-        )?.id || "full-year";
-      setSelectedTab(defaultTab);
+        )?.id || "full-year"
+      );
+    })();
+
+  //todo implement a custom field
+  useEffect(() => {
+    const linkedProviders = new Set(accounts?.map((acc) => acc.providerId));
+
+    if (
+      session?.user?.createdAt &&
+      new Date(session.user.createdAt).getTime() >
+        Date.now() - 1000 * 60 * 10 &&
+      (!subjects || subjects.length === 0) &&
+      (linkedProviders.has("google") || linkedProviders.has("microsoft")) &&
+      localStorage.getItem("isOnboardingCompleted") !== "true"
+    ) {
+      router.push("/onboarding");
     }
-  }, [periods]);
+  }, [session?.user?.createdAt, subjects, accounts, router]);
 
   // Error State
   if (
@@ -142,20 +161,6 @@ export default function OverviewPage() {
       (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
     );
 
-  const linkedProviders = new Set(accounts?.map((acc) => acc.providerId));
-
-  //todo implement a custom field
-  if (
-    session?.user?.createdAt &&
-    new Date(session.user.createdAt).getTime() >
-    Date.now() - 1000 * 60 * 10 &&
-    (!subjects || subjects.length === 0) &&
-    (linkedProviders.has("google") || linkedProviders.has("microsoft")) &&
-    localStorage.getItem("isOnboardingCompleted") !== "true"
-  ) {
-    router.push("/onboarding");
-  }
-
   return (
     <main className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
       <div className="flex flex-wrap items-center justify-between min-h-9">
@@ -182,14 +187,14 @@ export default function OverviewPage() {
         }
         value={selectedTab}
         onValueChange={(value) => {
-          setSelectedTab(value);
+          setUserSelectedTab(value);
           localStorage.setItem("selectedTab", value);
         }}
       >
         <div className="flex flex-col gap-2 md:gap-4">
-          <div className="hidden md:flex gap-4">
+          <div className="hidden md:block">
             <ScrollArea>
-              <div className="flex w-full">
+              <div className="w-full relative h-12">
                 <TabsList className="flex">
                   {periods?.map((period) => (
                     <TabsTrigger key={period.id} value={period.id}>
@@ -200,7 +205,6 @@ export default function OverviewPage() {
                   <TabsTrigger value="full-year">{t("fullYear")}</TabsTrigger>
                 </TabsList>
               </div>
-
               <ScrollBar orientation="horizontal" />
             </ScrollArea>
           </div>
@@ -209,7 +213,7 @@ export default function OverviewPage() {
             <SelectDrawer
               value={selectedTab}
               onValueChange={(value) => {
-                setSelectedTab(value);
+                setUserSelectedTab(value);
                 localStorage.setItem("selectedTab", value);
               }}
             >
@@ -224,7 +228,9 @@ export default function OverviewPage() {
                       {t("periodName", { name: period.name })}
                     </SelectDrawerItem>
                   ))}
-                  <SelectDrawerItem value="full-year">{t("fullYear")}</SelectDrawerItem>
+                  <SelectDrawerItem value="full-year">
+                    {t("fullYear")}
+                  </SelectDrawerItem>
                 </SelectDrawerGroup>
               </SelectDrawerContent>
             </SelectDrawer>
@@ -267,9 +273,23 @@ export default function OverviewPage() {
                     />
 
                     {/* Dernières notes */}
-                    {subjects.length > 0 && (
-                      <RecentGradesCard yearId={activeId} recentGrades={recentGrades} period={period} />
-                    )}
+                    {subjects.length > 0 &&
+                      (() => {
+                        const periodSubjects =
+                          organizedSubjects?.find(
+                            (p) => p.period.id === period.id
+                          )?.subjects || [];
+                        const hasGradesInPeriod = periodSubjects.some(
+                          (subject) => subject.grades.length > 0
+                        );
+                        return hasGradesInPeriod;
+                      })() && (
+                        <RecentGradesCard
+                          yearId={activeId}
+                          recentGrades={recentGrades}
+                          period={period}
+                        />
+                      )}
                   </div>
                 </TabsContent>
               ))}
@@ -289,9 +309,22 @@ export default function OverviewPage() {
                 periods={periods}
               />
 
-              {subjects.length > 0 && (
-                <RecentGradesCard yearId={activeId} recentGrades={recentGrades} period={fullYearPeriod(subjects, active)} />
-              )}
+              {subjects.length > 0 &&
+                (() => {
+                  const fullYearSubjects =
+                    organizedSubjects?.find((p) => p.period.id === "full-year")
+                      ?.subjects || [];
+                  const hasGradesInFullYear = fullYearSubjects.some(
+                    (subject) => subject.grades.length > 0
+                  );
+                  return hasGradesInFullYear;
+                })() && (
+                  <RecentGradesCard
+                    yearId={activeId}
+                    recentGrades={recentGrades}
+                    period={fullYearPeriod(subjects, active)}
+                  />
+                )}
             </div>
           </TabsContent>
         </div>

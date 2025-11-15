@@ -317,7 +317,15 @@
       "accountSecurity": "Compte & Sécurité",
       "settings": "Paramètres",
       "about": "À propos",
-      "back": "Retour"
+      "back": "Retour",
+      "general": "Général",
+      "yearSettings": "Paramètres de l'année",
+      "search": "Paramètres de recherche...",
+      "profileDescription": "Gérer les informations de votre profil",
+      "accountDescription": "Sécurité et comptes liés",
+      "yearSettingsDescription": "Gérer vos paramètres d'année",
+      "generalDescription": "Préférences et apparence de l'application",
+      "aboutDescription": "Version et contributeurs"
     },
     "Profile": {
       "Name": {
@@ -526,7 +534,9 @@
       "githubIssues": "Problèmes GitHub",
       "discordServer": "Serveur Discord",
       "homePage": "Page d'accueil"
-    }
+    },
+    "description": "Sélectionnez une catégorie pour afficher et gérer vos paramètres",
+    "title": "Paramètres"
   },
   "ErrorPages": {
     "NotFound": {
@@ -563,7 +573,8 @@
       "support": "Support",
       "feedback": "Retour",
       "notLoggedInTitle": "Vous n'êtes pas connecté",
-      "notLoggedInDescription": "Vous devez être connecté pour accéder à cette page."
+      "notLoggedInDescription": "Vous devez être connecté pour accéder à cette page.",
+      "general": "Général"
     }
   },
   "Dashboard": {
@@ -609,7 +620,8 @@
         "addGrade": "Ajouter une note",
         "globalAverageTitle": "Moyenne Générale",
         "areaChartDescription": "Visualiser l'évolution de votre moyenne générale sur ce trimestre",
-        "radarChartDescription": "Visualiser votre moyenne par matière"
+        "radarChartDescription": "Visualiser votre moyenne par matière",
+        "addGradeInSubject": "Ajouter une note dans {name}"
       },
       "SubjectAverageChart": {
         "average": "Moyenne"
@@ -620,7 +632,11 @@
         "title": "Notes récentes",
         "description": "Vous avez reçu {recentCount} nouvelles notes cette semaine !",
         "noRecentGrades": "Aucune note récente",
-        "addGrade": "Ajouter une note"
+        "addGrade": "Ajouter une note",
+        "thisWeek": "Cette semaine",
+        "noRecentGradesHint": "Ajoutez une nouvelle note maintenant !",
+        "showMore": "Afficher plus",
+        "latest": "Dernière note"
       }
     },
     "Nav": {
@@ -918,7 +934,8 @@
         "noParentSubjectFound": "Aucune matière parente trouvée.",
         "parentSubjectDescription": "Une matière parente regroupe plusieurs sous-matières, facilitant leur organisation.",
         "submit": "Ajouter une matière",
-        "noParent": "Sans Parent"
+        "noParent": "Sans Parent",
+        "parentIdInvalid": "ID parent invalide"
       },
       "Feedback": {
         "feedbackType": "Type de remarque",
@@ -1174,7 +1191,119 @@
       },
       "SETTINGS_PAGE": {
         "SETTINGS_PAGE_TITLE": "Paramètres"
+      },
+      "Analytics": {
+        "title": "Analytiques",
+        "totalGrades": "Total des notes",
+        "acrossSubjects": "Dans {count} matières",
+        "averageGrade": "Moyenne générale",
+        "overallPerformance": "Performance globale",
+        "subjectsActive": "Matières actives",
+        "withGrades": "Avec notes",
+        "trend": "Tendance",
+        "improving": "En amélioration",
+        "declining": "En déclin",
+        "gradeDistribution": "Répartition des notes",
+        "gradeDistributionDescription": "Répartition de vos notes par niveau de performance",
+        "gradeDistributionChart": "Graphique de répartition des notes",
+        "gradeDistributionChartDescription": "Représentation visuelle de la répartition de vos notes par pourcentage arrondi",
+        "chartLegend": "Les barres bleues représentent le nombre de chaque pourcentage de note",
+        "noGradesChart": "Aucune note à afficher",
+        "bestWorstGrades": "Meilleures et pires notes",
+        "bestGrade": "Meilleure note",
+        "worstGrade": "Pire note",
+        "bestWorstSubjects": "Meilleures et pires matières",
+        "bestSubject": "Meilleure matière",
+        "worstSubject": "Pire matière",
+        "subjectCorrelation": "Corrélation des matières",
+        "mostConsistent": "Plus constantes",
+        "mostConsistentDescription": "Matières avec la performance la plus stable",
+        "leastConsistent": "Moins constantes",
+        "leastConsistentDescription": "Matières avec la performance la plus variable",
+        "noData": "Aucune donnée disponible",
+        "performanceTrend": "Évolution des performances",
+        "performanceTrendDescription": "Comparez vos performances de la première moitié vs seconde moitié de la période",
+        "excellent": "Excellent ({range})",
+        "good": "Bon ({range})",
+        "satisfactory": "Satisfaisant ({range})",
+        "needsImprovement": "À améliorer ({range})",
+        "firstHalf": "Première moitié",
+        "secondHalf": "Seconde moitié",
+        "overallChange": "Évolution globale",
+        "gradeCount": "Nombre",
+        "currentStreak": "Série actuelle",
+        "streakDescription": "Notes consécutives améliorant la moyenne",
+        "medianGrade": "Note médiane",
+        "medianDescription": "Valeur médiane de toutes les notes",
+        "gradesOverTime": "Évolution des notes",
+        "gradesOverTimeDescription": "Notes individuelles avec ligne de tendance",
+        "grade": "Note",
+        "subjectAnalysis": "Analyse par matière",
+        "subjectAnalysisDescription": "Statistiques détaillées pour une matière spécifique",
+        "selectSubject": "Sélectionner une matière",
+        "allSubjects": "Toutes les matières",
+        "noGradesForSubject": "Aucune note pour cette matière",
+        "streakOverTime": "Évolution de la série",
+        "streakOverTimeDescription": "Comment votre série a évolué avec chaque note",
+        "streak": "Série"
+      },
+      "GRADES_SECTION": {
+        "GRADES_SECTION_TITLE": "Gérer les notes"
       }
+    },
+    "Analytics": {
+      "title": "Analytique",
+      "totalGrades": "Notes totales",
+      "averageGrade": "Note moyenne",
+      "acrossSubjects": "Sur {count} sujets",
+      "subjectsActive": "Sujets actifs",
+      "trend": "S'orienter",
+      "improving": "Améliorer",
+      "gradeDistributionChart": "Tableau de répartition des notes",
+      "gradeDistributionChartDescription": "Représentation visuelle de votre répartition des notes par pourcentage arrondi",
+      "gradeCount": "Compter",
+      "bestWorstGrades": "Meilleur",
+      "bestGrade": "Meilleure note",
+      "bestSubject": "Meilleur sujet",
+      "subjectCorrelation": "Corrélation du sujet",
+      "mostConsistent": "Le plus cohérent",
+      "noData": "Aucune donnée disponible",
+      "leastConsistent": "Le moins cohérent",
+      "gradeDistribution": "Répartition des notes",
+      "gradeDistributionDescription": "Répartition de vos notes par niveau de performance",
+      "performanceTrend": "Tendance des performances",
+      "performanceTrendDescription": "Comparez vos performances dans la première moitié par rapport à la seconde moitié de la période",
+      "secondHalf": "Deuxième mi-temps",
+      "currentStreak": "Série actuelle",
+      "streakDescription": "Notes consécutives améliorant la moyenne",
+      "gradesOverTime": "Notes au fil du temps",
+      "streakOverTime": "Séquence au fil du temps",
+      "streakOverTimeDescription": "Comment votre séquence a évolué à chaque note",
+      "selectSubject": "Sélectionnez un sujet",
+      "noGradesForSubject": "Aucune note pour ce sujet",
+      "allSubjects": "Tous les sujets",
+      "subjectAnalysisDescription": "Statistiques détaillées pour un sujet spécifique",
+      "subjectAnalysis": "Analyse du sujet",
+      "streak": "Traînée",
+      "grade": "Grade",
+      "gradesOverTimeDescription": "Grades individuels avec ligne de tendance",
+      "medianDescription": "Valeur moyenne de toutes les notes",
+      "medianGrade": "Note médiane",
+      "overallChange": "Changement global",
+      "firstHalf": "Première mi-temps",
+      "leastConsistentDescription": "Sujets aux performances les plus variables",
+      "mostConsistentDescription": "Sujets avec les performances les plus stables",
+      "worstSubject": "Pire sujet",
+      "bestWorstSubjects": "Meilleur",
+      "worstGrade": "Pire note",
+      "noGradesChart": "Aucune note à afficher",
+      "declining": "En déclin",
+      "withGrades": "Avec des notes",
+      "overallPerformance": "Performance globale",
+      "excellent": "Excellent ({range})",
+      "good": "Good ({range})",
+      "satisfactory": "Satisfactory ({range})",
+      "needsImprovement": "Needs Improvement ({range})"
     }
   },
   "Legal": {

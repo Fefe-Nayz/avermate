@@ -10,8 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePeriods } from "@/hooks/use-periods";
 import {
   EllipsisVerticalIcon,
-  PlusCircleIcon,
 } from "@heroicons/react/24/outline";
+import { PlusCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
