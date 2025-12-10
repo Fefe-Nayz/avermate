@@ -15,6 +15,7 @@ import { useTranslations } from "next-intl";
 import { Button } from '@/components/ui/button';
 import { EllipsisVerticalIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
 import { Label } from '@/components/ui/label';
+import { YearReviewButton } from '@/components/year-review/year-review-trigger';
 
 export default function YearSettingsPage() {
     const { activeId } = useActiveYearStore();
@@ -266,6 +267,9 @@ export default function YearSettingsPage() {
                     <DeleteYearSection yearId={activeId} />
                 </>
             )}
+             <div className="mb-8">
+                <YearReviewButton />
+            </div>
         </main>
     )
 }

@@ -3,6 +3,7 @@
 import DashboardHeader from "@/components/dashboard/dashboard-header";
 import DashboardNav from "@/components/nav/dashboard-nav";
 import { ReactNode } from "react";
+import { YearReviewTrigger } from "@/components/year-review/year-review-trigger";
 
 export default function AuthenticatedLayout({
   children,
@@ -15,6 +16,8 @@ export default function AuthenticatedLayout({
       <DashboardHeader />
 
       <DashboardNav />
+      
+      <YearReviewTrigger />
 
       {/* Page */}
       <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-16">

@@ -57,6 +57,7 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
     "framer-motion": "^12.23.12",
+    "html2canvas-pro": "^1.5.13",
     "input-otp": "^1.4.2",
     "js-cookie": "^3.0.5",
     "ky": "^1.7.3",
