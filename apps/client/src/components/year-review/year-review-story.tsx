@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target } from "lucide-react";
 import { YearReviewStats } from "@/types/year-review";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -40,27 +40,27 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
     return (
         <div className="relative flex flex-col items-center justify-center h-full text-center p-6 bg-[#0a0a0a] text-white overflow-hidden">
             {/* Animated gradient orbs */}
-            <motion.div 
+            <motion.div
                 className="absolute top-1/4 -left-20 w-72 h-72 bg-emerald-500/30 rounded-full blur-[100px]"
-                animate={{ 
-                    x: [0, 30, 0], 
+                animate={{
+                    x: [0, 30, 0],
                     y: [0, -20, 0],
                     scale: [1, 1.1, 1]
                 }}
                 transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
             />
-            <motion.div 
+            <motion.div
                 className="absolute bottom-1/4 -right-20 w-80 h-80 bg-cyan-500/25 rounded-full blur-[120px]"
-                animate={{ 
-                    x: [0, -40, 0], 
+                animate={{
+                    x: [0, -40, 0],
                     y: [0, 30, 0],
                     scale: [1, 1.2, 1]
                 }}
                 transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
             />
-            <motion.div 
+            <motion.div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-400/20 rounded-full blur-[150px]"
-                animate={{ 
+                animate={{
                     scale: [1, 1.3, 1],
                     opacity: [0.2, 0.35, 0.2]
                 }}
@@ -77,39 +77,39 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     className="relative mb-8"
                 >
                     {/* Animated rings - positioned outside the logo box */}
-                    <motion.div 
+                    <motion.div
                         className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
                         style={{ margin: -16 }}
                         animate={{ scale: [1.15, 1.30, 1.15], opacity: [0.6, 0, 0.6] }}
                         transition={{ duration: 2, repeat: Infinity }}
                     />
-                    <motion.div 
+                    <motion.div
                         className="absolute inset-0 rounded-full border border-cyan-400/40"
                         style={{ margin: -28 }}
                         animate={{ scale: [1.2, 1.4, 1.2], opacity: [0.4, 0, 0.4] }}
                         transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
                     />
-                    <motion.div 
+                    <motion.div
                         className="absolute inset-0 rounded-full border border-teal-400/20"
                         style={{ margin: -40 }}
                         animate={{ scale: [1.25, 1.5, 1.25], opacity: [0.2, 0, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity, delay: 0.6 }}
                     />
-                    
+
                     {userAvatar ? (
                         <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
-                            <img 
-                                src={userAvatar} 
-                                alt={userName || "User"} 
+                            <img
+                                src={userAvatar}
+                                alt={userName || "User"}
                                 className="w-full h-full rounded-[14px] object-cover"
                             />
                         </div>
                     ) : (
                         <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
                             <div className="w-full h-full rounded-2xl bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
-                                <img 
-                                    src="/logo.svg" 
-                                    alt="Avermate" 
+                                <img
+                                    src="/logo.svg"
+                                    alt="Avermate"
                                     className="w-full h-full object-contain"
                                 />
                             </div>
@@ -119,7 +119,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
 
                 {/* Username */}
                 {userName && (
-                    <motion.p 
+                    <motion.p
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 0.7, y: 0 }}
                         transition={{ delay: 0.3 }}
@@ -130,7 +130,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                 )}
 
                 {/* Year - Big dramatic reveal */}
-                <motion.h1 
+                <motion.h1
                     initial={{ opacity: 0, y: 30, scale: 0.8 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ delay: 0.5, duration: 0.6, type: "spring" }}
@@ -140,7 +140,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                 </motion.h1>
 
                 {/* Subtitle */}
-                <motion.h2 
+                <motion.h2
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.7 }}
@@ -150,7 +150,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                 </motion.h2>
 
                 {/* Tagline */}
-                <motion.p 
+                <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 0.6 }}
                     transition={{ delay: 0.9 }}
@@ -181,7 +181,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
 
 function StatsSlide({ stats }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
-    
+
     // Calculate dynamic offset to center on Grades bar
     // Layout: [GradesBar(128px)] [gap(64px)] [PointsBar(128px)]
     // Center of Grades bar is (64/2 + 128/2) = 96px left of container center
@@ -201,11 +201,11 @@ function StatsSlide({ stats }: SlideProps) {
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
             <motion.div
                 initial={{ scale: SCALE, y: 190, x: xOffset }}
-                animate={zoomOut 
+                animate={zoomOut
                     ? { scale: 1, y: 0, x: 0 } // Zoom out to full view
                     : { scale: SCALE, y: 320, x: xOffset } // Track the growing bar upwards, keep centered on Grades
                 }
-                transition={zoomOut 
+                transition={zoomOut
                     ? { duration: 0.8, type: "spring", bounce: 0.2 } // Zoom out transition
                     : { duration: 2, ease: "easeOut" } // Tracking transition (matches bar growth)
                 }
@@ -213,35 +213,35 @@ function StatsSlide({ stats }: SlideProps) {
             >
                 {/* Grades Bar */}
                 <div className="flex flex-col items-center gap-4 w-32 relative">
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         className="text-2xl font-bold whitespace-nowrap absolute -top-12"
                     >
                         Grades
                     </motion.div>
-                    
+
                     <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
-                         {/* Growing Fill */}
-                         <motion.div 
+                        {/* Growing Fill */}
+                        <motion.div
                             initial={{ height: "0%" }}
                             animate={{ height: "60%" }}
                             transition={{ duration: 2, ease: "easeOut" }}
                             className="w-full bg-white relative shadow-[0_0_20px_rgba(255,255,255,0.5)]"
-                         >
+                        >
                             {/* Ticking Value on top of the bar */}
                             <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
                                 <span className="text-5xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
                                     <CountUp value={stats.gradesCount} duration={2} />
                                 </span>
                             </div>
-                         </motion.div>
+                        </motion.div>
                     </div>
                 </div>
 
                 {/* Points Bar */}
                 <div className="flex flex-col items-center gap-4 w-32 relative">
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         transition={{ delay: 0.1 }}
@@ -251,12 +251,12 @@ function StatsSlide({ stats }: SlideProps) {
                     </motion.div>
 
                     <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
-                         <motion.div 
+                        <motion.div
                             initial={{ height: "0%" }}
                             animate={zoomOut ? { height: "75%" } : { height: "0%" }}
                             transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
                             className="w-full bg-yellow-300 relative shadow-[0_0_20px_rgba(253,224,71,0.5)]"
-                         >
+                        >
                             {zoomOut && (
                                 <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
                                     <span className="text-4xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
@@ -264,15 +264,15 @@ function StatsSlide({ stats }: SlideProps) {
                                     </span>
                                 </div>
                             )}
-                         </motion.div>
+                        </motion.div>
                     </div>
                 </div>
             </motion.div>
-            
+
             <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={zoomOut ? { opacity: 0.7, y: 0 } : { opacity: 0, y: 20 }}
-                transition={{ delay: 0.8 }} 
+                transition={{ delay: 0.8 }}
                 className="mt-12 text-sm max-w-xs mx-auto"
             >
                 Accumulated points throughout the year
@@ -282,25 +282,27 @@ function StatsSlide({ stats }: SlideProps) {
 }
 
 function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
+    const [zoomOut, setZoomOut] = useState(false);
+
     const days = useMemo(() => {
         const result = [];
         const yearNum = parseInt(year);
         const targetYear = isNaN(yearNum) ? new Date().getFullYear() : yearNum;
-        
+
         const startDate = new Date(targetYear, 0, 1);
         const now = new Date();
         const isCurrentYear = now.getFullYear() === targetYear;
         const endDate = isCurrentYear ? now : new Date(targetYear, 11, 31);
 
         const currentDate = new Date(startDate);
-        
+
         while (currentDate <= endDate) {
             const dateStr = currentDate.toISOString().split('T')[0];
             const count = stats.heatmap[dateStr] || 0;
-            result.push({ 
-                date: new Date(currentDate), 
+            result.push({
+                date: new Date(currentDate),
                 count,
-                dateStr 
+                dateStr
             });
             currentDate.setDate(currentDate.getDate() + 1);
         }
@@ -310,45 +312,64 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
     const weeks = useMemo(() => {
         const w: (typeof days[0] | null)[][] = [];
         let currentWeek: (typeof days[0] | null)[] = Array(7).fill(null);
-        
-        // Pad beginning to align with first day of week
+
         if (days.length > 0) {
             const firstDayOfWeek = days[0].date.getDay();
             for (let i = 0; i < firstDayOfWeek; i++) {
                 currentWeek[i] = null;
             }
         }
-        
+
         days.forEach((day) => {
             const dayIndex = day.date.getDay();
             currentWeek[dayIndex] = day;
-            
+
             if (dayIndex === 6) {
                 w.push(currentWeek);
                 currentWeek = Array(7).fill(null);
             }
         });
-        
+
         if (currentWeek.some(d => d !== null)) {
             w.push(currentWeek);
         }
-        
+
         return w;
     }, [days]);
 
+    // Trigger zoom out after horizontal pan completes
+    useEffect(() => {
+        const timer = setTimeout(() => setZoomOut(true), 2200);
+        return () => clearTimeout(timer);
+    }, []);
+
+    // Animation values for the heatmap camera
+    const SCALE = 3.5;
+    // Pan positions - start far right to show first weeks, end at left to show recent weeks
+    const START_X = 1400; // Start position (first day visible on right side)
+    const END_X = -800;   // End position (keep as is)
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0d1117] text-white">
-             <motion.div
+        <div className="flex flex-col items-center justify-center gap-30 h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden relative">
+            {/* Background Gradients */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-[20%] -right-[20%] w-[600px] h-[600px] bg-[#3e61d2]/10 rounded-full blur-[120px]" />
+                <div className="absolute -bottom-[20%] -left-[20%] w-[500px] h-[500px] bg-[#3e61d2]/5 rounded-full blur-[100px]" />
+            </div>
+
+            {/* Header - appears after zoom out */}
+            <motion.div
                 initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 w-full"
-             >
-                <div className="flex items-center justify-center gap-3 mb-4">
+                animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
+                transition={{ duration: 0.5 }}
+                className="w-full relative z-10"
+            >
+                <div className="flex items-center justify-center gap-3">
                     {userAvatar ? (
                         <img src={userAvatar} alt={userName || ""} className="w-12 h-12 rounded-full border-2 border-white/20 object-cover" />
                     ) : (
                         <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20">
-                            <div className="w-full h-full bg-gradient-to-br from-green-400 to-blue-500" />
+                            <div className="w-full h-full bg-gradient-to-br from-[#3e61d2] to-blue-500" />
                         </div>
                     )}
                     <div className="text-left">
@@ -356,59 +377,70 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                         <div className="text-sm opacity-60">{year} Year in Grades</div>
                     </div>
                 </div>
-             </motion.div>
+            </motion.div>
 
-             <motion.div 
-                 initial={{ opacity: 0, scale: 0.95 }}
-                 animate={{ opacity: 1, scale: 1 }}
-                 transition={{ delay: 0.2 }}
-                 className="w-full bg-[#161b22] p-4 rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center"
-             >
-                 {/* Flexible container for the grid */}
-                 <div className="w-full">
-                     <div 
-                        className="flex gap-[2px] w-full"
-                     >
+            {/* Heatmap container with camera animation */}
+            <motion.div
+                initial={{ scale: SCALE, x: START_X }}
+                animate={zoomOut
+                    ? { scale: 1, x: 0 }
+                    : { scale: SCALE, x: END_X }
+                }
+                transition={zoomOut
+                    ? { duration: 0.6, type: "spring", bounce: 0.1 }
+                    : { duration: 2, ease: [0.25, 0.8, 0.25, 1] } // Custom cubic bezier (easeOutQuad style)
+                }
+                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-4 rounded-2xl border border-white/10 shadow-2xl relative z-10"
+            >
+                <div className="w-full">
+                    <div className="flex gap-[2px] w-full">
                         {weeks.map((week, weekIndex) => (
-                            <div 
-                                key={weekIndex} 
+                            <div
+                                key={weekIndex}
                                 className="flex-1 flex flex-col gap-[2px]"
                             >
                                 {week.map((day, dayIndex) => (
-                                    <div 
-                                       key={`${weekIndex}-${dayIndex}`}
-                                       className={cn(
-                                           "w-full aspect-square rounded-[1px] sm:rounded-[2px]",
-                                           !day ? "bg-transparent" :
-                                            day.count === 0 ? "bg-[#161b22] border border-white/5" : 
-                                            day.count === 1 ? "bg-[#0e4429]" :
-                                            day.count <= 3 ? "bg-[#006d32]" :
-                                            "bg-[#39d353]"
-                                       )}
-                                       title={day ? `${day.dateStr}: ${day.count} grades` : ""}
+                                    <div
+                                        key={`${weekIndex}-${dayIndex}`}
+                                        className={cn(
+                                            "w-full aspect-square rounded-[1px] sm:rounded-[2px]",
+                                            !day ? "bg-transparent" :
+                                                day.count === 0 ? "bg-[#161b22] border border-white/5" :
+                                                    day.count === 1 ? "bg-[#1d2d60]" :
+                                                        day.count <= 3 ? "bg-[#2d4696]" :
+                                                            "bg-[#3e61d2]"
+                                        )}
                                     />
                                 ))}
-                             </div>
-                         ))}
-                     </div>
-                 </div>
-                 <div className="text-left mt-4 text-sm text-[#8b949e] w-full">
-                    {stats.gradesCount} grades in {year}
-                 </div>
-             </motion.div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
 
-             <motion.div
+                {/* Grade count - appears after zoom out */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={zoomOut ? { opacity: 1 } : { opacity: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-left mt-4 text-sm text-[#8b949e] w-full"
+                >
+                    {stats.gradesCount} grades in {year}
+                </motion.div>
+            </motion.div>
+
+            {/* Most Active Month - appears after zoom out */}
+            <motion.div
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="mt-8"
-             >
-                <h3 className="text-lg opacity-80 mb-2">Most Active Month</h3>
-                <div className="text-4xl font-black uppercase tracking-wider">
+                animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                transition={{ delay: 0.4, duration: 0.5 }}
+                className="w-full relative z-10"
+            >
+                <h3 className="text-lg text-[#8b949e] mb-3">Most Active Month</h3>
+                <div className="text-5xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] to-[#5e81f2] bg-clip-text text-transparent">
                     {stats.mostActiveMonth.month}
                 </div>
-                <p className="text-sm mt-2 opacity-60">{stats.mostActiveMonth.count} grades entered</p>
-             </motion.div>
+                <p className="text-base mt-3 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
+            </motion.div>
         </div>
     );
 }
@@ -438,34 +470,34 @@ function StreakSlide({ stats }: SlideProps) {
 
 function PrimeTimeSlide({ stats }: SlideProps) {
     const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
-    
+
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-yellow-400 to-amber-600 text-white">
-             <motion.div
+            <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-             >
+            >
                 <h2 className="text-3xl font-bold mb-8">Prime Time</h2>
-             </motion.div>
-             
-             <motion.div
+            </motion.div>
+
+            <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
                 className="bg-white/20 backdrop-blur-lg rounded-full w-48 h-48 flex flex-col items-center justify-center mb-6 border-4 border-white/30"
-             >
+            >
                 <span className="text-4xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
                 <span className="text-sm">/20</span>
-             </motion.div>
-             
-             <motion.p 
+            </motion.div>
+
+            <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
                 className="text-2xl"
-             >
-                Peak reached on<br/><strong>{date}</strong>
-             </motion.p>
+            >
+                Peak reached on<br /><strong>{date}</strong>
+            </motion.p>
         </div>
     );
 }
@@ -474,7 +506,7 @@ function SubjectsSlide({ stats }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
             <h2 className="text-3xl font-bold mb-8">Top Subjects</h2>
-            
+
             <div className="w-full max-w-md space-y-4">
                 {stats.bestSubjects.map((subject, index) => (
                     <motion.div
@@ -492,18 +524,18 @@ function SubjectsSlide({ stats }: SlideProps) {
                     </motion.div>
                 ))}
             </div>
-            
+
             {stats.bestProgression.value > 0 && (
-                 <motion.div
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 1 }}
                     className="mt-8 p-4 bg-white/20 rounded-xl w-full max-w-md"
-                 >
+                >
                     <div className="text-sm uppercase tracking-wider mb-1">Best Comeback 🚀</div>
                     <div className="font-bold text-xl">{stats.bestProgression.subject}</div>
                     <div className="text-sm opacity-80">+{stats.bestProgression.value.toFixed(2)} pts improvement</div>
-                 </motion.div>
+                </motion.div>
             )}
         </div>
     );
@@ -521,58 +553,65 @@ function PercentileSlide({ stats }: SlideProps) {
 
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
-             {/* Background animated gradient */}
-             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900 via-[#0a0a0a] to-black opacity-80" />
-             
-             <div className="relative z-10">
-                 <motion.div 
+            {/* Background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-purple-900 via-black to-indigo-900 opacity-60" />
+
+
+            <div className="relative z-10">
+                <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/20 rounded-full border border-yellow-500/40 text-yellow-300 mb-8"
-                 >
+                >
                     <Trophy className="w-4 h-4" />
                     <span className="font-bold text-sm uppercase tracking-wider">Legendary Status</span>
-                 </motion.div>
+                </motion.div>
 
-                 <motion.h2 
+                <motion.h2
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="text-3xl font-bold mb-4"
-                 >
+                >
                     You are in the top
-                 </motion.h2>
-                 
-                 <motion.div
+                </motion.h2>
+
+                <motion.div
                     initial={{ scale: 0.5, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
                     className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700 drop-shadow-[0_0_50px_rgba(234,179,8,0.5)]"
-                 >
+                >
                     {stats.topPercentile}%
-                 </motion.div>
-                 
-                 <motion.p
+                </motion.div>
+
+                <motion.p
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8 }}
                     className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
-                 >
+                >
                     of the most active students this year!
-                 </motion.p>
-             </div>
+                </motion.p>
+            </div>
         </div>
     );
 }
 
 // Stats Card Component
-function StatCard({ icon: Icon, title, value, colorClass, truncate = false }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean }) {
+function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string }) {
     return (
-        <div className="bg-[#161b22] border border-white/10 rounded-xl p-4 flex flex-col items-start h-full">
-            <div className="flex items-center gap-2 mb-2">
+        <div className={cn("bg-[#161b22] border border-white/10 rounded-xl p-4 flex flex-col items-start h-full", className)}>
+            <div className="flex items-center gap-2 mb-1">
                 <Icon className={cn("w-4 h-4", colorClass)} />
                 <span className="text-xs text-gray-400 font-medium">{title}</span>
             </div>
-            <div className={cn("text-2xl font-bold mt-auto", colorClass, truncate && "truncate w-full text-left")}>{value}</div>
+            <div className={cn(
+                "text-4xl sm:text-5xl font-bold my-auto text-left leading-[0.9] capitalize",
+                colorClass,
+                truncate && "line-clamp-2 w-full break-words"
+            )}>
+                {value}
+            </div>
         </div>
     );
 }
@@ -581,11 +620,20 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
+    const award = useMemo(() => {
+        if (stats.topPercentile <= 10) return { title: "The Elite", icon: Crown, desc: "Top 10% Performer", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" };
+        if (stats.gradesCount >= 80) return { title: "The Machine", icon: Zap, desc: "Relentless Effort", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
+        if (stats.longestStreak >= 15) return { title: "Unstoppable", icon: TrendingUp, desc: "Consistency King", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" };
+        if (stats.bestProgression.value >= 2) return { title: "The Climber", icon: Rocket, desc: "Skyrocketing Grades", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" };
+        if ((stats.average || 0) >= 15) return { title: "High Flyer", icon: Star, desc: "Excellence Achieved", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" };
+        return { title: "The Scholar", icon: BookOpen, desc: "Dedicated Student", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" };
+    }, [stats]);
+
     const weeks = useMemo(() => {
         const result = [];
         const yearNum = parseInt(year);
         const targetYear = isNaN(yearNum) ? new Date().getFullYear() : yearNum;
-        
+
         const startDate = new Date(targetYear, 0, 1);
         const now = new Date();
         const isCurrentYear = now.getFullYear() === targetYear;
@@ -593,21 +641,21 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
         const currentDate = new Date(startDate);
         const days = [];
-        
+
         while (currentDate <= endDate) {
             const dateStr = currentDate.toISOString().split('T')[0];
             const count = stats.heatmap[dateStr] || 0;
-            days.push({ 
-                date: new Date(currentDate), 
+            days.push({
+                date: new Date(currentDate),
                 count,
-                dateStr 
+                dateStr
             });
             currentDate.setDate(currentDate.getDate() + 1);
         }
 
         const w: (typeof days[0] | null)[][] = [];
         let currentWeek: (typeof days[0] | null)[] = Array(7).fill(null);
-        
+
         // Pad beginning
         if (days.length > 0) {
             const firstDayOfWeek = days[0].date.getDay();
@@ -615,27 +663,27 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 currentWeek[i] = null;
             }
         }
-        
+
         days.forEach((day) => {
             const dayIndex = day.date.getDay();
             currentWeek[dayIndex] = day;
-            
+
             if (dayIndex === 6) {
                 w.push(currentWeek);
                 currentWeek = Array(7).fill(null);
             }
         });
-        
+
         if (currentWeek.some(d => d !== null)) {
             w.push(currentWeek);
         }
-        
+
         return w;
     }, [stats.heatmap, year]);
 
     const handleShare = async () => {
         if (!recapRef.current || isSharing) return;
-        
+
         setIsSharing(true);
         try {
             const canvas = await html2canvas(recapRef.current, {
@@ -644,15 +692,15 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 useCORS: true,
                 allowTaint: true,
             });
-            
+
             canvas.toBlob(async (blob) => {
                 if (!blob) {
                     setIsSharing(false);
                     return;
                 }
-                
+
                 const file = new File([blob], `avermate-recap-${year}.png`, { type: 'image/png' });
-                
+
                 if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
                     try {
                         await navigator.share({
@@ -683,11 +731,11 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     };
 
     return (
-        <div className="flex flex-col items-center h-full text-center p-4 bg-[#0d1117] text-white overflow-y-auto">
+        <div className="flex flex-col items-center h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden">
             {/* Recap content to be captured */}
-            <div ref={recapRef} className="w-full bg-[#0d1117] p-4">
+            <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-4">
                 {/* Header */}
-                <div className="flex items-center gap-3 w-full mb-6">
+                <div className="flex items-center gap-3 w-full mb-4 shrink-0">
                     {userAvatar ? (
                         <img src={userAvatar} alt={userName || ""} className="w-12 h-12 rounded-full object-cover border-2 border-white/20" />
                     ) : (
@@ -702,31 +750,31 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 </div>
 
                 {/* Mini Heatmap Visual (Real Data) */}
-                <div className="w-full bg-[#161b22] border border-white/10 rounded-2xl p-4 mb-4">
+                <div className="w-full bg-[#161b22] border border-white/10 rounded-2xl p-4 mb-4 shrink-0">
                     <div className="w-full">
-                        <div 
+                        <div
                             className="flex gap-[2px] w-full"
                         >
                             {weeks.map((week, weekIndex) => (
-                                <div 
-                                    key={weekIndex} 
+                                <div
+                                    key={weekIndex}
                                     className="flex-1 flex flex-col gap-[2px]"
                                 >
                                     {week.map((day, dayIndex) => (
-                                        <div 
-                                           key={`${weekIndex}-${dayIndex}`}
-                                           className={cn(
-                                               "w-full aspect-square rounded-full",
-                                               !day ? "bg-transparent" :
-                                                day.count === 0 ? "bg-[#161b22]" : // Removed border
-                                                day.count === 1 ? "bg-[#0e4429]" :
-                                                day.count <= 3 ? "bg-[#006d32]" :
-                                                "bg-[#39d353]"
-                                           )}
+                                        <div
+                                            key={`${weekIndex}-${dayIndex}`}
+                                            className={cn(
+                                                "w-full aspect-square rounded-full",
+                                                !day ? "bg-transparent" :
+                                                    day.count === 0 ? "bg-[#161b22]" :
+                                                        day.count === 1 ? "bg-[#1d2d60]" :
+                                                            day.count <= 3 ? "bg-[#2d4696]" :
+                                                                "bg-[#3e61d2]"
+                                            )}
                                         />
                                     ))}
                                 </div>
-                             ))}
+                            ))}
                         </div>
                     </div>
                     <div className="text-left text-xs text-[#8b949e] mt-2">
@@ -734,89 +782,95 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                     </div>
                 </div>
 
-                {/* Grid Layout */}
-                <div className="grid grid-cols-2 gap-3 w-full mb-4">
-                    <StatCard 
-                        icon={Trophy} 
-                        title="Universal Rank" 
-                        value={`Top ${stats.topPercentile}%`} 
-                        colorClass="text-yellow-400" 
+                {/* Grid Layout - Flex grow to fill space */}
+                <div className="grid grid-cols-2 auto-rows-fr gap-3 w-full mb-4 flex-1">
+                    <StatCard
+                        icon={Trophy}
+                        title="Universal Rank"
+                        value={`Top ${stats.topPercentile}%`}
+                        colorClass="text-yellow-400"
                     />
-                    <StatCard 
-                        icon={Zap} 
-                        title="Longest Streak" 
-                        value={stats.longestStreak} 
-                        colorClass="text-emerald-400" 
+                    <StatCard
+                        icon={Zap}
+                        title="Longest Streak"
+                        value={stats.longestStreak}
+                        colorClass="text-emerald-400"
                     />
-                    <StatCard 
-                        icon={Activity} 
-                        title="Total Grades" 
-                        value={stats.gradesCount} 
-                        colorClass="text-pink-400" 
+                    <StatCard
+                        icon={Activity}
+                        title="Total Grades"
+                        value={stats.gradesCount}
+                        colorClass="text-pink-400"
                     />
-                    <StatCard 
-                        icon={Calendar} 
-                        title="Most Active Month" 
-                        value={stats.mostActiveMonth.month} 
-                        colorClass="text-purple-400" 
+                    <StatCard
+                        icon={Calendar}
+                        title="Most Active Month"
+                        value={stats.mostActiveMonth.month}
+                        colorClass="text-purple-400"
                     />
-                    <StatCard 
-                        icon={Star} 
-                        title="Total Points" 
-                        value={stats.gradesSum.toFixed(0)} 
-                        colorClass="text-blue-400" 
+                    <StatCard
+                        icon={Star}
+                        title="Total Points"
+                        value={stats.gradesSum.toFixed(0)}
+                        colorClass="text-blue-400"
                     />
-                    {/* Placeholder card */}
-                    <div className="bg-[#161b22] border border-white/10 rounded-xl p-4 flex flex-col items-start h-full opacity-50">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Sparkles className="w-4 h-4 text-gray-500" />
-                            <span className="text-xs text-gray-500 font-medium">Coming Soon</span>
-                        </div>
-                        <div className="text-2xl font-bold mt-auto text-gray-500">...</div>
-                    </div>
-                    <StatCard 
-                        icon={Rocket} 
-                        title="Top Subject" 
-                        value={stats.bestSubjects[0]?.name || "N/A"} 
-                        colorClass="text-cyan-400" 
+                    <StatCard
+                        icon={Target}
+                        title="Global Average"
+                        value={stats.average?.toFixed(2) || "N/A"}
+                        colorClass="text-teal-400"
+                    />
+                    <StatCard
+                        icon={Rocket}
+                        title="Top Subject"
+                        value={stats.bestSubjects[0]?.name || "N/A"}
+                        colorClass="text-cyan-400"
                         truncate={true}
+                        className="col-span-2"
                     />
-                    <StatCard 
-                        icon={Award} 
-                        title="Best Avg" 
-                        value={stats.bestSubjects[0]?.value.toFixed(2) || "0"} 
-                        colorClass="text-indigo-400" 
-                    />
+
+                    {/* Award Card */}
+                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border", award.bg)}>
+                        <div className="flex flex-col items-start text-left">
+                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
+                                {award.title}
+                            </div>
+                            <div className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+                                {award.desc}
+                            </div>
+                        </div>
+                        <award.icon className={cn("w-10 h-10", award.color)} />
+                    </div>
                 </div>
 
-                <div className="text-xs text-[#8b949e]">
-                    avermate.com
+                <div className="text-sm text-[#8b949e] shrink-0">
+                    avermate.fr
                 </div>
             </div>
 
             {/* Buttons (not captured) */}
-            <div className="flex gap-3 w-full mt-4 mb-4">
-                 <Button 
-                    className="flex-1 bg-[#238636] hover:bg-[#2ea043] text-white border-none h-12 rounded-xl font-bold"
+            <div className="flex gap-3 w-full mt-4 mb-4 shrink-0">
+                <Button
+                    className="flex-1 bg-white hover:bg-gray-200 text-black border-none h-12 rounded-xl font-bold"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleShare();
                     }}
                     disabled={isSharing}
-                 >
+                >
                     <Share2 className="w-4 h-4 mr-2" /> {isSharing ? "Generating..." : "Share Image"}
-                 </Button>
-                 
-                 <Button 
+                </Button>
+
+                <Button
                     variant="outline"
                     className="flex-1 border-white/20 bg-[#21262d] hover:bg-[#30363d] text-white h-12 rounded-xl"
                     onClick={(e) => {
                         e.stopPropagation();
                         onClose();
                     }}
-                 >
+                >
                     Close
-                 </Button>
+                </Button>
             </div>
         </div>
     );
@@ -907,10 +961,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
         const steps = Math.abs(targetIndex - currentSlide);
         const direction = targetIndex > currentSlide ? 'forward' : 'backward';
-        
+
         // For backward navigation, we need one extra step to animate the target bar too
         const totalSteps = direction === 'backward' ? steps + 1 : steps;
-        
+
         // Calculate per-step duration: total time divided by steps, with a minimum
         const perStepDuration = Math.max(MIN_STEP_DURATION, Math.floor(TOTAL_ANIMATION_TIME / totalSteps));
         setStepDuration(perStepDuration);
@@ -976,7 +1030,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                 setPaused(p => !p);
             }
         };
-        
+
         if (isOpen) {
             window.addEventListener('keydown', handleKeyDown);
         }
@@ -985,11 +1039,11 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
     const handleClick = (e: React.MouseEvent) => {
         if (e.defaultPrevented) return;
-        
+
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const width = rect.width;
-        
+
         if (x < width * 0.3) {
             prevSlide();
         } else if (x > width * 0.7) {
@@ -1015,7 +1069,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     return (
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
             {/* Desktop Close Button */}
-            <button 
+            <button
                 onClick={(e) => { e.stopPropagation(); onClose(); }}
                 className="absolute top-4 right-4 z-[60] text-white/50 hover:text-white p-2"
                 aria-label="Close"
@@ -1024,7 +1078,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             </button>
 
             {/* Desktop Navigation Buttons */}
-            <button 
+            <button
                 onClick={(e) => { e.stopPropagation(); prevSlide(); }}
                 className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-[60] text-white/50 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
                 aria-label="Previous slide"
@@ -1032,8 +1086,8 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             >
                 <ChevronLeft className="w-6 h-6" />
             </button>
-            
-            <button 
+
+            <button
                 onClick={(e) => { e.stopPropagation(); nextSlide(); }}
                 className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-[60] text-white/50 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
                 aria-label="Next slide"
@@ -1042,18 +1096,18 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             </button>
 
             {/* Mobile-style container */}
-            <div 
+            <div
                 className="relative w-full h-full md:w-auto md:h-[85vh] md:aspect-[9/16] md:rounded-3xl overflow-hidden bg-black shadow-2xl cursor-pointer select-none"
                 onClick={handleClick}
             >
-                
+
                 {/* Progress Bars */}
                 <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
                     {slides.map((_, index) => {
                         const barProgress = getBarProgress(index);
                         return (
-                            <button 
-                                key={index} 
+                            <button
+                                key={index}
                                 className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1"
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1062,9 +1116,9 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                                 aria-label={`Go to slide ${index + 1}`}
                             >
                                 <div className="h-1 w-full bg-white/30 rounded-full overflow-hidden group-hover:bg-white/40 transition-colors">
-                                    <div 
+                                    <div
                                         className="h-full bg-white"
-                                        style={{ 
+                                        style={{
                                             width: `${barProgress}%`,
                                             // Use linear timing during navigation so bars feel like one continuous progress
                                             transition: isNavigating ? `width ${stepDuration}ms linear` : 'width 50ms linear'
@@ -1096,9 +1150,9 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                             transition={{ duration: 0.2 }}
                             className="w-full h-full"
                         >
-                            <CurrentComponent 
-                                stats={stats} 
-                                year={year} 
+                            <CurrentComponent
+                                stats={stats}
+                                year={year}
                                 onClose={onClose}
                                 userName={userName}
                                 userAvatar={userAvatar}

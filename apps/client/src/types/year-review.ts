@@ -8,6 +8,7 @@ export type YearReviewStats = {
     bestSubjects: { name: string; value: number }[];
     bestProgression: { subject: string; value: number };
     topPercentile: number;
+    average: number;
 };
 
 export type YearReviewResponse = {
