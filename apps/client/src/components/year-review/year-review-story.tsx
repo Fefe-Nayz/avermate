@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play } from "lucide-react";
 import { YearReviewStats } from "@/types/year-review";
@@ -19,59 +19,264 @@ interface SlideProps {
     userAvatar?: string;
 }
 
+function CountUp({ value, duration = 2, delay = 0, decimals = 0 }: { value: number, duration?: number, delay?: number, decimals?: number }) {
+    const nodeRef = useRef<HTMLSpanElement>(null);
+    const motionValue = useMotionValue(0);
+    const rounded = useTransform(motionValue, (latest) => latest.toFixed(decimals));
+
+    useEffect(() => {
+        const controls = animate(motionValue, value, {
+            duration,
+            delay,
+            ease: "easeOut"
+        });
+        return () => controls.stop();
+    }, [value, duration, delay, motionValue]);
+
+    return <motion.span>{rounded}</motion.span>;
+}
+
 function IntroSlide({ year, userName, userAvatar }: SlideProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.5 }}
-            >
-                {userAvatar ? (
-                    <img 
-                        src={userAvatar} 
-                        alt={userName || "User"} 
-                        className="w-24 h-24 rounded-full mx-auto mb-6 border-4 border-white/30 object-cover"
+        <div className="relative flex flex-col items-center justify-center h-full text-center p-6 bg-[#0a0a0a] text-white overflow-hidden">
+            {/* Animated gradient orbs */}
+            <motion.div 
+                className="absolute top-1/4 -left-20 w-72 h-72 bg-emerald-500/30 rounded-full blur-[100px]"
+                animate={{ 
+                    x: [0, 30, 0], 
+                    y: [0, -20, 0],
+                    scale: [1, 1.1, 1]
+                }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div 
+                className="absolute bottom-1/4 -right-20 w-80 h-80 bg-cyan-500/25 rounded-full blur-[120px]"
+                animate={{ 
+                    x: [0, -40, 0], 
+                    y: [0, 30, 0],
+                    scale: [1, 1.2, 1]
+                }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div 
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-400/20 rounded-full blur-[150px]"
+                animate={{ 
+                    scale: [1, 1.3, 1],
+                    opacity: [0.2, 0.35, 0.2]
+                }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Content */}
+            <div className="relative z-10 flex flex-col items-center">
+                {/* Logo/Avatar with ring animation */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
+                    className="relative mb-8"
+                >
+                    {/* Animated rings - positioned outside the logo box */}
+                    <motion.div 
+                        className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
+                        style={{ margin: -16 }}
+                        animate={{ scale: [1.15, 1.30, 1.15], opacity: [0.6, 0, 0.6] }}
+                        transition={{ duration: 2, repeat: Infinity }}
                     />
-                ) : (
-                    <div className="w-24 h-24 bg-white/20 rounded-full mx-auto mb-6 flex items-center justify-center backdrop-blur-sm">
-                        <Sparkles className="w-12 h-12 text-yellow-300" />
-                    </div>
+                    <motion.div 
+                        className="absolute inset-0 rounded-full border border-cyan-400/40"
+                        style={{ margin: -28 }}
+                        animate={{ scale: [1.2, 1.4, 1.2], opacity: [0.4, 0, 0.4] }}
+                        transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
+                    />
+                    <motion.div 
+                        className="absolute inset-0 rounded-full border border-teal-400/20"
+                        style={{ margin: -40 }}
+                        animate={{ scale: [1.25, 1.5, 1.25], opacity: [0.2, 0, 0.2] }}
+                        transition={{ duration: 3, repeat: Infinity, delay: 0.6 }}
+                    />
+                    
+                    {userAvatar ? (
+                        <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
+                            <img 
+                                src={userAvatar} 
+                                alt={userName || "User"} 
+                                className="w-full h-full rounded-[14px] object-cover"
+                            />
+                        </div>
+                    ) : (
+                        <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
+                            <div className="w-full h-full rounded-2xl bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                                <img 
+                                    src="/logo.svg" 
+                                    alt="Avermate" 
+                                    className="w-full h-full object-contain"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </motion.div>
+
+                {/* Username */}
+                {userName && (
+                    <motion.p 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 0.7, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="text-lg font-medium text-gray-300 mb-3"
+                    >
+                        {userName}
+                    </motion.p>
                 )}
-                {userName && <p className="text-lg opacity-80 mb-2">{userName}</p>}
-                <h1 className="text-5xl font-black mb-4 tracking-tight">{year}</h1>
-                <h2 className="text-2xl font-bold mb-2">Year in Review</h2>
-                <p className="text-xl opacity-80">Ready to see your stats?</p>
-            </motion.div>
+
+                {/* Year - Big dramatic reveal */}
+                <motion.h1 
+                    initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ delay: 0.5, duration: 0.6, type: "spring" }}
+                    className="text-7xl font-black mb-4 tracking-tight bg-gradient-to-r from-emerald-300 via-cyan-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]"
+                >
+                    {year}
+                </motion.h1>
+
+                {/* Subtitle */}
+                <motion.h2 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 }}
+                    className="text-2xl font-bold mb-3 text-white"
+                >
+                    Year in Review
+                </motion.h2>
+
+                {/* Tagline */}
+                <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 0.6 }}
+                    transition={{ delay: 0.9 }}
+                    className="text-base text-gray-400"
+                >
+                    Your academic journey, visualized
+                </motion.p>
+
+                {/* Tap indicator */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 0.5, y: 0 }}
+                    transition={{ delay: 1.2 }}
+                    className="absolute -bottom-20 flex flex-col items-center gap-2"
+                >
+                    <motion.div
+                        animate={{ y: [0, 5, 0] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className="text-xs text-gray-500 uppercase tracking-widest"
+                    >
+                        Tap to continue
+                    </motion.div>
+                </motion.div>
+            </div>
         </div>
     );
 }
 
 function StatsSlide({ stats }: SlideProps) {
+    const [zoomOut, setZoomOut] = useState(false);
+    
+    // Calculate dynamic offset to center on Grades bar
+    // Layout: [GradesBar(128px)] [gap(64px)] [PointsBar(128px)]
+    // Center of Grades bar is (64/2 + 128/2) = 96px left of container center
+    // With scale, we need to offset by: distanceToCenter * scale
+    const SCALE = 3.5;
+    const BAR_WIDTH = 128; // w-32 = 8rem = 128px
+    const GAP = 64; // gap-16 = 4rem = 64px
+    const distanceToGradesCenter = (GAP / 2) + (BAR_WIDTH / 2); // 96px
+    const xOffset = distanceToGradesCenter * SCALE; // ~336px
+
+    useEffect(() => {
+        const timer = setTimeout(() => setZoomOut(true), 2500);
+        return () => clearTimeout(timer);
+    }, []);
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-blue-500 to-cyan-500 text-white">
-            <div className="grid grid-cols-1 gap-8 w-full max-w-md">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="bg-white/10 backdrop-blur-md rounded-2xl p-6"
-                >
-                    <h3 className="text-xl mb-2">Grades Entered</h3>
-                    <p className="text-5xl font-bold">{stats.gradesCount}</p>
-                </motion.div>
-                
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="bg-white/10 backdrop-blur-md rounded-2xl p-6"
-                >
-                    <h3 className="text-xl mb-2">Total Points</h3>
-                    <p className="text-5xl font-bold">{stats.gradesSum.toFixed(1)}</p>
-                    <p className="text-sm opacity-70 mt-2">Accumulated /20</p>
-                </motion.div>
-            </div>
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
+            <motion.div
+                initial={{ scale: SCALE, y: 190, x: xOffset }}
+                animate={zoomOut 
+                    ? { scale: 1, y: 0, x: 0 } // Zoom out to full view
+                    : { scale: SCALE, y: 320, x: xOffset } // Track the growing bar upwards, keep centered on Grades
+                }
+                transition={zoomOut 
+                    ? { duration: 0.8, type: "spring", bounce: 0.2 } // Zoom out transition
+                    : { duration: 2, ease: "easeOut" } // Tracking transition (matches bar growth)
+                }
+                className="flex items-end justify-center gap-16 h-80 w-full max-w-lg"
+            >
+                {/* Grades Bar */}
+                <div className="flex flex-col items-center gap-4 w-32 relative">
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                        className="text-2xl font-bold whitespace-nowrap absolute -top-12"
+                    >
+                        Grades
+                    </motion.div>
+                    
+                    <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                         {/* Growing Fill */}
+                         <motion.div 
+                            initial={{ height: "0%" }}
+                            animate={{ height: "60%" }}
+                            transition={{ duration: 2, ease: "easeOut" }}
+                            className="w-full bg-white relative shadow-[0_0_20px_rgba(255,255,255,0.5)]"
+                         >
+                            {/* Ticking Value on top of the bar */}
+                            <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
+                                <span className="text-5xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                    <CountUp value={stats.gradesCount} duration={2} />
+                                </span>
+                            </div>
+                         </motion.div>
+                    </div>
+                </div>
+
+                {/* Points Bar */}
+                <div className="flex flex-col items-center gap-4 w-32 relative">
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                        transition={{ delay: 0.1 }}
+                        className="text-2xl font-bold whitespace-nowrap absolute -top-12"
+                    >
+                        Points
+                    </motion.div>
+
+                    <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                         <motion.div 
+                            initial={{ height: "0%" }}
+                            animate={zoomOut ? { height: "75%" } : { height: "0%" }}
+                            transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                            className="w-full bg-yellow-300 relative shadow-[0_0_20px_rgba(253,224,71,0.5)]"
+                         >
+                            {zoomOut && (
+                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
+                                    <span className="text-4xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                        <CountUp value={stats.gradesSum} duration={1.5} delay={0.2} decimals={0} />
+                                    </span>
+                                </div>
+                            )}
+                         </motion.div>
+                    </div>
+                </div>
+            </motion.div>
+            
+            <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={zoomOut ? { opacity: 0.7, y: 0 } : { opacity: 0, y: 20 }}
+                transition={{ delay: 0.8 }} 
+                className="mt-12 text-sm max-w-xs mx-auto"
+            >
+                Accumulated points throughout the year
+            </motion.p>
         </div>
     );
 }
@@ -160,29 +365,29 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                  className="w-full bg-[#161b22] p-4 rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center"
              >
                  {/* Flexible container for the grid */}
-                 <div className="w-full flex justify-center">
+                 <div className="w-full">
                      <div 
-                        className="flex justify-center"
-                        style={{ 
-                            maxWidth: '100%',
-                        }}
+                        className="flex gap-[2px] w-full"
                      >
                         {weeks.map((week, weekIndex) => (
-                            <div key={weekIndex} className="flex flex-col gap-[1px] mr-[1px] last:mr-0">
+                            <div 
+                                key={weekIndex} 
+                                className="flex-1 flex flex-col gap-[2px]"
+                            >
                                 {week.map((day, dayIndex) => (
                                     <div 
                                        key={`${weekIndex}-${dayIndex}`}
                                        className={cn(
-                                           "rounded-[0.5px] w-[3px] h-[3px] min-[370px]:w-[4px] min-[370px]:h-[4px] sm:w-[5px] sm:h-[5px]",
+                                           "w-full aspect-square rounded-[1px] sm:rounded-[2px]",
                                            !day ? "bg-transparent" :
                                             day.count === 0 ? "bg-[#161b22] border border-white/5" : 
                                             day.count === 1 ? "bg-[#0e4429]" :
                                             day.count <= 3 ? "bg-[#006d32]" :
                                             "bg-[#39d353]"
-                                        )}
-                                        title={day ? `${day.dateStr}: ${day.count} grades` : ""}
-                                     />
-                                 ))}
+                                       )}
+                                       title={day ? `${day.dateStr}: ${day.count} grades` : ""}
+                                    />
+                                ))}
                              </div>
                          ))}
                      </div>
@@ -498,29 +703,29 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                 {/* Mini Heatmap Visual (Real Data) */}
                 <div className="w-full bg-[#161b22] border border-white/10 rounded-2xl p-4 mb-4">
-                    <div className="w-full flex justify-center">
+                    <div className="w-full">
                         <div 
-                            className="flex justify-center"
-                            style={{ 
-                                maxWidth: '100%',
-                            }}
+                            className="flex gap-[2px] w-full"
                         >
                             {weeks.map((week, weekIndex) => (
-                                 <div key={weekIndex} className="flex flex-col gap-[1px] mr-[1px] last:mr-0">
-                                     {week.map((day, dayIndex) => (
-                                         <div 
-                                            key={`${weekIndex}-${dayIndex}`}
-                                            className={cn(
-                                                "rounded-full w-[3px] h-[3px] min-[370px]:w-[4px] min-[370px]:h-[4px] sm:w-[5px] sm:h-[5px]",
-                                                !day ? "bg-transparent" :
-                                                day.count === 0 ? "bg-[#161b22] border border-white/10" : 
+                                <div 
+                                    key={weekIndex} 
+                                    className="flex-1 flex flex-col gap-[2px]"
+                                >
+                                    {week.map((day, dayIndex) => (
+                                        <div 
+                                           key={`${weekIndex}-${dayIndex}`}
+                                           className={cn(
+                                               "w-full aspect-square rounded-full",
+                                               !day ? "bg-transparent" :
+                                                day.count === 0 ? "bg-[#161b22]" : // Removed border
                                                 day.count === 1 ? "bg-[#0e4429]" :
                                                 day.count <= 3 ? "bg-[#006d32]" :
                                                 "bg-[#39d353]"
-                                            )}
-                                         />
-                                     ))}
-                                 </div>
+                                           )}
+                                        />
+                                    ))}
+                                </div>
                              ))}
                         </div>
                     </div>
@@ -622,6 +827,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const [currentSlide, setCurrentSlide] = useState(0);
     const [paused, setPaused] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [isNavigating, setIsNavigating] = useState(false);
+    // Track animated bar states: { index: targetProgress }
+    const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
+    const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const slides = useMemo(() => [
@@ -632,8 +841,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         { component: PrimeTimeSlide, duration: 5000 },
         { component: SubjectsSlide, duration: 7000 },
         { component: PercentileSlide, duration: 6000 },
-        { component: OutroSlide, duration: 1000000 },
+        { component: OutroSlide, duration: 10000 }, // Last slide: progress fills but doesn't auto-close
     ], []);
+
+    const isLastSlide = currentSlide === slides.length - 1;
 
     const CurrentComponent = slides[currentSlide].component;
 
@@ -643,35 +854,17 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             setCurrentSlide(0);
             setProgress(0);
             setPaused(false);
+            setIsNavigating(false);
+            setAnimatedBars({});
         }
     }, [isOpen]);
 
-    const goToSlide = useCallback((index: number) => {
-        if (index >= 0 && index < slides.length) {
-            setCurrentSlide(index);
-            setProgress(0);
-        }
-    }, [slides.length]);
-
-    const nextSlide = useCallback(() => {
-        if (currentSlide < slides.length - 1) {
-            goToSlide(currentSlide + 1);
-        } else {
-            onClose();
-        }
-    }, [currentSlide, slides.length, onClose, goToSlide]);
-
-    const prevSlide = useCallback(() => {
-        if (currentSlide > 0) {
-            goToSlide(currentSlide - 1);
-        }
-    }, [currentSlide, goToSlide]);
-
-    // Progress tracking
+    // Auto-progress using interval (only updates progress, doesn't change slides)
     useEffect(() => {
-        if (paused || !isOpen) {
+        if (paused || !isOpen || isNavigating) {
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
             }
             return;
         }
@@ -680,25 +873,97 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         const intervalTime = 50;
         const increment = (intervalTime / duration) * 100;
 
-        setProgress(0);
-        
         progressIntervalRef.current = setInterval(() => {
-            setProgress(prev => {
-                const next = prev + increment;
-                if (next >= 100) {
-                    nextSlide();
-                    return 0;
-                }
-                return next;
-            });
+            setProgress(prev => Math.min(prev + increment, 100));
         }, intervalTime);
 
         return () => {
             if (progressIntervalRef.current) {
                 clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
             }
         };
-    }, [currentSlide, paused, isOpen, slides, nextSlide]);
+    }, [currentSlide, paused, isOpen, isNavigating, slides]);
+
+    // Auto-advance when progress reaches 100 (but not on the last slide)
+    useEffect(() => {
+        if (progress >= 100 && !isNavigating && !paused && isOpen) {
+            if (currentSlide < slides.length - 1) {
+                setCurrentSlide(prev => prev + 1);
+                setProgress(0);
+            }
+            // On last slide: progress stays at 100, doesn't auto-close
+        }
+    }, [progress, currentSlide, slides.length, isNavigating, paused, isOpen]);
+
+    // Total animation time is constant regardless of steps
+    const TOTAL_ANIMATION_TIME = 350;
+    const MIN_STEP_DURATION = 60; // Minimum per-step to keep it visible
+
+    // Cascading animation for multi-step navigation
+    const animateToSlide = useCallback((targetIndex: number) => {
+        if (isNavigating || targetIndex === currentSlide) return;
+        if (targetIndex < 0 || targetIndex >= slides.length) return;
+
+        const steps = Math.abs(targetIndex - currentSlide);
+        const direction = targetIndex > currentSlide ? 'forward' : 'backward';
+        
+        // For backward navigation, we need one extra step to animate the target bar too
+        const totalSteps = direction === 'backward' ? steps + 1 : steps;
+        
+        // Calculate per-step duration: total time divided by steps, with a minimum
+        const perStepDuration = Math.max(MIN_STEP_DURATION, Math.floor(TOTAL_ANIMATION_TIME / totalSteps));
+        setStepDuration(perStepDuration);
+
+        setIsNavigating(true);
+
+        if (direction === 'forward') {
+            // Going forward: fill bars one by one from currentSlide to targetIndex-1
+            for (let i = 0; i < steps; i++) {
+                const barIndex = currentSlide + i;
+                setTimeout(() => {
+                    setAnimatedBars(prev => ({ ...prev, [barIndex]: 100 }));
+                }, i * perStepDuration);
+            }
+        } else {
+            // Going backward: empty bars one by one from currentSlide down to targetIndex (inclusive)
+            // This includes the target bar so it smoothly animates to 0 before we land on it
+            for (let i = 0; i <= steps; i++) {
+                const barIndex = currentSlide - i;
+                setTimeout(() => {
+                    setAnimatedBars(prev => ({ ...prev, [barIndex]: 0 }));
+                }, i * perStepDuration);
+            }
+        }
+
+        // After all animations complete, switch to target slide
+        const totalTime = totalSteps * perStepDuration;
+        setTimeout(() => {
+            setCurrentSlide(targetIndex);
+            setProgress(0);
+            setAnimatedBars({});
+            setIsNavigating(false);
+        }, totalTime + 30);
+    }, [currentSlide, isNavigating, slides.length]);
+
+    const nextSlide = useCallback(() => {
+        if (isNavigating) return;
+        if (currentSlide < slides.length - 1) {
+            animateToSlide(currentSlide + 1);
+        }
+        // On last slide: do nothing (don't close)
+    }, [currentSlide, slides.length, isNavigating, animateToSlide]);
+
+    const prevSlide = useCallback(() => {
+        if (isNavigating) return;
+        if (currentSlide > 0) {
+            animateToSlide(currentSlide - 1);
+        }
+    }, [currentSlide, isNavigating, animateToSlide]);
+
+    const goToSlide = useCallback((targetIndex: number) => {
+        animateToSlide(targetIndex);
+    }, [animateToSlide]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -730,6 +995,19 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         } else if (x > width * 0.7) {
             nextSlide();
         }
+    };
+
+    // Get the display progress for a bar
+    const getBarProgress = (index: number): number => {
+        // Check if this bar is being animated
+        if (index in animatedBars) {
+            return animatedBars[index];
+        }
+        // Default states based on position relative to current slide
+        if (index < currentSlide) return 100;
+        if (index > currentSlide) return 0;
+        // Current slide (not animating)
+        return progress;
     };
 
     if (!isOpen) return null;
@@ -765,23 +1043,37 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
             {/* Mobile-style container */}
             <div 
-                className="relative w-full h-full md:w-[400px] md:h-[80vh] md:rounded-3xl overflow-hidden bg-black shadow-2xl cursor-pointer select-none"
+                className="relative w-full h-full md:w-auto md:h-[85vh] md:aspect-[9/16] md:rounded-3xl overflow-hidden bg-black shadow-2xl cursor-pointer select-none"
                 onClick={handleClick}
             >
                 
                 {/* Progress Bars */}
                 <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
-                    {slides.map((_, index) => (
-                        <div key={index} className="h-1 flex-1 bg-white/30 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-white transition-all duration-75 ease-linear"
-                                style={{ 
-                                    width: index < currentSlide ? '100%' : 
-                                           index === currentSlide ? `${progress}%` : '0%'
+                    {slides.map((_, index) => {
+                        const barProgress = getBarProgress(index);
+                        return (
+                            <button 
+                                key={index} 
+                                className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    goToSlide(index);
                                 }}
-                            />
-                        </div>
-                    ))}
+                                aria-label={`Go to slide ${index + 1}`}
+                            >
+                                <div className="h-1 w-full bg-white/30 rounded-full overflow-hidden group-hover:bg-white/40 transition-colors">
+                                    <div 
+                                        className="h-full bg-white"
+                                        style={{ 
+                                            width: `${barProgress}%`,
+                                            // Use linear timing during navigation so bars feel like one continuous progress
+                                            transition: isNavigating ? `width ${stepDuration}ms linear` : 'width 50ms linear'
+                                        }}
+                                    />
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Pause Button */}
