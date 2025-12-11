@@ -696,6 +696,21 @@ function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userA
         }));
     }, []);
 
+    // Calculate heatmap scale and container height to fit max height of 80px
+    // Each cell is aspect-square, so cell height = cell width
+    // Total width is container width (390 - 24 padding = 366), divided by weeks + gaps
+    // Cell width ≈ 366 / weeks.length, Cell height = 7 cells * cellWidth + 6 gaps
+    const { heatmapScale, heatmapHeight } = useMemo(() => {
+        const MAX_HEIGHT = 100;
+        const containerWidth = 390 - 24; // canonical width minus padding
+        const numWeeks = weeks.length || 1;
+        const cellWidth = containerWidth / numWeeks;
+        const naturalHeight = 7 * cellWidth; // 7 days per week
+        const scale = Math.min(1, MAX_HEIGHT / naturalHeight);
+        const height = Math.min(MAX_HEIGHT, naturalHeight);
+        return { heatmapScale: scale, heatmapHeight: height };
+    }, [weeks.length]);
+
     // Animation values calibrated for canonical size (390x844)
     const SCALE = 2.5;
     // Pan positions scaled for the smaller viewport
@@ -799,8 +814,11 @@ function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userA
                     />
                 )}
 
-                <div className="w-full flex justify-center">
-                    <div className="flex gap-[1px] w-full" style={{ maxHeight: 200 }}>
+                <div className="w-full flex justify-center overflow-hidden" style={{ height: heatmapHeight }}>
+                    <div
+                        className="flex gap-[1px] w-full"
+                        style={{ transform: `scale(${heatmapScale})`, transformOrigin: 'top center' }}
+                    >
                         {weeks.map((week, weekIndex) => (
                             <div
                                 key={weekIndex}
@@ -2123,6 +2141,18 @@ function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName
         return w;
     }, [stats.heatmap, year, yearStartDate, yearEndDate]);
 
+    // Calculate heatmap scale and container height to fit max height of 40px for the mini heatmap
+    const { heatmapScale, heatmapHeight } = useMemo(() => {
+        const MAX_HEIGHT = 60;
+        const containerWidth = 390 - 48; // canonical width minus more padding for mini version
+        const numWeeks = weeks.length || 1;
+        const cellWidth = containerWidth / numWeeks;
+        const naturalHeight = 7 * cellWidth; // 7 days per week
+        const scale = Math.min(1, MAX_HEIGHT / naturalHeight);
+        const height = Math.min(MAX_HEIGHT, naturalHeight);
+        return { heatmapScale: scale, heatmapHeight: height };
+    }, [weeks.length]);
+
     const handleShare = async () => {
         if (!recapRef.current || isSharing) return;
 
@@ -2242,10 +2272,10 @@ function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName
 
                     {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
                     <motion.div variants={item} className="w-full bg-[#161b22] rounded-xl p-3 mb-3 shrink-0 flex flex-col items-center" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
-                        <div className="w-full flex justify-center">
+                        <div className="w-full flex justify-center overflow-hidden" style={{ height: heatmapHeight }}>
                             <div
                                 className="flex gap-[1px] w-full"
-                                style={{ maxHeight: 100 }}
+                                style={{ transform: `scale(${heatmapScale})`, transformOrigin: 'top center' }}
                             >
                                 {weeks.map((week, weekIndex) => (
                                     <div
