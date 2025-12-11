@@ -799,8 +799,8 @@ function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userA
                     />
                 )}
 
-                <div className="w-full">
-                    <div className="flex gap-[1px] w-full">
+                <div className="w-full flex justify-center">
+                    <div className="flex gap-[1px] w-full" style={{ maxHeight: 200 }}>
                         {weeks.map((week, weekIndex) => (
                             <div
                                 key={weekIndex}
@@ -2241,10 +2241,11 @@ function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName
                 >
 
                     {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
-                    <motion.div variants={item} className="w-full bg-[#161b22] rounded-xl p-3 mb-3 shrink-0" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
-                        <div className="w-full">
+                    <motion.div variants={item} className="w-full bg-[#161b22] rounded-xl p-3 mb-3 shrink-0 flex flex-col items-center" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
+                        <div className="w-full flex justify-center">
                             <div
                                 className="flex gap-[1px] w-full"
+                                style={{ maxHeight: 100 }}
                             >
                                 {weeks.map((week, weekIndex) => (
                                     <div
