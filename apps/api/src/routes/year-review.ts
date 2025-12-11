@@ -37,9 +37,10 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
-  // Use dynamic dates from the year's startDate and endDate
-  const startDateMin = new Date(year.startDate);
-  const startDateMax = new Date(year.endDate);
+  // Use the last 365 days
+  const startDateMax = new Date();
+  const startDateMin = new Date();
+  startDateMin.setDate(startDateMin.getDate() - 365);
 
   // Calculate top percentile - this requires data from all users so it must stay server-side
   const userCounts = await db
