@@ -447,23 +447,46 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 
 function StreakSlide({ stats }: SlideProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-orange-500 to-red-500 text-white">
-            <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            >
-                <div className="text-8xl mb-4">🔥</div>
-            </motion.div>
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-            >
-                <h2 className="text-3xl font-bold">On Fire!</h2>
-                <p className="text-6xl font-black my-6">{stats.longestStreak}</p>
-                <p className="text-xl max-w-xs mx-auto">Consecutive grades that increased your average</p>
-            </motion.div>
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Background gradient */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60" />
+
+            <div className="relative z-10">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full border border-orange-500/40 text-orange-300 mb-8"
+                >
+                    <div className="text-lg">🔥</div>
+                    <span className="font-bold text-sm uppercase tracking-wider">On Fire!</span>
+                </motion.div>
+
+                <motion.h2
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-3xl font-bold mb-4"
+                >
+                    Longest Streak
+                </motion.h2>
+
+                <motion.div
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
+                    className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 drop-shadow-[0_0_50px_rgba(234,88,12,0.5)]"
+                >
+                    {stats.longestStreak}
+                </motion.div>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
+                >
+                    Consecutive grades that increased your average
+                </motion.p>
+            </div>
         </div>
     );
 }
