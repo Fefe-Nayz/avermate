@@ -1133,27 +1133,42 @@ function PrimeTimeSlide({ stats, t }: SlideProps) {
                             style={{
                                 left: `${peakPoint.x}%`,
                                 top: `${100 - peakPoint.y}%`,
+                                willChange: 'transform, opacity',
                             }}
                         >
                             <motion.div
                                 className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
-                                initial={{ scale: 1, opacity: 0.8 }}
-                                animate={{ scale: 5, opacity: 0 }}
-                                transition={{
-                                    duration: 1.2,
-                                    repeat: Infinity,
-                                    ease: "easeOut"
+                                style={{
+                                    opacity: 0,
+                                    scale: 1,
+                                    willChange: 'transform, opacity',
+                                    backfaceVisibility: 'hidden',
+                                    transform: 'translateZ(0)',
                                 }}
-                            />
-                            <motion.div
-                                className="absolute inset-0 rounded-full border border-emerald-400/60"
-                                initial={{ scale: 1, opacity: 0.6 }}
-                                animate={{ scale: 5, opacity: 0 }}
+                                animate={{ scale: 5, opacity: [0, 0.8, 0] }}
                                 transition={{
                                     duration: 1.2,
                                     repeat: Infinity,
                                     ease: "easeOut",
-                                    delay: 0.4
+                                    times: [0, 0.1, 1],
+                                }}
+                            />
+                            <motion.div
+                                className="absolute inset-0 rounded-full border border-emerald-400/60"
+                                style={{
+                                    opacity: 0,
+                                    scale: 1,
+                                    willChange: 'transform, opacity',
+                                    backfaceVisibility: 'hidden',
+                                    transform: 'translateZ(0)',
+                                }}
+                                animate={{ scale: 5, opacity: [0, 0.6, 0] }}
+                                transition={{
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                    delay: 0.4,
+                                    times: [0, 0.1, 1],
                                 }}
                             />
                         </div>
