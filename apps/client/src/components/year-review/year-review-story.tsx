@@ -804,19 +804,19 @@ function AwardIntroSlide({ stats }: SlideProps) {
                 <motion.p
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 2 }}
+                    transition={{ delay: 1.5 }}
                     className="text-3xl font-medium"
                 >
                     And found the perfect title for you.
                 </motion.p>
 
-                <motion.div
+                {/* <motion.div
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ delay: 3.5, type: "spring" }}
                 >
                     <Sparkles className="w-16 h-16 text-yellow-400 mx-auto" />
-                </motion.div>
+                </motion.div> */}
             </div>
         </div>
     );
@@ -1171,8 +1171,8 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         { component: StreakSlide, duration: 5000 },
         { component: PrimeTimeSlide, duration: 5000 },
         { component: SubjectsSlide, duration: 7000 },
-        { component: AwardIntroSlide, duration: 4000 },
-        { component: AwardRevealSlide, duration: 8000 },
+        { component: AwardIntroSlide, duration: 3000 },
+        { component: AwardRevealSlide, duration: 6000 },
         { component: PercentileSlide, duration: 6000 },
         { component: OutroSlide, duration: 10000 }, // Last slide: progress fills but doesn't auto-close
     ], []);
