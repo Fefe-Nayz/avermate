@@ -1165,12 +1165,12 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const slides = useMemo(() => [
-        { component: IntroSlide, duration: 4000 },
+        { component: IntroSlide, duration: 3000 },
         { component: StatsSlide, duration: 6000 },
         { component: HeatmapSlide, duration: 6000 },
-        { component: StreakSlide, duration: 5000 },
+        { component: StreakSlide, duration: 3500 },
         { component: PrimeTimeSlide, duration: 5000 },
-        { component: SubjectsSlide, duration: 7000 },
+        { component: SubjectsSlide, duration: 5000 },
         { component: AwardIntroSlide, duration: 3000 },
         { component: AwardRevealSlide, duration: 6000 },
         { component: PercentileSlide, duration: 6000 },
