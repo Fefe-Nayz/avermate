@@ -46,8 +46,6 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     where: and(
       eq(grades.userId, session.user.id),
       eq(grades.yearId, yearId),
-      gte(grades.passedAt, startDateMin),
-      lte(grades.passedAt, startDateMax),
     ),
     with: {
       subject: true,
