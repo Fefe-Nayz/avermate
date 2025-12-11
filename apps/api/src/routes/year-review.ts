@@ -50,8 +50,8 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     .from(grades)
     .where(
       and(
-        gte(grades.createdAt, startDateMin),
-        lte(grades.createdAt, startDateMax)
+        gte(grades.passedAt, startDateMin),
+        lte(grades.passedAt, startDateMax)
       )
     )
     .groupBy(grades.userId);
