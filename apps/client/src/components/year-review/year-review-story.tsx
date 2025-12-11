@@ -879,7 +879,7 @@ function StreakSlide({ stats, t }: SlideProps) {
                     transition={{ type: "spring", stiffness: 200, delay: 0.4 }}
                     className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 drop-shadow-[0_0_50px_rgba(234,88,12,0.5)]"
                 >
-                    <CountUp value={5} duration={1.5} delay={0.5} ease="circOut" />
+                    <CountUp value={stats.longestStreak} duration={1.5} delay={0.5} ease="circOut" />
                 </motion.div>
 
                 <motion.p
