@@ -10,7 +10,7 @@ export function useYearReview(yearId: string | null) {
       return await apiClient.get(`year-review/${yearId}`).json<YearReviewResponse>();
     },
     enabled: !!yearId,
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 }
 

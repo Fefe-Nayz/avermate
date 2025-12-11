@@ -647,12 +647,12 @@ function PercentileSlide({ stats }: SlideProps) {
 function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string }) {
     return (
         <div className={cn("bg-[#161b22] border border-white/10 rounded-xl p-4 flex flex-col items-start h-full", className)}>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-2 sm:mb-4">
                 <Icon className={cn("w-4 h-4", colorClass)} />
-                <span className="text-xs text-gray-400 font-medium">{title}</span>
+                <span className="text-xs text-gray-400 font-medium text-left">{title}</span>
             </div>
             <div className={cn(
-                "text-4xl sm:text-5xl font-bold my-auto text-left leading-[0.9] capitalize",
+                "text-xl sm:text-4xl font-bold text-left capitalize",
                 colorClass,
                 truncate && "line-clamp-2 w-full break-words"
             )}>
@@ -662,127 +662,26 @@ function StatCard({ icon: Icon, title, value, colorClass, truncate = false, clas
     );
 }
 
-const getAward = (stats: YearReviewStats) => {
-    // Helper to safely access potential future properties
-    const s = stats as any;
+const awardIcons: Record<string, any> = {
+    "Scale": Scale,
+    "RefreshCcw": RefreshCcw,
+    "Dices": Dices,
+    "Crown": Crown,
+    "Shuffle": Shuffle,
+    "Crosshair": Crosshair,
+    "Gem": Gem,
+    "UserCheck": UserCheck,
+    "Plane": Plane
+};
 
-    // 1. Le Funambule
-    if (stats.average >= 10 && stats.average <= 11 && (s.gradesUnder8Count || 0) >= 3) {
-        return {
-            title: "Le Funambule",
-            icon: Scale,
-            description: "Tu as marché sur un fil toute l'année, le vide à gauche, le vide à droite... mais tu n'es jamais tombé. L'art de l'équilibre, le vrai.",
-            condition: "Moyenne entre 10 et 11 avec des notes < 8/20",
-            color: "text-orange-400",
-            bg: "bg-orange-500/10 border-orange-500/20",
-            gradient: "from-orange-500 to-amber-500"
-        };
-    }
-
-    // 2. Le Roi du Comeback
-    if (s.firstMonthAverage && stats.average > s.firstMonthAverage + 2) {
-        return {
-            title: "Le Roi du Comeback",
-            icon: RefreshCcw,
-            description: "Le début de saison était compliqué. On a eu peur. Et puis tu as enclenché la seconde et tu as doublé tout le monde avant la ligne d'arrivée.",
-            condition: "Moyenne finale supérieure de 2 points à celle du premier mois",
-            color: "text-emerald-400",
-            bg: "bg-emerald-500/10 border-emerald-500/20",
-            gradient: "from-emerald-500 to-green-500"
-        };
-    }
-
-    // 3. Le "All In"
-    // Assuming we might have worstSubjectAverage in the future
-    if (stats.bestSubjects.length > 0 && s.worstSubjectAverage && (stats.bestSubjects[0].value - s.worstSubjectAverage > 5)) {
-        return {
-            title: "Le \"All In\"",
-            icon: Dices,
-            description: "Tu as choisi tes batailles. Pourquoi essayer d'être moyen partout quand on peut tout miser sur ses points forts ? Une stratégie risquée, mais payante.",
-            condition: "Plus de 5 points d'écart entre ta meilleure et ta pire matière",
-            color: "text-red-400",
-            bg: "bg-red-500/10 border-red-500/20",
-            gradient: "from-red-500 to-rose-500"
-        };
-    }
-
-    // 4. La Masterclass
-    if (stats.average > 16) {
-        return {
-            title: "La Masterclass",
-            icon: Crown,
-            description: "À ce niveau-là, ce n'est plus des révisions, c'est une démonstration. Tu as plié l'année scolaire avec une facilité déconcertante.",
-            condition: "Moyenne générale supérieure à 16/20",
-            color: "text-yellow-400",
-            bg: "bg-yellow-500/10 border-yellow-500/20",
-            gradient: "from-yellow-400 to-amber-400"
-        };
-    }
-
-    // 5. L'Imprévisible
-    // Need stdDev > 4 in > 25% subjects
-    if (s.stdDevHighCount && s.totalSubjects && (s.stdDevHighCount / s.totalSubjects >= 0.25)) {
-        return {
-            title: "L'Imprévisible",
-            icon: Shuffle,
-            description: "Capable du génie absolu comme du ratage total au sein d'une même matière. Avec toi, c'est tout ou rien. Tes bulletins sont plus surprenants qu'une fin de saison Netflix.",
-            condition: "Des résultats très variables dans plus d'un quart de tes matières",
-            color: "text-purple-400",
-            bg: "bg-purple-500/10 border-purple-500/20",
-            gradient: "from-purple-500 to-violet-500"
-        };
-    }
-
-    // 6. La Précision
-    // Need stdDev < 2 in > 50% subjects
-    if (s.stdDevLowCount && s.totalSubjects && (s.stdDevLowCount / s.totalSubjects >= 0.5)) {
-        return {
-            title: "La Précision",
-            icon: Crosshair,
-            description: "Une régularité chirurgicale. Quand tu vises une note, tu l'atteins à chaque fois. Pas de mauvaises surprises, tu es une valeur sûre.",
-            condition: "Des résultats très réguliers dans la majorité de tes matières",
-            color: "text-blue-400",
-            bg: "bg-blue-500/10 border-blue-500/20",
-            gradient: "from-blue-400 to-cyan-400"
-        };
-    }
-
-    // 7. Légende d'Avermate
-    if (stats.gradesCount >= 40) {
-        return {
-            title: "Légende d'Avermate",
-            icon: Gem,
-            description: "On hésite à te donner les clés du serveur. Ton suivi est tellement complet que tu connais ta moyenne mieux que tes profs. Tu ne fais plus qu'un avec l'application.",
-            condition: "Plus de 40 notes ajoutées sur l'année",
-            color: "text-cyan-400",
-            bg: "bg-cyan-500/10 border-cyan-500/20",
-            gradient: "from-cyan-400 to-sky-400"
-        };
-    }
-
-    // 8. Avermatien
-    if (stats.gradesCount >= 15) {
-        return {
-            title: "Avermatien",
-            icon: UserCheck,
-            description: "Membre certifié de la famille. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable, mais le style en plus. C'est carré.",
-            condition: "Plus de 15 notes ajoutées sur l'année",
-            color: "text-green-400",
-            bg: "bg-green-500/10 border-green-500/20",
-            gradient: "from-green-400 to-emerald-400"
-        };
-    }
-
-    // 9. Le Touriste (Default fallback)
-    return {
-        title: "Le Touriste",
-        icon: Plane,
-        description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
-        condition: "Moins de 15 notes ajoutées sur l'année",
-        color: "text-pink-400",
-        bg: "bg-pink-500/10 border-pink-500/20",
-        gradient: "from-pink-400 to-rose-400"
-    };
+const DEFAULT_AWARD = {
+    title: "Le Touriste",
+    icon: "Plane",
+    description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+    condition: "Moins de 15 notes ajoutées sur l'année",
+    color: "text-pink-400",
+    bg: "bg-pink-500/10 border-pink-500/20",
+    gradient: "from-pink-400 to-rose-400"
 };
 
 function AwardIntroSlide({ stats }: SlideProps) {
@@ -823,7 +722,8 @@ function AwardIntroSlide({ stats }: SlideProps) {
 }
 
 function AwardRevealSlide({ stats }: SlideProps) {
-    const award = useMemo(() => getAward(stats), [stats]);
+    const award = stats.award || DEFAULT_AWARD;
+    const Icon = awardIcons[award.icon] || Plane;
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -852,7 +752,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 <div className="p-3 bg-yellow-500/20 rounded-full border border-yellow-500/30 mb-2">
                     <Trophy className="w-6 h-6 text-yellow-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-yellow-100">Your Award</h2>
+                <h2 className="text-2xl font-bold text-zinc-100">Your Award</h2>
             </motion.div>
 
             <motion.div
@@ -876,7 +776,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                         transition={{ delay: 0.7 }}
                         className="text-2xl font-bold text-white leading-tight"
                     >
-                        {award.description.split('.')[0]}
+                        {award.condition}
                     </motion.div>
                 </div>
                 <motion.div
@@ -884,7 +784,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.8, type: "spring" }}
                 >
-                    <award.icon className={cn("w-10 h-10", award.color)} />
+                    <Icon className={cn("w-10 h-10", award.color)} />
                 </motion.div>
             </motion.div>
 
@@ -892,9 +792,9 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.5 }}
-                className="relative z-10 mt-8 text-sm text-yellow-200/80 max-w-xs"
+                className="relative z-10 mt-8 text-sm text-zinc-100 max-w-xs"
             >
-                {award.condition}
+                {award.description}
             </motion.p>
         </div>
     );
@@ -904,7 +804,8 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
-    const award = useMemo(() => getAward(stats), [stats]);
+    const award = stats.award || DEFAULT_AWARD;
+    const Icon = awardIcons[award.icon] || Plane;
 
     const weeks = useMemo(() => {
         const result = [];
@@ -1008,7 +909,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     };
 
     return (
-        <div className="flex flex-col items-center h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden">
+        <div className="flex flex-col items-center h-full text-center p-2 sm:p-4 bg-[#0d1117] text-white overflow-hidden">
             {/* Recap content to be captured */}
             <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-4">
                 {/* Header */}
@@ -1061,19 +962,6 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                 {/* Grid Layout - Flex grow to fill space */}
                 <div className="grid grid-cols-2 auto-rows-fr gap-3 w-full mb-4 flex-1">
-                    {/* Award Card */}
-                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border bg-[#161b22]", award.bg)}>
-                        <div className="flex flex-col items-start text-left">
-                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
-                                {award.title}
-                            </div>
-                            <div className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-                                {award.description.split('.')[0]}
-                            </div>
-                        </div>
-                        <award.icon className={cn("w-10 h-10", award.color)} />
-                    </div>
-
                     <StatCard
                         icon={Trophy}
                         title="Universal Rank"
@@ -1086,6 +974,20 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                         value={stats.longestStreak}
                         colorClass="text-emerald-400"
                     />
+
+                    {/* Award Card */}
+                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border bg-[#161b22]", award.bg)}>
+                        <div className="flex flex-col items-start text-left">
+                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
+                                {award.title}
+                            </div>
+                            <div className="text-lg sm:text-3xl font-bold text-white leading-tight">
+                                {award.condition}
+                            </div>
+                        </div>
+                        <Icon className={cn("w-10 h-10", award.color)} />
+                    </div>
+
                     <StatCard
                         icon={Activity}
                         title="Total Grades"
