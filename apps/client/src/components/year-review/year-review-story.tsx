@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
 import { toPng } from "html-to-image";
 import LightPillar from "@/components/LightPillar";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
@@ -606,6 +606,14 @@ function StatsSlide({ stats, t }: SlideProps) {
 
 function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userAvatar, t }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
+    const formatter = useFormatter();
+
+    // Format the most active month using next-intl
+    const formattedMostActiveMonth = useMemo(() => {
+        const [yearNum, monthNum] = stats.mostActiveMonth.month.split('-').map(Number);
+        const date = new Date(yearNum, monthNum - 1, 1);
+        return formatter.dateTime(date, { month: 'long' });
+    }, [stats.mostActiveMonth.month, formatter]);
 
     const days = useMemo(() => {
         const result = [];
@@ -838,7 +846,7 @@ function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userA
             >
                 <h3 className="text-base text-[#8b949e] mb-2">{t("heatmap.mostActiveMonth")}</h3>
                 <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] via-[#5e81f2] to-[#3e61d2] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(62,97,210,0.4)]">
-                    {stats.mostActiveMonth.month}
+                    {formattedMostActiveMonth}
                 </div>
                 <p className="text-sm mt-2 text-[#8b949e]">{t("heatmap.gradesEntered", { count: stats.mostActiveMonth.count })}</p>
             </motion.div>
@@ -913,7 +921,8 @@ function PrimeTimeSlide({ stats, t }: SlideProps) {
     const [phase, setPhase] = useState<'tracing' | 'peak' | 'reveal'>('tracing');
     const [progress, setProgress] = useState(0);
     const pathRef = useRef<SVGPathElement>(null);
-    const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+    const formatter = useFormatter();
+    const date = formatter.dateTime(new Date(stats.primeTime.date), { day: 'numeric', month: 'long' });
 
     // Generate smoother line chart data
     const chartData = useMemo(() => {
@@ -2041,9 +2050,17 @@ function AwardRevealSlide({ stats, t }: SlideProps) {
 function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName, userAvatar, t }: SlideProps) {
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
+    const formatter = useFormatter();
 
     const award = getAward(stats.awardType);
     const Icon = awardIcons[award.icon] || Plane;
+
+    // Format the most active month using next-intl
+    const formattedMostActiveMonth = useMemo(() => {
+        const [yearNum, monthNum] = stats.mostActiveMonth.month.split('-').map(Number);
+        const date = new Date(yearNum, monthNum - 1, 1);
+        return formatter.dateTime(date, { month: 'long' });
+    }, [stats.mostActiveMonth.month, formatter]);
 
     const weeks = useMemo(() => {
         const result = [];
@@ -2282,7 +2299,7 @@ function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName
                         <StatCard
                             icon={Calendar}
                             title={t("outro.mostActiveMonth")}
-                            value={stats.mostActiveMonth.month}
+                            value={formattedMostActiveMonth}
                             colorClass="text-purple-400"
                             variants={item}
                         />
@@ -2695,7 +2712,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                             willChange: 'transform',
                             backfaceVisibility: 'hidden',
                             // CSS variable for inverse scale
-                            // @ts-ignore - CSS custom property
+                            //@ts-expect-error nike ta race
                             '--border-scale': 1 / storyScale,
                         }}
                         onClick={handleClick}

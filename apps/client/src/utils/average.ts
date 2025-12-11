@@ -2811,8 +2811,8 @@ function calculateActivityStats(grades: Array<{ passedAt: string }>) {
   grades.forEach((g) => {
     const date = new Date(g.passedAt);
     const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-    const monthStr = date.toLocaleString('default', { month: 'long' });
-    const dayStr = date.toLocaleString('default', { weekday: 'long' });
+    const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM format
+    const dayStr = date.getDay().toString(); // 0-6 (Sunday-Saturday)
 
     heatmap[dateStr] = (heatmap[dateStr] || 0) + 1;
     monthlyActivity[monthStr] = (monthlyActivity[monthStr] || 0) + 1;
@@ -2826,7 +2826,7 @@ function calculateActivityStats(grades: Array<{ passedAt: string }>) {
     }
   });
 
-  let mostActiveDay = { day: "", count: 0 };
+  let mostActiveDay = { day: "0", count: 0 };
   Object.entries(dailyActivity).forEach(([day, count]) => {
     if (count > mostActiveDay.count) {
       mostActiveDay = { day, count };
