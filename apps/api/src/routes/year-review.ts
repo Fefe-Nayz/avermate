@@ -45,8 +45,6 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     where: and(
       eq(grades.userId, session.user.id),
       eq(grades.yearId, yearId),
-      gte(grades.createdAt, startDateMin),
-      lte(grades.createdAt, startDateMax)
     ),
     with: {
       subject: true,
@@ -223,6 +221,8 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     const percent = ((myRankIndex + 1) / finalCounts.length) * 100;
     topPercentile = finalCounts.length === 1 ? 1 : Math.ceil(percent);
   }
+
+  if (topPercentile < 1) topPercentile = 1;
 
   // 7. Extra Stats for Awards
 
