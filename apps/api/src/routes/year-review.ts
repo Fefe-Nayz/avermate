@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { grades, subjects, years } from "@/db/schema";
+import { grades, subjects } from "@/db/schema";
 import { type Session, type User } from "@/lib/auth";
+import { computeAverage20 } from "@/lib/average";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, eq, sql, gte, lte, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -37,14 +38,16 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
-  const startDateMin = new Date("2025-01-01");
-  const startDateMax = new Date("2025-12-10");
+  const startDateMin = new Date("2025-01-01T00:00:00.000Z");
+  const startDateMax = new Date("2025-12-10T23:59:59.999Z");
 
   // Fetch all grades for the user and year, with subject info
   const userGrades = await db.query.grades.findMany({
     where: and(
       eq(grades.userId, session.user.id),
       eq(grades.yearId, yearId),
+      gte(grades.passedAt, startDateMin),
+      lte(grades.passedAt, startDateMax),
     ),
     with: {
       subject: true,
@@ -159,17 +162,6 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
     });
   });
 
-  // Calculate averages
-  const subjectAverages = Object.values(subjectsStats).map(s => ({
-    name: s.name,
-    average: s.weight > 0 ? s.sum / s.weight : 0,
-    grades: s.grades
-  }));
-
-  // Sort by average desc
-  subjectAverages.sort((a, b) => b.average - a.average);
-  const bestSubjects = subjectAverages.slice(0, 3).map(s => ({ name: s.name, value: s.average }));
-
 
   // Progression (Remontada)
   let bestProgression = { subject: "", value: -Infinity };
@@ -226,21 +218,65 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
 
   // 7. Extra Stats for Awards
 
-  // Global Average
-  let globalSum = 0;
-  let globalWeight = 0;
-  let gradesUnder8Count = 0;
-
-  userGrades.forEach(g => {
-    const gradeVal = (g.value / g.outOf) * 20;
-    const coeff = g.coefficient / 100;
-    globalSum += gradeVal * coeff;
-    globalWeight += coeff;
-
-    if (gradeVal < 8) gradesUnder8Count++;
+  // Real Global Average (same subject-tree logic as the client)
+  // IMPORTANT: We must fetch the subject tree (not only grades), otherwise we can't apply
+  // the display-subject container logic correctly.
+  const subjectsWithGrades = await db.query.subjects.findMany({
+    where: and(eq(subjects.userId, session.user.id), eq(subjects.yearId, yearId)),
+    with: {
+      grades: {
+        where: and(
+          eq(grades.userId, session.user.id),
+          eq(grades.yearId, yearId),
+          gte(grades.passedAt, startDateMin),
+          lte(grades.passedAt, startDateMax)
+        ),
+      },
+    },
   });
 
-  const average = globalWeight > 0 ? globalSum / globalWeight : 0;
+  const averageSubjects = subjectsWithGrades.map((s) => ({
+    id: s.id,
+    parentId: s.parentId,
+    coefficient: s.coefficient,
+    isDisplaySubject: s.isDisplaySubject,
+    grades: (s.grades ?? []).map((g) => ({
+      value: g.value,
+      outOf: g.outOf,
+      coefficient: g.coefficient,
+    })),
+  }));
+
+  const average = computeAverage20(undefined, averageSubjects) ?? 0;
+
+  // Best/Worst subjects must consider ALL subjects (including parent/display subjects)
+  // so the hierarchy rules are applied like on the client.
+  const subjectAveragesAll = subjectsWithGrades
+    .map((s) => {
+      const avg = computeAverage20(s.id, averageSubjects);
+      return avg === null
+        ? null
+        : {
+          id: s.id,
+          name: s.name,
+          average: avg,
+          coefficient: s.coefficient ?? 100,
+        };
+    })
+    .filter((v): v is { id: string; name: string; average: number; coefficient: number } => v !== null);
+
+  subjectAveragesAll.sort((a, b) => {
+    if (b.average !== a.average) return b.average - a.average;
+    return b.coefficient - a.coefficient;
+  });
+
+  const bestSubjects = subjectAveragesAll.slice(0, 3).map((s) => ({ name: s.name, value: s.average }));
+
+  let gradesUnder8Count = 0;
+  userGrades.forEach((g) => {
+    const gradeVal = (g.value / g.outOf) * 20;
+    if (gradeVal < 8) gradesUnder8Count++;
+  });
 
   // First Month Average
   let firstMonthAverage = 0;
@@ -266,8 +302,8 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
   }
 
   // Worst Subject Average
-  const worstSubjectAverage = subjectAverages.length > 0
-    ? subjectAverages[subjectAverages.length - 1].average
+  const worstSubjectAverage = subjectAveragesAll.length > 0
+    ? subjectAveragesAll[subjectAveragesAll.length - 1].average
     : 0;
 
   // StdDev Stats
