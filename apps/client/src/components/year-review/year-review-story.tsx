@@ -9,6 +9,172 @@ import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas-pro";
 
+// --- Canonical Size for Stories ---
+// The story is designed for this fixed resolution and scaled to fit any screen
+const CANONICAL_WIDTH = 390;
+const CANONICAL_HEIGHT = 693;
+const STORY_ASPECT_RATIO = CANONICAL_WIDTH / CANONICAL_HEIGHT;
+
+// Furniture sizes at 100% zoom (in CSS pixels at zoom=1)
+const NAV_BUTTON_SIZE_BASE = 40;
+const CLOSE_BUTTON_SIZE_BASE = 32;
+const BUTTON_GAP_BASE = 16;
+const CLOSE_BUTTON_GAP_BASE = 12;
+const MIN_MARGIN_BASE = 20; // Minimum margin in pixels at 100% zoom
+
+// Threshold: hide nav buttons when PHYSICAL viewport width is below this
+// (we use screen width to make this zoom-independent)
+const NAV_BUTTON_HIDE_THRESHOLD = 600;
+
+// Hook to calculate zoom level - works regardless of initial zoom level
+function useZoomLevel() {
+    const [zoom, setZoom] = useState(1);
+
+    useEffect(() => {
+        const updateZoom = () => {
+            // Method: Use screen.width vs window.innerWidth
+            // screen.width = physical screen width (constant)
+            // window.innerWidth = viewport width in CSS pixels (changes with zoom)
+            // At 100% zoom: innerWidth ≈ screen.width (minus browser chrome)
+            // At 200% zoom: innerWidth ≈ screen.width / 2
+
+            let detectedZoom = 1;
+
+            if (window.screen && window.screen.width && window.innerWidth) {
+                // Calculate zoom: higher zoom = smaller innerWidth
+                // We need to account for browser chrome (toolbars, etc.)
+                // A reasonable assumption is that at 100% zoom, innerWidth is ~95-100% of screen.width
+                // So we normalize based on that
+
+                const screenWidth = window.screen.width;
+                const innerWidth = window.innerWidth;
+
+                // The raw ratio
+                const rawZoom = screenWidth / innerWidth;
+
+                // Normalize: at 100% zoom on most setups, this ratio is ~1.0-1.1
+                // We assume if ratio is close to 1, that's 100% zoom
+                // This is imperfect but works well in practice
+                detectedZoom = rawZoom;
+            }
+
+            // Fallback/refinement using devicePixelRatio for subpixel accuracy
+            // devicePixelRatio changes with zoom on most browsers
+            const dpr = window.devicePixelRatio || 1;
+            // On a standard display at 100% zoom, dpr is 1
+            // On Retina at 100% zoom, dpr is 2
+            // We can use dpr changes relative to screen.deviceXDPI if available
+
+            // Clamp to reasonable values
+            detectedZoom = Math.max(0.1, Math.min(10, detectedZoom));
+
+            setZoom(detectedZoom);
+        };
+
+        updateZoom();
+        window.addEventListener('resize', updateZoom);
+
+        // Also listen to visualViewport resize if available (for pinch zoom on mobile)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateZoom);
+        }
+
+        return () => {
+            window.removeEventListener('resize', updateZoom);
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', updateZoom);
+            }
+        };
+    }, []);
+
+    return zoom;
+}
+
+// Hook to calculate the complete layout with zoom compensation
+function useStoryLayout() {
+    const zoom = useZoomLevel();
+
+    const [layout, setLayout] = useState({
+        storyScale: 1,
+        showNavButtons: true,
+        storyWidth: CANONICAL_WIDTH,
+        storyHeight: CANONICAL_HEIGHT,
+        // Furniture sizes adjusted for zoom
+        navButtonSize: NAV_BUTTON_SIZE_BASE,
+        closeButtonSize: CLOSE_BUTTON_SIZE_BASE,
+        buttonGap: BUTTON_GAP_BASE,
+        closeButtonGap: CLOSE_BUTTON_GAP_BASE,
+    });
+
+    useEffect(() => {
+        const updateLayout = () => {
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            // Calculate zoom-compensated furniture sizes
+            // When zoom is 2x, we want buttons to be half the CSS pixels so they appear same physical size
+            const navButtonSize = NAV_BUTTON_SIZE_BASE / zoom;
+            const closeButtonSize = CLOSE_BUTTON_SIZE_BASE / zoom;
+            const buttonGap = BUTTON_GAP_BASE / zoom;
+            const closeButtonGap = CLOSE_BUTTON_GAP_BASE / zoom;
+            const minMargin = MIN_MARGIN_BASE / zoom;
+
+            // Physical viewport width (zoom-independent) for threshold check
+            const physicalWidth = vw * zoom;
+            const showNavButtons = physicalWidth >= NAV_BUTTON_HIDE_THRESHOLD;
+
+            // Calculate margins (5% of viewport, minimum of zoom-adjusted margin)
+            const sideMargin = Math.max(vw * 0.05, minMargin);
+            const topMargin = Math.max(vh * 0.05, minMargin);
+            const bottomMargin = Math.max(vh * 0.05, minMargin);
+
+            // Space taken by furniture (in current CSS pixels)
+            const navButtonSpace = showNavButtons ? (navButtonSize + buttonGap) * 2 : 0;
+            const closeButtonSpace = closeButtonSize + closeButtonGap;
+
+            // Available space for the story
+            const availableWidth = Math.max(vw - sideMargin * 2 - navButtonSpace, 50);
+            const availableHeight = Math.max(vh - topMargin - bottomMargin - closeButtonSpace, 50);
+
+            // Calculate story scale to fit available space while ALWAYS maintaining aspect ratio
+            const scaleX = availableWidth / CANONICAL_WIDTH;
+            const scaleY = availableHeight / CANONICAL_HEIGHT;
+            const storyScale = Math.max(0.1, Math.min(scaleX, scaleY)); // Clamp to prevent zero/negative
+
+            // Final rendered story dimensions (always maintains aspect ratio)
+            const storyWidth = CANONICAL_WIDTH * storyScale;
+            const storyHeight = CANONICAL_HEIGHT * storyScale;
+
+            setLayout({
+                storyScale,
+                showNavButtons,
+                storyWidth,
+                storyHeight,
+                navButtonSize,
+                closeButtonSize,
+                buttonGap,
+                closeButtonGap,
+            });
+        };
+
+        updateLayout();
+
+        // Listen to resize events
+        window.addEventListener('resize', updateLayout);
+
+        // Also use ResizeObserver for more reliable updates
+        const resizeObserver = new ResizeObserver(updateLayout);
+        resizeObserver.observe(document.body);
+
+        return () => {
+            window.removeEventListener('resize', updateLayout);
+            resizeObserver.disconnect();
+        };
+    }, [zoom]);
+
+    return layout;
+}
+
 // --- Slides ---
 
 interface SlideProps {
@@ -38,28 +204,28 @@ function CountUp({ value, duration = 2, delay = 0, decimals = 0, ease = "easeOut
 
 function IntroSlide({ year, userName, userAvatar }: SlideProps) {
     return (
-        <div className="relative flex flex-col items-center justify-center h-full text-center p-6 bg-[#0a0a0a] text-white overflow-hidden">
-            {/* Animated gradient orbs */}
+        <div className="relative flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden">
+            {/* Animated gradient orbs - sized for canonical viewport */}
             <motion.div
-                className="absolute top-1/4 -left-20 w-72 h-72 bg-emerald-500/30 rounded-full blur-[100px]"
+                className="absolute top-1/4 -left-16 w-48 h-48 bg-emerald-500/30 rounded-full blur-[60px]"
                 animate={{
-                    x: [0, 30, 0],
-                    y: [0, -20, 0],
+                    x: [0, 20, 0],
+                    y: [0, -15, 0],
                     scale: [1, 1.1, 1]
                 }}
                 transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
             />
             <motion.div
-                className="absolute bottom-1/4 -right-20 w-80 h-80 bg-cyan-500/25 rounded-full blur-[120px]"
+                className="absolute bottom-1/4 -right-16 w-56 h-56 bg-cyan-500/25 rounded-full blur-[80px]"
                 animate={{
-                    x: [0, -40, 0],
-                    y: [0, 30, 0],
+                    x: [0, -25, 0],
+                    y: [0, 20, 0],
                     scale: [1, 1.2, 1]
                 }}
                 transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
             />
             <motion.div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-400/20 rounded-full blur-[150px]"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-teal-400/20 rounded-full blur-[100px]"
                 animate={{
                     scale: [1, 1.3, 1],
                     opacity: [0.2, 0.35, 0.2]
@@ -69,44 +235,44 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
 
             {/* Content */}
             <div className="relative z-10 flex flex-col items-center">
-                {/* Logo/Avatar with ring animation */}
+                {/* Logo/Avatar with ring animation - sized for canonical viewport */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.6, type: "spring", bounce: 0.4 }}
-                    className="relative mb-8"
+                    className="relative mb-6"
                 >
                     {/* Animated rings - positioned outside the logo box */}
                     <motion.div
                         className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
-                        style={{ margin: -16 }}
+                        style={{ margin: -12 }}
                         animate={{ scale: [1.15, 1.30, 1.15], opacity: [0.6, 0, 0.6] }}
                         transition={{ duration: 2, repeat: Infinity }}
                     />
                     <motion.div
                         className="absolute inset-0 rounded-full border border-cyan-400/40"
-                        style={{ margin: -28 }}
+                        style={{ margin: -20 }}
                         animate={{ scale: [1.2, 1.4, 1.2], opacity: [0.4, 0, 0.4] }}
                         transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
                     />
                     <motion.div
                         className="absolute inset-0 rounded-full border border-teal-400/20"
-                        style={{ margin: -40 }}
+                        style={{ margin: -28 }}
                         animate={{ scale: [1.25, 1.5, 1.25], opacity: [0.2, 0, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity, delay: 0.6 }}
                     />
 
                     {userAvatar ? (
-                        <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
+                        <div className="w-20 h-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
                             <img
                                 src={userAvatar}
                                 alt={userName || "User"}
-                                className="w-full h-full rounded-[14px] object-cover"
+                                className="w-full h-full rounded-[10px] object-cover"
                             />
                         </div>
                     ) : (
-                        <div className="w-28 h-28 rounded-2xl p-1 shadow-[0_0_40px_rgba(16,185,129,0.4)]">
-                            <div className="w-full h-full rounded-2xl bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                        <div className="w-20 h-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                            <div className="w-full h-full rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
                                 <img
                                     src="/logo.svg"
                                     alt="Avermate"
@@ -123,18 +289,18 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 0.7, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className="text-lg font-medium text-gray-300 mb-3"
+                        className="text-base font-medium text-gray-300 mb-2"
                     >
                         {userName}
                     </motion.p>
                 )}
 
-                {/* Year - Big dramatic reveal */}
+                {/* Year - Big dramatic reveal - sized for canonical viewport */}
                 <motion.h1
                     initial={{ opacity: 0, y: 30, scale: 0.8 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ delay: 0.5, duration: 0.6, type: "spring" }}
-                    className="text-7xl font-black mb-4 tracking-tight bg-gradient-to-r from-emerald-300 via-cyan-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]"
+                    className="text-6xl font-black mb-3 tracking-tight bg-gradient-to-r from-emerald-300 via-cyan-300 to-teal-300 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(16,185,129,0.5)]"
                 >
                     {year}
                 </motion.h1>
@@ -144,7 +310,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.7 }}
-                    className="text-2xl font-bold mb-3 text-white"
+                    className="text-xl font-bold mb-2 text-white"
                 >
                     Year in Review
                 </motion.h2>
@@ -154,7 +320,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 0.6 }}
                     transition={{ delay: 0.9 }}
-                    className="text-base text-gray-400"
+                    className="text-sm text-gray-400"
                 >
                     Your academic journey, visualized
                 </motion.p>
@@ -164,12 +330,12 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 0.5, y: 0 }}
                     transition={{ delay: 1.2 }}
-                    className="absolute -bottom-20 flex flex-col items-center gap-2"
+                    className="absolute -bottom-16 flex flex-col items-center gap-2"
                 >
                     <motion.div
                         animate={{ y: [0, 5, 0] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
-                        className="text-xs text-gray-500 uppercase tracking-widest"
+                        className="text-[10px] text-gray-500 uppercase tracking-widest"
                     >
                         Tap to continue
                     </motion.div>
@@ -182,15 +348,14 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
 function StatsSlide({ stats }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
 
+    // Animation values calibrated for canonical size (390x844)
     // Calculate dynamic offset to center on Grades bar
-    // Layout: [GradesBar(128px)] [gap(64px)] [PointsBar(128px)]
-    // Center of Grades bar is (64/2 + 128/2) = 96px left of container center
-    // With scale, we need to offset by: distanceToCenter * scale
-    const SCALE = 3.5;
-    const BAR_WIDTH = 128; // w-32 = 8rem = 128px
-    const GAP = 64; // gap-16 = 4rem = 64px
-    const distanceToGradesCenter = (GAP / 2) + (BAR_WIDTH / 2); // 96px
-    const xOffset = distanceToGradesCenter * SCALE; // ~336px
+    // Layout: [GradesBar(80px)] [gap(32px)] [PointsBar(80px)]
+    const SCALE = 2.8;
+    const BAR_WIDTH = 80; // w-20 = 5rem = 80px
+    const GAP = 32; // gap-8 = 2rem = 32px
+    const distanceToGradesCenter = (GAP / 2) + (BAR_WIDTH / 2); // 56px
+    const xOffset = distanceToGradesCenter * SCALE; // ~157px
 
     useEffect(() => {
         const timer = setTimeout(() => setZoomOut(true), 2500);
@@ -198,30 +363,30 @@ function StatsSlide({ stats }: SlideProps) {
     }, []);
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
             <motion.div
-                initial={{ scale: SCALE, y: 190, x: xOffset }}
+                initial={{ scale: SCALE, y: 100, x: xOffset }}
                 animate={zoomOut
                     ? { scale: 1, y: 0, x: 0 } // Zoom out to full view
-                    : { scale: SCALE, y: 320, x: xOffset } // Track the growing bar upwards, keep centered on Grades
+                    : { scale: SCALE, y: 180, x: xOffset } // Track the growing bar upwards, keep centered on Grades
                 }
                 transition={zoomOut
                     ? { duration: 0.8, type: "spring", bounce: 0.2 } // Zoom out transition
                     : { duration: 2, ease: "easeOut" } // Tracking transition (matches bar growth)
                 }
-                className="flex items-end justify-center gap-16 h-80 w-full max-w-lg"
+                className="flex items-end justify-center gap-8 h-64 w-full max-w-xs"
             >
                 {/* Grades Bar */}
-                <div className="flex flex-col items-center gap-4 w-32 relative">
+                <div className="flex flex-col items-center gap-2 w-20 relative">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                        className="text-2xl font-bold whitespace-nowrap absolute -top-12"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
                     >
                         Grades
                     </motion.div>
 
-                    <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
                         {/* Growing Fill */}
                         <motion.div
                             initial={{ height: "0%" }}
@@ -230,8 +395,8 @@ function StatsSlide({ stats }: SlideProps) {
                             className="w-full bg-white relative shadow-[0_0_20px_rgba(255,255,255,0.5)]"
                         >
                             {/* Ticking Value on top of the bar */}
-                            <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
-                                <span className="text-5xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
+                                <span className="text-3xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
                                     <CountUp value={stats.gradesCount} duration={2} />
                                 </span>
                             </div>
@@ -240,17 +405,17 @@ function StatsSlide({ stats }: SlideProps) {
                 </div>
 
                 {/* Points Bar */}
-                <div className="flex flex-col items-center gap-4 w-32 relative">
+                <div className="flex flex-col items-center gap-2 w-20 relative">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         transition={{ delay: 0.1 }}
-                        className="text-2xl font-bold whitespace-nowrap absolute -top-12"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
                     >
                         Points
                     </motion.div>
 
-                    <div className="relative w-full h-80 bg-white/10 rounded-t-3xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={zoomOut ? { height: "75%" } : { height: "0%" }}
@@ -258,8 +423,8 @@ function StatsSlide({ stats }: SlideProps) {
                             className="w-full bg-yellow-300 relative shadow-[0_0_20px_rgba(253,224,71,0.5)]"
                         >
                             {zoomOut && (
-                                <div className="absolute -top-14 left-1/2 -translate-x-1/2 text-center w-40">
-                                    <span className="text-4xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
+                                    <span className="text-2xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
                                         <CountUp value={stats.gradesSum} duration={1.5} delay={0.2} decimals={0} />
                                     </span>
                                 </div>
@@ -273,7 +438,7 @@ function StatsSlide({ stats }: SlideProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={zoomOut ? { opacity: 0.7, y: 0 } : { opacity: 0, y: 20 }}
                 transition={{ delay: 0.8 }}
-                className="mt-12 text-sm max-w-xs mx-auto"
+                className="mt-8 text-sm max-w-xs mx-auto"
             >
                 Accumulated points throughout the year
             </motion.p>
@@ -343,18 +508,18 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
         return () => clearTimeout(timer);
     }, []);
 
-    // Animation values for the heatmap camera
-    const SCALE = 3.5;
-    // Pan positions - start far right to show first weeks, end at left to show recent weeks
-    const START_X = 1400; // Start position (first day visible on right side)
-    const END_X = -800;   // End position (keep as is)
+    // Animation values calibrated for canonical size (390x844)
+    const SCALE = 2.5;
+    // Pan positions scaled for the smaller viewport
+    const START_X = 600; // Start position (first day visible on right side)
+    const END_X = -350;   // End position
 
     return (
-        <div className="flex flex-col items-center justify-center gap-30 h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden relative">
-            {/* Background Gradients */}
+        <div className="flex flex-col items-center justify-center gap-8 h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden relative">
+            {/* Background Gradients - scaled down */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -right-[20%] w-[600px] h-[600px] bg-[#3e61d2]/10 rounded-full blur-[120px]" />
-                <div className="absolute -bottom-[20%] -left-[20%] w-[500px] h-[500px] bg-[#3e61d2]/5 rounded-full blur-[100px]" />
+                <div className="absolute -top-[20%] -right-[20%] w-[300px] h-[300px] bg-[#3e61d2]/10 rounded-full blur-[80px]" />
+                <div className="absolute -bottom-[20%] -left-[20%] w-[250px] h-[250px] bg-[#3e61d2]/5 rounded-full blur-[60px]" />
             </div>
 
             {/* Header - appears after zoom out */}
@@ -366,15 +531,15 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
             >
                 <div className="flex items-center justify-center gap-3">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-12 h-12 rounded-full border-2 border-white/20 object-cover" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full border-2 border-white/20 object-cover" />
                     ) : (
-                        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/20">
+                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/20">
                             <div className="w-full h-full bg-gradient-to-br from-[#3e61d2] to-blue-500" />
                         </div>
                     )}
                     <div className="text-left">
-                        {userName && <div className="font-bold text-lg">{userName}</div>}
-                        <div className="text-sm opacity-60">{year} Year in Grades</div>
+                        {userName && <div className="font-bold text-base">{userName}</div>}
+                        <div className="text-xs opacity-60">{year} Year in Grades</div>
                     </div>
                 </div>
             </motion.div>
@@ -390,20 +555,20 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     ? { duration: 0.6, type: "spring", bounce: 0.1 }
                     : { duration: 2, ease: [0.25, 0.8, 0.25, 1] } // Custom cubic bezier (easeOutQuad style)
                 }
-                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-4 rounded-2xl border border-white/10 shadow-2xl relative z-10"
+                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-3 rounded-xl border border-white/10 shadow-2xl relative z-10"
             >
                 <div className="w-full">
-                    <div className="flex gap-[2px] w-full">
+                    <div className="flex gap-[1px] w-full">
                         {weeks.map((week, weekIndex) => (
                             <div
                                 key={weekIndex}
-                                className="flex-1 flex flex-col gap-[2px]"
+                                className="flex-1 flex flex-col gap-[1px]"
                             >
                                 {week.map((day, dayIndex) => (
                                     <div
                                         key={`${weekIndex}-${dayIndex}`}
                                         className={cn(
-                                            "w-full aspect-square rounded-[1px] sm:rounded-[2px]",
+                                            "w-full aspect-square rounded-[1px]",
                                             !day ? "bg-transparent" :
                                                 day.count === 0 ? "bg-[#161b22] border border-white/5" :
                                                     day.count === 1 ? "bg-[#1d2d60]" :
@@ -422,7 +587,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     initial={{ opacity: 0 }}
                     animate={zoomOut ? { opacity: 1 } : { opacity: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-left mt-4 text-sm text-[#8b949e] w-full"
+                    className="text-left mt-3 text-xs text-[#8b949e] w-full"
                 >
                     {stats.gradesCount} grades in {year}
                 </motion.div>
@@ -435,11 +600,11 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                 transition={{ delay: 0.4, duration: 0.5 }}
                 className="w-full relative z-10"
             >
-                <h3 className="text-lg text-[#8b949e] mb-3">Most Active Month</h3>
-                <div className="text-5xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] to-[#5e81f2] bg-clip-text text-transparent">
+                <h3 className="text-base text-[#8b949e] mb-2">Most Active Month</h3>
+                <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] to-[#5e81f2] bg-clip-text text-transparent">
                     {stats.mostActiveMonth.month}
                 </div>
-                <p className="text-base mt-3 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
+                <p className="text-sm mt-2 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
             </motion.div>
         </div>
     );
@@ -449,7 +614,7 @@ function StreakSlide({ stats }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
             {/* Background gradient */}
-            <motion.div 
+            <motion.div
                 className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60"
                 animate={{
                     scale: [1, 1.2, 1],
@@ -461,7 +626,7 @@ function StreakSlide({ stats }: SlideProps) {
                     ease: "easeInOut"
                 }}
             />
-            
+
             {/* Warm glow effects */}
             <motion.div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px]"
@@ -518,29 +683,29 @@ function PrimeTimeSlide({ stats }: SlideProps) {
     const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-yellow-400 to-amber-600 text-white">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-yellow-400 to-amber-600 text-white">
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h2 className="text-3xl font-bold mb-8">Prime Time</h2>
+                <h2 className="text-2xl font-bold mb-6">Prime Time</h2>
             </motion.div>
 
             <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="bg-white/20 backdrop-blur-lg rounded-full w-48 h-48 flex flex-col items-center justify-center mb-6 border-4 border-white/30"
+                className="bg-white/20 backdrop-blur-lg rounded-full w-36 h-36 flex flex-col items-center justify-center mb-4 border-4 border-white/30"
             >
-                <span className="text-4xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
-                <span className="text-sm">/20</span>
+                <span className="text-3xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
+                <span className="text-xs">/20</span>
             </motion.div>
 
             <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="text-2xl"
+                className="text-xl"
             >
                 Peak reached on<br /><strong>{date}</strong>
             </motion.p>
@@ -550,23 +715,23 @@ function PrimeTimeSlide({ stats }: SlideProps) {
 
 function SubjectsSlide({ stats }: SlideProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
-            <h2 className="text-3xl font-bold mb-8">Top Subjects</h2>
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+            <h2 className="text-2xl font-bold mb-6">Top Subjects</h2>
 
-            <div className="w-full max-w-md space-y-4">
+            <div className="w-full max-w-[320px] space-y-3">
                 {stats.bestSubjects.map((subject, index) => (
                     <motion.div
                         key={subject.name}
                         initial={{ opacity: 0, x: -50 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: index * 0.2 + 0.2 }}
-                        className="bg-white/10 backdrop-blur-md rounded-xl p-4 flex justify-between items-center"
+                        className="bg-white/10 backdrop-blur-md rounded-xl p-3 flex justify-between items-center"
                     >
-                        <div className="flex items-center gap-3">
-                            <span className="font-bold text-xl w-6">#{index + 1}</span>
-                            <span className="text-lg truncate max-w-[150px]">{subject.name}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg w-5">#{index + 1}</span>
+                            <span className="text-base truncate max-w-[140px]">{subject.name}</span>
                         </div>
-                        <span className="text-2xl font-bold">{subject.value.toFixed(2)}</span>
+                        <span className="text-xl font-bold">{subject.value.toFixed(2)}</span>
                     </motion.div>
                 ))}
             </div>
@@ -576,11 +741,11 @@ function SubjectsSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 1 }}
-                    className="mt-8 p-4 bg-white/20 rounded-xl w-full max-w-md"
+                    className="mt-6 p-3 bg-white/20 rounded-xl w-full max-w-[320px]"
                 >
-                    <div className="text-sm uppercase tracking-wider mb-1">Best Comeback 🚀</div>
-                    <div className="font-bold text-xl">{stats.bestProgression.subject}</div>
-                    <div className="text-sm opacity-80">+{stats.bestProgression.value.toFixed(2)} pts improvement</div>
+                    <div className="text-xs uppercase tracking-wider mb-1">Best Comeback 🚀</div>
+                    <div className="font-bold text-lg">{stats.bestProgression.subject}</div>
+                    <div className="text-xs opacity-80">+{stats.bestProgression.value.toFixed(2)} pts improvement</div>
                 </motion.div>
             )}
         </div>
@@ -598,7 +763,7 @@ function PercentileSlide({ stats }: SlideProps) {
     }, []);
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-black text-white relative overflow-hidden">
             {/* Background gradient */}
             <div className="absolute inset-0 bg-gradient-to-tr from-purple-900 via-black to-indigo-900 opacity-60" />
 
@@ -607,16 +772,16 @@ function PercentileSlide({ stats }: SlideProps) {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500/20 rounded-full border border-yellow-500/40 text-yellow-300 mb-8"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full border border-yellow-500/40 text-yellow-300 mb-6"
                 >
-                    <Trophy className="w-4 h-4" />
-                    <span className="font-bold text-sm uppercase tracking-wider">Legendary Status</span>
+                    <Trophy className="w-3 h-3" />
+                    <span className="font-bold text-xs uppercase tracking-wider">Legendary Status</span>
                 </motion.div>
 
                 <motion.h2
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="text-3xl font-bold mb-4"
+                    className="text-2xl font-bold mb-2"
                 >
                     You are in the top
                 </motion.h2>
@@ -625,7 +790,7 @@ function PercentileSlide({ stats }: SlideProps) {
                     initial={{ scale: 0.5, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
-                    className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700 drop-shadow-[0_0_50px_rgba(234,179,8,0.5)]"
+                    className="text-[8rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700 drop-shadow-[0_0_30px_rgba(234,179,8,0.5)]"
                 >
                     {stats.topPercentile}%
                 </motion.div>
@@ -634,7 +799,7 @@ function PercentileSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8 }}
-                    className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
+                    className="mt-6 text-base opacity-60 max-w-[280px] mx-auto"
                 >
                     of the most active students this year!
                 </motion.p>
@@ -643,22 +808,25 @@ function PercentileSlide({ stats }: SlideProps) {
     );
 }
 
-// Stats Card Component
-function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string }) {
+// Stats Card Component - sized for canonical 390x844 viewport
+function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className, ...props }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string } & React.ComponentProps<typeof motion.div>) {
     return (
-        <div className={cn("bg-[#161b22] border border-white/10 rounded-xl p-4 flex flex-col items-start h-full", className)}>
-            <div className="flex items-center gap-2 mb-2 sm:mb-4">
-                <Icon className={cn("w-4 h-4", colorClass)} />
-                <span className="text-xs text-gray-400 font-medium text-left">{title}</span>
+        <motion.div
+            className={cn("bg-[#161b22] border border-white/10 rounded-lg p-2.5 flex flex-col items-start h-full", className)}
+            {...props}
+        >
+            <div className="flex items-center gap-1.5 mb-0.5">
+                <Icon className={cn("w-3 h-3", colorClass)} />
+                <span className="text-[10px] text-gray-400 font-medium">{title}</span>
             </div>
             <div className={cn(
-                "text-xl sm:text-4xl font-bold text-left capitalize",
+                "text-2xl font-bold my-auto text-left leading-[0.9] capitalize",
                 colorClass,
                 truncate && "line-clamp-2 w-full break-words"
             )}>
                 {value}
             </div>
-        </div>
+        </motion.div>
     );
 }
 
@@ -689,7 +857,7 @@ function AwardIntroSlide({ stats }: SlideProps) {
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
             {/* Shiny Gold Background */}
             <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
-            
+
             <div className="relative z-10 max-w-md space-y-8">
                 <motion.p
                     initial={{ opacity: 0, y: 20 }}
@@ -759,7 +927,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
                 animate={{ scale: 1, opacity: 1, rotateY: 0 }}
                 transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
-                className={cn("relative z-10 rounded-xl p-6 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between border bg-[#161b22]", award.bg)}
+                className={cn("relative z-10 rounded-lg p-2.5 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between border bg-[#161b22]", award.bg)}
             >
                 <div className="flex flex-col items-start text-left">
                     <motion.div
@@ -774,7 +942,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.7 }}
-                        className="text-2xl font-bold text-white leading-tight"
+                        className="text-md sm:text-xl font-bold text-white leading-tight"
                     >
                         {award.condition}
                     </motion.div>
@@ -788,7 +956,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 </motion.div>
             </motion.div>
 
-            <motion.p 
+            <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.5 }}
@@ -908,141 +1076,176 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
         link.click();
     };
 
+    const container = {
+        hidden: { opacity: 0 },
+        show: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1,
+                delayChildren: 0.3
+            }
+        }
+    };
+
+    const item = {
+        hidden: { opacity: 0, scale: 0.9 },
+        show: { opacity: 1, scale: 1 }
+    };
+
     return (
-        <div className="flex flex-col items-center h-full text-center p-2 sm:p-4 bg-[#0d1117] text-white overflow-hidden">
+        <div className="flex flex-col items-center h-full text-center p-3 bg-[#0d1117] text-white overflow-hidden">
             {/* Recap content to be captured */}
-            <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-4">
-                {/* Header */}
-                <div className="flex items-center gap-3 w-full mb-4 shrink-0">
+            <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-3">
+                {/* Header - sized for canonical viewport */}
+                <div className="flex items-center gap-2 w-full mb-3 shrink-0">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-12 h-12 rounded-full object-cover border-2 border-white/20" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
                     ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-lg">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-base">
                             {year.slice(-2)}
                         </div>
                     )}
                     <div className="text-left">
-                        {userName && <div className="font-bold text-lg">{userName}</div>}
-                        <div className="text-xs text-[#8b949e]">{year} Recap • Avermate</div>
-                    </div>
-                </div>
-
-                {/* Mini Heatmap Visual (Real Data) */}
-                <div className="w-full bg-[#161b22] border border-white/10 rounded-2xl p-4 mb-4 shrink-0">
-                    <div className="w-full">
-                        <div
-                            className="flex gap-[2px] w-full"
-                        >
-                            {weeks.map((week, weekIndex) => (
-                                <div
-                                    key={weekIndex}
-                                    className="flex-1 flex flex-col gap-[2px]"
-                                >
-                                    {week.map((day, dayIndex) => (
-                                        <div
-                                            key={`${weekIndex}-${dayIndex}`}
-                                            className={cn(
-                                                "w-full aspect-square rounded-full",
-                                                !day ? "bg-transparent" :
-                                                    day.count === 0 ? "bg-[#161b22]" :
-                                                        day.count === 1 ? "bg-[#1d2d60]" :
-                                                            day.count <= 3 ? "bg-[#2d4696]" :
-                                                                "bg-[#3e61d2]"
-                                            )}
-                                        />
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="text-left text-xs text-[#8b949e] mt-2">
-                        {stats.gradesCount} grades in {year}
+                        {userName && <div className="font-bold text-base">{userName}</div>}
+                        <div className="text-[10px] text-[#8b949e]">{year} Recap • Avermate</div>
                     </div>
                 </div>
 
                 {/* Grid Layout - Flex grow to fill space */}
-                <div className="grid grid-cols-2 auto-rows-fr gap-3 w-full mb-4 flex-1">
-                    <StatCard
-                        icon={Trophy}
-                        title="Universal Rank"
-                        value={`Top ${stats.topPercentile}%`}
-                        colorClass="text-yellow-400"
-                    />
-                    <StatCard
-                        icon={Zap}
-                        title="Longest Streak"
-                        value={stats.longestStreak}
-                        colorClass="text-emerald-400"
-                    />
+                <motion.div
+                    className="flex flex-col flex-1"
+                    variants={container}
+                    initial="hidden"
+                    animate="show"
+                >
 
-                    {/* Award Card */}
-                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border bg-[#161b22]", award.bg)}>
-                        <div className="flex flex-col items-start text-left">
-                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
-                                {award.title}
-                            </div>
-                            <div className="text-lg sm:text-3xl font-bold text-white leading-tight">
-                                {award.condition}
+                    {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
+                    <motion.div variants={item} className="w-full bg-[#161b22] border border-white/10 rounded-xl p-3 mb-3 shrink-0">
+                        <div className="w-full">
+                            <div
+                                className="flex gap-[1px] w-full"
+                            >
+                                {weeks.map((week, weekIndex) => (
+                                    <div
+                                        key={weekIndex}
+                                        className="flex-1 flex flex-col gap-[1px]"
+                                    >
+                                        {week.map((day, dayIndex) => (
+                                            <div
+                                                key={`${weekIndex}-${dayIndex}`}
+                                                className={cn(
+                                                    "w-full aspect-square rounded-full",
+                                                    !day ? "bg-transparent" :
+                                                        day.count === 0 ? "bg-[#161b22]" :
+                                                            day.count === 1 ? "bg-[#1d2d60]" :
+                                                                day.count <= 3 ? "bg-[#2d4696]" :
+                                                                    "bg-[#3e61d2]"
+                                                )}
+                                            />
+                                        ))}
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                        <Icon className={cn("w-10 h-10", award.color)} />
+                        <div className="text-left text-[10px] text-[#8b949e] mt-1.5">
+                            {stats.gradesCount} grades in {year}
+                        </div>
+                    </motion.div>
+
+                    <div className="grid grid-cols-2 auto-rows-fr gap-2 w-full mb-3 flex-1">
+                        <StatCard
+                            icon={Trophy}
+                            title="Universal Rank"
+                            value={`Top ${stats.topPercentile}%`}
+                            colorClass="text-yellow-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Zap}
+                            title="Longest Streak"
+                            value={stats.longestStreak}
+                            colorClass="text-emerald-400"
+                            variants={item}
+                        />
+
+                        <StatCard
+                            icon={Activity}
+                            title="Total Grades"
+                            value={stats.gradesCount}
+                            colorClass="text-pink-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Calendar}
+                            title="Most Active Month"
+                            value={stats.mostActiveMonth.month}
+                            colorClass="text-purple-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Star}
+                            title="Total Points"
+                            value={stats.gradesSum.toFixed(0)}
+                            colorClass="text-blue-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Target}
+                            title="Global Average"
+                            value={stats.average?.toFixed(2) || "N/A"}
+                            colorClass="text-teal-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Rocket}
+                            title="Top Subject"
+                            value={stats.bestSubjects[0]?.name || "N/A"}
+                            colorClass="text-cyan-400"
+                            truncate={true}
+                            className="col-span-2"
+                            variants={item}
+                        />
                     </div>
 
-                    <StatCard
-                        icon={Activity}
-                        title="Total Grades"
-                        value={stats.gradesCount}
-                        colorClass="text-pink-400"
-                    />
-                    <StatCard
-                        icon={Calendar}
-                        title="Most Active Month"
-                        value={stats.mostActiveMonth.month}
-                        colorClass="text-purple-400"
-                    />
-                    <StatCard
-                        icon={Star}
-                        title="Total Points"
-                        value={stats.gradesSum.toFixed(0)}
-                        colorClass="text-blue-400"
-                    />
-                    <StatCard
-                        icon={Target}
-                        title="Global Average"
-                        value={stats.average?.toFixed(2) || "N/A"}
-                        colorClass="text-teal-400"
-                    />
-                    <StatCard
-                        icon={Rocket}
-                        title="Top Subject"
-                        value={stats.bestSubjects[0]?.name || "N/A"}
-                        colorClass="text-cyan-400"
-                        truncate={true}
-                        className="col-span-2"
-                    />
-                </div>
+                    <div>
+                        {/* Award Card */}
+                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between border bg-[#161b22]", award.bg)}>
+                            <div className="flex flex-col items-start text-left">
+                                <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
+                                    {award.title}
+                                </div>
+                                <div className="text-md sm:text-xl font-bold text-white leading-tight">
+                                    {award.condition}
+                                </div>
+                            </div>
+                            <Icon className={cn("w-10 h-10", award.color)} />
+                        </motion.div>
+                    </div>
 
-                <div className="text-sm text-[#8b949e] shrink-0">
-                    avermate.fr
-                </div>
+                    <div className="mt-2 text-xs text-[#8b949e] shrink-0">
+                        avermate.fr
+                    </div>
+
+                </motion.div>
+
             </div>
 
-            {/* Buttons (not captured) */}
-            <div className="flex gap-3 w-full mt-4 mb-4 shrink-0">
+            {/* Buttons (not captured) - sized for canonical viewport */}
+            <div className="flex gap-2 w-full mb-3 shrink-0">
                 <Button
-                    className="flex-1 bg-white hover:bg-gray-200 text-black border-none h-12 rounded-xl font-bold"
+                    className="flex-1 bg-white hover:bg-gray-200 text-black border-none h-10 rounded-lg font-bold text-sm"
                     onClick={(e) => {
                         e.stopPropagation();
                         handleShare();
                     }}
                     disabled={isSharing}
                 >
-                    <Share2 className="w-4 h-4 mr-2" /> {isSharing ? "Generating..." : "Share Image"}
+                    <Share2 className="w-3.5 h-3.5 mr-1.5" /> {isSharing ? "Generating..." : "Share Image"}
                 </Button>
 
                 <Button
                     variant="outline"
-                    className="flex-1 border-white/20 bg-[#21262d] hover:bg-[#30363d] text-white h-12 rounded-xl"
+                    className="flex-1 border-white/20 bg-[#21262d] hover:bg-[#30363d] text-white h-10 rounded-lg text-sm"
                     onClick={(e) => {
                         e.stopPropagation();
                         onClose();
@@ -1065,6 +1268,9 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
     const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Get the complete layout with zoom compensation
+    const layout = useStoryLayout();
 
     const slides = useMemo(() => [
         { component: IntroSlide, duration: 3000 },
@@ -1247,41 +1453,98 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
     if (!isOpen) return null;
 
+    const {
+        storyScale,
+        showNavButtons,
+        storyWidth,
+        storyHeight,
+        navButtonSize,
+        closeButtonSize,
+        buttonGap,
+        closeButtonGap,
+    } = layout;
+
     return (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-            {/* Desktop Close Button */}
+        <div className="fixed inset-0 z-[100] bg-black overflow-hidden">
+            {/* 
+                Layout structure:
+                - Outer container fills viewport (no flex to avoid high-zoom cropping)
+                - All children use absolute positioning relative to viewport center
+                - Button sizes are zoom-compensated to appear constant physical size
+                - Story scales to fill available space after margins/buttons
+            */}
+
+            {/* Close Button - positioned at top-right of story, zoom-compensated size */}
             <button
-                onClick={(e) => { e.stopPropagation(); onClose(); }}
-                className="absolute top-4 right-4 z-[60] text-white/50 hover:text-white p-2"
+                onClick={onClose}
+                className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                style={{
+                    width: closeButtonSize,
+                    height: closeButtonSize,
+                    top: `calc(50% - ${storyHeight / 2}px - ${closeButtonSize + closeButtonGap}px)`,
+                    left: `calc(50% + ${storyWidth / 2}px - ${closeButtonSize}px)`,
+                }}
                 aria-label="Close"
             >
-                <X className="w-8 h-8" />
+                <X style={{ width: closeButtonSize * 0.5, height: closeButtonSize * 0.5 }} />
             </button>
 
-            {/* Desktop Navigation Buttons */}
-            <button
-                onClick={(e) => { e.stopPropagation(); prevSlide(); }}
-                className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-[60] text-white/50 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-                aria-label="Previous slide"
-                disabled={currentSlide === 0}
-            >
-                <ChevronLeft className="w-6 h-6" />
-            </button>
+            {/* Left Navigation Button - hidden on small screens, zoom-compensated size */}
+            {showNavButtons && (
+                <button
+                    onClick={prevSlide}
+                    className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                    style={{
+                        width: navButtonSize,
+                        height: navButtonSize,
+                        left: `calc(50% - ${storyWidth / 2}px - ${navButtonSize + buttonGap}px)`,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                    }}
+                    aria-label="Previous slide"
+                    disabled={currentSlide === 0}
+                >
+                    <ChevronLeft style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
+                </button>
+            )}
 
-            <button
-                onClick={(e) => { e.stopPropagation(); nextSlide(); }}
-                className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-[60] text-white/50 hover:text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-                aria-label="Next slide"
-            >
-                <ChevronRight className="w-6 h-6" />
-            </button>
+            {/* Right Navigation Button - hidden on small screens, zoom-compensated size */}
+            {showNavButtons && (
+                <button
+                    onClick={nextSlide}
+                    className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                    style={{
+                        width: navButtonSize,
+                        height: navButtonSize,
+                        right: `calc(50% - ${storyWidth / 2}px - ${navButtonSize + buttonGap}px)`,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                    }}
+                    aria-label="Next slide"
+                >
+                    <ChevronRight style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
+                </button>
+            )}
 
-            {/* Mobile-style container */}
+            {/* Story Container - rendered at canonical size, scaled, and absolutely centered */}
             <div
-                className="relative w-full h-full md:w-auto md:h-[85vh] md:aspect-[9/16] md:rounded-3xl overflow-hidden bg-black shadow-2xl cursor-pointer select-none"
+                className="absolute bg-black shadow-2xl overflow-hidden cursor-pointer select-none"
+                style={{
+                    width: CANONICAL_WIDTH,
+                    height: CANONICAL_HEIGHT,
+                    // Center using absolute positioning + transform
+                    left: '50%',
+                    top: '50%',
+                    // Use translateZ(0) to force GPU layer - helps with border rendering at different zoom levels
+                    transform: `translate(-50%, -50%) scale(${storyScale}) translateZ(0)`,
+                    transformOrigin: 'center center',
+                    borderRadius: 24, // Fixed border radius in canonical pixels
+                    // Additional GPU hints to prevent subpixel border artifacts
+                    willChange: 'transform',
+                    backfaceVisibility: 'hidden',
+                }}
                 onClick={handleClick}
             >
-
                 {/* Progress Bars */}
                 <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
                     {slides.map((_, index) => {
@@ -1301,7 +1564,6 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                                         className="h-full bg-white"
                                         style={{
                                             width: `${barProgress}%`,
-                                            // Use linear timing during navigation so bars feel like one continuous progress
                                             transition: isNavigating ? `width ${stepDuration}ms linear` : 'width 50ms linear'
                                         }}
                                     />
@@ -1314,7 +1576,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                 {/* Pause Button */}
                 <button
                     onClick={(e) => { e.stopPropagation(); setPaused(p => !p); }}
-                    className="absolute top-8 right-4 z-20 text-white/70 hover:text-white p-2 bg-black/30 rounded-full backdrop-blur-sm"
+                    className="absolute top-8 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm"
                     aria-label={paused ? "Play" : "Pause"}
                 >
                     {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -1341,7 +1603,6 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                         </motion.div>
                     </AnimatePresence>
                 </div>
-
             </div>
         </div>
     );
