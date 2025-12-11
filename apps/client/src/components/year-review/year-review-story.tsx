@@ -701,7 +701,7 @@ function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userA
     // Total width is container width (390 - 24 padding = 366), divided by weeks + gaps
     // Cell width ≈ 366 / weeks.length, Cell height = 7 cells * cellWidth + 6 gaps
     const { heatmapScale, heatmapHeight } = useMemo(() => {
-        const MAX_HEIGHT = 100;
+        const MAX_HEIGHT = 150;
         const containerWidth = 390 - 24; // canonical width minus padding
         const numWeeks = weeks.length || 1;
         const cellWidth = containerWidth / numWeeks;
