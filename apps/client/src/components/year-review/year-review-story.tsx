@@ -813,69 +813,95 @@ function StreakSlide({ stats }: SlideProps) {
 
 function PrimeTimeSlide({ stats }: SlideProps) {
     const [phase, setPhase] = useState<'tracing' | 'peak' | 'reveal'>('tracing');
+    const [progress, setProgress] = useState(0);
+    const pathRef = useRef<SVGPathElement>(null);
     const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 
-    // Generate a fake line chart path that builds up to the peak
+    // Generate smoother line chart data
     const chartData = useMemo(() => {
-        // Create realistic-looking data points leading to the peak
-        const points: { x: number; y: number }[] = [];
-        const numPoints = 12;
-        const peakIndex = 9; // Peak near the end
-        
-        for (let i = 0; i <= numPoints; i++) {
-            const x = (i / numPoints) * 100;
-            let y: number;
-            
-            if (i <= peakIndex) {
-                // Build up with some variation
-                const progress = i / peakIndex;
-                const baseY = progress * 85; // Go up to ~85% height at peak
-                const noise = Math.sin(i * 1.5) * 8 + Math.cos(i * 2.3) * 5;
-                y = Math.max(5, Math.min(90, baseY + noise));
-            } else {
-                // Slight decline after peak
-                const decline = (i - peakIndex) / (numPoints - peakIndex);
-                y = 85 - decline * 15;
-            }
-            
-            points.push({ x, y });
-        }
-        
-        // Ensure peak point is actually the highest
-        points[peakIndex].y = 90;
-        
-        return { points, peakIndex };
+        const points: { x: number; y: number }[] = [
+            { x: 0, y: 15 },
+            { x: 8, y: 22 },
+            { x: 16, y: 18 },
+            { x: 24, y: 35 },
+            { x: 32, y: 28 },
+            { x: 40, y: 45 },
+            { x: 48, y: 42 },
+            { x: 56, y: 58 },
+            { x: 64, y: 52 },
+            { x: 72, y: 70 },
+            { x: 80, y: 90 }, // Peak
+            { x: 88, y: 78 },
+            { x: 100, y: 72 },
+        ];
+        const peakIndex = 10;
+        // Peak is at index 10 out of 13 points - adjusted to land exactly on peak
+        const peakProgress = 0.840;
+        return { points, peakIndex, peakProgress };
     }, []);
 
-    // Create SVG path from points
+    // Create smooth SVG path using cubic bezier curves
     const pathD = useMemo(() => {
         const { points } = chartData;
         if (points.length < 2) return '';
         
-        // Create smooth curve through points
         let d = `M ${points[0].x} ${100 - points[0].y}`;
         
-        for (let i = 1; i < points.length; i++) {
-            const prev = points[i - 1];
-            const curr = points[i];
-            const cpX = (prev.x + curr.x) / 2;
-            d += ` Q ${prev.x + (curr.x - prev.x) * 0.5} ${100 - prev.y}, ${cpX} ${100 - (prev.y + curr.y) / 2}`;
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+            
+            // Catmull-Rom to Bezier conversion
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            
+            d += ` C ${cp1x} ${100 - cp1y}, ${cp2x} ${100 - cp2y}, ${p2.x} ${100 - p2.y}`;
         }
-        
-        const last = points[points.length - 1];
-        d += ` L ${last.x} ${100 - last.y}`;
         
         return d;
     }, [chartData]);
 
+    // Get point position along path at given progress (0-1)
+    const getPointAtProgress = useCallback((prog: number) => {
+        if (!pathRef.current) return { x: 0, y: 50 };
+        const pathLength = pathRef.current.getTotalLength();
+        const point = pathRef.current.getPointAtLength(prog * pathLength);
+        return { x: point.x, y: point.y };
+    }, []);
+
+    const { points, peakIndex, peakProgress } = chartData;
+    const peakPoint = points[peakIndex];
+
+    // Animate progress for tracing phase
+    useEffect(() => {
+        if (phase !== 'tracing') return;
+        
+        const duration = 2500;
+        const startTime = performance.now();
+        
+        const animateProgress = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const t = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            setProgress(eased * peakProgress);
+            
+            if (t < 1) {
+                requestAnimationFrame(animateProgress);
+            }
+        };
+        
+        requestAnimationFrame(animateProgress);
+    }, [phase, peakProgress]);
+
     // Animation timeline
     useEffect(() => {
-        // Phase 1: Tracing the line (0-2.5s)
-        // Phase 2: Peak reached, pause with glow (2.5-3s)
-        // Phase 3: Zoom out and reveal (3s+)
-        
         const peakTimer = setTimeout(() => setPhase('peak'), 2500);
-        const revealTimer = setTimeout(() => setPhase('reveal'), 3000);
+        const revealTimer = setTimeout(() => setPhase('reveal'), 3200);
         
         return () => {
             clearTimeout(peakTimer);
@@ -883,11 +909,16 @@ function PrimeTimeSlide({ stats }: SlideProps) {
         };
     }, []);
 
-    const { points, peakIndex } = chartData;
-    const peakPoint = points[peakIndex];
+    // Calculate current dot position
+    const currentProgress = phase === 'tracing' ? progress : peakProgress;
+    const currentDotPos = getPointAtProgress(currentProgress);
+    
+    // Camera follows dot during tracing - calculate offset to keep dot centered
+    const cameraX = phase === 'reveal' ? 0 : -(currentDotPos.x - 50) * 7;
+    const cameraY = phase === 'reveal' ? 0 : -(currentDotPos.y - 50) * 2;
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center h-full text-center bg-[#0a0a0a] text-white relative overflow-hidden">
             {/* Animated background gradient */}
             <motion.div
                 className="absolute inset-0 bg-gradient-to-br from-emerald-900/20 via-[#0a0a0a] to-green-900/20"
@@ -906,25 +937,26 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 transition={{ duration: 0.5 }}
             />
 
-            {/* Chart container - zooms out on reveal */}
+            {/* Chart container - camera follows dot, then zooms out */}
             <motion.div
                 className="relative w-full flex-1 flex items-center justify-center"
-                initial={{ scale: 2.5, y: 100 }}
-                animate={
-                    phase === 'reveal' 
-                        ? { scale: 1, y: 0 } 
-                        : { scale: 2.5, y: 100 }
-                }
-                transition={{ 
-                    duration: 0.8, 
+                animate={{
+                    scale: phase === 'reveal' ? 1 : 2.8,
+                    x: cameraX,
+                    y: phase === 'reveal' ? 0 : cameraY + 80,
+                }}
+                transition={phase === 'reveal' ? { 
+                    duration: 0.7, 
                     type: "spring", 
-                    bounce: 0.15 
+                    bounce: 0.12 
+                } : {
+                    duration: 0.1,
+                    ease: "linear"
                 }}
             >
-                <div className="w-full max-w-[340px] h-[200px] relative">
+                <div className="w-full h-[200px] relative">
                     {/* Grid lines */}
                     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        {/* Horizontal grid lines */}
                         {[20, 40, 60, 80].map((y) => (
                             <motion.line
                                 key={y}
@@ -939,117 +971,122 @@ function PrimeTimeSlide({ stats }: SlideProps) {
 
                     {/* Main chart SVG */}
                     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        {/* Gradient fill under the line */}
                         <defs>
-                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.4" />
+                            <linearGradient id="chartGradientPrime" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
                                 <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
                             </linearGradient>
-                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.5" />
-                                <stop offset="100%" stopColor="#4ade80" stopOpacity="1" />
+                            <linearGradient id="lineGradientPrime" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#16a34a" />
+                                <stop offset="100%" stopColor="#4ade80" />
                             </linearGradient>
-                            <filter id="glow">
-                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                            <filter id="lineGlow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="1" result="blur"/>
                                 <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="blur"/>
                                     <feMergeNode in="SourceGraphic"/>
                                 </feMerge>
                             </filter>
                         </defs>
 
-                        {/* Area fill - reveals as line is drawn */}
+                        {/* Hidden path for measuring */}
+                        <path
+                            ref={pathRef}
+                            d={pathD}
+                            fill="none"
+                            stroke="transparent"
+                        />
+
+                        {/* Area fill under line */}
                         <motion.path
                             d={`${pathD} L 100 100 L 0 100 Z`}
-                            fill="url(#chartGradient)"
+                            fill="url(#chartGradientPrime)"
                             initial={{ opacity: 0 }}
-                            animate={{ opacity: phase !== 'tracing' ? 0.6 : 0.3 }}
+                            animate={{ opacity: phase !== 'tracing' ? 0.5 : 0.2 }}
                             transition={{ duration: 0.5 }}
                         />
 
-                        {/* The line itself with draw animation */}
+                        {/* The line with draw animation - matches dot position exactly */}
                         <motion.path
                             d={pathD}
                             fill="none"
-                            stroke="url(#lineGradient)"
-                            strokeWidth="1.5"
+                            stroke="url(#lineGradientPrime)"
+                            strokeWidth="1.2"
                             strokeLinecap="round"
-                            filter="url(#glow)"
+                            strokeLinejoin="round"
+                            filter="url(#lineGlow)"
                             initial={{ pathLength: 0 }}
-                            animate={{ pathLength: phase === 'tracing' ? 0.85 : 1 }}
+                            animate={{ pathLength: phase === 'tracing' ? progress : (phase === 'peak' ? peakProgress : 1) }}
                             transition={{ 
-                                duration: phase === 'tracing' ? 2.5 : 0.3,
-                                ease: phase === 'tracing' ? "easeOut" : "easeInOut"
+                                duration: phase === 'reveal' ? 0.3 : 0,
+                                ease: "linear"
                             }}
                         />
-
-                        {/* Glowing dot that follows the line */}
-                        <motion.circle
-                            r="2"
-                            fill="#4ade80"
-                            filter="url(#glow)"
-                            initial={{ 
-                                cx: points[0].x, 
-                                cy: 100 - points[0].y,
-                                scale: 1
-                            }}
-                            animate={
-                                phase === 'tracing' ? {
-                                    cx: peakPoint.x,
-                                    cy: 100 - peakPoint.y,
-                                    scale: 1
-                                } : phase === 'peak' ? {
-                                    cx: peakPoint.x,
-                                    cy: 100 - peakPoint.y,
-                                    scale: [1, 2, 1.5]
-                                } : {
-                                    cx: peakPoint.x,
-                                    cy: 100 - peakPoint.y,
-                                    scale: 1.2
-                                }
-                            }
-                            transition={{ 
-                                duration: phase === 'tracing' ? 2.5 : 0.3,
-                                ease: "easeOut"
-                            }}
-                        />
-
-                        {/* Extra glow ring at peak */}
-                        <AnimatePresence>
-                            {(phase === 'peak' || phase === 'reveal') && (
-                                <motion.circle
-                                    cx={peakPoint.x}
-                                    cy={100 - peakPoint.y}
-                                    r="4"
-                                    fill="none"
-                                    stroke="#4ade80"
-                                    strokeWidth="0.5"
-                                    initial={{ scale: 0, opacity: 1 }}
-                                    animate={{ scale: 3, opacity: 0 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ duration: 0.8 }}
-                                />
-                            )}
-                        </AnimatePresence>
                     </svg>
 
-                    {/* Peak marker that appears on reveal */}
+                    {/* Glowing dot - positioned via DOM for proper following */}
+                    <motion.div
+                        className="absolute w-3 h-3 -ml-1.5 -mt-1.5 pointer-events-none z-10"
+                        style={{
+                            left: `${currentDotPos.x}%`,
+                            top: `${currentDotPos.y}%`,
+                        }}
+                    >
+                        <div 
+                            className="w-full h-full rounded-full bg-emerald-400"
+                            style={{ boxShadow: '0 0 12px 4px rgba(74, 222, 128, 0.6)' }}
+                        />
+                    </motion.div>
+
+                    {/* Radar-style pulse rings - at dot position, infinite during reveal */}
+                    {(phase === 'peak' || phase === 'reveal') && (
+                        <div
+                            className="absolute w-3 h-3 -ml-1.5 -mt-1.5 pointer-events-none z-0"
+                            style={{
+                                left: `${peakPoint.x}%`,
+                                top: `${100 - peakPoint.y}%`,
+                            }}
+                        >
+                            <motion.div
+                                className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
+                                initial={{ scale: 1, opacity: 0.8 }}
+                                animate={{ scale: 5, opacity: 0 }}
+                                transition={{ 
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeOut"
+                                }}
+                            />
+                            <motion.div
+                                className="absolute inset-0 rounded-full border border-emerald-400/60"
+                                initial={{ scale: 1, opacity: 0.6 }}
+                                animate={{ scale: 5, opacity: 0 }}
+                                transition={{ 
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                    delay: 0.4
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Peak marker */}
                     <motion.div
                         className="absolute pointer-events-none"
                         style={{ 
                             left: `${peakPoint.x}%`, 
                             top: `${100 - peakPoint.y}%`,
-                            transform: 'translate(-50%, -50%)'
                         }}
-                        initial={{ opacity: 0, scale: 0 }}
-                        animate={phase === 'reveal' ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0 }}
+                        initial={{ opacity: 0, scale: 0, y: 0 }}
+                        animate={phase === 'reveal' ? { opacity: 1, scale: 1, y: -50 } : { opacity: 0, scale: 0, y: 0 }}
                         transition={{ delay: 0.3, type: "spring", bounce: 0.4 }}
                     >
-                        <div className="relative">
-                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-md"
-                                style={{ boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)' }}>
-                                PEAK
-                            </div>
+                        <div 
+                            className="whitespace-nowrap bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-md -translate-x-1/2"
+                            style={{ boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)' }}
+                        >
+                            PEAK
                         </div>
                     </motion.div>
                 </div>
@@ -1057,7 +1094,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
 
             {/* Stats reveal section */}
             <motion.div
-                className="relative z-10 w-full"
+                className="relative z-10 w-full px-4 pb-4"
                 initial={{ opacity: 0, y: 40 }}
                 animate={phase === 'reveal' ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
                 transition={{ delay: 0.2, duration: 0.5 }}
@@ -1080,38 +1117,191 @@ function PrimeTimeSlide({ stats }: SlideProps) {
 }
 
 function SubjectsSlide({ stats }: SlideProps) {
-    return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
-            <h2 className="text-2xl font-bold mb-6">Top Subjects</h2>
+    const [phase, setPhase] = useState<'anticipation' | 'reveal3' | 'reveal2' | 'reveal1' | 'complete'>('anticipation');
+    
+    // Animation timeline: staggered reveal from #3 to #1
+    useEffect(() => {
+        const timers = [
+            setTimeout(() => setPhase('reveal3'), 400),
+            setTimeout(() => setPhase('reveal2'), 1000),
+            setTimeout(() => setPhase('reveal1'), 1600),
+            setTimeout(() => setPhase('complete'), 2400),
+        ];
+        return () => timers.forEach(clearTimeout);
+    }, []);
 
-            <div className="w-full max-w-[320px] space-y-3">
-                {stats.bestSubjects.map((subject, index) => (
+    const subjects = stats.bestSubjects.slice(0, 3);
+    const hasProgression = stats.bestProgression.value > 0;
+
+    // Podium heights for visual hierarchy
+    const podiumHeights = [140, 180, 110]; // #2, #1, #3
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center bg-[#0a0a0a] text-white relative overflow-hidden">
+            {/* Animated background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-amber-900/20 via-[#0a0a0a] to-orange-900/20"
+                animate={{ opacity: [0.4, 0.6, 0.4] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Spotlight effect on #1 position */}
+            <motion.div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[500px]"
+                style={{
+                    background: 'radial-gradient(ellipse at top, rgba(251, 191, 36, 0.12) 0%, transparent 60%)',
+                }}
+                initial={{ opacity: 0, scaleY: 0 }}
+                animate={phase === 'reveal1' || phase === 'complete' ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+            />
+
+            {/* Title */}
+            <motion.div
+                initial={{ opacity: 0, y: -30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                className="relative z-10 mb-6"
+            >
+                <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-300">
+                    Top Subjects
+                </h2>
+                <p className="text-sm text-zinc-500 mt-1">Your academic podium</p>
+            </motion.div>
+
+            {/* Podium container */}
+            <div className="relative z-10 flex items-end justify-center gap-2 w-full px-4 max-w-[360px]" style={{ height: '320px' }}>
+                {/* #2 - Left podium */}
+                <div className="flex flex-col items-center" style={{ width: '30%' }}>
+                    <AnimatePresence>
+                        {(phase === 'reveal2' || phase === 'reveal1' || phase === 'complete') && subjects[1] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                <div className="text-3xl font-black text-zinc-400 mb-1">2</div>
+                                <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
+                                    {subjects[1].name}
+                                </div>
+                                <motion.div 
+                                    className="text-base font-bold text-zinc-300"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    {subjects[1].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     <motion.div
-                        key={subject.name}
-                        initial={{ opacity: 0, x: -50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.2 + 0.2 }}
-                        className="bg-white/10 backdrop-blur-md rounded-xl p-3 flex justify-between items-center"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg w-5">#{index + 1}</span>
-                            <span className="text-base truncate max-w-[140px]">{subject.name}</span>
-                        </div>
-                        <span className="text-xl font-bold">{subject.value.toFixed(2)}</span>
-                    </motion.div>
-                ))}
+                        className="w-full rounded-t-lg bg-gradient-to-t from-zinc-700 to-zinc-600"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase !== 'anticipation' && phase !== 'reveal3' ? podiumHeights[0] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 0 20px rgba(161, 161, 170, 0.1)' }}
+                    />
+                </div>
+
+                {/* #1 - Center podium (tallest) */}
+                <div className="flex flex-col items-center" style={{ width: '36%' }}>
+                    <AnimatePresence>
+                        {(phase === 'reveal1' || phase === 'complete') && subjects[0] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                {/* Crown */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: -20, rotate: -10 }}
+                                    animate={{ opacity: 1, y: 0, rotate: 0 }}
+                                    transition={{ delay: 0.3, type: "spring", bounce: 0.5 }}
+                                    className="text-2xl"
+                                >
+                                    👑
+                                </motion.div>
+                                <div className="text-4xl font-black text-amber-400" style={{ textShadow: '0 0 20px rgba(251, 191, 36, 0.5)' }}>1</div>
+                                <div className="text-sm font-bold text-white truncate px-1 w-full">
+                                    {subjects[0].name}
+                                </div>
+                                <motion.div 
+                                    className="text-lg font-black text-amber-400"
+                                    initial={{ opacity: 0, scale: 0 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.4, type: "spring" }}
+                                    style={{ textShadow: '0 0 15px rgba(251, 191, 36, 0.4)' }}
+                                >
+                                    {subjects[0].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    <motion.div
+                        className="w-full rounded-t-lg bg-gradient-to-t from-amber-600 to-amber-500"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase === 'reveal1' || phase === 'complete' ? podiumHeights[1] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 0 40px rgba(251, 191, 36, 0.3)' }}
+                    />
+                </div>
+
+                {/* #3 - Right podium */}
+                <div className="flex flex-col items-center" style={{ width: '30%' }}>
+                    <AnimatePresence>
+                        {(phase !== 'anticipation') && subjects[2] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                <div className="text-2xl font-black text-orange-400 mb-1">3</div>
+                                <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
+                                    {subjects[2].name}
+                                </div>
+                                <motion.div 
+                                    className="text-base font-bold text-orange-400"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    {subjects[2].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    <motion.div
+                        className="w-full rounded-t-lg bg-gradient-to-t from-orange-800 to-orange-700"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase !== 'anticipation' ? podiumHeights[2] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px rgba(234, 88, 12, 0.15)' }}
+                    />
+                </div>
             </div>
 
-            {stats.bestProgression.value > 0 && (
+            {/* Best Progression - appears last */}
+            {hasProgression && (
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1 }}
-                    className="mt-6 p-3 bg-white/20 rounded-xl w-full max-w-[320px]"
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={phase === 'complete' ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 20, scale: 0.95 }}
+                    transition={{ delay: 0.3, duration: 0.5, ease: "easeOut" }}
+                    className="relative z-10 mt-8 flex items-center gap-3 px-4"
                 >
-                    <div className="text-xs uppercase tracking-wider mb-1">Best Comeback 🚀</div>
-                    <div className="font-bold text-lg">{stats.bestProgression.subject}</div>
-                    <div className="text-xs opacity-80">+{stats.bestProgression.value.toFixed(2)} pts improvement</div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shrink-0">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                        <div className="text-xs text-zinc-500 mb-0.5">Best Comeback</div>
+                        <div className="font-semibold text-white truncate">{stats.bestProgression.subject}</div>
+                    </div>
+                    <div className="text-lg font-bold text-emerald-400 shrink-0">
+                        +{stats.bestProgression.value.toFixed(2)}
+                    </div>
                 </motion.div>
             )}
         </div>
@@ -1552,9 +1742,35 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     };
 
     return (
-        <div className="flex flex-col items-center h-full text-center p-3 bg-[#0d1117] text-white overflow-hidden">
+        <div className="flex flex-col items-center h-full text-center p-3 bg-[#0d1117] text-white overflow-hidden relative">
+            {/* Animated background gradients */}
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.25) 0%, transparent 40%)',
+                }}
+                animate={{ opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 0% 60%, rgba(168, 85, 247, 0.2) 0%, transparent 35%)',
+                }}
+                animate={{ opacity: [0.4, 0.8, 0.4] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            />
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 100% 85%, rgba(59, 130, 246, 0.2) 0%, transparent 35%)',
+                }}
+                animate={{ opacity: [0.5, 0.9, 0.5] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+            />
+
             {/* Recap content to be captured */}
-            <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-3">
+            <div ref={recapRef} className="w-full h-full flex flex-col p-3 relative z-10">
                 {/* Header - sized for canonical viewport */}
                 <div className="flex items-center gap-2 w-full mb-3 shrink-0">
                     {userAvatar ? (
@@ -1737,7 +1953,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         { component: StatsSlide, duration: 6000 },
         { component: HeatmapSlide, duration: 6000 },
         { component: StreakSlide, duration: 3500 },
-        { component: PrimeTimeSlide, duration: 5000 },
+        { component: PrimeTimeSlide, duration: 7000 },
         { component: SubjectsSlide, duration: 5000 },
         { component: AwardIntroSlide, duration: 3000 },
         { component: AwardRevealSlide, duration: 6000 },
