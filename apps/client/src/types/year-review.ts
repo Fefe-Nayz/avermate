@@ -9,6 +9,15 @@ export type YearReviewStats = {
     bestProgression: { subject: string; value: number };
     topPercentile: number;
     average: number;
+    award: {
+        title: string;
+        icon: string;
+        description: string;
+        condition: string;
+        color: string;
+        bg: string;
+        gradient: string;
+    };
 };
 
 export type YearReviewResponse = {
