@@ -26,59 +26,52 @@ const MIN_MARGIN_BASE = 20; // Minimum margin in pixels at 100% zoom
 // (we use screen width to make this zoom-independent)
 const NAV_BUTTON_HIDE_THRESHOLD = 600;
 
-// Hook to calculate zoom level - works regardless of initial zoom level
+// Hook to calculate zoom level - cross-browser (Chrome + Firefox)
 function useZoomLevel() {
     const [zoom, setZoom] = useState(1);
 
     useEffect(() => {
         const updateZoom = () => {
-            // Method: Use screen.width vs window.innerWidth
-            // screen.width = physical screen width (constant)
-            // window.innerWidth = viewport width in CSS pixels (changes with zoom)
-            // At 100% zoom: innerWidth ≈ screen.width (minus browser chrome)
-            // At 200% zoom: innerWidth ≈ screen.width / 2
-            
             let detectedZoom = 1;
-            
-            if (window.screen && window.screen.width && window.innerWidth) {
-                // Calculate zoom: higher zoom = smaller innerWidth
-                // We need to account for browser chrome (toolbars, etc.)
-                // A reasonable assumption is that at 100% zoom, innerWidth is ~95-100% of screen.width
-                // So we normalize based on that
-                
-                const screenWidth = window.screen.width;
-                const innerWidth = window.innerWidth;
-                
-                // The raw ratio
-                const rawZoom = screenWidth / innerWidth;
-                
-                // Normalize: at 100% zoom on most setups, this ratio is ~1.0-1.1
-                // We assume if ratio is close to 1, that's 100% zoom
-                // This is imperfect but works well in practice
-                detectedZoom = rawZoom;
+
+            // Detect browser
+            const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('firefox');
+
+            if (isFirefox) {
+                // Firefox: Always use devicePixelRatio approach
+                // In Firefox, DPR changes directly with zoom: DPR = nativeDPR * zoomFactor
+                // 
+                // IMPORTANT: We cannot reliably distinguish between Retina displays and zoomed
+                // standard displays. For example, DPR=2 could be:
+                // - Standard display at 200% zoom
+                // - Retina display at 100% zoom
+                // 
+                // Any threshold we use to detect Retina will cause a "jump" when zoom crosses it.
+                // Therefore, we always assume nativeDPR = 1 (standard display).
+                // 
+                // Tradeoff: On Retina displays, buttons will be 2x the intended physical size,
+                // but at least zoom changes won't cause sudden jumps in button sizes.
+                const dpr = window.devicePixelRatio || 1;
+                detectedZoom = dpr; // nativeDPR = 1, so zoom = dpr / 1 = dpr
+            } else if (window.outerWidth && window.innerWidth && window.outerWidth > 0) {
+                // Chrome and other browsers: outerWidth/innerWidth works reliably
+                detectedZoom = window.outerWidth / window.innerWidth;
             }
-            
-            // Fallback/refinement using devicePixelRatio for subpixel accuracy
-            // devicePixelRatio changes with zoom on most browsers
-            const dpr = window.devicePixelRatio || 1;
-            // On a standard display at 100% zoom, dpr is 1
-            // On Retina at 100% zoom, dpr is 2
-            // We can use dpr changes relative to screen.deviceXDPI if available
-            
+
             // Clamp to reasonable values
             detectedZoom = Math.max(0.1, Math.min(10, detectedZoom));
-            
+
             setZoom(detectedZoom);
         };
 
         updateZoom();
         window.addEventListener('resize', updateZoom);
-        
-        // Also listen to visualViewport resize if available (for pinch zoom on mobile)
+
+        // Also listen to visualViewport resize if available
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateZoom);
         }
-        
+
         return () => {
             window.removeEventListener('resize', updateZoom);
             if (window.visualViewport) {
@@ -93,7 +86,7 @@ function useZoomLevel() {
 // Hook to calculate the complete layout with zoom compensation
 function useStoryLayout() {
     const zoom = useZoomLevel();
-    
+
     const [layout, setLayout] = useState({
         storyScale: 1,
         showNavButtons: true,
@@ -161,7 +154,7 @@ function useStoryLayout() {
 
         // Listen to resize events
         window.addEventListener('resize', updateLayout);
-        
+
         // Also use ResizeObserver for more reliable updates
         const resizeObserver = new ResizeObserver(updateLayout);
         resizeObserver.observe(document.body);
@@ -243,21 +236,22 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     className="relative mb-6"
                 >
                     {/* Animated rings - positioned outside the logo box */}
+                    {/* Using box-shadow instead of border for consistent rendering at different scales */}
                     <motion.div
-                        className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
-                        style={{ margin: -12 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -12, boxShadow: 'inset 0 0 0 2px rgba(52, 211, 153, 0.5)' }}
                         animate={{ scale: [1.15, 1.30, 1.15], opacity: [0.6, 0, 0.6] }}
                         transition={{ duration: 2, repeat: Infinity }}
                     />
                     <motion.div
-                        className="absolute inset-0 rounded-full border border-cyan-400/40"
-                        style={{ margin: -20 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -20, boxShadow: 'inset 0 0 0 1px rgba(34, 211, 238, 0.4)' }}
                         animate={{ scale: [1.2, 1.4, 1.2], opacity: [0.4, 0, 0.4] }}
                         transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
                     />
                     <motion.div
-                        className="absolute inset-0 rounded-full border border-teal-400/20"
-                        style={{ margin: -28 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -28, boxShadow: 'inset 0 0 0 1px rgba(45, 212, 191, 0.2)' }}
                         animate={{ scale: [1.25, 1.5, 1.25], opacity: [0.2, 0, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity, delay: 0.6 }}
                     />
@@ -272,7 +266,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                         </div>
                     ) : (
                         <div className="w-20 h-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                                <div className="w-full h-full rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                            <div className="w-full h-full rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
                                 <img
                                     src="/logo.svg"
                                     alt="Avermate"
@@ -386,7 +380,7 @@ function StatsSlide({ stats }: SlideProps) {
                         Grades
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
                         {/* Growing Fill */}
                         <motion.div
                             initial={{ height: "0%" }}
@@ -415,7 +409,7 @@ function StatsSlide({ stats }: SlideProps) {
                         Points
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={zoomOut ? { height: "75%" } : { height: "0%" }}
@@ -531,9 +525,9 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
             >
                 <div className="flex items-center justify-center gap-3">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full border-2 border-white/20 object-cover" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }} />
                     ) : (
-                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/20">
+                        <div className="w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }}>
                             <div className="w-full h-full bg-gradient-to-br from-[#3e61d2] to-blue-500" />
                         </div>
                     )}
@@ -555,7 +549,8 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     ? { duration: 0.6, type: "spring", bounce: 0.1 }
                     : { duration: 2, ease: [0.25, 0.8, 0.25, 1] } // Custom cubic bezier (easeOutQuad style)
                 }
-                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-3 rounded-xl border border-white/10 shadow-2xl relative z-10"
+                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-3 rounded-xl shadow-2xl relative z-10"
+                style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
             >
                 <div className="w-full">
                     <div className="flex gap-[1px] w-full">
@@ -570,11 +565,12 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                                         className={cn(
                                             "w-full aspect-square rounded-[1px]",
                                             !day ? "bg-transparent" :
-                                                day.count === 0 ? "bg-[#161b22] border border-white/5" :
+                                                day.count === 0 ? "bg-[#161b22]" :
                                                     day.count === 1 ? "bg-[#1d2d60]" :
                                                         day.count <= 3 ? "bg-[#2d4696]" :
                                                             "bg-[#3e61d2]"
                                         )}
+                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.05)' } : undefined}
                                     />
                                 ))}
                             </div>
@@ -649,7 +645,8 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2 }}
-                className="bg-white/20 backdrop-blur-lg rounded-full w-36 h-36 flex flex-col items-center justify-center mb-4 border-4 border-white/30"
+                className="bg-white/20 backdrop-blur-lg rounded-full w-36 h-36 flex flex-col items-center justify-center mb-4"
+                style={{ boxShadow: 'inset 0 0 0 4px rgba(255, 255, 255, 0.3)' }}
             >
                 <span className="text-3xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
                 <span className="text-xs">/20</span>
@@ -707,17 +704,47 @@ function SubjectsSlide({ stats }: SlideProps) {
 }
 
 function PercentileSlide({ stats }: SlideProps) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(null);
+
     useEffect(() => {
-        confetti({
-            particleCount: 150,
-            spread: 90,
-            origin: { y: 0.6 },
-            colors: ['#ffffff', '#fbbf24']
-        });
+        // Create a confetti instance bound to our canvas inside the story
+        if (canvasRef.current && !confettiInstanceRef.current) {
+            confettiInstanceRef.current = confetti.create(canvasRef.current, {
+                resize: false, // Don't auto-resize - we want fixed canonical dimensions
+                useWorker: true,
+            });
+        }
+
+        // Fire confetti from the canvas (which is inside the story and scales with it)
+        if (confettiInstanceRef.current) {
+            confettiInstanceRef.current({
+                particleCount: 150,
+                spread: 90,
+                origin: { x: 0.5, y: 0.6 }, // Relative to the canvas (story container)
+                colors: ['#ffffff', '#fbbf24']
+            });
+        }
+
+        return () => {
+            // Clean up confetti instance
+            if (confettiInstanceRef.current) {
+                confettiInstanceRef.current.reset();
+            }
+        };
     }, []);
 
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-black text-white relative overflow-hidden">
+            {/* Confetti canvas - fixed to canonical dimensions, CSS stretches to fill container */}
+            <canvas
+                ref={canvasRef}
+                width={CANONICAL_WIDTH}
+                height={CANONICAL_HEIGHT}
+                className="absolute inset-0 pointer-events-none z-20"
+                style={{ width: '100%', height: '100%' }}
+            />
+
             {/* Background gradient */}
             <div className="absolute inset-0 bg-gradient-to-tr from-purple-900 via-black to-indigo-900 opacity-60" />
 
@@ -726,7 +753,8 @@ function PercentileSlide({ stats }: SlideProps) {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full border border-yellow-500/40 text-yellow-300 mb-6"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full text-yellow-300 mb-6"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.4)' }}
                 >
                     <Trophy className="w-3 h-3" />
                     <span className="font-bold text-xs uppercase tracking-wider">Legendary Status</span>
@@ -763,10 +791,14 @@ function PercentileSlide({ stats }: SlideProps) {
 }
 
 // Stats Card Component - sized for canonical 390x844 viewport
+// Using box-shadow instead of border for consistent rendering at different scales
 function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className, ...props }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string } & React.ComponentProps<typeof motion.div>) {
     return (
         <motion.div
-            className={cn("bg-[#161b22] border border-white/10 rounded-lg p-2.5 flex flex-col items-start h-full", className)}
+            className={cn("bg-[#161b22] rounded-lg p-2.5 flex flex-col items-start h-full", className)}
+            style={{
+                boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)',
+            }}
             {...props}
         >
             <div className="flex items-center gap-1.5 mb-0.5">
@@ -921,7 +953,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 {/* Header - sized for canonical viewport */}
                 <div className="flex items-center gap-2 w-full mb-3 shrink-0">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }} />
                     ) : (
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-base">
                             {year.slice(-2)}
@@ -934,7 +966,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 </div>
 
                 {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
-                <div className="w-full bg-[#161b22] border border-white/10 rounded-xl p-3 mb-3 shrink-0">
+                <div className="w-full bg-[#161b22] rounded-xl p-3 mb-3 shrink-0" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
                     <div className="w-full">
                         <div
                             className="flex gap-[1px] w-full"
@@ -1026,8 +1058,10 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                     />
 
                     {/* Award Card - sized for canonical viewport */}
+                    {/* Using inline box-shadow instead of border class for consistent rendering */}
                     <motion.div
-                        className={cn("col-span-2 rounded-lg p-3 flex items-center justify-between border", award.bg)}
+                        className={cn("col-span-2 rounded-lg p-3 flex items-center justify-between", award.bg.replace(/border-[a-z]+-[0-9]+\/[0-9]+/g, ''))}
+                        style={{ boxShadow: `inset 0 0 0 1px ${award.color.includes('yellow') ? 'rgba(234, 179, 8, 0.2)' : award.color.includes('red') ? 'rgba(239, 68, 68, 0.2)' : award.color.includes('orange') ? 'rgba(249, 115, 22, 0.2)' : award.color.includes('green') ? 'rgba(34, 197, 94, 0.2)' : award.color.includes('purple') ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)'}` }}
                         variants={item}
                     >
                         <div className="flex flex-col items-start text-left">
@@ -1060,7 +1094,8 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                 <Button
                     variant="outline"
-                    className="flex-1 border-white/20 bg-[#21262d] hover:bg-[#30363d] text-white h-10 rounded-lg text-sm"
+                    className="flex-1 border-none bg-[#21262d] hover:bg-[#30363d] text-white h-10 rounded-lg text-sm"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)' }}
                     onClick={(e) => {
                         e.stopPropagation();
                         onClose();
@@ -1083,7 +1118,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
     const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    
+
     // Get the complete layout with zoom compensation
     const layout = useStoryLayout();
 
@@ -1266,10 +1301,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
     if (!isOpen) return null;
 
-    const { 
-        storyScale, 
-        showNavButtons, 
-        storyWidth, 
+    const {
+        storyScale,
+        showNavButtons,
+        storyWidth,
         storyHeight,
         navButtonSize,
         closeButtonSize,
@@ -1286,7 +1321,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                 - Button sizes are zoom-compensated to appear constant physical size
                 - Story scales to fill available space after margins/buttons
             */}
-            
+
             {/* Close Button - positioned at top-right of story, zoom-compensated size */}
             <button
                 onClick={onClose}
@@ -1355,6 +1390,9 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                     // Additional GPU hints to prevent subpixel border artifacts
                     willChange: 'transform',
                     backfaceVisibility: 'hidden',
+                    // CSS variable for inverse scale - used by child elements to counter-scale borders
+                    // @ts-ignore - CSS custom property
+                    '--border-scale': 1 / storyScale,
                 }}
                 onClick={handleClick}
             >
