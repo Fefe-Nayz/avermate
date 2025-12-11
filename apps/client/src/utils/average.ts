@@ -4,6 +4,7 @@ import { startOfDay } from "date-fns";
 import { Average } from "@/types/average";
 import { Grade } from "@/types/grade";
 import { Year } from "@/types/year";
+import { YearReviewStats, AwardType } from "@/types/year-review";
 
 /**
  * Calculates the average score for a specific subject or overall.
@@ -2520,6 +2521,104 @@ export function calculateStreak(
   return streak;
 }
 
+/**
+ * Calculates the longest streak of consecutive grades that contributed to an increasing average.
+ * Unlike calculateStreak which returns the current streak, this function tracks the streak
+ * over time and returns the maximum streak ever achieved.
+ *
+ * @param subjects - An array of all subjects.
+ * @param options - Optional parameters to specify the scope of the streak calculation.
+ * @returns The longest streak achieved as a number.
+ */
+export function calculateLongestStreak(
+  subjects: Subject[],
+  options?: {
+    subjectId?: string;
+    customAverage?: Average;
+  }
+): number {
+  let relevantGrades: { date: Date; value: number; coefficient?: number }[] = [];
+
+  // **Mode 1: Specific Subject Streak**
+  if (options?.subjectId) {
+    const subject = subjects.find((s) => s.id === options.subjectId);
+    if (!subject) {
+      console.warn(`Subject with ID ${options.subjectId} not found.`);
+      return 0;
+    }
+
+    relevantGrades = subject.grades.map((grade) => ({
+      date: new Date(grade.passedAt),
+      value: (grade.value / grade.outOf) * 100,
+      coefficient: grade.coefficient,
+    }));
+  }
+  // **Mode 2: Custom Streak**
+  else if (options?.customAverage) {
+    const customConfig = buildCustomConfig(options.customAverage);
+    const includedSubjects = subjects.filter((s) => isSubjectIncludedInCustomAverage(s, subjects, customConfig));
+
+    includedSubjects.forEach((subject) => {
+      subject.grades.forEach((grade) => {
+        const percentage = (grade.value / grade.outOf) * 100;
+        const coefficient = (grade.coefficient ?? 100) / 100;
+        relevantGrades.push({
+          date: new Date(grade.passedAt),
+          value: percentage * coefficient,
+          coefficient: grade.coefficient,
+        });
+      });
+    });
+  }
+  // **Mode 3: Global Streak**
+  else {
+    subjects.forEach((subject) => {
+      subject.grades.forEach((grade) => {
+        const percentage = (grade.value / grade.outOf) * 100;
+        const coefficient = (grade.coefficient ?? 100) / 100;
+        relevantGrades.push({
+          date: new Date(grade.passedAt),
+          value: percentage * coefficient,
+          coefficient: grade.coefficient,
+        });
+      });
+    });
+  }
+
+  // **Sort Grades Chronologically**
+  relevantGrades.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  let currentStreak = 0;
+  let longestStreak = 0;
+  let previousAverage: number | null = null;
+
+  relevantGrades.forEach((grade) => {
+    if (previousAverage === null) {
+      previousAverage = grade.value;
+      currentStreak = 1;
+      longestStreak = 1;
+      return;
+    }
+
+    const newAverage = (previousAverage + grade.value) / 2;
+
+    if (newAverage > previousAverage) {
+      currentStreak += 1;
+    } else if (newAverage < previousAverage) {
+      currentStreak = Math.max(currentStreak - 1, 0);
+    }
+
+    // Track the longest streak ever achieved
+    if (currentStreak > longestStreak) {
+      longestStreak = currentStreak;
+    }
+
+    previousAverage = newAverage;
+  });
+
+  return longestStreak;
+}
+
 export function buildVirtualSubject(
   average: Average | null,
   subjects: Subject[]
@@ -2619,4 +2718,353 @@ export function addGeneralAverageToSubjects(
   });
 
   return [buildVirtualSubject(customAverage, subjects), ...modifiedSubjects];
+}
+
+// ============================================================================
+// Year Review Calculation Functions
+// ============================================================================
+
+/**
+ * Calculates all year review statistics from subjects data.
+ * Uses existing utility functions from this file where possible.
+ * 
+ * @param subjects - Array of subjects with grades
+ * @param topPercentile - The percentile from server (requires all users data)
+ * @param yearStartDate - The start date of the school year
+ * @param yearEndDate - The end date of the school year
+ * @returns Complete year review stats object
+ */
+export function calculateYearReviewStats(
+  subjects: Subject[],
+  topPercentile: number,
+  yearStartDate: Date,
+  yearEndDate: Date
+): YearReviewStats {
+  // Collect all grades from all subjects
+  const allGrades = subjects.flatMap(subject =>
+    subject.grades.map(grade => ({
+      ...grade,
+      subjectId: subject.id,
+      subjectName: subject.name
+    }))
+  );
+
+  // Sort grades by passedAt date
+  const sortedGrades = [...allGrades].sort(
+    (a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime()
+  );
+
+  // 1. Number of entered grades
+  const gradesCount = allGrades.length;
+
+  // 2. Grades sum (normalized to 20)
+  const gradesSum = allGrades.reduce((acc, g) => {
+    const gradeVal = (g.value / g.outOf) * 20;
+    return acc + gradeVal;
+  }, 0);
+
+  // 3. Heatmap, Most Active Month & Most Active Day
+  const { heatmap, mostActiveMonth, mostActiveDay } = calculateActivityStats(allGrades);
+
+  // 4. Longest streak - use calculateLongestStreak to get the best streak achieved
+  const longestStreak = calculateLongestStreak(subjects);
+
+  // 5. Prime Time - use averageOverTime and find peak
+  const primeTime = calculatePrimeTimeFromAverageOverTime(subjects, yearStartDate, yearEndDate);
+
+  // 6. Best subjects - use existing getSubjectAverages function
+  const bestSubjects = calculateBestSubjectsFromAverages(subjects);
+
+  // 7. Best progression - compare first grade average to final average for each subject
+  const bestProgression = calculateBestComebackFromAverages(subjects);
+
+  // 8. Global average using existing average function
+  const avgValue = average(undefined, subjects) ?? 0;
+
+  // 9. Award type - uses existing functions internally
+  const awardType = calculateAwardType(subjects, avgValue, gradesCount, sortedGrades);
+
+  return {
+    gradesCount,
+    gradesSum,
+    heatmap,
+    mostActiveMonth,
+    mostActiveDay,
+    longestStreak,
+    primeTime,
+    bestSubjects,
+    bestProgression,
+    topPercentile,
+    average: avgValue,
+    awardType,
+  };
+}
+
+/**
+ * Calculates activity statistics: heatmap, most active month, and most active day
+ */
+function calculateActivityStats(grades: Array<{ passedAt: string }>) {
+  const heatmap: Record<string, number> = {};
+  const monthlyActivity: Record<string, number> = {};
+  const dailyActivity: Record<string, number> = {};
+
+  grades.forEach((g) => {
+    const date = new Date(g.passedAt);
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const monthStr = date.toLocaleString('default', { month: 'long' });
+    const dayStr = date.toLocaleString('default', { weekday: 'long' });
+
+    heatmap[dateStr] = (heatmap[dateStr] || 0) + 1;
+    monthlyActivity[monthStr] = (monthlyActivity[monthStr] || 0) + 1;
+    dailyActivity[dayStr] = (dailyActivity[dayStr] || 0) + 1;
+  });
+
+  let mostActiveMonth = { month: "", count: 0 };
+  Object.entries(monthlyActivity).forEach(([month, count]) => {
+    if (count > mostActiveMonth.count) {
+      mostActiveMonth = { month, count };
+    }
+  });
+
+  let mostActiveDay = { day: "", count: 0 };
+  Object.entries(dailyActivity).forEach(([day, count]) => {
+    if (count > mostActiveDay.count) {
+      mostActiveDay = { day, count };
+    }
+  });
+
+  return { heatmap, mostActiveMonth, mostActiveDay };
+}
+
+/**
+ * Calculate prime time (peak average moment) using averageOverTime function
+ * Creates a full-year period and finds the date with the highest average
+ */
+function calculatePrimeTimeFromAverageOverTime(
+  subjects: Subject[],
+  yearStartDate: Date,
+  yearEndDate: Date
+): { date: string; value: number } {
+  // Create a full-year period for averageOverTime
+  const fullYearPeriod: Period = {
+    id: "full-year",
+    name: "Full Year",
+    startAt: yearStartDate.toISOString(),
+    endAt: yearEndDate.toISOString(),
+    createdAt: new Date().toISOString(),
+    userId: "",
+    isCumulative: false,
+    yearId: "",
+  };
+
+  // Get average over time for the full year (global average)
+  const averages = averageOverTime(subjects, undefined, fullYearPeriod, [fullYearPeriod]);
+
+  // Generate date range to match averages array
+  const normalizedEndDate = new Date(yearEndDate).getTime() > Date.now()
+    ? startOfDay(new Date())
+    : startOfDay(yearEndDate);
+  const dates = createDateRange(startOfDay(yearStartDate), normalizedEndDate, 1);
+
+  // Find the date with the highest average
+  let primeTime = { date: new Date().toISOString(), value: 0 };
+
+  averages.forEach((avg, index) => {
+    if (avg !== null && avg > primeTime.value) {
+      primeTime = {
+        date: dates[index]?.toISOString() ?? new Date().toISOString(),
+        value: avg,
+      };
+    }
+  });
+
+  return primeTime;
+}
+
+/**
+ * Get best subjects using existing getSubjectAverages function
+ */
+function calculateBestSubjectsFromAverages(subjects: Subject[]): { name: string; value: number }[] {
+  const subjectAverages = getSubjectAverages(subjects);
+
+  // Sort by average descending, then by coefficient descending for ties
+  const sorted = [...subjectAverages].sort((a, b) => {
+    if (b.average !== a.average) return b.average - a.average;
+    const subjA = subjects.find(s => s.id === a.id);
+    const subjB = subjects.find(s => s.id === b.id);
+    return (subjB?.coefficient ?? 100) - (subjA?.coefficient ?? 100);
+  });
+
+  return sorted.slice(0, 3).map((entry) => {
+    const subj = subjects.find(s => s.id === entry.id);
+    return {
+      name: subj?.name ?? "Unknown",
+      value: entry.average,
+    };
+  });
+}
+
+/**
+ * Calculate best comeback: for each subject, compare the average after the first grade
+ * to the final average, and pick the subject with the biggest positive difference
+ */
+function calculateBestComebackFromAverages(subjects: Subject[]): { subject: string; value: number } {
+  let bestComeback = { subject: "", value: -Infinity };
+
+  subjects.forEach((subj) => {
+    // Need at least 2 grades to have a comeback
+    if (subj.grades.length < 2) return;
+
+    // Sort grades by date
+    const sortedGrades = [...subj.grades].sort(
+      (a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime()
+    );
+
+    // Calculate average after just the first grade (which is the first grade itself normalized)
+    const firstGrade = sortedGrades[0];
+    const firstAverage = (firstGrade.value / firstGrade.outOf) * 20;
+
+    // Calculate final average for this subject (using the proper average function)
+    const finalAverage = average(subj.id, subjects);
+
+    if (finalAverage === null) return;
+
+    // Calculate the difference (comeback = improvement from start to end)
+    const diff = finalAverage - firstAverage;
+
+    if (diff > bestComeback.value) {
+      bestComeback = { subject: subj.name, value: diff };
+    }
+  });
+
+  if (bestComeback.value === -Infinity || bestComeback.value <= 0) {
+    bestComeback = { subject: "N/A", value: 0 };
+  }
+
+  return bestComeback;
+}
+
+/**
+ * Calculates the average for the first month of grades using the proper average function.
+ * Creates a filtered copy of subjects with only grades from the first month.
+ */
+function calculateFirstMonthAverage(
+  subjects: Subject[],
+  sortedGrades: Array<{ passedAt: string }>
+): number {
+  if (sortedGrades.length === 0) return 0;
+
+  const firstDate = new Date(sortedGrades[0].passedAt);
+  const oneMonthLater = new Date(firstDate);
+  oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+
+  // Create a filtered copy of subjects with only grades from the first month
+  const filteredSubjects: Subject[] = subjects.map((subject) => ({
+    ...subject,
+    grades: subject.grades.filter((grade) => {
+      const gradeDate = new Date(grade.passedAt);
+      return gradeDate <= oneMonthLater;
+    }),
+  }));
+
+  // Filter out subjects with no grades in the first month
+  const subjectsWithGrades = filteredSubjects.filter((s) => s.grades.length > 0);
+
+  if (subjectsWithGrades.length === 0) return 0;
+
+  // Use the average function to calculate the global average
+  const firstMonthAvg = average(undefined, subjectsWithGrades);
+  return firstMonthAvg ?? 0;
+}
+
+/**
+ * Determines the award type based on various metrics.
+ * Uses existing functions where possible.
+ */
+function calculateAwardType(
+  subjects: Subject[],
+  avgValue: number,
+  gradesCount: number,
+  sortedGrades: Array<{ value: number; outOf: number; coefficient: number; passedAt: string }>
+): AwardType {
+  // Count grades under 8/20
+  let gradesUnder8Count = 0;
+  sortedGrades.forEach((g) => {
+    const gradeVal = (g.value / g.outOf) * 20;
+    if (gradeVal < 8) gradesUnder8Count++;
+  });
+
+  // Calculate first month average using the proper average function
+  // Filter subjects to only include grades from the first month
+  const firstMonthAverage = calculateFirstMonthAverage(subjects, sortedGrades);
+
+  // Use existing getBestSubject and getWorstSubject functions
+  const bestSubject = getBestSubject(subjects);
+  const worstSubject = getWorstSubject(subjects);
+
+  const bestAvg = bestSubject ? (average(bestSubject.id, subjects) ?? 0) : 0;
+  const worstAvg = worstSubject ? (average(worstSubject.id, subjects) ?? 0) : 0;
+
+  // Use existing getGradeStandardDeviation for consistency analysis
+  const stdDevMap = getGradeStandardDeviation(subjects);
+  let stdDevHighCount = 0;
+  let stdDevLowCount = 0;
+  let totalSubjectsWithGrades = 0;
+
+  stdDevMap.forEach((stdDev) => {
+    if (stdDev !== null) {
+      totalSubjectsWithGrades++;
+      if (stdDev > 4) stdDevHighCount++;
+      if (stdDev < 2) stdDevLowCount++;
+    }
+  });
+
+  // Determine Award
+  if (avgValue >= 10 && avgValue <= 11 && gradesUnder8Count >= 3) {
+    return "tightrope";
+  } else if (firstMonthAverage > 0 && avgValue > firstMonthAverage + 2) {
+    return "comeback";
+  } else if (bestAvg - worstAvg > 5) {
+    return "allin";
+  } else if (avgValue > 15) {
+    return "masterclass";
+  } else if (totalSubjectsWithGrades > 0 && (stdDevHighCount / totalSubjectsWithGrades >= 0.25)) {
+    return "unpredictable";
+  } else if (totalSubjectsWithGrades > 0 && (stdDevLowCount / totalSubjectsWithGrades >= 0.5)) {
+    return "precision";
+  } else if (gradesCount >= 40) {
+    return "legend";
+  } else if (gradesCount >= 15) {
+    return "avermatien";
+  }
+
+  return "tourist";
+}
+
+/**
+ * Generates a heatmap for a date range (from year start to current day)
+ * Used for dynamic heatmap display in year review
+ */
+export function generateDynamicHeatmap(
+  heatmap: Record<string, number>,
+  yearStartDate: Date,
+  currentDate: Date = new Date()
+): { date: string; count: number }[] {
+  const result: { date: string; count: number }[] = [];
+  const current = new Date(yearStartDate);
+  current.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(currentDate);
+  endDate.setHours(23, 59, 59, 999);
+
+  while (current <= endDate) {
+    const dateStr = current.toISOString().split('T')[0];
+    result.push({
+      date: dateStr,
+      count: heatmap[dateStr] || 0
+    });
+    current.setDate(current.getDate() + 1);
+  }
+
+  return result;
 }

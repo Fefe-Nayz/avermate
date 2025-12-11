@@ -28,6 +28,8 @@ export function YearReviewTrigger() {
 
     const activeYear = years?.find(y => y.id === activeId);
     const yearLabel = activeYear ? activeYear.name : new Date().getFullYear().toString();
+    const yearStartDate = activeYear ? new Date(activeYear.startDate) : undefined;
+    const yearEndDate = activeYear ? new Date(activeYear.endDate) : undefined;
 
     const userName = session?.user?.name || undefined;
     const userAvatar = session?.user?.image || undefined;
@@ -114,6 +116,8 @@ export function YearReviewTrigger() {
                 onClose={() => setIsOpen(false)}
                 stats={reviewData.stats}
                 year={yearLabel}
+                yearStartDate={yearStartDate}
+                yearEndDate={yearEndDate}
                 userName={userName}
                 userAvatar={userAvatar}
             />
@@ -132,6 +136,8 @@ export function YearReviewSection() {
 
     const activeYear = years?.find(y => y.id === activeId);
     const yearLabel = activeYear ? activeYear.name : "";
+    const yearStartDate = activeYear ? new Date(activeYear.startDate) : undefined;
+    const yearEndDate = activeYear ? new Date(activeYear.endDate) : undefined;
 
     const userName = session?.user?.name || undefined;
     const userAvatar = session?.user?.image || undefined;
@@ -175,6 +181,8 @@ export function YearReviewSection() {
                 onClose={() => setIsOpen(false)}
                 stats={reviewData.stats}
                 year={yearLabel}
+                yearStartDate={yearStartDate}
+                yearEndDate={yearEndDate}
                 userName={userName}
                 userAvatar={userAvatar}
             />

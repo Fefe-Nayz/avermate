@@ -247,6 +247,8 @@ function AmbilightWrapper({
 interface SlideProps {
     stats: YearReviewStats;
     year: string;
+    yearStartDate?: Date;
+    yearEndDate?: Date;
     onClose: () => void;
     userName?: string;
     userAvatar?: string;
@@ -257,6 +259,8 @@ interface SlideProps {
 interface YearReviewStoryProps {
     stats: YearReviewStats;
     year: string;
+    yearStartDate?: Date;
+    yearEndDate?: Date;
     onClose: () => void;
     userName?: string;
     userAvatar?: string;
@@ -600,18 +604,28 @@ function StatsSlide({ stats, t }: SlideProps) {
     );
 }
 
-function HeatmapSlide({ stats, year, userName, userAvatar, t }: SlideProps) {
+function HeatmapSlide({ stats, year, yearStartDate, yearEndDate, userName, userAvatar, t }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
 
     const days = useMemo(() => {
         const result = [];
-        const yearNum = parseInt(year);
-        const targetYear = isNaN(yearNum) ? new Date().getFullYear() : yearNum;
-
-        const startDate = new Date(targetYear, 0, 1);
         const now = new Date();
-        const isCurrentYear = now.getFullYear() === targetYear;
-        const endDate = isCurrentYear ? now : new Date(targetYear, 11, 31);
+
+        // Use provided year dates or fall back to parsing year name
+        let startDate: Date;
+        let endDate: Date;
+
+        if (yearStartDate && yearEndDate) {
+            startDate = new Date(yearStartDate);
+            // End date is either the year end date or current date, whichever is earlier
+            endDate = new Date(Math.min(new Date(yearEndDate).getTime(), now.getTime()));
+        } else {
+            const yearNum = parseInt(year);
+            const targetYear = isNaN(yearNum) ? now.getFullYear() : yearNum;
+            startDate = new Date(targetYear, 0, 1);
+            const isCurrentYear = now.getFullYear() === targetYear;
+            endDate = isCurrentYear ? now : new Date(targetYear, 11, 31);
+        }
 
         const currentDate = new Date(startDate);
 
@@ -626,7 +640,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar, t }: SlideProps) {
             currentDate.setDate(currentDate.getDate() + 1);
         }
         return result;
-    }, [stats.heatmap, year]);
+    }, [stats.heatmap, year, yearStartDate, yearEndDate]);
 
     const weeks = useMemo(() => {
         const w: (typeof days[0] | null)[][] = [];
@@ -2024,7 +2038,7 @@ function AwardRevealSlide({ stats, t }: SlideProps) {
     );
 }
 
-function OutroSlide({ year, stats, onClose, userName, userAvatar, t }: SlideProps) {
+function OutroSlide({ year, yearStartDate, yearEndDate, stats, onClose, userName, userAvatar, t }: SlideProps) {
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
@@ -2033,13 +2047,22 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar, t }: SlideProp
 
     const weeks = useMemo(() => {
         const result = [];
-        const yearNum = parseInt(year);
-        const targetYear = isNaN(yearNum) ? new Date().getFullYear() : yearNum;
-
-        const startDate = new Date(targetYear, 0, 1);
         const now = new Date();
-        const isCurrentYear = now.getFullYear() === targetYear;
-        const endDate = isCurrentYear ? now : new Date(targetYear, 11, 31);
+
+        // Use provided year dates or fall back to parsing year name
+        let startDate: Date;
+        let endDate: Date;
+
+        if (yearStartDate && yearEndDate) {
+            startDate = new Date(yearStartDate);
+            endDate = new Date(Math.min(new Date(yearEndDate).getTime(), now.getTime()));
+        } else {
+            const yearNum = parseInt(year);
+            const targetYear = isNaN(yearNum) ? now.getFullYear() : yearNum;
+            startDate = new Date(targetYear, 0, 1);
+            const isCurrentYear = now.getFullYear() === targetYear;
+            endDate = isCurrentYear ? now : new Date(targetYear, 11, 31);
+        }
 
         const currentDate = new Date(startDate);
         const days = [];
@@ -2081,7 +2104,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar, t }: SlideProp
         }
 
         return w;
-    }, [stats.heatmap, year]);
+    }, [stats.heatmap, year, yearStartDate, yearEndDate]);
 
     const handleShare = async () => {
         if (!recapRef.current || isSharing) return;
@@ -2341,7 +2364,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar, t }: SlideProp
 }
 
 // ... Main Story Component ... (keep as is)
-export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAvatar }: YearReviewStoryProps) {
+export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpen, onClose, userName, userAvatar }: YearReviewStoryProps) {
     const t = useTranslations("YearReview");
     const [currentSlide, setCurrentSlide] = useState(0);
     const [paused, setPaused] = useState(false);
@@ -2737,6 +2760,8 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                                     <CurrentComponent
                                         stats={stats}
                                         year={year}
+                                        yearStartDate={yearStartDate}
+                                        yearEndDate={yearEndDate}
                                         onClose={onClose}
                                         userName={userName}
                                         userAvatar={userAvatar}

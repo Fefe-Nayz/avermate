@@ -24,6 +24,7 @@ export type YearReviewStats = {
     gradesSum: number;
     heatmap: Record<string, number>;
     mostActiveMonth: { month: string; count: number };
+    mostActiveDay: { day: string; count: number };
     longestStreak: number;
     primeTime: { date: string; value: number };
     bestSubjects: { name: string; value: number }[];
@@ -33,6 +34,13 @@ export type YearReviewStats = {
     awardType: AwardType;
 };
 
+// Server only returns percentile (requires data from all users)
+export type YearReviewServerResponse = {
+    hasData: boolean;
+    topPercentile: number;
+};
+
+// Full response with client-calculated stats
 export type YearReviewResponse = {
     hasData: boolean;
     stats?: YearReviewStats;
