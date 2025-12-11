@@ -2,13 +2,14 @@
 
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target, Scale, RefreshCcw, Dices, Shuffle, Crosshair, Gem, UserCheck, Plane } from "lucide-react";
-import { YearReviewStats } from "@/types/year-review";
+import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target, Scale, RefreshCcw, Dices, Shuffle, Crosshair, Gem, UserCheck, Plane, Volume2, VolumeX } from "lucide-react";
+import { YearReviewStats, Award as AwardData, AwardType } from "@/types/year-review";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
-import html2canvas from "html2canvas-pro";
+import { toPng } from "html-to-image";
 import LightPillar from "@/components/LightPillar";
+import { useTranslations } from "next-intl";
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
@@ -17,7 +18,7 @@ const CANONICAL_HEIGHT = 693;
 const STORY_ASPECT_RATIO = CANONICAL_WIDTH / CANONICAL_HEIGHT;
 
 // Furniture sizes at 100% zoom (in CSS pixels at zoom=1)
-const NAV_BUTTON_SIZE_BASE = 48;
+const NAV_BUTTON_SIZE_BASE = 70;
 const CLOSE_BUTTON_SIZE_BASE = 32;
 const BUTTON_GAP_BASE = 16;
 const CLOSE_BUTTON_GAP_BASE = 12;
@@ -169,6 +170,78 @@ function useStoryLayout() {
     return layout;
 }
 
+// Animated Music Icon Component
+function MusicBarsIcon({ isMuted, className }: { isMuted: boolean; className?: string }) {
+    return (
+        <div className={cn("flex items-end justify-center gap-[2px] h-4 w-4", className)}>
+            {[0, 1, 2].map((i) => (
+                <motion.div
+                    key={i}
+                    className="w-1 bg-current rounded-full"
+                    animate={isMuted ? { height: 4 } : {
+                        height: [8, 14, 8, 12, 8],
+                    }}
+                    transition={isMuted ? { duration: 0.2 } : {
+                        duration: 0.6 + i * 0.1,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: i * 0.15,
+                    }}
+                    style={{ minHeight: 4 }}
+                />
+            ))}
+        </div>
+    );
+}
+
+// Ambilight Canvas Component - YouTube-style ambient glow
+// CSS-based Ambilight effect that works with any DOM element
+// Creates a blurred, scaled-up clone of the story behind it
+function AmbilightWrapper({
+    children,
+    storyScale,
+}: {
+    children: React.ReactNode;
+    storyScale: number;
+}) {
+    // Ambilight settings - increased for more dramatic glow
+    const BLUR_AMOUNT = 100; // px - increased from 80
+    const GLOW_SCALE = 1.25; // How much larger the glow is vs the story - increased from 1.15
+    const GLOW_OPACITY = 0.7; // increased from 0.6
+    const SATURATION_BOOST = 1.5; // increased from 1.3
+
+    return (
+        <div className="relative">
+            {/* Ambilight layer - blurred clone positioned behind */}
+            <div
+                className="absolute pointer-events-none"
+                style={{
+                    inset: 0,
+                    transform: `scale(${GLOW_SCALE})`,
+                    filter: `blur(${BLUR_AMOUNT}px) saturate(${SATURATION_BOOST})`,
+                    opacity: GLOW_OPACITY,
+                    zIndex: 0,
+                }}
+            >
+                {/* Clone of children rendered blurred behind */}
+                <div style={{
+                    width: CANONICAL_WIDTH,
+                    height: CANONICAL_HEIGHT,
+                    overflow: 'hidden',
+                    borderRadius: 24,
+                }}>
+                    {children}
+                </div>
+            </div>
+
+            {/* Actual story content on top */}
+            <div style={{ position: 'relative', zIndex: 1 }}>
+                {children}
+            </div>
+        </div>
+    );
+}
+
 // --- Slides ---
 
 interface SlideProps {
@@ -177,6 +250,17 @@ interface SlideProps {
     onClose: () => void;
     userName?: string;
     userAvatar?: string;
+    t: ReturnType<typeof useTranslations<"YearReview">>;
+}
+
+// Props for the exported YearReviewStory component (t is internal)
+interface YearReviewStoryProps {
+    stats: YearReviewStats;
+    year: string;
+    onClose: () => void;
+    userName?: string;
+    userAvatar?: string;
+    isOpen: boolean;
 }
 
 function CountUp({ value, duration = 2, delay = 0, decimals = 0, ease = "easeOut" }: { value: number, duration?: number, delay?: number, decimals?: number, ease?: any }) {
@@ -196,7 +280,7 @@ function CountUp({ value, duration = 2, delay = 0, decimals = 0, ease = "easeOut
     return <motion.span>{rounded}</motion.span>;
 }
 
-function IntroSlide({ year, userName, userAvatar }: SlideProps) {
+function IntroSlide({ year, userName, userAvatar, t }: SlideProps) {
     return (
         <div className="relative flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden">
             {/* Animated gradient orbs - sized for canonical viewport */}
@@ -307,7 +391,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     transition={{ delay: 0.7 }}
                     className="text-xl font-bold mb-2 text-white"
                 >
-                    Year in Review
+                    {t("intro.yearInReview")}
                 </motion.h2>
 
                 {/* Tagline */}
@@ -317,7 +401,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     transition={{ delay: 0.9 }}
                     className="text-sm text-gray-400"
                 >
-                    Your academic journey, visualized
+                    {t("intro.yourJourney")}
                 </motion.p>
 
                 {/* Tap indicator */}
@@ -332,7 +416,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                         transition={{ duration: 1.5, repeat: Infinity }}
                         className="text-[10px] text-gray-500 uppercase tracking-widest"
                     >
-                        Tap to continue
+                        {t("intro.tapToContinue")}
                     </motion.div>
                 </motion.div>
             </div>
@@ -340,7 +424,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
     );
 }
 
-function StatsSlide({ stats }: SlideProps) {
+function StatsSlide({ stats, t }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
 
     // Animation values calibrated for canonical size (390x844)
@@ -435,7 +519,7 @@ function StatsSlide({ stats }: SlideProps) {
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         className="text-lg font-bold whitespace-nowrap absolute -top-8 text-violet-200"
                     >
-                        Grades
+                        {t("stats.grades")}
                     </motion.div>
 
                     <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.2)' }}>
@@ -478,7 +562,7 @@ function StatsSlide({ stats }: SlideProps) {
                         transition={{ delay: 0.1 }}
                         className="text-lg font-bold whitespace-nowrap absolute -top-8 text-fuchsia-200"
                     >
-                        Points
+                        {t("stats.points")}
                     </motion.div>
 
                     <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(236, 72, 153, 0.2)' }}>
@@ -510,13 +594,13 @@ function StatsSlide({ stats }: SlideProps) {
                 transition={{ delay: 0.8 }}
                 className="mt-8 text-sm max-w-xs mx-auto text-gray-400 relative z-10"
             >
-                Accumulated points throughout the year
+                {t("stats.accumulatedPoints")}
             </motion.p>
         </div>
     );
 }
 
-function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
+function HeatmapSlide({ stats, year, userName, userAvatar, t }: SlideProps) {
     const [zoomOut, setZoomOut] = useState(false);
 
     const days = useMemo(() => {
@@ -609,12 +693,12 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 
             {/* Background Gradients - enhanced glow */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <motion.div 
+                <motion.div
                     className="absolute -top-[20%] -right-[20%] w-[350px] h-[350px] bg-[#3e61d2]/15 rounded-full blur-[100px]"
                     animate={zoomOut ? { scale: 1.3, opacity: 0.2 } : { scale: 1, opacity: 0.15 }}
                     transition={{ duration: 0.8 }}
                 />
-                <motion.div 
+                <motion.div
                     className="absolute -bottom-[20%] -left-[20%] w-[300px] h-[300px] bg-[#5e81f2]/10 rounded-full blur-[80px]"
                     animate={zoomOut ? { scale: 1.2, opacity: 0.15 } : { scale: 1, opacity: 0.1 }}
                     transition={{ duration: 0.8 }}
@@ -664,7 +748,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     )}
                     <div className="text-left">
                         {userName && <div className="font-bold text-base">{userName}</div>}
-                        <div className="text-xs text-blue-300/60">{year} Year in Grades</div>
+                        <div className="text-xs text-blue-300/60">{t("heatmap.yearInGrades", { year })}</div>
                     </div>
                 </div>
             </motion.div>
@@ -711,8 +795,8 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                                                         day.count <= 3 ? "bg-[#2d4696]" :
                                                             "bg-[#3e61d2]"
                                         )}
-                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.03)' } : 
-                                               day && day.count > 3 ? { boxShadow: '0 0 4px rgba(62, 97, 210, 0.4)' } : undefined}
+                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.03)' } :
+                                            day && day.count > 3 ? { boxShadow: '0 0 4px rgba(62, 97, 210, 0.4)' } : undefined}
                                     />
                                 ))}
                             </div>
@@ -727,7 +811,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     transition={{ delay: 0.3 }}
                     className="text-left mt-3 text-xs text-[#8b949e] w-full"
                 >
-                    {stats.gradesCount} grades in {year}
+                    {t("heatmap.gradesInYear", { count: stats.gradesCount, year })}
                 </motion.div>
             </motion.div>
 
@@ -738,17 +822,17 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                 transition={{ delay: 0.4, duration: 0.5 }}
                 className="w-full relative z-10"
             >
-                <h3 className="text-base text-[#8b949e] mb-2">Most Active Month</h3>
+                <h3 className="text-base text-[#8b949e] mb-2">{t("heatmap.mostActiveMonth")}</h3>
                 <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] via-[#5e81f2] to-[#3e61d2] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(62,97,210,0.4)]">
                     {stats.mostActiveMonth.month}
                 </div>
-                <p className="text-sm mt-2 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
+                <p className="text-sm mt-2 text-[#8b949e]">{t("heatmap.gradesEntered", { count: stats.mostActiveMonth.count })}</p>
             </motion.div>
         </div>
     );
 }
 
-function StreakSlide({ stats }: SlideProps) {
+function StreakSlide({ stats, t }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
             {/* LightPillar effect */}
@@ -777,7 +861,7 @@ function StreakSlide({ stats }: SlideProps) {
                     style={{ boxShadow: 'inset 0 0 0 1px rgba(249, 115, 22, 0.4)' }}
                 >
                     <div className="text-lg">🔥</div>
-                    <span className="font-bold text-sm uppercase tracking-wider">On Fire!</span>
+                    <span className="font-bold text-sm uppercase tracking-wider">{t("streak.onFire")}</span>
                 </motion.div>
 
                 <motion.h2
@@ -786,7 +870,7 @@ function StreakSlide({ stats }: SlideProps) {
                     transition={{ delay: 0.3 }}
                     className="text-3xl font-bold mb-4 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
                 >
-                    Longest Streak
+                    {t("streak.longestStreak")}
                 </motion.h2>
 
                 <motion.div
@@ -804,14 +888,14 @@ function StreakSlide({ stats }: SlideProps) {
                     transition={{ delay: 0.8 }}
                     className="mt-8 text-xl opacity-80 max-w-xs mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
                 >
-                    Consecutive grades that increased your average
+                    {t("streak.consecutiveGrades")}
                 </motion.p>
             </div>
         </div>
     );
 }
 
-function PrimeTimeSlide({ stats }: SlideProps) {
+function PrimeTimeSlide({ stats, t }: SlideProps) {
     const [phase, setPhase] = useState<'tracing' | 'peak' | 'reveal'>('tracing');
     const [progress, setProgress] = useState(0);
     const pathRef = useRef<SVGPathElement>(null);
@@ -844,24 +928,24 @@ function PrimeTimeSlide({ stats }: SlideProps) {
     const pathD = useMemo(() => {
         const { points } = chartData;
         if (points.length < 2) return '';
-        
+
         let d = `M ${points[0].x} ${100 - points[0].y}`;
-        
+
         for (let i = 0; i < points.length - 1; i++) {
             const p0 = points[Math.max(0, i - 1)];
             const p1 = points[i];
             const p2 = points[i + 1];
             const p3 = points[Math.min(points.length - 1, i + 2)];
-            
+
             // Catmull-Rom to Bezier conversion
             const cp1x = p1.x + (p2.x - p0.x) / 6;
             const cp1y = p1.y + (p2.y - p0.y) / 6;
             const cp2x = p2.x - (p3.x - p1.x) / 6;
             const cp2y = p2.y - (p3.y - p1.y) / 6;
-            
+
             d += ` C ${cp1x} ${100 - cp1y}, ${cp2x} ${100 - cp2y}, ${p2.x} ${100 - p2.y}`;
         }
-        
+
         return d;
     }, [chartData]);
 
@@ -879,22 +963,22 @@ function PrimeTimeSlide({ stats }: SlideProps) {
     // Animate progress for tracing phase
     useEffect(() => {
         if (phase !== 'tracing') return;
-        
+
         const duration = 2500;
         const startTime = performance.now();
-        
+
         const animateProgress = (currentTime: number) => {
             const elapsed = currentTime - startTime;
             const t = Math.min(elapsed / duration, 1);
             // Ease out cubic
             const eased = 1 - Math.pow(1 - t, 3);
             setProgress(eased * peakProgress);
-            
+
             if (t < 1) {
                 requestAnimationFrame(animateProgress);
             }
         };
-        
+
         requestAnimationFrame(animateProgress);
     }, [phase, peakProgress]);
 
@@ -902,7 +986,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
     useEffect(() => {
         const peakTimer = setTimeout(() => setPhase('peak'), 2500);
         const revealTimer = setTimeout(() => setPhase('reveal'), 3200);
-        
+
         return () => {
             clearTimeout(peakTimer);
             clearTimeout(revealTimer);
@@ -912,7 +996,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
     // Calculate current dot position
     const currentProgress = phase === 'tracing' ? progress : peakProgress;
     const currentDotPos = getPointAtProgress(currentProgress);
-    
+
     // Camera follows dot during tracing - calculate offset to keep dot centered
     const cameraX = phase === 'reveal' ? 0 : -(currentDotPos.x - 50) * 7;
     const cameraY = phase === 'reveal' ? 0 : -(currentDotPos.y - 50) * 2;
@@ -931,8 +1015,8 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-emerald-500/20 rounded-full blur-[100px]"
                 animate={
                     phase === 'peak' ? { scale: 1.5, opacity: 0.6 } :
-                    phase === 'reveal' ? { scale: 2, opacity: 0.3, y: -50 } :
-                    { scale: 1, opacity: 0.1 }
+                        phase === 'reveal' ? { scale: 2, opacity: 0.3, y: -50 } :
+                            { scale: 1, opacity: 0.1 }
                 }
                 transition={{ duration: 0.5 }}
             />
@@ -945,10 +1029,10 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                     x: cameraX,
                     y: phase === 'reveal' ? 0 : cameraY + 80,
                 }}
-                transition={phase === 'reveal' ? { 
-                    duration: 0.7, 
-                    type: "spring", 
-                    bounce: 0.12 
+                transition={phase === 'reveal' ? {
+                    duration: 0.7,
+                    type: "spring",
+                    bounce: 0.12
                 } : {
                     duration: 0.1,
                     ease: "linear"
@@ -981,10 +1065,10 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                                 <stop offset="100%" stopColor="#4ade80" />
                             </linearGradient>
                             <filter id="lineGlow" x="-50%" y="-50%" width="200%" height="200%">
-                                <feGaussianBlur stdDeviation="1" result="blur"/>
+                                <feGaussianBlur stdDeviation="1" result="blur" />
                                 <feMerge>
-                                    <feMergeNode in="blur"/>
-                                    <feMergeNode in="SourceGraphic"/>
+                                    <feMergeNode in="blur" />
+                                    <feMergeNode in="SourceGraphic" />
                                 </feMerge>
                             </filter>
                         </defs>
@@ -1015,11 +1099,15 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             filter="url(#lineGlow)"
-                            initial={{ pathLength: 0 }}
-                            animate={{ pathLength: phase === 'tracing' ? progress : (phase === 'peak' ? peakProgress : 1) }}
-                            transition={{ 
-                                duration: phase === 'reveal' ? 0.3 : 0,
-                                ease: "linear"
+                            style={{ pathLength: 0 }}
+                            initial={{ pathLength: 0, opacity: 0 }}
+                            animate={{
+                                pathLength: phase === 'tracing' ? progress : (phase === 'peak' ? peakProgress : 1),
+                                opacity: 1
+                            }}
+                            transition={{
+                                pathLength: { duration: phase === 'reveal' ? 0.3 : 0, ease: "linear" },
+                                opacity: { duration: 0.1, delay: 0.05 }
                             }}
                         />
                     </svg>
@@ -1032,7 +1120,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                             top: `${currentDotPos.y}%`,
                         }}
                     >
-                        <div 
+                        <div
                             className="w-full h-full rounded-full bg-emerald-400"
                             style={{ boxShadow: '0 0 12px 4px rgba(74, 222, 128, 0.6)' }}
                         />
@@ -1051,7 +1139,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                                 className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
                                 initial={{ scale: 1, opacity: 0.8 }}
                                 animate={{ scale: 5, opacity: 0 }}
-                                transition={{ 
+                                transition={{
                                     duration: 1.2,
                                     repeat: Infinity,
                                     ease: "easeOut"
@@ -1061,7 +1149,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                                 className="absolute inset-0 rounded-full border border-emerald-400/60"
                                 initial={{ scale: 1, opacity: 0.6 }}
                                 animate={{ scale: 5, opacity: 0 }}
-                                transition={{ 
+                                transition={{
                                     duration: 1.2,
                                     repeat: Infinity,
                                     ease: "easeOut",
@@ -1074,19 +1162,19 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                     {/* Peak marker */}
                     <motion.div
                         className="absolute pointer-events-none"
-                        style={{ 
-                            left: `${peakPoint.x}%`, 
+                        style={{
+                            left: `${peakPoint.x}%`,
                             top: `${100 - peakPoint.y}%`,
                         }}
                         initial={{ opacity: 0, scale: 0, y: 0 }}
                         animate={phase === 'reveal' ? { opacity: 1, scale: 1, y: -50 } : { opacity: 0, scale: 0, y: 0 }}
                         transition={{ delay: 0.3, type: "spring", bounce: 0.4 }}
                     >
-                        <div 
+                        <div
                             className="whitespace-nowrap bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-md -translate-x-1/2"
                             style={{ boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)' }}
                         >
-                            PEAK
+                            {t("primeTime.peak")}
                         </div>
                     </motion.div>
                 </div>
@@ -1099,8 +1187,8 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 animate={phase === 'reveal' ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
                 transition={{ delay: 0.2, duration: 0.5 }}
             >
-                <h2 className="text-lg font-medium text-emerald-400/80 mb-2">Prime Time</h2>
-                
+                <h2 className="text-lg font-medium text-emerald-400/80 mb-2">{t("primeTime.title")}</h2>
+
                 <div className="flex items-baseline justify-center gap-1 mb-3">
                     <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300 drop-shadow-[0_0_30px_rgba(34,197,94,0.5)]">
                         {stats.primeTime.value.toFixed(2)}
@@ -1109,16 +1197,18 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 </div>
 
                 <p className="text-sm text-zinc-400">
-                    Peak reached on <span className="text-emerald-400 font-semibold">{date}</span>
+                    {t.rich("primeTime.peakReachedOn", {
+                        date: (chunks) => <span className="text-emerald-400 font-semibold">{date}</span>
+                    })}
                 </p>
             </motion.div>
         </div>
     );
 }
 
-function SubjectsSlide({ stats }: SlideProps) {
+function SubjectsSlide({ stats, t }: SlideProps) {
     const [phase, setPhase] = useState<'anticipation' | 'reveal3' | 'reveal2' | 'reveal1' | 'complete'>('anticipation');
-    
+
     // Animation timeline: staggered reveal from #3 to #1
     useEffect(() => {
         const timers = [
@@ -1164,9 +1254,9 @@ function SubjectsSlide({ stats }: SlideProps) {
                 className="relative z-10 mb-6"
             >
                 <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-300">
-                    Top Subjects
+                    {t("subjects.topSubjects")}
                 </h2>
-                <p className="text-sm text-zinc-500 mt-1">Your academic podium</p>
+                <p className="text-sm text-zinc-500 mt-1">{t("subjects.yourPodium")}</p>
             </motion.div>
 
             {/* Podium container */}
@@ -1185,7 +1275,7 @@ function SubjectsSlide({ stats }: SlideProps) {
                                 <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
                                     {subjects[1].name}
                                 </div>
-                                <motion.div 
+                                <motion.div
                                     className="text-base font-bold text-zinc-300"
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -1228,7 +1318,7 @@ function SubjectsSlide({ stats }: SlideProps) {
                                 <div className="text-sm font-bold text-white truncate px-1 w-full">
                                     {subjects[0].name}
                                 </div>
-                                <motion.div 
+                                <motion.div
                                     className="text-lg font-black text-amber-400"
                                     initial={{ opacity: 0, scale: 0 }}
                                     animate={{ opacity: 1, scale: 1 }}
@@ -1263,7 +1353,7 @@ function SubjectsSlide({ stats }: SlideProps) {
                                 <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
                                     {subjects[2].name}
                                 </div>
-                                <motion.div 
+                                <motion.div
                                     className="text-base font-bold text-orange-400"
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
@@ -1296,7 +1386,7 @@ function SubjectsSlide({ stats }: SlideProps) {
                         <TrendingUp className="w-5 h-5 text-white" />
                     </div>
                     <div className="text-left flex-1 min-w-0">
-                        <div className="text-xs text-zinc-500 mb-0.5">Best Comeback</div>
+                        <div className="text-xs text-zinc-500 mb-0.5">{t("subjects.bestComeback")}</div>
                         <div className="font-semibold text-white truncate">{stats.bestProgression.subject}</div>
                     </div>
                     <div className="text-lg font-bold text-emerald-400 shrink-0">
@@ -1308,89 +1398,311 @@ function SubjectsSlide({ stats }: SlideProps) {
     );
 }
 
-function PercentileSlide({ stats }: SlideProps) {
+function PercentileSlide({ stats, t }: SlideProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(null);
+    const [phase, setPhase] = useState<'inspiral' | 'explode' | 'revealed'>('inspiral');
+    const [orb1Pos, setOrb1Pos] = useState({ x: 0, y: 0 });
+    const [orb2Pos, setOrb2Pos] = useState({ x: 0, y: 0 });
+    const [orbRadius, setOrbRadius] = useState(80);
+    const animationRef = useRef<number | null>(null);
+    const startTimeRef = useRef<number | null>(null);
 
+    // Neutron star inspiral animation - accelerating spiral inward
     useEffect(() => {
-        // Create a confetti instance bound to our canvas inside the story
+        if (phase !== 'inspiral') return;
+
+        const TOTAL_DURATION = 1000; // Total inspiral time (1 second)
+        const INITIAL_RADIUS = 90;
+        const FINAL_RADIUS = 5;
+        const INITIAL_SPEED = 4; // rotations per second at start
+        const FINAL_SPEED = 18; // rotations per second at end
+
+        const animateInspiral = (timestamp: number) => {
+            if (!startTimeRef.current) startTimeRef.current = timestamp;
+            const elapsed = timestamp - startTimeRef.current;
+            const progress = Math.min(elapsed / TOTAL_DURATION, 1);
+
+            // Exponential decay for radius - gets tighter faster near the end
+            const radiusProgress = Math.pow(progress, 1.5);
+            const currentRadius = INITIAL_RADIUS - (INITIAL_RADIUS - FINAL_RADIUS) * radiusProgress;
+            setOrbRadius(currentRadius);
+
+            // Exponential increase in rotation speed
+            const speedProgress = Math.pow(progress, 2);
+            const currentSpeed = INITIAL_SPEED + (FINAL_SPEED - INITIAL_SPEED) * speedProgress;
+
+            // Calculate angle - integral of speed over time for smooth acceleration
+            const baseRotations = INITIAL_SPEED * (elapsed / 1000);
+            const acceleratedRotations = (FINAL_SPEED - INITIAL_SPEED) * Math.pow(progress, 3) * (elapsed / 1000) / 3;
+            const angle = (baseRotations + acceleratedRotations) * Math.PI * 2;
+
+            // Orb 1 position (180 degrees offset from orb 2)
+            setOrb1Pos({
+                x: Math.cos(angle) * currentRadius,
+                y: Math.sin(angle) * currentRadius,
+            });
+
+            // Orb 2 position (opposite side)
+            setOrb2Pos({
+                x: Math.cos(angle + Math.PI) * currentRadius,
+                y: Math.sin(angle + Math.PI) * currentRadius,
+            });
+
+            if (progress < 1) {
+                animationRef.current = requestAnimationFrame(animateInspiral);
+            }
+        };
+
+        animationRef.current = requestAnimationFrame(animateInspiral);
+
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [phase]);
+
+    // Phase timeline
+    useEffect(() => {
+        const timers = [
+            setTimeout(() => setPhase('explode'), 1000),
+            setTimeout(() => setPhase('revealed'), 1300),
+        ];
+        return () => timers.forEach(clearTimeout);
+    }, []);
+
+    // Create confetti instance
+    useEffect(() => {
         if (canvasRef.current && !confettiInstanceRef.current) {
             confettiInstanceRef.current = confetti.create(canvasRef.current, {
-                resize: false, // Don't auto-resize - we want fixed canonical dimensions
+                resize: false,
                 useWorker: true,
             });
         }
-
-        // Fire confetti from the canvas (which is inside the story and scales with it)
-        if (confettiInstanceRef.current) {
-            confettiInstanceRef.current({
-                particleCount: 150,
-                spread: 90,
-                origin: { x: 0.5, y: 0.6 }, // Relative to the canvas (story container)
-                colors: ['#ffffff', '#fbbf24']
-            });
-        }
-
         return () => {
-            // Clean up confetti instance
             if (confettiInstanceRef.current) {
                 confettiInstanceRef.current.reset();
             }
         };
     }, []);
 
+    // Fire confetti on explosion - kilonova style burst
+    useEffect(() => {
+        if (phase === 'explode' && confettiInstanceRef.current) {
+            // Main kilonova explosion - bright burst
+            confettiInstanceRef.current({
+                particleCount: 120,
+                spread: 360,
+                origin: { x: 0.5, y: 0.45 },
+                colors: ['#fbbf24', '#f59e0b', '#ffffff', '#a855f7', '#6366f1', '#ec4899', '#22d3ee'],
+                startVelocity: 50,
+                gravity: 0.8,
+                scalar: 1.2,
+            });
+            // Secondary ring burst
+            setTimeout(() => {
+                confettiInstanceRef.current?.({
+                    particleCount: 80,
+                    spread: 360,
+                    origin: { x: 0.5, y: 0.45 },
+                    colors: ['#fbbf24', '#ffffff', '#f97316'],
+                    startVelocity: 35,
+                    gravity: 0.6,
+                });
+            }, 80);
+            // Final sparkle
+            setTimeout(() => {
+                confettiInstanceRef.current?.({
+                    particleCount: 40,
+                    spread: 180,
+                    origin: { x: 0.5, y: 0.45 },
+                    colors: ['#ffffff', '#fef3c7'],
+                    startVelocity: 25,
+                });
+            }, 200);
+        }
+    }, [phase]);
+
+    // Orb scale shrinks as they spiral in
+    const orbScale = Math.max(0.4, orbRadius / 90);
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-black text-white relative overflow-hidden">
-            {/* Confetti canvas - fixed to canonical dimensions, CSS stretches to fill container */}
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white relative overflow-hidden">
+            {/* Confetti canvas */}
             <canvas
                 ref={canvasRef}
                 width={CANONICAL_WIDTH}
                 height={CANONICAL_HEIGHT}
-                className="absolute inset-0 pointer-events-none z-20"
+                className="absolute inset-0 pointer-events-none z-30"
                 style={{ width: '100%', height: '100%' }}
             />
 
-            {/* Background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-purple-900 via-black to-indigo-900 opacity-60" />
+            {/* Dark ambient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-950/30 via-[#0a0a0a] to-indigo-950/30" />
 
+            {/* Gravitational wave ripples during inspiral */}
+            {phase === 'inspiral' && (
+                <>
+                    <motion.div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-purple-500/20"
+                        style={{ width: orbRadius * 3, height: orbRadius * 3 }}
+                        animate={{ scale: [1, 2, 1], opacity: [0.3, 0, 0.3] }}
+                        transition={{ duration: 0.3, repeat: Infinity, ease: "linear" }}
+                    />
+                    <motion.div
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-500/15"
+                        style={{ width: orbRadius * 4, height: orbRadius * 4 }}
+                        animate={{ scale: [1, 2.5, 1], opacity: [0.2, 0, 0.2] }}
+                        transition={{ duration: 0.4, repeat: Infinity, ease: "linear", delay: 0.1 }}
+                    />
+                </>
+            )}
 
-            <div className="relative z-10">
+            {/* Orb container - centered */}
+            <div className="absolute inset-0 flex items-center justify-center" style={{ top: '-10%' }}>
+                {/* Orb 1 - Purple/Pink */}
+                {phase === 'inspiral' && (
+                    <motion.div
+                        className="absolute rounded-full"
+                        style={{
+                            width: 100 * orbScale,
+                            height: 100 * orbScale,
+                            background: 'radial-gradient(circle at 30% 30%, rgba(168, 85, 247, 0.9), rgba(236, 72, 153, 0.7), transparent 70%)',
+                            filter: `blur(${12 * orbScale}px)`,
+                            x: orb1Pos.x,
+                            y: orb1Pos.y,
+                        }}
+                    />
+                )}
+
+                {/* Orb 2 - Blue/Cyan */}
+                {phase === 'inspiral' && (
+                    <motion.div
+                        className="absolute rounded-full"
+                        style={{
+                            width: 100 * orbScale,
+                            height: 100 * orbScale,
+                            background: 'radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.9), rgba(34, 211, 238, 0.7), transparent 70%)',
+                            filter: `blur(${12 * orbScale}px)`,
+                            x: orb2Pos.x,
+                            y: orb2Pos.y,
+                        }}
+                    />
+                )}
+
+                {/* Trail effect - fading afterimages */}
+                {phase === 'inspiral' && orbRadius > 20 && (
+                    <>
+                        <div
+                            className="absolute rounded-full opacity-30"
+                            style={{
+                                width: 80 * orbScale,
+                                height: 80 * orbScale,
+                                background: 'radial-gradient(circle, rgba(168, 85, 247, 0.5), transparent 70%)',
+                                filter: `blur(${15 * orbScale}px)`,
+                                transform: `translate(${orb1Pos.x * 0.85}px, ${orb1Pos.y * 0.85}px)`,
+                            }}
+                        />
+                        <div
+                            className="absolute rounded-full opacity-30"
+                            style={{
+                                width: 80 * orbScale,
+                                height: 80 * orbScale,
+                                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.5), transparent 70%)',
+                                filter: `blur(${15 * orbScale}px)`,
+                                transform: `translate(${orb2Pos.x * 0.85}px, ${orb2Pos.y * 0.85}px)`,
+                            }}
+                        />
+                    </>
+                )}
+
+                {/* Kilonova explosion flash */}
                 <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full text-yellow-300 mb-6"
+                    className="absolute rounded-full"
+                    style={{
+                        width: 300,
+                        height: 300,
+                        background: 'radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(251, 191, 36, 0.8) 20%, rgba(249, 115, 22, 0.5) 40%, transparent 70%)',
+                    }}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={phase === 'explode' || phase === 'revealed' ? {
+                        scale: [0, 2.5, 0],
+                        opacity: [0, 1, 0]
+                    } : { scale: 0, opacity: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                />
+
+                {/* Secondary shockwave ring */}
+                <motion.div
+                    className="absolute rounded-full"
+                    style={{
+                        width: 100,
+                        height: 100,
+                        border: '3px solid rgba(251, 191, 36, 0.8)',
+                        background: 'transparent',
+                    }}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={phase === 'explode' || phase === 'revealed' ? {
+                        scale: [0, 5],
+                        opacity: [1, 0]
+                    } : { scale: 0, opacity: 0 }}
+                    transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+                />
+            </div>
+
+            {/* Content - revealed after explosion */}
+            <div className="relative z-20">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0 }}
+                    animate={phase === 'revealed' ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full text-yellow-300 mb-4"
                     style={{ boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.4)' }}
                 >
                     <Trophy className="w-3 h-3" />
-                    <span className="font-bold text-xs uppercase tracking-wider">Legendary Status</span>
+                    <span className="font-bold text-xs uppercase tracking-wider">{t("percentile.legendaryStatus")}</span>
                 </motion.div>
 
                 <motion.h2
                     initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={phase === 'revealed' ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                    transition={{ delay: 0.1 }}
                     className="text-2xl font-bold mb-2"
                 >
-                    You are in the top
+                    {t("percentile.youAreInTheTop")}
                 </motion.h2>
 
                 <motion.div
-                    initial={{ scale: 0.5, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
-                    className="text-[8rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700 drop-shadow-[0_0_30px_rgba(234,179,8,0.5)]"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={phase === 'revealed' ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.15 }}
+                    className="text-[8rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-700"
+                    style={{ textShadow: '0 0 60px rgba(251, 191, 36, 0.5)' }}
                 >
                     {stats.topPercentile}%
                 </motion.div>
 
                 <motion.p
                     initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.8 }}
-                    className="mt-6 text-base opacity-60 max-w-[280px] mx-auto"
+                    animate={phase === 'revealed' ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-4 text-base text-zinc-400 max-w-[280px] mx-auto"
                 >
-                    of the most active students this year!
+                    {t("percentile.mostActiveStudents")}
                 </motion.p>
             </div>
+
+            {/* Ambient glow after reveal */}
+            <motion.div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    background: 'radial-gradient(circle at 50% 40%, rgba(251, 191, 36, 0.15) 0%, transparent 50%)',
+                }}
+                initial={{ opacity: 0 }}
+                animate={phase === 'revealed' ? { opacity: 1 } : { opacity: 0 }}
+                transition={{ duration: 0.5 }}
+            />
         </div>
     );
 }
@@ -1433,17 +1745,97 @@ const awardIcons: Record<string, any> = {
     "Plane": Plane
 };
 
-const DEFAULT_AWARD = {
-    title: "Le Touriste",
-    icon: "Plane",
-    description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
-    condition: "Moins de 15 notes ajoutées sur l'année",
-    color: "text-pink-400",
-    bg: "bg-pink-500/10 border-pink-500/20",
-    gradient: "from-pink-400 to-rose-400"
+// Awards data map - keyed by award type from API
+const AWARDS: Record<AwardType, AwardData> = {
+    tourist: {
+        title: "Le Touriste",
+        icon: "Plane",
+        description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+        condition: "Moins de 15 notes ajoutées",
+        color: "text-pink-400",
+        bg: "bg-pink-500/10 border-pink-500/20",
+        gradient: "from-pink-400 to-rose-400"
+    },
+    tightrope: {
+        title: "Le Funambule",
+        icon: "Scale",
+        description: "Tu as marché sur un fil toute l'année, le vide à gauche, le vide à droite... mais tu n'es jamais tombé. L'art de l'équilibre, le vrai.",
+        condition: "Moyenne entre 10 et 11",
+        color: "text-orange-400",
+        bg: "bg-orange-500/10 border-orange-500/20",
+        gradient: "from-orange-500 to-amber-500"
+    },
+    comeback: {
+        title: "Le Roi du Comeback",
+        icon: "RefreshCcw",
+        description: "Le début de saison était compliqué. On a eu peur. Et puis tu as enclenché la seconde et tu as doublé tout le monde avant la ligne d'arrivée.",
+        condition: "+2 pts vs début d'année",
+        color: "text-emerald-400",
+        bg: "bg-emerald-500/10 border-emerald-500/20",
+        gradient: "from-emerald-500 to-green-500"
+    },
+    allin: {
+        title: "Le \"All In\"",
+        icon: "Dices",
+        description: "Pourquoi essayer d'être moyen partout quand on peut tout miser sur ses points forts ? Une stratégie risquée, mais payante.",
+        condition: "+5 pts d'écart entre les matières",
+        color: "text-red-400",
+        bg: "bg-red-500/10 border-red-500/20",
+        gradient: "from-red-500 to-rose-500"
+    },
+    masterclass: {
+        title: "La Masterclass",
+        icon: "Crown",
+        description: "Félicitations. Tu as plié l'année scolaire avec une facilité déconcertante.",
+        condition: "Moyenne générale > 15",
+        color: "text-yellow-400",
+        bg: "bg-yellow-500/10 border-yellow-500/20",
+        gradient: "from-yellow-400 to-amber-400"
+    },
+    unpredictable: {
+        title: "L'Imprévisible",
+        icon: "Shuffle",
+        description: "Capable du génie absolu comme du ratage total au sein d'une même matière. Avec toi, c'est tout ou rien.",
+        condition: "Notes très variables",
+        color: "text-purple-400",
+        bg: "bg-purple-500/10 border-purple-500/20",
+        gradient: "from-purple-500 to-violet-500"
+    },
+    precision: {
+        title: "La Précision",
+        icon: "Crosshair",
+        description: "Une régularité chirurgicale. Quand tu vises une note, tu l'atteins à chaque fois. Pas de mauvaises surprises, tu es une valeur sûre.",
+        condition: "Notes très régulières",
+        color: "text-blue-400",
+        bg: "bg-blue-500/10 border-blue-500/20",
+        gradient: "from-blue-400 to-cyan-400"
+    },
+    legend: {
+        title: "Légende d'Avermate",
+        icon: "Gem",
+        description: "Ton suivi est tellement complet que tu connais ta moyenne mieux que tes profs. Tu ne fais plus qu'un avec l'application.",
+        condition: "Plus de 40 notes",
+        color: "text-cyan-400",
+        bg: "bg-cyan-500/10 border-cyan-500/20",
+        gradient: "from-cyan-400 to-sky-400"
+    },
+    avermatien: {
+        title: "Avermatien",
+        icon: "UserCheck",
+        description: "Utilisateur certifié d'Avermate. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable. C'est carré.",
+        condition: "Plus de 15 notes",
+        color: "text-green-400",
+        bg: "bg-green-500/10 border-green-500/20",
+        gradient: "from-green-400 to-emerald-400"
+    }
 };
 
-function AwardIntroSlide({ stats }: SlideProps) {
+// Helper to get award data from award type
+function getAward(awardType: AwardType): AwardData {
+    return AWARDS[awardType] || AWARDS.tourist;
+}
+
+function AwardIntroSlide({ stats, t }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
             {/* Shiny Gold Background */}
@@ -1456,7 +1848,7 @@ function AwardIntroSlide({ stats }: SlideProps) {
                     transition={{ delay: 0.5 }}
                     className="text-2xl font-light text-gray-400"
                 >
-                    We've analyzed your performance...
+                    {t("awardIntro.analyzedPerformance")}
                 </motion.p>
 
                 <motion.p
@@ -1465,7 +1857,7 @@ function AwardIntroSlide({ stats }: SlideProps) {
                     transition={{ delay: 1.5 }}
                     className="text-3xl font-medium"
                 >
-                    And found the perfect title for you.
+                    {t("awardIntro.foundTitle")}
                 </motion.p>
 
                 {/* <motion.div
@@ -1506,10 +1898,10 @@ const getAwardBorderColor = (colorClass: string): string => {
     return 'rgba(59, 130, 246, 0.2)'; // blue default
 };
 
-function AwardRevealSlide({ stats }: SlideProps) {
+function AwardRevealSlide({ stats, t }: SlideProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(null);
-    const award = stats.award || DEFAULT_AWARD;
+    const award = getAward(stats.awardType);
     const Icon = awardIcons[award.icon] || Plane;
 
     useEffect(() => {
@@ -1568,7 +1960,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 <div className="p-3 bg-yellow-500/20 rounded-full mb-2" style={{ boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.3)' }}>
                     <Trophy className="w-6 h-6 text-yellow-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-zinc-100">Your Award</h2>
+                <h2 className="text-2xl font-bold text-zinc-100">{t("awardReveal.yourAward")}</h2>
             </motion.div>
 
             <motion.div
@@ -1585,7 +1977,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                         transition={{ delay: 0.6 }}
                         className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}
                     >
-                        {award.title}
+                        {t(`awards.${stats.awardType}.title` as const)}
                     </motion.div>
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
@@ -1593,7 +1985,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                         transition={{ delay: 0.7 }}
                         className="text-md sm:text-xl font-bold text-white leading-tight"
                     >
-                        {award.condition}
+                        {t(`awards.${stats.awardType}.condition` as const)}
                     </motion.div>
                 </div>
                 <motion.div
@@ -1611,17 +2003,17 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 transition={{ delay: 1.5 }}
                 className="relative z-10 mt-8 text-sm text-zinc-100 max-w-xs"
             >
-                {award.description}
+                {t(`awards.${stats.awardType}.description` as const)}
             </motion.p>
         </div>
     );
 }
 
-function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) {
+function OutroSlide({ year, stats, onClose, userName, userAvatar, t }: SlideProps) {
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
-    const award = stats.award || DEFAULT_AWARD;
+    const award = getAward(stats.awardType);
     const Icon = awardIcons[award.icon] || Plane;
 
     const weeks = useMemo(() => {
@@ -1680,48 +2072,47 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
         if (!recapRef.current || isSharing) return;
 
         setIsSharing(true);
+
         try {
-            const canvas = await html2canvas(recapRef.current, {
+            // Wait a frame for the content to fully render
+            await new Promise(resolve => requestAnimationFrame(resolve));
+
+            const dataUrl = await toPng(recapRef.current, {
                 backgroundColor: '#0d1117',
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
+                pixelRatio: 3, // High resolution for sharing
+                cacheBust: true,
             });
 
-            canvas.toBlob(async (blob) => {
-                if (!blob) {
-                    setIsSharing(false);
-                    return;
-                }
+            // Convert data URL to blob
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+            const file = new File([blob], `avermate-recap-${year}.png`, { type: 'image/png' });
 
-                const file = new File([blob], `avermate-recap-${year}.png`, { type: 'image/png' });
-
-                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-                    try {
-                        await navigator.share({
-                            files: [file],
-                            title: `My ${year} Recap on Avermate`,
-                            text: `I was in the top ${stats.topPercentile}% of Avermate users in ${year}!`,
-                        });
-                    } catch (err) {
-                        console.error("Error sharing:", err);
-                        downloadImage(canvas);
-                    }
-                } else {
-                    downloadImage(canvas);
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: `My ${year} Recap on Avermate`,
+                        text: `I was in the top ${stats.topPercentile}% of Avermate users in ${year}!`,
+                    });
+                } catch (err) {
+                    console.error("Error sharing:", err);
+                    downloadImage(dataUrl);
                 }
-                setIsSharing(false);
-            }, 'image/png');
+            } else {
+                downloadImage(dataUrl);
+            }
+            setIsSharing(false);
         } catch (err) {
             console.error("Error generating image:", err);
             setIsSharing(false);
         }
     };
 
-    const downloadImage = (canvas: HTMLCanvasElement) => {
+    const downloadImage = (dataUrl: string) => {
         const link = document.createElement('a');
         link.download = `avermate-recap-${year}.png`;
-        link.href = canvas.toDataURL('image/png');
+        link.href = dataUrl;
         link.click();
     };
 
@@ -1782,7 +2173,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                     )}
                     <div className="text-left">
                         {userName && <div className="font-bold text-base">{userName}</div>}
-                        <div className="text-[10px] text-[#8b949e]">{year} Recap • Avermate</div>
+                        <div className="text-[10px] text-[#8b949e]">{t("outro.recapBrand", { year })}</div>
                     </div>
                 </div>
 
@@ -1823,21 +2214,21 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                             </div>
                         </div>
                         <div className="text-left text-[10px] text-[#8b949e] mt-1.5">
-                            {stats.gradesCount} grades in {year}
+                            {t("outro.gradesInYear", { count: stats.gradesCount, year })}
                         </div>
                     </motion.div>
 
                     <div className="grid grid-cols-2 auto-rows-fr gap-2 w-full mb-3 flex-1">
                         <StatCard
                             icon={Trophy}
-                            title="Universal Rank"
-                            value={`Top ${stats.topPercentile}%`}
+                            title={t("outro.universalRank")}
+                            value={t("outro.topPercent", { percent: stats.topPercentile })}
                             colorClass="text-yellow-400"
                             variants={item}
                         />
                         <StatCard
                             icon={Zap}
-                            title="Longest Streak"
+                            title={t("outro.longestStreak")}
                             value={stats.longestStreak}
                             colorClass="text-emerald-400"
                             variants={item}
@@ -1845,35 +2236,35 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                         <StatCard
                             icon={Activity}
-                            title="Total Grades"
+                            title={t("outro.totalGrades")}
                             value={stats.gradesCount}
                             colorClass="text-pink-400"
                             variants={item}
                         />
                         <StatCard
                             icon={Calendar}
-                            title="Most Active Month"
+                            title={t("outro.mostActiveMonth")}
                             value={stats.mostActiveMonth.month}
                             colorClass="text-purple-400"
                             variants={item}
                         />
                         <StatCard
                             icon={Star}
-                            title="Total Points"
+                            title={t("outro.totalPoints")}
                             value={stats.gradesSum.toFixed(0)}
                             colorClass="text-blue-400"
                             variants={item}
                         />
                         <StatCard
                             icon={Target}
-                            title="Global Average"
+                            title={t("outro.globalAverage")}
                             value={stats.average?.toFixed(2) || "N/A"}
                             colorClass="text-teal-400"
                             variants={item}
                         />
                         <StatCard
                             icon={Rocket}
-                            title="Top Subject"
+                            title={t("outro.topSubject")}
                             value={stats.bestSubjects[0]?.name || "N/A"}
                             colorClass="text-cyan-400"
                             truncate={true}
@@ -1884,16 +2275,16 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                     <div>
                         {/* Award Card */}
-                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between bg-[#161b22]", award.bg.replace(/border-[a-z]+-[0-9]+\/[0-9]+/g, ''))} style={{ boxShadow: `inset 0 0 0 1px ${getAwardBorderColor(award.color)}` }}>
-                            <div className="flex flex-col items-start text-left">
+                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between gap-2 bg-[#161b22]", award.bg.replace(/border-[a-z]+-[0-9]+\/[0-9]+/g, ''))} style={{ boxShadow: `inset 0 0 0 1px ${getAwardBorderColor(award.color)}` }}>
+                            <div className="flex flex-col items-start text-left min-w-0 flex-1">
                                 <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
-                                    {award.title}
+                                    {t(`awards.${stats.awardType}.title` as const)}
                                 </div>
-                                <div className="text-md sm:text-xl font-bold text-white leading-tight">
-                                    {award.condition}
+                                <div className="text-lg font-bold text-white leading-tight truncate w-full">
+                                    {t(`awards.${stats.awardType}.condition` as const)}
                                 </div>
                             </div>
-                            <Icon className={cn("w-10 h-10", award.color)} />
+                            <Icon className={cn("w-10 h-10 shrink-0", award.color)} />
                         </motion.div>
                     </div>
 
@@ -1915,7 +2306,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                     }}
                     disabled={isSharing}
                 >
-                    <Share2 className="w-3.5 h-3.5 mr-1.5" /> {isSharing ? "Generating..." : "Share Image"}
+                    <Share2 className="w-3.5 h-3.5 mr-1.5" /> {isSharing ? t("outro.generating") : t("outro.shareImage")}
                 </Button>
 
                 <Button
@@ -1927,7 +2318,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                         onClose();
                     }}
                 >
-                    Close
+                    {t("outro.close")}
                 </Button>
             </div>
         </div>
@@ -1935,15 +2326,19 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 }
 
 // ... Main Story Component ... (keep as is)
-export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAvatar }: SlideProps & { isOpen: boolean }) {
+export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAvatar }: YearReviewStoryProps) {
+    const t = useTranslations("YearReview");
     const [currentSlide, setCurrentSlide] = useState(0);
     const [paused, setPaused] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isNavigating, setIsNavigating] = useState(false);
+    const [isMuted, setIsMuted] = useState(false); // Start with music enabled by default
     // Track animated bar states: { index: targetProgress }
     const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
     const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const storyContainerRef = useRef<HTMLDivElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Get the complete layout with zoom compensation
     const layout = useStoryLayout();
@@ -1964,6 +2359,36 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const isLastSlide = currentSlide === slides.length - 1;
 
     const CurrentComponent = slides[currentSlide].component;
+
+    // Initialize audio on mount
+    useEffect(() => {
+        audioRef.current = new Audio('/recap-music.mp3');
+        audioRef.current.loop = true;
+        audioRef.current.volume = 0.5;
+
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
+        };
+    }, []);
+
+    // Handle audio play/pause based on isOpen and isMuted
+    useEffect(() => {
+        if (!audioRef.current) return;
+
+        if (isOpen && !isMuted) {
+            audioRef.current.play().catch(() => {
+                // Autoplay might be blocked, user will need to unmute manually
+            });
+        } else {
+            audioRef.current.pause();
+            if (!isOpen) {
+                audioRef.current.currentTime = 0;
+            }
+        }
+    }, [isOpen, isMuted]);
 
     // Reset to first slide when opening
     useEffect(() => {
@@ -2160,7 +2585,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                     top: `calc(50% - ${storyHeight / 2}px - ${closeButtonSize + closeButtonGap}px)`,
                     left: `calc(50% + ${storyWidth / 2}px - ${closeButtonSize}px)`,
                 }}
-                aria-label="Close"
+                aria-label={t("controls.close")}
             >
                 <X style={{ width: closeButtonSize * 0.5, height: closeButtonSize * 0.5 }} />
             </button>
@@ -2169,7 +2594,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             {showNavButtons && (
                 <button
                     onClick={prevSlide}
-                    className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center ${currentSlide === 0
+                        ? 'text-white/20 bg-white/5 cursor-not-allowed'
+                        : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
+                        }`}
                     style={{
                         width: navButtonSize,
                         height: navButtonSize,
@@ -2177,7 +2605,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                         top: '50%',
                         transform: 'translateY(-50%)',
                     }}
-                    aria-label="Previous slide"
+                    aria-label={t("controls.previousSlide")}
                     disabled={currentSlide === 0}
                 >
                     <ChevronLeft style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
@@ -2188,7 +2616,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
             {showNavButtons && (
                 <button
                     onClick={nextSlide}
-                    className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center ${isLastSlide
+                        ? 'text-white/20 bg-white/5 cursor-not-allowed'
+                        : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
+                        }`}
                     style={{
                         width: navButtonSize,
                         height: navButtonSize,
@@ -2196,92 +2627,111 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                         top: '50%',
                         transform: 'translateY(-50%)',
                     }}
-                    aria-label="Next slide"
+                    aria-label={t("controls.nextSlide")}
+                    disabled={isLastSlide}
                 >
                     <ChevronRight style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
                 </button>
             )}
 
-            {/* Story Container - rendered at canonical size, scaled, and absolutely centered */}
+            {/* Ambilight + Story Container wrapper - centered */}
             <div
-                className="absolute bg-black shadow-2xl overflow-hidden cursor-pointer select-none"
+                className="absolute"
                 style={{
-                    width: CANONICAL_WIDTH,
-                    height: CANONICAL_HEIGHT,
-                    // Center using absolute positioning + transform
                     left: '50%',
                     top: '50%',
-                    // Use translateZ(0) to force GPU layer - helps with border rendering at different zoom levels
-                    transform: `translate(-50%, -50%) scale(${storyScale}) translateZ(0)`,
+                    transform: `translate(-50%, -50%) scale(${storyScale})`,
                     transformOrigin: 'center center',
-                    borderRadius: 24, // Fixed border radius in canonical pixels
-                    // Additional GPU hints to prevent subpixel border artifacts
-                    willChange: 'transform',
-                    backfaceVisibility: 'hidden',
-                    // CSS variable for inverse scale - used by child elements to counter-scale borders
-                    // @ts-ignore - CSS custom property
-                    '--border-scale': 1 / storyScale,
                 }}
-                onClick={handleClick}
             >
-                {/* Progress Bars */}
-                <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
-                    {slides.map((_, index) => {
-                        const barProgress = getBarProgress(index);
-                        return (
-                            <button
-                                key={index}
-                                className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    goToSlide(index);
-                                }}
-                                aria-label={`Go to slide ${index + 1}`}
-                            >
-                                <div className="h-1 w-full bg-white/30 rounded-full overflow-hidden group-hover:bg-white/40 transition-colors">
-                                    <div
-                                        className="h-full bg-white"
-                                        style={{
-                                            width: `${barProgress}%`,
-                                            transition: isNavigating ? `width ${stepDuration}ms linear` : 'width 50ms linear'
+                <AmbilightWrapper storyScale={storyScale}>
+                    {/* Story Content */}
+                    <div
+                        ref={storyContainerRef}
+                        className="bg-black shadow-2xl overflow-hidden cursor-pointer select-none"
+                        style={{
+                            width: CANONICAL_WIDTH,
+                            height: CANONICAL_HEIGHT,
+                            borderRadius: 24,
+                            // Additional GPU hints
+                            willChange: 'transform',
+                            backfaceVisibility: 'hidden',
+                            // CSS variable for inverse scale
+                            // @ts-ignore - CSS custom property
+                            '--border-scale': 1 / storyScale,
+                        }}
+                        onClick={handleClick}
+                    >
+                        {/* Progress Bars */}
+                        <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 p-2">
+                            {slides.map((_, index) => {
+                                const barProgress = getBarProgress(index);
+                                return (
+                                    <button
+                                        key={index}
+                                        className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            goToSlide(index);
                                         }}
-                                    />
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
+                                        aria-label={t("controls.goToSlide", { number: index + 1 })}
+                                    >
+                                        <div className="h-1 w-full bg-white/30 rounded-full overflow-hidden group-hover:bg-white/40 transition-colors">
+                                            <div
+                                                className="h-full bg-white"
+                                                style={{
+                                                    width: `${barProgress}%`,
+                                                    transition: isNavigating ? `width ${stepDuration}ms linear` : 'width 50ms linear'
+                                                }}
+                                            />
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
 
-                {/* Pause Button */}
-                <button
-                    onClick={(e) => { e.stopPropagation(); setPaused(p => !p); }}
-                    className="absolute top-8 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm"
-                    aria-label={paused ? "Play" : "Pause"}
-                >
-                    {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                </button>
-
-                {/* Content */}
-                <div className="relative w-full h-full z-10">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={currentSlide}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="w-full h-full"
+                        {/* Pause Button */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setPaused(p => !p); }}
+                            className="absolute top-8 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm"
+                            aria-label={paused ? t("controls.play") : t("controls.pause")}
                         >
-                            <CurrentComponent
-                                stats={stats}
-                                year={year}
-                                onClose={onClose}
-                                userName={userName}
-                                userAvatar={userAvatar}
-                            />
-                        </motion.div>
-                    </AnimatePresence>
-                </div>
+                            {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                        </button>
+
+                        {/* Music/Mute Button */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsMuted(m => !m); }}
+                            className="absolute bottom-3 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm flex items-center justify-center"
+                            aria-label={isMuted ? t("controls.unmute") : t("controls.mute")}
+                        >
+                            <MusicBarsIcon isMuted={isMuted} />
+                        </button>
+
+                        {/* Content */}
+                        <div className="relative w-full h-full z-10">
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={currentSlide}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="w-full h-full"
+                                >
+                                    <CurrentComponent
+                                        stats={stats}
+                                        year={year}
+                                        onClose={onClose}
+                                        userName={userName}
+                                        userAvatar={userAvatar}
+                                        t={t}
+                                    />
+                                </motion.div>
+                            </AnimatePresence>
+                        </div>
+                    </div>
+                </AmbilightWrapper>
             </div>
         </div>
     );

@@ -23,7 +23,7 @@ export default function YearSettingsPage() {
     const year = years?.find((year) => year.id === activeId);
     const t = useTranslations("Dashboard.Pages.YEAR_SETTINGS_PAGE");
 
-    const showSkeleton = activeId === "none" || !year ;
+    const showSkeleton = activeId === "none" || !year;
 
     return (
         <main className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
@@ -165,10 +165,10 @@ export default function YearSettingsPage() {
                                         ))}
                                     </div>
                                     <div className="flex justify-end border-t py-4 px-6">
-                                            <Button disabled>
-                                                <PlusCircleIcon className="size-4 mr-2" />
+                                        <Button disabled>
+                                            <PlusCircleIcon className="size-4 mr-2" />
                                             {t("addPeriod")}
-                                            </Button>
+                                        </Button>
                                     </div>
                                 </div>
                             </CardContent>
@@ -212,10 +212,10 @@ export default function YearSettingsPage() {
                                         ))}
                                     </div>
                                     <div className="flex justify-end border-t py-4 px-6">
-                                            <Button disabled>
-                                                <PlusCircleIcon className="size-4 mr-2" />
-                                                {t("addCustomAverage")}
-                                            </Button>
+                                        <Button disabled>
+                                            <PlusCircleIcon className="size-4 mr-2" />
+                                            {t("addCustomAverage")}
+                                        </Button>
                                     </div>
                                 </div>
                             </CardContent>
@@ -260,6 +260,9 @@ export default function YearSettingsPage() {
                 </div>
             ) : (
                 <>
+                    {/* Year Recap Section - Featured at top */}
+                    <YearReviewButton />
+
                     <UpdateYearSection yearId={activeId} />
                     <PeriodsSection yearId={activeId} />
                     <CustomAveragesSection yearId={activeId} />
@@ -267,9 +270,6 @@ export default function YearSettingsPage() {
                     <DeleteYearSection yearId={activeId} />
                 </>
             )}
-             <div className="mb-8">
-                <YearReviewButton />
-            </div>
         </main>
     )
 }

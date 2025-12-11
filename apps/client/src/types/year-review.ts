@@ -1,3 +1,24 @@
+export type AwardType =
+    | "tourist"
+    | "tightrope"
+    | "comeback"
+    | "allin"
+    | "masterclass"
+    | "unpredictable"
+    | "precision"
+    | "legend"
+    | "avermatien";
+
+export type Award = {
+    title: string;
+    icon: string;
+    description: string;
+    condition: string;
+    color: string;
+    bg: string;
+    gradient: string;
+};
+
 export type YearReviewStats = {
     gradesCount: number;
     gradesSum: number;
@@ -9,15 +30,7 @@ export type YearReviewStats = {
     bestProgression: { subject: string; value: number };
     topPercentile: number;
     average: number;
-    award: {
-        title: string;
-        icon: string;
-        description: string;
-        condition: string;
-        color: string;
-        bg: string;
-        gradient: string;
-    };
+    awardType: AwardType;
 };
 
 export type YearReviewResponse = {

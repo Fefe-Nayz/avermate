@@ -1522,5 +1522,131 @@
       }
     }
   },
-  "details": "Détails"
+  "details": "Détails",
+  "YearReview": {
+    "intro": {
+      "yearInReview": "Rétrospective",
+      "yourJourney": "Ton parcours académique, visualisé",
+      "tapToContinue": "Appuie pour continuer"
+    },
+    "stats": {
+      "grades": "Notes",
+      "points": "Points",
+      "accumulatedPoints": "Points accumulés tout au long de l'année"
+    },
+    "heatmap": {
+      "yearInGrades": "Année {year} en notes",
+      "gradesInYear": "{count} notes en {year}",
+      "mostActiveMonth": "Mois le plus actif",
+      "gradesEntered": "{count} notes ajoutées"
+    },
+    "streak": {
+      "onFire": "En feu !",
+      "longestStreak": "Plus longue série",
+      "consecutiveGrades": "Notes consécutives qui ont augmenté ta moyenne"
+    },
+    "primeTime": {
+      "title": "Apogée",
+      "peak": "SOMMET",
+      "peakReachedOn": "Sommet atteint le <date></date>"
+    },
+    "subjects": {
+      "topSubjects": "Top Matières",
+      "yourPodium": "Ton podium académique",
+      "bestComeback": "Meilleure progression"
+    },
+    "percentile": {
+      "legendaryStatus": "Statut Légendaire",
+      "youAreInTheTop": "Tu fais partie du top",
+      "mostActiveStudents": "des étudiants les plus actifs cette année !"
+    },
+    "awardIntro": {
+      "analyzedPerformance": "On a analysé tes performances...",
+      "foundTitle": "Et on t'a trouvé le titre parfait."
+    },
+    "awardReveal": {
+      "yourAward": "Ton Titre"
+    },
+    "outro": {
+      "recapBrand": "Récap {year} • Avermate",
+      "gradesInYear": "{count} notes en {year}",
+      "universalRank": "Classement universel",
+      "topPercent": "Top {percent}%",
+      "longestStreak": "Plus longue série",
+      "totalGrades": "Total des notes",
+      "mostActiveMonth": "Mois le plus actif",
+      "totalPoints": "Total des points",
+      "globalAverage": "Moyenne générale",
+      "topSubject": "Meilleure matière",
+      "shareImage": "Partager l'image",
+      "generating": "Génération...",
+      "close": "Fermer"
+    },
+    "controls": {
+      "play": "Lecture",
+      "pause": "Pause",
+      "mute": "Couper le son",
+      "unmute": "Activer le son",
+      "close": "Fermer",
+      "previousSlide": "Diapositive précédente",
+      "nextSlide": "Diapositive suivante",
+      "goToSlide": "Aller à la diapositive {number}"
+    },
+    "trigger": {
+      "popupTitle": "Ton Récap {year} est prêt",
+      "popupDescription": "Appuie pour voir ta rétrospective",
+      "dismiss": "Fermer",
+      "cardTitle": "Récap {year}",
+      "cardDescription": "Regarde ta rétrospective personnalisée",
+      "cardBody": "Revis tes moments forts, stats et accomplissements de {year}",
+      "playRecap": "Lancer le récap"
+    },
+    "awards": {
+      "tourist": {
+        "title": "Le Touriste",
+        "description": "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+        "condition": "Moins de 15 notes ajoutées"
+      },
+      "tightrope": {
+        "title": "Le Funambule",
+        "description": "Tu as marché sur un fil toute l'année, le vide à gauche, le vide à droite... mais tu n'es jamais tombé. L'art de l'équilibre, le vrai.",
+        "condition": "Moyenne entre 10 et 11"
+      },
+      "comeback": {
+        "title": "Le Roi du Comeback",
+        "description": "Le début de saison était compliqué. On a eu peur. Et puis tu as enclenché la seconde et tu as doublé tout le monde avant la ligne d'arrivée.",
+        "condition": "+2 pts vs début d'année"
+      },
+      "allin": {
+        "title": "Le \"All In\"",
+        "description": "Pourquoi essayer d'être moyen partout quand on peut tout miser sur ses points forts ? Une stratégie risquée, mais payante.",
+        "condition": "+5 pts d'écart entre les matières"
+      },
+      "masterclass": {
+        "title": "La Masterclass",
+        "description": "Félicitations. Tu as plié l'année scolaire avec une facilité déconcertante.",
+        "condition": "Moyenne générale > 15"
+      },
+      "unpredictable": {
+        "title": "L'Imprévisible",
+        "description": "Capable du génie absolu comme du ratage total au sein d'une même matière. Avec toi, c'est tout ou rien.",
+        "condition": "Notes très variables"
+      },
+      "precision": {
+        "title": "La Précision",
+        "description": "Une régularité chirurgicale. Quand tu vises une note, tu l'atteins à chaque fois. Pas de mauvaises surprises, tu es une valeur sûre.",
+        "condition": "Notes très régulières"
+      },
+      "legend": {
+        "title": "Légende d'Avermate",
+        "description": "Ton suivi est tellement complet que tu connais ta moyenne mieux que tes profs. Tu ne fais plus qu'un avec l'application.",
+        "condition": "Plus de 40 notes"
+      },
+      "avermatien": {
+        "title": "Avermatien",
+        "description": "Utilisateur certifié d'Avermate. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable. C'est carré.",
+        "condition": "Plus de 15 notes"
+      }
+    }
+  }
 }
