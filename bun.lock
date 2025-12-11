@@ -87,6 +87,7 @@
         "date-fns": "^4.1.0",
         "dayjs": "^1.11.13",
         "framer-motion": "^12.23.12",
+        "html-to-image": "1.11.11",
         "input-otp": "^1.4.2",
         "js-cookie": "^3.0.5",
         "ky": "^1.7.3",
@@ -101,13 +102,14 @@
         "patch-package": "^8.0.0",
         "react": "^19.2.1",
         "react-day-picker": "^9.9.0",
-        "react-dom": "19.2.1",
+        "react-dom": "^19.2.1",
         "react-easy-crop": "^5.2.0",
         "react-hook-form": "^7.62.0",
         "react-icons": "^5.4.0",
         "recharts": "^3.0.0-alpha.8",
         "sonner": "^2.0.7",
         "tailwind-merge": "^3.3.1",
+        "three": "^0.167.1",
         "tw-animate-css": "^1.3.8",
         "ua-parser-js": "^2.0.4",
         "uploadthing": "^7.7.4",
@@ -1071,6 +1073,8 @@
 
     "hono": ["hono@4.9.6", "", {}, "sha512-doVjXhSFvYZ7y0dNokjwwSahcrAfdz+/BCLvAMa/vHLzjj8+CFyV5xteThGUsKdkaasgN+gF2mUxao+SGLpUeA=="],
 
+    "html-to-image": ["html-to-image@1.11.11", "", {}, "sha512-9gux8QhvjRO/erSnDPv28noDZcPZmYE7e1vFsBLKLlRlKDSqNJYebj6Qz1TGd5lsRV+X+xYyjCKjuZdABinWjA=="],
+
     "html-to-text": ["html-to-text@9.0.5", "", { "dependencies": { "@selderee/plugin-htmlparser2": "^0.11.0", "deepmerge": "^4.3.1", "dom-serializer": "^2.0.0", "htmlparser2": "^8.0.2", "selderee": "^0.11.0" } }, "sha512-qY60FjREgVZL03vJU6IfMV4GDjGBIoOyvuFdpBDIX9yTlDw0TjxVBQp+P8NvpdIXNJvfWBTNul7fsAQJq2FNpg=="],
 
     "htmlparser2": ["htmlparser2@8.0.2", "", { "dependencies": { "domelementtype": "^2.3.0", "domhandler": "^5.0.3", "domutils": "^3.0.1", "entities": "^4.4.0" } }, "sha512-GYdjWKDkbRLkZ5geuHs5NY1puJ+PXwP7+fHPRz06Eirsb9ugf6d8kkXav6ADhcODhFFPMIXyxkxSuMf3D6NCFA=="],
@@ -1512,6 +1516,8 @@
     "tapable": ["tapable@2.2.3", "", {}, "sha512-ZL6DDuAlRlLGghwcfmSn9sK3Hr6ArtyudlSAiCqQ6IfE+b+HHbydbYDIG15IfS5do+7XQQBdBiubF/cV2dnDzg=="],
 
     "tar": ["tar@7.4.3", "", { "dependencies": { "@isaacs/fs-minipass": "^4.0.0", "chownr": "^3.0.0", "minipass": "^7.1.2", "minizlib": "^3.0.1", "mkdirp": "^3.0.1", "yallist": "^5.0.0" } }, "sha512-5S7Va8hKfV7W5U6g3aYxXmlPoZVAwUMy9AOKyF2fVuZa2UD3qZjg578OrLRt8PcNN1PleVaL/5/yYATNL0ICUw=="],
+
+    "three": ["three@0.167.1", "", {}, "sha512-gYTLJA/UQip6J/tJvl91YYqlZF47+D/kxiWrbTon35ZHlXEN0VOo+Qke2walF1/x92v55H6enomymg4Dak52kw=="],
 
     "tiny-invariant": ["tiny-invariant@1.3.3", "", {}, "sha512-+FbBPE1o9QAYvviau/qC5SE3caw21q3xkvWKBtja5vgqOWIHHJ3ioaq1VPfn/Szqctz2bU/oYeKd9/z5BL+PVg=="],
 

@@ -331,17 +331,19 @@ function renderSubjects(
 
             <TableCell className="hidden md:table-cell">
               <div className="flex gap-4 flex-wrap">
-                {subject.grades.map((grade) => (
-                  <GradeBadge
-                    key={grade.id}
-                    value={grade.value}
-                    outOf={grade.outOf}
-                    coefficient={grade.coefficient}
-                    id={grade.id}
-                    periodId={periodId}
-                    subjectId={grade.subjectId}
-                  />
-                ))}
+                {[...subject.grades]
+                  .sort((a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime())
+                  .map((grade) => (
+                    <GradeBadge
+                      key={grade.id}
+                      value={grade.value}
+                      outOf={grade.outOf}
+                      coefficient={grade.coefficient}
+                      id={grade.id}
+                      periodId={periodId}
+                      subjectId={grade.subjectId}
+                    />
+                  ))}
               </div>
             </TableCell>
           </TableRow>
@@ -354,17 +356,19 @@ function renderSubjects(
                 className={cn(getPaddingClass(subject.depth))}
               >
                 <div className="flex gap-2 flex-wrap pt-1 pb-2">
-                  {subject.grades.map((grade) => (
-                    <GradeBadge
-                      key={grade.id}
-                      value={grade.value}
-                      outOf={grade.outOf}
-                      coefficient={grade.coefficient}
-                      id={grade.id}
-                      periodId={periodId}
-                      subjectId={grade.subjectId}
-                    />
-                  ))}
+                  {[...subject.grades]
+                    .sort((a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime())
+                    .map((grade) => (
+                      <GradeBadge
+                        key={grade.id}
+                        value={grade.value}
+                        outOf={grade.outOf}
+                        coefficient={grade.coefficient}
+                        id={grade.id}
+                        periodId={periodId}
+                        subjectId={grade.subjectId}
+                      />
+                    ))}
                 </div>
               </TableCell>
             </TableRow>

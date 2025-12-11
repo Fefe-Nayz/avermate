@@ -1468,5 +1468,131 @@
       }
     }
   },
-  "details": "Details"
+  "details": "Details",
+  "YearReview": {
+    "intro": {
+      "yearInReview": "Year in Review",
+      "yourJourney": "Your academic journey, visualized",
+      "tapToContinue": "Tap to continue"
+    },
+    "stats": {
+      "grades": "Grades",
+      "points": "Points",
+      "accumulatedPoints": "Accumulated points throughout the year"
+    },
+    "heatmap": {
+      "yearInGrades": "{year} Year in Grades",
+      "gradesInYear": "{count} grades in {year}",
+      "mostActiveMonth": "Most Active Month",
+      "gradesEntered": "{count} grades entered"
+    },
+    "streak": {
+      "onFire": "On Fire!",
+      "longestStreak": "Longest Streak",
+      "consecutiveGrades": "Consecutive grades that increased your average"
+    },
+    "primeTime": {
+      "title": "Prime Time",
+      "peak": "PEAK",
+      "peakReachedOn": "Peak reached on <date></date>"
+    },
+    "subjects": {
+      "topSubjects": "Top Subjects",
+      "yourPodium": "Your academic podium",
+      "bestComeback": "Best Comeback"
+    },
+    "percentile": {
+      "legendaryStatus": "Legendary Status",
+      "youAreInTheTop": "You are in the top",
+      "mostActiveStudents": "of the most active students this year!"
+    },
+    "awardIntro": {
+      "analyzedPerformance": "We've analyzed your performance...",
+      "foundTitle": "And found the perfect title for you."
+    },
+    "awardReveal": {
+      "yourAward": "Your Award"
+    },
+    "outro": {
+      "recapBrand": "{year} Recap • Avermate",
+      "gradesInYear": "{count} grades in {year}",
+      "universalRank": "Universal Rank",
+      "topPercent": "Top {percent}%",
+      "longestStreak": "Longest Streak",
+      "totalGrades": "Total Grades",
+      "mostActiveMonth": "Most Active Month",
+      "totalPoints": "Total Points",
+      "globalAverage": "Global Average",
+      "topSubject": "Top Subject",
+      "shareImage": "Share Image",
+      "generating": "Generating...",
+      "close": "Close"
+    },
+    "controls": {
+      "play": "Play",
+      "pause": "Pause",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "close": "Close",
+      "previousSlide": "Previous slide",
+      "nextSlide": "Next slide",
+      "goToSlide": "Go to slide {number}"
+    },
+    "trigger": {
+      "popupTitle": "Your {year} Recap is ready",
+      "popupDescription": "Tap to watch your year in review",
+      "dismiss": "Dismiss",
+      "cardTitle": "{year} Year Recap",
+      "cardDescription": "Watch your personalized year in review",
+      "cardBody": "Relive your highlights, stats, and achievements from {year}",
+      "playRecap": "Play Recap"
+    },
+    "awards": {
+      "tourist": {
+        "title": "The Tourist",
+        "description": "You saw the light, you came in, you added a few grades and you left. We don't know if it's absolute confidence or talent, but we love the audacity.",
+        "condition": "Less than 15 grades added"
+      },
+      "tightrope": {
+        "title": "The Tightrope Walker",
+        "description": "You walked on a wire all year, the void to the left, the void to the right... but you never fell. The art of balance, the real one.",
+        "condition": "Average between 10 and 11"
+      },
+      "comeback": {
+        "title": "The Comeback King",
+        "description": "The start of the season was complicated. We were scared. And then you shifted into second gear and overtook everyone before the finish line.",
+        "condition": "+2 pts vs beginning of year"
+      },
+      "allin": {
+        "title": "The \"All In\"",
+        "description": "Why try to be average everywhere when you can bet everything on your strengths? A risky strategy, but it pays off.",
+        "condition": "+5 pts gap between subjects"
+      },
+      "masterclass": {
+        "title": "The Masterclass",
+        "description": "Congratulations. You crushed the school year with disconcerting ease.",
+        "condition": "Overall average > 15"
+      },
+      "unpredictable": {
+        "title": "The Unpredictable",
+        "description": "Capable of absolute genius as well as total failure within the same subject. With you, it's all or nothing.",
+        "condition": "Highly variable grades"
+      },
+      "precision": {
+        "title": "The Precision",
+        "description": "Surgical regularity. When you aim for a grade, you hit it every time. No bad surprises, you're a safe bet.",
+        "condition": "Very consistent grades"
+      },
+      "legend": {
+        "title": "Avermate Legend",
+        "description": "Your tracking is so complete that you know your average better than your teachers. You are one with the app.",
+        "condition": "More than 40 grades"
+      },
+      "avermatien": {
+        "title": "Avermatian",
+        "description": "Certified Avermate user. Not too much, not too little. You manage your year with the seriousness of an accountant. It's solid.",
+        "condition": "More than 15 grades"
+      }
+    }
+  }
 }
