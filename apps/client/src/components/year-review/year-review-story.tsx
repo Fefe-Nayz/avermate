@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas-pro";
+import LightPillar from "@/components/LightPillar";
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
@@ -16,7 +17,7 @@ const CANONICAL_HEIGHT = 693;
 const STORY_ASPECT_RATIO = CANONICAL_WIDTH / CANONICAL_HEIGHT;
 
 // Furniture sizes at 100% zoom (in CSS pixels at zoom=1)
-const NAV_BUTTON_SIZE_BASE = 40;
+const NAV_BUTTON_SIZE_BASE = 48;
 const CLOSE_BUTTON_SIZE_BASE = 32;
 const BUTTON_GAP_BASE = 16;
 const CLOSE_BUTTON_GAP_BASE = 12;
@@ -352,12 +353,69 @@ function StatsSlide({ stats }: SlideProps) {
     const xOffset = distanceToGradesCenter * SCALE; // ~157px
 
     useEffect(() => {
-        const timer = setTimeout(() => setZoomOut(true), 2500);
+        const timer = setTimeout(() => setZoomOut(true), 2200);
         return () => clearTimeout(timer);
     }, []);
 
+    // Generate more speed lines for the tracking phase - spread across the whole screen
+    const speedLines = useMemo(() => {
+        return Array.from({ length: 24 }, (_, i) => ({
+            id: i,
+            left: `${(i / 24) * 100 + (Math.random() - 0.5) * 8}%`,
+            delay: Math.random() * 0.8,
+            duration: 0.4 + Math.random() * 0.5,
+            height: 60 + Math.random() * 120,
+            opacity: 0.3 + Math.random() * 0.4,
+        }));
+    }, []);
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden relative">
+            {/* Animated gradient background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-violet-900/40 via-[#0a0a0a] to-fuchsia-900/40"
+                animate={{
+                    opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Radial glow behind bars */}
+            <motion.div
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/4 w-[500px] h-[500px] rounded-full"
+                style={{
+                    background: 'radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0) 70%)',
+                }}
+                animate={zoomOut ? { scale: 1.2, opacity: 0.6 } : { scale: 0.8, opacity: 0.4 }}
+                transition={{ duration: 0.8 }}
+            />
+
+            {/* Speed lines during tracking phase - behind bar chart (z-0) */}
+            <AnimatePresence>
+                {!zoomOut && speedLines.map((line) => (
+                    <motion.div
+                        key={line.id}
+                        className="absolute w-[1.5px] bg-gradient-to-b from-transparent via-violet-400/60 to-transparent rounded-full z-0"
+                        style={{
+                            left: line.left,
+                            height: line.height,
+                        }}
+                        initial={{ y: -150, opacity: 0 }}
+                        animate={{
+                            y: ['-20%', '120%'],
+                            opacity: [0, line.opacity, line.opacity, 0],
+                        }}
+                        exit={{ opacity: 0, transition: { duration: 0.3 } }}
+                        transition={{
+                            duration: line.duration,
+                            delay: line.delay,
+                            repeat: Infinity,
+                            ease: "linear",
+                        }}
+                    />
+                ))}
+            </AnimatePresence>
+
             <motion.div
                 initial={{ scale: SCALE, y: 100, x: xOffset }}
                 animate={zoomOut
@@ -368,29 +426,43 @@ function StatsSlide({ stats }: SlideProps) {
                     ? { duration: 0.8, type: "spring", bounce: 0.2 } // Zoom out transition
                     : { duration: 2, ease: "easeOut" } // Tracking transition (matches bar growth)
                 }
-                className="flex items-end justify-center gap-8 h-64 w-full max-w-xs"
+                className="flex items-end justify-center gap-8 h-64 w-full max-w-xs relative z-10"
             >
                 {/* Grades Bar */}
                 <div className="flex flex-col items-center gap-2 w-20 relative">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8 text-violet-200"
                     >
                         Grades
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
+                    <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.2)' }}>
                         {/* Growing Fill */}
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={{ height: "60%" }}
                             transition={{ duration: 2, ease: "easeOut" }}
-                            className="w-full bg-white relative shadow-[0_0_20px_rgba(255,255,255,0.5)]"
+                            className="w-full relative"
+                            style={{
+                                background: 'linear-gradient(to top, #7c3aed, #a78bfa, #c4b5fd)',
+                                boxShadow: '0 0 30px rgba(139, 92, 246, 0.6), 0 0 60px rgba(139, 92, 246, 0.3)',
+                            }}
                         >
+                            {/* Subtle shimmer effect - gentler, continues past the top */}
+                            {!zoomOut && (
+                                <motion.div
+                                    className="absolute inset-x-0 -top-[50%] bottom-0 bg-gradient-to-t from-transparent via-white/15 to-transparent"
+                                    style={{ height: '200%' }}
+                                    initial={{ y: '50%' }}
+                                    animate={{ y: '-100%' }}
+                                    transition={{ duration: 2.2, ease: "easeOut" }}
+                                />
+                            )}
                             {/* Ticking Value on top of the bar */}
                             <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
-                                <span className="text-3xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                <span className="text-3xl font-black text-white drop-shadow-[0_0_20px_rgba(139,92,246,0.8)]">
                                     <CountUp value={stats.gradesCount} duration={2} />
                                 </span>
                             </div>
@@ -404,21 +476,25 @@ function StatsSlide({ stats }: SlideProps) {
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         transition={{ delay: 0.1 }}
-                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8 text-fuchsia-200"
                     >
                         Points
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
+                    <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(236, 72, 153, 0.2)' }}>
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={zoomOut ? { height: "75%" } : { height: "0%" }}
                             transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
-                            className="w-full bg-yellow-300 relative shadow-[0_0_20px_rgba(253,224,71,0.5)]"
+                            className="w-full relative"
+                            style={{
+                                background: 'linear-gradient(to top, #db2777, #f472b6, #fbcfe8)',
+                                boxShadow: '0 0 30px rgba(236, 72, 153, 0.6), 0 0 60px rgba(236, 72, 153, 0.3)',
+                            }}
                         >
                             {zoomOut && (
                                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
-                                    <span className="text-2xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                    <span className="text-2xl font-black text-white drop-shadow-[0_0_20px_rgba(236,72,153,0.8)]">
                                         <CountUp value={stats.gradesSum} duration={1.5} delay={0.2} decimals={0} />
                                     </span>
                                 </div>
@@ -430,9 +506,9 @@ function StatsSlide({ stats }: SlideProps) {
 
             <motion.p
                 initial={{ opacity: 0, y: 20 }}
-                animate={zoomOut ? { opacity: 0.7, y: 0 } : { opacity: 0, y: 20 }}
+                animate={zoomOut ? { opacity: 0.6, y: 0 } : { opacity: 0, y: 20 }}
                 transition={{ delay: 0.8 }}
-                className="mt-8 text-sm max-w-xs mx-auto"
+                className="mt-8 text-sm max-w-xs mx-auto text-gray-400 relative z-10"
             >
                 Accumulated points throughout the year
             </motion.p>
@@ -498,8 +574,20 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 
     // Trigger zoom out after horizontal pan completes
     useEffect(() => {
-        const timer = setTimeout(() => setZoomOut(true), 2200);
+        const timer = setTimeout(() => setZoomOut(true), 1800);
         return () => clearTimeout(timer);
+    }, []);
+
+    // Generate horizontal speed lines for the pan effect
+    const speedLines = useMemo(() => {
+        return Array.from({ length: 18 }, (_, i) => ({
+            id: i,
+            top: `${(i / 18) * 100 + (Math.random() - 0.5) * 10}%`,
+            delay: Math.random() * 0.6,
+            duration: 0.3 + Math.random() * 0.3,
+            width: 80 + Math.random() * 150,
+            opacity: 0.2 + Math.random() * 0.3,
+        }));
     }, []);
 
     // Animation values calibrated for canonical size (390x844)
@@ -509,12 +597,55 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
     const END_X = -350;   // End position
 
     return (
-        <div className="flex flex-col items-center justify-center gap-8 h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden relative">
-            {/* Background Gradients - scaled down */}
+        <div className="flex flex-col items-center justify-center gap-8 h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden relative">
+            {/* Animated gradient background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-[#0a0a0a] to-indigo-900/30"
+                animate={{
+                    opacity: [0.5, 0.7, 0.5],
+                }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Background Gradients - enhanced glow */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -right-[20%] w-[300px] h-[300px] bg-[#3e61d2]/10 rounded-full blur-[80px]" />
-                <div className="absolute -bottom-[20%] -left-[20%] w-[250px] h-[250px] bg-[#3e61d2]/5 rounded-full blur-[60px]" />
+                <motion.div 
+                    className="absolute -top-[20%] -right-[20%] w-[350px] h-[350px] bg-[#3e61d2]/15 rounded-full blur-[100px]"
+                    animate={zoomOut ? { scale: 1.3, opacity: 0.2 } : { scale: 1, opacity: 0.15 }}
+                    transition={{ duration: 0.8 }}
+                />
+                <motion.div 
+                    className="absolute -bottom-[20%] -left-[20%] w-[300px] h-[300px] bg-[#5e81f2]/10 rounded-full blur-[80px]"
+                    animate={zoomOut ? { scale: 1.2, opacity: 0.15 } : { scale: 1, opacity: 0.1 }}
+                    transition={{ duration: 0.8 }}
+                />
             </div>
+
+            {/* Horizontal speed lines during pan phase */}
+            <AnimatePresence>
+                {!zoomOut && speedLines.map((line) => (
+                    <motion.div
+                        key={line.id}
+                        className="absolute h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent rounded-full z-0"
+                        style={{
+                            top: line.top,
+                            width: line.width,
+                        }}
+                        initial={{ x: '100vw', opacity: 0 }}
+                        animate={{
+                            x: ['-10%', '-120%'],
+                            opacity: [0, line.opacity, line.opacity, 0],
+                        }}
+                        exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                        transition={{
+                            duration: line.duration,
+                            delay: line.delay,
+                            repeat: Infinity,
+                            ease: "linear",
+                        }}
+                    />
+                ))}
+            </AnimatePresence>
 
             {/* Header - appears after zoom out */}
             <motion.div
@@ -533,7 +664,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     )}
                     <div className="text-left">
                         {userName && <div className="font-bold text-base">{userName}</div>}
-                        <div className="text-xs opacity-60">{year} Year in Grades</div>
+                        <div className="text-xs text-blue-300/60">{year} Year in Grades</div>
                     </div>
                 </div>
             </motion.div>
@@ -546,12 +677,22 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     : { scale: SCALE, x: END_X }
                 }
                 transition={zoomOut
-                    ? { duration: 0.6, type: "spring", bounce: 0.1 }
-                    : { duration: 2, ease: [0.25, 0.8, 0.25, 1] } // Custom cubic bezier (easeOutQuad style)
+                    ? { duration: 0.5, type: "spring", bounce: 0.08 }
+                    : { duration: 1.8, ease: [0.35, 0.85, 0.35, 1] } // Snappier ease-out
                 }
-                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-3 rounded-xl shadow-2xl relative z-10"
-                style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+                className="w-full bg-[#0d1117] p-3 rounded-xl relative z-10 overflow-hidden"
+                style={{ boxShadow: 'inset 0 0 0 1px rgba(62, 97, 210, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(62, 97, 210, 0.1)' }}
             >
+                {/* Subtle scan line effect during pan */}
+                {!zoomOut && (
+                    <motion.div
+                        className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-blue-400/10 to-transparent z-10 pointer-events-none"
+                        initial={{ x: '-100%' }}
+                        animate={{ x: '500%' }}
+                        transition={{ duration: 2.5, ease: "easeOut" }}
+                    />
+                )}
+
                 <div className="w-full">
                     <div className="flex gap-[1px] w-full">
                         {weeks.map((week, weekIndex) => (
@@ -570,7 +711,8 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                                                         day.count <= 3 ? "bg-[#2d4696]" :
                                                             "bg-[#3e61d2]"
                                         )}
-                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.05)' } : undefined}
+                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.03)' } : 
+                                               day && day.count > 3 ? { boxShadow: '0 0 4px rgba(62, 97, 210, 0.4)' } : undefined}
                                     />
                                 ))}
                             </div>
@@ -597,7 +739,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                 className="w-full relative z-10"
             >
                 <h3 className="text-base text-[#8b949e] mb-2">Most Active Month</h3>
-                <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] to-[#5e81f2] bg-clip-text text-transparent">
+                <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] via-[#5e81f2] to-[#3e61d2] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(62,97,210,0.4)]">
                     {stats.mostActiveMonth.month}
                 </div>
                 <p className="text-sm mt-2 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
@@ -609,36 +751,29 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 function StreakSlide({ stats }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
-            {/* Background gradient */}
-            <motion.div
-                className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60"
-                animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                    duration: 8,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                }}
+            {/* LightPillar effect */}
+            <LightPillar
+                topColor="#cc8800"
+                bottomColor="#5a2800"
+                intensity={1.8}
+                rotationSpeed={1}
+                glowAmount={0.0015}
+                pillarWidth={3}
+                pillarHeight={0.4}
+                noiseIntensity={0.5}
+                pillarRotation={45}
+                mixBlendMode="screen"
             />
 
-            {/* Warm glow effects */}
-            <motion.div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px]"
-                animate={{
-                    scale: [1, 1.1, 1],
-                    opacity: [0.3, 0.6, 0.3],
-                }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            />
+            {/* Dark vignette overlay for better text contrast */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/50 pointer-events-none z-[1]" />
 
             <div className="relative z-10">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full text-orange-300 mb-8"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full text-orange-300 mb-8 backdrop-blur-sm"
                     style={{ boxShadow: 'inset 0 0 0 1px rgba(249, 115, 22, 0.4)' }}
                 >
                     <div className="text-lg">🔥</div>
@@ -649,7 +784,7 @@ function StreakSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-3xl font-bold mb-4"
+                    className="text-3xl font-bold mb-4 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
                 >
                     Longest Streak
                 </motion.h2>
@@ -667,7 +802,7 @@ function StreakSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8 }}
-                    className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
+                    className="mt-8 text-xl opacity-80 max-w-xs mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
                 >
                     Consecutive grades that increased your average
                 </motion.p>
@@ -677,36 +812,269 @@ function StreakSlide({ stats }: SlideProps) {
 }
 
 function PrimeTimeSlide({ stats }: SlideProps) {
+    const [phase, setPhase] = useState<'tracing' | 'peak' | 'reveal'>('tracing');
     const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 
+    // Generate a fake line chart path that builds up to the peak
+    const chartData = useMemo(() => {
+        // Create realistic-looking data points leading to the peak
+        const points: { x: number; y: number }[] = [];
+        const numPoints = 12;
+        const peakIndex = 9; // Peak near the end
+        
+        for (let i = 0; i <= numPoints; i++) {
+            const x = (i / numPoints) * 100;
+            let y: number;
+            
+            if (i <= peakIndex) {
+                // Build up with some variation
+                const progress = i / peakIndex;
+                const baseY = progress * 85; // Go up to ~85% height at peak
+                const noise = Math.sin(i * 1.5) * 8 + Math.cos(i * 2.3) * 5;
+                y = Math.max(5, Math.min(90, baseY + noise));
+            } else {
+                // Slight decline after peak
+                const decline = (i - peakIndex) / (numPoints - peakIndex);
+                y = 85 - decline * 15;
+            }
+            
+            points.push({ x, y });
+        }
+        
+        // Ensure peak point is actually the highest
+        points[peakIndex].y = 90;
+        
+        return { points, peakIndex };
+    }, []);
+
+    // Create SVG path from points
+    const pathD = useMemo(() => {
+        const { points } = chartData;
+        if (points.length < 2) return '';
+        
+        // Create smooth curve through points
+        let d = `M ${points[0].x} ${100 - points[0].y}`;
+        
+        for (let i = 1; i < points.length; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            const cpX = (prev.x + curr.x) / 2;
+            d += ` Q ${prev.x + (curr.x - prev.x) * 0.5} ${100 - prev.y}, ${cpX} ${100 - (prev.y + curr.y) / 2}`;
+        }
+        
+        const last = points[points.length - 1];
+        d += ` L ${last.x} ${100 - last.y}`;
+        
+        return d;
+    }, [chartData]);
+
+    // Animation timeline
+    useEffect(() => {
+        // Phase 1: Tracing the line (0-2.5s)
+        // Phase 2: Peak reached, pause with glow (2.5-3s)
+        // Phase 3: Zoom out and reveal (3s+)
+        
+        const peakTimer = setTimeout(() => setPhase('peak'), 2500);
+        const revealTimer = setTimeout(() => setPhase('reveal'), 3000);
+        
+        return () => {
+            clearTimeout(peakTimer);
+            clearTimeout(revealTimer);
+        };
+    }, []);
+
+    const { points, peakIndex } = chartData;
+    const peakPoint = points[peakIndex];
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-yellow-400 to-amber-600 text-white">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white relative overflow-hidden">
+            {/* Animated background gradient */}
             <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
+                className="absolute inset-0 bg-gradient-to-br from-emerald-900/20 via-[#0a0a0a] to-green-900/20"
+                animate={phase === 'reveal' ? { opacity: 0.8 } : { opacity: 0.4 }}
+                transition={{ duration: 0.8 }}
+            />
+
+            {/* Background glow that intensifies at peak */}
+            <motion.div
+                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-emerald-500/20 rounded-full blur-[100px]"
+                animate={
+                    phase === 'peak' ? { scale: 1.5, opacity: 0.6 } :
+                    phase === 'reveal' ? { scale: 2, opacity: 0.3, y: -50 } :
+                    { scale: 1, opacity: 0.1 }
+                }
+                transition={{ duration: 0.5 }}
+            />
+
+            {/* Chart container - zooms out on reveal */}
+            <motion.div
+                className="relative w-full flex-1 flex items-center justify-center"
+                initial={{ scale: 2.5, y: 100 }}
+                animate={
+                    phase === 'reveal' 
+                        ? { scale: 1, y: 0 } 
+                        : { scale: 2.5, y: 100 }
+                }
+                transition={{ 
+                    duration: 0.8, 
+                    type: "spring", 
+                    bounce: 0.15 
+                }}
             >
-                <h2 className="text-2xl font-bold mb-6">Prime Time</h2>
+                <div className="w-full max-w-[340px] h-[200px] relative">
+                    {/* Grid lines */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {/* Horizontal grid lines */}
+                        {[20, 40, 60, 80].map((y) => (
+                            <motion.line
+                                key={y}
+                                x1="0" y1={y} x2="100" y2={y}
+                                stroke="rgba(255,255,255,0.05)"
+                                strokeWidth="0.3"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: phase === 'reveal' ? 1 : 0.3 }}
+                            />
+                        ))}
+                    </svg>
+
+                    {/* Main chart SVG */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {/* Gradient fill under the line */}
+                        <defs>
+                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.4" />
+                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                            </linearGradient>
+                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.5" />
+                                <stop offset="100%" stopColor="#4ade80" stopOpacity="1" />
+                            </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        {/* Area fill - reveals as line is drawn */}
+                        <motion.path
+                            d={`${pathD} L 100 100 L 0 100 Z`}
+                            fill="url(#chartGradient)"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: phase !== 'tracing' ? 0.6 : 0.3 }}
+                            transition={{ duration: 0.5 }}
+                        />
+
+                        {/* The line itself with draw animation */}
+                        <motion.path
+                            d={pathD}
+                            fill="none"
+                            stroke="url(#lineGradient)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            filter="url(#glow)"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: phase === 'tracing' ? 0.85 : 1 }}
+                            transition={{ 
+                                duration: phase === 'tracing' ? 2.5 : 0.3,
+                                ease: phase === 'tracing' ? "easeOut" : "easeInOut"
+                            }}
+                        />
+
+                        {/* Glowing dot that follows the line */}
+                        <motion.circle
+                            r="2"
+                            fill="#4ade80"
+                            filter="url(#glow)"
+                            initial={{ 
+                                cx: points[0].x, 
+                                cy: 100 - points[0].y,
+                                scale: 1
+                            }}
+                            animate={
+                                phase === 'tracing' ? {
+                                    cx: peakPoint.x,
+                                    cy: 100 - peakPoint.y,
+                                    scale: 1
+                                } : phase === 'peak' ? {
+                                    cx: peakPoint.x,
+                                    cy: 100 - peakPoint.y,
+                                    scale: [1, 2, 1.5]
+                                } : {
+                                    cx: peakPoint.x,
+                                    cy: 100 - peakPoint.y,
+                                    scale: 1.2
+                                }
+                            }
+                            transition={{ 
+                                duration: phase === 'tracing' ? 2.5 : 0.3,
+                                ease: "easeOut"
+                            }}
+                        />
+
+                        {/* Extra glow ring at peak */}
+                        <AnimatePresence>
+                            {(phase === 'peak' || phase === 'reveal') && (
+                                <motion.circle
+                                    cx={peakPoint.x}
+                                    cy={100 - peakPoint.y}
+                                    r="4"
+                                    fill="none"
+                                    stroke="#4ade80"
+                                    strokeWidth="0.5"
+                                    initial={{ scale: 0, opacity: 1 }}
+                                    animate={{ scale: 3, opacity: 0 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.8 }}
+                                />
+                            )}
+                        </AnimatePresence>
+                    </svg>
+
+                    {/* Peak marker that appears on reveal */}
+                    <motion.div
+                        className="absolute pointer-events-none"
+                        style={{ 
+                            left: `${peakPoint.x}%`, 
+                            top: `${100 - peakPoint.y}%`,
+                            transform: 'translate(-50%, -50%)'
+                        }}
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={phase === 'reveal' ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0 }}
+                        transition={{ delay: 0.3, type: "spring", bounce: 0.4 }}
+                    >
+                        <div className="relative">
+                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-md"
+                                style={{ boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)' }}>
+                                PEAK
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
             </motion.div>
 
+            {/* Stats reveal section */}
             <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white/20 backdrop-blur-lg rounded-full w-36 h-36 flex flex-col items-center justify-center mb-4"
-                style={{ boxShadow: 'inset 0 0 0 4px rgba(255, 255, 255, 0.3)' }}
+                className="relative z-10 w-full"
+                initial={{ opacity: 0, y: 40 }}
+                animate={phase === 'reveal' ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+                transition={{ delay: 0.2, duration: 0.5 }}
             >
-                <span className="text-3xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
-                <span className="text-xs">/20</span>
-            </motion.div>
+                <h2 className="text-lg font-medium text-emerald-400/80 mb-2">Prime Time</h2>
+                
+                <div className="flex items-baseline justify-center gap-1 mb-3">
+                    <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300 drop-shadow-[0_0_30px_rgba(34,197,94,0.5)]">
+                        {stats.primeTime.value.toFixed(2)}
+                    </span>
+                    <span className="text-xl text-emerald-400/60">/20</span>
+                </div>
 
-            <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="text-xl"
-            >
-                Peak reached on<br /><strong>{date}</strong>
-            </motion.p>
+                <p className="text-sm text-zinc-400">
+                    Peak reached on <span className="text-emerald-400 font-semibold">{date}</span>
+                </p>
+            </motion.div>
         </div>
     );
 }
