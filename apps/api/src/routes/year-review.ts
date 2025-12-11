@@ -213,6 +213,166 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
       topPercentile = finalCounts.length === 1 ? 1 : Math.ceil(percent);
   }
 
+  // 7. Extra Stats for Awards
+  
+  // Global Average
+  let globalSum = 0;
+  let globalWeight = 0;
+  let gradesUnder8Count = 0;
+  
+  userGrades.forEach(g => {
+      const gradeVal = (g.value / g.outOf) * 20;
+      const coeff = g.coefficient / 100;
+      globalSum += gradeVal * coeff;
+      globalWeight += coeff;
+      
+      if (gradeVal < 8) gradesUnder8Count++;
+  });
+  
+  const average = globalWeight > 0 ? globalSum / globalWeight : 0;
+
+  // First Month Average
+  let firstMonthAverage = 0;
+  if (userGrades.length > 0) {
+      const sortedByDate = [...userGrades].sort((a, b) => a.passedAt.getTime() - b.passedAt.getTime());
+      const firstDate = sortedByDate[0].passedAt;
+      const oneMonthLater = new Date(firstDate);
+      oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+      
+      let fmSum = 0;
+      let fmWeight = 0;
+      
+      sortedByDate.forEach(g => {
+          if (g.passedAt <= oneMonthLater) {
+              const gradeVal = (g.value / g.outOf) * 20;
+              const coeff = g.coefficient / 100;
+              fmSum += gradeVal * coeff;
+              fmWeight += coeff;
+          }
+      });
+      
+      firstMonthAverage = fmWeight > 0 ? fmSum / fmWeight : 0;
+  }
+
+  // Worst Subject Average
+  const worstSubjectAverage = subjectAverages.length > 0 
+      ? subjectAverages[subjectAverages.length - 1].average 
+      : 0;
+
+  // StdDev Stats
+  let stdDevHighCount = 0;
+  let stdDevLowCount = 0;
+  const totalSubjects = Object.keys(subjectsStats).length;
+
+  Object.values(subjectsStats).forEach(s => {
+      const avg = s.weight > 0 ? s.sum / s.weight : 0;
+      let varianceSum = 0;
+      
+      s.grades.forEach(g => {
+          const val = (g.value / g.outOf) * 20;
+          varianceSum += Math.pow(val - avg, 2);
+      });
+      
+      const variance = s.grades.length > 0 ? varianceSum / s.grades.length : 0;
+      const stdDev = Math.sqrt(variance);
+      
+      if (stdDev > 4) stdDevHighCount++;
+      if (stdDev < 2) stdDevLowCount++;
+  });
+
+  // Determine Award
+  let award = {
+        title: "Le Touriste",
+        icon: "Plane",
+        description: "Tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+        condition: "Moins de 15 notes",
+        color: "text-pink-400",
+        bg: "bg-pink-500/10 border-pink-500/20",
+        gradient: "from-pink-400 to-rose-400"
+  };
+
+  if (average >= 10 && average <= 11 && gradesUnder8Count >= 3) {
+      award = {
+            title: "Le Funambule",
+            icon: "Scale",
+            description: "Tu as marché sur un fil toute l'année, le vide à gauche, le vide à droite... mais tu n'es jamais tombé. L'art de l'équilibre, le vrai.",
+            condition: "Moyenne entre 10 et 11",
+            color: "text-orange-400",
+            bg: "bg-orange-500/10 border-orange-500/20",
+            gradient: "from-orange-500 to-amber-500"
+      };
+  } else if (firstMonthAverage > 0 && average > firstMonthAverage + 2) {
+      award = {
+            title: "Le Roi du Comeback",
+            icon: "RefreshCcw",
+            description: "Le début de saison était compliqué. On a eu peur. Et puis tu as enclenché la seconde et tu as doublé tout le monde avant la ligne d'arrivée.",
+            condition: "+2 pts vs début d'année",
+            color: "text-emerald-400",
+            bg: "bg-emerald-500/10 border-emerald-500/20",
+            gradient: "from-emerald-500 to-green-500"
+      };
+  } else if (bestSubjects.length > 0 && (bestSubjects[0].value - worstSubjectAverage > 5)) {
+       award = {
+            title: "Le \"All In\"",
+            icon: "Dices",
+            description: "Pourquoi essayer d'être moyen partout quand on peut tout miser sur ses points forts ? Une stratégie risquée, mais payante.",
+            condition: "+5 pts entre pire et meilleure matière",
+            color: "text-red-400",
+            bg: "bg-red-500/10 border-red-500/20",
+            gradient: "from-red-500 to-rose-500"
+        };
+  } else if (average > 15) {
+      award = {
+            title: "La Masterclass",
+            icon: "Crown",
+            description: "Félicitations. Tu as plié l'année scolaire avec une facilité déconcertante.",
+            condition: "Moyenne générale > 15",
+            color: "text-yellow-400",
+            bg: "bg-yellow-500/10 border-yellow-500/20",
+            gradient: "from-yellow-400 to-amber-400"
+      };
+  } else if (totalSubjects > 0 && (stdDevHighCount / totalSubjects >= 0.25)) {
+      award = {
+            title: "L'Imprévisible",
+            icon: "Shuffle",
+            description: "Capable du génie absolu comme du ratage total au sein d'une même matière. Avec toi, c'est tout ou rien.",
+            condition: "Notes variables dans +25% des matières",
+            color: "text-purple-400",
+            bg: "bg-purple-500/10 border-purple-500/20",
+            gradient: "from-purple-500 to-violet-500"
+      };
+  } else if (totalSubjects > 0 && (stdDevLowCount / totalSubjects >= 0.5)) {
+      award = {
+            title: "La Précision",
+            icon: "Crosshair",
+            description: "Une régularité chirurgicale. Quand tu vises une note, tu l'atteins à chaque fois. Pas de mauvaises surprises, tu es une valeur sûre.",
+            condition: "Notes régulières dans > 50% des matières",
+            color: "text-blue-400",
+            bg: "bg-blue-500/10 border-blue-500/20",
+            gradient: "from-blue-400 to-cyan-400"
+      };
+  } else if (gradesCount >= 40) {
+      award = {
+            title: "Légende d'Avermate",
+            icon: "Gem",
+            description: "Ton suivi est tellement complet que tu connais ta moyenne mieux que tes profs. Tu ne fais plus qu'un avec l'application.",
+            condition: "Plus de 40 notes",
+            color: "text-cyan-400",
+            bg: "bg-cyan-500/10 border-cyan-500/20",
+            gradient: "from-cyan-400 to-sky-400"
+      };
+  } else if (gradesCount >= 15) {
+      award = {
+            title: "Avermatien",
+            icon: "UserCheck",
+            description: "Utilisateur certifié d'Avermate. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable. C'est carré.",
+            condition: "Plus de 15 notes",
+            color: "text-green-400",
+            bg: "bg-green-500/10 border-green-500/20",
+            gradient: "from-green-400 to-emerald-400"
+      };
+  }
+
   return c.json({
     hasData: true,
     stats: {
@@ -225,7 +385,9 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
         primeTime,
         bestSubjects,
         bestProgression,
-        topPercentile
+        topPercentile,
+        average,
+        award
     }
   });
 });

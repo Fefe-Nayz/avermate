@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target, Scale, RefreshCcw, Dices, Shuffle, Crosshair, Gem, UserCheck, Plane } from "lucide-react";
 import { YearReviewStats } from "@/types/year-review";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,48 +37,48 @@ function useZoomLevel() {
             // window.innerWidth = viewport width in CSS pixels (changes with zoom)
             // At 100% zoom: innerWidth ≈ screen.width (minus browser chrome)
             // At 200% zoom: innerWidth ≈ screen.width / 2
-            
+
             let detectedZoom = 1;
-            
+
             if (window.screen && window.screen.width && window.innerWidth) {
                 // Calculate zoom: higher zoom = smaller innerWidth
                 // We need to account for browser chrome (toolbars, etc.)
                 // A reasonable assumption is that at 100% zoom, innerWidth is ~95-100% of screen.width
                 // So we normalize based on that
-                
+
                 const screenWidth = window.screen.width;
                 const innerWidth = window.innerWidth;
-                
+
                 // The raw ratio
                 const rawZoom = screenWidth / innerWidth;
-                
+
                 // Normalize: at 100% zoom on most setups, this ratio is ~1.0-1.1
                 // We assume if ratio is close to 1, that's 100% zoom
                 // This is imperfect but works well in practice
                 detectedZoom = rawZoom;
             }
-            
+
             // Fallback/refinement using devicePixelRatio for subpixel accuracy
             // devicePixelRatio changes with zoom on most browsers
             const dpr = window.devicePixelRatio || 1;
             // On a standard display at 100% zoom, dpr is 1
             // On Retina at 100% zoom, dpr is 2
             // We can use dpr changes relative to screen.deviceXDPI if available
-            
+
             // Clamp to reasonable values
             detectedZoom = Math.max(0.1, Math.min(10, detectedZoom));
-            
+
             setZoom(detectedZoom);
         };
 
         updateZoom();
         window.addEventListener('resize', updateZoom);
-        
+
         // Also listen to visualViewport resize if available (for pinch zoom on mobile)
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateZoom);
         }
-        
+
         return () => {
             window.removeEventListener('resize', updateZoom);
             if (window.visualViewport) {
@@ -93,7 +93,7 @@ function useZoomLevel() {
 // Hook to calculate the complete layout with zoom compensation
 function useStoryLayout() {
     const zoom = useZoomLevel();
-    
+
     const [layout, setLayout] = useState({
         storyScale: 1,
         showNavButtons: true,
@@ -161,7 +161,7 @@ function useStoryLayout() {
 
         // Listen to resize events
         window.addEventListener('resize', updateLayout);
-        
+
         // Also use ResizeObserver for more reliable updates
         const resizeObserver = new ResizeObserver(updateLayout);
         resizeObserver.observe(document.body);
@@ -185,7 +185,7 @@ interface SlideProps {
     userAvatar?: string;
 }
 
-function CountUp({ value, duration = 2, delay = 0, decimals = 0 }: { value: number, duration?: number, delay?: number, decimals?: number }) {
+function CountUp({ value, duration = 2, delay = 0, decimals = 0, ease = "easeOut" }: { value: number, duration?: number, delay?: number, decimals?: number, ease?: any }) {
     const nodeRef = useRef<HTMLSpanElement>(null);
     const motionValue = useMotionValue(0);
     const rounded = useTransform(motionValue, (latest) => latest.toFixed(decimals));
@@ -194,10 +194,10 @@ function CountUp({ value, duration = 2, delay = 0, decimals = 0 }: { value: numb
         const controls = animate(motionValue, value, {
             duration,
             delay,
-            ease: "easeOut"
+            ease
         });
         return () => controls.stop();
-    }, [value, duration, delay, motionValue]);
+    }, [value, duration, delay, motionValue, ease]);
 
     return <motion.span>{rounded}</motion.span>;
 }
@@ -272,7 +272,7 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                         </div>
                     ) : (
                         <div className="w-20 h-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                                <div className="w-full h-full rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+                            <div className="w-full h-full rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
                                 <img
                                     src="/logo.svg"
                                     alt="Avermate"
@@ -612,23 +612,69 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 
 function StreakSlide({ stats }: SlideProps) {
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-orange-500 to-red-500 text-white">
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Background gradient */}
             <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            >
-                <div className="text-7xl mb-4">🔥</div>
-            </motion.div>
+                className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60"
+                animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{
+                    duration: 8,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                }}
+            />
+
+            {/* Warm glow effects */}
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-            >
-                <h2 className="text-2xl font-bold">On Fire!</h2>
-                <p className="text-5xl font-black my-4">{stats.longestStreak}</p>
-                <p className="text-base max-w-[280px] mx-auto">Consecutive grades that increased your average</p>
-            </motion.div>
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px]"
+                animate={{
+                    scale: [1, 1.1, 1],
+                    opacity: [0.3, 0.6, 0.3],
+                }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            />
+
+            <div className="relative z-10">
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full border border-orange-500/40 text-orange-300 mb-8"
+                >
+                    <div className="text-lg">🔥</div>
+                    <span className="font-bold text-sm uppercase tracking-wider">On Fire!</span>
+                </motion.div>
+
+                <motion.h2
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-3xl font-bold mb-4"
+                >
+                    Longest Streak
+                </motion.h2>
+
+                <motion.div
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200, delay: 0.4 }}
+                    className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 drop-shadow-[0_0_50px_rgba(234,88,12,0.5)]"
+                >
+                    <CountUp value={5} duration={1.5} delay={0.5} ease="circOut" />
+                </motion.div>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
+                >
+                    Consecutive grades that increased your average
+                </motion.p>
+            </div>
         </div>
     );
 }
@@ -784,18 +830,150 @@ function StatCard({ icon: Icon, title, value, colorClass, truncate = false, clas
     );
 }
 
+const awardIcons: Record<string, any> = {
+    "Scale": Scale,
+    "RefreshCcw": RefreshCcw,
+    "Dices": Dices,
+    "Crown": Crown,
+    "Shuffle": Shuffle,
+    "Crosshair": Crosshair,
+    "Gem": Gem,
+    "UserCheck": UserCheck,
+    "Plane": Plane
+};
+
+const DEFAULT_AWARD = {
+    title: "Le Touriste",
+    icon: "Plane",
+    description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+    condition: "Moins de 15 notes ajoutées sur l'année",
+    color: "text-pink-400",
+    bg: "bg-pink-500/10 border-pink-500/20",
+    gradient: "from-pink-400 to-rose-400"
+};
+
+function AwardIntroSlide({ stats }: SlideProps) {
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Shiny Gold Background */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
+
+            <div className="relative z-10 max-w-md space-y-8">
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-2xl font-light text-gray-400"
+                >
+                    We've analyzed your performance...
+                </motion.p>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.5 }}
+                    className="text-3xl font-medium"
+                >
+                    And found the perfect title for you.
+                </motion.p>
+
+                {/* <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 3.5, type: "spring" }}
+                >
+                    <Sparkles className="w-16 h-16 text-yellow-400 mx-auto" />
+                </motion.div> */}
+            </div>
+        </div>
+    );
+}
+
+function AwardRevealSlide({ stats }: SlideProps) {
+    const award = stats.award || DEFAULT_AWARD;
+    const Icon = awardIcons[award.icon] || Plane;
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            confetti({
+                particleCount: 200,
+                spread: 100,
+                origin: { y: 0.6 },
+                colors: ['#FFD700', '#FFA500', '#ffffff']
+            });
+        }, 600);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Shiny Gold Background */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
+
+            {/* Header Text */}
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="relative z-10 mb-8 flex flex-col items-center gap-2"
+            >
+                <div className="p-3 bg-yellow-500/20 rounded-full border border-yellow-500/30 mb-2">
+                    <Trophy className="w-6 h-6 text-yellow-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-zinc-100">Your Award</h2>
+            </motion.div>
+
+            <motion.div
+                initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
+                animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+                transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
+                className={cn("relative z-10 rounded-lg p-2.5 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between border bg-[#161b22]", award.bg)}
+            >
+                <div className="flex flex-col items-start text-left">
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6 }}
+                        className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}
+                    >
+                        {award.title}
+                    </motion.div>
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.7 }}
+                        className="text-md sm:text-xl font-bold text-white leading-tight"
+                    >
+                        {award.condition}
+                    </motion.div>
+                </div>
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.8, type: "spring" }}
+                >
+                    <Icon className={cn("w-10 h-10", award.color)} />
+                </motion.div>
+            </motion.div>
+
+            <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.5 }}
+                className="relative z-10 mt-8 text-sm text-zinc-100 max-w-xs"
+            >
+                {award.description}
+            </motion.p>
+        </div>
+    );
+}
+
 function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) {
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
-    const award = useMemo(() => {
-        if (stats.topPercentile <= 10) return { title: "The Elite", icon: Crown, desc: "Top 10% Performer", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" };
-        if (stats.gradesCount >= 80) return { title: "The Machine", icon: Zap, desc: "Relentless Effort", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
-        if (stats.longestStreak >= 15) return { title: "Unstoppable", icon: TrendingUp, desc: "Consistency King", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" };
-        if (stats.bestProgression.value >= 2) return { title: "The Climber", icon: Rocket, desc: "Skyrocketing Grades", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" };
-        if ((stats.average || 0) >= 15) return { title: "High Flyer", icon: Star, desc: "Excellence Achieved", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" };
-        return { title: "The Scholar", icon: BookOpen, desc: "Dedicated Student", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" };
-    }, [stats]);
+    const award = stats.award || DEFAULT_AWARD;
+    const Icon = awardIcons[award.icon] || Plane;
 
     const weeks = useMemo(() => {
         const result = [];
@@ -933,120 +1111,127 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                     </div>
                 </div>
 
-                {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
-                <div className="w-full bg-[#161b22] border border-white/10 rounded-xl p-3 mb-3 shrink-0">
-                    <div className="w-full">
-                        <div
-                            className="flex gap-[1px] w-full"
-                        >
-                            {weeks.map((week, weekIndex) => (
-                                <div
-                                    key={weekIndex}
-                                    className="flex-1 flex flex-col gap-[1px]"
-                                >
-                                    {week.map((day, dayIndex) => (
-                                        <div
-                                            key={`${weekIndex}-${dayIndex}`}
-                                            className={cn(
-                                                "w-full aspect-square rounded-full",
-                                                !day ? "bg-transparent" :
-                                                    day.count === 0 ? "bg-[#161b22]" :
-                                                        day.count === 1 ? "bg-[#1d2d60]" :
-                                                            day.count <= 3 ? "bg-[#2d4696]" :
-                                                                "bg-[#3e61d2]"
-                                            )}
-                                        />
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="text-left text-[10px] text-[#8b949e] mt-1.5">
-                        {stats.gradesCount} grades in {year}
-                    </div>
-                </div>
-
                 {/* Grid Layout - Flex grow to fill space */}
                 <motion.div
-                    className="grid grid-cols-2 auto-rows-fr gap-2 w-full mb-3 flex-1"
+                    className="flex flex-col flex-1"
                     variants={container}
                     initial="hidden"
                     animate="show"
                 >
-                    <StatCard
-                        icon={Trophy}
-                        title="Universal Rank"
-                        value={`Top ${stats.topPercentile}%`}
-                        colorClass="text-yellow-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Zap}
-                        title="Longest Streak"
-                        value={stats.longestStreak}
-                        colorClass="text-emerald-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Activity}
-                        title="Total Grades"
-                        value={stats.gradesCount}
-                        colorClass="text-pink-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Calendar}
-                        title="Most Active Month"
-                        value={stats.mostActiveMonth.month}
-                        colorClass="text-purple-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Star}
-                        title="Total Points"
-                        value={stats.gradesSum.toFixed(0)}
-                        colorClass="text-blue-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Target}
-                        title="Global Average"
-                        value={stats.average?.toFixed(2) || "N/A"}
-                        colorClass="text-teal-400"
-                        variants={item}
-                    />
-                    <StatCard
-                        icon={Rocket}
-                        title="Top Subject"
-                        value={stats.bestSubjects[0]?.name || "N/A"}
-                        colorClass="text-cyan-400"
-                        truncate={true}
-                        className="col-span-2"
-                        variants={item}
-                    />
 
-                    {/* Award Card - sized for canonical viewport */}
-                    <motion.div
-                        className={cn("col-span-2 rounded-lg p-3 flex items-center justify-between border", award.bg)}
-                        variants={item}
-                    >
-                        <div className="flex flex-col items-start text-left">
-                            <div className={cn("text-[10px] font-bold uppercase tracking-wider mb-0.5", award.color)}>
-                                {award.title}
-                            </div>
-                            <div className="text-xl font-bold text-white leading-tight">
-                                {award.desc}
+                    {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
+                    <motion.div variants={item} className="w-full bg-[#161b22] border border-white/10 rounded-xl p-3 mb-3 shrink-0">
+                        <div className="w-full">
+                            <div
+                                className="flex gap-[1px] w-full"
+                            >
+                                {weeks.map((week, weekIndex) => (
+                                    <div
+                                        key={weekIndex}
+                                        className="flex-1 flex flex-col gap-[1px]"
+                                    >
+                                        {week.map((day, dayIndex) => (
+                                            <div
+                                                key={`${weekIndex}-${dayIndex}`}
+                                                className={cn(
+                                                    "w-full aspect-square rounded-full",
+                                                    !day ? "bg-transparent" :
+                                                        day.count === 0 ? "bg-[#161b22]" :
+                                                            day.count === 1 ? "bg-[#1d2d60]" :
+                                                                day.count <= 3 ? "bg-[#2d4696]" :
+                                                                    "bg-[#3e61d2]"
+                                                )}
+                                            />
+                                        ))}
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                        <award.icon className={cn("w-8 h-8", award.color)} />
+                        <div className="text-left text-[10px] text-[#8b949e] mt-1.5">
+                            {stats.gradesCount} grades in {year}
+                        </div>
                     </motion.div>
-                </motion.div>                <div className="text-xs text-[#8b949e] shrink-0">
-                    avermate.fr
-                </div>
+
+                    <div className="grid grid-cols-2 auto-rows-fr gap-2 w-full mb-3 flex-1">
+                        <StatCard
+                            icon={Trophy}
+                            title="Universal Rank"
+                            value={`Top ${stats.topPercentile}%`}
+                            colorClass="text-yellow-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Zap}
+                            title="Longest Streak"
+                            value={stats.longestStreak}
+                            colorClass="text-emerald-400"
+                            variants={item}
+                        />
+
+                        <StatCard
+                            icon={Activity}
+                            title="Total Grades"
+                            value={stats.gradesCount}
+                            colorClass="text-pink-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Calendar}
+                            title="Most Active Month"
+                            value={stats.mostActiveMonth.month}
+                            colorClass="text-purple-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Star}
+                            title="Total Points"
+                            value={stats.gradesSum.toFixed(0)}
+                            colorClass="text-blue-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Target}
+                            title="Global Average"
+                            value={stats.average?.toFixed(2) || "N/A"}
+                            colorClass="text-teal-400"
+                            variants={item}
+                        />
+                        <StatCard
+                            icon={Rocket}
+                            title="Top Subject"
+                            value={stats.bestSubjects[0]?.name || "N/A"}
+                            colorClass="text-cyan-400"
+                            truncate={true}
+                            className="col-span-2"
+                            variants={item}
+                        />
+                    </div>
+
+                    <div>
+                        {/* Award Card */}
+                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between border bg-[#161b22]", award.bg)}>
+                            <div className="flex flex-col items-start text-left">
+                                <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
+                                    {award.title}
+                                </div>
+                                <div className="text-md sm:text-xl font-bold text-white leading-tight">
+                                    {award.condition}
+                                </div>
+                            </div>
+                            <Icon className={cn("w-10 h-10", award.color)} />
+                        </motion.div>
+                    </div>
+
+                    <div className="mt-2 text-xs text-[#8b949e] shrink-0">
+                        avermate.fr
+                    </div>
+
+                </motion.div>
+
             </div>
 
             {/* Buttons (not captured) - sized for canonical viewport */}
-            <div className="flex gap-2 w-full mt-3 mb-3 shrink-0">
+            <div className="flex gap-2 w-full mb-3 shrink-0">
                 <Button
                     className="flex-1 bg-white hover:bg-gray-200 text-black border-none h-10 rounded-lg font-bold text-sm"
                     onClick={(e) => {
@@ -1083,17 +1268,19 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
     const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
     const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    
+
     // Get the complete layout with zoom compensation
     const layout = useStoryLayout();
 
     const slides = useMemo(() => [
-        { component: IntroSlide, duration: 4000 },
+        { component: IntroSlide, duration: 3000 },
         { component: StatsSlide, duration: 6000 },
         { component: HeatmapSlide, duration: 6000 },
-        { component: StreakSlide, duration: 5000 },
+        { component: StreakSlide, duration: 3500 },
         { component: PrimeTimeSlide, duration: 5000 },
-        { component: SubjectsSlide, duration: 7000 },
+        { component: SubjectsSlide, duration: 5000 },
+        { component: AwardIntroSlide, duration: 3000 },
+        { component: AwardRevealSlide, duration: 6000 },
         { component: PercentileSlide, duration: 6000 },
         { component: OutroSlide, duration: 10000 }, // Last slide: progress fills but doesn't auto-close
     ], []);
@@ -1266,10 +1453,10 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
 
     if (!isOpen) return null;
 
-    const { 
-        storyScale, 
-        showNavButtons, 
-        storyWidth, 
+    const {
+        storyScale,
+        showNavButtons,
+        storyWidth,
         storyHeight,
         navButtonSize,
         closeButtonSize,
@@ -1286,7 +1473,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                 - Button sizes are zoom-compensated to appear constant physical size
                 - Story scales to fill available space after margins/buttons
             */}
-            
+
             {/* Close Button - positioned at top-right of story, zoom-compensated size */}
             <button
                 onClick={onClose}
