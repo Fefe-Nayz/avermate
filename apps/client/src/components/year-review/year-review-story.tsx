@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
 import html2canvas from "html2canvas-pro";
+import LightPillar from "@/components/LightPillar";
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
@@ -16,7 +17,7 @@ const CANONICAL_HEIGHT = 693;
 const STORY_ASPECT_RATIO = CANONICAL_WIDTH / CANONICAL_HEIGHT;
 
 // Furniture sizes at 100% zoom (in CSS pixels at zoom=1)
-const NAV_BUTTON_SIZE_BASE = 40;
+const NAV_BUTTON_SIZE_BASE = 48;
 const CLOSE_BUTTON_SIZE_BASE = 32;
 const BUTTON_GAP_BASE = 16;
 const CLOSE_BUTTON_GAP_BASE = 12;
@@ -26,44 +27,37 @@ const MIN_MARGIN_BASE = 20; // Minimum margin in pixels at 100% zoom
 // (we use screen width to make this zoom-independent)
 const NAV_BUTTON_HIDE_THRESHOLD = 600;
 
-// Hook to calculate zoom level - works regardless of initial zoom level
+// Hook to calculate zoom level - cross-browser (Chrome + Firefox)
 function useZoomLevel() {
     const [zoom, setZoom] = useState(1);
 
     useEffect(() => {
         const updateZoom = () => {
-            // Method: Use screen.width vs window.innerWidth
-            // screen.width = physical screen width (constant)
-            // window.innerWidth = viewport width in CSS pixels (changes with zoom)
-            // At 100% zoom: innerWidth ≈ screen.width (minus browser chrome)
-            // At 200% zoom: innerWidth ≈ screen.width / 2
-
             let detectedZoom = 1;
 
-            if (window.screen && window.screen.width && window.innerWidth) {
-                // Calculate zoom: higher zoom = smaller innerWidth
-                // We need to account for browser chrome (toolbars, etc.)
-                // A reasonable assumption is that at 100% zoom, innerWidth is ~95-100% of screen.width
-                // So we normalize based on that
+            // Detect browser
+            const isFirefox = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('firefox');
 
-                const screenWidth = window.screen.width;
-                const innerWidth = window.innerWidth;
-
-                // The raw ratio
-                const rawZoom = screenWidth / innerWidth;
-
-                // Normalize: at 100% zoom on most setups, this ratio is ~1.0-1.1
-                // We assume if ratio is close to 1, that's 100% zoom
-                // This is imperfect but works well in practice
-                detectedZoom = rawZoom;
+            if (isFirefox) {
+                // Firefox: Always use devicePixelRatio approach
+                // In Firefox, DPR changes directly with zoom: DPR = nativeDPR * zoomFactor
+                // 
+                // IMPORTANT: We cannot reliably distinguish between Retina displays and zoomed
+                // standard displays. For example, DPR=2 could be:
+                // - Standard display at 200% zoom
+                // - Retina display at 100% zoom
+                // 
+                // Any threshold we use to detect Retina will cause a "jump" when zoom crosses it.
+                // Therefore, we always assume nativeDPR = 1 (standard display).
+                // 
+                // Tradeoff: On Retina displays, buttons will be 2x the intended physical size,
+                // but at least zoom changes won't cause sudden jumps in button sizes.
+                const dpr = window.devicePixelRatio || 1;
+                detectedZoom = dpr; // nativeDPR = 1, so zoom = dpr / 1 = dpr
+            } else if (window.outerWidth && window.innerWidth && window.outerWidth > 0) {
+                // Chrome and other browsers: outerWidth/innerWidth works reliably
+                detectedZoom = window.outerWidth / window.innerWidth;
             }
-
-            // Fallback/refinement using devicePixelRatio for subpixel accuracy
-            // devicePixelRatio changes with zoom on most browsers
-            const dpr = window.devicePixelRatio || 1;
-            // On a standard display at 100% zoom, dpr is 1
-            // On Retina at 100% zoom, dpr is 2
-            // We can use dpr changes relative to screen.deviceXDPI if available
 
             // Clamp to reasonable values
             detectedZoom = Math.max(0.1, Math.min(10, detectedZoom));
@@ -74,7 +68,7 @@ function useZoomLevel() {
         updateZoom();
         window.addEventListener('resize', updateZoom);
 
-        // Also listen to visualViewport resize if available (for pinch zoom on mobile)
+        // Also listen to visualViewport resize if available
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', updateZoom);
         }
@@ -243,21 +237,22 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
                     className="relative mb-6"
                 >
                     {/* Animated rings - positioned outside the logo box */}
+                    {/* Using box-shadow instead of border for consistent rendering at different scales */}
                     <motion.div
-                        className="absolute inset-0 rounded-full border-2 border-emerald-400/50"
-                        style={{ margin: -12 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -12, boxShadow: 'inset 0 0 0 2px rgba(52, 211, 153, 0.5)' }}
                         animate={{ scale: [1.15, 1.30, 1.15], opacity: [0.6, 0, 0.6] }}
                         transition={{ duration: 2, repeat: Infinity }}
                     />
                     <motion.div
-                        className="absolute inset-0 rounded-full border border-cyan-400/40"
-                        style={{ margin: -20 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -20, boxShadow: 'inset 0 0 0 1px rgba(34, 211, 238, 0.4)' }}
                         animate={{ scale: [1.2, 1.4, 1.2], opacity: [0.4, 0, 0.4] }}
                         transition={{ duration: 2.5, repeat: Infinity, delay: 0.3 }}
                     />
                     <motion.div
-                        className="absolute inset-0 rounded-full border border-teal-400/20"
-                        style={{ margin: -28 }}
+                        className="absolute inset-0 rounded-full"
+                        style={{ margin: -28, boxShadow: 'inset 0 0 0 1px rgba(45, 212, 191, 0.2)' }}
                         animate={{ scale: [1.25, 1.5, 1.25], opacity: [0.2, 0, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity, delay: 0.6 }}
                     />
@@ -358,12 +353,69 @@ function StatsSlide({ stats }: SlideProps) {
     const xOffset = distanceToGradesCenter * SCALE; // ~157px
 
     useEffect(() => {
-        const timer = setTimeout(() => setZoomOut(true), 2500);
+        const timer = setTimeout(() => setZoomOut(true), 2200);
         return () => clearTimeout(timer);
     }, []);
 
+    // Generate more speed lines for the tracking phase - spread across the whole screen
+    const speedLines = useMemo(() => {
+        return Array.from({ length: 24 }, (_, i) => ({
+            id: i,
+            left: `${(i / 24) * 100 + (Math.random() - 0.5) * 8}%`,
+            delay: Math.random() * 0.8,
+            duration: 0.4 + Math.random() * 0.5,
+            height: 60 + Math.random() * 120,
+            opacity: 0.3 + Math.random() * 0.4,
+        }));
+    }, []);
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-blue-500 to-cyan-500 text-white overflow-hidden relative">
+        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden relative">
+            {/* Animated gradient background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-violet-900/40 via-[#0a0a0a] to-fuchsia-900/40"
+                animate={{
+                    opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Radial glow behind bars */}
+            <motion.div
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/4 w-[500px] h-[500px] rounded-full"
+                style={{
+                    background: 'radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0) 70%)',
+                }}
+                animate={zoomOut ? { scale: 1.2, opacity: 0.6 } : { scale: 0.8, opacity: 0.4 }}
+                transition={{ duration: 0.8 }}
+            />
+
+            {/* Speed lines during tracking phase - behind bar chart (z-0) */}
+            <AnimatePresence>
+                {!zoomOut && speedLines.map((line) => (
+                    <motion.div
+                        key={line.id}
+                        className="absolute w-[1.5px] bg-gradient-to-b from-transparent via-violet-400/60 to-transparent rounded-full z-0"
+                        style={{
+                            left: line.left,
+                            height: line.height,
+                        }}
+                        initial={{ y: -150, opacity: 0 }}
+                        animate={{
+                            y: ['-20%', '120%'],
+                            opacity: [0, line.opacity, line.opacity, 0],
+                        }}
+                        exit={{ opacity: 0, transition: { duration: 0.3 } }}
+                        transition={{
+                            duration: line.duration,
+                            delay: line.delay,
+                            repeat: Infinity,
+                            ease: "linear",
+                        }}
+                    />
+                ))}
+            </AnimatePresence>
+
             <motion.div
                 initial={{ scale: SCALE, y: 100, x: xOffset }}
                 animate={zoomOut
@@ -374,29 +426,43 @@ function StatsSlide({ stats }: SlideProps) {
                     ? { duration: 0.8, type: "spring", bounce: 0.2 } // Zoom out transition
                     : { duration: 2, ease: "easeOut" } // Tracking transition (matches bar growth)
                 }
-                className="flex items-end justify-center gap-8 h-64 w-full max-w-xs"
+                className="flex items-end justify-center gap-8 h-64 w-full max-w-xs relative z-10"
             >
                 {/* Grades Bar */}
                 <div className="flex flex-col items-center gap-2 w-20 relative">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8 text-violet-200"
                     >
                         Grades
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.2)' }}>
                         {/* Growing Fill */}
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={{ height: "60%" }}
                             transition={{ duration: 2, ease: "easeOut" }}
-                            className="w-full bg-white relative shadow-[0_0_20px_rgba(255,255,255,0.5)]"
+                            className="w-full relative"
+                            style={{
+                                background: 'linear-gradient(to top, #7c3aed, #a78bfa, #c4b5fd)',
+                                boxShadow: '0 0 30px rgba(139, 92, 246, 0.6), 0 0 60px rgba(139, 92, 246, 0.3)',
+                            }}
                         >
+                            {/* Subtle shimmer effect - gentler, continues past the top */}
+                            {!zoomOut && (
+                                <motion.div
+                                    className="absolute inset-x-0 -top-[50%] bottom-0 bg-gradient-to-t from-transparent via-white/15 to-transparent"
+                                    style={{ height: '200%' }}
+                                    initial={{ y: '50%' }}
+                                    animate={{ y: '-100%' }}
+                                    transition={{ duration: 2.2, ease: "easeOut" }}
+                                />
+                            )}
                             {/* Ticking Value on top of the bar */}
                             <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
-                                <span className="text-3xl font-black text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                <span className="text-3xl font-black text-white drop-shadow-[0_0_20px_rgba(139,92,246,0.8)]">
                                     <CountUp value={stats.gradesCount} duration={2} />
                                 </span>
                             </div>
@@ -410,21 +476,25 @@ function StatsSlide({ stats }: SlideProps) {
                         initial={{ opacity: 0, y: 20 }}
                         animate={zoomOut ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
                         transition={{ delay: 0.1 }}
-                        className="text-lg font-bold whitespace-nowrap absolute -top-8"
+                        className="text-lg font-bold whitespace-nowrap absolute -top-8 text-fuchsia-200"
                     >
                         Points
                     </motion.div>
 
-                    <div className="relative w-full h-64 bg-white/10 rounded-t-2xl overflow-hidden flex items-end backdrop-blur-sm border border-white/10">
+                    <div className="relative w-full h-64 bg-[#0a0a0a] rounded-t-2xl overflow-hidden flex items-end" style={{ boxShadow: 'inset 0 0 0 1px rgba(236, 72, 153, 0.2)' }}>
                         <motion.div
                             initial={{ height: "0%" }}
                             animate={zoomOut ? { height: "75%" } : { height: "0%" }}
                             transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
-                            className="w-full bg-yellow-300 relative shadow-[0_0_20px_rgba(253,224,71,0.5)]"
+                            className="w-full relative"
+                            style={{
+                                background: 'linear-gradient(to top, #db2777, #f472b6, #fbcfe8)',
+                                boxShadow: '0 0 30px rgba(236, 72, 153, 0.6), 0 0 60px rgba(236, 72, 153, 0.3)',
+                            }}
                         >
                             {zoomOut && (
                                 <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-24">
-                                    <span className="text-2xl font-black text-yellow-300 drop-shadow-[0_4px_8px_rgba(0,0,0,0.3)]">
+                                    <span className="text-2xl font-black text-white drop-shadow-[0_0_20px_rgba(236,72,153,0.8)]">
                                         <CountUp value={stats.gradesSum} duration={1.5} delay={0.2} decimals={0} />
                                     </span>
                                 </div>
@@ -436,9 +506,9 @@ function StatsSlide({ stats }: SlideProps) {
 
             <motion.p
                 initial={{ opacity: 0, y: 20 }}
-                animate={zoomOut ? { opacity: 0.7, y: 0 } : { opacity: 0, y: 20 }}
+                animate={zoomOut ? { opacity: 0.6, y: 0 } : { opacity: 0, y: 20 }}
                 transition={{ delay: 0.8 }}
-                className="mt-8 text-sm max-w-xs mx-auto"
+                className="mt-8 text-sm max-w-xs mx-auto text-gray-400 relative z-10"
             >
                 Accumulated points throughout the year
             </motion.p>
@@ -504,8 +574,20 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 
     // Trigger zoom out after horizontal pan completes
     useEffect(() => {
-        const timer = setTimeout(() => setZoomOut(true), 2200);
+        const timer = setTimeout(() => setZoomOut(true), 1800);
         return () => clearTimeout(timer);
+    }, []);
+
+    // Generate horizontal speed lines for the pan effect
+    const speedLines = useMemo(() => {
+        return Array.from({ length: 18 }, (_, i) => ({
+            id: i,
+            top: `${(i / 18) * 100 + (Math.random() - 0.5) * 10}%`,
+            delay: Math.random() * 0.6,
+            duration: 0.3 + Math.random() * 0.3,
+            width: 80 + Math.random() * 150,
+            opacity: 0.2 + Math.random() * 0.3,
+        }));
     }, []);
 
     // Animation values calibrated for canonical size (390x844)
@@ -515,12 +597,55 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
     const END_X = -350;   // End position
 
     return (
-        <div className="flex flex-col items-center justify-center gap-8 h-full text-center p-4 bg-[#0d1117] text-white overflow-hidden relative">
-            {/* Background Gradients - scaled down */}
+        <div className="flex flex-col items-center justify-center gap-8 h-full text-center p-4 bg-[#0a0a0a] text-white overflow-hidden relative">
+            {/* Animated gradient background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-blue-900/30 via-[#0a0a0a] to-indigo-900/30"
+                animate={{
+                    opacity: [0.5, 0.7, 0.5],
+                }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Background Gradients - enhanced glow */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -right-[20%] w-[300px] h-[300px] bg-[#3e61d2]/10 rounded-full blur-[80px]" />
-                <div className="absolute -bottom-[20%] -left-[20%] w-[250px] h-[250px] bg-[#3e61d2]/5 rounded-full blur-[60px]" />
+                <motion.div 
+                    className="absolute -top-[20%] -right-[20%] w-[350px] h-[350px] bg-[#3e61d2]/15 rounded-full blur-[100px]"
+                    animate={zoomOut ? { scale: 1.3, opacity: 0.2 } : { scale: 1, opacity: 0.15 }}
+                    transition={{ duration: 0.8 }}
+                />
+                <motion.div 
+                    className="absolute -bottom-[20%] -left-[20%] w-[300px] h-[300px] bg-[#5e81f2]/10 rounded-full blur-[80px]"
+                    animate={zoomOut ? { scale: 1.2, opacity: 0.15 } : { scale: 1, opacity: 0.1 }}
+                    transition={{ duration: 0.8 }}
+                />
             </div>
+
+            {/* Horizontal speed lines during pan phase */}
+            <AnimatePresence>
+                {!zoomOut && speedLines.map((line) => (
+                    <motion.div
+                        key={line.id}
+                        className="absolute h-[1.5px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent rounded-full z-0"
+                        style={{
+                            top: line.top,
+                            width: line.width,
+                        }}
+                        initial={{ x: '100vw', opacity: 0 }}
+                        animate={{
+                            x: ['-10%', '-120%'],
+                            opacity: [0, line.opacity, line.opacity, 0],
+                        }}
+                        exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                        transition={{
+                            duration: line.duration,
+                            delay: line.delay,
+                            repeat: Infinity,
+                            ease: "linear",
+                        }}
+                    />
+                ))}
+            </AnimatePresence>
 
             {/* Header - appears after zoom out */}
             <motion.div
@@ -531,15 +656,15 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
             >
                 <div className="flex items-center justify-center gap-3">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full border-2 border-white/20 object-cover" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }} />
                     ) : (
-                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/20">
+                        <div className="w-10 h-10 rounded-full overflow-hidden" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }}>
                             <div className="w-full h-full bg-gradient-to-br from-[#3e61d2] to-blue-500" />
                         </div>
                     )}
                     <div className="text-left">
                         {userName && <div className="font-bold text-base">{userName}</div>}
-                        <div className="text-xs opacity-60">{year} Year in Grades</div>
+                        <div className="text-xs text-blue-300/60">{year} Year in Grades</div>
                     </div>
                 </div>
             </motion.div>
@@ -552,11 +677,22 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                     : { scale: SCALE, x: END_X }
                 }
                 transition={zoomOut
-                    ? { duration: 0.6, type: "spring", bounce: 0.1 }
-                    : { duration: 2, ease: [0.25, 0.8, 0.25, 1] } // Custom cubic bezier (easeOutQuad style)
+                    ? { duration: 0.5, type: "spring", bounce: 0.08 }
+                    : { duration: 1.8, ease: [0.35, 0.85, 0.35, 1] } // Snappier ease-out
                 }
-                className="w-full bg-[#161b22]/80 backdrop-blur-sm p-3 rounded-xl border border-white/10 shadow-2xl relative z-10"
+                className="w-full bg-[#0d1117] p-3 rounded-xl relative z-10 overflow-hidden"
+                style={{ boxShadow: 'inset 0 0 0 1px rgba(62, 97, 210, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(62, 97, 210, 0.1)' }}
             >
+                {/* Subtle scan line effect during pan */}
+                {!zoomOut && (
+                    <motion.div
+                        className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-blue-400/10 to-transparent z-10 pointer-events-none"
+                        initial={{ x: '-100%' }}
+                        animate={{ x: '500%' }}
+                        transition={{ duration: 2.5, ease: "easeOut" }}
+                    />
+                )}
+
                 <div className="w-full">
                     <div className="flex gap-[1px] w-full">
                         {weeks.map((week, weekIndex) => (
@@ -570,11 +706,13 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                                         className={cn(
                                             "w-full aspect-square rounded-[1px]",
                                             !day ? "bg-transparent" :
-                                                day.count === 0 ? "bg-[#161b22] border border-white/5" :
+                                                day.count === 0 ? "bg-[#161b22]" :
                                                     day.count === 1 ? "bg-[#1d2d60]" :
                                                         day.count <= 3 ? "bg-[#2d4696]" :
                                                             "bg-[#3e61d2]"
                                         )}
+                                        style={day && day.count === 0 ? { boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.03)' } : 
+                                               day && day.count > 3 ? { boxShadow: '0 0 4px rgba(62, 97, 210, 0.4)' } : undefined}
                                     />
                                 ))}
                             </div>
@@ -601,7 +739,7 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
                 className="w-full relative z-10"
             >
                 <h3 className="text-base text-[#8b949e] mb-2">Most Active Month</h3>
-                <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] to-[#5e81f2] bg-clip-text text-transparent">
+                <div className="text-4xl font-black uppercase tracking-wider bg-gradient-to-r from-[#3e61d2] via-[#5e81f2] to-[#3e61d2] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(62,97,210,0.4)]">
                     {stats.mostActiveMonth.month}
                 </div>
                 <p className="text-sm mt-2 text-[#8b949e]">{stats.mostActiveMonth.count} grades entered</p>
@@ -613,36 +751,30 @@ function HeatmapSlide({ stats, year, userName, userAvatar }: SlideProps) {
 function StreakSlide({ stats }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
-            {/* Background gradient */}
-            <motion.div
-                className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60"
-                animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                    duration: 8,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                }}
+            {/* LightPillar effect */}
+            <LightPillar
+                topColor="#cc8800"
+                bottomColor="#5a2800"
+                intensity={1.8}
+                rotationSpeed={1}
+                glowAmount={0.0015}
+                pillarWidth={3}
+                pillarHeight={0.4}
+                noiseIntensity={0.5}
+                pillarRotation={45}
+                mixBlendMode="screen"
             />
 
-            {/* Warm glow effects */}
-            <motion.div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px]"
-                animate={{
-                    scale: [1, 1.1, 1],
-                    opacity: [0.3, 0.6, 0.3],
-                }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            />
+            {/* Dark vignette overlay for better text contrast */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/50 pointer-events-none z-[1]" />
 
             <div className="relative z-10">
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full border border-orange-500/40 text-orange-300 mb-8"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full text-orange-300 mb-8 backdrop-blur-sm"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(249, 115, 22, 0.4)' }}
                 >
                     <div className="text-lg">🔥</div>
                     <span className="font-bold text-sm uppercase tracking-wider">On Fire!</span>
@@ -652,7 +784,7 @@ function StreakSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-3xl font-bold mb-4"
+                    className="text-3xl font-bold mb-4 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
                 >
                     Longest Streak
                 </motion.h2>
@@ -670,7 +802,7 @@ function StreakSlide({ stats }: SlideProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8 }}
-                    className="mt-8 text-xl opacity-60 max-w-xs mx-auto"
+                    className="mt-8 text-xl opacity-80 max-w-xs mx-auto drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
                 >
                     Consecutive grades that increased your average
                 </motion.p>
@@ -680,72 +812,496 @@ function StreakSlide({ stats }: SlideProps) {
 }
 
 function PrimeTimeSlide({ stats }: SlideProps) {
+    const [phase, setPhase] = useState<'tracing' | 'peak' | 'reveal'>('tracing');
+    const [progress, setProgress] = useState(0);
+    const pathRef = useRef<SVGPathElement>(null);
     const date = new Date(stats.primeTime.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
 
+    // Generate smoother line chart data
+    const chartData = useMemo(() => {
+        const points: { x: number; y: number }[] = [
+            { x: 0, y: 15 },
+            { x: 8, y: 22 },
+            { x: 16, y: 18 },
+            { x: 24, y: 35 },
+            { x: 32, y: 28 },
+            { x: 40, y: 45 },
+            { x: 48, y: 42 },
+            { x: 56, y: 58 },
+            { x: 64, y: 52 },
+            { x: 72, y: 70 },
+            { x: 80, y: 90 }, // Peak
+            { x: 88, y: 78 },
+            { x: 100, y: 72 },
+        ];
+        const peakIndex = 10;
+        // Peak is at index 10 out of 13 points - adjusted to land exactly on peak
+        const peakProgress = 0.840;
+        return { points, peakIndex, peakProgress };
+    }, []);
+
+    // Create smooth SVG path using cubic bezier curves
+    const pathD = useMemo(() => {
+        const { points } = chartData;
+        if (points.length < 2) return '';
+        
+        let d = `M ${points[0].x} ${100 - points[0].y}`;
+        
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+            
+            // Catmull-Rom to Bezier conversion
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            
+            d += ` C ${cp1x} ${100 - cp1y}, ${cp2x} ${100 - cp2y}, ${p2.x} ${100 - p2.y}`;
+        }
+        
+        return d;
+    }, [chartData]);
+
+    // Get point position along path at given progress (0-1)
+    const getPointAtProgress = useCallback((prog: number) => {
+        if (!pathRef.current) return { x: 0, y: 50 };
+        const pathLength = pathRef.current.getTotalLength();
+        const point = pathRef.current.getPointAtLength(prog * pathLength);
+        return { x: point.x, y: point.y };
+    }, []);
+
+    const { points, peakIndex, peakProgress } = chartData;
+    const peakPoint = points[peakIndex];
+
+    // Animate progress for tracing phase
+    useEffect(() => {
+        if (phase !== 'tracing') return;
+        
+        const duration = 2500;
+        const startTime = performance.now();
+        
+        const animateProgress = (currentTime: number) => {
+            const elapsed = currentTime - startTime;
+            const t = Math.min(elapsed / duration, 1);
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - t, 3);
+            setProgress(eased * peakProgress);
+            
+            if (t < 1) {
+                requestAnimationFrame(animateProgress);
+            }
+        };
+        
+        requestAnimationFrame(animateProgress);
+    }, [phase, peakProgress]);
+
+    // Animation timeline
+    useEffect(() => {
+        const peakTimer = setTimeout(() => setPhase('peak'), 2500);
+        const revealTimer = setTimeout(() => setPhase('reveal'), 3200);
+        
+        return () => {
+            clearTimeout(peakTimer);
+            clearTimeout(revealTimer);
+        };
+    }, []);
+
+    // Calculate current dot position
+    const currentProgress = phase === 'tracing' ? progress : peakProgress;
+    const currentDotPos = getPointAtProgress(currentProgress);
+    
+    // Camera follows dot during tracing - calculate offset to keep dot centered
+    const cameraX = phase === 'reveal' ? 0 : -(currentDotPos.x - 50) * 7;
+    const cameraY = phase === 'reveal' ? 0 : -(currentDotPos.y - 50) * 2;
+
     return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-yellow-400 to-amber-600 text-white">
+        <div className="flex flex-col items-center justify-center h-full text-center bg-[#0a0a0a] text-white relative overflow-hidden">
+            {/* Animated background gradient */}
             <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
+                className="absolute inset-0 bg-gradient-to-br from-emerald-900/20 via-[#0a0a0a] to-green-900/20"
+                animate={phase === 'reveal' ? { opacity: 0.8 } : { opacity: 0.4 }}
+                transition={{ duration: 0.8 }}
+            />
+
+            {/* Background glow that intensifies at peak */}
+            <motion.div
+                className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-emerald-500/20 rounded-full blur-[100px]"
+                animate={
+                    phase === 'peak' ? { scale: 1.5, opacity: 0.6 } :
+                    phase === 'reveal' ? { scale: 2, opacity: 0.3, y: -50 } :
+                    { scale: 1, opacity: 0.1 }
+                }
+                transition={{ duration: 0.5 }}
+            />
+
+            {/* Chart container - camera follows dot, then zooms out */}
+            <motion.div
+                className="relative w-full flex-1 flex items-center justify-center"
+                animate={{
+                    scale: phase === 'reveal' ? 1 : 2.8,
+                    x: cameraX,
+                    y: phase === 'reveal' ? 0 : cameraY + 80,
+                }}
+                transition={phase === 'reveal' ? { 
+                    duration: 0.7, 
+                    type: "spring", 
+                    bounce: 0.12 
+                } : {
+                    duration: 0.1,
+                    ease: "linear"
+                }}
             >
-                <h2 className="text-2xl font-bold mb-6">Prime Time</h2>
+                <div className="w-full h-[200px] relative">
+                    {/* Grid lines */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        {[20, 40, 60, 80].map((y) => (
+                            <motion.line
+                                key={y}
+                                x1="0" y1={y} x2="100" y2={y}
+                                stroke="rgba(255,255,255,0.05)"
+                                strokeWidth="0.3"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: phase === 'reveal' ? 1 : 0.3 }}
+                            />
+                        ))}
+                    </svg>
+
+                    {/* Main chart SVG */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="chartGradientPrime" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+                            </linearGradient>
+                            <linearGradient id="lineGradientPrime" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#16a34a" />
+                                <stop offset="100%" stopColor="#4ade80" />
+                            </linearGradient>
+                            <filter id="lineGlow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="1" result="blur"/>
+                                <feMerge>
+                                    <feMergeNode in="blur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        {/* Hidden path for measuring */}
+                        <path
+                            ref={pathRef}
+                            d={pathD}
+                            fill="none"
+                            stroke="transparent"
+                        />
+
+                        {/* Area fill under line */}
+                        <motion.path
+                            d={`${pathD} L 100 100 L 0 100 Z`}
+                            fill="url(#chartGradientPrime)"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: phase !== 'tracing' ? 0.5 : 0.2 }}
+                            transition={{ duration: 0.5 }}
+                        />
+
+                        {/* The line with draw animation - matches dot position exactly */}
+                        <motion.path
+                            d={pathD}
+                            fill="none"
+                            stroke="url(#lineGradientPrime)"
+                            strokeWidth="1.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            filter="url(#lineGlow)"
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: phase === 'tracing' ? progress : (phase === 'peak' ? peakProgress : 1) }}
+                            transition={{ 
+                                duration: phase === 'reveal' ? 0.3 : 0,
+                                ease: "linear"
+                            }}
+                        />
+                    </svg>
+
+                    {/* Glowing dot - positioned via DOM for proper following */}
+                    <motion.div
+                        className="absolute w-3 h-3 -ml-1.5 -mt-1.5 pointer-events-none z-10"
+                        style={{
+                            left: `${currentDotPos.x}%`,
+                            top: `${currentDotPos.y}%`,
+                        }}
+                    >
+                        <div 
+                            className="w-full h-full rounded-full bg-emerald-400"
+                            style={{ boxShadow: '0 0 12px 4px rgba(74, 222, 128, 0.6)' }}
+                        />
+                    </motion.div>
+
+                    {/* Radar-style pulse rings - at dot position, infinite during reveal */}
+                    {(phase === 'peak' || phase === 'reveal') && (
+                        <div
+                            className="absolute w-3 h-3 -ml-1.5 -mt-1.5 pointer-events-none z-0"
+                            style={{
+                                left: `${peakPoint.x}%`,
+                                top: `${100 - peakPoint.y}%`,
+                            }}
+                        >
+                            <motion.div
+                                className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
+                                initial={{ scale: 1, opacity: 0.8 }}
+                                animate={{ scale: 5, opacity: 0 }}
+                                transition={{ 
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeOut"
+                                }}
+                            />
+                            <motion.div
+                                className="absolute inset-0 rounded-full border border-emerald-400/60"
+                                initial={{ scale: 1, opacity: 0.6 }}
+                                animate={{ scale: 5, opacity: 0 }}
+                                transition={{ 
+                                    duration: 1.2,
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                    delay: 0.4
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Peak marker */}
+                    <motion.div
+                        className="absolute pointer-events-none"
+                        style={{ 
+                            left: `${peakPoint.x}%`, 
+                            top: `${100 - peakPoint.y}%`,
+                        }}
+                        initial={{ opacity: 0, scale: 0, y: 0 }}
+                        animate={phase === 'reveal' ? { opacity: 1, scale: 1, y: -50 } : { opacity: 0, scale: 0, y: 0 }}
+                        transition={{ delay: 0.3, type: "spring", bounce: 0.4 }}
+                    >
+                        <div 
+                            className="whitespace-nowrap bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-md -translate-x-1/2"
+                            style={{ boxShadow: '0 0 20px rgba(34, 197, 94, 0.5)' }}
+                        >
+                            PEAK
+                        </div>
+                    </motion.div>
+                </div>
             </motion.div>
 
+            {/* Stats reveal section */}
             <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="bg-white/20 backdrop-blur-lg rounded-full w-36 h-36 flex flex-col items-center justify-center mb-4 border-4 border-white/30"
+                className="relative z-10 w-full px-4 pb-4"
+                initial={{ opacity: 0, y: 40 }}
+                animate={phase === 'reveal' ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+                transition={{ delay: 0.2, duration: 0.5 }}
             >
-                <span className="text-3xl font-bold">{stats.primeTime.value.toFixed(2)}</span>
-                <span className="text-xs">/20</span>
-            </motion.div>
+                <h2 className="text-lg font-medium text-emerald-400/80 mb-2">Prime Time</h2>
+                
+                <div className="flex items-baseline justify-center gap-1 mb-3">
+                    <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-300 drop-shadow-[0_0_30px_rgba(34,197,94,0.5)]">
+                        {stats.primeTime.value.toFixed(2)}
+                    </span>
+                    <span className="text-xl text-emerald-400/60">/20</span>
+                </div>
 
-            <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="text-xl"
-            >
-                Peak reached on<br /><strong>{date}</strong>
-            </motion.p>
+                <p className="text-sm text-zinc-400">
+                    Peak reached on <span className="text-emerald-400 font-semibold">{date}</span>
+                </p>
+            </motion.div>
         </div>
     );
 }
 
 function SubjectsSlide({ stats }: SlideProps) {
-    return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
-            <h2 className="text-2xl font-bold mb-6">Top Subjects</h2>
+    const [phase, setPhase] = useState<'anticipation' | 'reveal3' | 'reveal2' | 'reveal1' | 'complete'>('anticipation');
+    
+    // Animation timeline: staggered reveal from #3 to #1
+    useEffect(() => {
+        const timers = [
+            setTimeout(() => setPhase('reveal3'), 400),
+            setTimeout(() => setPhase('reveal2'), 1000),
+            setTimeout(() => setPhase('reveal1'), 1600),
+            setTimeout(() => setPhase('complete'), 2400),
+        ];
+        return () => timers.forEach(clearTimeout);
+    }, []);
 
-            <div className="w-full max-w-[320px] space-y-3">
-                {stats.bestSubjects.map((subject, index) => (
+    const subjects = stats.bestSubjects.slice(0, 3);
+    const hasProgression = stats.bestProgression.value > 0;
+
+    // Podium heights for visual hierarchy
+    const podiumHeights = [140, 180, 110]; // #2, #1, #3
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center bg-[#0a0a0a] text-white relative overflow-hidden">
+            {/* Animated background */}
+            <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-amber-900/20 via-[#0a0a0a] to-orange-900/20"
+                animate={{ opacity: [0.4, 0.6, 0.4] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+
+            {/* Spotlight effect on #1 position */}
+            <motion.div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[500px]"
+                style={{
+                    background: 'radial-gradient(ellipse at top, rgba(251, 191, 36, 0.12) 0%, transparent 60%)',
+                }}
+                initial={{ opacity: 0, scaleY: 0 }}
+                animate={phase === 'reveal1' || phase === 'complete' ? { opacity: 1, scaleY: 1 } : { opacity: 0, scaleY: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+            />
+
+            {/* Title */}
+            <motion.div
+                initial={{ opacity: 0, y: -30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                className="relative z-10 mb-6"
+            >
+                <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-300">
+                    Top Subjects
+                </h2>
+                <p className="text-sm text-zinc-500 mt-1">Your academic podium</p>
+            </motion.div>
+
+            {/* Podium container */}
+            <div className="relative z-10 flex items-end justify-center gap-2 w-full px-4 max-w-[360px]" style={{ height: '320px' }}>
+                {/* #2 - Left podium */}
+                <div className="flex flex-col items-center" style={{ width: '30%' }}>
+                    <AnimatePresence>
+                        {(phase === 'reveal2' || phase === 'reveal1' || phase === 'complete') && subjects[1] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                <div className="text-3xl font-black text-zinc-400 mb-1">2</div>
+                                <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
+                                    {subjects[1].name}
+                                </div>
+                                <motion.div 
+                                    className="text-base font-bold text-zinc-300"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    {subjects[1].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     <motion.div
-                        key={subject.name}
-                        initial={{ opacity: 0, x: -50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.2 + 0.2 }}
-                        className="bg-white/10 backdrop-blur-md rounded-xl p-3 flex justify-between items-center"
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg w-5">#{index + 1}</span>
-                            <span className="text-base truncate max-w-[140px]">{subject.name}</span>
-                        </div>
-                        <span className="text-xl font-bold">{subject.value.toFixed(2)}</span>
-                    </motion.div>
-                ))}
+                        className="w-full rounded-t-lg bg-gradient-to-t from-zinc-700 to-zinc-600"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase !== 'anticipation' && phase !== 'reveal3' ? podiumHeights[0] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 0 20px rgba(161, 161, 170, 0.1)' }}
+                    />
+                </div>
+
+                {/* #1 - Center podium (tallest) */}
+                <div className="flex flex-col items-center" style={{ width: '36%' }}>
+                    <AnimatePresence>
+                        {(phase === 'reveal1' || phase === 'complete') && subjects[0] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                {/* Crown */}
+                                <motion.div
+                                    initial={{ opacity: 0, y: -20, rotate: -10 }}
+                                    animate={{ opacity: 1, y: 0, rotate: 0 }}
+                                    transition={{ delay: 0.3, type: "spring", bounce: 0.5 }}
+                                    className="text-2xl"
+                                >
+                                    👑
+                                </motion.div>
+                                <div className="text-4xl font-black text-amber-400" style={{ textShadow: '0 0 20px rgba(251, 191, 36, 0.5)' }}>1</div>
+                                <div className="text-sm font-bold text-white truncate px-1 w-full">
+                                    {subjects[0].name}
+                                </div>
+                                <motion.div 
+                                    className="text-lg font-black text-amber-400"
+                                    initial={{ opacity: 0, scale: 0 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.4, type: "spring" }}
+                                    style={{ textShadow: '0 0 15px rgba(251, 191, 36, 0.4)' }}
+                                >
+                                    {subjects[0].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    <motion.div
+                        className="w-full rounded-t-lg bg-gradient-to-t from-amber-600 to-amber-500"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase === 'reveal1' || phase === 'complete' ? podiumHeights[1] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), 0 0 40px rgba(251, 191, 36, 0.3)' }}
+                    />
+                </div>
+
+                {/* #3 - Right podium */}
+                <div className="flex flex-col items-center" style={{ width: '30%' }}>
+                    <AnimatePresence>
+                        {(phase !== 'anticipation') && subjects[2] && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: "spring", bounce: 0.4, duration: 0.8 }}
+                                className="mb-2 text-center w-full"
+                            >
+                                <div className="text-2xl font-black text-orange-400 mb-1">3</div>
+                                <div className="text-xs font-semibold text-zinc-400 truncate px-1 w-full">
+                                    {subjects[2].name}
+                                </div>
+                                <motion.div 
+                                    className="text-base font-bold text-orange-400"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    {subjects[2].value.toFixed(2)}
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    <motion.div
+                        className="w-full rounded-t-lg bg-gradient-to-t from-orange-800 to-orange-700"
+                        initial={{ height: 0 }}
+                        animate={{ height: phase !== 'anticipation' ? podiumHeights[2] : 0 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.8 }}
+                        style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 0 20px rgba(234, 88, 12, 0.15)' }}
+                    />
+                </div>
             </div>
 
-            {stats.bestProgression.value > 0 && (
+            {/* Best Progression - appears last */}
+            {hasProgression && (
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1 }}
-                    className="mt-6 p-3 bg-white/20 rounded-xl w-full max-w-[320px]"
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={phase === 'complete' ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 20, scale: 0.95 }}
+                    transition={{ delay: 0.3, duration: 0.5, ease: "easeOut" }}
+                    className="relative z-10 mt-8 flex items-center gap-3 px-4"
                 >
-                    <div className="text-xs uppercase tracking-wider mb-1">Best Comeback 🚀</div>
-                    <div className="font-bold text-lg">{stats.bestProgression.subject}</div>
-                    <div className="text-xs opacity-80">+{stats.bestProgression.value.toFixed(2)} pts improvement</div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shrink-0">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left flex-1 min-w-0">
+                        <div className="text-xs text-zinc-500 mb-0.5">Best Comeback</div>
+                        <div className="font-semibold text-white truncate">{stats.bestProgression.subject}</div>
+                    </div>
+                    <div className="text-lg font-bold text-emerald-400 shrink-0">
+                        +{stats.bestProgression.value.toFixed(2)}
+                    </div>
                 </motion.div>
             )}
         </div>
@@ -753,17 +1309,47 @@ function SubjectsSlide({ stats }: SlideProps) {
 }
 
 function PercentileSlide({ stats }: SlideProps) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(null);
+
     useEffect(() => {
-        confetti({
-            particleCount: 150,
-            spread: 90,
-            origin: { y: 0.6 },
-            colors: ['#ffffff', '#fbbf24']
-        });
+        // Create a confetti instance bound to our canvas inside the story
+        if (canvasRef.current && !confettiInstanceRef.current) {
+            confettiInstanceRef.current = confetti.create(canvasRef.current, {
+                resize: false, // Don't auto-resize - we want fixed canonical dimensions
+                useWorker: true,
+            });
+        }
+
+        // Fire confetti from the canvas (which is inside the story and scales with it)
+        if (confettiInstanceRef.current) {
+            confettiInstanceRef.current({
+                particleCount: 150,
+                spread: 90,
+                origin: { x: 0.5, y: 0.6 }, // Relative to the canvas (story container)
+                colors: ['#ffffff', '#fbbf24']
+            });
+        }
+
+        return () => {
+            // Clean up confetti instance
+            if (confettiInstanceRef.current) {
+                confettiInstanceRef.current.reset();
+            }
+        };
     }, []);
 
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-4 bg-black text-white relative overflow-hidden">
+            {/* Confetti canvas - fixed to canonical dimensions, CSS stretches to fill container */}
+            <canvas
+                ref={canvasRef}
+                width={CANONICAL_WIDTH}
+                height={CANONICAL_HEIGHT}
+                className="absolute inset-0 pointer-events-none z-20"
+                style={{ width: '100%', height: '100%' }}
+            />
+
             {/* Background gradient */}
             <div className="absolute inset-0 bg-gradient-to-tr from-purple-900 via-black to-indigo-900 opacity-60" />
 
@@ -772,7 +1358,8 @@ function PercentileSlide({ stats }: SlideProps) {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full border border-yellow-500/40 text-yellow-300 mb-6"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 rounded-full text-yellow-300 mb-6"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.4)' }}
                 >
                     <Trophy className="w-3 h-3" />
                     <span className="font-bold text-xs uppercase tracking-wider">Legendary Status</span>
@@ -809,10 +1396,14 @@ function PercentileSlide({ stats }: SlideProps) {
 }
 
 // Stats Card Component - sized for canonical 390x844 viewport
+// Using box-shadow instead of border for consistent rendering at different scales
 function StatCard({ icon: Icon, title, value, colorClass, truncate = false, className, ...props }: { icon: any, title: string, value: string | number, colorClass: string, truncate?: boolean, className?: string } & React.ComponentProps<typeof motion.div>) {
     return (
         <motion.div
-            className={cn("bg-[#161b22] border border-white/10 rounded-lg p-2.5 flex flex-col items-start h-full", className)}
+            className={cn("bg-[#161b22] rounded-lg p-2.5 flex flex-col items-start h-full", className)}
+            style={{
+                boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)',
+            }}
             {...props}
         >
             <div className="flex items-center gap-1.5 mb-0.5">
@@ -889,24 +1480,81 @@ function AwardIntroSlide({ stats }: SlideProps) {
     );
 }
 
+// Helper to get confetti colors based on award color
+const getAwardConfettiColors = (colorClass: string): string[] => {
+    if (colorClass.includes('yellow')) return ['#fbbf24', '#f59e0b', '#ffffff'];
+    if (colorClass.includes('red')) return ['#ef4444', '#dc2626', '#ffffff'];
+    if (colorClass.includes('orange')) return ['#f97316', '#ea580c', '#ffffff'];
+    if (colorClass.includes('green')) return ['#22c55e', '#16a34a', '#ffffff'];
+    if (colorClass.includes('purple')) return ['#a855f7', '#9333ea', '#ffffff'];
+    if (colorClass.includes('pink')) return ['#ec4899', '#db2777', '#ffffff'];
+    if (colorClass.includes('cyan')) return ['#06b6d4', '#0891b2', '#ffffff'];
+    if (colorClass.includes('teal')) return ['#14b8a6', '#0d9488', '#ffffff'];
+    return ['#3b82f6', '#2563eb', '#ffffff']; // blue default
+};
+
+// Helper to get box-shadow color based on award color
+const getAwardBorderColor = (colorClass: string): string => {
+    if (colorClass.includes('yellow')) return 'rgba(234, 179, 8, 0.2)';
+    if (colorClass.includes('red')) return 'rgba(239, 68, 68, 0.2)';
+    if (colorClass.includes('orange')) return 'rgba(249, 115, 22, 0.2)';
+    if (colorClass.includes('green')) return 'rgba(34, 197, 94, 0.2)';
+    if (colorClass.includes('purple')) return 'rgba(168, 85, 247, 0.2)';
+    if (colorClass.includes('pink')) return 'rgba(236, 72, 153, 0.2)';
+    if (colorClass.includes('cyan')) return 'rgba(6, 182, 212, 0.2)';
+    if (colorClass.includes('teal')) return 'rgba(20, 184, 166, 0.2)';
+    return 'rgba(59, 130, 246, 0.2)'; // blue default
+};
+
 function AwardRevealSlide({ stats }: SlideProps) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(null);
     const award = stats.award || DEFAULT_AWARD;
     const Icon = awardIcons[award.icon] || Plane;
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            confetti({
-                particleCount: 200,
-                spread: 100,
-                origin: { y: 0.6 },
-                colors: ['#FFD700', '#FFA500', '#ffffff']
+        // Create a confetti instance bound to our canvas inside the story
+        if (canvasRef.current && !confettiInstanceRef.current) {
+            confettiInstanceRef.current = confetti.create(canvasRef.current, {
+                resize: false,
+                useWorker: true,
             });
+        }
+
+        // Fire confetti with award accent colors after a delay
+        const timer = setTimeout(() => {
+            if (confettiInstanceRef.current) {
+                confettiInstanceRef.current({
+                    particleCount: 180,
+                    spread: 70,
+                    origin: { x: 0.5, y: 0.5 },
+                    colors: getAwardConfettiColors(award.color),
+                    startVelocity: 45,
+                    gravity: 0.8,
+                    ticks: 300,
+                });
+            }
         }, 600);
-        return () => clearTimeout(timer);
-    }, []);
+
+        return () => {
+            clearTimeout(timer);
+            if (confettiInstanceRef.current) {
+                confettiInstanceRef.current.reset();
+            }
+        };
+    }, [award.color]);
 
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Confetti canvas - fixed to canonical dimensions */}
+            <canvas
+                ref={canvasRef}
+                width={CANONICAL_WIDTH}
+                height={CANONICAL_HEIGHT}
+                className="absolute inset-0 pointer-events-none z-20"
+                style={{ width: '100%', height: '100%' }}
+            />
+
             {/* Shiny Gold Background */}
             <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
 
@@ -917,7 +1565,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 transition={{ delay: 0.3 }}
                 className="relative z-10 mb-8 flex flex-col items-center gap-2"
             >
-                <div className="p-3 bg-yellow-500/20 rounded-full border border-yellow-500/30 mb-2">
+                <div className="p-3 bg-yellow-500/20 rounded-full mb-2" style={{ boxShadow: 'inset 0 0 0 1px rgba(234, 179, 8, 0.3)' }}>
                     <Trophy className="w-6 h-6 text-yellow-400" />
                 </div>
                 <h2 className="text-2xl font-bold text-zinc-100">Your Award</h2>
@@ -927,7 +1575,8 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
                 animate={{ scale: 1, opacity: 1, rotateY: 0 }}
                 transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
-                className={cn("relative z-10 rounded-lg p-2.5 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between border bg-[#161b22]", award.bg)}
+                className={cn("relative z-10 rounded-lg p-2.5 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between bg-[#161b22]", award.bg.replace(/border-[a-z]+-[0-9]+\/[0-9]+/g, ''))}
+                style={{ boxShadow: `0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px ${getAwardBorderColor(award.color)}` }}
             >
                 <div className="flex flex-col items-start text-left">
                     <motion.div
@@ -1093,13 +1742,39 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
     };
 
     return (
-        <div className="flex flex-col items-center h-full text-center p-3 bg-[#0d1117] text-white overflow-hidden">
+        <div className="flex flex-col items-center h-full text-center p-3 bg-[#0d1117] text-white overflow-hidden relative">
+            {/* Animated background gradients */}
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.25) 0%, transparent 40%)',
+                }}
+                animate={{ opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 0% 60%, rgba(168, 85, 247, 0.2) 0%, transparent 35%)',
+                }}
+                animate={{ opacity: [0.4, 0.8, 0.4] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            />
+            <motion.div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                    background: 'radial-gradient(circle at 100% 85%, rgba(59, 130, 246, 0.2) 0%, transparent 35%)',
+                }}
+                animate={{ opacity: [0.5, 0.9, 0.5] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+            />
+
             {/* Recap content to be captured */}
-            <div ref={recapRef} className="w-full h-full flex flex-col bg-[#0d1117] p-3">
+            <div ref={recapRef} className="w-full h-full flex flex-col p-3 relative z-10">
                 {/* Header - sized for canonical viewport */}
                 <div className="flex items-center gap-2 w-full mb-3 shrink-0">
                     {userAvatar ? (
-                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover border-2 border-white/20" />
+                        <img src={userAvatar} alt={userName || ""} className="w-10 h-10 rounded-full object-cover" style={{ boxShadow: 'inset 0 0 0 2px rgba(255, 255, 255, 0.2)' }} />
                     ) : (
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-base">
                             {year.slice(-2)}
@@ -1120,7 +1795,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                 >
 
                     {/* Mini Heatmap Visual (Real Data) - sized for canonical viewport */}
-                    <motion.div variants={item} className="w-full bg-[#161b22] border border-white/10 rounded-xl p-3 mb-3 shrink-0">
+                    <motion.div variants={item} className="w-full bg-[#161b22] rounded-xl p-3 mb-3 shrink-0" style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.1)' }}>
                         <div className="w-full">
                             <div
                                 className="flex gap-[1px] w-full"
@@ -1209,7 +1884,7 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                     <div>
                         {/* Award Card */}
-                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between border bg-[#161b22]", award.bg)}>
+                        <motion.div variants={item} className={cn("col-span-2 rounded-lg p-2.5 flex items-center justify-between bg-[#161b22]", award.bg.replace(/border-[a-z]+-[0-9]+\/[0-9]+/g, ''))} style={{ boxShadow: `inset 0 0 0 1px ${getAwardBorderColor(award.color)}` }}>
                             <div className="flex flex-col items-start text-left">
                                 <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
                                     {award.title}
@@ -1245,7 +1920,8 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                 <Button
                     variant="outline"
-                    className="flex-1 border-white/20 bg-[#21262d] hover:bg-[#30363d] text-white h-10 rounded-lg text-sm"
+                    className="flex-1 border-none bg-[#21262d] hover:bg-[#30363d] text-white h-10 rounded-lg text-sm"
+                    style={{ boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)' }}
                     onClick={(e) => {
                         e.stopPropagation();
                         onClose();
@@ -1277,7 +1953,7 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         { component: StatsSlide, duration: 6000 },
         { component: HeatmapSlide, duration: 6000 },
         { component: StreakSlide, duration: 3500 },
-        { component: PrimeTimeSlide, duration: 5000 },
+        { component: PrimeTimeSlide, duration: 7000 },
         { component: SubjectsSlide, duration: 5000 },
         { component: AwardIntroSlide, duration: 3000 },
         { component: AwardRevealSlide, duration: 6000 },
@@ -1542,6 +2218,9 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
                     // Additional GPU hints to prevent subpixel border artifacts
                     willChange: 'transform',
                     backfaceVisibility: 'hidden',
+                    // CSS variable for inverse scale - used by child elements to counter-scale borders
+                    // @ts-ignore - CSS custom property
+                    '--border-scale': 1 / storyScale,
                 }}
                 onClick={handleClick}
             >
