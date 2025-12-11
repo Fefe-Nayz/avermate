@@ -842,11 +842,24 @@ function AwardRevealSlide({ stats }: SlideProps) {
             {/* Shiny Gold Background */}
             <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
 
+            {/* Header Text */}
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="relative z-10 mb-8 flex flex-col items-center gap-2"
+            >
+                <div className="p-3 bg-yellow-500/20 rounded-full border border-yellow-500/30 mb-2">
+                    <Trophy className="w-6 h-6 text-yellow-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-yellow-100">Your Award</h2>
+            </motion.div>
+
             <motion.div
                 initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
                 animate={{ scale: 1, opacity: 1, rotateY: 0 }}
                 transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
-                className={cn("rounded-xl p-6 w-full max-w-sm shadow-2xl flex items-center justify-between border bg-[#161b22]", award.bg)}
+                className={cn("relative z-10 rounded-xl p-6 w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between border bg-[#161b22]", award.bg)}
             >
                 <div className="flex flex-col items-start text-left">
                     <motion.div
@@ -879,7 +892,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.5 }}
-                className="mt-8 text-sm text-yellow-200/80 max-w-xs"
+                className="relative z-10 mt-8 text-sm text-yellow-200/80 max-w-xs"
             >
                 {award.condition}
             </motion.p>
