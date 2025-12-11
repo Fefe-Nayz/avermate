@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target, Scale, RefreshCcw, Dices, Shuffle, Crosshair, Gem, UserCheck, Plane } from "lucide-react";
 import { YearReviewStats } from "@/types/year-review";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ interface SlideProps {
     userAvatar?: string;
 }
 
-function CountUp({ value, duration = 2, delay = 0, decimals = 0 }: { value: number, duration?: number, delay?: number, decimals?: number }) {
+function CountUp({ value, duration = 2, delay = 0, decimals = 0, ease = "easeOut" }: { value: number, duration?: number, delay?: number, decimals?: number, ease?: any }) {
     const nodeRef = useRef<HTMLSpanElement>(null);
     const motionValue = useMotionValue(0);
     const rounded = useTransform(motionValue, (latest) => latest.toFixed(decimals));
@@ -28,10 +28,10 @@ function CountUp({ value, duration = 2, delay = 0, decimals = 0 }: { value: numb
         const controls = animate(motionValue, value, {
             duration,
             delay,
-            ease: "easeOut"
+            ease
         });
         return () => controls.stop();
-    }, [value, duration, delay, motionValue]);
+    }, [value, duration, delay, motionValue, ease]);
 
     return <motion.span>{rounded}</motion.span>;
 }
@@ -449,12 +449,34 @@ function StreakSlide({ stats }: SlideProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
             {/* Background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60" />
+            <motion.div 
+                className="absolute inset-0 bg-gradient-to-tr from-red-900 via-black to-orange-900 opacity-60"
+                animate={{
+                    scale: [1, 1.2, 1],
+                    opacity: [0.5, 0.8, 0.5],
+                }}
+                transition={{
+                    duration: 8,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                }}
+            />
+            
+            {/* Warm glow effects */}
+            <motion.div
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px]"
+                animate={{
+                    scale: [1, 1.1, 1],
+                    opacity: [0.3, 0.6, 0.3],
+                }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            />
 
             <div className="relative z-10">
                 <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500/20 rounded-full border border-orange-500/40 text-orange-300 mb-8"
                 >
                     <div className="text-lg">🔥</div>
@@ -464,6 +486,7 @@ function StreakSlide({ stats }: SlideProps) {
                 <motion.h2
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
                     className="text-3xl font-bold mb-4"
                 >
                     Longest Streak
@@ -472,10 +495,10 @@ function StreakSlide({ stats }: SlideProps) {
                 <motion.div
                     initial={{ scale: 0.5, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.3 }}
+                    transition={{ type: "spring", stiffness: 200, delay: 0.4 }}
                     className="text-[12rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 drop-shadow-[0_0_50px_rgba(234,88,12,0.5)]"
                 >
-                    {stats.longestStreak}
+                    <CountUp value={5} duration={1.5} delay={0.5} ease="circOut" />
                 </motion.div>
 
                 <motion.p
@@ -639,18 +662,236 @@ function StatCard({ icon: Icon, title, value, colorClass, truncate = false, clas
     );
 }
 
+const getAward = (stats: YearReviewStats) => {
+    // Helper to safely access potential future properties
+    const s = stats as any;
+
+    // 1. Le Funambule
+    if (stats.average >= 10 && stats.average <= 11 && (s.gradesUnder8Count || 0) >= 3) {
+        return {
+            title: "Le Funambule",
+            icon: Scale,
+            description: "Tu as marché sur un fil toute l'année, le vide à gauche, le vide à droite... mais tu n'es jamais tombé. L'art de l'équilibre, le vrai.",
+            condition: "Moyenne entre 10 et 11 avec des notes < 8/20",
+            color: "text-orange-400",
+            bg: "bg-orange-500/10 border-orange-500/20",
+            gradient: "from-orange-500 to-amber-500"
+        };
+    }
+
+    // 2. Le Roi du Comeback
+    if (s.firstMonthAverage && stats.average > s.firstMonthAverage + 2) {
+        return {
+            title: "Le Roi du Comeback",
+            icon: RefreshCcw,
+            description: "Le début de saison était compliqué. On a eu peur. Et puis tu as enclenché la seconde et tu as doublé tout le monde avant la ligne d'arrivée.",
+            condition: "Moyenne finale supérieure de 2 points à celle du premier mois",
+            color: "text-emerald-400",
+            bg: "bg-emerald-500/10 border-emerald-500/20",
+            gradient: "from-emerald-500 to-green-500"
+        };
+    }
+
+    // 3. Le "All In"
+    // Assuming we might have worstSubjectAverage in the future
+    if (stats.bestSubjects.length > 0 && s.worstSubjectAverage && (stats.bestSubjects[0].value - s.worstSubjectAverage > 5)) {
+        return {
+            title: "Le \"All In\"",
+            icon: Dices,
+            description: "Tu as choisi tes batailles. Pourquoi essayer d'être moyen partout quand on peut tout miser sur ses points forts ? Une stratégie risquée, mais payante.",
+            condition: "Plus de 5 points d'écart entre ta meilleure et ta pire matière",
+            color: "text-red-400",
+            bg: "bg-red-500/10 border-red-500/20",
+            gradient: "from-red-500 to-rose-500"
+        };
+    }
+
+    // 4. La Masterclass
+    if (stats.average > 16) {
+        return {
+            title: "La Masterclass",
+            icon: Crown,
+            description: "À ce niveau-là, ce n'est plus des révisions, c'est une démonstration. Tu as plié l'année scolaire avec une facilité déconcertante.",
+            condition: "Moyenne générale supérieure à 16/20",
+            color: "text-yellow-400",
+            bg: "bg-yellow-500/10 border-yellow-500/20",
+            gradient: "from-yellow-400 to-amber-400"
+        };
+    }
+
+    // 5. L'Imprévisible
+    // Need stdDev > 4 in > 25% subjects
+    if (s.stdDevHighCount && s.totalSubjects && (s.stdDevHighCount / s.totalSubjects >= 0.25)) {
+        return {
+            title: "L'Imprévisible",
+            icon: Shuffle,
+            description: "Capable du génie absolu comme du ratage total au sein d'une même matière. Avec toi, c'est tout ou rien. Tes bulletins sont plus surprenants qu'une fin de saison Netflix.",
+            condition: "Des résultats très variables dans plus d'un quart de tes matières",
+            color: "text-purple-400",
+            bg: "bg-purple-500/10 border-purple-500/20",
+            gradient: "from-purple-500 to-violet-500"
+        };
+    }
+
+    // 6. La Précision
+    // Need stdDev < 2 in > 50% subjects
+    if (s.stdDevLowCount && s.totalSubjects && (s.stdDevLowCount / s.totalSubjects >= 0.5)) {
+        return {
+            title: "La Précision",
+            icon: Crosshair,
+            description: "Une régularité chirurgicale. Quand tu vises une note, tu l'atteins à chaque fois. Pas de mauvaises surprises, tu es une valeur sûre.",
+            condition: "Des résultats très réguliers dans la majorité de tes matières",
+            color: "text-blue-400",
+            bg: "bg-blue-500/10 border-blue-500/20",
+            gradient: "from-blue-400 to-cyan-400"
+        };
+    }
+
+    // 7. Légende d'Avermate
+    if (stats.gradesCount >= 40) {
+        return {
+            title: "Légende d'Avermate",
+            icon: Gem,
+            description: "On hésite à te donner les clés du serveur. Ton suivi est tellement complet que tu connais ta moyenne mieux que tes profs. Tu ne fais plus qu'un avec l'application.",
+            condition: "Plus de 40 notes ajoutées sur l'année",
+            color: "text-cyan-400",
+            bg: "bg-cyan-500/10 border-cyan-500/20",
+            gradient: "from-cyan-400 to-sky-400"
+        };
+    }
+
+    // 8. Avermatien
+    if (stats.gradesCount >= 15) {
+        return {
+            title: "Avermatien",
+            icon: UserCheck,
+            description: "Membre certifié de la famille. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable, mais le style en plus. C'est carré.",
+            condition: "Plus de 15 notes ajoutées sur l'année",
+            color: "text-green-400",
+            bg: "bg-green-500/10 border-green-500/20",
+            gradient: "from-green-400 to-emerald-400"
+        };
+    }
+
+    // 9. Le Touriste (Default fallback)
+    return {
+        title: "Le Touriste",
+        icon: Plane,
+        description: "Tu as vu de la lumière, tu es rentré, tu as mis quelques notes et tu es reparti. On ne sait pas si c'est de la confiance absolue ou du talent, mais on adore l'audace.",
+        condition: "Moins de 15 notes ajoutées sur l'année",
+        color: "text-pink-400",
+        bg: "bg-pink-500/10 border-pink-500/20",
+        gradient: "from-pink-400 to-rose-400"
+    };
+};
+
+function AwardIntroSlide({ stats }: SlideProps) {
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Shiny Gold Background */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
+            
+            <div className="relative z-10 max-w-md space-y-8">
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-2xl font-light text-gray-400"
+                >
+                    We've analyzed your performance...
+                </motion.p>
+
+                <motion.p
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 2 }}
+                    className="text-3xl font-medium"
+                >
+                    And found the perfect title for you.
+                </motion.p>
+
+                <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 3.5, type: "spring" }}
+                >
+                    <Sparkles className="w-16 h-16 text-yellow-400 mx-auto" />
+                </motion.div>
+            </div>
+        </div>
+    );
+}
+
+function AwardRevealSlide({ stats }: SlideProps) {
+    const award = useMemo(() => getAward(stats), [stats]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            confetti({
+                particleCount: 200,
+                spread: 100,
+                origin: { y: 0.6 },
+                colors: ['#FFD700', '#FFA500', '#ffffff']
+            });
+        }, 600);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return (
+        <div className="flex flex-col items-center justify-center h-full text-center p-6 bg-black text-white relative overflow-hidden">
+            {/* Shiny Gold Background */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/50 via-black to-yellow-400/50" />
+
+            <motion.div
+                initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
+                animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+                transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
+                className={cn("rounded-xl p-6 w-full max-w-sm shadow-2xl flex items-center justify-between border bg-[#161b22]", award.bg)}
+            >
+                <div className="flex flex-col items-start text-left">
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6 }}
+                        className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}
+                    >
+                        {award.title}
+                    </motion.div>
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.7 }}
+                        className="text-2xl font-bold text-white leading-tight"
+                    >
+                        {award.description.split('.')[0]}
+                    </motion.div>
+                </div>
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.8, type: "spring" }}
+                >
+                    <award.icon className={cn("w-10 h-10", award.color)} />
+                </motion.div>
+            </motion.div>
+
+            <motion.p 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.5 }}
+                className="mt-8 text-sm text-yellow-200/80 max-w-xs"
+            >
+                {award.condition}
+            </motion.p>
+        </div>
+    );
+}
+
 function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) {
     const recapRef = useRef<HTMLDivElement>(null);
     const [isSharing, setIsSharing] = useState(false);
 
-    const award = useMemo(() => {
-        if (stats.topPercentile <= 10) return { title: "The Elite", icon: Crown, desc: "Top 10% Performer", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" };
-        if (stats.gradesCount >= 80) return { title: "The Machine", icon: Zap, desc: "Relentless Effort", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
-        if (stats.longestStreak >= 15) return { title: "Unstoppable", icon: TrendingUp, desc: "Consistency King", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" };
-        if (stats.bestProgression.value >= 2) return { title: "The Climber", icon: Rocket, desc: "Skyrocketing Grades", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" };
-        if ((stats.average || 0) >= 15) return { title: "High Flyer", icon: Star, desc: "Excellence Achieved", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" };
-        return { title: "The Scholar", icon: BookOpen, desc: "Dedicated Student", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" };
-    }, [stats]);
+    const award = useMemo(() => getAward(stats), [stats]);
 
     const weeks = useMemo(() => {
         const result = [];
@@ -807,6 +1048,19 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
 
                 {/* Grid Layout - Flex grow to fill space */}
                 <div className="grid grid-cols-2 auto-rows-fr gap-3 w-full mb-4 flex-1">
+                    {/* Award Card */}
+                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border bg-[#161b22]", award.bg)}>
+                        <div className="flex flex-col items-start text-left">
+                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
+                                {award.title}
+                            </div>
+                            <div className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+                                {award.description.split('.')[0]}
+                            </div>
+                        </div>
+                        <award.icon className={cn("w-10 h-10", award.color)} />
+                    </div>
+
                     <StatCard
                         icon={Trophy}
                         title="Universal Rank"
@@ -851,19 +1105,6 @@ function OutroSlide({ year, stats, onClose, userName, userAvatar }: SlideProps) 
                         truncate={true}
                         className="col-span-2"
                     />
-
-                    {/* Award Card */}
-                    <div className={cn("col-span-2 rounded-xl p-4 flex items-center justify-between border", award.bg)}>
-                        <div className="flex flex-col items-start text-left">
-                            <div className={cn("text-xs font-bold uppercase tracking-wider mb-1", award.color)}>
-                                {award.title}
-                            </div>
-                            <div className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-                                {award.desc}
-                            </div>
-                        </div>
-                        <award.icon className={cn("w-10 h-10", award.color)} />
-                    </div>
                 </div>
 
                 <div className="text-sm text-[#8b949e] shrink-0">
@@ -917,6 +1158,8 @@ export function YearReviewStory({ stats, year, isOpen, onClose, userName, userAv
         { component: StreakSlide, duration: 5000 },
         { component: PrimeTimeSlide, duration: 5000 },
         { component: SubjectsSlide, duration: 7000 },
+        { component: AwardIntroSlide, duration: 4000 },
+        { component: AwardRevealSlide, duration: 8000 },
         { component: PercentileSlide, duration: 6000 },
         { component: OutroSlide, duration: 10000 }, // Last slide: progress fills but doesn't auto-close
     ], []);
