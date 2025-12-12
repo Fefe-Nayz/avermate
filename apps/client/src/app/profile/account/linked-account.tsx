@@ -386,7 +386,7 @@ function PasswordResetForm({ onClose }: { onClose: () => void }) {
           <motion.div
             initial={{ width: "0%" }}
             animate={{
-              width: `${getPasswordStrength(newPassword).entropy * 100}%`,
+              width: `${Math.min((getPasswordStrength(newPassword).entropy / 4) * 100, 100)}%`,
             }}
             transition={{
               damping: 25,

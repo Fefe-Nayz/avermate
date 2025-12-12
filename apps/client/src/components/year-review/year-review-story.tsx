@@ -7,7 +7,7 @@ import { YearReviewStats, Award as AwardData, AwardType } from "@/types/year-rev
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import confetti from "canvas-confetti";
-import { toPng } from "html-to-image";
+import { toPng } from "@jpinsonneau/html-to-image";
 import LightPillar from "@/components/LightPillar";
 import { useFormatter, useTranslations } from "next-intl";
 

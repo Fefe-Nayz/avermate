@@ -181,9 +181,10 @@ export const ResetPasswordForm = () => {
                       <motion.div
                         initial={{ width: "0%" }}
                         animate={{
-                          width: `${getPasswordStrength(form.getValues("password"))
-                            .entropy * 100
-                            }%`,
+                          width: `${Math.min(
+                            (getPasswordStrength(form.getValues("password")).entropy / 4) * 100,
+                            100
+                          )}%`,
                         }}
                         transition={{
                           damping: 25,
