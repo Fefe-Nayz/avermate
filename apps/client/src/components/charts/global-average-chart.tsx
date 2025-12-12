@@ -105,7 +105,7 @@ function GlobalActiveDot({ chartData }: { chartData: ChartDataPoint[] }) {
   const activeLabel = useActiveTooltipLabel();
   if (!activeLabel) return null;
 
-  const nearestDatum = findNearestDatum(chartData, activeLabel);
+  const nearestDatum = findNearestDatum(chartData, String(activeLabel));
   if (!nearestDatum || nearestDatum.average === null) return null;
 
   return (

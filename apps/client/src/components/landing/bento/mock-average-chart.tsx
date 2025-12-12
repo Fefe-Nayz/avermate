@@ -291,17 +291,6 @@ export const MockAverageChart = () => {
                   tickMargin={8}
                   tickCount={5}
                 />
-                <ChartTooltip
-                  filterNull={false}
-                  cursor={false}
-                  content={(props) => (
-                    <CustomTooltipContent
-                      {...props}
-                      label={props.label ? props.label.toString() : undefined}
-                      valueFormatter={(value) => value.toFixed(2)}
-                    />
-                  )}
-                />
                 <defs>
                   <linearGradient id="fillAverage" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2662d9" stopOpacity={0.8} />
@@ -342,16 +331,6 @@ export const MockAverageChart = () => {
                   fillOpacity={0.1}
                   stroke="#2662d9"
                   fill="#2662d9"
-                />
-                <ChartTooltip
-                  cursor={false}
-                  content={(props) => (
-                    <CustomTooltipContent
-                      {...props}
-                      label={props.label ? props.label.toString() : undefined}
-                      valueFormatter={(value) => value.toFixed(2)}
-                    />
-                  )}
                 />
               </RadarChart>
             </ChartContainer>

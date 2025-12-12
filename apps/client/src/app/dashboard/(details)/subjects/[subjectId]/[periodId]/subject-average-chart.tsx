@@ -118,7 +118,7 @@ function SubjectActiveDot({
   const activeLabel = useActiveTooltipLabel();
   if (!activeLabel) return null;
 
-  const nearestDatum = findNearestDatum(chartData, activeLabel, dataKey);
+  const nearestDatum = findNearestDatum(chartData, String(activeLabel), dataKey);
   if (!nearestDatum || nearestDatum[dataKey] === undefined) return null;
 
   const value = nearestDatum[dataKey];

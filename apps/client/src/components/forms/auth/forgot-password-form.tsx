@@ -39,7 +39,7 @@ export const ForgotPasswordForm = () => {
   const { mutate, isPending } = useMutation({
     mutationKey: ["sign-up"],
     mutationFn: async ({ email }: ForgotPasswordSchema) => {
-      const data = await authClient.forgetPassword({
+      const data = await authClient.requestPasswordReset({
         email,
         redirectTo: `${env.NEXT_PUBLIC_CLIENT_URL}/auth/reset-password`,
       });
