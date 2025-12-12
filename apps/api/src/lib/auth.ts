@@ -404,7 +404,9 @@ export const auth = betterAuth({
   // Cookie
   advanced: {
     cookiePrefix: "avermate",
-    generateId: false,
+    database: {
+      generateId: false,
+    },
   },
 });
 
