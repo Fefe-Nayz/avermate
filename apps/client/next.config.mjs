@@ -1,16 +1,18 @@
 import createNextIntlPlugin from 'next-intl/plugin';
+import path from "path";
+import { fileURLToPath } from "url";
 
 const withNextIntl = createNextIntlPlugin();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
-  // Ensure Turbopack resolves the workspace root (node_modules at /app)
-  experimental: {
-    turbopack: {
-      // point to the workspace root from the project dir so Next is resolvable
-      root: "../../",
-    },
+  turbopack: {
+    // monorepo root (=> includes /app/node_modules in Docker)
+    root: path.join(__dirname, "../.."),
   },
   images: {
     remotePatterns: [
