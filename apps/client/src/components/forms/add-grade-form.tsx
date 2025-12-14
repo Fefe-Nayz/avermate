@@ -62,18 +62,18 @@ import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import FormContentWrapper from "./form-content-wrapper";
 
-// Initial loose schema (not used for validation, can be removed or renamed)
-const looseAddGradeSchema = z.object({
-  name: z.string().min(1).optional(),
-  outOf: z.number().min(0).max(1000).optional(),
-  value: z.number().min(0).max(1000).optional(),
-  coefficient: z.number().min(0).max(1000).optional(),
-  passedAt: z.date().optional(),
+// Base schema for parent component type
+const baseAddGradeSchema = z.object({
+  name: z.string().min(1),
+  outOf: z.number().min(0).max(1000),
+  value: z.number().min(0).max(1000),
+  coefficient: z.number().min(0).max(1000),
+  passedAt: z.date(),
   subjectId: z.string().min(1).max(64),
   periodId: z.string().min(1).max(64).nullable(),
 });
 
-export type AddGradeSchema = z.infer<typeof looseAddGradeSchema>;
+export type AddGradeSchema = z.infer<typeof baseAddGradeSchema>;
 
 export function AddGradeForm({
   close,
@@ -125,8 +125,6 @@ export function AddGradeForm({
     message: t("valueCannotExceedOutOf"),
     path: ["value"],
   });
-
-  type AddGradeSchema = z.infer<typeof addGradeSchema>;
 
   // The same schema is used
   function determinePeriodId(
@@ -189,8 +187,6 @@ export function AddGradeForm({
 
   // 2) Now we use parent's `formData` as defaultValues
   const form = useForm({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     resolver: zodResolver(addGradeSchema),
     defaultValues: formData,
   });
@@ -205,7 +201,7 @@ export function AddGradeForm({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
-      setFormData(watchedValues);
+      setFormData(watchedValues as AddGradeSchema);
     }
   }, [watchedValues, formData, setFormData]);
 
@@ -294,6 +290,7 @@ export function AddGradeForm({
                         type="number"
                         placeholder={t("gradeValuePlaceholder")}
                         {...field}
+                        value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>
@@ -314,6 +311,7 @@ export function AddGradeForm({
                         type="number"
                         placeholder={t("gradeOutOfPlaceholder")}
                         {...field}
+                        value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>
@@ -336,6 +334,7 @@ export function AddGradeForm({
                       type="number"
                       placeholder={t("gradeCoefficientPlaceholder")}
                       {...field}
+                      value={field.value as number | string}
                       onChange={(e) => field.onChange(e.target.value)}
                     />
                   </FormControl>

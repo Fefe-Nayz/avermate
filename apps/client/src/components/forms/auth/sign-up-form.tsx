@@ -129,8 +129,6 @@ export const SignUpForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<SignUpSchema>({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     resolver: zodResolver(signUpSchema),
     defaultValues: {
       firstName: "",

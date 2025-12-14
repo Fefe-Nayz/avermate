@@ -58,8 +58,6 @@ export function UpdateYearDefaultOutOfForm({
 	});
 
 	const form = useForm({
-		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-		// @ts-ignore
 		resolver: zodResolver(schema),
 		defaultValues: { outOf: defaultOutOf != null ? Math.round(defaultOutOf / 100) : 20 },
 	});
@@ -79,9 +77,7 @@ export function UpdateYearDefaultOutOfForm({
 								render={({ field }) => (
 									<FormItem>
 										<FormControl>
-											{/* eslint-disable-next-line @typescript-eslint/ban-ts-comment  */}
-											{/* @ts-ignore */}
-											<Input type="number" placeholder={t("FIELD_PLACEHOLDER")} {...field} onChange={(e) => field.onChange(e.target.value)} />
+											<Input type="number" placeholder={t("FIELD_PLACEHOLDER")} {...field} value={field.value as number | string} onChange={(e) => field.onChange(e.target.value)} />
 										</FormControl>
 										<FormMessage />
 									</FormItem>

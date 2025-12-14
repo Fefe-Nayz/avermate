@@ -156,8 +156,6 @@ export const CreateYearForm = ({
   const numberOfMonths = useMediaQuery("(min-width: 1024px)") ? 2 : 1;
 
   const form = useForm({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     resolver: zodResolver(createYearSchema),
     defaultValues: {
       name: initialData?.name || "",
@@ -278,14 +276,13 @@ export const CreateYearForm = ({
                     {t("CREATE_YEAR_FORM_OUT_OF_FIELD_LABEL")}
                   </FormLabel>
                   <FormControl>
-                    {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                    {/* @ts-ignore */}
                     <Input
                       type="number"
                       placeholder={t(
                         "CREATE_YEAR_FORM_OUT_OF_FIELD_PLACEHOLDER"
                       )}
                       {...field}
+                      value={field.value as number | string}
                       onChange={(e) => field.onChange(e.target.value)}
                     />
                   </FormControl>

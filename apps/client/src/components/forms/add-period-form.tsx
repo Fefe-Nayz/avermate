@@ -129,8 +129,6 @@ export const AddPeriodForm = ({
 
   // Keep your original defaults here:
   const form = useForm({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     resolver: zodResolver(addPeriodSchema),
     defaultValues: {
       name: "",

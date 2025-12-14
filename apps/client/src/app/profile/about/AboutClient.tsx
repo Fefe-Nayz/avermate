@@ -30,6 +30,7 @@ export default function AboutClient({
 
   const version =
     tags && Array.isArray(tags) && tags.length > 0 ? tags[0].name : "v1.5.2";
+  const commitHash = process.env.NEXT_PUBLIC_GIT_COMMIT_HASH || "unknown";
   const githubLink = `https://github.com/${repo.owner?.login ?? "nayzflux"}/${
     repo.name ?? "avermate"
   }`;
@@ -57,7 +58,12 @@ export default function AboutClient({
               {repo?.description ?? t("defaultDescription")}
             </CardDescription>
           </div>
-          <Badge variant="secondary">{version}</Badge>
+          <div className="flex flex-col gap-2 items-end">
+            <Badge variant="secondary">{version}</Badge>
+            <Badge variant="outline" className="text-xs">
+              {commitHash}
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="flex items-center justify-between">

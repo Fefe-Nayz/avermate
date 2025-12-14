@@ -97,7 +97,7 @@ export function UpdateGradeForm({
 
   const { data: periods } = usePeriods(yearId);
 
-  const updateGradeSchema = z.object({
+  const updateGradeSchemaWithValidation = z.object({
     name: z.string().min(1, t("nameRequired")).max(64, t("nameTooLong")),
     outOf: z.coerce.number().min(0, t("outOfMin")).max(1000, t("outOfMax")),
     value: z.coerce.number().min(0, t("valueMin")).max(1000, t("valueMax")),
@@ -116,8 +116,6 @@ export function UpdateGradeForm({
       .max(64, t("periodIdMax"))
       .nullable(),
   });
-
-  type UpdateGradeSchema = z.infer<typeof updateGradeSchema>;
 
   // This is how we pick an automatic period
   function determinePeriodId(date: Date | null | undefined, allPeriods: { id: string; name: string; startAt: string; endAt: string }[] | undefined) {
@@ -165,9 +163,7 @@ export function UpdateGradeForm({
 
   // Setup our form with parent's data
   const form = useForm({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    resolver: zodResolver(updateGradeSchema),
+    resolver: zodResolver(updateGradeSchemaWithValidation),
     defaultValues: formData,
   });
 
@@ -181,9 +177,7 @@ export function UpdateGradeForm({
   const watchedValues = form.watch();
   useEffect(() => {
     if (!isEqual(watchedValues, formData)) {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      setFormData(watchedValues);
+      setFormData(watchedValues as UpdateGradeSchema);
     }
   }, [watchedValues, formData, setFormData]);
 
@@ -301,11 +295,10 @@ export function UpdateGradeForm({
                   <FormItem className="mx-1">
                     <FormLabel>{t("grade")}</FormLabel>
                     <FormControl>
-                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment  */}
-                      {/* @ts-ignore */}
                       <Input
                         type="number"
                         {...field}
+                        value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>
@@ -322,11 +315,10 @@ export function UpdateGradeForm({
                   <FormItem className="mx-1">
                     <FormLabel>{t("outOf")}</FormLabel>
                     <FormControl>
-                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                      {/* @ts-ignore */}
                       <Input
                         type="number"
                         {...field}
+                        value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>
@@ -343,11 +335,10 @@ export function UpdateGradeForm({
                   <FormItem className="col-span-2 mx-1">
                     <FormLabel>{t("coefficient")}</FormLabel>
                     <FormControl>
-                      {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                      {/* @ts-ignore */}
                       <Input
                         type="number"
                         {...field}
+                        value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>

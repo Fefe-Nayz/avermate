@@ -2,7 +2,6 @@ node_modules
 Dockerfile*
 docker-compose*
 .dockerignore
-.git
 .gitignore
 README.md
 LICENSE
@@ -24,7 +23,6 @@ node_modules
 npm-debug.log
 README.md
 .next
-.git
 
 # Logs
 

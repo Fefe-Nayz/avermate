@@ -105,8 +105,6 @@ export const ResetPasswordForm = () => {
   const toggleVisibility = () => setIsVisible((prevState) => !prevState);
 
   const form = useForm<ResetPasswordSchema>({
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
       password: "",

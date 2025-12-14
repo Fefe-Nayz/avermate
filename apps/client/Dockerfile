@@ -18,7 +18,11 @@ WORKDIR /app/apps/client
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=https://api.avermate.fr
 ENV NEXT_PUBLIC_CLIENT_URL=https://avermate.fr
-RUN bun run build
+
+# Capture git commit hash and build in one step
+RUN apk add --no-cache git && \
+    export NEXT_PUBLIC_GIT_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') && \
+    bun run build
 
 # ---------------- runner ----------------
 FROM base AS runner
