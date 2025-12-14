@@ -32,13 +32,15 @@ ENV NODE_ENV=production \
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# These two are REQUIRED for standalone to serve assets:
-COPY --from=builder /app/apps/client/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/static ./.next/static
+# Put the standalone output in its own folder
+COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/standalone ./.next/standalone
+
+# Standalone still needs static + public (copy them *into* the standalone folder)
+COPY --from=builder /app/apps/client/public ./.next/standalone/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/static ./.next/standalone/.next/static
 
 USER nextjs
 EXPOSE 3000
 
-WORKDIR /app
+WORKDIR /app/.next/standalone
 CMD ["bun", "apps/client/server.js"]
