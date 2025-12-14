@@ -32,15 +32,15 @@ ENV NODE_ENV=production \
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Put the standalone output in its own folder
-COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/standalone ./.next/standalone
+# Copy the standalone output (keeps apps/client/server.js)
+COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/standalone /app
 
-# Standalone still needs static + public (copy them *into* the standalone folder)
-COPY --from=builder /app/apps/client/public ./.next/standalone/public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/static ./.next/standalone/.next/static
+# IMPORTANT: copy assets NEXT TO where server.js is (apps/client)
+COPY --from=builder --chown=nextjs:nodejs /app/apps/client/public /app/apps/client/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/static /app/apps/client/.next/static
 
 USER nextjs
 EXPOSE 3000
 
-WORKDIR /app/.next/standalone
-CMD ["bun", "apps/client/server.js"]
+WORKDIR /app/apps/client
+CMD ["bun", "server.js"]
