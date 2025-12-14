@@ -29,7 +29,7 @@ export default function AboutClient({
   const t = useTranslations("Settings.About");
 
   const version =
-    tags && Array.isArray(tags) && tags.length > 0 ? tags[0].name : "v1.5.1";
+    tags && Array.isArray(tags) && tags.length > 0 ? tags[0].name : "v1.5.2";
   const githubLink = `https://github.com/${repo.owner?.login ?? "nayzflux"}/${
     repo.name ?? "avermate"
   }`;
