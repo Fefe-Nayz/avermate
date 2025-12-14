@@ -62,15 +62,15 @@ import { useYears } from "@/hooks/use-years";
 import { isEqual } from "lodash";
 import FormContentWrapper from "./form-content-wrapper";
 
-// Base schema for parent component type
+// Base schema for parent component type (allows empty/undefined for initial state)
 const baseAddGradeSchema = z.object({
-  name: z.string().min(1),
-  outOf: z.number().min(0).max(1000),
-  value: z.number().min(0).max(1000),
-  coefficient: z.number().min(0).max(1000),
-  passedAt: z.date(),
-  subjectId: z.string().min(1).max(64),
-  periodId: z.string().min(1).max(64).nullable(),
+  name: z.string(),
+  outOf: z.number().optional(),
+  value: z.number().optional(),
+  coefficient: z.number().optional(),
+  passedAt: z.date().optional(),
+  subjectId: z.string(),
+  periodId: z.string().nullable(),
 });
 
 export type AddGradeSchema = z.infer<typeof baseAddGradeSchema>;
@@ -186,8 +186,16 @@ export function AddGradeForm({
   });
 
   // 2) Now we use parent's `formData` as defaultValues
+  // Type assertion explanation:
+  // We use 'as any' on the resolver because of a TypeScript limitation with z.coerce.number().
+  // - Parent schema (AddGradeSchema): Has optional numbers for empty initial state
+  // - Validation schema: Uses z.coerce.number() which accepts unknown and converts to number
+  // TypeScript cannot bridge these types, but at runtime:
+  // - Initial render: Empty fields are fine (no validation yet)
+  // - On submit: Zod validates and coerces strings → numbers correctly
+  // This is the recommended pattern for forms with optional initial values + coercion.
   const form = useForm({
-    resolver: zodResolver(addGradeSchema),
+    resolver: zodResolver(addGradeSchema) as any,
     defaultValues: formData,
   });
 
