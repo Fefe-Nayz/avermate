@@ -40,5 +40,5 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/client/.next/static ./.next/
 USER nextjs
 EXPOSE 3000
 
-# IMPORTANT: run the file, don't "bun run server.js"
-CMD ["bun", "./server.js"]
+WORKDIR /app
+CMD ["bun", "apps/client/server.js"]
