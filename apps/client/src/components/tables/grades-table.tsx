@@ -94,7 +94,7 @@ export default function GradesTable({
   /**
    * Format overall average according to year default out of
    */
-  const overallAverage = overallAverageVal ? formatAverageValue(overallAverageVal * 100, yearDefaultOutOf).toString() : "—";
+  const overallAverage = overallAverageVal ? formatAverageValue(overallAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
   return (
     <Table>
@@ -187,7 +187,7 @@ export default function GradesTable({
               /**
                * Format overall average according to year default out of
                */
-              const customAvg = customAvgVal ? formatAverageValue(customAvgVal * 100, yearDefaultOutOf).toString() : "—";
+              const customAvg = customAvgVal ? formatAverageValue(customAvgVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
               return (
                 <React.Fragment key={ca.id}>
@@ -312,7 +312,7 @@ function renderSubjects(
       /**
       * Format overall average according to year default out of
       */
-      const subjAverage = subjAverageVal ? formatAverageValue(subjAverageVal * 100, yearDefaultOutOf).toString() : "—";
+      const subjAverage = subjAverageVal ? formatAverageValue(subjAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
 
 
