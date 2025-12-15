@@ -18,19 +18,12 @@ const app = new Hono<{
   };
 }>();
 
-async function getCustomAverageById(averageId: string) {
-  const average = await db.query.customAverages.findFirst({
-    where: and(
-      eq(customAverages.id, averageId)
-    ),
-  });
-
-  return average;
-}
-
 /**
- * Retrieve a Specific Custom Average by ID
+ * Schema
  */
+const averageIdParamSchema = z.object({
+  averageId: z.string().min(1).max(64),
+});
 
 const updateCustomAverageSchema = z.object({
   name: z.string().min(1).max(64).optional(),
@@ -51,11 +44,22 @@ const updateCustomAverageSchema = z.object({
   isMainAverage: z.boolean().optional(),
 });
 
-const averageIdParamSchema = z.object({
-  averageId: z.string().min(1).max(64),
-});
+/**
+ * Get Custom Average by ID
+ */
+async function getCustomAverageById(averageId: string) {
+  const average = await db.query.customAverages.findFirst({
+    where: and(
+      eq(customAverages.id, averageId)
+    ),
+  });
 
+  return average;
+}
 
+/**
+ * Get Custom Average
+ */
 app.get(
   "/:averageId",
   zValidator("param", averageIdParamSchema),
@@ -81,17 +85,7 @@ app.get(
 );
 
 /**
-      ),
-    });
-
-    if (!average) throw new HTTPException(404);
-
-    return c.json({ customAverage: { ...average, subjects: JSON.parse(average.subjects) } });
-  }
-);
-
-/**
- * Update an Existing Custom Average
+ * Update Custom Average
  */
 app.patch(
   "/:averageId",
@@ -173,7 +167,7 @@ app.patch(
 
 
 /**
- * Delete a Custom Average
+ * Delete Custom Average
  */
 app.delete(
   "/:averageId",
