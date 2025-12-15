@@ -41,6 +41,7 @@ export default function OverviewPage() {
   const { activeId } = useActiveYearStore();
   const { data: years } = useYears();
   const active = years?.find((year) => year.id === activeId);
+  const yearDefaultOutOf = active?.defaultOutOf || 2000;
 
   // Fetch subjects lists with grades from API
   const { data: subjects, isError, isPending } = useSubjects(activeId);
@@ -246,6 +247,7 @@ export default function OverviewPage() {
               .map((period) => (
                 <TabsContent key={period.id} value={period.id}>
                   <DataCards
+                    yearDefaultOutOf={yearDefaultOutOf}
                     period={period}
                     subjects={
                       organizedSubjects?.find((p) => p.period.id === period.id)
@@ -295,6 +297,7 @@ export default function OverviewPage() {
               ))}
           <TabsContent value="full-year">
             <DataCards
+              yearDefaultOutOf={yearDefaultOutOf}
               subjects={subjects || []}
               period={fullYearPeriod(subjects, active)}
               customAverages={customAverages}

@@ -26,11 +26,13 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
 export default function DataCards({
+  yearDefaultOutOf,
   period,
   subjects,
   customAverages,
   periods,
 }: {
+  yearDefaultOutOf: number;
   period: Period;
   subjects: Subject[];
   customAverages?: Average[];
@@ -142,8 +144,9 @@ export default function DataCards({
         {average(undefined, subjects) !== null ? (
           <GradeValue
             value={(average(undefined, subjects) || 0) * 100}
-            outOf={2000}
+            outOf={yearDefaultOutOf}
             size="xl"
+            isAverage={true}
           />
         ) : null}
       </DataCard>
@@ -202,7 +205,7 @@ export default function DataCards({
             icon={AcademicCapIcon}
             description={descriptionText}
           >
-            <GradeValue value={customVal * 100} outOf={2000} size="xl" />
+            <GradeValue value={customVal * 100} outOf={yearDefaultOutOf} isAverage={true} size="xl" />
           </DataCard>
         );
       })}
@@ -247,7 +250,7 @@ export default function DataCards({
         }
       >
         {bestSubjectAverage !== null && (
-          <GradeValue value={bestSubjectAverage * 100} outOf={2000} size="xl" />
+          <GradeValue value={bestSubjectAverage * 100} outOf={yearDefaultOutOf} isAverage={true} size="xl" />
         )}
       </DataCard>
 
@@ -291,7 +294,8 @@ export default function DataCards({
         {worstSubjectAverage !== null && (
           <GradeValue
             value={worstSubjectAverage * 100}
-            outOf={2000}
+            outOf={yearDefaultOutOf}
+            isAverage={true}
             size="xl"
           />
         )}

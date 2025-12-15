@@ -14,7 +14,7 @@ import {
   gradeImpact,
   isGradeIncludedInCustomAverage,
 } from "@/utils/average";
-import { formatDate } from "@/utils/format";
+import { formatAverageImpactValue, formatDate } from "@/utils/format";
 import {
   AcademicCapIcon,
   ArrowDownCircleIcon,
@@ -30,6 +30,9 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { Period } from "@/types/period";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { useYears } from "@/hooks/use-years";
+import { format } from "node:path";
 
 export default function GradeWrapper({
   subjects,
@@ -48,6 +51,11 @@ export default function GradeWrapper({
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Pages.GradeWrapper"); // Initialize t
+
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
+  const yearDefaultOutOf = active?.defaultOutOf || 2000;
 
   const gradeParents = () => {
     if (!grade || !subjects) {
@@ -172,7 +180,7 @@ export default function GradeWrapper({
             icon={
               subjects
                 ? (gradeImpact(grade.id, undefined, subjects)?.difference ??
-                    0) >= 0
+                  0) >= 0
                   ? ArrowUpCircleIcon
                   : ArrowDownCircleIcon
                 : ArrowUpCircleIcon
@@ -181,44 +189,44 @@ export default function GradeWrapper({
             <DifferenceBadge
               diff={
                 subjects
-                  ? gradeImpact(grade.id, undefined, subjects)?.difference || 0
+                  ? formatAverageImpactValue(gradeImpact(grade.id, undefined, subjects)?.difference || 0, yearDefaultOutOf)
                   : 0
               }
             />
           </DataCard>
 
-        {/* Custom averages integrated with basic info as requested */}
-        {customAverages.map((ca) => {
-          // Check if this grade is part of the custom average
-          if (!isGradeIncludedInCustomAverage(grade, subjects, ca)) {
-            return null; // skip if not included
-          }
+          {/* Custom averages integrated with basic info as requested */}
+          {customAverages.map((ca) => {
+            // Check if this grade is part of the custom average
+            if (!isGradeIncludedInCustomAverage(grade, subjects, ca)) {
+              return null; // skip if not included
+            }
 
-          // If included, compute the impact of this single grade on that custom average
-          const withGrade = ca
-            ? gradeImpact(grade.id, undefined, subjects, ca)
-            : null;
-          // withGrade might be { difference, percentageChange } or null
+            // If included, compute the impact of this single grade on that custom average
+            const withGrade = ca
+              ? gradeImpact(grade.id, undefined, subjects, ca)
+              : null;
+            // withGrade might be { difference, percentageChange } or null
 
-          return (
-            <DataCard
-              key={ca.id}
-              title={t("impactCustomAverageTitle", { name: ca.name })}
-              description={t("impactCustomAverageDescription", {
-                name: ca.name,
-                periodName: period?.name,
-              })}
-              icon={
-                withGrade?.difference && withGrade.difference >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-              }
-            >
-              <DifferenceBadge diff={withGrade?.difference || 0} />
-            </DataCard>
-          );
-        })}
-      
+            return (
+              <DataCard
+                key={ca.id}
+                title={t("impactCustomAverageTitle", { name: ca.name })}
+                description={t("impactCustomAverageDescription", {
+                  name: ca.name,
+                  periodName: period?.name,
+                })}
+                icon={
+                  withGrade?.difference && withGrade.difference >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                }
+              >
+                <DifferenceBadge diff={formatAverageImpactValue(withGrade?.difference || 0, yearDefaultOutOf)} />
+              </DataCard>
+            );
+          })}
+
 
 
           {gradeParents().map((parent: Subject) => (
@@ -232,7 +240,7 @@ export default function GradeWrapper({
               icon={
                 subjects
                   ? (gradeImpact(grade.id, parent.id, subjects)?.difference ??
-                      0) >= 0
+                    0) >= 0
                     ? ArrowUpCircleIcon
                     : ArrowDownCircleIcon
                   : ArrowUpCircleIcon
@@ -241,8 +249,7 @@ export default function GradeWrapper({
               <DifferenceBadge
                 diff={
                   subjects
-                    ? gradeImpact(grade.id, parent.id, subjects)?.difference ||
-                      0
+                    ? formatAverageImpactValue(gradeImpact(grade.id, parent.id, subjects)?.difference || 0, yearDefaultOutOf)
                     : 0
                 }
               />
@@ -258,7 +265,7 @@ export default function GradeWrapper({
             icon={
               subjects
                 ? (gradeImpact(grade.id, grade.subjectId, subjects)
-                    ?.difference ?? 0) >= 0
+                  ?.difference ?? 0) >= 0
                   ? ArrowUpCircleIcon
                   : ArrowDownCircleIcon
                 : ArrowUpCircleIcon
@@ -267,8 +274,7 @@ export default function GradeWrapper({
             <DifferenceBadge
               diff={
                 subjects
-                  ? gradeImpact(grade.id, grade.subjectId, subjects)
-                      ?.difference || 0
+                  ? formatAverageImpactValue(gradeImpact(grade.id, grade.subjectId, subjects)?.difference || 0, yearDefaultOutOf)
                   : 0
               }
             />

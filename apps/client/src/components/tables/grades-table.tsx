@@ -29,6 +29,9 @@ import {
   buildGeneralAverageSubject,
 } from "@/utils/average";
 import { usePeriod } from "@/hooks/use-period";
+import { useYears } from "@/hooks/use-years";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { formatAverageValue } from "@/utils/format";
 
 export default function GradesTable({
   subjects,
@@ -41,6 +44,11 @@ export default function GradesTable({
 }) {
   const pathname = usePathname();
   const t = useTranslations("Dashboard.Tables.GradesTable");
+
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
+  const yearDefaultOutOf = active?.defaultOutOf || 2000;
 
   const {
     data: period,
@@ -80,8 +88,13 @@ export default function GradesTable({
 
   const periodName = periodId !== "full-year" ? period?.name : t("fullYear");
   const overallAverageVal = average(undefined, subjects);
-  const overallAverage =
-    overallAverageVal !== null ? overallAverageVal.toFixed(2) : "—";
+
+  // const overallAverage =
+  //   overallAverageVal !== null ? overallAverageVal.toFixed(2) : "—";
+  /**
+   * Format overall average according to year default out of
+   */
+  const overallAverage = overallAverageVal ? formatAverageValue(overallAverageVal * 100, yearDefaultOutOf).toString() : "—";
 
   return (
     <Table>
@@ -99,7 +112,7 @@ export default function GradesTable({
       </TableHeader>
 
       <TableBody>
-        {renderSubjects(subjects, periodId, null, pathname, customAverages, t)}
+        {renderSubjects(subjects, periodId, null, pathname, yearDefaultOutOf, customAverages, t)}
       </TableBody>
 
       <TableFooter>
@@ -167,8 +180,14 @@ export default function GradesTable({
                 subjectVirtual()?.id,
                 subjectsToGive()
               );
-              const customAvg =
-                customAvgVal !== null ? customAvgVal.toFixed(2) : "—";
+
+              // const customAvg =
+              //   customAvgVal !== null ? customAvgVal.toFixed(2) : "—";
+
+              /**
+               * Format overall average according to year default out of
+               */
+              const customAvg = customAvgVal ? formatAverageValue(customAvgVal * 100, yearDefaultOutOf).toString() : "—";
 
               return (
                 <React.Fragment key={ca.id}>
@@ -278,16 +297,24 @@ function renderSubjects(
   periodId: string,
   parentId: string | null,
   pathname: string,
+  yearDefaultOutOf: number,
   customAverages?: Average[],
-  t?: any
+  t?: any,
 ) {
   return subjects
     .filter((subject) => subject.parentId === parentId)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((subject) => {
       const subjAverageVal = average(subject.id, subjects, undefined);
-      const subjAverage =
-        subjAverageVal !== null ? subjAverageVal.toFixed(2) : "—";
+
+      // const subjAverage =
+      //   subjAverageVal !== null ? subjAverageVal.toFixed(2) : "—";
+      /**
+      * Format overall average according to year default out of
+      */
+      const subjAverage = subjAverageVal ? formatAverageValue(subjAverageVal * 100, yearDefaultOutOf).toString() : "—";
+
+
 
       return (
         <React.Fragment key={subject.id}>
@@ -379,6 +406,7 @@ function renderSubjects(
             periodId,
             subject.id,
             pathname,
+            yearDefaultOutOf,
             customAverages,
             t
           )}

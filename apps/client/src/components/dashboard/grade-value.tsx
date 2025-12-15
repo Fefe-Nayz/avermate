@@ -1,21 +1,22 @@
 import NumberTicker from "@/components/ui/number-ticker";
 import { cn } from "@/lib/utils";
-import { formatGradeValue } from "@/utils/format";
+import { formatAverageValue, formatGradeValue } from "@/utils/format";
 
 export default function GradeValue({
   value,
   outOf,
   size = "xl",
   duration = 2,
-  triggerOnView = false
+  triggerOnView = false,
+  isAverage = false,
 }: {
   value: number;
   outOf: number;
   size?: "sm" | "xl";
   duration?: number;
   triggerOnView?: boolean;
+  isAverage?: boolean;
 }) {
-  //const decimals = formatGradeValue(value).toString().split(".")[1]?.length || 0;
   return (
     <div className="flex items-center gap-1 whitespace-nowrap">
       <p
@@ -26,7 +27,7 @@ export default function GradeValue({
       >
         <NumberTicker
           decimalPlaces={2}
-          value={formatGradeValue(value)}
+          value={isAverage ? formatAverageValue(value, outOf) : formatGradeValue(value)}
           duration={duration}
           triggerOnView={triggerOnView}
         />

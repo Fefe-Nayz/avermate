@@ -5,6 +5,45 @@ import { type DateTimeFormatOptions } from 'next-intl';
 
 dayjs.locale('fr');
 
+/**
+ * Impact decimals places
+ */
+export const IMPACT_DECIMALS = 3;
+
+/**
+ * Average decimals places
+ */
+export const AVG_DECIMALS = 2;
+
+/**
+ * The out of value used for average calculations
+ */
+const AVG_CALCULATION_OUT_OF = 2000;
+
+/**
+ * Get display value for average
+ */
+export const formatAverageValue = (value: number, outOf: number): number => {
+  // Get average on a scale of 0 to 1
+  const normalizedValue = (value / AVG_CALCULATION_OUT_OF);
+  // Scale it to the desired outOf value
+  const formattedValue = normalizedValue * (outOf / 100);
+  // Return value rounded to 2 decimal places
+  return parseFloat(formattedValue.toFixed(AVG_DECIMALS));
+}
+
+/**
+ * Get display value for average impact
+ */
+export const formatAverageImpactValue = (value: number, outOf: number): number => {
+  // Get average on a scale of 0 to 1
+  const normalizedValue = (value * 100 / AVG_CALCULATION_OUT_OF );
+  // Scale it to the desired outOf value
+  const formattedValue = normalizedValue * (outOf / 100);
+  // Return value rounded to 2 decimal places
+  return parseFloat(formattedValue.toFixed(IMPACT_DECIMALS));
+}
+
 export const formatGradeValue = (value: number) => {
   return parseFloat((value / 100).toFixed(2));
 };

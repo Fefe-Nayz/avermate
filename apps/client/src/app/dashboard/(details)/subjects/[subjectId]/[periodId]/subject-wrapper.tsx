@@ -48,6 +48,8 @@ import {
 import { SubjectGradesTable } from "@/components/tables/subject-grades-table";
 import { Grade, PartialGrade } from "@/types/grade";
 import { GradeEmptyState } from "@/components/empty-states/grade-empty-state";
+import { useActiveYearStore } from "@/stores/active-year-store";
+import { useYears } from "@/hooks/use-years";
 
 function getRelevantPeriodIds(period: Period, periods: Period[]): string[] {
   if (period.id === "full-year") {
@@ -90,6 +92,11 @@ function SubjectWrapper({
   grades: PartialGrade[];
 }) {
   const t = useTranslations("Dashboard.Pages.SubjectWrapper");
+
+  const { activeId } = useActiveYearStore();
+  const { data: years } = useYears();
+  const active = years?.find((year) => year.id === activeId);
+  const yearDefaultOutOf = active?.defaultOutOf || 2000;
 
   const isVirtualSubject =
     subject.id.startsWith("ca") || subject.id.startsWith("general-average");
@@ -311,7 +318,8 @@ function SubjectWrapper({
         >
           <GradeValue
             value={(average(subject?.id, subjects) || 0) * 100}
-            outOf={2000}
+            outOf={yearDefaultOutOf}
+            isAverage={true}
           />
         </DataCard>
 
@@ -378,7 +386,7 @@ function SubjectWrapper({
           })()}
         </DataCard>
 
- 
+
       </div>
 
       {/* Impact Cards Section */}
@@ -402,7 +410,7 @@ function SubjectWrapper({
                     : ArrowDownCircleIcon
                   : subjects
                     ? (subjectImpact(subject.id, undefined, subjects)
-                        ?.difference ?? 0) >= 0
+                      ?.difference ?? 0) >= 0
                       ? ArrowUpCircleIcon
                       : ArrowDownCircleIcon
                     : ArrowUpCircleIcon
@@ -414,40 +422,40 @@ function SubjectWrapper({
                     ? customAverageImpact || 0
                     : subjects
                       ? subjectImpact(subject.id, undefined, subjects)
-                          ?.difference || 0
+                        ?.difference || 0
                       : 0
                 }
               />
             </DataCard>
           )}
 
-       {/* Custom averages integrated with basic info as requested */}
-        {customAverages.map((ca) => {
-          const configMap = buildCustomConfig(ca);
-          if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
-            return null;
-          }
+          {/* Custom averages integrated with basic info as requested */}
+          {customAverages.map((ca) => {
+            const configMap = buildCustomConfig(ca);
+            if (!isSubjectIncludedInCustomAverage(subject, subjects, configMap)) {
+              return null;
+            }
 
-          const impact = subjectImpact(subject.id, undefined, subjects, ca);
-          return (
-            <DataCard
-              key={ca.id}
-              title={t("customImpactTitle", { name: ca.name })}
-              description={t("customImpactDescription", {
-                name: subject.name,
-                customName: ca.name,
-                periodName: period?.name,
-              })}
-              icon={
-                impact?.difference && impact.difference >= 0
-                  ? ArrowUpCircleIcon
-                  : ArrowDownCircleIcon
-              }
-            >
-              <DifferenceBadge diff={impact?.difference || 0} />
-            </DataCard>
-          );
-        })}
+            const impact = subjectImpact(subject.id, undefined, subjects, ca);
+            return (
+              <DataCard
+                key={ca.id}
+                title={t("customImpactTitle", { name: ca.name })}
+                description={t("customImpactDescription", {
+                  name: subject.name,
+                  customName: ca.name,
+                  periodName: period?.name,
+                })}
+                icon={
+                  impact?.difference && impact.difference >= 0
+                    ? ArrowUpCircleIcon
+                    : ArrowDownCircleIcon
+                }
+              >
+                <DifferenceBadge diff={impact?.difference || 0} />
+              </DataCard>
+            );
+          })}
 
           {/* Parent Subjects (impact on them) */}
           {parentSubjects().map((parent) => (
@@ -462,7 +470,7 @@ function SubjectWrapper({
               icon={
                 subjects
                   ? (subjectImpact(subject.id, parent.id, subjects)
-                      ?.difference ?? 0) >= 0
+                    ?.difference ?? 0) >= 0
                     ? ArrowUpCircleIcon
                     : ArrowDownCircleIcon
                   : ArrowUpCircleIcon
@@ -472,7 +480,7 @@ function SubjectWrapper({
                 diff={
                   subjects
                     ? subjectImpact(subject.id, parent.id, subjects)
-                        ?.difference || 0
+                      ?.difference || 0
                     : 0
                 }
               />
