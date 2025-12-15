@@ -29,8 +29,24 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
-const DropDrawerContext = React.createContext<{ isMobile: boolean }>({
+interface DropDrawerContextValue {
+  isMobile: boolean;
+  /** Close the dropdown/drawer */
+  close: () => void;
+  /** Whether the dropdown/drawer is open */
+  isOpen: boolean;
+  /** Lock the current mode (prevents Drawer↔DropdownMenu transition) */
+  lockMode: () => void;
+  /** Unlock the mode (allows transitions again) */
+  unlockMode: () => void;
+}
+
+const DropDrawerContext = React.createContext<DropDrawerContextValue>({
   isMobile: false,
+  close: () => {},
+  isOpen: false,
+  lockMode: () => {},
+  unlockMode: () => {},
 });
 
 const useDropDrawerContext = () => {
@@ -43,20 +59,101 @@ const useDropDrawerContext = () => {
   return context;
 };
 
+/**
+ * Hook to access DropDrawer context. Returns null if used outside a DropDrawer.
+ * Use this to close the parent DropDrawer when opening nested dialogs.
+ */
+function useDropDrawer() {
+  return React.useContext(DropDrawerContext);
+}
+
 function DropDrawer({
   children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
   ...props
-}:
+}: (
   | React.ComponentProps<typeof Drawer>
-  | React.ComponentProps<typeof DropdownMenu>) {
+  | React.ComponentProps<typeof DropdownMenu>
+) & {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const isMobile = useIsMobile();
-  const DropdownComponent = isMobile ? Drawer : DropdownMenu;
+
+  // Lock mechanism to prevent Drawer↔DropdownMenu transitions while a nested dialog is open
+  const [lockedMode, setLockedMode] = React.useState<boolean | null>(null);
+
+  // Use locked mode if set, otherwise use current viewport-based mode
+  const effectiveIsMobile = lockedMode !== null ? lockedMode : isMobile;
+  const DropdownComponent = effectiveIsMobile ? Drawer : DropdownMenu;
+
+  // Use internal state if not controlled
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const isOpen = isControlled ? controlledOpen : internalOpen;
+
+  // Track viewport transitions to ignore false close events (skip initial hydration)
+  const hasMountedRef = React.useRef(false);
+  const prevIsMobileRef = React.useRef(isMobile);
+  const isViewportTransitionRef = React.useRef(false);
+
+  // Mark as mounted after first render
+  React.useEffect(() => {
+    hasMountedRef.current = true;
+  }, []);
+
+  // Viewport transition detection (only after mount to skip hydration)
+  if (hasMountedRef.current && prevIsMobileRef.current !== isMobile && isOpen) {
+    isViewportTransitionRef.current = true;
+  }
+  prevIsMobileRef.current = isMobile;
+
+  // Reset viewport transition flag after a delay
+  React.useEffect(() => {
+    if (isViewportTransitionRef.current) {
+      const timer = setTimeout(() => {
+        isViewportTransitionRef.current = false;
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isMobile]);
+
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      // Ignore close events during viewport transitions
+      if (!open && isViewportTransitionRef.current) {
+        return;
+      }
+      if (!isControlled) {
+        setInternalOpen(open);
+      }
+      controlledOnOpenChange?.(open);
+    },
+    [isControlled, controlledOnOpenChange]
+  );
+
+  const close = React.useCallback(() => {
+    handleOpenChange(false);
+  }, [handleOpenChange]);
+
+  // Lock the current mode to prevent transitions
+  const lockMode = React.useCallback(() => {
+    setLockedMode(isMobile);
+  }, [isMobile]);
+
+  // Unlock to allow transitions again
+  const unlockMode = React.useCallback(() => {
+    setLockedMode(null);
+  }, []);
 
   return (
-    <DropDrawerContext.Provider value={{ isMobile }}>
+    <DropDrawerContext.Provider value={{ isMobile: effectiveIsMobile, close, isOpen, lockMode, unlockMode }}>
       <DropdownComponent
         data-slot="drop-drawer"
-        {...(isMobile && { autoFocus: true })}
+        open={isOpen}
+        onOpenChange={handleOpenChange}
+        {...(effectiveIsMobile && { autoFocus: true })}
         {...props}
       >
         {children}
@@ -403,10 +500,13 @@ function DropDrawerItem({
   variant = "default",
   inset,
   disabled,
+  closeOnSelect = true,
   ...props
 }: React.ComponentProps<typeof DropdownMenuItem> & {
   icon?: React.ReactNode;
   variant?: "default" | "destructive";
+  /** Whether to close the drawer when this item is selected. Default true. Set to false for dialog triggers. */
+  closeOnSelect?: boolean;
 }) {
   const { isMobile } = useDropDrawerContext();
 
@@ -490,12 +590,26 @@ function DropDrawerItem({
       (props as Record<string, unknown>)["data-parent-submenu-id"] ||
       (props as Record<string, unknown>)["data-parent-submenu"];
 
-    if (isInSubmenu) {
+    // Don't wrap in DrawerClose if:
+    // - It's inside a submenu
+    // - closeOnSelect is false (e.g., for dialog triggers)
+    if (isInSubmenu || !closeOnSelect) {
       return content;
     }
 
     return <DrawerClose asChild>{content}</DrawerClose>;
   }
+
+  // For desktop DropdownMenu, handle closeOnSelect by preventing default in onSelect
+  const handleDesktopSelect = React.useCallback(
+    (e: Event) => {
+      if (!closeOnSelect) {
+        e.preventDefault();
+      }
+      onSelect?.(e);
+    },
+    [closeOnSelect, onSelect]
+  );
 
   return (
     <DropdownMenuItem
@@ -503,7 +617,7 @@ function DropDrawerItem({
       data-variant={variant}
       data-inset={inset}
       className={className}
-      onSelect={onSelect}
+      onSelect={handleDesktopSelect}
       onClick={onClick as React.MouseEventHandler<HTMLDivElement>}
       inset={inset}
       disabled={disabled}
@@ -1115,4 +1229,5 @@ export {
   DropDrawerSubContent,
   DropDrawerSubTrigger,
   DropDrawerTrigger,
+  useDropDrawer,
 };

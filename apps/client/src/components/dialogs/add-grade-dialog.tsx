@@ -2,8 +2,6 @@
 
 import {
   Credenza,
-  CredenzaBody,
-  CredenzaContent,
   CredenzaDescription,
   CredenzaHeader,
   CredenzaTitle,
@@ -15,17 +13,30 @@ import { useTranslations } from "next-intl";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
+interface AddGradeDialogProps {
+  children?: React.ReactNode;
+  parentId?: string;
+  yearId: string;
+  /** If provided, the dialog will be controlled externally */
+  open?: boolean;
+  /** If provided, the dialog will be controlled externally */
+  onOpenChange?: (open: boolean) => void;
+}
+
 export default function AddGradeDialog({
   children,
   parentId,
   yearId,
-}: {
-  children: React.ReactNode;
-  parentId?: string;
-  yearId: string;
-}) {
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: AddGradeDialogProps) {
   const t = useTranslations("Dashboard.Dialogs.AddGrade");
-  const [open, setOpen] = useState(false);
+
+  // Support both controlled and uncontrolled modes
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
 
   // The same defaults you had in the original code
   const EMPTY_FORM_DATA: AddGradeSchema = {
@@ -43,7 +54,7 @@ export default function AddGradeDialog({
   const close = () => {
     setOpen(false);
     setFormData(EMPTY_FORM_DATA);
-  }
+  };
 
   return (
     <Credenza
@@ -55,7 +66,7 @@ export default function AddGradeDialog({
         }
       }}
     >
-      <CredenzaTrigger asChild>{children}</CredenzaTrigger>
+      {children && <CredenzaTrigger asChild>{children}</CredenzaTrigger>}
       <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>

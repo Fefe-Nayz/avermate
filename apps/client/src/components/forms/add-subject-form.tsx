@@ -46,19 +46,22 @@ import { isEqual } from "lodash";
 import React from "react";
 import { useForm } from "react-hook-form";
 import FormContentWrapper from "./form-content-wrapper";
+import { useCredenzaContext } from "@/components/ui/credenza";
 
 interface AddSubjectFormProps {
   close: () => void;
   parentId?: string;
   yearId: string;
-  formData: {
+  /** @deprecated Use reparentableContent pattern instead - form state is now preserved automatically */
+  formData?: {
     name: string;
     coefficient?: number;
     parentId?: string | null;
     isMainSubject?: boolean;
     isDisplaySubject?: boolean;
   };
-  setFormData: React.Dispatch<
+  /** @deprecated Use reparentableContent pattern instead - form state is now preserved automatically */
+  setFormData?: React.Dispatch<
     React.SetStateAction<{
       name: string;
       coefficient?: number;
@@ -155,16 +158,45 @@ export const AddSubjectForm = ({
     },
   })
 
-  // Sync with parent's data
+  // Get open state from credenza context to reset form when dialog closes
+  const credenzaContext = useCredenzaContext();
+  const prevOpenRef = React.useRef(credenzaContext?.open);
+
+  // Reset form when dialog closes (after animation completes)
   useEffect(() => {
-    form.reset(formData);
+    const wasOpen = prevOpenRef.current;
+    const isOpen = credenzaContext?.open;
+
+    if (wasOpen && !isOpen) {
+      // Dialog just closed - reset form after animation completes
+      const timer = setTimeout(() => {
+        form.reset({
+          name: "",
+          parentId: parentId || "",
+          isDisplaySubject: false,
+          isMainSubject: false,
+          coefficient: 1,
+        });
+      }, 300); // Match dialog close animation duration
+      return () => clearTimeout(timer);
+    }
+
+    prevOpenRef.current = isOpen;
+  }, [credenzaContext?.open, form, parentId]);
+
+  // Sync with parent's data (only if using deprecated lifted state pattern)
+  useEffect(() => {
+    if (formData) {
+      form.reset(formData);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const watchedValues = form.watch();
   useEffect(() => {
-    if (!isEqual(watchedValues, formData)) {
-      setFormData(watchedValues as typeof formData);
+    // Only sync back if using deprecated lifted state pattern
+    if (setFormData && formData && !isEqual(watchedValues, formData)) {
+      setFormData(watchedValues as NonNullable<typeof formData>);
     }
   }, [watchedValues, formData, setFormData]);
 

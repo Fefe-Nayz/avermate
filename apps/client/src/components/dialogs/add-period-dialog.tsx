@@ -2,8 +2,6 @@
 
 import {
   Credenza,
-  CredenzaBody,
-  CredenzaContent,
   CredenzaDescription,
   CredenzaHeader,
   CredenzaTitle,
@@ -17,20 +15,33 @@ import * as z from "zod";
 import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
 
+interface AddPeriodCredenzaProps {
+  children?: React.ReactNode;
+  yearId: string;
+  /** If provided, the dialog will be controlled externally */
+  open?: boolean;
+  /** If provided, the dialog will be controlled externally */
+  onOpenChange?: (open: boolean) => void;
+}
+
 export default function AddPeriodCredenza({
   children,
   yearId,
-}: {
-  children: React.ReactNode;
-  yearId: string;
-}) {
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: AddPeriodCredenzaProps) {
   const t = useTranslations("Dashboard.Dialogs.AddPeriod");
-  const [open, setOpen] = useState(false);
+
+  // Support both controlled and uncontrolled modes
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
 
   // Fetch existing periods to prevent overlapping
   const { data: periods, isError, isPending } = usePeriods(yearId);
 
-  // 1) Mirror the same shape as the AddPeriodForm’s defaultValues
+  // 1) Mirror the same shape as the AddPeriodForm's defaultValues
   const AddPeriodSchema = z.object({
     name: z.string().min(1).max(64),
     dateRange: z.object({
@@ -56,7 +67,7 @@ export default function AddPeriodCredenza({
   const close = () => {
     setOpen(false);
     setFormData(EMPTY_FORM_DATA);
-  }
+  };
 
   return (
     <Credenza
@@ -69,9 +80,11 @@ export default function AddPeriodCredenza({
         }
       }}
     >
-      <CredenzaTrigger className="flex items-center" asChild>
-        {children}
-      </CredenzaTrigger>
+      {children && (
+        <CredenzaTrigger className="flex items-center" asChild>
+          {children}
+        </CredenzaTrigger>
+      )}
 
       <CredenzaContentWrapper>
         <CredenzaHeader>

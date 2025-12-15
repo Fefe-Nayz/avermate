@@ -44,6 +44,12 @@ const Drawer = ({
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) => {
   const isMobile = useIsMobile();
 
+  // Track when component has mounted (to skip hydration issues with isMobile)
+  const hasMountedRef = React.useRef(false);
+  React.useEffect(() => {
+    hasMountedRef.current = true;
+  }, []);
+
   // Support controlled and uncontrolled usage
   const isControlled = controlledOpen !== undefined;
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(
@@ -63,6 +69,8 @@ const Drawer = ({
   const linkNavigationRef = React.useRef(false);
 
   const registerOpen = React.useCallback(() => {
+    // Wait for mount to ensure isMobile has stabilized after hydration
+    if (!hasMountedRef.current) return;
     if (!isMobile) return;
     if (typeof window === "undefined") return;
     if (hasPushedRef.current) return;

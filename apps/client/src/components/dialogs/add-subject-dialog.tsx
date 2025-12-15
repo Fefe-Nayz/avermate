@@ -2,86 +2,88 @@
 
 import {
   Credenza,
-  CredenzaBody,
-  CredenzaContent,
   CredenzaDescription,
   CredenzaHeader,
   CredenzaTitle,
   CredenzaTrigger,
+  CredenzaFormSlot,
 } from "@/components/ui/credenza";
 import { useState } from "react";
 import { AddSubjectForm } from "../forms/add-subject-form";
 import { useTranslations } from "next-intl";
-import * as z from "zod";
 import CredenzaContentWrapper from "../credenza/credenza-content-wrapper";
-import CredenzaBodyWrapper from "../credenza/credenza-body-wrapper";
 
+interface AddSubjectCredenzaProps {
+  children?: React.ReactNode;
+  parentId?: string;
+  yearId: string;
+  /** If provided, the dialog will be controlled externally */
+  open?: boolean;
+  /** If provided, the dialog will be controlled externally */
+  onOpenChange?: (open: boolean) => void;
+}
+
+/**
+ * AddSubjectCredenza - A dialog for adding subjects.
+ *
+ * Can be used in two modes:
+ * 1. Self-managed (default): Just pass children as trigger
+ * 2. Controlled: Pass open/onOpenChange to control from outside (useful when rendered inside DropDrawer)
+ *
+ * For DropDrawer usage, render the dialog OUTSIDE the DropDrawer and control it externally:
+ * ```tsx
+ * const [open, setOpen] = useState(false);
+ * <>
+ *   <AddSubjectDialog open={open} onOpenChange={setOpen} yearId={yearId} />
+ *   <DropDrawer>
+ *     <DropDrawerItem onClick={() => setOpen(true)}>Add Subject</DropDrawerItem>
+ *   </DropDrawer>
+ * </>
+ * ```
+ */
 export default function AddSubjectCredenza({
   children,
   parentId,
   yearId,
-}: {
-  children: React.ReactNode;
-  parentId?: string;
-  yearId: string;
-}) {
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: AddSubjectCredenzaProps) {
   const t = useTranslations("Dashboard.Dialogs.AddSubject");
-  const [open, setOpen] = useState(false);
 
-  const AddSubjectSchema = z.object({
-    name: z.string().min(1).max(64),
-    coefficient: z.number().min(0).max(1000).optional(),
-    parentId: z.string().nullable().optional(),
-    isMainSubject: z.boolean().optional(),
-    isDisplaySubject: z.boolean().optional(),
-  });
-  type TAddSubject = z.infer<typeof AddSubjectSchema>;
-
-  const EMPTY_FORM_DATA: TAddSubject = {
-    name: "",
-    parentId: parentId ?? "",
-    isDisplaySubject: false,
-    isMainSubject: false,
-    coefficient: undefined,
-  };
-
-  const [formData, setFormData] = useState<TAddSubject>(EMPTY_FORM_DATA);
+  // Support both controlled and uncontrolled modes
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? controlledOnOpenChange! : setInternalOpen;
 
   const close = () => {
     setOpen(false);
-    setFormData(EMPTY_FORM_DATA);
-  }
+  };
 
   return (
     <Credenza
       open={open}
-      onOpenChange={(newOpen) => {
-        setOpen(newOpen);
-        if (!newOpen) {
-          setFormData(EMPTY_FORM_DATA);
-        }
-      }}
+      onOpenChange={setOpen}
+      reparentableContent={
+        <AddSubjectForm
+          close={close}
+          parentId={parentId}
+          yearId={yearId}
+        />
+      }
     >
-      <CredenzaTrigger className="flex items-center" asChild>
-        {children}
-      </CredenzaTrigger>
+      {children && (
+        <CredenzaTrigger className="flex items-center" asChild>
+          {children}
+        </CredenzaTrigger>
+      )}
 
       <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>{t("title")}</CredenzaTitle>
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
-        <CredenzaBodyWrapper>
-          {open && (
-            <AddSubjectForm
-              close={() => close()}
-              parentId={parentId}
-              formData={formData}
-              setFormData={setFormData}
-              yearId={yearId}
-            />
-          )}
-        </CredenzaBodyWrapper>
+        <CredenzaFormSlot />
       </CredenzaContentWrapper>
     </Credenza>
   );
