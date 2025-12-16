@@ -13,6 +13,8 @@
 - Move to dockploy for ci cd
 - Add OTP for email verification and restyle the auth pages
 - Add a notifications feature
+- better adapt ui on mobile (bigger buttons etc.)
+- restore deleted changes to start again the refactor
 
 Refactor the major most messed up components and refactor how we fetch and treat the data
 Faire le système d'amis/de classe
