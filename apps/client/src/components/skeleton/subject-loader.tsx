@@ -103,9 +103,13 @@ export default function subjectLoader(t: any) {
 
       {/* Charts of average evolution */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">
-          <Skeleton className="w-96 h-7" />
-        </h2>
+        <div className="flex items-center justify-between">
+          <Skeleton className="w-32 h-7" />
+          <div className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-[3px]">
+            <Skeleton className="h-[calc(100%-1px)] w-20 rounded-md" />
+            <Skeleton className="h-[calc(100%-1px)] w-16 rounded-md ml-1" />
+          </div>
+        </div>
 
         <Card className="p-4">
           <ChartContainer config={chartConfig} className="h-[400px] w-full">
