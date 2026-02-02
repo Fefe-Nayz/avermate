@@ -625,6 +625,10 @@
       },
       "SubjectAverageChart": {
         "average": "Average"
+      },
+      "SubjectGradesChart": {
+        "grades": "Grades",
+        "noGrades": "No grades to display"
       }
     },
     "Cards": {
@@ -1164,7 +1168,10 @@
         "notAvailable": "N/A",
         "averageEvolution": "Average Evolution",
         "generalAverage": "General Average",
-        "impactSectionTitle": "Impacts of the subject"
+        "impactSectionTitle": "Impacts of the subject",
+        "chartSectionTitle": "Evolution",
+        "averageOverTime": "Average",
+        "gradesOverTime": "Grades"
       },
       "GradeWrapper": {
         "back": "Back",

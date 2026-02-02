@@ -32,7 +32,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { PlusCircleIcon } from "lucide-react";
 import SubjectAverageChart from "./subject-average-chart";
+import SubjectGradesChart from "./subject-grades-chart";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { useTranslations } from "next-intl";
 import { EllipsisVerticalIcon, MinusIcon, PlusIcon } from "lucide-react";
@@ -485,13 +487,31 @@ function SubjectWrapper({
 
       {/* Charts */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-xl font-semibold">{t("averageEvolution")}</h2>
-        <SubjectAverageChart
-          subjectId={subject.id}
-          period={period}
-          subjects={subjects}
-          periods={periods}
-        />
+        <Tabs defaultValue="average" className="w-full">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">{t("chartSectionTitle")}</h2>
+            <TabsList>
+              <TabsTrigger value="average">{t("averageOverTime")}</TabsTrigger>
+              <TabsTrigger value="grades">{t("gradesOverTime")}</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="average">
+            <SubjectAverageChart
+              subjectId={subject.id}
+              period={period}
+              subjects={subjects}
+              periods={periods}
+            />
+          </TabsContent>
+          <TabsContent value="grades">
+            <SubjectGradesChart
+              subjectId={subject.id}
+              period={period}
+              subjects={subjects}
+              periods={periods}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Grades List */}
