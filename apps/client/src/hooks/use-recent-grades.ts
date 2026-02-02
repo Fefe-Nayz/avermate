@@ -1,10 +1,11 @@
 import { apiClient } from "@/lib/api";
 import { Grade } from "@/types/grade";
 import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 export const useRecentGrades = (yearId: string) =>
   useQuery({
-    queryKey: ["recent-grades"],
+    queryKey: queryKeys.grades.recent(yearId),
     queryFn: async () => {
       const res = await apiClient.get(
         `years/${yearId}/grades?from=${new Date(
