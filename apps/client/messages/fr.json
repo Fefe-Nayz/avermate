@@ -625,6 +625,10 @@
       },
       "SubjectAverageChart": {
         "average": "Moyenne"
+      },
+      "SubjectGradesChart": {
+        "grades": "Notes",
+        "noGrades": "Aucune note à afficher"
       }
     },
     "Cards": {
@@ -1164,7 +1168,10 @@
         "notAvailable": "N/A",
         "averageEvolution": "Evolution de la moyenne",
         "generalAverage": "Moyenne générale",
-        "impactSectionTitle": "Impacts de la matière"
+        "impactSectionTitle": "Impacts de la matière",
+        "chartSectionTitle": "Évolution",
+        "averageOverTime": "Moyenne",
+        "gradesOverTime": "Notes"
       },
       "GradeWrapper": {
         "back": "Retour",
