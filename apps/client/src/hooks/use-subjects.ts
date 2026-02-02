@@ -2,6 +2,7 @@ import { apiClient } from "@/lib/api";
 import { GetSubjectsResponse } from "@/types/get-subjects-response";
 import { useQuery } from "@tanstack/react-query";
 import { Grade } from "@/types/grade";
+import { queryKeys } from "@/lib/query-keys";
 
 // Function to modify grades for April Fools
 function modifyGradeForAprilFools(grade: Grade): Grade {
@@ -27,7 +28,7 @@ function isAprilFoolsDay(): boolean {
 
 export const useSubjects = (yearId: string) =>
   useQuery({
-    queryKey: ["subjects"],
+    queryKey: queryKeys.subjects.all(yearId),
     queryFn: async () => {
       const res = await apiClient.get(`years/${yearId}/subjects`);
       const data = await res.json<GetSubjectsResponse>();

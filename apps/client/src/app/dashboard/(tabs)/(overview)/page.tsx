@@ -44,36 +44,36 @@ export default function OverviewPage() {
   const yearDefaultOutOf = active?.defaultOutOf || 2000;
 
   // Fetch subjects lists with grades from API
-  const { data: subjects, isError, isPending } = useSubjects(activeId);
-
-  useEffect(() => {
-    console.log("Active ID changed from overview:", activeId);
-  }, [activeId]);
+  const {
+    data: subjects,
+    isError: isSubjectsError,
+    isPending: isSubjectsPending,
+  } = useSubjects(activeId);
 
   // Fetch periods from API
   const {
     data: periods,
-    isError: periodsIsError,
-    isPending: periodsIsPending,
+    isError: isPeriodsError,
+    isPending: isPeriodsPending,
   } = usePeriods(activeId);
 
   // fetch subjects but organized by period
   const {
     data: organizedSubjects,
-    isError: organizedSubjectsIsError,
-    isPending: organizedSubjectsIsPending,
+    isError: isOrganizedSubjectsError,
+    isPending: isOrganizedSubjectsPending,
   } = useOrganizedSubjects(activeId);
 
   const {
     data: recentGrades,
-    isError: isErrorRecentGrades,
-    isPending: isPendingRecentGrades,
+    isError: isRecentGradesError,
+    isPending: isRecentGradesPending,
   } = useRecentGrades(activeId);
 
   const {
     data: accounts,
-    isPending: isPendingAccount,
-    isError: isErrorAccount,
+    isPending: isAccountsPending,
+    isError: isAccountsError,
   } = useAccounts();
 
   const {
@@ -86,26 +86,19 @@ export default function OverviewPage() {
   const [userSelectedTab, setUserSelectedTab] = useState<string | null>(null);
 
   // Derive the selected tab value
-  const selectedTab =
-    userSelectedTab ??
-    (() => {
-      if (!periods) return null;
+  const getDefaultTab = () => {
+    if (!periods) return "full-year";
+    const savedTab = localStorage.getItem("selectedTab");
+    if (savedTab && periods.some((p) => p.id === savedTab)) return savedTab;
 
-      const savedTab = localStorage.getItem("selectedTab");
-      const savedTabExists = periods.find((period) => period.id === savedTab);
+    const currentPeriod = periods.find((p) => {
+      const now = new Date();
+      return new Date(p.startAt) <= now && new Date(p.endAt) >= now;
+    });
+    return currentPeriod?.id || "full-year";
+  };
 
-      if (savedTabExists) {
-        return savedTab;
-      }
-
-      return (
-        periods.find(
-          (period) =>
-            new Date(period.startAt) <= new Date() &&
-            new Date(period.endAt) >= new Date()
-        )?.id || "full-year"
-      );
-    })();
+  const selectedTab = userSelectedTab ?? getDefaultTab();
 
   //todo implement a custom field
   useEffect(() => {
@@ -124,14 +117,15 @@ export default function OverviewPage() {
   }, [session?.user?.createdAt, subjects, accounts, router]);
 
   // Error State
-  if (
-    isError ||
-    periodsIsError ||
-    organizedSubjectsIsError ||
-    isErrorRecentGrades ||
-    isErrorAccount ||
-    isCustomAveragesError
-  ) {
+  const isError =
+    isSubjectsError ||
+    isPeriodsError ||
+    isOrganizedSubjectsError ||
+    isRecentGradesError ||
+    isAccountsError ||
+    isCustomAveragesError;
+
+  if (isError) {
     return (
       <div>
         <ErrorStateCard />
@@ -140,15 +134,15 @@ export default function OverviewPage() {
   }
 
   // Loading State
-  if (
-    isPending ||
-    periodsIsPending ||
-    organizedSubjectsIsPending ||
-    isPendingRecentGrades ||
-    isPendingAccount ||
-    isCustomAveragesPending ||
-    selectedTab === null
-  ) {
+  const isLoading =
+    isSubjectsPending ||
+    isPeriodsPending ||
+    isOrganizedSubjectsPending ||
+    isRecentGradesPending ||
+    isAccountsPending ||
+    isCustomAveragesPending;
+
+  if (isLoading) {
     return (
       <div>
         <DashboardLoader />
