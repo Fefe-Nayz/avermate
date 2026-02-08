@@ -221,13 +221,25 @@ export const Header = () => {
                   <li
                     key={s.id}
                     ref={el => { linkRefs.current[i] = el; }}
-                    className="z-10 flex h-full cursor-pointer items-center justify-center px-4 py-2 text-sm font-medium tracking-tight text-primary/60 transition-colors hover:text-primary"
-                    onClick={(e) => {
-                      if (s.href.startsWith("#")) e.preventDefault();
-                      handleNavClick(s.href);
-                    }}
+                    className="z-10 flex h-full items-center justify-center"
                   >
-                    {s.href.startsWith("#") ? <span>{s.label}</span> : <Link href={s.href}>{s.label}</Link>}
+                    {s.href.startsWith("#") ? (
+                      <button
+                        type="button"
+                        className="cursor-pointer rounded-full px-4 py-2 text-sm font-medium tracking-tight text-primary/60 transition-colors hover:text-primary outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        onClick={() => handleNavClick(s.href)}
+                      >
+                        {s.label}
+                      </button>
+                    ) : (
+                      <Link
+                        href={s.href}
+                        className="cursor-pointer rounded-full px-4 py-2 text-sm font-medium tracking-tight text-primary/60 transition-colors hover:text-primary outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        onClick={() => handleNavClick(s.href)}
+                      >
+                        {s.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
 

@@ -209,8 +209,9 @@ const UpdateAvatar = () => {
             return buttonVariants({
               variant: "default",
               size: "sm",
-              className: `!h-9 !w-auto px-3 mb-0 ${isUploading || !ready ? "opacity-50 pointer-events-none" : ""
-                }`,
+              className: `!h-9 !w-auto px-3 mb-0 overflow-visible focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] ${
+                isUploading || !ready ? "opacity-50 pointer-events-none" : ""
+              }`,
             });
           },
           container: "flex flex-col items-center space-y-2",

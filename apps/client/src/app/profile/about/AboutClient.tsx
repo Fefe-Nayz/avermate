@@ -73,7 +73,7 @@ export default function AboutClient({
                 href={githubLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium hover:underline"
+                className="font-medium rounded-sm outline-none hover:underline focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               >
                 {t("viewOnGitHub")}
               </Link>
@@ -95,10 +95,11 @@ export default function AboutClient({
                     href={contributor.html_url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="group rounded-full outline-none"
                   >
                     <Avatar
                       size={40}
-                      className="cursor-pointer"
+                      className="cursor-pointer rounded-full border border-transparent transition-all group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px]"
                       src={contributor.avatar_url}
                     />
                   </Link>

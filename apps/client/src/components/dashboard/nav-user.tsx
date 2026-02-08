@@ -121,18 +121,17 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
           "group size-8 p-1 justify-center shrink-0 rounded-md outline-none transition-all",
           "hover:bg-muted hover:text-foreground",
           "active:bg-muted/80 active:text-foreground",
-          // Match button/breadcrumb focus ring
-          "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-          // Tab-like outline when open
+          // Move focus ring to avatar image instead of button
+          "focus-visible:ring-0",
+          // Keep neutral open container state; avatar carries ring
           "data-[state=open]:bg-transparent data-[state=open]:text-foreground",
-          "data-[state=open]:border-ring data-[state=open]:ring-ring/50 data-[state=open]:ring-[3px]",
         ]
       )}
     >
       {isPending ? (
-        <Skeleton className="h-8 w-8 rounded-lg" />
+        <Skeleton className="h-8 w-8 rounded-lg border border-transparent transition-all group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px] group-data-[state=open]:border-ring group-data-[state=open]:ring-ring/50 group-data-[state=open]:ring-[3px]" />
       ) : (
-        <Avatar className="h-8 w-8 rounded-lg grayscale transition-all group-hover:!rounded-md group-focus-visible:!rounded-md group-aria-expanded:!rounded-md group-data-[state=open]:!rounded-md">
+        <Avatar className="h-8 w-8 rounded-lg border border-transparent grayscale transition-all group-hover:!rounded-md group-focus-visible:!rounded-md group-aria-expanded:!rounded-md group-data-[state=open]:!rounded-md group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px] group-data-[state=open]:border-ring group-data-[state=open]:ring-ring/50 group-data-[state=open]:ring-[3px]">
           <AvatarImage
             src={
               data?.user?.image

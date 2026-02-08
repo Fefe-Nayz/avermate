@@ -2664,7 +2664,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
             {/* Close Button - positioned at top-right of story, zoom-compensated size */}
             <button
                 onClick={onClose}
-                className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center"
+                className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                 style={{
                     width: closeButtonSize,
                     height: closeButtonSize,
@@ -2680,7 +2680,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
             {showNavButtons && (
                 <button
                     onClick={prevSlide}
-                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center ${currentSlide === 0
+                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${currentSlide === 0
                         ? 'text-white/20 bg-white/5 cursor-not-allowed'
                         : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
                         }`}
@@ -2702,7 +2702,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
             {showNavButtons && (
                 <button
                     onClick={nextSlide}
-                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center ${isLastSlide
+                    className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${isLastSlide
                         ? 'text-white/20 bg-white/5 cursor-not-allowed'
                         : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
                         }`}
@@ -2755,7 +2755,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                                 return (
                                     <button
                                         key={index}
-                                        className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1"
+                                        className="h-3 flex-1 bg-transparent rounded-full overflow-hidden cursor-pointer group py-1 outline-none focus-visible:ring-inset focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             goToSlide(index);
@@ -2779,7 +2779,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                         {/* Pause Button */}
                         <button
                             onClick={(e) => { e.stopPropagation(); setPaused(p => !p); }}
-                            className="absolute top-8 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm"
+                            className="absolute top-8 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm outline-none focus-visible:ring-inset focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             aria-label={paused ? t("controls.play") : t("controls.pause")}
                         >
                             {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -2788,7 +2788,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                         {/* Music/Mute Button */}
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsMuted(m => !m); }}
-                            className="absolute bottom-3 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm flex items-center justify-center"
+                            className="absolute bottom-3 right-2 z-20 text-white/70 hover:text-white p-1.5 bg-black/30 rounded-full backdrop-blur-sm flex items-center justify-center outline-none focus-visible:ring-inset focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             aria-label={isMuted ? t("controls.unmute") : t("controls.mute")}
                         >
                             <MusicBarsIcon isMuted={isMuted} />

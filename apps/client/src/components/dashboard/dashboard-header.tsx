@@ -139,10 +139,10 @@ export default function DashboardHeader({
           {!hideWorkspaces && (
             <div
               className={cn(
-                "transition-all duration-300 overflow-hidden",
+                "transition-all duration-300",
                 isCompact
-                  ? "w-0 opacity-0 pointer-events-none"
-                  : "w-auto opacity-100"
+                  ? "w-0 overflow-hidden opacity-0 pointer-events-none"
+                  : "w-auto overflow-visible opacity-100"
               )}
             >
               <YearWorkspaceSelect />

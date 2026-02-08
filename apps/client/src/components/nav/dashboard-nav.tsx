@@ -175,7 +175,7 @@ export default function DashboardNav() {
                   <Link
                     href={route.path}
                     className={cn(
-                      "flex items-center gap-2 p-4 text-sm border-b-2 border-transparent hover:border-black dark:hover:border-white transition-all",
+                      "flex items-center gap-2 p-4 text-sm border-b-2 border-transparent hover:border-black dark:hover:border-white transition-all outline-none focus-visible:rounded-md focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                       isActive && "border-black dark:border-white"
                     )}
                   >

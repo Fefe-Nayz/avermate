@@ -285,7 +285,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1"
             >
-              <Link href="/">
+              <Link href="/" className="group">
                 <LogoSmall className="!size-6 rounded-sm" />
                 <span className="text-[16px] font-medium">Avermate</span>
               </Link>

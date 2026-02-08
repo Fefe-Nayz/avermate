@@ -34,6 +34,7 @@ export default function AccountDropdown() {
   };
 
   const isOnboarding = pathname.startsWith("/onboarding");
+  const triggerClassName = "group p-2 rounded-full outline-none";
 
   useEffect(() => {
     if (isPending) return;
@@ -76,10 +77,8 @@ export default function AccountDropdown() {
   if (!data && !isPending) {
     return (
       <DropDrawer>
-        <DropDrawerTrigger>
-          <div className="p-2">
-            <Skeleton className="size-8 rounded-full" />
-          </div>
+        <DropDrawerTrigger className={triggerClassName}>
+          <Skeleton className="size-8 rounded-full border border-transparent transition-all group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px]" />
         </DropDrawerTrigger>
       </DropDrawer>
     );
@@ -87,22 +86,20 @@ export default function AccountDropdown() {
 
   return (
     <DropDrawer>
-      <DropDrawerTrigger>
-        <div className="p-2">
-          {isPending ? (
-            <Skeleton className="size-8 rounded-full" />
-          ) : (
-            <Avatar
-              size={32}
-              src={
-                data?.user?.image
-                  ? data?.user?.image
-                  : `https://avatar.vercel.sh/${data?.user?.id}?size=32`
-              }
-              className="rounded-full size-8"
-            />
-          )}
-        </div>
+      <DropDrawerTrigger className={triggerClassName}>
+        {isPending ? (
+          <Skeleton className="size-8 rounded-full border border-transparent transition-all group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px]" />
+        ) : (
+          <Avatar
+            size={32}
+            src={
+              data?.user?.image
+                ? data?.user?.image
+                : `https://avatar.vercel.sh/${data?.user?.id}?size=32`
+            }
+            className="rounded-full size-8 border border-transparent transition-all group-focus-visible:border-ring group-focus-visible:ring-ring/50 group-focus-visible:ring-[3px]"
+          />
+        )}
       </DropDrawerTrigger>
 
       <DropDrawerContent>

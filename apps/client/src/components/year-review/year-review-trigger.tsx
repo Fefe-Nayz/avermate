@@ -101,7 +101,7 @@ export function YearReviewTrigger() {
                             </div>
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleDismiss(); }}
-                                className="p-2 hover:bg-muted rounded-full transition-colors shrink-0 text-muted-foreground hover:text-foreground"
+                                className="p-2 hover:bg-muted rounded-full transition-colors shrink-0 text-muted-foreground hover:text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 aria-label={t("trigger.dismiss")}
                             >
                                 <X className="w-4 h-4" />

@@ -16,12 +16,12 @@ export default function GradesSection({ yearId }: { yearId: string }) {
           <CardDescription>{t("GRADES_SECTION_DESCRIPTION")}</CardDescription>
         </CardHeader>
         <div className="justify-end flex rounded-b-xl px-6 py-4 border-t bg-muted/30">
-          <Link href="/dashboard/settings/grades">
-            <Button>
+          <Button asChild>
+            <Link href="/dashboard/settings/grades">
               <IconAdjustmentsHorizontal className="size-4" />
               {t("GRADES_SECTION_BUTTON")}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </Card>
     );

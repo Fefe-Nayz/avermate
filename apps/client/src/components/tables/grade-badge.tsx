@@ -30,7 +30,11 @@ export default function GradeBadge({
   };
 
   return (
-    <Link href={`/dashboard/grades/${id}/${periodId}`} onClick={handleClick}>
+    <Link
+      href={`/dashboard/grades/${id}/${periodId}`}
+      onClick={handleClick}
+      className="inline-block rounded-full outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+    >
       <Badge
         variant="secondary"
         className="rounded-full text-sm"

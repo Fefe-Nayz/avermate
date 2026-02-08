@@ -33,6 +33,9 @@ import { useYears } from "@/hooks/use-years";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { formatAverageValue } from "@/utils/format";
 
+const tableLinkClass =
+  "border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity rounded-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+
 export default function GradesTable({
   subjects,
   periodId,
@@ -121,7 +124,7 @@ export default function GradesTable({
           <TableCell className="font-semibold p-4" colSpan={2}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
-              className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
+              className={tableLinkClass}
               onClick={() => {
                 const currentPath =
                   pathname + window.location.search || "/dashboard";
@@ -142,7 +145,7 @@ export default function GradesTable({
           <TableCell className="font-semibold text-center p-4" colSpan={3}>
             <Link
               href={`/dashboard/subjects/general-average/${periodId}`}
-              className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
+              className={tableLinkClass}
               onClick={() => {
                 const currentPath =
                   pathname + window.location.search || "/dashboard";
@@ -203,7 +206,7 @@ export default function GradesTable({
                             `${currentPath}#${ca.id}`
                           );
                         }}
-                        className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
+                        className={tableLinkClass}
                       >
                         {ca.name}
                       </Link>
@@ -227,7 +230,7 @@ export default function GradesTable({
                             `${currentPath}#${ca.id}-mobile`
                           );
                         }}
-                        className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
+                        className={tableLinkClass}
                       >
                         {ca.name}
                       </Link>
@@ -337,7 +340,7 @@ function renderSubjects(
                     `${currentPath}#${subject.id}`
                   );
                 }}
-                className="border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity"
+                className={tableLinkClass}
               >
                 {subject.name +
                   (!subject.isDisplaySubject
