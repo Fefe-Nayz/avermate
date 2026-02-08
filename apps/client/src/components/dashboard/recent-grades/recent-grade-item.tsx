@@ -17,7 +17,7 @@ export default function RecentGradeItem({ grade, period }: { grade: Grade, perio
     <Link
       href={`/dashboard/grades/${grade.id}/${period.id === "full-year" ? period.id : grade.periodId}`}
       onClick={handleClick}
-      className="block rounded-lg outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+      className="block rounded-lg outline-none focus-visible:ring-inset focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
     >
       <div className="flex items-center justify-between gap-2 hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 cursor-pointer rounded-lg p-2 overflow-hidden min-w-0">
         <div className="flex flex-col gap-0.5 w-[80%] min-w-0 overflow-hidden">
