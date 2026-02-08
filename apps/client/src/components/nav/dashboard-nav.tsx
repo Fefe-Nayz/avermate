@@ -96,7 +96,7 @@ export default function DashboardNav() {
                   <Link
                     key={route.path}
                     href={route.path}
-                    className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0"
+                    className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   >
                     <div
                       className={cn(
@@ -138,7 +138,7 @@ export default function DashboardNav() {
                   <Link
                     key={route.path}
                     href={route.path}
-                    className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0"
+                    className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   >
                     <div
                       className={cn(
