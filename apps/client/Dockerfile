@@ -22,9 +22,9 @@ ENV NEXT_PUBLIC_API_URL=https://api.avermate.fr
 ENV NEXT_PUBLIC_CLIENT_URL=https://avermate.fr
 
 # Capture git commit hash and build in one step
-RUN apk add --no-cache git && \
+RUN apk add --no-cache git nodejs && \
     export NEXT_PUBLIC_GIT_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') && \
-    bun run build
+    node ./node_modules/next/dist/bin/next build
 
 # ---------------- runner ----------------
 FROM base AS runner
