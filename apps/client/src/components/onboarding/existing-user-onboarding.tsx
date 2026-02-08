@@ -11,6 +11,7 @@ import {
   GraduationCap,
   BookOpen,
   Calendar,
+  Loader2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,7 +19,6 @@ import { useActiveYears } from "@/hooks/use-active-year";
 import { ConfettiButton } from "@/components/magicui/confetti";
 import { useYears } from "@/hooks/use-years";
 import { useIsMobile } from "@/hooks/use-mobile";
-import Link from "next/link";
 
 // Step components
 import YearStep from "./year-step";
@@ -31,9 +31,7 @@ interface ExistingUserOnboardingProps {
 
 const {
   Stepper: YearStepper,
-  useStepper: useYearStepper,
   steps: yearSteps,
-  utils: yearUtils,
 } = defineStepper(
   { id: "year", title: "Year" },
   { id: "subjects", title: "Subjects" },
@@ -42,9 +40,7 @@ const {
 
 const {
   Stepper: ConfigStepper,
-  useStepper: useConfigStepper,
   steps: configSteps,
-  utils: configUtils,
 } = defineStepper(
   { id: "subjects", title: "Subjects" },
   { id: "periods", title: "Periods" }
@@ -66,7 +62,8 @@ export default function ExistingUserOnboarding({
   const [isAnimating, setIsAnimating] = useState(false);
 
   const isNewYear = yearId === "new";
-  const isConfiguring = !isNewYear && !!years?.find((y) => y.id === yearId);
+  const hasMatchingYear = years?.some((y) => y.id === yearId);
+  const isConfiguring = !isNewYear && (hasMatchingYear ?? true);
 
   // Use different steppers based on whether creating new year or configuring existing
   if (isConfiguring) {
@@ -142,8 +139,9 @@ function YearOnboardingContent({
   isAnimating,
   setIsAnimating,
 }: YearOnboardingContentProps) {
-  const currentStep = methods.current;
-  const currentIndex = yearUtils.getIndex(currentStep.id);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const currentStep = methods.state.current.data;
+  const currentIndex = methods.state.current.index;
   const isLastStep = currentIndex === steps.length - 1;
 
   // Check for yearId in URL on mount and restore state
@@ -154,7 +152,7 @@ function YearOnboardingContent({
       setCurrentYearId(yearIdFromUrl);
       // Navigate to subjects step since year is already created
       setTimeout(() => {
-        methods.goTo("subjects");
+        methods.navigation.goTo("subjects");
       }, 100);
     }
   }, [searchParams, currentYearId, setCurrentYearId, methods]);
@@ -170,7 +168,7 @@ function YearOnboardingContent({
     if (!isLastStep) {
       const nextStepIndex = currentIndex + 1;
       if (nextStepIndex < steps.length) {
-        methods.goTo(steps[nextStepIndex].id);
+        methods.navigation.goTo(steps[nextStepIndex].id);
       }
     }
   };
@@ -186,7 +184,7 @@ function YearOnboardingContent({
 
     const prevStepIndex = currentIndex - 1;
     if (prevStepIndex >= 0) {
-      methods.goTo(steps[prevStepIndex].id);
+      methods.navigation.goTo(steps[prevStepIndex].id);
     }
   };
 
@@ -208,16 +206,18 @@ function YearOnboardingContent({
       const nextStepIndex = Math.min(currentIndex + 1, steps.length - 1);
       const nextStepId = steps[nextStepIndex]?.id;
       if (nextStepId && nextStepId !== currentStep.id) {
-        methods.goTo(nextStepId);
+        methods.navigation.goTo(nextStepId);
       }
     }, 150);
   };
 
   const handleFinish = () => {
+    if (isFinishing) return;
+    setIsFinishing(true);
     if (currentYearId) {
       select(currentYearId);
     }
-    // Navigation handled by Link wrapper
+    router.push("/dashboard");
   };
 
   const canNavigateNext = () => {
@@ -295,29 +295,29 @@ function YearOnboardingContent({
             size="sm"
             variant="outline"
             onClick={handleBack}
-            disabled={isAnimating || (currentIndex > 0 && !canGoBack())}
+            disabled={isAnimating || isFinishing || (currentIndex > 0 && !canGoBack())}
           >
             {backButtonText}
           </Button>
           {isLastStep ? (
-            <Link href="/dashboard" onClick={handleFinish}>
-              <ConfettiButton
-                size="sm"
-                disabled={!currentYearId}
-                options={{
-                  particleCount: 100,
-                  spread: 70,
-                  origin: { y: 0.6 },
-                }}
-              >
-                {t("finish")} 🎉
-              </ConfettiButton>
-            </Link>
+            <ConfettiButton
+              size="sm"
+              disabled={!currentYearId || isFinishing}
+              onClick={handleFinish}
+              options={{
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+              }}
+            >
+              {isFinishing && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {t("finish")} 🎉
+            </ConfettiButton>
           ) : (
             <Button
               size="sm"
               onClick={handleNext}
-              disabled={isAnimating || !canNavigateNext()}
+              disabled={isAnimating || isFinishing || !canNavigateNext()}
             >
               {t("next")}
             </Button>
@@ -358,7 +358,7 @@ function YearOnboardingContent({
                 disabled={isDisabled}
                 onClick={() => {
                   if (!isDisabled && !isAnimating) {
-                    methods.goTo(step.id);
+                    methods.navigation.goTo(step.id);
                   }
                 }}
               >
@@ -377,28 +377,34 @@ function YearOnboardingContent({
 
       {/* Content Area */}
       <div className="flex-1 overflow-auto overflow-x-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentStep.id}
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ duration: 0.3 }}
-            onAnimationStart={() => setIsAnimating(true)}
-            onAnimationComplete={() => setIsAnimating(false)}
-            className="h-full p-6"
-          >
-            {currentStep.id === "year" && (
-              <YearStep yearId="new" onYearCreated={handleYearCreated} />
-            )}
-            {currentStep.id === "subjects" && currentYearId && (
-              <SubjectsStep yearId={currentYearId} />
-            )}
-            {currentStep.id === "periods" && currentYearId && (
-              <PeriodsStep yearId={currentYearId} />
-            )}
-          </motion.div>
-        </AnimatePresence>
+        {isFinishing ? (
+          <div className="h-full p-6 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep.id}
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+              transition={{ duration: 0.3 }}
+              onAnimationStart={() => setIsAnimating(true)}
+              onAnimationComplete={() => setIsAnimating(false)}
+              className="h-full p-6"
+            >
+              {currentStep.id === "year" && (
+                <YearStep yearId="new" onYearCreated={handleYearCreated} />
+              )}
+              {currentStep.id === "subjects" && currentYearId && (
+                <SubjectsStep yearId={currentYearId} />
+              )}
+              {currentStep.id === "periods" && currentYearId && (
+                <PeriodsStep yearId={currentYearId} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -407,31 +413,31 @@ function YearOnboardingContent({
           size="sm"
           variant="outline"
           onClick={handleBack}
-          disabled={isAnimating || (currentIndex > 0 && !canGoBack())}
+          disabled={isAnimating || isFinishing || (currentIndex > 0 && !canGoBack())}
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           {backButtonText}
         </Button>
 
         {isLastStep ? (
-          <Link href="/dashboard" onClick={handleFinish}>
-            <ConfettiButton
-              size="sm"
-              disabled={!currentYearId}
-              options={{
-                particleCount: 100,
-                spread: 70,
-                origin: { y: 0.6 },
-              }}
-            >
-              {t("finish")} 🎉
-            </ConfettiButton>
-          </Link>
+          <ConfettiButton
+            size="sm"
+            disabled={!currentYearId || isFinishing}
+            onClick={handleFinish}
+            options={{
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 },
+            }}
+          >
+            {isFinishing && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            {t("finish")} 🎉
+          </ConfettiButton>
         ) : (
           <Button
             size="sm"
             onClick={handleNext}
-            disabled={isAnimating || !canNavigateNext()}
+            disabled={isAnimating || isFinishing || !canNavigateNext()}
           >
             {t("next")}
             <ChevronRight className="h-4 w-4 ml-1" />
@@ -465,8 +471,9 @@ function ConfigOnboardingContent({
   isAnimating,
   setIsAnimating,
 }: ConfigOnboardingContentProps) {
-  const currentStep = methods.current;
-  const currentIndex = configUtils.getIndex(currentStep.id);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const currentStep = methods.state.current.data;
+  const currentIndex = methods.state.current.index;
   const isLastStep = currentIndex === steps.length - 1;
 
   const handleNext = () => {
@@ -474,7 +481,7 @@ function ConfigOnboardingContent({
     if (!isLastStep) {
       const nextStepIndex = currentIndex + 1;
       if (nextStepIndex < steps.length) {
-        methods.goTo(steps[nextStepIndex].id);
+        methods.navigation.goTo(steps[nextStepIndex].id);
       }
     }
   };
@@ -490,7 +497,7 @@ function ConfigOnboardingContent({
 
     const prevStepIndex = currentIndex - 1;
     if (prevStepIndex >= 0) {
-      methods.goTo(steps[prevStepIndex].id);
+      methods.navigation.goTo(steps[prevStepIndex].id);
     }
   };
 
@@ -520,8 +527,10 @@ function ConfigOnboardingContent({
   }
 
   const handleFinish = () => {
+    if (isFinishing) return;
+    setIsFinishing(true);
     select(yearId);
-    // Navigation handled by Link wrapper
+    router.push("/dashboard");
   };
 
   const canGoBack = () => {
@@ -547,25 +556,30 @@ function ConfigOnboardingContent({
             size="sm"
             variant="outline"
             onClick={handleBack}
-            disabled={isAnimating || (currentIndex > 0 && !canGoBack())}
+            disabled={isAnimating || isFinishing || (currentIndex > 0 && !canGoBack())}
           >
             {backButtonText}
           </Button>
           {isLastStep ? (
-            <Link href="/dashboard" onClick={handleFinish}>
-              <ConfettiButton
-                size="sm"
-                options={{
-                  particleCount: 100,
-                  spread: 70,
-                  origin: { y: 0.6 },
-                }}
-              >
-                {t("finish")} 🎉
-              </ConfettiButton>
-            </Link>
+            <ConfettiButton
+              size="sm"
+              disabled={isFinishing}
+              onClick={handleFinish}
+              options={{
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+              }}
+            >
+              {isFinishing && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {t("finish")} 🎉
+            </ConfettiButton>
           ) : (
-            <Button size="sm" onClick={handleNext} disabled={isAnimating}>
+            <Button
+              size="sm"
+              onClick={handleNext}
+              disabled={isAnimating || isFinishing}
+            >
               {t("next")}
             </Button>
           )}
@@ -592,7 +606,7 @@ function ConfigOnboardingContent({
               icon={getStepIcon(step.id)}
               onClick={() => {
                 if (!isAnimating) {
-                  methods.goTo(step.id);
+                  methods.navigation.goTo(step.id);
                 }
               }}
             >
@@ -606,21 +620,27 @@ function ConfigOnboardingContent({
 
       {/* Content Area */}
       <div className="flex-1 overflow-auto overflow-x-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentStep.id}
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ duration: 0.3 }}
-            onAnimationStart={() => setIsAnimating(true)}
-            onAnimationComplete={() => setIsAnimating(false)}
-            className="h-full p-6"
-          >
-            {currentStep.id === "subjects" && <SubjectsStep yearId={yearId} />}
-            {currentStep.id === "periods" && <PeriodsStep yearId={yearId} />}
-          </motion.div>
-        </AnimatePresence>
+        {isFinishing ? (
+          <div className="h-full p-6 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep.id}
+              initial={{ opacity: 0, x: 100 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -100 }}
+              transition={{ duration: 0.3 }}
+              onAnimationStart={() => setIsAnimating(true)}
+              onAnimationComplete={() => setIsAnimating(false)}
+              className="h-full p-6"
+            >
+              {currentStep.id === "subjects" && <SubjectsStep yearId={yearId} />}
+              {currentStep.id === "periods" && <PeriodsStep yearId={yearId} />}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -629,27 +649,32 @@ function ConfigOnboardingContent({
           size="sm"
           variant="outline"
           onClick={handleBack}
-          disabled={isAnimating}
+          disabled={isAnimating || isFinishing}
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
           {backButtonText}
         </Button>
 
         {isLastStep ? (
-          <Link href="/dashboard" onClick={handleFinish}>
-            <ConfettiButton
-              size="sm"
-              options={{
-                particleCount: 100,
-                spread: 70,
-                origin: { y: 0.6 },
-              }}
-            >
-              {t("finish")} 🎉
-            </ConfettiButton>
-          </Link>
+          <ConfettiButton
+            size="sm"
+            disabled={isFinishing}
+            onClick={handleFinish}
+            options={{
+              particleCount: 100,
+              spread: 70,
+              origin: { y: 0.6 },
+            }}
+          >
+            {isFinishing && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            {t("finish")} 🎉
+          </ConfettiButton>
         ) : (
-          <Button size="sm" onClick={handleNext} disabled={isAnimating}>
+          <Button
+            size="sm"
+            onClick={handleNext}
+            disabled={isAnimating || isFinishing}
+          >
             {t("next")}
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>

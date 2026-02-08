@@ -22,7 +22,7 @@ import { VariantProps } from "class-variance-authority";
 
 interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 
@@ -118,7 +118,7 @@ export const Confetti = ConfettiComponent;
 
 interface ConfettiButtonProps extends ButtonProps {
   options?: ConfettiOptions &
-    ConfettiGlobalOptions & { canvas?: HTMLCanvasElement };
+  ConfettiGlobalOptions & { canvas?: HTMLCanvasElement };
   children?: React.ReactNode;
 }
 
@@ -128,26 +128,26 @@ const ConfettiButtonComponent = ({
   onClick,
   ...props
 }: ConfettiButtonProps) => {
-  const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     try {
-      // First trigger confetti animation
+      // Fire confetti animation (don't await - let it play in background)
       const rect = event.currentTarget.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-      await confetti({
+      confetti({
         ...options,
         origin: {
           x: x / window.innerWidth,
           y: y / window.innerHeight,
         },
       });
-
-      // Then call the custom onClick handler if provided
-      if (onClick) {
-        onClick(event);
-      }
     } catch (error) {
       console.error("Confetti button error:", error);
+    }
+
+    // Call the custom onClick handler immediately (not after confetti)
+    if (onClick) {
+      onClick(event);
     }
   };
 

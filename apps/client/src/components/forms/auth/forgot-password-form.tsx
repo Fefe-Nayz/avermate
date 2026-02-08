@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth";
-import { env } from "@/lib/env";
 import { handleError } from "@/utils/error-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -37,19 +36,20 @@ export const ForgotPasswordForm = () => {
   type ForgotPasswordSchema = z.infer<typeof forgotPasswordSchema>;
 
   const { mutate, isPending } = useMutation({
-    mutationKey: ["sign-up"],
+    mutationKey: ["forgot-password"],
     mutationFn: async ({ email }: ForgotPasswordSchema) => {
-      const data = await authClient.requestPasswordReset({
+      await authClient.emailOtp.sendVerificationOtp({
         email,
-        redirectTo: `${env.NEXT_PUBLIC_CLIENT_URL}/auth/reset-password`,
+        type: "forget-password",
       });
-
-      return data;
+      return { email };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ email }) => {
       toast.success(t("resetEmailSent"), {
-        description: t("checkEmailForInstructions"),
+        description: t("checkEmailForOtp"),
       });
+      // Navigate to reset password page with email as query param
+      router.push(`/auth/reset-password?email=${encodeURIComponent(email)}`);
     },
 
     onError: (error) => {

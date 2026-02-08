@@ -112,7 +112,7 @@ export const SignUpForm = () => {
     onSuccess: (data) => {
       if (!data.user.emailVerified) {
         toast.error(t("emailNotVerified"), {
-          description: t("verificationLinkSent", { email: data.user.email || "" }),
+          description: t("verificationOtpSent", { email: data.user.email || "" }),
         });
 
         // Redirect to email verify

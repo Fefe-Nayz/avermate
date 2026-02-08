@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isBefore } from "date-fns";
@@ -57,25 +58,51 @@ export const CreateYearForm = ({
 
   const isUpdating = !!yearId && !!initialData;
 
+  const dateRangeSchema = z
+    .object({
+      from: z.date().optional(),
+      to: z.date().optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (!data.from) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("CREATE_YEAR_FORM_START_REQUIRED_ERROR"),
+        });
+        return;
+      }
+
+      if (!data.to) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("CREATE_YEAR_FORM_END_REQUIRED_ERROR"),
+        });
+        return;
+      }
+
+      if (
+        !(
+          isBefore(data.from, data.to) ||
+          data.from.getTime() === data.to.getTime()
+        )
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t("CREATE_YEAR_FORM_START_BEFORE_END_ERROR"),
+        });
+      }
+    })
+    .transform((data) => ({
+      from: data.from as Date,
+      to: data.to as Date,
+    }));
+
   const createYearSchema = z.object({
     name: z
       .string()
       .min(1, t("CREATE_YEAR_FORM_NAME_REQUIRED_ERROR"))
       .max(32, t("CREATE_YEAR_FORM_NAME_TOO_LONG_ERROR")),
-    dateRange: z
-      .object({
-        from: z.date().min(1, t("CREATE_YEAR_FORM_START_REQUIRED_ERROR")),
-        to: z.date().min(1, t("CREATE_YEAR_FORM_END_REQUIRED_ERROR")),
-      })
-      .refine(
-        (data) =>
-          isBefore(data.from, data.to) ||
-          data.from.getTime() === data.to.getTime(),
-        {
-          message: t("CREATE_YEAR_FORM_START_BEFORE_END_ERROR"),
-          path: ["to"],
-        }
-      ),
+    dateRange: dateRangeSchema,
     defaultOutOf: z.coerce
       .number()
       .min(0, t("CREATE_YEAR_FORM_OUT_OF_MIN_ERROR"))
@@ -181,7 +208,7 @@ export const CreateYearForm = ({
         <form
           noValidate
           onSubmit={form.handleSubmit(onSubmit)}
-          // className="flex flex-col gap-8"
+        // className="flex flex-col gap-8"
         >
           <FormContentWrapper>
             {/* Name Field */}
@@ -211,59 +238,66 @@ export const CreateYearForm = ({
               control={form.control}
               disabled={isPending}
               name="dateRange"
-              render={({ field }) => (
-                <FormItem className="mx-1">
-                  <FormLabel>
-                    {t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}
-                  </FormLabel>
-                  <FormControl>
-                    <div className="flex flex-col gap-2">
-                      <Popover modal>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={
-                              !field.value?.from ? "text-muted-foreground" : ""
-                            }
-                          >
-                            {field.value?.from ? (
-                              field.value.to ? (
-                                `${formatDates.formatIntermediate(
-                                  field.value.from
-                                )} - ${formatDates.formatIntermediate(
-                                  field.value.to
-                                )}`
+              render={({ field, fieldState }) => {
+                return (
+                  <FormItem className="mx-1">
+                    <FormLabel
+                      className={fieldState.error ? "text-destructive" : undefined}
+                    >
+                      {t("CREATE_YEAR_FORM_DATE_RANGE_FIELD_LABEL")}
+                    </FormLabel>
+                    <FormControl>
+                      <div className="flex flex-col gap-2">
+                        <Popover modal>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                !field.value?.from ? "text-muted-foreground" : "",
+                                fieldState.error && "border-destructive"
+                              )}
+                            >
+                              {field.value?.from ? (
+                                field.value.to ? (
+                                  `${formatDates.formatIntermediate(
+                                    field.value.from
+                                  )} - ${formatDates.formatIntermediate(
+                                    field.value.to
+                                  )}`
+                                ) : (
+                                  formatDates.formatIntermediate(field.value.from)
+                                )
                               ) : (
-                                formatDates.formatIntermediate(field.value.from)
-                              )
-                            ) : (
-                              <span>
-                                {t(
-                                  "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER"
-                                )}
-                              </span>
-                            )}
+                                <span>
+                                  {t(
+                                    "CREATE_YEAR_FORM_DATE_RANGE_FIELD_PLACEHOLDER"
+                                  )}
+                                </span>
+                              )}
 
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="center">
-                          <Calendar
-                            className="rounded-md"
-                            excludeDisabled
-                            mode="range"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            numberOfMonths={numberOfMonths}
-                            defaultMonth={field.value?.from || new Date()}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="center">
+                            <Calendar
+                              className="rounded-md"
+                              excludeDisabled
+                              mode="range"
+                              selected={
+                                field.value as { from: Date; to?: Date } | undefined
+                              }
+                              onSelect={field.onChange}
+                              numberOfMonths={numberOfMonths}
+                              defaultMonth={field.value?.from ?? new Date()}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField

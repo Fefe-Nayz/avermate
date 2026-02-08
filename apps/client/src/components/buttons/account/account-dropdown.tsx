@@ -33,6 +33,8 @@ export default function AccountDropdown() {
     localStorage.setItem("backFromSettings", currentPath);
   };
 
+  const isOnboarding = pathname.startsWith("/onboarding");
+
   useEffect(() => {
     if (isPending) return;
 
@@ -54,9 +56,10 @@ export default function AccountDropdown() {
 
     // Not verified
     if (!data.user.emailVerified) {
-      // Send a verification link
-      authClient.sendVerificationEmail({
+      // Send a verification OTP
+      authClient.emailOtp.sendVerificationOtp({
         email: data.user.email,
+        type: "email-verification",
       });
 
       toast.error(t("emailNotVerifiedTitle"), {
@@ -68,7 +71,7 @@ export default function AccountDropdown() {
       router.push("/auth/verify-email");
       return;
     }
-  }, [data, isPending]);
+  }, [data, isPending, pathname]);
 
   if (!data && !isPending) {
     return (
@@ -128,32 +131,59 @@ export default function AccountDropdown() {
         <DropDrawerSeparator />
 
         <DropDrawerGroup>
-          <Link href={`/profile`} onClick={handleClick}>
-            <DropDrawerItem>
-              <div className="flex items-center gap-2">
+          {isOnboarding ? (
+            <DropDrawerItem disabled>
+              <div className="flex items-center gap-2 opacity-50">
                 <UserIcon className="size-4" />
                 {t("profile")}
               </div>
             </DropDrawerItem>
-          </Link>
+          ) : (
+            <Link href={`/profile`} onClick={handleClick}>
+              <DropDrawerItem>
+                <div className="flex items-center gap-2">
+                  <UserIcon className="size-4" />
+                  {t("profile")}
+                </div>
+              </DropDrawerItem>
+            </Link>
+          )}
 
-          <Link href={`/profile/account`} onClick={handleClick}>
-            <DropDrawerItem>
-              <div className="flex items-center gap-2">
+          {isOnboarding ? (
+            <DropDrawerItem disabled>
+              <div className="flex items-center gap-2 opacity-50">
                 <ShieldCheckIcon className="size-4" />
                 {t("account")}
               </div>
             </DropDrawerItem>
-          </Link>
+          ) : (
+            <Link href={`/profile/account`} onClick={handleClick}>
+              <DropDrawerItem>
+                <div className="flex items-center gap-2">
+                  <ShieldCheckIcon className="size-4" />
+                  {t("account")}
+                </div>
+              </DropDrawerItem>
+            </Link>
+          )}
 
-          <Link href={`/profile/settings`} onClick={handleClick}>
-            <DropDrawerItem>
-              <div className="flex items-center gap-2">
+          {isOnboarding ? (
+            <DropDrawerItem disabled>
+              <div className="flex items-center gap-2 opacity-50">
                 <Cog6ToothIcon className="size-4" />
                 {t("settings")}
               </div>
             </DropDrawerItem>
-          </Link>
+          ) : (
+            <Link href={`/profile/settings`} onClick={handleClick}>
+              <DropDrawerItem>
+                <div className="flex items-center gap-2">
+                  <Cog6ToothIcon className="size-4" />
+                  {t("settings")}
+                </div>
+              </DropDrawerItem>
+            </Link>
+          )}
         </DropDrawerGroup>
 
         {/* <DropDrawerLabel>{t("appearance")}</DropDrawerLabel> */}

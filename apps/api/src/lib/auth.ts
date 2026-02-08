@@ -3,6 +3,8 @@ import { env } from "@/lib/env";
 import { resend } from "@/lib/resend";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { expo } from "@better-auth/expo";
+import { emailOTP } from "better-auth/plugins";
 
 export const auth = betterAuth({
   appName: "Avermate",
@@ -18,7 +20,14 @@ export const auth = betterAuth({
   }),
 
   // Client URL
-  trustedOrigins: [env.CLIENT_URL],
+  trustedOrigins: [
+    env.CLIENT_URL,
+    // "avermate://",
+    // // Development mode - Expo's exp:// scheme with local IPs
+    // ...(env.NODE_ENV === "development"
+    //   ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
+    //   : []),
+  ],
 
   // Session
   session: {
@@ -31,108 +40,6 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
-
-    sendVerificationEmail: async ({ user, url }) => {
-      // If already verified, don't send email
-      if (user.emailVerified) return;
-
-      // If email disable console log
-      if (env.DISABLE_EMAIL) {
-        console.log(`Email verification url for ${user.email}: ${url}`);
-        return;
-      }
-
-      const currentYear = new Date().getFullYear();
-      const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="fr">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Vérifiez Votre Adresse E-mail</title>
-      </head>
-      <body style="margin:0; padding:0; background-color:#F3F4F6; font-family:sans-serif; color:#333333;">
-        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color:#F3F4F6; padding:40px 0;">
-          <tr>
-            <td align="center">
-              <table width="600" style="max-width:600px; background:#FFFFFF; border-radius:8px; overflow:hidden; margin:0 20px;">
-                <!-- Logo & Header -->
-                <tr>
-                  <td style="padding:24px; text-align:left;">
-                    <table border="0" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="vertical-align:middle;">
-                          <img
-                            src="https://avermate.fr/icon512_maskable.png"
-                            alt="Logo Avermate"
-                            width="40"
-                            style="display:block; border-radius:5px;"
-                          />
-                        </td>
-                        <td style="vertical-align:middle; padding-left:8px;">
-                          <p style="margin:0; font-size:16px; color:#333333; font-weight: bold;">Avermate</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Title Row -->
-                <tr>
-                  <td style="padding:0 24px; text-align:center;">
-                    <h1 style="margin:0; font-size:24px; color:#333333;">Vérifiez Votre Adresse E-mail</h1>
-                  </td>
-                </tr>
-
-                <!-- Body Content -->
-                <tr>
-                  <td style="padding:24px; text-align:center;">
-                    <p style="color:#555555; font-size:16px; line-height:1.5; margin-bottom:24px;">
-                      Bonjour <strong>${user.name}</strong>,
-                      <br /><br />
-                      Merci de vous être inscrit(e) sur Avermate ! Veuillez confirmer votre adresse e-mail 
-                      en cliquant sur le bouton ci-dessous. Ce lien expirera dans 24 heures.
-                    </p>
-                    <table border="0" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-                      <tr>
-                        <td align="center" bgcolor="#18181b" style="border-radius:4px;">
-                          <a 
-                            href="${url}" 
-                            target="_blank" 
-                            style="font-size:16px; font-weight:bold; color:#ffffff; text-decoration:none; padding:12px 24px; display:inline-block; border-radius:4px;"
-                          >
-                            Vérifier l&apos;adresse e-mail
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                  <td align="center" style="padding:16px;">
-                    <p style="margin:0; color:#999999; font-size:12px;">
-                      &copy; ${currentYear} Avermate. Tous droits réservés.
-                    </p>
-                  </td>
-                </tr>
-
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-      </html>
-      `;
-
-      await resend.emails.send({
-        from: `Avermate <${env.EMAIL_FROM}>`,
-        to: user.email,
-        subject: "Vérifiez votre adresse e-mail",
-        html: htmlContent,
-      });
-    },
   },
 
   account: {
@@ -266,105 +173,7 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
 
-    // Password reset
-    sendResetPassword: async ({ user, url }) => {
-      // If email disable console log
-      if (env.DISABLE_EMAIL) {
-        console.log(`Password reset url for ${user.email}: ${url}`);
-        return;
-      }
 
-      const currentYear = new Date().getFullYear();
-      const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="fr">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Réinitialiser Votre Mot de Passe</title>
-      </head>
-      <body style="margin:0; padding:0; background-color:#F3F4F6; font-family:sans-serif; color:#333333;">
-        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color:#F3F4F6; padding:40px 0;">
-          <tr>
-            <td align="center">
-              <table width="600" style="max-width:600px; background:#FFFFFF; border-radius:8px; overflow:hidden; margin:0 20px;">
-                <!-- Logo & Header -->
-                <tr>
-                  <td style="padding:24px; text-align:left;">
-                    <table border="0" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="vertical-align:middle;">
-                          <img
-                            src="https://avermate.fr/icon512_maskable.png"
-                            alt="Logo Avermate"
-                            width="40"
-                            style="display:block; border-radius:5px;"
-                          />
-                        </td>
-                        <td style="vertical-align:middle; padding-left:8px;">
-                          <p style="margin:0; font-size:16px; color:#333333; font-weight: bold;">Avermate</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Title Row -->
-                <tr>
-                  <td style="padding:0 24px; text-align:center;">
-                    <h1 style="margin:0; font-size:24px; color:#333333;">Réinitialiser Votre Mot de Passe</h1>
-                  </td>
-                </tr>
-
-                <!-- Body Content -->
-                <tr>
-                  <td style="padding:24px; text-align:center;">
-                    <p style="color:#555555; font-size:16px; line-height:1.5; margin-bottom:24px;">
-                      Bonjour <strong>${user.name}</strong>,
-                      <br /><br />
-                      Nous avons reçu une demande de réinitialisation de votre mot de passe Avermate. 
-                      Cliquez sur le bouton ci-dessous pour continuer. Ce lien expirera dans 24 heures.
-                    </p>
-                    <table border="0" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-                      <tr>
-                        <td align="center" bgcolor="#18181b" style="border-radius:4px;">
-                          <a 
-                            href="${url}" 
-                            target="_blank" 
-                            style="font-size:16px; font-weight:bold; color:#ffffff; text-decoration:none; padding:12px 24px; display:inline-block; border-radius:4px;"
-                          >
-                            Réinitialiser le mot de passe
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                    <p style="font-size:14px; color:#999999; margin-top:24px; line-height:1.4;">
-                      Si vous n&apos;êtes pas à l&apos;origine de cette demande, veuillez ignorer cet e-mail.
-                    </p>
-                  </td>
-                </tr>
-
-                <!-- Footer -->
-                <tr>
-                  <td align="center" style="padding:16px; font-family:sans-serif; font-size:12px; color:#999999;">
-                    &copy; ${currentYear} Avermate. Tous droits réservés.
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-      </body>
-      </html>
-      `;
-
-      await resend.emails.send({
-        from: `Avermate <${env.EMAIL_FROM}>`,
-        to: user.email,
-        subject: "Réinitialisez votre mot de passe",
-        html: htmlContent,
-      });
-    },
 
     password: {
       // Hash password using Argon2id
@@ -400,6 +209,130 @@ export const auth = betterAuth({
       clientSecret: env.MICROSOFT_CLIENT_SECRET,
     },
   },
+
+  // Plugins
+  plugins: [
+    expo(),
+    emailOTP({
+      otpLength: 6,
+      expiresIn: 600,
+      sendVerificationOnSignUp: true,
+      overrideDefaultEmailVerification: true,
+      async sendVerificationOTP({ email, otp, type }) {
+        // If email disabled, console log
+        if (env.DISABLE_EMAIL) {
+          console.log(`OTP for ${email} (${type}): ${otp}`);
+          return;
+        }
+
+        const currentYear = new Date().getFullYear();
+
+        const subjects: Record<string, string> = {
+          "email-verification": "Votre code de vérification Avermate",
+          "sign-in": "Votre code de connexion Avermate",
+          "forget-password": "Votre code de réinitialisation Avermate",
+        };
+
+        const titles: Record<string, string> = {
+          "email-verification": "Vérifiez Votre Adresse E-mail",
+          "sign-in": "Code de Connexion",
+          "forget-password": "Réinitialiser Votre Mot de Passe",
+        };
+
+        const descriptions: Record<string, string> = {
+          "email-verification":
+            "Merci de vous être inscrit(e) sur Avermate ! Utilisez le code ci-dessous pour vérifier votre adresse e-mail. Ce code expirera dans 10 minutes.",
+          "sign-in":
+            "Utilisez le code ci-dessous pour vous connecter à votre compte Avermate. Ce code expirera dans 10 minutes.",
+          "forget-password":
+            "Nous avons reçu une demande de réinitialisation de votre mot de passe Avermate. Utilisez le code ci-dessous pour continuer. Ce code expirera dans 10 minutes.",
+        };
+
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>${titles[type]}</title>
+        </head>
+        <body style="margin:0; padding:0; background-color:#F3F4F6; font-family:sans-serif; color:#333333;">
+          <table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color:#F3F4F6; padding:40px 0;">
+            <tr>
+              <td align="center">
+                <table width="600" style="max-width:600px; background:#FFFFFF; border-radius:8px; overflow:hidden; margin:0 20px;">
+                  <!-- Logo & Header -->
+                  <tr>
+                    <td style="padding:24px; text-align:left;">
+                      <table border="0" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align:middle;">
+                            <img
+                              src="https://avermate.fr/icon512_maskable.png"
+                              alt="Logo Avermate"
+                              width="40"
+                              style="display:block; border-radius:5px;"
+                            />
+                          </td>
+                          <td style="vertical-align:middle; padding-left:8px;">
+                            <p style="margin:0; font-size:16px; color:#333333; font-weight: bold;">Avermate</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Title Row -->
+                  <tr>
+                    <td style="padding:0 24px; text-align:center;">
+                      <h1 style="margin:0; font-size:24px; color:#333333;">${titles[type]}</h1>
+                    </td>
+                  </tr>
+
+                  <!-- Body Content -->
+                  <tr>
+                    <td style="padding:24px; text-align:center;">
+                      <p style="color:#555555; font-size:16px; line-height:1.5; margin-bottom:24px;">
+                        ${descriptions[type]}
+                      </p>
+                      <table border="0" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                        <tr>
+                          <td align="center" bgcolor="#18181b" style="border-radius:8px; padding:16px 32px;">
+                            <span style="font-size:32px; font-weight:bold; color:#ffffff; letter-spacing:8px; font-family:monospace;">
+                              ${otp}
+                            </span>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="font-size:14px; color:#999999; margin-top:24px; line-height:1.4;">
+                        Si vous n&apos;êtes pas à l&apos;origine de cette demande, veuillez ignorer cet e-mail.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td align="center" style="padding:16px; font-family:sans-serif; font-size:12px; color:#999999;">
+                      &copy; ${currentYear} Avermate. Tous droits réservés.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        `;
+
+        await resend.emails.send({
+          from: `Avermate <${env.EMAIL_FROM}>`,
+          to: email,
+          subject: subjects[type],
+          html: htmlContent,
+        });
+      },
+    }),
+  ],
 
   // Cookie
   advanced: {

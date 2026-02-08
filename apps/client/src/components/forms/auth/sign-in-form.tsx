@@ -61,13 +61,14 @@ export const SignInForm = () => {
     onSuccess: async (data) => {
       // If email is not verified
       if (!data.user.emailVerified) {
-        // Send a verification link
-        await authClient.sendVerificationEmail({
+        // Send a verification OTP
+        await authClient.emailOtp.sendVerificationOtp({
           email: data.user.email,
+          type: "email-verification",
         });
 
         toast.error(t("emailNotVerified"), {
-          description: t("verificationLinkSent", { email: data.user.email }),
+          description: t("verificationOtpSent", { email: data.user.email }),
         });
 
         router.push("/auth/verify-email");
