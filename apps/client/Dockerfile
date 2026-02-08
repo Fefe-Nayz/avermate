@@ -12,9 +12,11 @@ RUN bun install
 # ---------------- builder ----------------
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/client/node_modules ./apps/client/node_modules
 COPY . .
 
 WORKDIR /app/apps/client
+ENV PATH="/app/apps/client/node_modules/.bin:/app/node_modules/.bin:${PATH}"
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=https://api.avermate.fr
 ENV NEXT_PUBLIC_CLIENT_URL=https://avermate.fr
