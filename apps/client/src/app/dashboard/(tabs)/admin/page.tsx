@@ -613,10 +613,10 @@ export default function AdminDashboardPage() {
                             </CardHeader>
                             <CardContent className="min-w-0">
                                 {overviewQuery.isPending ? (
-                                    <Skeleton className="h-[300px] w-full" />
+                                    <Skeleton className="h-[600x] w-full" />
                                 ) : (
                                     <div className="min-w-0 overflow-hidden">
-                                        <ChartContainer config={timelineChartConfig} className="h-[300px] w-full min-w-0">
+                                        <ChartContainer config={timelineChartConfig} className="h-[600px] w-full min-w-0">
                                             <LineChart data={overviewQuery.data?.timeline ?? []}>
                                                 <CartesianGrid vertical={false} />
                                                 <XAxis
