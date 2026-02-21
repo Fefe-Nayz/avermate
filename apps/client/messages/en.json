@@ -512,7 +512,8 @@
       "DeveloperOptions": {
         "title": "Developer options",
         "description": "Advanced account information and utilities.",
-        "toggle": "Show developer options"
+        "toggle": "Show developer options",
+        "adminDashboardLink": "Open admin dashboard"
       },
       "CustomAverages": {
         "title": "Custom Averages",
@@ -1311,6 +1312,7 @@
             "selectUserTitle": "Select user",
             "noUserSelected": "No user selected.",
             "loadError": "Unable to load user insights.",
+            "userId": "User ID",
             "grades": "Grades",
             "subjects": "Subjects",
             "averageOn20": "Average (/20)",

@@ -514,7 +514,8 @@
       "DeveloperOptions": {
         "title": "Options développeur",
         "description": "Informations et outils avancés du compte.",
-        "toggle": "Afficher les options développeur"
+        "toggle": "Afficher les options développeur",
+        "adminDashboardLink": "Ouvrir le tableau de bord admin"
       },
       "CustomAverages": {
         "title": "Moyennes personnalisées",
@@ -1313,6 +1314,7 @@
             "selectUserTitle": "Sélectionner un utilisateur",
             "noUserSelected": "Aucun utilisateur sélectionné.",
             "loadError": "Impossible de charger les insights utilisateur.",
+            "userId": "ID utilisateur",
             "grades": "Notes",
             "subjects": "Matières",
             "averageOn20": "Moyenne (/20)",

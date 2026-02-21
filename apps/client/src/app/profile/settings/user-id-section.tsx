@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, Copy } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, Copy, Shield } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth";
+import { useAdminAccess } from "@/hooks/use-admin-access";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -40,11 +42,17 @@ export const UserIdSection = () => {
   const tDeveloper = useTranslations("Settings.Settings.DeveloperOptions");
   const t = useTranslations("Settings.Settings.UserId");
   const { data: session, isPending } = authClient.useSession();
+  const { data: isAdminFromServer } = useAdminAccess(Boolean(session));
   const [isOpen, setIsOpen] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
   const userId = session?.user?.id ?? null;
+  const currentRole = (session?.user as { role?: string | null } | undefined)?.role;
+  const roleBasedIsAdmin = currentRole
+    ? currentRole.split(",").some((value) => value.trim() === "admin")
+    : false;
+  const isAdmin = roleBasedIsAdmin || Boolean(isAdminFromServer);
 
   const handleCopy = async () => {
     if (!userId) {
@@ -104,6 +112,15 @@ export const UserIdSection = () => {
                 )}
                 {t("copyButton")}
               </Button>
+
+              {isAdmin ? (
+                <Button asChild type="button" variant="outline" className="w-full sm:w-fit">
+                  <Link href="/dashboard/admin">
+                    <Shield className="size-4" />
+                    {tDeveloper("adminDashboardLink")}
+                  </Link>
+                </Button>
+              ) : null}
             </div>
           </div>
         </ProfileSection>

@@ -1125,6 +1125,14 @@ export default function AdminDashboardPage() {
                                     ) : userStatsQuery.data ? (
                                         <>
                                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                <div className="rounded-md border p-3 sm:col-span-2">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {t("sections.selectedInsights.userId")}
+                                                    </p>
+                                                    <p className="text-sm font-mono break-all">
+                                                        {userStatsQuery.data.user.id}
+                                                    </p>
+                                                </div>
                                                 <div className="rounded-md border p-3">
                                                     <p className="text-xs text-muted-foreground">
                                                         {t("sections.selectedInsights.grades")}
