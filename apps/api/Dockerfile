@@ -25,4 +25,4 @@ USER bun
 
 EXPOSE 5000/tcp
 
-ENTRYPOINT [ "sh", "-c", "bun run db:migrate && exec bun run start" ]
+ENTRYPOINT [ "sh", "-c", "bun run db:migrate || bun run db:push; exec bun run start" ]
