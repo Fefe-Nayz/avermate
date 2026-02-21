@@ -6,16 +6,18 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollDirection } from "@/hooks/use-scroll-direction";
+import { authClient } from "@/lib/auth";
+import { useAdminAccess } from "@/hooks/use-admin-access";
 import {
   LayoutDashboard,
   BookOpen,
   CalendarCog,
+  Shield,
   Settings,
   Plus,
 } from "lucide-react";
 import AddGradeDialog from "@/components/dialogs/add-grade-dialog";
 import { useActiveYearStore } from "@/stores/active-year-store";
-import { useEffect, useState } from "react";
 import { BodyPortal } from "@/components/portal/body-portal";
 
 export default function DashboardNav() {
@@ -24,28 +26,45 @@ export default function DashboardNav() {
   const isMobile = useIsMobile();
   const { scrollDirection } = useScrollDirection();
   const { activeId } = useActiveYearStore();
-  const [isAtBottom, setIsAtBottom] = useState(false);
+  const { data: session } = authClient.useSession();
+  const { data: isAdminFromServer } = useAdminAccess(Boolean(session));
 
   const routes = [
     {
       label: t("overview"),
       path: "/dashboard",
       icon: LayoutDashboard,
+      showOnMobile: true,
+      showOnDesktop: true,
     },
     {
       label: t("grades"),
       path: "/dashboard/grades",
       icon: BookOpen,
+      showOnMobile: true,
+      showOnDesktop: true,
     },
     {
       label: t("YEAR_SETTINGS_PAGE_TITLE"),
       path: "/dashboard/settings",
       icon: CalendarCog,
+      showOnMobile: true,
+      showOnDesktop: true,
+    },
+    {
+      label: t("admin"),
+      path: "/dashboard/admin",
+      icon: Shield,
+      adminOnly: true,
+      showOnMobile: false,
+      showOnDesktop: true,
     },
     {
       label: t("settings"),
       path: "/profile/settings",
       icon: Settings,
+      showOnMobile: true,
+      showOnDesktop: false,
     },
     {
       label: t("addGrade"),
@@ -54,6 +73,23 @@ export default function DashboardNav() {
       isAddButton: true,
     },
   ];
+
+  const currentRole = (session?.user as { role?: string | null } | undefined)
+    ?.role;
+  const roleBasedIsAdmin = currentRole
+    ? currentRole.split(",").some((value) => value.trim() === "admin")
+    : false;
+  const isAdmin = roleBasedIsAdmin || Boolean(isAdminFromServer);
+
+  const visibleRoutes = routes.filter(
+    (route) => !route.adminOnly || isAdmin
+  );
+  const mobileRoutes = visibleRoutes.filter(
+    (route) => !route.isAddButton && route.showOnMobile !== false
+  );
+  const desktopRoutes = visibleRoutes.filter(
+    (route) => !route.isAddButton && route.showOnDesktop !== false
+  );
 
   // Show navbar when scrolling up, at top, or at bottom (mobile logic)
   const shouldShow = scrollDirection === "up" || scrollDirection === null;
@@ -88,7 +124,7 @@ export default function DashboardNav() {
           <div className="flex justify-center px-2 py-1.5 gap-1">
             {/* Left navigation buttons - equal width; equal height within the group */}
             <div className="flex flex-1 basis-0 min-w-0 gap-1 items-stretch">
-              {routes.slice(0, 2).map((route) => {
+              {mobileRoutes.slice(0, 2).map((route) => {
                 const Icon = route.icon;
                 const isActive = getIsActiveRoute(route, path);
 
@@ -130,7 +166,7 @@ export default function DashboardNav() {
 
             {/* Right navigation buttons - equal width; equal height within the group */}
             <div className="flex flex-1 basis-0 min-w-0 gap-1 items-stretch">
-              {routes.slice(2, 4).map((route) => {
+              {mobileRoutes.slice(2, 4).map((route) => {
                 const Icon = route.icon;
                 const isActive = getIsActiveRoute(route, path);
 
@@ -166,7 +202,7 @@ export default function DashboardNav() {
       <nav className="sticky px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 pt-4 hidden md:block">
         <div className="flex items-center border-b mx-auto max-w-[2000px]">
           <ul className="flex items-center">
-            {routes.slice(0, 3).map((route) => {
+            {desktopRoutes.map((route) => {
               const Icon = route.icon;
               const isActive = getIsActiveRoute(route, path);
 

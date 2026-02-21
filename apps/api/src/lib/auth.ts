@@ -4,7 +4,12 @@ import { resend } from "@/lib/resend";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { expo } from "@better-auth/expo";
-import { emailOTP } from "better-auth/plugins";
+import { admin as adminPlugin, emailOTP } from "better-auth/plugins";
+
+const adminUserIds = env.ADMIN_USER_IDS
+  ?.split(",")
+  .map((id) => id.trim())
+  .filter(Boolean) ?? [];
 
 export const auth = betterAuth({
   appName: "Avermate",
@@ -331,6 +336,11 @@ export const auth = betterAuth({
           html: htmlContent,
         });
       },
+    }),
+    adminPlugin({
+      defaultRole: "user",
+      adminRoles: ["admin"],
+      adminUserIds,
     }),
   ],
 

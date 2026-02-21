@@ -502,6 +502,18 @@
         "autoZoomYAxis": "Auto-zoom Y-axis",
         "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin."
       },
+      "UserId": {
+        "label": "Current user ID",
+        "copyButton": "Copy user ID",
+        "copied": "User ID copied to clipboard.",
+        "copyError": "Unable to copy user ID.",
+        "unavailable": "Unavailable"
+      },
+      "DeveloperOptions": {
+        "title": "Developer options",
+        "description": "Advanced account information and utilities.",
+        "toggle": "Show developer options"
+      },
       "CustomAverages": {
         "title": "Custom Averages",
         "description": "Manage your custom averages",
@@ -655,6 +667,7 @@
       "overview": "Overview",
       "grades": "Grades",
       "YEAR_SETTINGS_PAGE_TITLE": "Year settings",
+      "admin": "Admin",
       "settings": "Settings",
       "addGrade": "Add"
     },
@@ -1152,6 +1165,179 @@
         "fullYear": "Full Year",
         "periodName": "{name}",
         "selectPeriod": "Select Period"
+      },
+      "AdminPage": {
+        "title": "Admin Dashboard",
+        "subtitle": "Manage users and monitor platform-wide analytics.",
+        "common": {
+          "na": "N/A"
+        },
+        "buttons": {
+          "refresh": "Refresh",
+          "clear": "Clear",
+          "previous": "Previous",
+          "next": "Next",
+          "createUser": "Create User"
+        },
+        "ranges": {
+          "title": "Timeline range",
+          "last30": "Last 30 days",
+          "last90": "Last 90 days",
+          "last180": "Last 180 days",
+          "last365": "Last 365 days",
+          "always": "Always"
+        },
+        "charts": {
+          "accounts": "Accounts",
+          "grades": "Grades"
+        },
+        "roles": {
+          "user": "User",
+          "admin": "Admin"
+        },
+        "status": {
+          "active": "Active",
+          "banned": "Banned"
+        },
+        "actions": {
+          "promote": "Promote",
+          "demote": "Demote",
+          "ban": "Ban",
+          "unban": "Unban",
+          "delete": "Delete"
+        },
+        "table": {
+          "user": "User",
+          "status": "Status",
+          "role": "Role",
+          "created": "Created",
+          "actions": "Actions",
+          "loadingUsers": "Loading users...",
+          "noUsersFound": "No users found."
+        },
+        "pagination": {
+          "pageOf": "Page {page} of {total}"
+        },
+        "placeholders": {
+          "search": "Search by email...",
+          "fullName": "Full name",
+          "email": "Email",
+          "password": "Password",
+          "selectUser": "Select a user"
+        },
+        "states": {
+          "sessionRequiredTitle": "Session required",
+          "sessionRequiredDescription": "Sign in to access the admin dashboard.",
+          "accessDeniedTitle": "Access denied",
+          "accessDeniedDescription": "Your account does not have admin access."
+        },
+        "metrics": {
+          "totalUsers": {
+            "title": "Total users",
+            "description": "{count} new users in the last 30 days"
+          },
+          "totalGrades": {
+            "title": "Total grades",
+            "description": "{count} new grades in the last 30 days"
+          },
+          "activeUsers": {
+            "title": "Active users (30d)",
+            "description": "Users who added at least one grade in the last 30 days"
+          },
+          "bannedUsers": {
+            "title": "Banned users",
+            "description": "{count} admins across the platform"
+          },
+          "verificationRate": {
+            "title": "Verification rate",
+            "description": "{count} verified users"
+          },
+          "adoptionRate": {
+            "title": "Adoption rate",
+            "description": "{count} users have added grades"
+          },
+          "globalAverage": {
+            "title": "Global average (/20)",
+            "description": "{count} pass rate",
+            "descriptionWithoutPassRate": "Pass rate unavailable"
+          },
+          "gradesPerUser": {
+            "title": "Avg grades per user",
+            "description": "{count} avg grades per active user"
+          }
+        },
+        "sections": {
+          "growth": {
+            "title": "Growth timeline",
+            "description": "Cumulative accounts and grades over time."
+          },
+          "distribution": {
+            "title": "Role & provider distribution",
+            "description": "Understand role allocation and sign-in provider usage.",
+            "rolesTitle": "Roles",
+            "providersTitle": "Providers"
+          },
+          "topUsers": {
+            "title": "Top users",
+            "description": "Most active users by number of grades.",
+            "gradesLabel": "grades"
+          },
+          "subjects": {
+            "title": "Top subjects",
+            "description": "Subjects with the highest grade volume."
+          },
+          "last7Days": {
+            "title": "Last 7 days snapshot",
+            "description": "Short-term activity indicators.",
+            "newUsers": "New users",
+            "newGrades": "New grades",
+            "activeUsers": "Active users",
+            "mostActiveGrades": "Most active grades day"
+          },
+          "userManagement": {
+            "title": "User management",
+            "description": "Search users, change roles, and moderate accounts."
+          },
+          "createUser": {
+            "title": "Create user",
+            "description": "Provision a new account directly from admin.",
+            "roleTitle": "Select role"
+          },
+          "selectedInsights": {
+            "title": "Selected user insights",
+            "description": "Deep stats for one selected user.",
+            "selectionHint": "Select a user from the table or from the dropdown below.",
+            "selectUserTitle": "Select user",
+            "noUserSelected": "No user selected.",
+            "loadError": "Unable to load user insights.",
+            "grades": "Grades",
+            "subjects": "Subjects",
+            "averageOn20": "Average (/20)",
+            "last30DaysGrades": "New grades (30d)"
+          }
+        },
+        "moderation": {
+          "defaultBanReason": "Policy violation"
+        },
+        "toasts": {
+          "requiredFields": "Please fill all required fields.",
+          "userCreated": "User created.",
+          "roleUpdated": "Role updated.",
+          "userBanned": "User banned.",
+          "userUnbanned": "User unbanned.",
+          "userDeleted": "User deleted.",
+          "cannotDemoteSelf": "You cannot remove your own admin role.",
+          "cannotBanSelf": "You cannot ban your own account.",
+          "cannotDeleteSelf": "You cannot delete your own account.",
+          "confirmDelete": "Delete user {email}?",
+          "errors": {
+            "createUser": "Unable to create user.",
+            "updateRole": "Unable to update role.",
+            "banUser": "Unable to ban user.",
+            "unbanUser": "Unable to unban user.",
+            "deleteUser": "Unable to delete user."
+          }
+        }
       },
       "SubjectWrapper": {
         "back": "Back",

@@ -1,3 +1,5 @@
+import type { AdminTimelineRange } from "@/types/admin";
+
 export const queryKeys = {
   years: {
     all: ["years"] as const,
@@ -19,5 +21,16 @@ export const queryKeys = {
   },
   accounts: {
     all: ["accounts"] as const,
+  },
+  admin: {
+    access: ["admin", "access"] as const,
+    users: (
+      searchValue: string,
+      limit: number,
+      offset: number
+    ) => ["admin", "users", searchValue, limit, offset] as const,
+    overview: (days: AdminTimelineRange) => ["admin", "overview", days] as const,
+    userStats: (userId: string, days: AdminTimelineRange) =>
+      ["admin", "user-stats", userId, days] as const,
   },
 };

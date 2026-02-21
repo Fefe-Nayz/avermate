@@ -175,6 +175,11 @@ export const users = sqliteTable("users", {
 
   avatarUrl: text(),
 
+  role: text().default("user"),
+  banned: integer({ mode: "boolean" }).default(false),
+  banReason: text(),
+  banExpires: integer({ mode: "timestamp" }),
+
   updatedAt: integer({ mode: "timestamp" }).notNull(),
   createdAt: integer({ mode: "timestamp" }).notNull(),
 }, (t) => ({
@@ -204,6 +209,7 @@ export const sessions = sqliteTable("sessions", {
 
   ipAddress: text(),
   userAgent: text(),
+  impersonatedBy: text(),
 
   userId: text()
     .notNull()

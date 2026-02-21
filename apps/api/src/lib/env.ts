@@ -13,6 +13,7 @@ export const env = createEnv({
     // Better Auth
     BETTER_AUTH_URL: z.string().url(),
     BETTER_AUTH_SECRET: z.string().min(32),
+    ADMIN_USER_IDS: z.string().optional(),
 
     // Client
     CLIENT_URL: z.string().url(),

@@ -2,6 +2,7 @@ import { ThemeSection } from "./theme-section";
 import { LanguageSection } from "./language-section";
 import { ChartSettingsSection } from "./chart-settings-section";
 import { SeasonalThemesSection } from "./seasonal-themes-section";
+import { UserIdSection } from "./user-id-section";
 
 export default function SettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function SettingsPage() {
       <LanguageSection />
       <ChartSettingsSection />
       <SeasonalThemesSection />
+      <UserIdSection />
       {/* USE YEAR WORKSPACE SETTINGS NOW */}
       {/* <PeriodsSection /> */}
       {/* <CustomAveragesSection /> */}

@@ -53,6 +53,10 @@ const getPageTitle = (
     return t("Dashboard.Pages.YEAR_SETTINGS_PAGE.YEAR_SETTINGS_PAGE_TITLE");
   }
 
+  if (pathname === "/dashboard/admin") {
+    return t("Dashboard.Pages.AdminPage.title");
+  }
+
   // Handle profile/settings pages
   if (pathname === "/profile") {
     return t("Settings.Nav.profile");

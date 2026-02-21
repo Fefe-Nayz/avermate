@@ -504,6 +504,18 @@
         "autoZoomYAxis": "Zoom automatique de l'axe Y",
         "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge."
       },
+      "UserId": {
+        "label": "Identifiant utilisateur actuel",
+        "copyButton": "Copier l'identifiant",
+        "copied": "Identifiant utilisateur copié dans le presse-papiers.",
+        "copyError": "Impossible de copier l'identifiant utilisateur.",
+        "unavailable": "Indisponible"
+      },
+      "DeveloperOptions": {
+        "title": "Options développeur",
+        "description": "Informations et outils avancés du compte.",
+        "toggle": "Afficher les options développeur"
+      },
       "CustomAverages": {
         "title": "Moyennes personnalisées",
         "description": "Gérez vos moyennes personnalisées",
@@ -657,6 +669,7 @@
       "overview": "Vue d'ensemble",
       "grades": "Notes",
       "YEAR_SETTINGS_PAGE_TITLE": "Paramètres de l'année",
+      "admin": "Admin",
       "settings": "Paramètres",
       "addGrade": "Ajouter"
     },
@@ -1154,6 +1167,179 @@
         "fullYear": "Toute l'année",
         "periodName": "{name}",
         "selectPeriod": "Sélectionner une période"
+      },
+      "AdminPage": {
+        "title": "Tableau de bord admin",
+        "subtitle": "Gérez les utilisateurs et suivez les analyses globales de la plateforme.",
+        "common": {
+          "na": "N/A"
+        },
+        "buttons": {
+          "refresh": "Actualiser",
+          "clear": "Effacer",
+          "previous": "Précédent",
+          "next": "Suivant",
+          "createUser": "Créer l'utilisateur"
+        },
+        "ranges": {
+          "title": "Période de la timeline",
+          "last30": "30 derniers jours",
+          "last90": "90 derniers jours",
+          "last180": "180 derniers jours",
+          "last365": "365 derniers jours",
+          "always": "Toujours"
+        },
+        "charts": {
+          "accounts": "Comptes",
+          "grades": "Notes"
+        },
+        "roles": {
+          "user": "Utilisateur",
+          "admin": "Admin"
+        },
+        "status": {
+          "active": "Actif",
+          "banned": "Banni"
+        },
+        "actions": {
+          "promote": "Promouvoir",
+          "demote": "Rétrograder",
+          "ban": "Bannir",
+          "unban": "Débannir",
+          "delete": "Supprimer"
+        },
+        "table": {
+          "user": "Utilisateur",
+          "status": "Statut",
+          "role": "Rôle",
+          "created": "Créé le",
+          "actions": "Actions",
+          "loadingUsers": "Chargement des utilisateurs...",
+          "noUsersFound": "Aucun utilisateur trouvé."
+        },
+        "pagination": {
+          "pageOf": "Page {page} sur {total}"
+        },
+        "placeholders": {
+          "search": "Rechercher par email...",
+          "fullName": "Nom complet",
+          "email": "Email",
+          "password": "Mot de passe",
+          "selectUser": "Sélectionner un utilisateur"
+        },
+        "states": {
+          "sessionRequiredTitle": "Session requise",
+          "sessionRequiredDescription": "Connectez-vous pour accéder au tableau de bord admin.",
+          "accessDeniedTitle": "Accès refusé",
+          "accessDeniedDescription": "Votre compte ne dispose pas des droits admin."
+        },
+        "metrics": {
+          "totalUsers": {
+            "title": "Utilisateurs totaux",
+            "description": "{count} nouveaux utilisateurs sur les 30 derniers jours"
+          },
+          "totalGrades": {
+            "title": "Notes totales",
+            "description": "{count} nouvelles notes sur les 30 derniers jours"
+          },
+          "activeUsers": {
+            "title": "Utilisateurs actifs (30j)",
+            "description": "Utilisateurs ayant ajouté au moins une note sur les 30 derniers jours"
+          },
+          "bannedUsers": {
+            "title": "Utilisateurs bannis",
+            "description": "{count} admins sur la plateforme"
+          },
+          "verificationRate": {
+            "title": "Taux de vérification",
+            "description": "{count} utilisateurs vérifiés"
+          },
+          "adoptionRate": {
+            "title": "Taux d'adoption",
+            "description": "{count} utilisateurs ont ajouté des notes"
+          },
+          "globalAverage": {
+            "title": "Moyenne globale (/20)",
+            "description": "{count} de taux de réussite",
+            "descriptionWithoutPassRate": "Taux de réussite indisponible"
+          },
+          "gradesPerUser": {
+            "title": "Moy. notes par utilisateur",
+            "description": "{count} de moy. notes par utilisateur actif"
+          }
+        },
+        "sections": {
+          "growth": {
+            "title": "Timeline de croissance",
+            "description": "Comptes et notes cumulés dans le temps."
+          },
+          "distribution": {
+            "title": "Répartition rôles et fournisseurs",
+            "description": "Comprendre la répartition des rôles et l'usage des fournisseurs de connexion.",
+            "rolesTitle": "Rôles",
+            "providersTitle": "Fournisseurs"
+          },
+          "topUsers": {
+            "title": "Top utilisateurs",
+            "description": "Utilisateurs les plus actifs par volume de notes.",
+            "gradesLabel": "notes"
+          },
+          "subjects": {
+            "title": "Top matières",
+            "description": "Matières avec le plus grand volume de notes."
+          },
+          "last7Days": {
+            "title": "Vue des 7 derniers jours",
+            "description": "Indicateurs d'activité à court terme.",
+            "newUsers": "Nouveaux utilisateurs",
+            "newGrades": "Nouvelles notes",
+            "activeUsers": "Utilisateurs actifs",
+            "mostActiveGrades": "Jour le plus actif (notes)"
+          },
+          "userManagement": {
+            "title": "Gestion des utilisateurs",
+            "description": "Recherchez des utilisateurs, modifiez les rôles et modérez les comptes."
+          },
+          "createUser": {
+            "title": "Créer un utilisateur",
+            "description": "Provisionnez un nouveau compte directement depuis l'admin.",
+            "roleTitle": "Sélectionner un rôle"
+          },
+          "selectedInsights": {
+            "title": "Insights utilisateur sélectionné",
+            "description": "Statistiques détaillées pour un utilisateur sélectionné.",
+            "selectionHint": "Sélectionnez un utilisateur depuis le tableau ou via la liste ci-dessous.",
+            "selectUserTitle": "Sélectionner un utilisateur",
+            "noUserSelected": "Aucun utilisateur sélectionné.",
+            "loadError": "Impossible de charger les insights utilisateur.",
+            "grades": "Notes",
+            "subjects": "Matières",
+            "averageOn20": "Moyenne (/20)",
+            "last30DaysGrades": "Nouvelles notes (30j)"
+          }
+        },
+        "moderation": {
+          "defaultBanReason": "Violation des règles"
+        },
+        "toasts": {
+          "requiredFields": "Veuillez remplir tous les champs requis.",
+          "userCreated": "Utilisateur créé.",
+          "roleUpdated": "Rôle mis à jour.",
+          "userBanned": "Utilisateur banni.",
+          "userUnbanned": "Utilisateur débanni.",
+          "userDeleted": "Utilisateur supprimé.",
+          "cannotDemoteSelf": "Vous ne pouvez pas retirer votre propre rôle admin.",
+          "cannotBanSelf": "Vous ne pouvez pas bannir votre propre compte.",
+          "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte.",
+          "confirmDelete": "Supprimer l'utilisateur {email} ?",
+          "errors": {
+            "createUser": "Impossible de créer l'utilisateur.",
+            "updateRole": "Impossible de mettre à jour le rôle.",
+            "banUser": "Impossible de bannir l'utilisateur.",
+            "unbanUser": "Impossible de débannir l'utilisateur.",
+            "deleteUser": "Impossible de supprimer l'utilisateur."
+          }
+        }
       },
       "SubjectWrapper": {
         "back": "Retour",
