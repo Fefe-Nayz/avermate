@@ -1191,7 +1191,8 @@
         },
         "charts": {
           "accounts": "Comptes",
-          "grades": "Notes"
+          "grades": "Notes",
+          "subjects": "Matières"
         },
         "roles": {
           "user": "Utilisateur",

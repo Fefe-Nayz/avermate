@@ -356,6 +356,10 @@ export default function AdminDashboardPage() {
             label: t("charts.grades"),
             color: "#22c55e",
         },
+        subjects: {
+            label: t("charts.subjects"),
+            color: "#f97316",
+        },
     };
 
     const userTimelineChartConfig = {
@@ -623,7 +627,21 @@ export default function AdminDashboardPage() {
                                                     minTickGap={24}
                                                     tickFormatter={(value) => formatChartDate(String(value))}
                                                 />
-                                                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={36} />
+                                                <YAxis
+                                                    yAxisId="usersAxis"
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickMargin={8}
+                                                    width={40}
+                                                />
+                                                <YAxis
+                                                    yAxisId="gradesAxis"
+                                                    orientation="right"
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickMargin={8}
+                                                    width={40}
+                                                />
                                                 <ChartTooltip
                                                     cursor={false}
                                                     content={
@@ -637,13 +655,23 @@ export default function AdminDashboardPage() {
                                                 <Line
                                                     type="monotone"
                                                     dataKey="accounts"
+                                                    yAxisId="usersAxis"
                                                     stroke="var(--color-accounts)"
                                                     strokeWidth={2}
                                                     dot={false}
                                                 />
                                                 <Line
                                                     type="monotone"
+                                                    dataKey="subjects"
+                                                    yAxisId="usersAxis"
+                                                    stroke="var(--color-subjects)"
+                                                    strokeWidth={2}
+                                                    dot={false}
+                                                />
+                                                <Line
+                                                    type="monotone"
                                                     dataKey="grades"
+                                                    yAxisId="gradesAxis"
                                                     stroke="var(--color-grades)"
                                                     strokeWidth={2}
                                                     dot={false}

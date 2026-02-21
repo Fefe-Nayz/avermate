@@ -389,21 +389,27 @@ function buildCumulativeTimeline(
   days: number,
   baselineAccounts: number,
   baselineGrades: number,
+  baselineSubjects: number,
   accountEntries: Array<{ createdAt: Date }>,
-  gradeEntries: Array<{ createdAt: Date }>
+  gradeEntries: Array<{ createdAt: Date }>,
+  subjectEntries: Array<{ createdAt: Date }>
 ) {
   const timeline: Array<{
     date: string;
     accounts: number;
     grades: number;
+    subjects: number;
     newAccounts: number;
     newGrades: number;
+    newSubjects: number;
   }> = [];
 
   let accountCursor = 0;
   let gradeCursor = 0;
+  let subjectCursor = 0;
   let accountCumulative = baselineAccounts;
   let gradeCumulative = baselineGrades;
+  let subjectCumulative = baselineSubjects;
 
   for (let index = 0; index < days; index += 1) {
     const dayStart = addUtcDays(startDate, index);
@@ -429,12 +435,24 @@ function buildCumulativeTimeline(
       newGrades += 1;
     }
 
+    let newSubjects = 0;
+    while (
+      subjectCursor < subjectEntries.length &&
+      toDate(subjectEntries[subjectCursor].createdAt) < dayEnd
+    ) {
+      subjectCursor += 1;
+      subjectCumulative += 1;
+      newSubjects += 1;
+    }
+
     timeline.push({
       date: dayStart.toISOString(),
       accounts: accountCumulative,
       grades: gradeCumulative,
+      subjects: subjectCumulative,
       newAccounts,
       newGrades,
+      newSubjects,
     });
   }
 
@@ -542,8 +560,10 @@ app.get("/overview", zValidator("query", timelineQuerySchema), async (c) => {
     gradeRowsForAverage,
     accountEntries,
     gradeEntries,
+    subjectEntries,
     baselineAccounts,
     baselineGrades,
+    baselineSubjects,
   ] = await Promise.all([
     db.$count(users),
     db.$count(grades),
@@ -636,8 +656,14 @@ app.get("/overview", zValidator("query", timelineQuerySchema), async (c) => {
       .from(grades)
       .where(gte(grades.createdAt, startDate))
       .orderBy(asc(grades.createdAt)),
+    db
+      .select({ createdAt: subjects.createdAt })
+      .from(subjects)
+      .where(gte(subjects.createdAt, startDate))
+      .orderBy(asc(subjects.createdAt)),
     db.$count(users, lt(users.createdAt, startDate)),
     db.$count(grades, lt(grades.createdAt, startDate)),
+    db.$count(subjects, lt(subjects.createdAt, startDate)),
   ]);
 
   const adminUsers = usersWithRoles.filter((row) => {
@@ -653,8 +679,10 @@ app.get("/overview", zValidator("query", timelineQuerySchema), async (c) => {
     days,
     baselineAccounts,
     baselineGrades,
+    baselineSubjects,
     accountEntries,
-    gradeEntries
+    gradeEntries,
+    subjectEntries
   );
 
   const usersWithGrades = usersWithGradesRows.length;

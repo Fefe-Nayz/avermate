@@ -1189,7 +1189,8 @@
         },
         "charts": {
           "accounts": "Accounts",
-          "grades": "Grades"
+          "grades": "Grades",
+          "subjects": "Subjects"
         },
         "roles": {
           "user": "User",

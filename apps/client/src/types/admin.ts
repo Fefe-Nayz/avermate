@@ -25,8 +25,10 @@ export interface AdminOverviewTimelinePoint {
   date: string;
   accounts: number;
   grades: number;
+  subjects: number;
   newAccounts: number;
   newGrades: number;
+  newSubjects: number;
 }
 
 export interface AdminOverviewTopUser {
