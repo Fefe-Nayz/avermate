@@ -663,7 +663,7 @@ export default function AdminDashboardPage() {
                                                 <Line
                                                     type="monotone"
                                                     dataKey="subjects"
-                                                    yAxisId="usersAxis"
+                                                    yAxisId="gradesAxis"
                                                     stroke="var(--color-subjects)"
                                                     strokeWidth={2}
                                                     dot={false}
