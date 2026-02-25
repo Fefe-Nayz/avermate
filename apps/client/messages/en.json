@@ -1322,6 +1322,38 @@
         "moderation": {
           "defaultBanReason": "Policy violation"
         },
+        "confirmModals": {
+          "delete": {
+            "title": "Delete user account",
+            "description": "This will permanently delete the account of {name} ({email}). All their data will be removed and this action cannot be undone.",
+            "cancel": "Cancel",
+            "confirm": "Delete account"
+          },
+          "ban": {
+            "title": "Ban user",
+            "description": "This will ban {name} ({email}) and prevent them from accessing the platform.",
+            "cancel": "Cancel",
+            "confirm": "Ban user"
+          },
+          "unban": {
+            "title": "Unban user",
+            "description": "This will restore access for {name} ({email}) and allow them to use the platform again.",
+            "cancel": "Cancel",
+            "confirm": "Unban user"
+          },
+          "promote": {
+            "title": "Promote to admin",
+            "description": "This will grant {name} ({email}) full admin privileges on the platform.",
+            "cancel": "Cancel",
+            "confirm": "Promote to admin"
+          },
+          "demote": {
+            "title": "Demote from admin",
+            "description": "This will remove admin privileges from {name} ({email}). They will become a regular user.",
+            "cancel": "Cancel",
+            "confirm": "Demote to user"
+          }
+        },
         "toasts": {
           "requiredFields": "Please fill all required fields.",
           "userCreated": "User created.",
@@ -1332,7 +1364,6 @@
           "cannotDemoteSelf": "You cannot remove your own admin role.",
           "cannotBanSelf": "You cannot ban your own account.",
           "cannotDeleteSelf": "You cannot delete your own account.",
-          "confirmDelete": "Delete user {email}?",
           "errors": {
             "createUser": "Unable to create user.",
             "updateRole": "Unable to update role.",

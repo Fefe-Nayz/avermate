@@ -43,6 +43,16 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
@@ -175,6 +185,15 @@ export default function AdminDashboardPage() {
     const [newUserEmail, setNewUserEmail] = useState("");
     const [newUserPassword, setNewUserPassword] = useState("");
     const [newUserRole, setNewUserRole] = useState<"user" | "admin">("user");
+
+    type PendingAction =
+        | { type: "delete"; user: AdminManagedUser }
+        | { type: "ban"; user: AdminManagedUser }
+        | { type: "unban"; user: AdminManagedUser }
+        | { type: "promote"; user: AdminManagedUser }
+        | { type: "demote"; user: AdminManagedUser };
+
+    const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
     const { data: session, isPending: isSessionPending } = authClient.useSession();
     const isDataEnabled = !isSessionPending && Boolean(session);
@@ -408,10 +427,7 @@ export default function AdminDashboardPage() {
             return;
         }
 
-        setRoleMutation.mutate({
-            userId: user.id,
-            role: nextRole,
-        });
+        setPendingAction({ type: currentlyAdmin ? "demote" : "promote", user });
     };
 
     const handleToggleBan = (user: AdminManagedUser) => {
@@ -420,12 +436,7 @@ export default function AdminDashboardPage() {
             return;
         }
 
-        if (user.banned) {
-            unbanMutation.mutate(user.id);
-            return;
-        }
-
-        banMutation.mutate(user.id);
+        setPendingAction({ type: user.banned ? "unban" : "ban", user });
     };
 
     const handleDeleteUser = (user: AdminManagedUser) => {
@@ -434,15 +445,27 @@ export default function AdminDashboardPage() {
             return;
         }
 
-        const confirmed = window.confirm(
-            t("toasts.confirmDelete", { email: user.email })
-        );
+        setPendingAction({ type: "delete", user });
+    };
 
-        if (!confirmed) {
-            return;
+    const handleConfirmAction = () => {
+        if (!pendingAction) return;
+
+        const { type, user } = pendingAction;
+
+        if (type === "delete") {
+            removeUserMutation.mutate(user.id);
+        } else if (type === "ban") {
+            banMutation.mutate(user.id);
+        } else if (type === "unban") {
+            unbanMutation.mutate(user.id);
+        } else if (type === "promote") {
+            setRoleMutation.mutate({ userId: user.id, role: "admin" });
+        } else if (type === "demote") {
+            setRoleMutation.mutate({ userId: user.id, role: "user" });
         }
 
-        removeUserMutation.mutate(user.id);
+        setPendingAction(null);
     };
 
     const metricCards = useMemo(() => {
@@ -1217,6 +1240,70 @@ export default function AdminDashboardPage() {
                     </div>
                 </>
             ) : null}
+
+            <AlertDialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>
+                            {pendingAction?.type === "delete" && t("confirmModals.delete.title")}
+                            {pendingAction?.type === "ban" && t("confirmModals.ban.title")}
+                            {pendingAction?.type === "unban" && t("confirmModals.unban.title")}
+                            {pendingAction?.type === "promote" && t("confirmModals.promote.title")}
+                            {pendingAction?.type === "demote" && t("confirmModals.demote.title")}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {pendingAction?.type === "delete" &&
+                                t("confirmModals.delete.description", {
+                                    name: pendingAction.user.name,
+                                    email: pendingAction.user.email,
+                                })}
+                            {pendingAction?.type === "ban" &&
+                                t("confirmModals.ban.description", {
+                                    name: pendingAction.user.name,
+                                    email: pendingAction.user.email,
+                                })}
+                            {pendingAction?.type === "unban" &&
+                                t("confirmModals.unban.description", {
+                                    name: pendingAction.user.name,
+                                    email: pendingAction.user.email,
+                                })}
+                            {pendingAction?.type === "promote" &&
+                                t("confirmModals.promote.description", {
+                                    name: pendingAction.user.name,
+                                    email: pendingAction.user.email,
+                                })}
+                            {pendingAction?.type === "demote" &&
+                                t("confirmModals.demote.description", {
+                                    name: pendingAction.user.name,
+                                    email: pendingAction.user.email,
+                                })}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>
+                            {pendingAction?.type === "delete" && t("confirmModals.delete.cancel")}
+                            {pendingAction?.type === "ban" && t("confirmModals.ban.cancel")}
+                            {pendingAction?.type === "unban" && t("confirmModals.unban.cancel")}
+                            {pendingAction?.type === "promote" && t("confirmModals.promote.cancel")}
+                            {pendingAction?.type === "demote" && t("confirmModals.demote.cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmAction}
+                            className={
+                                pendingAction?.type === "delete" || pendingAction?.type === "ban"
+                                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    : undefined
+                            }
+                        >
+                            {pendingAction?.type === "delete" && t("confirmModals.delete.confirm")}
+                            {pendingAction?.type === "ban" && t("confirmModals.ban.confirm")}
+                            {pendingAction?.type === "unban" && t("confirmModals.unban.confirm")}
+                            {pendingAction?.type === "promote" && t("confirmModals.promote.confirm")}
+                            {pendingAction?.type === "demote" && t("confirmModals.demote.confirm")}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </main>
     );
 }

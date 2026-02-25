@@ -1324,6 +1324,38 @@
         "moderation": {
           "defaultBanReason": "Violation des règles"
         },
+        "confirmModals": {
+          "delete": {
+            "title": "Supprimer le compte utilisateur",
+            "description": "Cela supprimera définitivement le compte de {name} ({email}). Toutes leurs données seront effacées et cette action est irréversible.",
+            "cancel": "Annuler",
+            "confirm": "Supprimer le compte"
+          },
+          "ban": {
+            "title": "Bannir l'utilisateur",
+            "description": "Cela bannira {name} ({email}) et l'empêchera d'accéder à la plateforme.",
+            "cancel": "Annuler",
+            "confirm": "Bannir l'utilisateur"
+          },
+          "unban": {
+            "title": "Débannir l'utilisateur",
+            "description": "Cela rétablira l'accès de {name} ({email}) et lui permettra d'utiliser à nouveau la plateforme.",
+            "cancel": "Annuler",
+            "confirm": "Débannir l'utilisateur"
+          },
+          "promote": {
+            "title": "Promouvoir en admin",
+            "description": "Cela accordera à {name} ({email}) des privilèges d'administrateur complets sur la plateforme.",
+            "cancel": "Annuler",
+            "confirm": "Promouvoir en admin"
+          },
+          "demote": {
+            "title": "Rétrograder de l'admin",
+            "description": "Cela retirera les privilèges d'administrateur de {name} ({email}). Ils deviendront un utilisateur ordinaire.",
+            "cancel": "Annuler",
+            "confirm": "Rétrograder en utilisateur"
+          }
+        },
         "toasts": {
           "requiredFields": "Veuillez remplir tous les champs requis.",
           "userCreated": "Utilisateur créé.",
@@ -1334,7 +1366,6 @@
           "cannotDemoteSelf": "Vous ne pouvez pas retirer votre propre rôle admin.",
           "cannotBanSelf": "Vous ne pouvez pas bannir votre propre compte.",
           "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte.",
-          "confirmDelete": "Supprimer l'utilisateur {email} ?",
           "errors": {
             "createUser": "Impossible de créer l'utilisateur.",
             "updateRole": "Impossible de mettre à jour le rôle.",
