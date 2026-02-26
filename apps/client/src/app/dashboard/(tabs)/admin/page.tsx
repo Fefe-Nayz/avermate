@@ -67,7 +67,7 @@ import {
 } from "@/components/ui/selectdrawer";
 
 const USERS_PER_PAGE = 20;
-const DEFAULT_TIMELINE_RANGE: AdminTimelineRange = 90;
+const DEFAULT_TIMELINE_RANGE: AdminTimelineRange = "always" ;
 const TIMELINE_RANGE_OPTIONS: AdminTimelineRange[] = [30, 90, 180, 365, "always"];
 
 function parseRoleList(role: string | null | undefined): string[] {
