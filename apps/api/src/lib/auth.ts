@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { expo } from "@better-auth/expo";
 import { admin as adminPlugin, emailOTP } from "better-auth/plugins";
+import { dash } from "@better-auth/infra";
 
 const adminUserIds = env.ADMIN_USER_IDS
   ?.split(",")
@@ -60,7 +61,7 @@ export const auth = betterAuth({
     },
     changeEmail: {
       enabled: true,
-      sendChangeEmailVerification: async ({ user, newEmail, url }) => {
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
         // If email disable console log
         if (env.DISABLE_EMAIL) {
           console.log(`Email update url for ${user.email} to ${newEmail}: ${url}`);
@@ -217,6 +218,7 @@ export const auth = betterAuth({
 
   // Plugins
   plugins: [
+    dash(),
     expo(),
     emailOTP({
       otpLength: 6,
