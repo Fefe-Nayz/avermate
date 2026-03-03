@@ -9,7 +9,7 @@ import { dash } from "@better-auth/infra";
 
 const adminUserIds = env.ADMIN_USER_IDS
   ?.split(",")
-  .map((id) => id.trim())
+  .map((id: string) => id.trim())
   .filter(Boolean) ?? [];
 
 export const auth = betterAuth({
@@ -38,9 +38,9 @@ export const auth = betterAuth({
   // Session
   session: {
     // 7 days
-    expiresIn: 7 * 24 * 60 * 60,
-    // 1 day
-    updateAge: 24 * 60 * 60,
+    expiresIn: 30 * 24 * 60 * 60,
+    // 15 day
+    updateAge: 15 * 24 * 60 * 60,
   },
 
   emailVerification: {
