@@ -2,9 +2,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { average } from "./average";
+import { average, averageOverTime } from "./average";
 import type { PartialGrade } from "../types/grade";
 import type { Subject } from "../types/subject";
+import type { Average } from "../types/average";
+import type { Period } from "../types/period";
 
 type SubjectInput = {
   id: string;
@@ -145,5 +147,128 @@ describe("average() - conformité calcul moyenne", () => {
     assert.equal(average(undefined, empty), null);
     assert.equal(average("root", empty), null);
     assert.equal(average("leaf", empty), null);
+  });
+
+  it("respecte includeChildren=false dans une moyenne custom", () => {
+    const customSubjects = makeSubjects([
+      { id: "parent", name: "Parent", parentId: null, isDisplaySubject: false },
+      {
+        id: "child",
+        name: "Child",
+        parentId: "parent",
+        isDisplaySubject: false,
+        grades: [{ value: 1600, outOf: 2000, periodId: "p1" }],
+      },
+    ]);
+
+    const withoutChildren: Average = {
+      id: "ca-1",
+      name: "Sans enfants",
+      subjects: [{ id: "parent", customCoefficient: null, includeChildren: false }],
+      isMainAverage: false,
+      createdAt: Date.now(),
+      userId: "u1",
+      yearId: "y1",
+    };
+
+    const withChildren: Average = {
+      ...withoutChildren,
+      id: "ca-2",
+      name: "Avec enfants",
+      subjects: [{ id: "parent", customCoefficient: null, includeChildren: true }],
+    };
+
+    assert.equal(average(undefined, customSubjects, withoutChildren), null);
+    closeTo(average(undefined, customSubjects, withChildren), 16);
+  });
+
+  it("applique customCoefficient en priorité sur le coefficient matière", () => {
+    const customSubjects = makeSubjects([
+      {
+        id: "s1",
+        name: "S1",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [{ value: 1000, outOf: 2000, periodId: "p1" }],
+      },
+      {
+        id: "s2",
+        name: "S2",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [{ value: 2000, outOf: 2000, periodId: "p1" }],
+      },
+    ]);
+
+    const weightedCustomAverage: Average = {
+      id: "ca-3",
+      name: "Pondérée",
+      subjects: [
+        { id: "s1", customCoefficient: 1, includeChildren: false },
+        { id: "s2", customCoefficient: 3, includeChildren: false },
+      ],
+      isMainAverage: false,
+      createdAt: Date.now(),
+      userId: "u1",
+      yearId: "y1",
+    };
+
+    closeTo(average(undefined, customSubjects, weightedCustomAverage), 17.5);
+  });
+});
+
+describe("averageOverTime() - périodes cumulatives", () => {
+  const timelineSubjects = makeSubjects([
+    {
+      id: "maths",
+      name: "Maths",
+      parentId: null,
+      isDisplaySubject: false,
+      grades: [
+        { value: 1000, outOf: 2000, periodId: "p1", passedAt: "2026-01-10T00:00:00.000Z" },
+        { value: 2000, outOf: 2000, periodId: "p2", passedAt: "2026-02-10T00:00:00.000Z" },
+      ],
+    },
+  ]);
+
+  const p1: Period = {
+    id: "p1",
+    name: "P1",
+    startAt: "2026-01-01T00:00:00.000Z",
+    endAt: "2026-01-31T23:59:59.999Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    userId: "u1",
+    isCumulative: false,
+    yearId: "y1",
+  };
+
+  const p2Cumulative: Period = {
+    id: "p2",
+    name: "P2",
+    startAt: "2026-02-01T00:00:00.000Z",
+    endAt: "2026-02-28T23:59:59.999Z",
+    createdAt: "2026-02-01T00:00:00.000Z",
+    userId: "u1",
+    isCumulative: true,
+    yearId: "y1",
+  };
+
+  const p2NonCumulative: Period = {
+    ...p2Cumulative,
+    isCumulative: false,
+  };
+
+  it("inclut les notes des périodes précédentes si la période est cumulative", () => {
+    const values = averageOverTime(timelineSubjects, undefined, p2Cumulative, [p1, p2Cumulative]);
+    const lastValue = values[values.length - 1];
+
+    closeTo(lastValue, 15);
+  });
+
+  it("n'inclut pas les notes des périodes précédentes si la période n'est pas cumulative", () => {
+    const values = averageOverTime(timelineSubjects, undefined, p2NonCumulative, [p1, p2NonCumulative]);
+    const lastValue = values[values.length - 1];
+
+    closeTo(lastValue, 20);
   });
 });

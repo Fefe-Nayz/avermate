@@ -6,6 +6,182 @@ import { Grade } from "@/types/grade";
 import { Year } from "@/types/year";
 import { YearReviewStats, AwardType } from "@/types/year-review";
 
+type CustomConfig = Map<string, { customCoefficient: number | null; includeChildren: boolean }>;
+
+type AverageContext = {
+  childrenByParentId: Map<string, Subject[]>;
+  averageCache: Map<string, number | null>;
+  displayContributorsCache: Map<string, Subject[]>;
+  customConfig?: CustomConfig;
+};
+
+function getChildrenByParentId(subjects: Subject[]): Map<string, Subject[]> {
+  const childrenByParentId = new Map<string, Subject[]>();
+
+  for (const subject of subjects) {
+    if (!subject.parentId) continue;
+
+    const currentChildren = childrenByParentId.get(subject.parentId) ?? [];
+    currentChildren.push(subject);
+    childrenByParentId.set(subject.parentId, currentChildren);
+  }
+
+  return childrenByParentId;
+}
+
+function toSubjectCoefficient(coefficient: number | null | undefined): number {
+  return (coefficient ?? 100) / 100;
+}
+
+function toGradeCoefficient(coefficient: number | null | undefined): number {
+  return (coefficient ?? 100) / 100;
+}
+
+function getCustomOrDefaultSubjectCoefficient(
+  subject: Subject,
+  customConfig?: CustomConfig
+): number {
+  if (!customConfig) {
+    return toSubjectCoefficient(subject.coefficient);
+  }
+
+  const customEntry = customConfig.get(subject.id);
+  if (!customEntry || customEntry.customCoefficient === null) {
+    return toSubjectCoefficient(subject.coefficient);
+  }
+
+  return customEntry.customCoefficient;
+}
+
+function collectDisplayContributors(displaySubject: Subject, context: AverageContext): Subject[] {
+  const cached = context.displayContributorsCache.get(displaySubject.id);
+  if (cached) return cached;
+
+  const contributors: Subject[] = [];
+  const directChildren = context.childrenByParentId.get(displaySubject.id) ?? [];
+
+  for (const child of directChildren) {
+    if (child.isDisplaySubject) {
+      contributors.push(...collectDisplayContributors(child, context));
+      continue;
+    }
+
+    contributors.push(child);
+  }
+
+  context.displayContributorsCache.set(displaySubject.id, contributors);
+  return contributors;
+}
+
+function getContributingChildren(subject: Subject, context: AverageContext): Subject[] {
+  const directChildren = context.childrenByParentId.get(subject.id) ?? [];
+  const contributors: Subject[] = [];
+
+  for (const child of directChildren) {
+    if (child.isDisplaySubject) {
+      contributors.push(...collectDisplayContributors(child, context));
+      continue;
+    }
+
+    contributors.push(child);
+  }
+
+  return contributors;
+}
+
+function computeSubjectAverage(subject: Subject, context: AverageContext): number | null {
+  const cached = context.averageCache.get(subject.id);
+  if (cached !== undefined) return cached;
+
+  let totalWeightedPercentages = 0;
+  let totalCoefficients = 0;
+
+  for (const grade of subject.grades ?? []) {
+    if (!grade.outOf) continue;
+
+    const gradeCoefficient = toGradeCoefficient(grade.coefficient);
+    const percentage = grade.value / grade.outOf;
+
+    totalWeightedPercentages += percentage * gradeCoefficient;
+    totalCoefficients += gradeCoefficient;
+  }
+
+  const contributingChildren = getContributingChildren(subject, context);
+
+  for (const child of contributingChildren) {
+    const childAverage = computeSubjectAverage(child, context);
+    if (childAverage === null) continue;
+
+    const childPercentage = childAverage / 20;
+    const childCoefficient = getCustomOrDefaultSubjectCoefficient(child, context.customConfig);
+
+    totalWeightedPercentages += childPercentage * childCoefficient;
+    totalCoefficients += childCoefficient;
+  }
+
+  const result = totalCoefficients === 0
+    ? null
+    : (totalWeightedPercentages / totalCoefficients) * 20;
+
+  context.averageCache.set(subject.id, result);
+  return result;
+}
+
+function createGlobalVirtualSubject(): Subject {
+  return {
+    id: "GLOBAL_SUBJECT_ID",
+    name: "GLOBAL_SUBJECT_NAME",
+    parentId: null,
+    yearId: "GLOBAL_SUBJECT_YEAR_ID",
+    coefficient: 100,
+    userId: "",
+    depth: 0,
+    grades: [],
+    isMainSubject: false,
+    isDisplaySubject: true,
+    createdAt: new Date(),
+  };
+}
+
+function computeAverageFromGlobalVirtualRoot(
+  subjects: Subject[],
+  customConfig?: CustomConfig
+): number | null {
+  const rootSubjects = subjects.filter((subject) => subject.parentId === null);
+  const otherSubjects = subjects.filter((subject) => subject.parentId !== null);
+  const globalSubject = createGlobalVirtualSubject();
+
+  const subjectTree: Subject[] = [
+    globalSubject,
+    ...rootSubjects.map((subject) => ({ ...subject, parentId: globalSubject.id })),
+    ...otherSubjects,
+  ];
+
+  const context: AverageContext = {
+    childrenByParentId: getChildrenByParentId(subjectTree),
+    averageCache: new Map<string, number | null>(),
+    displayContributorsCache: new Map<string, Subject[]>(),
+    customConfig,
+  };
+
+  return computeSubjectAverage(globalSubject, context);
+}
+
+function computeAverageForSingleSubject(
+  subject: Subject,
+  subjects: Subject[],
+  customConfig?: CustomConfig
+): number | null {
+  const context: AverageContext = {
+    childrenByParentId: getChildrenByParentId(subjects),
+    averageCache: new Map<string, number | null>(),
+    displayContributorsCache: new Map<string, Subject[]>(),
+    customConfig,
+  };
+
+  return computeSubjectAverage(subject, context);
+}
+
 /**
  * Calculates the average score for a specific subject or overall.
  *
@@ -38,31 +214,13 @@ export function average(
   }
 
   if (!subjectId) {
-    // This attempts to fix bad calculation with non-category nested subjects for global avg and it works
-    const rootSubjects = subjects.filter((s) => s.parentId === null);
-    const otherSubjects = subjects.filter((s) => s.parentId !== null);
-    const globalSubject = {
-      id: "GLOBAL_SUBJECT_ID",
-      name: "GLOBAL_SUBJECT_NAME",
-      parentId: null,
-      yearId: "GLOBAL_SUBJECT_YEAR_ID",
-      coefficient: 1,
-      userId: "",
-      depth: 0,
-      grades: [],
-      isMainSubject: false,
-      isDisplaySubject: true,
-      createdAt: new Date(),
-    }
-    const subjectsList = [globalSubject, ...rootSubjects.map((s) => ({ ...s, parentId: globalSubject.id })), ...otherSubjects];
-    return calculateAverageForSubject(globalSubject, subjectsList);
-    // return calculateAverageForSubjects(rootSubjects, subjects);
+    return computeAverageFromGlobalVirtualRoot(subjects);
   }
 
   const subject = subjects.find((s) => s.id === subjectId);
   if (!subject) return null;
 
-  return calculateAverageForSubject(subject, subjects);
+  return computeAverageForSingleSubject(subject, subjects);
 }
 
 /**
@@ -104,7 +262,7 @@ function calculateCustomAverage(
   }
 
   if (!subjectId) {
-    return calculateAverageForSubjects(includedSubjects, includedSubjects, customConfig, true);
+    return computeAverageFromGlobalVirtualRoot(includedSubjects, customConfig);
   }
 
   const targetSubject = includedSubjects.find((s) => s.id === subjectId);
@@ -112,7 +270,7 @@ function calculateCustomAverage(
     return null;
   }
 
-  return calculateAverageForSubject(targetSubject, includedSubjects, customConfig, true);
+  return computeAverageForSingleSubject(targetSubject, includedSubjects, customConfig);
 }
 
 /**
@@ -197,53 +355,7 @@ function calculateAverageForSubject(
   customConfig?: Map<string, { customCoefficient: number | null; includeChildren: boolean }>,
   isCustom = false
 ): number | null {
-  let totalWeightedPercentages = 0;
-  let totalCoefficients = 0;
-
-  if (subject.grades && subject.grades.length > 0) {
-    for (const grade of subject.grades) {
-      const gradeValue = grade.value / 100;
-      const outOf = grade.outOf / 100;
-      const gradeCoefficient = (grade.coefficient ?? 100) / 100;
-      if (outOf === 0) continue;
-
-      const percentage = gradeValue / outOf;
-      totalWeightedPercentages += percentage * gradeCoefficient;
-      totalCoefficients += gradeCoefficient;
-    }
-  }
-
-  let descendants: Subject[];
-  if (isCustom && customConfig) {
-    descendants = getAllIncludedDescendants(subject, subjects, customConfig);
-    descendants = descendants.filter((s) => s.id !== subject.id);
-  } else {
-    const allNonDisplaySubjects = getAllNonDisplaySubjects(subject, subjects);
-    descendants = allNonDisplaySubjects.filter((s) => s.id !== subject.id);
-  }
-
-  for (const child of descendants) {
-    const childAverage = calculateAverageForSubject(child, subjects, customConfig, isCustom);
-    if (childAverage !== null) {
-      const childPercentage = childAverage / 20;
-      let childCoefficient = (child.coefficient ?? 100) / 100;
-
-      if (customConfig && customConfig.has(child.id)) {
-        const cc = customConfig.get(child.id)!;
-        if (cc.customCoefficient !== null) {
-          childCoefficient = cc.customCoefficient;
-        }
-      }
-
-      totalWeightedPercentages += childPercentage * childCoefficient;
-      totalCoefficients += childCoefficient;
-    }
-  }
-
-  if (totalCoefficients === 0) return null;
-
-  const averagePercentage = totalWeightedPercentages / totalCoefficients;
-  return averagePercentage * 20;
+  return computeAverageForSingleSubject(subject, subjects, isCustom ? customConfig : undefined);
 }
 
 /**
@@ -282,38 +394,12 @@ function calculateAverageForSubjects(
   customConfig?: Map<string, { customCoefficient: number | null; includeChildren: boolean }>,
   isCustom = false
 ): number | null {
-  let totalWeightedPercentages = 0;
-  let totalCoefficients = 0;
-
-  for (const subject of subjects) {
-    let consideredSubjects: Subject[];
-    if (isCustom && customConfig) {
-      consideredSubjects = getAllIncludedDescendants(subject, allSubjects, customConfig);
-    } else {
-      consideredSubjects = getAllNonDisplaySubjects(subject, allSubjects);
-    }
-
-    for (const nonDisplaySubject of consideredSubjects) {
-      const subjectAverage = calculateAverageForSubject(nonDisplaySubject, allSubjects, customConfig, isCustom);
-      if (subjectAverage !== null) {
-        const subjectPercentage = subjectAverage / 20;
-        let subjectCoefficient = (nonDisplaySubject.coefficient ?? 100) / 100;
-        if (customConfig && customConfig.has(nonDisplaySubject.id)) {
-          const cc = customConfig.get(nonDisplaySubject.id)!;
-          if (cc.customCoefficient !== null) {
-            subjectCoefficient = cc.customCoefficient;
-          }
-        }
-        totalWeightedPercentages += subjectPercentage * subjectCoefficient;
-        totalCoefficients += subjectCoefficient;
-      }
-    }
+  if (!subjects.length || !allSubjects.length) {
+    return null;
   }
 
-  if (totalCoefficients === 0) return null;
-
-  const averagePercentage = totalWeightedPercentages / totalCoefficients;
-  return averagePercentage * 20;
+  const source = subjects === allSubjects ? allSubjects : subjects;
+  return computeAverageFromGlobalVirtualRoot(source, isCustom ? customConfig : undefined);
 }
 
 /**
@@ -882,44 +968,13 @@ export function averageOverTime(
   periods: Period[]
 ): (number | null)[] {
   const isFullYear = period.id === "full-year";
-  const isCumulative = !!period.isCumulative;
+  const relevantPeriods = getRelevantPeriodsForAverageTimeline(period, periods);
+  const relevantPeriodIds = relevantPeriods.map((entry) => entry.id);
 
-  // Sort all periods by start date
-  const sortedPeriods = [...periods].sort(
-    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-  );
-
-  // Find the index of our current period
-  const currentIndex = sortedPeriods.findIndex((p) => p.id === period.id);
-
-  // Build a list of relevant period IDs
-  let relevantPeriodIds: string[] = [];
-  if (isFullYear) {
-    // "full-year" => We'll ignore period IDs below
-  } else if (isCumulative && currentIndex !== -1) {
-    // Gather all period IDs from the first up to currentIndex
-    relevantPeriodIds = sortedPeriods.slice(0, currentIndex + 1).map((p) => p.id);
-  } else {
-    // Non-cumulative => just the current one
-    relevantPeriodIds = [period.id];
-  }
-
-  // Determine the earliest start date for cumulative
-  // or just the current period's start date if not cumulative
-  let earliestStart = new Date(period.startAt);
-  if (isCumulative && currentIndex !== -1) {
-    earliestStart = new Date(sortedPeriods[0].startAt);
-  }
-
-  // Now we have the final start/end to pass to findPeriodBounds, or we do manual clamping
-  // If you have logic in findPeriodBounds, you can adapt. We'll do a simplified approach:
-
-  // Force the start/end from the earliest relevant or from the period itself
   const normalizedStartDate = startOfDay(
-    isFullYear ? new Date(period.startAt) : earliestStart
+    getAverageTimelineStartDate(period, relevantPeriods, isFullYear)
   );
-  const periodEndAt = new Date(period.endAt);
-  const normalizedEndDate = periodEndAt.getTime() > Date.now() ? startOfDay(new Date()) : startOfDay(new Date(period.endAt));
+  const normalizedEndDate = getAverageTimelineEndDate(period);
 
   // Create the day-by-day date range
   const dates = createDateRange(normalizedStartDate, normalizedEndDate, 1);
@@ -997,6 +1052,53 @@ export function averageOverTime(
     // Compute the average (use your existing `average(subjectId, subjectsWithAdjustedGrades)`)
     return average(subjectId, subjectsWithAdjustedGrades);
   });
+}
+
+function sortPeriodsByStartAt(periods: Period[]): Period[] {
+  return [...periods].sort(
+    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+  );
+}
+
+function getRelevantPeriodsForAverageTimeline(currentPeriod: Period, periods: Period[]): Period[] {
+  const isFullYear = currentPeriod.id === "full-year";
+  if (isFullYear) {
+    return sortPeriodsByStartAt(periods);
+  }
+
+  const sortedPeriods = sortPeriodsByStartAt(periods);
+  const currentIndex = sortedPeriods.findIndex((period) => period.id === currentPeriod.id);
+
+  if (currentIndex === -1) {
+    return [currentPeriod];
+  }
+
+  if (!currentPeriod.isCumulative) {
+    return [sortedPeriods[currentIndex]];
+  }
+
+  return sortedPeriods.slice(0, currentIndex + 1);
+}
+
+function getAverageTimelineStartDate(
+  currentPeriod: Period,
+  relevantPeriods: Period[],
+  isFullYear: boolean
+): Date {
+  if (isFullYear || !currentPeriod.isCumulative || relevantPeriods.length === 0) {
+    return new Date(currentPeriod.startAt);
+  }
+
+  return new Date(relevantPeriods[0].startAt);
+}
+
+function getAverageTimelineEndDate(currentPeriod: Period): Date {
+  const periodEndAt = new Date(currentPeriod.endAt);
+  if (periodEndAt.getTime() > Date.now()) {
+    return startOfDay(new Date());
+  }
+
+  return startOfDay(periodEndAt);
 }
 
 
