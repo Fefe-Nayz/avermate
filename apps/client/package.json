@@ -6,8 +6,9 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
+    "test": "bun test",
     "lint": "next lint",
-    "postinstall": "patch-package"
+    "postinstall": "bun -e \"import {existsSync} from 'node:fs'; import {spawnSync} from 'node:child_process'; if (!existsSync('patches')) process.exit(0); const cmd = process.platform === 'win32' ? 'patch-package.cmd' : 'patch-package'; const r = spawnSync(cmd, { stdio: 'inherit', shell: true }); process.exit(r.status ?? 1);\""
   },
   "dependencies": {
     "@better-auth/infra": "^0.1.8",
