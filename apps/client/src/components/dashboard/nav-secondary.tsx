@@ -15,6 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { triggerHaptic } from "@/lib/haptics";
 import { usePathname } from "next/navigation";
 // import { useSearch } from "../search-context";
 import Link from "next/link";
@@ -45,7 +46,14 @@ export function NavSecondary({
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={isActive}>
-                  <Link href={item.url}>
+                  <Link
+                    href={item.url}
+                    onClick={() => {
+                      if (!isActive && item.url !== "#") {
+                        triggerHaptic("selection");
+                      }
+                    }}
+                  >
                     {IconComponent && <IconComponent />}
                     <span>{item.title}</span>
                   </Link>

@@ -10,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { triggerHaptic } from "@/lib/haptics";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -59,7 +60,14 @@ export function NavMain({
                   isActive={isActive}
                   asChild
                 >
-                  <Link href={item.url}>
+                  <Link
+                    href={item.url}
+                    onClick={() => {
+                      if (!isActive) {
+                        triggerHaptic("selection");
+                      }
+                    }}
+                  >
                     {IconComponent && <IconComponent />}
                     <span>{item.title}</span>
                   </Link>

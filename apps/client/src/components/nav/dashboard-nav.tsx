@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { triggerHaptic } from "@/lib/haptics";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -132,6 +133,11 @@ export default function DashboardNav() {
                   <Link
                     key={route.path}
                     href={route.path}
+                    onClick={() => {
+                      if (!isActive) {
+                        triggerHaptic("selection");
+                      }
+                    }}
                     className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   >
                     <div
@@ -157,7 +163,10 @@ export default function DashboardNav() {
             {activeId && (
               <AddGradeDialog yearId={activeId}>
                 <div className="flex flex-col items-center justify-center mx-0.5">
-                  <div className="flex flex-col items-center justify-center rounded-full transition-all size-[52px] bg-foreground text-background hover:bg-foreground/80">
+                  <div
+                    onClick={() => triggerHaptic("medium")}
+                    className="flex flex-col items-center justify-center rounded-full transition-all size-[52px] bg-foreground text-background hover:bg-foreground/80"
+                  >
                     <Plus className="size-5 flex-shrink-0" />
                   </div>
                 </div>
@@ -174,6 +183,11 @@ export default function DashboardNav() {
                   <Link
                     key={route.path}
                     href={route.path}
+                    onClick={() => {
+                      if (!isActive) {
+                        triggerHaptic("selection");
+                      }
+                    }}
                     className="flex flex-col items-center justify-center flex-1 basis-0 min-w-0 rounded-lg outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   >
                     <div
@@ -210,6 +224,11 @@ export default function DashboardNav() {
                 <li key={route.path}>
                   <Link
                     href={route.path}
+                    onClick={() => {
+                      if (!isActive) {
+                        triggerHaptic("selection");
+                      }
+                    }}
                     className={cn(
                       "flex items-center gap-2 p-4 text-sm border-b-2 border-transparent hover:border-black dark:hover:border-white transition-all outline-none focus-visible:rounded-md focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                       isActive && "border-black dark:border-white"
