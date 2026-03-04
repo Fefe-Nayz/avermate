@@ -11,7 +11,7 @@ export type Grade = {
   createdAt: string;
   userId: string;
   subject: PartialSubject;
-  periodId: string | null;
+  periodId: string;
   yearId: string;
 };
 
