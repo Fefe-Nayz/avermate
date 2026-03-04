@@ -37,6 +37,7 @@ function __ensureGlobalPopListener() {
 // Works by pushing a history entry when open, then consuming it on close or back.
 const Drawer = ({
   shouldScaleBackground = true,
+  repositionInputs = true,
   open: controlledOpen,
   defaultOpen,
   onOpenChange: userOnOpenChange,
@@ -160,6 +161,16 @@ const Drawer = ({
     return () => window.removeEventListener("click", onClickCapture, true);
   }, [isMobile, open]);
 
+  // Defensive cleanup when a drawer unmounts while still marked open.
+  React.useEffect(() => {
+    return () => {
+      unregisterCloseHandlerAndStack();
+      hasPushedRef.current = false;
+      skipProgrammaticPopOnCloseRef.current = false;
+      linkNavigationRef.current = false;
+    };
+  }, [unregisterCloseHandlerAndStack]);
+
   const handleOpenChange = React.useCallback(
     (next: boolean) => {
       // First, forward to user's handler
@@ -176,6 +187,7 @@ const Drawer = ({
   return (
     <DrawerPrimitive.Root
       shouldScaleBackground={shouldScaleBackground}
+      repositionInputs={repositionInputs}
       open={open}
       onOpenChange={handleOpenChange}
       defaultOpen={defaultOpen}

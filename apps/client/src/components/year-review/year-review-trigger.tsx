@@ -36,33 +36,32 @@ export function YearReviewTrigger() {
 
     // Check if we should show the popup
     useEffect(() => {
-        if (!reviewData?.hasData || !isDashboard) return;
+        if (!reviewData?.hasData || !isDashboard || !activeId || !yearEndDate) {
+            return;
+        }
+
+        if (Number.isNaN(yearEndDate.getTime())) {
+            return;
+        }
+
+        const revealAt = new Date(yearEndDate);
+        // Show only after the academic year fully ends (end of local day).
+        revealAt.setHours(23, 59, 59, 999);
+
+        if (new Date().getTime() < revealAt.getTime()) {
+            return;
+        }
 
         const dismissedKey = `year-review-dismissed-${activeId}`;
         const isDismissed = localStorage.getItem(dismissedKey);
 
-        const yearNum = parseInt(yearLabel);
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-
-        let shouldShow = false;
-
-        if (!isNaN(yearNum)) {
-            if (currentYear > yearNum) {
-                shouldShow = true;
-            } else if (currentYear === yearNum && currentMonth >= 11) {
-                shouldShow = true;
-            }
-        } else {
-            shouldShow = true;
+        if (isDismissed) {
+            return;
         }
 
-        if (shouldShow && !isDismissed) {
-            const timer = setTimeout(() => setShowPopup(true), 2000);
-            return () => clearTimeout(timer);
-        }
-    }, [reviewData, activeId, yearLabel, isDashboard]);
+        const timer = setTimeout(() => setShowPopup(true), 2000);
+        return () => clearTimeout(timer);
+    }, [reviewData?.hasData, isDashboard, activeId, yearEndDate]);
 
     const handleDismiss = () => {
         setShowPopup(false);
