@@ -36,7 +36,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { Check, ChevronsUpDown } from "lucide-react";

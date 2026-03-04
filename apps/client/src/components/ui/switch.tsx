@@ -3,12 +3,29 @@
 import * as React from "react"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 
+import { type AppHapticPreset, triggerHaptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+
+type SwitchProps = React.ComponentProps<typeof SwitchPrimitive.Root> & {
+  haptic?: AppHapticPreset | false
+}
 
 function Switch({
   className,
+  haptic = "light",
+  onCheckedChange,
   ...props
-}: React.ComponentProps<typeof SwitchPrimitive.Root>) {
+}: SwitchProps) {
+  const handleCheckedChange: React.ComponentProps<
+    typeof SwitchPrimitive.Root
+  >["onCheckedChange"] = (checked) => {
+    if (haptic) {
+      triggerHaptic(haptic)
+    }
+
+    onCheckedChange?.(checked)
+  }
+
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
@@ -16,6 +33,7 @@ function Switch({
         "peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/50 dark:data-[state=unchecked]:bg-input/80 inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
+      onCheckedChange={handleCheckedChange}
       {...props}
     >
       <SwitchPrimitive.Thumb

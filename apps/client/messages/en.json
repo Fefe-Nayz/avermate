@@ -502,6 +502,12 @@
         "autoZoomYAxis": "Auto-zoom Y-axis",
         "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin."
       },
+      "Haptics": {
+        "title": "Haptics",
+        "description": "Control vibration feedback for interactions and outcomes.",
+        "enableHaptics": "Enable haptic feedback",
+        "enableHapticsDescription": "Use subtle vibrations for key actions, selection changes, and success or error outcomes."
+      },
       "UserId": {
         "label": "Current user ID",
         "copyButton": "Copy user ID",

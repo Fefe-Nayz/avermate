@@ -49,7 +49,7 @@ import {
 } from "@/components/ui/popover";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { handleError } from "@/utils/error-utils";

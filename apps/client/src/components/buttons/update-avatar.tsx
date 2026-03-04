@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { UploadButton as OriginalUploadButton } from "@/components/buttons/upload-button";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { authClient } from "@/lib/auth";
 import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";

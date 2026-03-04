@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "bun test",
-    "lint": "next lint",
+    "lint": "eslint src",
     "postinstall": "bun -e \"import {existsSync} from 'node:fs'; import {spawnSync} from 'node:child_process'; if (!existsSync('patches')) process.exit(0); const cmd = process.platform === 'win32' ? 'patch-package.cmd' : 'patch-package'; const r = spawnSync(cmd, { stdio: 'inherit', shell: true }); process.exit(r.status ?? 1);\""
   },
   "dependencies": {
@@ -97,7 +97,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.183.1",
-    "eslint": "^10.0.2",
+    "eslint": "^9.0.0",
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.1",

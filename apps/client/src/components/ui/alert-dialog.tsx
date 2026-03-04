@@ -3,6 +3,7 @@
 import * as React from "react"
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
+import { type AppHapticPreset, triggerHaptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
@@ -13,10 +14,26 @@ function AlertDialog({
 }
 
 function AlertDialogTrigger({
+  haptic = "warning",
+  onClick,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Trigger> & {
+  haptic?: AppHapticPreset | false
+}) {
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    if (haptic) {
+      triggerHaptic(haptic)
+    }
+
+    onClick?.(event)
+  }
+
   return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
+    <AlertDialogPrimitive.Trigger
+      data-slot="alert-dialog-trigger"
+      onClick={handleClick}
+      {...props}
+    />
   )
 }
 
@@ -120,11 +137,24 @@ function AlertDialogDescription({
 
 function AlertDialogAction({
   className,
+  haptic = "heavy",
+  onClick,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  haptic?: AppHapticPreset | false
+}) {
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    if (haptic) {
+      triggerHaptic(haptic)
+    }
+
+    onClick?.(event)
+  }
+
   return (
     <AlertDialogPrimitive.Action
       className={cn(buttonVariants(), className)}
+      onClick={handleClick}
       {...props}
     />
   )
@@ -132,11 +162,24 @@ function AlertDialogAction({
 
 function AlertDialogCancel({
   className,
+  haptic = false,
+  onClick,
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel> & {
+  haptic?: AppHapticPreset | false
+}) {
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    if (haptic) {
+      triggerHaptic(haptic)
+    }
+
+    onClick?.(event)
+  }
+
   return (
     <AlertDialogPrimitive.Cancel
       className={cn(buttonVariants({ variant: "outline" }), className)}
+      onClick={handleClick}
       {...props}
     />
   )

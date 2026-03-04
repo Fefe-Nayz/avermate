@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { apiClient } from "@/lib/api";
 import { Grade, PartialGrade } from "@/types/grade";
 import { TrashIcon } from "@heroicons/react/24/outline";

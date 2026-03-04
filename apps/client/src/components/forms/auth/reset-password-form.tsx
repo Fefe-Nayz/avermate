@@ -16,7 +16,7 @@ import {
   InputOTPSlot,
   InputOTPSeparator,
 } from "@/components/ui/input-otp";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { authClient } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { handleError } from "@/utils/error-utils";

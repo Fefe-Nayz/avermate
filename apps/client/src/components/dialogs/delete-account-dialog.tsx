@@ -1,6 +1,6 @@
 "use client";
 
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { authClient } from "@/lib/auth";
 import { QueryClient, useMutation } from "@tanstack/react-query";
 import { User } from "better-auth/types";

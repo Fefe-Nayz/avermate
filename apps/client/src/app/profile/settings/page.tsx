@@ -1,6 +1,7 @@
 import { ThemeSection } from "./theme-section";
 import { LanguageSection } from "./language-section";
 import { ChartSettingsSection } from "./chart-settings-section";
+import { HapticsSection } from "./haptics-section";
 import { SeasonalThemesSection } from "./seasonal-themes-section";
 import { UserIdSection } from "./user-id-section";
 
@@ -10,6 +11,7 @@ export default function SettingsPage() {
       <ThemeSection />
       <LanguageSection />
       <ChartSettingsSection />
+      <HapticsSection />
       <SeasonalThemesSection />
       <UserIdSection />
       {/* USE YEAR WORKSPACE SETTINGS NOW */}

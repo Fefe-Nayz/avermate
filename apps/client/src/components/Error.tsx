@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
 import { handleError } from "@/utils/error-utils";

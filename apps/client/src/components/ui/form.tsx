@@ -11,12 +11,47 @@ import {
   type ControllerProps,
   type FieldPath,
   type FieldValues,
+  type FormProviderProps,
 } from "react-hook-form"
 
+import { triggerHaptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 
-const Form = FormProvider
+function FormHapticsListener() {
+  const { formState } = useFormContext()
+  const previousSubmitCountRef = React.useRef(formState.submitCount)
+
+  React.useEffect(() => {
+    if (formState.submitCount === previousSubmitCountRef.current) {
+      return
+    }
+
+    previousSubmitCountRef.current = formState.submitCount
+
+    if (Object.keys(formState.errors).length > 0) {
+      triggerHaptic("error")
+    }
+  }, [formState.errors, formState.submitCount])
+
+  return null
+}
+
+function Form<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = unknown,
+  TTransformedValues = TFieldValues,
+>({
+  children,
+  ...props
+}: FormProviderProps<TFieldValues, TContext, TTransformedValues>) {
+  return (
+    <FormProvider<TFieldValues, TContext, TTransformedValues> {...props}>
+      <FormHapticsListener />
+      {children}
+    </FormProvider>
+  )
+}
 
 type FormFieldContextValue<
   TFieldValues extends FieldValues = FieldValues,

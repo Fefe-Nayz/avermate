@@ -504,6 +504,12 @@
         "autoZoomYAxis": "Zoom automatique de l'axe Y",
         "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge."
       },
+      "Haptics": {
+        "title": "Retour haptique",
+        "description": "Contrôlez les vibrations pour les interactions et les résultats.",
+        "enableHaptics": "Activer le retour haptique",
+        "enableHapticsDescription": "Utilisez de légères vibrations pour les actions importantes, les changements de selection et les succes ou erreurs."
+      },
       "UserId": {
         "label": "Identifiant utilisateur actuel",
         "copyButton": "Copier l'identifiant",

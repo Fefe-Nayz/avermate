@@ -41,7 +41,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 // Import components from the previous version
 import EarlyBirdBadge from "@/components/buttons/account/early-bird-badge";

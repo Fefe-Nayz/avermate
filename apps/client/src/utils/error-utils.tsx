@@ -1,5 +1,5 @@
 import { HTTPError } from "ky";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 export function handleError(
   error: unknown,
