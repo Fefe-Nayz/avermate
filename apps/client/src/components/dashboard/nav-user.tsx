@@ -49,13 +49,20 @@ import FeedbackDialog from "@/components/dialogs/feedback-dialog";
 import ThemeSwitchButton from "@/components/buttons/theme-switch-button";
 import SignOutButton from "@/components/buttons/sign-out-button";
 
+const isUnauthorizedSessionError = (error: unknown): error is { status: number } => {
+  if (typeof error !== "object" || error === null) return false;
+  if (!("status" in error)) return false;
+
+  return (error as { status: number }).status === 401;
+};
+
 export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
   const { isMobile } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
   const t = useTranslations("Header.Dropdown");
 
-  const { data, isPending } = authClient.useSession();
+  const { data, error, isPending } = authClient.useSession();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -65,21 +72,25 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
   useEffect(() => {
     if (isPending) return;
 
-    // Skip check if there's no data but we're in the process of signing out
-    if (!data && !localStorage.getItem("isSigningOut")) {
-      router.push("/auth/sign-in");
+    if (!data) {
+      // Skip toast if we're explicitly signing out.
+      if (localStorage.getItem("isSigningOut")) {
+        router.push("/auth/sign-in");
+        return;
+      }
 
+      // On mobile resume, Better Auth can transiently return null data on
+      // request errors. Redirect only on a definitive unauthorized response.
+      if (!isUnauthorizedSessionError(error)) {
+        return;
+      }
+
+      router.push("/auth/sign-in");
       toast.error(t("notLoggedInTitle"), {
         description: t("notLoggedInDescription"),
       });
-
-      return;
-    } else if (!data && localStorage.getItem("isSigningOut")) {
-      router.push("/auth/sign-in");
       return;
     }
-
-    if (!data) return;
 
     // Not verified
     if (!data.user.emailVerified) {
@@ -97,7 +108,7 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
       router.push("/auth/verify-email");
       return;
     }
-  }, [data, isPending]);
+  }, [data, error, isPending, router, t]);
 
   if (!data && !isPending) {
     return (
