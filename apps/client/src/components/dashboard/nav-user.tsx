@@ -38,7 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth";
 import { useRouter, usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { toast } from "@/lib/toast";
@@ -62,30 +62,62 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
   const pathname = usePathname();
   const t = useTranslations("Header.Dropdown");
 
-  const { data, error, isPending } = authClient.useSession();
+  const { data, error, isPending, refetch } = authClient.useSession();
+  const hasResolvedAuthenticatedSession = useRef(false);
+  const hasRetriedMissingSession = useRef(false);
+  const hasRedirectedForMissingSession = useRef(false);
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
     localStorage.setItem("backFromSettings", currentPath);
   };
+  useEffect(() => {
+    if (data) {
+      hasResolvedAuthenticatedSession.current = true;
+      hasRetriedMissingSession.current = false;
+      hasRedirectedForMissingSession.current = false;
+    }
+  }, [data]);
 
   useEffect(() => {
-    if (isPending) return;
+    if (!isPending || data) return;
+
+    const timeout = window.setTimeout(() => {
+      void refetch();
+    }, 6000);
+
+    return () => window.clearTimeout(timeout);
+  }, [data, isPending, refetch]);
+
+  useEffect(() => {
+    if (isPending || hasRedirectedForMissingSession.current) return;
 
     if (!data) {
       // Skip toast if we're explicitly signing out.
       if (localStorage.getItem("isSigningOut")) {
-        router.push("/auth/sign-in");
+        hasRedirectedForMissingSession.current = true;
+        router.replace("/auth/sign-in");
         return;
       }
 
-      // On mobile resume, Better Auth can transiently return null data on
-      // request errors. Redirect only on a definitive unauthorized response.
-      if (!isUnauthorizedSessionError(error)) {
+      const isUnauthorized = isUnauthorizedSessionError(error);
+      const hadSessionBefore = hasResolvedAuthenticatedSession.current;
+
+      // Preserve mobile resume behavior: don't force-logout on transient non-401
+      // failures when we already had an authenticated session.
+      if (hadSessionBefore && !isUnauthorized) {
         return;
       }
 
-      router.push("/auth/sign-in");
+      // Retry once before redirecting to avoid false negatives on first fetch.
+      if (!hasRetriedMissingSession.current) {
+        hasRetriedMissingSession.current = true;
+        void refetch();
+        return;
+      }
+
+      hasRedirectedForMissingSession.current = true;
+      router.replace("/auth/sign-in");
       toast.error(t("notLoggedInTitle"), {
         description: t("notLoggedInDescription"),
       });
@@ -105,10 +137,10 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
         }),
       });
 
-      router.push("/auth/verify-email");
+      router.replace("/auth/verify-email");
       return;
     }
-  }, [data, error, isPending, router, t]);
+  }, [data, error, isPending, refetch, router, t]);
 
   if (!data && !isPending) {
     return (
@@ -320,3 +352,4 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
     </SidebarMenu>
   );
 }
+

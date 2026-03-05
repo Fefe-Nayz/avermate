@@ -43,9 +43,9 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
 
   if (isPeriodPending) {
     return (
-      <Card className={"w-full"}>
+      <Card className="w-full">
         <div className="flex flex-col gap-6">
-          <CardHeader className="pb-0">
+          <CardHeader>
             <CardTitle>
               <Skeleton className="w-36 h-6" />
             </CardTitle>
@@ -78,7 +78,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end border-t py-4 px-6">
+              <div className="flex justify-end border-t px-6 pt-6 pb-0">
                 <AddPeriodDialog yearId={yearId}>
                   <Button disabled>
                     <PlusCircleIcon className="size-4" />
@@ -100,7 +100,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
   if (period.length === 0) {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
-        <PeriodEmptyState yearId={yearId} className="mx-6 mb-6" />
+        <PeriodEmptyState yearId={yearId} className="mx-6" />
       </ProfileSection>
     );
   }
@@ -145,7 +145,7 @@ export const PeriodsSection = ({ yearId }: { yearId: string }) => {
             </div>
           ))}
         </div>
-        <div className="flex justify-end border-t py-4 px-6">
+        <div className="flex justify-end border-t px-6 pt-6 pb-0">
           <AddPeriodDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4" />

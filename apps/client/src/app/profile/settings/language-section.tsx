@@ -61,7 +61,7 @@ export const LanguageSection = () => {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
-          <div className="px-6 grid gap-4 pb-4">
+          <div className="px-6 grid gap-4">
             <SelectDrawer disabled>
               <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
                 {/* Loading state - show placeholder */}
@@ -83,7 +83,7 @@ export const LanguageSection = () => {
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
-        <div className="px-6 grid gap-4 pb-4">
+        <div className="px-6 grid gap-4">
           <SelectDrawer onValueChange={changeLanguage} value={language}>
             <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
               {language === "system" ? t("system") : language === "en" ? t("english") : t("french")}

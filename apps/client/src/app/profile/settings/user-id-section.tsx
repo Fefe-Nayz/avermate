@@ -90,7 +90,7 @@ export const UserIdSection = () => {
           description={tDeveloper("description")}
         >
           <div className="flex flex-col gap-4">
-            <div className="px-6 grid gap-4 pb-4">
+            <div className="px-6 grid gap-4">
               <div className="rounded-md border p-3">
                 <p className="text-sm text-muted-foreground">{t("label")}</p>
                 <p className="mt-1 break-all font-mono text-xs sm:text-sm">

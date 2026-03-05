@@ -21,7 +21,7 @@ export default function EmailSection() {
     return (
       <Card className="w-full">
         <div className="flex flex-col gap-6">
-          <CardHeader className="pb-0">
+          <CardHeader>
             <div>
               <Skeleton className="w-36 h-6" />
             </div>
@@ -39,7 +39,7 @@ export default function EmailSection() {
                   </div>
                 </form>
               </div>
-              <div className="flex justify-end border-t py-4 px-6">
+              <div className="flex justify-end border-t px-6 pt-6 pb-0">
                 <Button type="submit" disabled={isPending}>
                   {t("save")}
                 </Button>

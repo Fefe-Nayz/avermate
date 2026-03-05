@@ -46,7 +46,7 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 pb-8 md:pb-0">
         <div className="flex flex-col gap-4">
           {Array.from({ length: 5 }).map((_, index) => (
             <div
@@ -198,7 +198,7 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
       ));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-8 md:pb-0">
       <div className="text-center md:text-left">
         <h2 className="text-2xl font-bold text-primary">{t("title")}</h2>
       </div>
@@ -216,3 +216,5 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
     </div>
   );
 }
+
+

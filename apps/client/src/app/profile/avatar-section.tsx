@@ -6,14 +6,12 @@ import DeleteAvatar from "@/components/buttons/delete-avatar";
 import { Trash2Icon } from "lucide-react";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth";
-import ProfileSection from "./profile-section";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 
@@ -22,11 +20,12 @@ export default function AvatarSection() {
   const { data: session, isPending } = authClient.useSession();
 
   // Check if user has a custom avatar (not the default Vercel avatar)
-  const hasCustomAvatar = session?.user?.image && !session.user.image.includes("avatar.vercel.sh");
+  const hasCustomAvatar =
+    session?.user?.image && !session.user.image.includes("avatar.vercel.sh");
 
   if (isPending) {
     return (
-      <Card className="flex flex-col gap-6">
+      <Card className="flex flex-col gap-6 pb-0">
         <div className="flex justify-between">
           <CardHeader className="pb-0 grow self-start">
             <CardTitle>
@@ -40,17 +39,20 @@ export default function AvatarSection() {
             <Skeleton className="size-20 rounded-full" />
           </div>
         </div>
-        <div className="flex flex-col justify-between items-center gap-4 rounded-b-xl md:flex-row border-t bg-muted dark:bg-transparent py-5 px-6">
-          <div className="text-center text-muted-foreground text-xs md:text-start md:text-sm">
-            <Skeleton className="w-full md:w-48 h-4" />
+        <div className="flex flex-col justify-between items-end gap-4 rounded-b-xl border-t bg-card px-6 py-5 md:flex-row md:items-center">
+          <div className="w-full text-right text-muted-foreground text-xs md:w-auto md:text-start md:text-sm">
+            <Skeleton className="w-full md:w-48 h-4 md:ms-0 md:me-auto" />
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full justify-end gap-2 md:w-auto">
             <Button type="submit" disabled={isPending}>
               {t("changeAvatar")}
             </Button>
-            <Button variant="outline"
+            <Button
+              variant="outline"
               size="icon"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isPending}>
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              disabled={isPending}
+            >
               <Trash2Icon className="size-4 " />
             </Button>
           </div>
@@ -63,9 +65,7 @@ export default function AvatarSection() {
     <Card className="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border shadow-sm w-full pb-0 text-start">
       <div className="flex justify-between">
         <CardHeader className="pb-0 grow self-start">
-          <CardTitle className="font-semibold">
-            {t("title")}
-          </CardTitle>
+          <CardTitle className="font-semibold">{t("title")}</CardTitle>
           <CardDescription className="text-muted-foreground">
             {t("description")}
           </CardDescription>
@@ -80,11 +80,11 @@ export default function AvatarSection() {
           />
         </div>
       </div>
-      <div className="flex flex-col justify-between items-center gap-4 rounded-b-xl md:flex-row border-t bg-muted dark:bg-transparent py-5 px-6">
-        <div className="text-center text-muted-foreground text-xs md:text-start md:text-sm">
+      <div className="flex flex-col justify-between items-end gap-4 rounded-b-xl border-t bg-card px-6 py-5 md:flex-row md:items-center">
+        <div className="w-full text-right text-muted-foreground text-xs md:w-auto md:text-start md:text-sm">
           {t("allowedFormats")}
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full justify-end gap-2 md:w-auto">
           <UpdateAvatar />
           <DeleteAvatar disabled={!hasCustomAvatar} />
         </div>

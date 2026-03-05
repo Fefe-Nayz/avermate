@@ -85,7 +85,7 @@ export const UpdateNameForm = ({ defaultName }: { defaultName: string }) => {
           </form>
         </Form>
       </div>
-      <div className="flex justify-end border-t py-4 px-6">
+      <div className="flex justify-end border-t px-6 pt-6 pb-0">
         <Button
           type="submit"
           disabled={isPending}

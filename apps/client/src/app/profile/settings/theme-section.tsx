@@ -27,7 +27,7 @@ export const ThemeSection = () => {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
         <div className="flex flex-col gap-4">
-          <div className="px-6 grid gap-4 pb-4">
+          <div className="px-6 grid gap-4">
             <SelectDrawer disabled>
               <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
                 {/* Loading state - show placeholder */}
@@ -49,7 +49,7 @@ export const ThemeSection = () => {
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
-        <div className="px-6 grid gap-4 pb-4">
+        <div className="px-6 grid gap-4">
           <SelectDrawer onValueChange={setTheme} value={theme} defaultValue={theme}>
             <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
               {theme === "system" ? t("system") : theme === "light" ? t("light") : t("dark")}

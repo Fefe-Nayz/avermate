@@ -50,7 +50,7 @@ export default function PeriodsStep({ yearId }: PeriodsStepProps) {
 
   if (periodsIsPending) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 pb-8 md:pb-0">
         {Array.from({ length: 3 }).map((_, index) => (
           <div
             key={index}
@@ -109,7 +109,7 @@ export default function PeriodsStep({ yearId }: PeriodsStepProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 pb-8 md:pb-0">
       <div className="text-center md:text-left">
         <h2 className="text-2xl font-bold text-primary">{t("title")}</h2>
       </div>
@@ -157,3 +157,4 @@ export default function PeriodsStep({ yearId }: PeriodsStepProps) {
     </div>
   );
 }
+

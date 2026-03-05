@@ -46,9 +46,9 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
 
   if (isAveragesPending || isSubjectsPending) {
     return (
-      <Card className={"w-full"}>
+      <Card className="w-full">
         <div className="flex flex-col gap-6">
-          <CardHeader className="pb-0">
+          <CardHeader>
             <CardTitle>
               <Skeleton className="w-36 h-6" />
             </CardTitle>
@@ -81,7 +81,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end border-t py-4 px-6">
+              <div className="flex justify-end border-t px-6 pt-6 pb-0">
                 <AddAverageDialog yearId={yearId}>
                   <Button disabled>
                     <PlusCircleIcon className="size-4" />
@@ -103,7 +103,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
   if (averages.length == 0) {
     return (
       <ProfileSection title={t("title")} description={t("description")}>
-        <CustomAverageEmptyState yearId={yearId} className="mx-6 mb-6" />
+        <CustomAverageEmptyState yearId={yearId} className="mx-6" />
       </ProfileSection>
     );
   }
@@ -152,7 +152,7 @@ export const CustomAveragesSection = ({ yearId }: { yearId: string }) => {
             </div>
           ))}
         </div>
-        <div className="flex justify-end border-t py-4 px-6">
+        <div className="flex justify-end border-t px-6 pt-6 pb-0">
           <AddAverageDialog yearId={yearId}>
             <Button>
               <PlusCircleIcon className="size-4" />

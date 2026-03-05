@@ -87,7 +87,7 @@ export function UpdateYearDefaultOutOfForm({
 					</form>
 				</Form>
 			</div>
-			<div className="flex justify-end border-t py-4 px-6">
+			<div className="flex justify-end border-t px-6 pt-6 pb-0">
 				<Button type="submit" disabled={isPending} onClick={form.handleSubmit(onSubmit)}>
 					{isPending && <Loader2 className="animate-spin h-4 w-4 mr-2" />}
 					{t("SUBMIT_BUTTON_LABEL")}

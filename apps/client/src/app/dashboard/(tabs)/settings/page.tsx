@@ -35,10 +35,29 @@ export default function YearSettingsPage() {
 
             {showSkeleton ? (
                 <div className="flex flex-col gap-4 md:gap-8">
+                    {/* Year Recap Section */}
+                    <Card className="w-full gap-0">
+                        <CardHeader className="pb-6">
+                            <div className="flex items-start gap-3">
+                                <Skeleton className="size-8 rounded-lg" />
+                                <div className="space-y-2">
+                                    <Skeleton className="h-4 w-40" />
+                                    <Skeleton className="h-4 w-56" />
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="border-t px-6 pt-6 pb-0">
+                            <div className="flex items-center justify-between gap-4">
+                                <Skeleton className="h-4 w-56" />
+                                <Skeleton className="h-9 w-28 rounded-md" />
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     {/* Update Year - Name */}
                     <Card className="w-full">
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <div>
                                     <Skeleton className="w-36 h-6" />
                                 </div>
@@ -56,7 +75,7 @@ export default function YearSettingsPage() {
                                             </div>
                                         </form>
                                     </div>
-                                    <div className="flex justify-end border-t py-4 px-6">
+                                    <div className="flex justify-end border-t px-6 pt-6 pb-0">
                                         <Button type="submit" disabled>
                                             {t("save")}
                                         </Button>
@@ -69,7 +88,7 @@ export default function YearSettingsPage() {
                     {/* Update Year - Default Out Of */}
                     <Card className="w-full">
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <div>
                                     <Skeleton className="w-36 h-6" />
                                 </div>
@@ -87,7 +106,7 @@ export default function YearSettingsPage() {
                                             </div>
                                         </form>
                                     </div>
-                                    <div className="flex justify-end border-t py-4 px-6">
+                                    <div className="flex justify-end border-t px-6 pt-6 pb-0">
                                         <Button type="submit" disabled>
                                             {t("save")}
                                         </Button>
@@ -100,7 +119,7 @@ export default function YearSettingsPage() {
                     {/* Update Year - Date Range */}
                     <Card className="w-full">
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <div>
                                     <Skeleton className="w-36 h-6" />
                                 </div>
@@ -118,7 +137,7 @@ export default function YearSettingsPage() {
                                             </div>
                                         </form>
                                     </div>
-                                    <div className="flex justify-end border-t py-4 px-6">
+                                    <div className="flex justify-end border-t px-6 pt-6 pb-0">
                                         <Button type="submit" disabled>
                                             {t("save")}
                                         </Button>
@@ -131,7 +150,7 @@ export default function YearSettingsPage() {
                     {/* Periods Section */}
                     <Card className={"w-full"}>
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <CardTitle>
                                     <Skeleton className="w-36 h-6" />
                                 </CardTitle>
@@ -164,7 +183,7 @@ export default function YearSettingsPage() {
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="flex justify-end border-t py-4 px-6">
+                                    <div className="flex justify-end border-t px-6 pt-6 pb-0">
                                         <Button disabled>
                                             <PlusCircleIcon className="size-4 mr-2" />
                                             {t("addPeriod")}
@@ -178,7 +197,7 @@ export default function YearSettingsPage() {
                     {/* Custom Averages Section */}
                     <Card className={"w-full"}>
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <CardTitle>
                                     <Skeleton className="w-36 h-6" />
                                 </CardTitle>
@@ -211,7 +230,7 @@ export default function YearSettingsPage() {
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="flex justify-end border-t py-4 px-6">
+                                    <div className="flex justify-end border-t px-6 pt-6 pb-0">
                                         <Button disabled>
                                             <PlusCircleIcon className="size-4 mr-2" />
                                             {t("addCustomAverage")}
@@ -225,7 +244,7 @@ export default function YearSettingsPage() {
                     {/* Grades Section */}
                     <Card className="w-full">
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <CardTitle>
                                     <Skeleton className="w-44 h-6" />
                                 </CardTitle>
@@ -233,7 +252,7 @@ export default function YearSettingsPage() {
                                     <Skeleton className="w-72 h-4" />
                                 </CardDescription>
                             </CardHeader>
-                            <div className="justify-end flex rounded-b-xl px-6 py-4 border-t">
+                            <div className="justify-end flex rounded-b-xl border-t px-6 pt-6 pb-0">
                                 <Button disabled>
                                     <PlusCircleIcon className="size-4 mr-2" />
                                     {t("GRADES_SECTION_BUTTON")}
@@ -242,9 +261,9 @@ export default function YearSettingsPage() {
                         </div>
                     </Card>
                     {/* Delete Year Section */}
-                    <Card className="w-full border-destructive/40">
+                    <Card className="w-full border-destructive/40 gap-0">
                         <div className="flex flex-col gap-6">
-                            <CardHeader className="pb-0">
+                            <CardHeader className="pb-6">
                                 <CardTitle>
                                     <Skeleton className="w-44 h-6" />
                                 </CardTitle>
@@ -252,7 +271,7 @@ export default function YearSettingsPage() {
                                     <Skeleton className="w-72 h-4" />
                                 </CardDescription>
                             </CardHeader>
-                            <div className="justify-end flex rounded-b-xl px-6 py-4 border-t border-destructive/30 bg-destructive/10">
+                            <div className="justify-end flex rounded-b-xl border-t border-destructive/30 bg-destructive/10 px-6 pt-6 pb-6 -mb-6">
                                 <Button disabled variant="destructive">{t("DELETE_YEAR_DIALOG_OPEN_BUTTON")}</Button>
                             </div>
                         </div>
@@ -273,3 +292,4 @@ export default function YearSettingsPage() {
         </main>
     )
 }
+

@@ -124,7 +124,7 @@ export default function LinkedAccount() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="px-6 grid gap-4 pb-6">
+            <div className="px-6 grid gap-4">
               {/* Password row skeleton */}
               <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-row items-center gap-3 px-4 py-3 w-full">
                 <Skeleton className="size-4 rounded-full" />
@@ -159,7 +159,7 @@ export default function LinkedAccount() {
   return (
     <ProfileSection title={t("title")} description={t("description")}>
       {/* Card body (mirrors CustomAveragesSection padding/structure) */}
-      <div className="px-6 grid gap-4 pb-6">
+      <div className="px-6 grid gap-4">
         {/* Password row */}
         <Collapsible open={isPasswordResetOpen} onOpenChange={setIsPasswordResetOpen}>
           <div className="bg-card text-card-foreground flex rounded-xl border shadow-sm flex-col">

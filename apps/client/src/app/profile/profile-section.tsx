@@ -21,14 +21,12 @@ export default function ProfileSection({
 }) {
   return (
     <Card className={cn("w-full", className)}>
-      <div className="flex flex-col gap-6">
-        <CardHeader className="pb-0">
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </CardHeader>
+      <CardHeader className="pb-0">
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
 
-        <CardContent className="p-0">{children}</CardContent>
-      </div>
+      <CardContent className="p-0">{children}</CardContent>
     </Card>
   );
 }

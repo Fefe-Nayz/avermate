@@ -10,7 +10,7 @@ import {
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { LuGithub } from "react-icons/lu";
 import SignOutButton from "../sign-out-button";
 import ThemeSwitchButton from "../theme-switch-button";
@@ -33,7 +33,7 @@ export default function AccountDropdown() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data, error, isPending } = authClient.useSession();
+  const { data, error, isPending, refetch } = authClient.useSession();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -42,24 +42,56 @@ export default function AccountDropdown() {
 
   const isOnboarding = pathname.startsWith("/onboarding");
   const triggerClassName = "group p-2 rounded-full outline-none";
+  const hasResolvedAuthenticatedSession = useRef(false);
+  const hasRetriedMissingSession = useRef(false);
+  const hasRedirectedForMissingSession = useRef(false);
 
   useEffect(() => {
-    if (isPending) return;
+    if (data) {
+      hasResolvedAuthenticatedSession.current = true;
+      hasRetriedMissingSession.current = false;
+      hasRedirectedForMissingSession.current = false;
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (!isPending || data) return;
+
+    const timeout = window.setTimeout(() => {
+      void refetch();
+    }, 6000);
+
+    return () => window.clearTimeout(timeout);
+  }, [data, isPending, refetch]);
+
+  useEffect(() => {
+    if (isPending || hasRedirectedForMissingSession.current) return;
 
     if (!data) {
-      // Skip toast if we're explicitly signing out.
       if (localStorage.getItem("isSigningOut")) {
-        router.push("/auth/sign-in");
+        hasRedirectedForMissingSession.current = true;
+        router.replace("/auth/sign-in");
         return;
       }
 
-      // On mobile resume, Better Auth can transiently return null data on
-      // request errors. Redirect only on a definitive unauthorized response.
-      if (!isUnauthorizedSessionError(error)) {
+      const isUnauthorized = isUnauthorizedSessionError(error);
+      const hadSessionBefore = hasResolvedAuthenticatedSession.current;
+
+      // Preserve mobile resume behavior: don't force-logout on transient non-401
+      // failures when we already had an authenticated session.
+      if (hadSessionBefore && !isUnauthorized) {
         return;
       }
 
-      router.push("/auth/sign-in");
+      // Retry once before redirecting to avoid false negatives on first fetch.
+      if (!hasRetriedMissingSession.current) {
+        hasRetriedMissingSession.current = true;
+        void refetch();
+        return;
+      }
+
+      hasRedirectedForMissingSession.current = true;
+      router.replace("/auth/sign-in");
       toast.error(t("notLoggedInTitle"), {
         description: t("notLoggedInDescription"),
       });
@@ -80,10 +112,10 @@ export default function AccountDropdown() {
         }),
       });
 
-      router.push("/auth/verify-email");
+      router.replace("/auth/verify-email");
       return;
     }
-  }, [data, error, isPending, pathname, router, t]);
+  }, [data, error, isPending, refetch, router, t]);
 
   if (!data && !isPending) {
     return (
@@ -243,3 +275,4 @@ export default function AccountDropdown() {
     </DropDrawer>
   );
 }
+

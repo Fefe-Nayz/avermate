@@ -87,7 +87,6 @@ export default function SessionList() {
             ))}
           </div>
         </CardContent>
-        <div className="items-center px-6 [.border-t]:pt-6 flex flex-col justify-between gap-4 rounded-b-xl md:flex-row bg-muted dark:bg-transparent"></div>
       </Card>
     );
   }
@@ -174,7 +173,7 @@ export default function SessionList() {
           ))}
         </div>
       </CardContent>
-      <div className="items-center px-6 [.border-t]:pt-6 flex flex-col justify-between gap-4 rounded-b-xl md:flex-row bg-muted dark:bg-transparent"></div>
     </Card>
   );
 }
+
