@@ -9,7 +9,7 @@ import {
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { averageOverTime, getChildren } from "@/utils/average";
-import { calculateYAxisDomain } from "@/utils/chart";
+import { calculateTrendLineData, calculateYAxisDomain } from "@/utils/chart";
 import React from "react";
 import {
   CartesianGrid,
@@ -24,6 +24,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
+import { useChartSettings } from "@/hooks/use-chart-settings";
 
 function getCumulativeStartDate(
   periods: Period[],
@@ -190,6 +191,8 @@ export default function SubjectAverageChart({
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.SubjectAverageChart");
   const formatDates = useFormatDates(formatter);
+  const { settings, isLoaded } = useChartSettings();
+  const showTrendLine = isLoaded && settings.showTrendLine;
 
   const { childrenAverage, chartData, chartConfig, yAxisDomain } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
@@ -224,12 +227,20 @@ export default function SubjectAverageChart({
 
     const mainAverages = averageOverTime(subjects, subjectId, period, periods);
 
-    const chartData = dates.map((date, index) => ({
+    const baseChartData = dates.map((date, index) => ({
       date: date.toISOString(),
       average: mainAverages[index],
       ...Object.fromEntries(
         childrenAverage.map((child) => [child.id, child.average[index]])
       ),
+    }));
+
+    const trendLine = showTrendLine
+      ? calculateTrendLineData(baseChartData, "average")
+      : baseChartData.map(() => null);
+    const chartData = baseChartData.map((point, index) => ({
+      ...point,
+      trendLine: trendLine[index],
     }));
 
     const chartConfig = {
@@ -249,7 +260,13 @@ export default function SubjectAverageChart({
     };
 
     // Calculate Y-axis domain based on all numeric values in chartData
-    const yAxisDomain = calculateYAxisDomain(chartData, 0, 20, "all");
+    const yAxisDomain = calculateYAxisDomain(
+      chartData,
+      0,
+      20,
+      "all",
+      settings.autoZoomYAxis
+    );
 
     return { childrenAverage, chartData, chartConfig, yAxisDomain };
   })();
@@ -311,6 +328,19 @@ export default function SubjectAverageChart({
               dot={false}
               activeDot={false}
             />
+
+            {showTrendLine ? (
+              <Line
+                dataKey="trendLine"
+                type="monotone"
+                stroke="#64748b"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                connectNulls={true}
+                dot={false}
+                activeDot={false}
+              />
+            ) : null}
 
             {childrenAverage?.map((child) => (
               <SubjectActiveDot

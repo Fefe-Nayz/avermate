@@ -500,7 +500,9 @@
         "title": "Chart Settings",
         "description": "Customize how your charts are displayed.",
         "autoZoomYAxis": "Auto-zoom Y-axis",
-        "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin."
+        "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin.",
+        "showTrendLine": "Show trend line",
+        "showTrendLineDescription": "Overlay a dashed trend line on your average and grade charts to highlight the overall direction of your results."
       },
       "Haptics": {
         "title": "Haptics",

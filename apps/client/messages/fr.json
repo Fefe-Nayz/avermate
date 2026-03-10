@@ -502,7 +502,9 @@
         "title": "Paramètres des graphiques",
         "description": "Personnalisez l'affichage de vos graphiques.",
         "autoZoomYAxis": "Zoom automatique de l'axe Y",
-        "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge."
+        "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge.",
+        "showTrendLine": "Afficher la ligne de tendance",
+        "showTrendLineDescription": "Ajoute une ligne de tendance en pointillés sur les graphiques de moyennes et de notes pour visualiser la direction globale de vos résultats."
       },
       "Haptics": {
         "title": "Retour haptique",

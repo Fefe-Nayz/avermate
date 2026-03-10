@@ -16,12 +16,13 @@ import { Separator } from "@/components/ui/separator";
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { average, averageOverTime } from "@/utils/average";
-import { calculateYAxisDomain } from "@/utils/chart";
+import { calculateTrendLineData, calculateYAxisDomain } from "@/utils/chart";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
@@ -40,6 +41,7 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { GradeEmptyState } from "../empty-states/grade-empty-state";
+import { useChartSettings } from "@/hooks/use-chart-settings";
 
 export interface TickProps {
   x?: number | string;
@@ -169,6 +171,8 @@ export default function GlobalAverageChart({
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.GlobalAverageChart");
   const formatDates = useFormatDates(formatter);
+  const { settings, isLoaded } = useChartSettings();
+  const showTrendLine = isLoaded && settings.showTrendLine;
 
   // Calculate the start and end dates
   const periodEndAt = new Date(period.endAt);
@@ -189,9 +193,17 @@ export default function GlobalAverageChart({
   // Calculate the average grades over time
   const averages = averageOverTime(subjects, undefined, period, periods);
 
-  const chartData = dates.map((date, index) => ({
+  const baseChartData = dates.map((date, index) => ({
     date: date.toISOString(),
     average: averages[index],
+  }));
+
+  const trendLine = showTrendLine
+    ? calculateTrendLineData(baseChartData, "average")
+    : baseChartData.map(() => null);
+  const chartData = baseChartData.map((point, index) => ({
+    ...point,
+    trendLine: trendLine[index],
   }));
 
   const chartConfig = {
@@ -202,7 +214,13 @@ export default function GlobalAverageChart({
   };
 
   // Calculate Y-axis domain based on settings
-  const yAxisDomain = calculateYAxisDomain(chartData);
+  const yAxisDomain = calculateYAxisDomain(
+    chartData,
+    0,
+    20,
+    ["average", "trendLine"],
+    settings.autoZoomYAxis
+  );
 
   // Calculate average grades per subject for radar chart
   const subjectAverages = subjects
@@ -332,6 +350,18 @@ export default function GlobalAverageChart({
                   dot={false}
                   activeDot={false}
                 />
+                {showTrendLine ? (
+                  <Line
+                    dataKey="trendLine"
+                    type="monotone"
+                    stroke="#64748b"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    connectNulls={true}
+                    dot={false}
+                    activeDot={false}
+                  />
+                ) : null}
                 <GlobalActiveDot chartData={chartData} />
               </AreaChart>
             </ChartContainer>

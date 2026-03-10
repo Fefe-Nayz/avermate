@@ -9,7 +9,7 @@ import {
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { getChildren } from "@/utils/average";
-import { calculateYAxisDomain } from "@/utils/chart";
+import { calculateTrendLineData, calculateYAxisDomain } from "@/utils/chart";
 import React from "react";
 import {
     CartesianGrid,
@@ -25,6 +25,7 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { PartialGrade } from "@/types/grade";
+import { useChartSettings } from "@/hooks/use-chart-settings";
 
 function getCumulativeStartDate(
     periods: Period[],
@@ -78,6 +79,7 @@ interface GradeDataPoint {
     subjectName: string | null;
     value: number | null;
     outOf: number | null;
+    [key: string]: string | number | null;
 }
 
 interface ChartConfig {
@@ -177,6 +179,8 @@ export default function SubjectGradesChart({
     const formatter = useFormatter();
     const t = useTranslations("Dashboard.Charts.SubjectGradesChart");
     const formatDates = useFormatDates(formatter);
+    const { settings, isLoaded } = useChartSettings();
+    const showTrendLine = isLoaded && settings.showTrendLine;
 
     const { chartData, chartConfig, yAxisDomain, hasGrades } = React.useMemo(() => {
         const childrenIds = getChildren(subjects, subjectId);
@@ -227,7 +231,7 @@ export default function SubjectGradesChart({
         }
 
         // Create chart data with grades mapped to dates
-        const chartData: GradeDataPoint[] = dates.map((date) => {
+        const baseChartData: GradeDataPoint[] = dates.map((date) => {
             const dateStr = date.toISOString().split("T")[0];
             const gradeOnDate = allGrades.find(
                 (g) => new Date(g.passedAt).toISOString().split("T")[0] === dateStr
@@ -254,6 +258,14 @@ export default function SubjectGradesChart({
             };
         });
 
+        const trendLine = showTrendLine
+            ? calculateTrendLineData(baseChartData, "grade")
+            : baseChartData.map(() => null);
+        const chartData = baseChartData.map((point, index) => ({
+            ...point,
+            trendLine: trendLine[index],
+        }));
+
         const chartConfig: ChartConfig = {
             grade: {
                 label: t("grades"),
@@ -261,15 +273,16 @@ export default function SubjectGradesChart({
             },
         };
 
-        // Calculate Y-axis domain (normalized to 20)
         const yAxisDomain = calculateYAxisDomain(
-            chartData.filter((d) => d.grade !== null).map((d) => ({ average: d.grade })),
+            chartData,
             0,
-            20
+            20,
+            ["grade", "trendLine"],
+            settings.autoZoomYAxis
         );
 
         return { chartData, chartConfig, yAxisDomain, hasGrades };
-    }, [subjectId, period, subjects, periods, t]);
+    }, [period, periods, settings.autoZoomYAxis, showTrendLine, subjectId, subjects, t]);
 
     if (!hasGrades) {
         return (
@@ -324,6 +337,18 @@ export default function SubjectGradesChart({
                             dot={{ r: 4, fill: "#2662d9", strokeWidth: 0 }}
                             activeDot={false}
                         />
+                        {showTrendLine ? (
+                            <Line
+                                dataKey="trendLine"
+                                type="monotone"
+                                stroke="#64748b"
+                                strokeWidth={2}
+                                strokeDasharray="6 4"
+                                connectNulls={true}
+                                dot={false}
+                                activeDot={false}
+                            />
+                        ) : null}
                         <GradeActiveDot chartData={chartData} />
                     </LineChart>
                 </ResponsiveContainer>

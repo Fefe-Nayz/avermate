@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 
 export interface ChartSettings {
   autoZoomYAxis: boolean;
+  showTrendLine: boolean;
 }
 
 const defaultSettings: ChartSettings = {
   autoZoomYAxis: true,
+  showTrendLine: false,
 };
 
 const SETTINGS_STORAGE_KEY = "chart-settings";

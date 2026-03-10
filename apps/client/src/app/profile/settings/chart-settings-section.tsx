@@ -30,6 +30,23 @@ export const ChartSettingsSection = () => {
               }
             />
           </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">
+                {t("showTrendLine")}
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                {t("showTrendLineDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.showTrendLine}
+              onCheckedChange={(checked) =>
+                updateSettings({ showTrendLine: checked })
+              }
+            />
+          </div>
         </div>
       </div>
     </ProfileSection>
