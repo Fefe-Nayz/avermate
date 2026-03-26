@@ -40,12 +40,16 @@ type Props = React.ComponentPropsWithRef<"canvas"> & {
 export type ConfettiRef = Api | null;
 
 const ConfettiContext = createContext<Api>({} as Api);
+const DEFAULT_GLOBAL_OPTIONS: ConfettiGlobalOptions = {
+  resize: true,
+  useWorker: true,
+};
 
 // Define component first
 const ConfettiComponent = forwardRef<ConfettiRef, Props>((props, ref) => {
   const {
     options,
-    globalOptions = { resize: true, useWorker: true },
+    globalOptions = DEFAULT_GLOBAL_OPTIONS,
     manualstart = false,
     children,
     ...rest
