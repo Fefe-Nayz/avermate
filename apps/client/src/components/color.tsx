@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Viewport } from "next";
+import {
+  getUserSettingsStorageEventName,
+  isMokattamThemeActive,
+  readLocalUserSettings,
+} from "@/lib/user-settings-storage";
 
 export const viewport: Viewport = {
   themeColor: [
@@ -13,10 +18,40 @@ export const viewport: Viewport = {
 
 export function ThemeColorMetaTag() {
   const { theme } = useTheme(); // could be "dark", "light", "system", etc.
+  const [mokattamActive, setMokattamActive] = useState(false);
+
+  useEffect(() => {
+    const syncMokattamTheme = () => {
+      setMokattamActive(
+        isMokattamThemeActive(readLocalUserSettings().settings)
+      );
+    };
+
+    syncMokattamTheme();
+    window.addEventListener(getUserSettingsStorageEventName(), syncMokattamTheme);
+
+    return () => {
+      window.removeEventListener(
+        getUserSettingsStorageEventName(),
+        syncMokattamTheme
+      );
+    };
+  }, []);
 
   useEffect(() => {
     const metaTag = document.querySelector('meta[name="theme-color"]');
     if (!metaTag) return;
+
+    if (mokattamActive) {
+      const osPrefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches;
+      const isDarkTheme =
+        theme === "dark" || (theme !== "light" && osPrefersDark);
+
+      metaTag.setAttribute("content", isDarkTheme ? "#9a3412" : "#f97316");
+      return;
+    }
 
     if (theme === "light") {
       metaTag.setAttribute("content", "#ffffff");
@@ -29,7 +64,7 @@ export function ThemeColorMetaTag() {
       ).matches;
       metaTag.setAttribute("content", osPrefersDark ? "#09090b" : "#ffffff");
     }
-  }, [theme]);
+  }, [mokattamActive, theme]);
 
   return null;
 }

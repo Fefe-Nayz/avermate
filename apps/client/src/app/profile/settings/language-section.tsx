@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import Cookies from "js-cookie";
-import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 import {
   SelectDrawer,
   SelectDrawerContent,
@@ -13,46 +11,34 @@ import {
 } from "@/components/ui/selectdrawer";
 import ProfileSection from "../profile-section";
 import { useTranslations } from "next-intl";
+import { useUpdateUserSettings } from "@/hooks/use-user-settings";
+import { readLocalUserSettings, updateLocalUserSettings } from "@/lib/user-settings-storage";
+import { type AppLanguage } from "@/types/user-settings";
 
 export const LanguageSection = () => {
   const t = useTranslations("Settings.Settings.Language");
 
   const router = useRouter();
-  const pathname = usePathname();
+  const updateUserSettings = useUpdateUserSettings();
 
-  // We'll keep an internal state of the user's chosen language
-  // so the Select shows the right value without waiting for SSR.
-  const [language, setLanguage] = useState("system");
+  const [language, setLanguage] = useState<AppLanguage>("system");
   const [mounted, setMounted] = useState(false);
 
-  // On mount, read the cookie and set initial state
   useEffect(() => {
-    const cookieLocale = Cookies.get("locale");
-    if (cookieLocale) {
-      setLanguage(cookieLocale);
-    } else {
-      // If no cookie is set, the user is in "system" mode (auto-detect).
-      setLanguage("system");
-    }
-    // This ensures we only render the UI after the client is hydrated
+    setLanguage(readLocalUserSettings().settings.language);
     setMounted(true);
   }, []);
 
-  // Called when the user selects a language in the dropdown
   const changeLanguage = (lang: string) => {
-    if (lang === "system") {
-      // "System" => delete the cookie to let the server detect from headers
-      Cookies.remove("locale");
-    } else {
-      // Otherwise store the chosen locale
-      Cookies.set("locale", lang);
-    }
-    setLanguage(lang);
+    const nextLanguage = lang as AppLanguage;
+    setLanguage(nextLanguage);
+    updateLocalUserSettings({
+      language: nextLanguage,
+    });
+    updateUserSettings.mutate({
+      language: nextLanguage,
+    });
 
-    // On mobile, the drawer consumes a history entry on close which can
-    // race with router.refresh(). Defer the refresh slightly so it runs
-    // after the drawer finishes closing, ensuring the new locale applies
-    // immediately without requiring a manual reload.
     setTimeout(() => router.refresh(), 50);
   };
 

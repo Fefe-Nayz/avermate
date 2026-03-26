@@ -1,62 +1,75 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useUpdateUserSettings } from "./use-user-settings";
+import {
+  getUserSettingsStorageEventName,
+  readLocalUserSettings,
+  updateLocalUserSettings,
+} from "@/lib/user-settings-storage";
+import {
+  defaultChartSettings,
+  type ChartSettings,
+} from "@/types/user-settings";
 
-export interface ChartSettings {
-  autoZoomYAxis: boolean;
-  showTrendLine: boolean;
-}
-
-const defaultSettings: ChartSettings = {
-  autoZoomYAxis: true,
-  showTrendLine: false,
+type UpdateChartSettingsOptions = {
+  persist?: boolean;
 };
 
-const SETTINGS_STORAGE_KEY = "chart-settings";
-
-function getStoredSettings(): ChartSettings {
-  if (typeof window === "undefined") {
-    return defaultSettings;
-  }
-
-  try {
-    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) };
-    }
-  } catch (error) {
-    console.warn("Failed to parse chart settings from localStorage:", error);
-  }
-
-  return defaultSettings;
-}
-
-function saveSettings(settings: ChartSettings): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch (error) {
-    console.warn("Failed to save chart settings to localStorage:", error);
-  }
-}
-
 export function useChartSettings() {
-  const [settings, setSettings] = useState<ChartSettings>(defaultSettings);
+  const [settings, setSettings] = useState<ChartSettings>(defaultChartSettings);
   const [isLoaded, setIsLoaded] = useState(false);
+  const updateUserSettings = useUpdateUserSettings();
 
   useEffect(() => {
-    const storedSettings = getStoredSettings();
+    const storedSettings = readLocalUserSettings().settings.chartSettings;
+    const handleSettingsChange = (event: Event) => {
+      const nextSettings = (event as CustomEvent<{
+        settings: {
+          chartSettings: ChartSettings;
+        };
+      }>).detail?.settings?.chartSettings;
+
+      if (nextSettings) {
+        setSettings(nextSettings);
+      }
+    };
+
     setSettings(storedSettings);
     setIsLoaded(true);
+
+    window.addEventListener(getUserSettingsStorageEventName(), handleSettingsChange);
+
+    return () => {
+      window.removeEventListener(
+        getUserSettingsStorageEventName(),
+        handleSettingsChange
+      );
+    };
   }, []);
 
-  const updateSettings = (updates: Partial<ChartSettings>) => {
-    const newSettings = { ...settings, ...updates };
+  const updateSettings = (
+    updates: Partial<ChartSettings>,
+    options?: UpdateChartSettingsOptions
+  ) => {
+    const nextSettings: ChartSettings = {
+      autoZoomYAxis: updates.autoZoomYAxis ?? settings.autoZoomYAxis,
+      showTrendLine: updates.showTrendLine ?? settings.showTrendLine,
+      trendLineSubdivisions:
+        updates.trendLineSubdivisions ?? settings.trendLineSubdivisions,
+    };
+
+    const newSettings = updateLocalUserSettings({
+      chartSettings: nextSettings,
+    }).chartSettings;
+
     setSettings(newSettings);
-    saveSettings(newSettings);
+
+    if (options?.persist !== false) {
+      updateUserSettings.mutate({
+        chartSettings: updates,
+      });
+    }
   };
 
   return {
@@ -67,5 +80,5 @@ export function useChartSettings() {
 }
 
 export function getChartSettings(): ChartSettings {
-  return getStoredSettings();
+  return readLocalUserSettings().settings.chartSettings;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { useTimelineModeState } from "@/hooks/use-timeline-mode";
 import {
   ChartContainer,
   ChartTooltip,
@@ -9,7 +10,11 @@ import {
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
 import { averageOverTime, getChildren } from "@/utils/average";
-import { calculateTrendLineData, calculateYAxisDomain } from "@/utils/chart";
+import {
+  calculateTrendLineData,
+  calculateYAxisDomain,
+  getVisibleChartEndDate,
+} from "@/utils/chart";
 import React from "react";
 import {
   CartesianGrid,
@@ -193,11 +198,13 @@ export default function SubjectAverageChart({
   const formatDates = useFormatDates(formatter);
   const { settings, isLoaded } = useChartSettings();
   const showTrendLine = isLoaded && settings.showTrendLine;
+  const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
 
   const { childrenAverage, chartData, chartConfig, yAxisDomain } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
-    const endDate =
-      new Date() < new Date(period.endAt) ? new Date() : new Date(period.endAt);
+    const endDate = getVisibleChartEndDate(new Date(period.endAt), {
+      snapshotDate: timelineEnabled ? snapshotDate : null,
+    });
     const startDate = getCumulativeStartDate(periods, period);
 
     const dates: Date[] = [];
@@ -236,7 +243,7 @@ export default function SubjectAverageChart({
     }));
 
     const trendLine = showTrendLine
-      ? calculateTrendLineData(baseChartData, "average")
+      ? calculateTrendLineData(baseChartData, "average", { subdivisions: settings.trendLineSubdivisions })
       : baseChartData.map(() => null);
     const chartData = baseChartData.map((point, index) => ({
       ...point,

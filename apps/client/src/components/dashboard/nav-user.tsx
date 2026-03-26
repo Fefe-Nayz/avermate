@@ -42,9 +42,11 @@ import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { toast } from "@/lib/toast";
+import { useUserSettings } from "@/hooks/use-user-settings";
 
 // Import components from the previous version
 import EarlyBirdBadge from "@/components/buttons/account/early-bird-badge";
+import MokattamBadge from "@/components/buttons/account/mokattam-badge";
 import FeedbackDialog from "@/components/dialogs/feedback-dialog";
 import ThemeSwitchButton from "@/components/buttons/theme-switch-button";
 import SignOutButton from "@/components/buttons/sign-out-button";
@@ -63,6 +65,7 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
   const t = useTranslations("Header.Dropdown");
 
   const { data, error, isPending, refetch } = authClient.useSession();
+  const { data: userSettings } = useUserSettings(Boolean(data?.user?.id));
   const hasResolvedAuthenticatedSession = useRef(false);
   const hasRetriedMissingSession = useRef(false);
   const hasRedirectedForMissingSession = useRef(false);
@@ -233,6 +236,7 @@ export function NavUser({ iconOnly = false }: { iconOnly?: boolean }) {
                   new Date(data?.user.createdAt).getTime() < 1756677600000 && (
                     <EarlyBirdBadge />
                   )}
+                {userSettings?.mokattamThemeAvailable ? <MokattamBadge /> : null}
               </h1>
               <p className="text-muted-foreground font-medium ">
                 {data?.user?.email}

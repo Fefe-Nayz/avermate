@@ -1,10 +1,12 @@
 "use client";
 
+import { GradesTimeline } from "@/components/dashboard/grades-timeline";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import subjectLoader from "@/components/skeleton/subject-loader";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { usePeriods } from "@/hooks/use-periods";
 import { useSubjects } from "@/hooks/use-subjects";
+import { useTimelineMode } from "@/hooks/use-timeline-mode";
 import { apiClient } from "@/lib/api";
 import { Subject } from "@/types/subject";
 import {
@@ -14,8 +16,13 @@ import {
   subjectImpact,
   getParents,
 } from "@/utils/average";
+import {
+  clampDateToRange,
+  countSubjectGrades,
+  getGradesTimelineBounds,
+} from "@/utils/grades-timeline";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SubjectWrapper from "./subject-wrapper";
 import { useTranslations } from "next-intl";
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
@@ -33,6 +40,8 @@ export default function SubjectPage() {
 
   const isVirtualSubject =
     subjectId.startsWith("ca") || subjectId === "general-average";
+  const { isActive: timelineEnabled, snapshotDate, updateTimelineDate } =
+    useTimelineMode();
 
   const router = useRouter();
 
@@ -96,6 +105,54 @@ export default function SubjectPage() {
     isPending: isCustomAveragesPending,
   } = useCustomAverages(yearId);
 
+  const sortedPeriods = useMemo(
+    () =>
+      period
+        ?.slice()
+        .sort(
+          (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+        ) ?? [],
+    [period]
+  );
+  const timelineBounds = useMemo(() => {
+    if (!year) {
+      return null;
+    }
+
+    return getGradesTimelineBounds({
+      year,
+      selectedTab: periodId,
+      periods: sortedPeriods,
+    });
+  }, [periodId, sortedPeriods, year]);
+  const effectiveTimelineDate = useMemo(() => {
+    if (!timelineEnabled || !snapshotDate || !timelineBounds) {
+      return null;
+    }
+
+    return clampDateToRange(
+      snapshotDate,
+      timelineBounds.minDate,
+      timelineBounds.maxDate
+    );
+  }, [snapshotDate, timelineBounds, timelineEnabled]);
+
+  useEffect(() => {
+    if (!timelineEnabled || !timelineBounds || !snapshotDate || !effectiveTimelineDate) {
+      return;
+    }
+
+    if (effectiveTimelineDate.getTime() !== snapshotDate.getTime()) {
+      updateTimelineDate(effectiveTimelineDate);
+    }
+  }, [
+    effectiveTimelineDate,
+    snapshotDate,
+    timelineBounds,
+    timelineEnabled,
+    updateTimelineDate,
+  ]);
+
   if (
     isPeriodError ||
     organizedSubjectsIsError ||
@@ -115,12 +172,6 @@ export default function SubjectPage() {
   ) {
     return <div>{subjectLoader(t)}</div>;
   }
-
-  const sortedPeriods = period
-    ?.slice()
-    .sort(
-      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-    );
 
   const periods =
     periodId === "full-year"
@@ -203,9 +254,11 @@ export default function SubjectPage() {
     return impact?.difference || null;
   };
 
+  const currentSubjects = subjectsToGive();
+
   return (
     <SubjectWrapper
-      subjects={subjectsToGive()}
+      subjects={currentSubjects}
       subject={
         isVirtualSubject
           ? subjectVirtual()
@@ -217,6 +270,17 @@ export default function SubjectPage() {
       onBack={handleBack}
       periods={sortedPeriods}
       grades={subject?.grades || []}
+      timelineControl={
+        timelineEnabled && timelineBounds && effectiveTimelineDate ? (
+          <GradesTimeline
+            minDate={timelineBounds.minDate}
+            maxDate={timelineBounds.maxDate}
+            selectedDate={effectiveTimelineDate}
+            visibleGradesCount={countSubjectGrades(currentSubjects)}
+            onSelectedDateChange={updateTimelineDate}
+          />
+        ) : undefined
+      }
     />
   );
 }

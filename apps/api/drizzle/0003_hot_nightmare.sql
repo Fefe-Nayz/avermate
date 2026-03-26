@@ -1,0 +1,2 @@
+ALTER TABLE `user_settings` ADD `mokattam_theme_available` integer DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE `user_settings` ADD `mokattam_theme_enabled` integer DEFAULT false NOT NULL;

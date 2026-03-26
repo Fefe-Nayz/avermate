@@ -12,10 +12,12 @@ export default function RecentGradesList({
   recentGrades,
   period,
   yearId,
+  valueAnimationDelay = 0,
 }: {
   recentGrades: Grade[];
   period: Period;
   yearId: string;
+  valueAnimationDelay?: number;
 }) {
   const t = useTranslations("Dashboard.Cards.RecentGradesCard");
 
@@ -35,7 +37,12 @@ export default function RecentGradesList({
   return (
     <div className="grid grid-cols-1 gap-0.5 overflow-hidden min-w-0">
       {recentGrades.slice(0, 5).map((grade) => (
-        <RecentGradeItem key={grade.id} grade={grade} period={period} />
+        <RecentGradeItem
+          key={grade.id}
+          grade={grade}
+          period={period}
+          valueAnimationDelay={valueAnimationDelay}
+        />
       ))}
     </div>
   );

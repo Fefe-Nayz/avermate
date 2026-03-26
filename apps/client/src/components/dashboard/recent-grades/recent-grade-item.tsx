@@ -6,7 +6,15 @@ import GradeValue from "../grade-value";
 import { usePathname } from "next/navigation";
 import { Period } from "@/types/period";
 
-export default function RecentGradeItem({ grade, period }: { grade: Grade, period: Period }) {
+export default function RecentGradeItem({
+  grade,
+  period,
+  valueAnimationDelay = 0,
+}: {
+  grade: Grade;
+  period: Period;
+  valueAnimationDelay?: number;
+}) {
   const pathname = usePathname();
 
   const handleClick = () => {
@@ -25,7 +33,12 @@ export default function RecentGradeItem({ grade, period }: { grade: Grade, perio
           <p className="text-sm text-muted-foreground truncate">{grade.name}</p>
         </div>
         <div className="w-[60px] shrink-0 overflow-hidden">
-          <GradeValue value={grade.value} outOf={grade.outOf} size="sm" />
+          <GradeValue
+            value={grade.value}
+            outOf={grade.outOf}
+            size="sm"
+            delay={valueAnimationDelay}
+          />
         </div>
       </div>
     </Link>

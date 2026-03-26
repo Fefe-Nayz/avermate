@@ -15,8 +15,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Period } from "@/types/period";
 import { Subject } from "@/types/subject";
+import { useTimelineModeState } from "@/hooks/use-timeline-mode";
 import { average, averageOverTime } from "@/utils/average";
-import { calculateTrendLineData, calculateYAxisDomain } from "@/utils/chart";
+import {
+  calculateTrendLineData,
+  calculateYAxisDomain,
+  getVisibleChartEndDate,
+} from "@/utils/chart";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import {
   Area,
@@ -173,11 +178,12 @@ export default function GlobalAverageChart({
   const formatDates = useFormatDates(formatter);
   const { settings, isLoaded } = useChartSettings();
   const showTrendLine = isLoaded && settings.showTrendLine;
+  const { isActive: timelineEnabled, snapshotDate } = useTimelineModeState();
 
   // Calculate the start and end dates
-  const periodEndAt = new Date(period.endAt);
-  const endDate =
-    periodEndAt.getTime() >= Date.now() ? new Date() : periodEndAt;
+  const endDate = getVisibleChartEndDate(new Date(period.endAt), {
+    snapshotDate: timelineEnabled ? snapshotDate : null,
+  });
   const startDate = getCumulativeStartDate(periods, period);
 
   // Generate an array of dates
@@ -199,7 +205,7 @@ export default function GlobalAverageChart({
   }));
 
   const trendLine = showTrendLine
-    ? calculateTrendLineData(baseChartData, "average")
+    ? calculateTrendLineData(baseChartData, "average", { subdivisions: settings.trendLineSubdivisions })
     : baseChartData.map(() => null);
   const chartData = baseChartData.map((point, index) => ({
     ...point,

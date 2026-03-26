@@ -31,12 +31,14 @@ export default function DataCards({
   subjects,
   customAverages,
   periods,
+  valueAnimationDelay = 0,
 }: {
   yearDefaultOutOf: number;
   period: Period;
   subjects: Subject[];
   customAverages?: Average[];
   periods: Period[];
+  valueAnimationDelay?: number;
 }) {
   const t = useTranslations("Dashboard.Components.DataCards");
 
@@ -146,6 +148,7 @@ export default function DataCards({
             value={(average(undefined, subjects) || 0) * 100}
             outOf={yearDefaultOutOf}
             size="xl"
+            delay={valueAnimationDelay}
             isAverage={true}
           />
         ) : null}
@@ -205,7 +208,13 @@ export default function DataCards({
             icon={AcademicCapIcon}
             description={descriptionText}
           >
-            <GradeValue value={customVal * 100} outOf={yearDefaultOutOf} isAverage={true} size="xl" />
+            <GradeValue
+              value={customVal * 100}
+              outOf={yearDefaultOutOf}
+              isAverage={true}
+              size="xl"
+              delay={valueAnimationDelay}
+            />
           </DataCard>
         );
       })}
@@ -229,6 +238,7 @@ export default function DataCards({
             value={bestGrade.grade}
             outOf={bestGrade.outOf}
             size="xl"
+            delay={valueAnimationDelay}
           />
         )}
       </DataCard>
@@ -250,7 +260,13 @@ export default function DataCards({
         }
       >
         {bestSubjectAverage !== null && (
-          <GradeValue value={bestSubjectAverage * 100} outOf={yearDefaultOutOf} isAverage={true} size="xl" />
+          <GradeValue
+            value={bestSubjectAverage * 100}
+            outOf={yearDefaultOutOf}
+            isAverage={true}
+            size="xl"
+            delay={valueAnimationDelay}
+          />
         )}
       </DataCard>
 
@@ -272,6 +288,7 @@ export default function DataCards({
             value={worstGrade.grade}
             outOf={worstGrade.outOf}
             size="xl"
+            delay={valueAnimationDelay}
           />
         )}
       </DataCard>
@@ -297,6 +314,7 @@ export default function DataCards({
             outOf={yearDefaultOutOf}
             isAverage={true}
             size="xl"
+            delay={valueAnimationDelay}
           />
         )}
       </DataCard>

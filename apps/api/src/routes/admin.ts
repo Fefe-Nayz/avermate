@@ -6,13 +6,14 @@ import {
   periods,
   sessions,
   subjects,
+  userSettings,
   users,
   years,
 } from "@/db/schema";
 import { type Session, type User } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -42,10 +43,23 @@ const userParamSchema = z.object({
   userId: z.string().min(1).max(64),
 });
 
+const listUsersQuerySchema = z.object({
+  search: z.string().trim().max(120).optional().default(""),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
+const updateMokattamAccessSchema = z.object({
+  available: z.boolean(),
+});
+
 const configuredAdminUserIds = env.ADMIN_USER_IDS
   ?.split(",")
   .map((id) => id.trim())
   .filter(Boolean) ?? [];
+
+const defaultChartSettingsJson =
+  '{"autoZoomYAxis":true,"showTrendLine":false,"trendLineSubdivisions":1}';
 
 function parseRoleList(role: string | null | undefined): string[] {
   if (!role) {
@@ -79,6 +93,22 @@ function ensureAdminSession(session: { user: User; session: Session } | null) {
   if (!isAdminSession(session)) {
     throw new HTTPException(403);
   }
+}
+
+function buildUserSearchWhere(search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  if (!normalizedSearch) {
+    return undefined;
+  }
+
+  const pattern = `%${normalizedSearch}%`;
+
+  return or(
+    sql`lower(${users.name}) like ${pattern}`,
+    sql`lower(${users.email}) like ${pattern}`,
+    sql`lower(${users.id}) like ${pattern}`
+  );
 }
 
 function toDate(input: Date | string | number): Date {
@@ -504,6 +534,154 @@ app.get("/access", async (c) => {
     isAdmin: isAdminSession(session),
   });
 });
+
+app.get("/users", zValidator("query", listUsersQuerySchema), async (c) => {
+  const session = c.get("session");
+  ensureAdminSession(session);
+
+  const { search, limit, offset } = c.req.valid("query");
+  const searchWhere = buildUserSearchWhere(search);
+
+  const rows = await (
+    searchWhere
+      ? db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            image: users.avatarUrl,
+            emailVerified: users.emailVerified,
+            role: users.role,
+            banned: users.banned,
+            banReason: users.banReason,
+            banExpires: users.banExpires,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+            mokattamThemeAvailable: userSettings.mokattamThemeAvailable,
+            mokattamThemeEnabled: userSettings.mokattamThemeEnabled,
+          })
+          .from(users)
+          .leftJoin(userSettings, eq(userSettings.userId, users.id))
+          .where(searchWhere)
+      : db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            image: users.avatarUrl,
+            emailVerified: users.emailVerified,
+            role: users.role,
+            banned: users.banned,
+            banReason: users.banReason,
+            banExpires: users.banExpires,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+            mokattamThemeAvailable: userSettings.mokattamThemeAvailable,
+            mokattamThemeEnabled: userSettings.mokattamThemeEnabled,
+          })
+          .from(users)
+          .leftJoin(userSettings, eq(userSettings.userId, users.id))
+  )
+    .orderBy(desc(users.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  const total = searchWhere
+    ? await db.$count(users, searchWhere)
+    : await db.$count(users);
+
+  return c.json({
+    users: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      image: row.image,
+      emailVerified: row.emailVerified,
+      role: row.role,
+      banned: Boolean(row.banned),
+      banReason: row.banReason,
+      banExpires: row.banExpires,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      mokattamThemeAvailable: Boolean(row.mokattamThemeAvailable),
+      mokattamThemeEnabled: Boolean(
+        row.mokattamThemeAvailable && row.mokattamThemeEnabled
+      ),
+    })),
+    total,
+    limit,
+    offset,
+  });
+});
+
+app.patch(
+  "/users/:userId/mokattam-theme",
+  zValidator("param", userParamSchema),
+  zValidator("json", updateMokattamAccessSchema),
+  async (c) => {
+    const session = c.get("session");
+    ensureAdminSession(session);
+
+    const { userId } = c.req.valid("param");
+    const { available } = c.req.valid("json");
+
+    const targetUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!targetUser) {
+      throw new HTTPException(404);
+    }
+
+    const existingSettings = await db.query.userSettings.findFirst({
+      where: eq(userSettings.userId, userId),
+    });
+    const now = new Date();
+    const preserveCelebrationMarker =
+      available && Boolean(existingSettings?.mokattamThemeAvailable);
+
+    const values = {
+      userId,
+      theme: existingSettings?.theme ?? "system",
+      language: existingSettings?.language ?? "system",
+      chartSettings: existingSettings?.chartSettings ?? defaultChartSettingsJson,
+      seasonalThemesEnabled: existingSettings?.seasonalThemesEnabled ?? true,
+      seasonalTheme: existingSettings?.seasonalTheme ?? "none",
+      mokattamThemeAvailable: available,
+      mokattamThemeEnabled:
+        available && (existingSettings?.mokattamThemeEnabled ?? false),
+      mokattamThemeCelebrationSeenAt: preserveCelebrationMarker
+        ? existingSettings?.mokattamThemeCelebrationSeenAt ?? null
+        : null,
+      hapticsEnabled: existingSettings?.hapticsEnabled ?? true,
+      createdAt: existingSettings?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    const settings = await db
+      .insert(userSettings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          mokattamThemeAvailable: values.mokattamThemeAvailable,
+          mokattamThemeEnabled: values.mokattamThemeEnabled,
+          mokattamThemeCelebrationSeenAt: values.mokattamThemeCelebrationSeenAt,
+          updatedAt: values.updatedAt,
+        },
+      })
+      .returning()
+      .get();
+
+    return c.json({
+      userId,
+      mokattamThemeAvailable: Boolean(settings?.mokattamThemeAvailable),
+      mokattamThemeEnabled: Boolean(
+        settings?.mokattamThemeAvailable && settings?.mokattamThemeEnabled
+      ),
+    });
+  }
+);
 
 /**
  * Global admin overview

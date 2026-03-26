@@ -4,6 +4,7 @@ import ErrorStateCard from "@/components/skeleton/error-card";
 import gradeLoader from "@/components/skeleton/grade-loader";
 import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { useGrade } from "@/hooks/use-grade";
+import { useTimelineMode } from "@/hooks/use-timeline-mode";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import GradeWrapper from "./grade-wrapper";
@@ -30,6 +31,7 @@ export default function GradePage() {
   }
 
   const router = useRouter();
+  const { isActive: timelineEnabled, getTimelineHref } = useTimelineMode();
 
   const [returnUrl, setReturnUrl] = useState("/dashboard");
 
@@ -49,6 +51,14 @@ export default function GradePage() {
   };
 
   const { data: grade, isPending, isError } = useGrade(gradeId);
+
+  useEffect(() => {
+    if (!timelineEnabled || isPending || grade !== null) {
+      return;
+    }
+
+    router.replace(getTimelineHref("/dashboard/grades"));
+  }, [getTimelineHref, grade, isPending, router, timelineEnabled]);
 
   const {
     data: organizedSubjects,
@@ -96,6 +106,10 @@ export default function GradePage() {
     isPeriodPending
     // || true
   ) {
+    return <div>{gradeLoader(t)}</div>;
+  }
+
+  if (grade === null) {
     return <div>{gradeLoader(t)}</div>;
   }
 

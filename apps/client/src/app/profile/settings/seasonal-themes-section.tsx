@@ -16,6 +16,12 @@ import {
   SeasonalTheme,
   SEASONAL_THEMES,
 } from "@/components/april-fools/april-fools-theme-provider";
+import {
+  getUserSettingsStorageEventName,
+  readLocalUserSettings,
+  updateLocalUserSettings,
+} from "@/lib/user-settings-storage";
+import { useUpdateUserSettings } from "@/hooks/use-user-settings";
 
 // Define the theme configuration type
 type ThemeConfig = {
@@ -33,44 +39,58 @@ export const SeasonalThemesSection = () => {
   const [mounted, setMounted] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [selectedTheme, setSelectedTheme] = useState<SeasonalTheme>("none");
+  const updateUserSettings = useUpdateUserSettings();
 
   useEffect(() => {
+    const localSettings = readLocalUserSettings().settings;
+    const handleSettingsChange = (event: Event) => {
+      const nextSettings = (event as CustomEvent<{
+        settings: {
+          seasonalThemesEnabled: boolean;
+          seasonalTheme: SeasonalTheme;
+        };
+      }>).detail?.settings;
+
+      if (!nextSettings) {
+        return;
+      }
+
+      setEnabled(nextSettings.seasonalThemesEnabled);
+      setSelectedTheme(nextSettings.seasonalTheme);
+    };
+
     setMounted(true);
+    setEnabled(localSettings.seasonalThemesEnabled);
+    setSelectedTheme(localSettings.seasonalTheme);
 
-    // Load the current setting from localStorage
-    const stored = localStorage.getItem("seasonal-themes-enabled");
-    if (stored !== null) {
-      setEnabled(stored === "true");
-    }
+    window.addEventListener(getUserSettingsStorageEventName(), handleSettingsChange);
 
-    // Load the current forced theme from localStorage
-    const forcedTheme = localStorage.getItem(
-      "seasonal-theme-settings-force"
-    ) as SeasonalTheme;
-    if (forcedTheme && forcedTheme in SEASONAL_THEMES) {
-      setSelectedTheme(forcedTheme);
-    } else {
-      setSelectedTheme("none");
-    }
+    return () => {
+      window.removeEventListener(
+        getUserSettingsStorageEventName(),
+        handleSettingsChange
+      );
+    };
   }, []);
 
   const handleToggle = (checked: boolean) => {
     setEnabled(checked);
-    localStorage.setItem("seasonal-themes-enabled", checked.toString());
-
-    // Force a page reload to apply the change
-    window.location.reload();
+    updateLocalUserSettings({
+      seasonalThemesEnabled: checked,
+    });
+    updateUserSettings.mutate({
+      seasonalThemesEnabled: checked,
+    });
   };
 
   const handleThemeChange = (theme: SeasonalTheme) => {
     setSelectedTheme(theme);
-    if (theme === "none") {
-      localStorage.removeItem("seasonal-theme-settings-force");
-    } else {
-      localStorage.setItem("seasonal-theme-settings-force", theme);
-    }
-    // Force a page reload to apply the change
-    window.location.reload();
+    updateLocalUserSettings({
+      seasonalTheme: theme,
+    });
+    updateUserSettings.mutate({
+      seasonalTheme: theme,
+    });
   };
 
   if (!mounted) {

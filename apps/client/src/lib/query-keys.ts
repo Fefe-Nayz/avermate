@@ -1,6 +1,9 @@
 import type { AdminTimelineRange } from "@/types/admin";
 
 export const queryKeys = {
+  userSettings: {
+    current: ["user-settings"] as const,
+  },
   years: {
     all: ["years"] as const,
     one: (id: string) => [...queryKeys.years.all, id] as const,

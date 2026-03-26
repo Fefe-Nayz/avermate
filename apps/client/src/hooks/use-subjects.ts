@@ -1,8 +1,10 @@
 import { apiClient } from "@/lib/api";
-import { GetSubjectsResponse } from "@/types/get-subjects-response";
-import { useQuery } from "@tanstack/react-query";
-import { Grade } from "@/types/grade";
 import { queryKeys } from "@/lib/query-keys";
+import { GetSubjectsResponse } from "@/types/get-subjects-response";
+import { Grade } from "@/types/grade";
+import { filterSubjectsBySnapshotDate } from "@/utils/grades-timeline";
+import { useQuery } from "@tanstack/react-query";
+import { useTimelineModeState } from "./use-timeline-mode";
 
 // Function to modify grades for April Fools
 function modifyGradeForAprilFools(grade: Grade): Grade {
@@ -26,8 +28,10 @@ function isAprilFoolsDay(): boolean {
   return today.getMonth() === 3 && today.getDate() === 1;
 }
 
-export const useSubjects = (yearId: string) =>
-  useQuery({
+export const useSubjects = (yearId: string) => {
+  const { isActive, snapshotDate } = useTimelineModeState();
+
+  return useQuery({
     queryKey: queryKeys.subjects.all(yearId),
     queryFn: async () => {
       const res = await apiClient.get(`years/${yearId}/subjects`);
@@ -58,5 +62,10 @@ export const useSubjects = (yearId: string) =>
 
       return data.subjects;
     },
+    select: (subjects) =>
+      isActive && snapshotDate
+        ? filterSubjectsBySnapshotDate(subjects, snapshotDate)
+        : subjects,
     enabled: !!yearId && yearId !== "none",
   });
+};

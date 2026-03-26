@@ -50,7 +50,7 @@ export const ThemeSection = () => {
     <ProfileSection title={t("title")} description={t("description")}>
       <div className="flex flex-col gap-4">
         <div className="px-6 grid gap-4">
-          <SelectDrawer onValueChange={setTheme} value={theme} defaultValue={theme}>
+          <SelectDrawer onValueChange={setTheme} value={theme}>
             <SelectDrawerTrigger className="capitalize w-full" placeholder={t("selectPlaceholder")}>
               {theme === "system" ? t("system") : theme === "light" ? t("light") : t("dark")}
             </SelectDrawerTrigger>

@@ -1,6 +1,7 @@
 {
   "BADGE": {
-    "EARLY_BIRD_BADGE_LABEL": "OG"
+    "EARLY_BIRD_BADGE_LABEL": "OG",
+    "MOKATTAM_BADGE_LABEL": "Mokattam"
   },
   "Landing": {
     "Header": {
@@ -329,6 +330,9 @@
       "general": "General",
       "yearSettings": "Year Settings",
       "search": "Search settings...",
+      "clearSearch": "Clear search",
+      "searchHint": "Search across profile, app, account, and year settings.",
+      "noResults": "No settings match your search.",
       "profileDescription": "Manage your profile information",
       "accountDescription": "Security and linked accounts",
       "yearSettingsDescription": "Manage your year settings",
@@ -502,7 +506,11 @@
         "autoZoomYAxis": "Auto-zoom Y-axis",
         "autoZoomYAxisDescription": "Automatically adjust the Y-axis scale to fit your data with a small margin.",
         "showTrendLine": "Show trend line",
-        "showTrendLineDescription": "Overlay a dashed trend line on your average and grade charts to highlight the overall direction of your results."
+        "showTrendLineDescription": "Overlay a dashed trend line on your average and grade charts to highlight the overall direction of your results.",
+        "trendLineSubdivisions": "Trend line precision",
+        "trendLineSubdivisionsDescription": "Control how many segments the trend line is split into. Higher values make it follow your data more closely.",
+        "trendLineSubdivisionsMin": "Global",
+        "trendLineSubdivisionsMax": "Local"
       },
       "Haptics": {
         "title": "Haptics",
@@ -551,6 +559,27 @@
         "active": "Active",
         "inactive": "Inactive",
         "noteAprilFools": "Note: April Fools theme cannot be disabled and will always activate on April 1st."
+      },
+        "MokattamTheme": {
+          "title": "Mokattam Theme",
+          "description": "Enable the exclusive orange theme unlocked for the Mokattam fundraiser.",
+          "enable": "Enable Mokattam theme",
+          "enableDescription": "Applies the exclusive orange palette from the charity campaign across the app.",
+          "badgeLabel": "Exclusive",
+          "preview": "A warm orange look inspired by the Mokattam campaign, so you can show support directly inside Avermate.",
+          "celebrationThankYou": "Thanks for the donation",
+          "celebrationTitle": "Your Mokattam bonus is unlocked",
+          "celebrationDescription": "Thanks for supporting the Mokattam fundraiser. You can enable the exclusive orange theme in Avermate right now.",
+          "celebrationPreviewTitle": "An exclusive theme is waiting",
+          "celebrationHint": "The Mokattam theme brings a dedicated orange palette across the app, and you can still turn it off later from settings.",
+          "celebrationActivate": "Enable Mokattam theme",
+          "celebrationLater": "Maybe later",
+          "celebrationActivationError": "Unable to enable the Mokattam theme right now."
+        },
+      "TimelineMode": {
+        "title": "Timeline mode",
+        "description": "Open the app in a dated view so you can revisit your grades and averages exactly as they stood then.",
+        "open": "Open timeline mode"
       }
     },
     "About": {
@@ -1173,7 +1202,18 @@
         "addPeriod": "Add Period",
         "fullYear": "Full Year",
         "periodName": "{name}",
-        "selectPeriod": "Select Period"
+        "selectPeriod": "Select Period",
+        "timelineLabel": "Timeline",
+        "timelineLiveTitle": "Latest view",
+        "timelineSnapshotTitle": "Snapshot mode",
+        "timelineDescription": "Scrub to any day and see your grades and averages exactly as they stood then.",
+        "timelineSelectedDate": "Selected day",
+        "timelineLatestLabel": "Latest",
+        "timelineUnavailable": "Add grades to unlock the timeline.",
+        "timelineNoGradesYet": "No grades had been recorded yet on that day.",
+        "timelineVisibleCount": "{count} grades visible on that day",
+        "timelineVisibleGrades": "{visible} of {total} grades visible",
+        "timelineReset": "Jump to latest"
       },
       "AdminPage": {
         "title": "Admin Dashboard",
@@ -1214,7 +1254,12 @@
           "demote": "Demote",
           "ban": "Ban",
           "unban": "Unban",
-          "delete": "Delete"
+          "delete": "Delete",
+          "grantMokattam": "Grant Mokattam",
+          "revokeMokattam": "Revoke Mokattam"
+        },
+        "badges": {
+          "mokattam": "Mokattam"
         },
         "table": {
           "user": "User",
@@ -1229,7 +1274,7 @@
           "pageOf": "Page {page} of {total}"
         },
         "placeholders": {
-          "search": "Search by email...",
+          "search": "Search by name, email, or ID...",
           "fullName": "Full name",
           "email": "Email",
           "password": "Password",
@@ -1369,6 +1414,8 @@
           "userBanned": "User banned.",
           "userUnbanned": "User unbanned.",
           "userDeleted": "User deleted.",
+          "mokattamGranted": "Mokattam bonus granted to this user.",
+          "mokattamRevoked": "Mokattam bonus removed from this user.",
           "cannotDemoteSelf": "You cannot remove your own admin role.",
           "cannotBanSelf": "You cannot ban your own account.",
           "cannotDeleteSelf": "You cannot delete your own account.",
@@ -1377,7 +1424,8 @@
             "updateRole": "Unable to update role.",
             "banUser": "Unable to ban user.",
             "unbanUser": "Unable to unban user.",
-            "deleteUser": "Unable to delete user."
+            "deleteUser": "Unable to delete user.",
+            "updateMokattam": "Unable to update Mokattam access."
           }
         }
       },
@@ -1836,6 +1884,14 @@
         "description": "Certified Avermate user. Not too much, not too little. You manage your year with the seriousness of an accountant. It's solid.",
         "condition": "More than 15 grades"
       }
+    }
+  },
+  "TimelineMode": {
+    "Banner": {
+      "label": "Timeline mode",
+      "activeOn": "Snapshot locked to {date}",
+      "adjust": "Adjust in grades",
+      "exit": "Exit timeline mode"
     }
   }
 }

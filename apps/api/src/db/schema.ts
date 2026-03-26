@@ -186,13 +186,44 @@ export const users = sqliteTable("users", {
   emailIdx: index("users_email_idx").on(t.email),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const userSettings = sqliteTable("user_settings", {
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  theme: text().notNull().default("system"),
+  language: text().notNull().default("system"),
+  chartSettings: text()
+    .notNull()
+    .default('{"autoZoomYAxis":true,"showTrendLine":false,"trendLineSubdivisions":1}'),
+  seasonalThemesEnabled: integer({ mode: "boolean" }).notNull().default(true),
+  seasonalTheme: text().notNull().default("none"),
+  mokattamThemeAvailable: integer({ mode: "boolean" }).notNull().default(false),
+  mokattamThemeEnabled: integer({ mode: "boolean" }).notNull().default(false),
+  mokattamThemeCelebrationSeenAt: integer({ mode: "timestamp" }),
+  hapticsEnabled: integer({ mode: "boolean" }).notNull().default(true),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});
+
+export const usersRelations = relations(users, ({ many, one }) => ({
   subjects: many(subjects),
   grades: many(grades),
   sessions: many(sessions),
   accounts: many(accounts),
+  settings: one(userSettings, {
+    fields: [users.id],
+    references: [userSettings.userId],
+  }),
   // cardTemplates: many(cardTemplates),
   // cardLayouts: many(cardLayouts),
+}));
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [userSettings.userId],
+    references: [users.id],
+  }),
 }));
 
 export const sessions = sqliteTable("sessions", {

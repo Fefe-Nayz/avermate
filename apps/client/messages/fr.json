@@ -1,6 +1,7 @@
 {
   "BADGE": {
-    "EARLY_BIRD_BADGE_LABEL": "OG"
+    "EARLY_BIRD_BADGE_LABEL": "OG",
+    "MOKATTAM_BADGE_LABEL": "Mokattam"
   },
   "Landing": {
     "Header": {
@@ -330,7 +331,10 @@
       "back": "Retour",
       "general": "Général",
       "yearSettings": "Paramètres de l'année",
-      "search": "Paramètres de recherche...",
+      "search": "Rechercher dans les paramètres...",
+      "clearSearch": "Effacer la recherche",
+      "searchHint": "Recherchez dans les paramètres du profil, de l'application, du compte et de l'année.",
+      "noResults": "Aucun paramètre ne correspond à votre recherche.",
       "profileDescription": "Gérer les informations de votre profil",
       "accountDescription": "Sécurité et comptes liés",
       "yearSettingsDescription": "Gérer vos paramètres d'année",
@@ -504,7 +508,11 @@
         "autoZoomYAxis": "Zoom automatique de l'axe Y",
         "autoZoomYAxisDescription": "Ajuste automatiquement l'échelle de l'axe Y pour s'adapter à vos données avec une petite marge.",
         "showTrendLine": "Afficher la ligne de tendance",
-        "showTrendLineDescription": "Ajoute une ligne de tendance en pointillés sur les graphiques de moyennes et de notes pour visualiser la direction globale de vos résultats."
+        "showTrendLineDescription": "Ajoute une ligne de tendance en pointillés sur les graphiques de moyennes et de notes pour visualiser la direction globale de vos résultats.",
+        "trendLineSubdivisions": "Précision de la tendance",
+        "trendLineSubdivisionsDescription": "Contrôle le nombre de segments de la ligne de tendance. Des valeurs plus élevées la font suivre vos données de plus près.",
+        "trendLineSubdivisionsMin": "Globale",
+        "trendLineSubdivisionsMax": "Locale"
       },
       "Haptics": {
         "title": "Retour haptique",
@@ -553,6 +561,27 @@
         "active": "Actif",
         "inactive": "Inactif",
         "noteAprilFools": "Note : Le thème du 1er avril ne peut pas être désactivé et s'activera toujours le 1er avril."
+      },
+        "MokattamTheme": {
+          "title": "Thème Mokattam",
+          "description": "Activez le thème exclusif orange débloqué pour l'opération Mokattam.",
+          "enable": "Activer le thème Mokattam",
+          "enableDescription": "Applique la palette orange exclusive de l'opération solidaire dans toute l'application.",
+          "badgeLabel": "Exclusif",
+          "preview": "Un habillage orange chaleureux inspiré de l'opération Mokattam, pour afficher votre soutien directement dans Avermate.",
+          "celebrationThankYou": "Merci pour le don",
+          "celebrationTitle": "Votre bonus Mokattam est débloqué",
+          "celebrationDescription": "Merci pour votre soutien a l'opération Mokattam. Vous pouvez activer dès maintenant le thème exclusif orange dans Avermate.",
+          "celebrationPreviewTitle": "Un thème exclusif vous attend",
+          "celebrationHint": "Le thème Mokattam colore l'application avec une palette orange dédiée, et vous pourrez toujours le désactiver plus tard dans les paramètres.",
+          "celebrationActivate": "Activer le thème Mokattam",
+          "celebrationLater": "Plus tard",
+          "celebrationActivationError": "Impossible d'activer le thème Mokattam pour le moment."
+        },
+      "TimelineMode": {
+        "title": "Mode timeline",
+        "description": "Ouvrez l'app dans une vue datée pour revoir vos notes et moyennes comme elles étaient ce jour-là.",
+        "open": "Accéder au mode timeline"
       }
     },
     "About": {
@@ -1175,7 +1204,18 @@
         "addPeriod": "Ajouter une période",
         "fullYear": "Toute l'année",
         "periodName": "{name}",
-        "selectPeriod": "Sélectionner une période"
+        "selectPeriod": "Sélectionner une période",
+        "timelineLabel": "Timeline",
+        "timelineLiveTitle": "Vue actuelle",
+        "timelineSnapshotTitle": "Mode instantané",
+        "timelineDescription": "Faites glisser le curseur vers n'importe quel jour pour revoir vos notes et moyennes telles qu'elles étaient à ce moment-là.",
+        "timelineSelectedDate": "Jour sélectionné",
+        "timelineLatestLabel": "Actuel",
+        "timelineUnavailable": "Ajoutez des notes pour débloquer la timeline.",
+        "timelineNoGradesYet": "Aucune note n'avait encore été enregistrée à cette date.",
+        "timelineVisibleCount": "{count} notes visibles à cette date",
+        "timelineVisibleGrades": "{visible} notes visibles sur {total}",
+        "timelineReset": "Revenir à l'actuel"
       },
       "AdminPage": {
         "title": "Tableau de bord admin",
@@ -1216,7 +1256,12 @@
           "demote": "Rétrograder",
           "ban": "Bannir",
           "unban": "Débannir",
-          "delete": "Supprimer"
+          "delete": "Supprimer",
+          "grantMokattam": "Offrir Mokattam",
+          "revokeMokattam": "Retirer Mokattam"
+        },
+        "badges": {
+          "mokattam": "Mokattam"
         },
         "table": {
           "user": "Utilisateur",
@@ -1231,7 +1276,7 @@
           "pageOf": "Page {page} sur {total}"
         },
         "placeholders": {
-          "search": "Rechercher par email...",
+          "search": "Rechercher par nom, email ou ID...",
           "fullName": "Nom complet",
           "email": "Email",
           "password": "Mot de passe",
@@ -1371,6 +1416,8 @@
           "userBanned": "Utilisateur banni.",
           "userUnbanned": "Utilisateur débanni.",
           "userDeleted": "Utilisateur supprimé.",
+          "mokattamGranted": "Le bonus Mokattam a été attribué à cet utilisateur.",
+          "mokattamRevoked": "Le bonus Mokattam a été retiré à cet utilisateur.",
           "cannotDemoteSelf": "Vous ne pouvez pas retirer votre propre rôle admin.",
           "cannotBanSelf": "Vous ne pouvez pas bannir votre propre compte.",
           "cannotDeleteSelf": "Vous ne pouvez pas supprimer votre propre compte.",
@@ -1379,7 +1426,8 @@
             "updateRole": "Impossible de mettre à jour le rôle.",
             "banUser": "Impossible de bannir l'utilisateur.",
             "unbanUser": "Impossible de débannir l'utilisateur.",
-            "deleteUser": "Impossible de supprimer l'utilisateur."
+            "deleteUser": "Impossible de supprimer l'utilisateur.",
+            "updateMokattam": "Impossible de mettre à jour l'accès Mokattam."
           }
         }
       },
@@ -1892,6 +1940,14 @@
         "description": "Utilisateur certifié d'Avermate. Ni trop, ni trop peu. Tu gères ton année avec le sérieux d'un comptable. C'est carré.",
         "condition": "Plus de 15 notes"
       }
+    }
+  },
+  "TimelineMode": {
+    "Banner": {
+      "label": "Mode timeline",
+      "activeOn": "Vue figée au {date}",
+      "adjust": "Ajuster dans les notes",
+      "exit": "Quitter le mode timeline"
     }
   }
 }

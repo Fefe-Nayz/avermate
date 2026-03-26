@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `mokattam_theme_celebration_seen_at` integer;

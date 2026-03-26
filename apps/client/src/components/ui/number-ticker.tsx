@@ -115,6 +115,7 @@ interface NumberTickerProps {
   value: number;
   decimalPlaces?: number;
   duration?: number; // seconds
+  delay?: number; // seconds
   onChange?: (currentValue: number) => void;
   className?: string;
   style?: React.CSSProperties;
@@ -125,6 +126,7 @@ export default function NumberTicker({
   value,
   decimalPlaces = 0,
   duration = 2,
+  delay = 0,
   onChange,
   className,
   style,
@@ -138,15 +140,15 @@ export default function NumberTicker({
     if (triggerOnView) {
       // Only animate when in view
       if (isInView) {
-        const t = setTimeout(() => setDisplayValue(value), 0);
+        const t = setTimeout(() => setDisplayValue(value), delay * 1000);
         return () => clearTimeout(t);
       }
     } else {
       // Original behavior - animate immediately
-      const t = setTimeout(() => setDisplayValue(value), 0);
+      const t = setTimeout(() => setDisplayValue(value), delay * 1000);
       return () => clearTimeout(t);
     }
-  }, [value, isInView, triggerOnView]);
+  }, [value, isInView, triggerOnView, delay]);
 
   const handleAnimationsFinish = () => {
     onChange?.(value);

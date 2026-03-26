@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Check, ChevronDown, Copy, Shield } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "@/lib/toast";
@@ -41,6 +42,7 @@ async function copyToClipboard(value: string): Promise<void> {
 export const UserIdSection = () => {
   const tDeveloper = useTranslations("Settings.Settings.DeveloperOptions");
   const t = useTranslations("Settings.Settings.UserId");
+  const searchParams = useSearchParams();
   const { data: session, isPending } = authClient.useSession();
   const { data: isAdminFromServer } = useAdminAccess(Boolean(session));
   const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +55,13 @@ export const UserIdSection = () => {
     ? currentRole.split(",").some((value) => value.trim() === "admin")
     : false;
   const isAdmin = roleBasedIsAdmin || Boolean(isAdminFromServer);
+  const shouldOpenFromSearch = searchParams.get("setting") === "developer-options";
+
+  useEffect(() => {
+    if (shouldOpenFromSearch) {
+      setIsOpen(true);
+    }
+  }, [shouldOpenFromSearch]);
 
   const handleCopy = async () => {
     if (!userId) {

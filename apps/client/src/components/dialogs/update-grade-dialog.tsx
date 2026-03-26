@@ -76,7 +76,7 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
           <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBodyWrapper>
-          {!isPending && !isError && formData && (
+          {!isPending && !isError && formData && grade && (
             <UpdateGradeForm
               gradeId={grade.id}
               close={() => setOpen(false)}

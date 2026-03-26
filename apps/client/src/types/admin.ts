@@ -12,6 +12,8 @@ export interface AdminManagedUser {
   banExpires?: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
+  mokattamThemeAvailable: boolean;
+  mokattamThemeEnabled: boolean;
 }
 
 export interface AdminListUsersResponse {

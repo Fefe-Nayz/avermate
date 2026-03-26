@@ -81,7 +81,15 @@ function useMeasuredWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-export function DifferenceBadge({ diff, triggerOnView = false }: { diff: number; triggerOnView?: boolean }) {
+export function DifferenceBadge({
+  diff,
+  triggerOnView = false,
+  delay = 0,
+}: {
+  diff: number;
+  triggerOnView?: boolean;
+  delay?: number;
+}) {
   const [animatedDiff, setAnimatedDiff] = useState(diff);
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -150,6 +158,7 @@ export function DifferenceBadge({ diff, triggerOnView = false }: { diff: number;
               decimalPlaces={3}
               value={diff}
               duration={2}
+              delay={delay}
               className="leading-none"
               onChange={(val) => setAnimatedDiff(val)}
               triggerOnView={triggerOnView}

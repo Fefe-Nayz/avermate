@@ -3,6 +3,7 @@
 import ProfileSection from "../profile-section";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { useTranslations } from "next-intl";
 import { useChartSettings } from "@/hooks/use-chart-settings";
 
@@ -47,6 +48,43 @@ export const ChartSettingsSection = () => {
               }
             />
           </div>
+
+          {settings.showTrendLine && (
+            <div className="space-y-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">
+                  {t("trendLineSubdivisions")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("trendLineSubdivisionsDescription")}
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-muted-foreground w-16 shrink-0">
+                  {t("trendLineSubdivisionsMin")}
+                </span>
+                <Slider
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={[settings.trendLineSubdivisions]}
+                  onValueChange={([value]) =>
+                    updateSettings(
+                      { trendLineSubdivisions: value },
+                      { persist: false }
+                    )
+                  }
+                  onValueCommit={([value]) =>
+                    updateSettings({ trendLineSubdivisions: value })
+                  }
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-16 shrink-0 text-right">
+                  {t("trendLineSubdivisionsMax")}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </ProfileSection>

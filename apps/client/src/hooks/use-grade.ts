@@ -1,6 +1,8 @@
 import { apiClient } from "@/lib/api";
 import { Grade } from "@/types/grade";
+import { isGradeVisibleAtSnapshot } from "@/utils/grades-timeline";
 import { useQuery } from "@tanstack/react-query";
+import { useTimelineModeState } from "./use-timeline-mode";
 
 // Function to modify grades for April Fools
 function modifyGradeForAprilFools(grade: Grade): Grade {
@@ -24,8 +26,10 @@ function isAprilFoolsDay(): boolean {
   return today.getMonth() === 3 && today.getDate() === 1;
 }
 
-export const useGrade = (gradeId?: string) =>
-  useQuery({
+export const useGrade = (gradeId?: string) => {
+  const { isActive, snapshotDate } = useTimelineModeState();
+
+  return useQuery({
     queryKey: ["grades", gradeId],
     queryFn: async () => {
       if (!gradeId) {
@@ -42,5 +46,10 @@ export const useGrade = (gradeId?: string) =>
       // Otherwise return the actual grades
       return data.grade;
     },
+    select: (grade) =>
+      isActive && snapshotDate && !isGradeVisibleAtSnapshot(grade, snapshotDate)
+        ? null
+        : grade,
     enabled: !!gradeId,
   });
+};

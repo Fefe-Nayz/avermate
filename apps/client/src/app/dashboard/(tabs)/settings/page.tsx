@@ -5,6 +5,8 @@ import { PeriodsSection } from '@/app/profile/settings/periods-section';
 import DeleteYearSection from '@/components/dashboard/year-settings/delete-year-section';
 import UpdateYearSection from '@/components/dashboard/year-settings/update-year-section';
 import GradesSection from '@/components/dashboard/year-settings/grades-section';
+import { MobileSettingsAnchor } from '@/components/settings/mobile-settings-anchor';
+import { MobileSettingsDetailHeader } from '@/components/settings/mobile-settings-shell';
 import { Separator } from '@/components/ui/separator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,8 +29,14 @@ export default function YearSettingsPage() {
 
     return (
         <main className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
+            <MobileSettingsDetailHeader
+                className="mb-1"
+                href="/profile/settings"
+                title={t("YEAR_SETTINGS_PAGE_TITLE")}
+            />
+
             <div className="flex flex-wrap items-center justify-between min-h-9">
-                <h1 className="md:text-3xl font-bold text-xl">{t("YEAR_SETTINGS_PAGE_TITLE")}</h1>
+                <h1 className="hidden text-xl font-bold md:block md:text-3xl">{t("YEAR_SETTINGS_PAGE_TITLE")}</h1>
             </div>
 
             <Separator />
@@ -282,11 +290,21 @@ export default function YearSettingsPage() {
                     {/* Year Recap Section - Featured at top */}
                     <YearReviewButton />
 
-                    <UpdateYearSection yearId={activeId} />
-                    <PeriodsSection yearId={activeId} />
-                    <CustomAveragesSection yearId={activeId} />
-                    <GradesSection yearId={activeId} />
-                    <DeleteYearSection yearId={activeId} />
+                    <MobileSettingsAnchor settingId="year-workspace">
+                        <UpdateYearSection yearId={activeId} />
+                    </MobileSettingsAnchor>
+                    <MobileSettingsAnchor settingId="periods">
+                        <PeriodsSection yearId={activeId} />
+                    </MobileSettingsAnchor>
+                    <MobileSettingsAnchor settingId="custom-averages">
+                        <CustomAveragesSection yearId={activeId} />
+                    </MobileSettingsAnchor>
+                    <MobileSettingsAnchor settingId="grades">
+                        <GradesSection yearId={activeId} />
+                    </MobileSettingsAnchor>
+                    <MobileSettingsAnchor settingId="delete-year">
+                        <DeleteYearSection yearId={activeId} />
+                    </MobileSettingsAnchor>
                 </>
             )}
         </main>

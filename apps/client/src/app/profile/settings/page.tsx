@@ -1,24 +1,13 @@
-import { ThemeSection } from "./theme-section";
-import { LanguageSection } from "./language-section";
-import { ChartSettingsSection } from "./chart-settings-section";
-import { HapticsSection } from "./haptics-section";
-import { SeasonalThemesSection } from "./seasonal-themes-section";
-import { UserIdSection } from "./user-id-section";
+import { GeneralSettingsContent } from "@/components/settings/general-settings-content";
+import { MobileSettingsHub } from "@/components/settings/mobile-settings-shell";
 
 export default function SettingsPage() {
   return (
-    <main className="flex flex-col md:gap-8 gap-4 w-full ">
-      <ThemeSection />
-      <LanguageSection />
-      <ChartSettingsSection />
-      <HapticsSection />
-      <SeasonalThemesSection />
-      <UserIdSection />
-      {/* USE YEAR WORKSPACE SETTINGS NOW */}
-      {/* <PeriodsSection /> */}
-      {/* <CustomAveragesSection /> */}
-      {/* <OnboardingSection /> */}
-      {/* <ResetAccountSection /> */}
-    </main>
+    <>
+      <div className="hidden md:block">
+        <GeneralSettingsContent />
+      </div>
+      <MobileSettingsHub />
+    </>
   );
 }

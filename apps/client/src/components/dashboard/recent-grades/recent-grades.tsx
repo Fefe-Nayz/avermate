@@ -15,11 +15,13 @@ import { useTranslations } from "next-intl";
 export default function RecentGradesCard({
   recentGrades,
   period,
-  yearId
+  yearId,
+  valueAnimationDelay = 0,
 }: {
   recentGrades: Grade[];
   period: Period;
   yearId: string;
+  valueAnimationDelay?: number;
 }) {
   const t = useTranslations("Dashboard.Cards.RecentGradesCard");
 
@@ -36,7 +38,12 @@ export default function RecentGradesCard({
       </CardHeader>
 
       <CardContent className="h-full overflow-hidden min-w-0">
-        <RecentGradesList recentGrades={recentGrades} period={period} yearId={yearId} />
+        <RecentGradesList
+          recentGrades={recentGrades}
+          period={period}
+          yearId={yearId}
+          valueAnimationDelay={valueAnimationDelay}
+        />
       </CardContent>
     </Card>
   );

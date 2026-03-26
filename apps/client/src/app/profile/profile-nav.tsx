@@ -17,6 +17,14 @@ export default function ProfileNav({ onBack }: { onBack: () => void }) {
   const t = useTranslations("Settings.Nav");
   const path = usePathname();
 
+  const isActiveRoute = (routePath: string) => {
+    if (routePath === "/profile/settings") {
+      return path === routePath || path.startsWith("/profile/settings/");
+    }
+
+    return path === routePath;
+  };
+
   const routes = [
     {
       icon: UserIcon,
@@ -81,7 +89,7 @@ export default function ProfileNav({ onBack }: { onBack: () => void }) {
                   "2xl:flex-row 2xl:justify-start", // Extra large screens: icon + label left-aligned
                   "lg:flex-col lg:justify-center", // Large screens: icon only centered, stay in column
                   "flex-col justify-center", // Small screens: icon centered + label below
-                  path === route.path ? "bg-primary/10" : ""
+                  isActiveRoute(route.path) ? "bg-primary/10" : ""
                 )}
                 variant="ghost"
                 asChild

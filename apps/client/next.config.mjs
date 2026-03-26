@@ -33,6 +33,7 @@ const nextConfig = {
       },
     ],
   },
+  allowedDevOrigins: ['192.168.1.32'],
   env: {
     NEXT_PUBLIC_GIT_COMMIT_HASH: process.env.NEXT_PUBLIC_GIT_COMMIT_HASH || getGitCommitHash(),
   },

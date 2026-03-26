@@ -17,8 +17,10 @@ import ThemeSwitchButton from "../theme-switch-button";
 import Avatar from "./avatar";
 import { MessageSquareIcon, MessagesSquareIcon, Moon, Sun } from "lucide-react";
 import FeedbackDialog from "@/components/dialogs/feedback-dialog";
+import { useUserSettings } from "@/hooks/use-user-settings";
 import { useTranslations } from "next-intl";
 import EarlyBirdBadge from "./early-bird-badge";
+import MokattamBadge from "./mokattam-badge";
 import { DropDrawer, DropDrawerTrigger, DropDrawerContent, DropDrawerLabel, DropDrawerSeparator, DropDrawerItem, DropDrawerGroup } from "@/components/ui/dropdrawer";
 
 const isUnauthorizedSessionError = (error: unknown): error is { status: number } => {
@@ -34,6 +36,7 @@ export default function AccountDropdown() {
   const pathname = usePathname();
 
   const { data, error, isPending, refetch } = authClient.useSession();
+  const { data: userSettings } = useUserSettings(Boolean(data?.user?.id));
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -159,7 +162,14 @@ export default function AccountDropdown() {
                 className="rounded-full size-8"
               />
               <div className="flex flex-col items-start">
-                <h1 className="text-foreground font-semibold">{data?.user?.name} {(data?.user && (new Date(data?.user.createdAt).getTime() < 1756677600000)) && <EarlyBirdBadge />}</h1>
+                <h1 className="text-foreground font-semibold">
+                  {data?.user?.name}{" "}
+                  {data?.user &&
+                    new Date(data?.user.createdAt).getTime() < 1756677600000 && (
+                      <EarlyBirdBadge />
+                    )}
+                  {userSettings?.mokattamThemeAvailable ? <MokattamBadge /> : null}
+                </h1>
                 <p className="text-muted-foreground font-medium ">
                   {data?.user?.email}
                 </p>

@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  getUserSettingsStorageEventName,
+  isMokattamThemeActive,
+  readLocalUserSettings,
+} from "@/lib/user-settings-storage";
 
 // Define seasonal theme types
 export type SeasonalTheme = "april-fools" | "halloween" | "christmas" | "none";
@@ -270,10 +275,11 @@ function getForcedTheme(): SeasonalTheme | null {
   }
 
   // Check for settings-based forced theme (for dev tools)
-  const settingsForcedTheme = localStorage.getItem(
-    "seasonal-theme-settings-force"
-  );
-  if (settingsForcedTheme && settingsForcedTheme in SEASONAL_THEMES) {
+  const settingsForcedTheme = readLocalUserSettings().settings.seasonalTheme;
+  if (
+    settingsForcedTheme !== "none" &&
+    settingsForcedTheme in SEASONAL_THEMES
+  ) {
     return settingsForcedTheme as SeasonalTheme;
   }
 
@@ -291,12 +297,20 @@ function getForcedTheme(): SeasonalTheme | null {
 
 // Determine which seasonal theme should be active
 function getActiveSeasonalTheme(): SeasonalTheme {
-  // Check if seasonal themes are enabled (default to true if not set)
   if (typeof window !== "undefined") {
-    const enabled = localStorage.getItem("seasonal-themes-enabled");
-    if (enabled === "false") {
+    const localSettings = readLocalUserSettings().settings;
+
+    if (isMokattamThemeActive(localSettings)) {
       return "none";
     }
+
+    if (!localSettings.seasonalThemesEnabled) {
+      return "none";
+    }
+  }
+
+  if (typeof window === "undefined") {
+    return "none";
   }
 
   const forcedTheme = getForcedTheme();
@@ -329,29 +343,37 @@ export function SeasonalThemeProvider() {
   const [activeTheme, setActiveTheme] = useState<SeasonalTheme>("none");
 
   useEffect(() => {
-    const theme = getActiveSeasonalTheme();
-    setActiveTheme(theme);
+    const syncTheme = () => {
+      setActiveTheme(getActiveSeasonalTheme());
+    };
 
-    if (theme !== "none") {
-      const themeConfig = SEASONAL_THEMES[theme];
+    syncTheme();
 
-      // Add the seasonal theme CSS to the document
-      const styleElement = document.createElement("style");
-      styleElement.setAttribute("id", `seasonal-theme-${theme}`);
-      styleElement.textContent = themeConfig.css;
+    window.addEventListener(getUserSettingsStorageEventName(), syncTheme);
 
-      document.head.appendChild(styleElement);
+    return () => {
+      window.removeEventListener(getUserSettingsStorageEventName(), syncTheme);
+    };
+  }, []);
 
-      // Cleanup function to remove the styles when component unmounts or theme changes
-      return () => {
-        const styleToRemove = document.getElementById(
-          `seasonal-theme-${theme}`
-        );
-        if (styleToRemove) {
-          styleToRemove.remove();
-        }
-      };
+  useEffect(() => {
+    const existingStyles = document.querySelectorAll("[id^='seasonal-theme-']");
+    existingStyles.forEach((node) => node.remove());
+
+    if (activeTheme === "none") {
+      return;
     }
+
+    const themeConfig = SEASONAL_THEMES[activeTheme];
+    const styleElement = document.createElement("style");
+    styleElement.setAttribute("id", `seasonal-theme-${activeTheme}`);
+    styleElement.textContent = themeConfig.css;
+
+    document.head.appendChild(styleElement);
+
+    return () => {
+      styleElement.remove();
+    };
   }, [activeTheme]);
 
   return null;

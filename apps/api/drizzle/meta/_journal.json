@@ -15,6 +15,27 @@
       "when": 1771697161644,
       "tag": "0001_lame_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774032708075,
+      "tag": "0002_steady_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1774479983373,
+      "tag": "0003_hot_nightmare",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1774481592790,
+      "tag": "0004_cooing_ben_urich",
+      "breakpoints": true
     }
   ]
 }

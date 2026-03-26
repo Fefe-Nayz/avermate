@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Ban,
     Loader2,
+    Palette,
     RefreshCcw,
     Search,
     Shield,
@@ -18,9 +19,11 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { useTranslations } from "next-intl";
 
 import { authClient } from "@/lib/auth";
+import { apiClient } from "@/lib/api";
 import { useAdminOverview } from "@/hooks/use-admin-overview";
 import { useAdminUserStats } from "@/hooks/use-admin-user-stats";
 import { useAdminUsers } from "@/hooks/use-admin-users";
+import { queryKeys } from "@/lib/query-keys";
 import { handleError } from "@/utils/error-utils";
 import type { AdminManagedUser, AdminTimelineRange } from "@/types/admin";
 import {
@@ -257,6 +260,10 @@ export default function AdminDashboardPage() {
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: ["admin"] }),
             queryClient.invalidateQueries({ queryKey: ["session"] }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.userSettings.current,
+                exact: true,
+            }),
         ]);
     };
 
@@ -355,11 +362,49 @@ export default function AdminDashboardPage() {
         },
     });
 
+    const toggleMokattamMutation = useMutation({
+        mutationKey: ["admin", "mokattam-theme"],
+        mutationFn: async ({
+            userId,
+            available,
+        }: {
+            userId: string;
+            available: boolean;
+        }) => {
+            const response = await apiClient.patch(
+                `admin/users/${userId}/mokattam-theme`,
+                {
+                    json: {
+                        available,
+                    },
+                }
+            );
+
+            return response.json<{
+                userId: string;
+                mokattamThemeAvailable: boolean;
+                mokattamThemeEnabled: boolean;
+            }>();
+        },
+        onSuccess: async (_data, variables) => {
+            toast.success(
+                variables.available
+                    ? t("toasts.mokattamGranted")
+                    : t("toasts.mokattamRevoked")
+            );
+            await refreshAdminData();
+        },
+        onError: (error) => {
+            handleError(error, tErrors, t("toasts.errors.updateMokattam"));
+        },
+    });
+
     const isActionPending =
         setRoleMutation.isPending ||
         banMutation.isPending ||
         unbanMutation.isPending ||
-        removeUserMutation.isPending;
+        removeUserMutation.isPending ||
+        toggleMokattamMutation.isPending;
 
     const selectedUser = useMemo(
         () => users.find((user) => user.id === selectedUserId) ?? null,
@@ -923,6 +968,13 @@ export default function AdminDashboardPage() {
                                                                     <p className="truncate text-xs text-muted-foreground">
                                                                         {user.email}
                                                                     </p>
+                                                                    {user.mokattamThemeAvailable ? (
+                                                                        <div className="mt-2">
+                                                                            <Badge className="border-orange-200 bg-orange-100 text-orange-700 dark:border-orange-500/35 dark:bg-orange-500/15 dark:text-orange-200">
+                                                                                {t("badges.mokattam")}
+                                                                            </Badge>
+                                                                        </div>
+                                                                    ) : null}
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell>
@@ -951,6 +1003,35 @@ export default function AdminDashboardPage() {
                                                             </TableCell>
                                                             <TableCell className="text-right md:whitespace-nowrap">
                                                                 <div className="flex flex-wrap items-center justify-end gap-1 md:flex-nowrap">
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className={
+                                                                            user.mokattamThemeAvailable
+                                                                                ? "border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-500/35 dark:text-orange-200 dark:hover:bg-orange-500/15"
+                                                                                : undefined
+                                                                        }
+                                                                        aria-label={
+                                                                            user.mokattamThemeAvailable
+                                                                                ? t("actions.revokeMokattam")
+                                                                                : t("actions.grantMokattam")
+                                                                        }
+                                                                        disabled={isActionPending}
+                                                                        onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            toggleMokattamMutation.mutate({
+                                                                                userId: user.id,
+                                                                                available: !user.mokattamThemeAvailable,
+                                                                            });
+                                                                        }}
+                                                                    >
+                                                                        <Palette className="size-3" />
+                                                                        <span className="hidden sm:inline">
+                                                                            {user.mokattamThemeAvailable
+                                                                                ? t("actions.revokeMokattam")
+                                                                                : t("actions.grantMokattam")}
+                                                                        </span>
+                                                                    </Button>
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"

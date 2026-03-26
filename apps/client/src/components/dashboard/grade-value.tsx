@@ -7,6 +7,7 @@ export default function GradeValue({
   outOf,
   size = "xl",
   duration = 2,
+  delay = 0,
   triggerOnView = false,
   isAverage = false,
 }: {
@@ -14,6 +15,7 @@ export default function GradeValue({
   outOf: number;
   size?: "sm" | "xl";
   duration?: number;
+  delay?: number;
   triggerOnView?: boolean;
   isAverage?: boolean;
 }) {
@@ -29,6 +31,7 @@ export default function GradeValue({
           decimalPlaces={2}
           value={isAverage ? formatAverageValue(value, outOf) : formatGradeValue(value)}
           duration={duration}
+          delay={delay}
           triggerOnView={triggerOnView}
         />
 

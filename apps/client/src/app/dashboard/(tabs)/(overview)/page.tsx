@@ -1,6 +1,7 @@
 "use client";
 
 import GlobalAverageChart from "@/components/charts/global-average-chart";
+import { GradesTimeline } from "@/components/dashboard/grades-timeline";
 import RecentGradesCard from "@/components/dashboard/recent-grades/recent-grades";
 import DashboardLoader from "@/components/skeleton/dashboard-loader";
 import ErrorStateCard from "@/components/skeleton/error-card";
@@ -18,10 +19,16 @@ import { useCustomAverages } from "@/hooks/use-custom-averages";
 import { usePeriods } from "@/hooks/use-periods";
 import { useRecentGrades } from "@/hooks/use-recent-grades";
 import { useSubjects } from "@/hooks/use-subjects";
+import { useTimelineMode } from "@/hooks/use-timeline-mode";
 import { authClient } from "@/lib/auth";
 import { fullYearPeriod } from "@/utils/average";
+import {
+  clampDateToRange,
+  countSubjectGrades,
+  getGradesTimelineBounds,
+} from "@/utils/grades-timeline";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DataCards from "./data-cards";
 import { useTranslations } from "next-intl"; // Import useTranslations
 import { useOrganizedSubjects } from "@/hooks/use-organized-subjects";
@@ -35,6 +42,8 @@ import { useAccounts } from "@/hooks/use-accounts";
 export default function OverviewPage() {
   const t = useTranslations("Dashboard.Pages.OverviewPage"); // Initialize t
   const { data: session } = authClient.useSession();
+  const { isActive: timelineEnabled, snapshotDate, updateTimelineDate } =
+    useTimelineMode();
 
   const router = useRouter();
 
@@ -99,6 +108,47 @@ export default function OverviewPage() {
   };
 
   const selectedTab = userSelectedTab ?? getDefaultTab();
+  const sortedPeriods = useMemo(
+    () =>
+      periods
+        ?.slice()
+        .sort(
+          (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+        ) ?? [],
+    [periods]
+  );
+  const selectedSubjects = useMemo(() => {
+    if (selectedTab === "full-year") {
+      return subjects ?? [];
+    }
+
+    return (
+      organizedSubjects?.find((entry) => entry.period.id === selectedTab)
+        ?.subjects ?? []
+    );
+  }, [organizedSubjects, selectedTab, subjects]);
+  const timelineBounds = useMemo(() => {
+    if (!active || !selectedTab) {
+      return null;
+    }
+
+    return getGradesTimelineBounds({
+      year: active,
+      selectedTab,
+      periods: sortedPeriods,
+    });
+  }, [active, selectedTab, sortedPeriods]);
+  const effectiveTimelineDate = useMemo(() => {
+    if (!timelineEnabled || !snapshotDate || !timelineBounds) {
+      return null;
+    }
+
+    return clampDateToRange(
+      snapshotDate,
+      timelineBounds.minDate,
+      timelineBounds.maxDate
+    );
+  }, [snapshotDate, timelineBounds, timelineEnabled]);
 
   //todo implement a custom field
   useEffect(() => {
@@ -115,6 +165,22 @@ export default function OverviewPage() {
       router.push("/onboarding");
     }
   }, [session?.user?.createdAt, subjects, accounts, router]);
+
+  useEffect(() => {
+    if (!timelineEnabled || !timelineBounds || !snapshotDate || !effectiveTimelineDate) {
+      return;
+    }
+
+    if (effectiveTimelineDate.getTime() !== snapshotDate.getTime()) {
+      updateTimelineDate(effectiveTimelineDate);
+    }
+  }, [
+    effectiveTimelineDate,
+    snapshotDate,
+    timelineBounds,
+    timelineEnabled,
+    updateTimelineDate,
+  ]);
 
   // Error State
   const isError =
@@ -149,12 +215,6 @@ export default function OverviewPage() {
       </div>
     );
   }
-
-  const sortedPeriods = periods
-    ?.slice()
-    .sort(
-      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-    );
 
   return (
     <main className="flex flex-col gap-4 md:gap-8 mx-auto max-w-[2000px]">
@@ -231,14 +291,19 @@ export default function OverviewPage() {
             </SelectDrawer>
           </div>
 
+          {timelineEnabled && timelineBounds && effectiveTimelineDate && (
+            <GradesTimeline
+              minDate={timelineBounds.minDate}
+              maxDate={timelineBounds.maxDate}
+              selectedDate={effectiveTimelineDate}
+              visibleGradesCount={countSubjectGrades(selectedSubjects)}
+              onSelectedDateChange={updateTimelineDate}
+            />
+          )}
+
           {periods &&
             periods.length > 0 &&
-            periods
-              .sort(
-                (a, b) =>
-                  new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-              )
-              .map((period) => (
+            sortedPeriods.map((period) => (
                 <TabsContent key={period.id} value={period.id}>
                   <DataCards
                     yearDefaultOutOf={yearDefaultOutOf}

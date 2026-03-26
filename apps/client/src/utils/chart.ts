@@ -6,6 +6,27 @@ export interface ChartDataPoint {
 
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
+export function getVisibleChartEndDate(
+  periodEndDate: Date,
+  options?: {
+    snapshotDate?: Date | null;
+    now?: Date;
+  }
+) {
+  const now = options?.now ?? new Date();
+  const cappedEndDate =
+    periodEndDate.getTime() > now.getTime() ? now : periodEndDate;
+  const snapshotDate = options?.snapshotDate;
+
+  if (!snapshotDate) {
+    return cappedEndDate;
+  }
+
+  return snapshotDate.getTime() < cappedEndDate.getTime()
+    ? snapshotDate
+    : cappedEndDate;
+}
+
 /**
  * Calculate the Y-axis domain for chart data based on the auto-zoom setting
  * @param data - Array of chart data points
@@ -65,6 +86,25 @@ export function calculateYAxisDomain(
   return [Math.floor(min), Math.ceil(max)];
 }
 
+function linearRegression(points: { x: number; y: number }[]): {
+  slope: number;
+  intercept: number;
+} {
+  const n = points.length;
+  const sumX = points.reduce((s, p) => s + p.x, 0);
+  const sumY = points.reduce((s, p) => s + p.y, 0);
+  const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+  const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) {
+    return { slope: 0, intercept: sumY / n };
+  }
+  return {
+    slope: (n * sumXY - sumX * sumY) / denom,
+    intercept: (sumY - (((n * sumXY - sumX * sumY) / denom) * sumX)) / n,
+  };
+}
+
 export function calculateTrendLineData(
   data: ChartDataPoint[],
   dataKey: string,
@@ -72,10 +112,13 @@ export function calculateTrendLineData(
     dateKey = "date",
     minValue = 0,
     maxValue = 20,
+    subdivisions = 1,
   }: {
     dateKey?: string;
     minValue?: number;
     maxValue?: number;
+    /** Number of piecewise segments (1 = single global regression, higher = more local) */
+    subdivisions?: number;
   } = {}
 ): Array<number | null> {
   const validPoints = data
@@ -108,27 +151,35 @@ export function calculateTrendLineData(
     x: (point.x - firstX) / DAY_IN_MS,
   }));
 
-  const count = normalizedPoints.length;
-  const sumX = normalizedPoints.reduce((total, point) => total + point.x, 0);
-  const sumY = normalizedPoints.reduce((total, point) => total + point.y, 0);
-  const sumXY = normalizedPoints.reduce(
-    (total, point) => total + point.x * point.y,
-    0
-  );
-  const sumX2 = normalizedPoints.reduce(
-    (total, point) => total + point.x * point.x,
-    0
-  );
+  const n = normalizedPoints.length;
+  const k = Math.min(Math.max(1, Math.round(subdivisions)), n);
 
-  const denominator = count * sumX2 - sumX * sumX;
-  if (denominator === 0) {
-    return data.map(() => null);
+  // Build piecewise segment regressions
+  const segments: Array<{
+    endX: number;
+    slope: number;
+    intercept: number;
+  }> = [];
+
+  for (let seg = 0; seg < k; seg++) {
+    const ptStart = Math.floor((seg * n) / k);
+    const ptEnd = Math.min(Math.floor(((seg + 1) * n) / k) - 1, n - 1);
+    const segPts = normalizedPoints.slice(ptStart, ptEnd + 1);
+
+    if (segPts.length === 0) continue;
+
+    const endX = normalizedPoints[ptEnd].x;
+
+    if (segPts.length === 1) {
+      segments.push({ endX, slope: 0, intercept: segPts[0].y });
+    } else {
+      const { slope, intercept } = linearRegression(segPts);
+      segments.push({ endX, slope, intercept });
+    }
   }
 
-  const slope = (count * sumXY - sumX * sumY) / denominator;
-  const intercept = (sumY - slope * sumX) / count;
   const firstIndex = validPoints[0].index;
-  const lastIndex = validPoints[validPoints.length - 1].index;
+  const lastIndex = validPoints[n - 1].index;
 
   return data.map((point, index) => {
     if (index < firstIndex || index > lastIndex) {
@@ -146,8 +197,17 @@ export function calculateTrendLineData(
     }
 
     const normalizedX = (timestamp - firstX) / DAY_IN_MS;
-    const predictedValue = intercept + slope * normalizedX;
 
-    return Math.min(maxValue, Math.max(minValue, predictedValue));
+    // Find the segment this x falls into (first segment whose endX >= normalizedX)
+    let seg = segments[segments.length - 1];
+    for (const s of segments) {
+      if (normalizedX <= s.endX) {
+        seg = s;
+        break;
+      }
+    }
+
+    const predicted = seg.intercept + seg.slope * normalizedX;
+    return Math.min(maxValue, Math.max(minValue, predicted));
   });
 }

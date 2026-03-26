@@ -3,6 +3,7 @@ import {
   type HapticInput,
   type TriggerOptions,
 } from "web-haptics";
+import { updateLocalUserSettings } from "@/lib/user-settings-storage";
 
 export type AppHapticPreset =
   | "success"
@@ -58,7 +59,9 @@ export function setHapticsEnabled(enabled: boolean): void {
   }
 
   try {
-    window.localStorage.setItem(HAPTICS_STORAGE_KEY, String(enabled));
+    updateLocalUserSettings({
+      hapticsEnabled: enabled,
+    });
   } catch {
     // localStorage can be unavailable in strict privacy contexts.
   }

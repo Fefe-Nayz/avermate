@@ -1,5 +1,5 @@
 import { queryKeys } from "@/lib/query-keys";
-import { authClient } from "@/lib/auth";
+import { apiClient } from "@/lib/api";
 import { AdminListUsersResponse } from "@/types/admin";
 import { useQuery } from "@tanstack/react-query";
 
@@ -19,19 +19,15 @@ export const useAdminUsers = ({
   useQuery({
     queryKey: queryKeys.admin.users(searchValue, limit, offset),
     queryFn: async () => {
-      const response = await authClient.admin.listUsers({
-        query: {
-          searchValue: searchValue || undefined,
-          searchField: "email",
-          searchOperator: "contains",
+      const response = await apiClient.get("admin/users", {
+        searchParams: {
+          search: searchValue || undefined,
           limit,
           offset,
-          sortBy: "createdAt",
-          sortDirection: "desc",
         },
       });
 
-      return response as AdminListUsersResponse;
+      return response.json<AdminListUsersResponse>();
     },
     enabled,
     placeholderData: (previousData) => previousData,

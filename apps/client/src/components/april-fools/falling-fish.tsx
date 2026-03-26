@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { SeasonalTheme } from "./april-fools-theme-provider";
+import {
+  getUserSettingsStorageEventName,
+  isMokattamThemeActive,
+  readLocalUserSettings,
+} from "@/lib/user-settings-storage";
 
 // Define seasonal elements for different themes
 const SEASONAL_ELEMENTS = {
@@ -35,25 +40,28 @@ export function SeasonalElements() {
   const [activeTheme, setActiveTheme] = useState<SeasonalTheme>("none");
 
   useEffect(() => {
-    // Function to determine active theme (same logic as in theme provider)
     const getActiveTheme = (): SeasonalTheme => {
-      // Check for Next.js public environment variable (highest priority)
       const envForcedTheme = process.env.NEXT_PUBLIC_FORCE_SEASONAL_THEME;
       if (envForcedTheme && envForcedTheme in SEASONAL_ELEMENTS) {
         return envForcedTheme as SeasonalTheme;
       }
 
-      // Check for settings-based forced theme (for dev tools)
-      if (typeof window !== "undefined") {
-        const settingsForcedTheme = localStorage.getItem(
-          "seasonal-theme-settings-force"
-        );
-        if (settingsForcedTheme && settingsForcedTheme in SEASONAL_ELEMENTS) {
-          return settingsForcedTheme as SeasonalTheme;
-        }
+      const localSettings = readLocalUserSettings().settings;
+      if (isMokattamThemeActive(localSettings)) {
+        return "none";
       }
 
-      // Check for dev override in localStorage or URL params
+      if (!localSettings.seasonalThemesEnabled) {
+        return "none";
+      }
+
+      if (
+        localSettings.seasonalTheme !== "none" &&
+        localSettings.seasonalTheme in SEASONAL_ELEMENTS
+      ) {
+        return localSettings.seasonalTheme as SeasonalTheme;
+      }
+
       if (typeof window !== "undefined") {
         const forcedTheme =
           localStorage.getItem("seasonal-theme-force") ||
@@ -78,25 +86,35 @@ export function SeasonalElements() {
       return "none";
     };
 
-    const theme = getActiveTheme();
-    setActiveTheme(theme);
+    const syncTheme = () => {
+      const theme = getActiveTheme();
+      setActiveTheme(theme);
 
-    if (theme !== "none") {
+      if (theme === "none") {
+        setElements([]);
+        return;
+      }
+
       const themeConfig = SEASONAL_ELEMENTS[theme];
-
-      // Create elements with random properties
       const newElements = Array.from({ length: themeConfig.count }, (_, i) => ({
         id: i,
-        x: Math.random() * 100, // Random horizontal position (%)
-        size: Math.random() * 30 + 20, // Random size between 20-50px
-        delay: Math.random() * 5, // Random delay up to 5s
-        duration: Math.random() * 10 + 8, // Random duration between 8-18s
-        rotation: (Math.random() - 0.5) * 40, // Random rotation -20 to +20 degrees
+        x: Math.random() * 100,
+        size: Math.random() * 30 + 20,
+        delay: Math.random() * 5,
+        duration: Math.random() * 10 + 8,
+        rotation: (Math.random() - 0.5) * 40,
         emoji: themeConfig.emoji,
       }));
 
       setElements(newElements);
-    }
+    };
+
+    syncTheme();
+    window.addEventListener(getUserSettingsStorageEventName(), syncTheme);
+
+    return () => {
+      window.removeEventListener(getUserSettingsStorageEventName(), syncTheme);
+    };
   }, []);
 
   if (activeTheme === "none") return null;

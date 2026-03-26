@@ -83,6 +83,7 @@ function SubjectWrapper({
   onBack,
   periods,
   grades,
+  timelineControl,
 }: {
   subjects: Subject[];
   subject: Subject;
@@ -92,6 +93,7 @@ function SubjectWrapper({
   onBack: () => void;
   periods: Period[];
   grades: PartialGrade[];
+  timelineControl?: React.ReactNode;
 }) {
   const t = useTranslations("Dashboard.Pages.SubjectWrapper");
 
@@ -225,6 +227,8 @@ function SubjectWrapper({
 
         <Separator />
 
+        {timelineControl}
+
         {/* Coefficient card (optional) */}
         {!isVirtualSubject && (
           <DataCard
@@ -306,6 +310,8 @@ function SubjectWrapper({
       </div>
 
       <Separator />
+
+      {timelineControl}
 
       {/* Basic Information Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 md:gap-4">

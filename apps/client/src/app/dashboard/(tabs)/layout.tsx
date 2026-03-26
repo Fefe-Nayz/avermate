@@ -1,7 +1,9 @@
 "use client";
 
 import DashboardHeader from "@/components/dashboard/dashboard-header";
+import TimelineModeBanner from "@/components/dashboard/timeline-mode-banner";
 import DashboardNav from "@/components/nav/dashboard-nav";
+import { useMobileScrollReset } from "@/hooks/use-mobile-scroll-reset";
 import { ReactNode } from "react";
 import { YearReviewTrigger } from "@/components/year-review/year-review-trigger";
 
@@ -10,12 +12,15 @@ export default function AuthenticatedLayout({
 }: {
   children: ReactNode;
 }) {
+  useMobileScrollReset();
+
   return (
     <div className="flex flex-col shadow-[0px_4px_64px_0px_rgba(255,255,255,0.05)_inset] min-h-screen h-full">
       {/* Header */}
       <DashboardHeader />
 
       <DashboardNav />
+      <TimelineModeBanner />
       
       <YearReviewTrigger />
 

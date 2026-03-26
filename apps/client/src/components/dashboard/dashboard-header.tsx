@@ -22,8 +22,8 @@ interface DashboardHeaderProps {
 const getPageTitle = (
   pathname: string,
   t: any,
-  grade?: Grade,
-  subject?: Subject
+  grade?: Grade | null,
+  subject?: Subject | null
 ) => {
   if (pathname === "/dashboard") {
     return t("Dashboard.Pages.OverviewPage.overviewTitle");
@@ -66,6 +66,9 @@ const getPageTitle = (
   }
   if (pathname === "/profile/settings") {
     return t("Settings.Nav.settings");
+  }
+  if (pathname === "/profile/settings/general") {
+    return t("Settings.Nav.general");
   }
   if (pathname === "/profile/about") {
     return t("Settings.Nav.about");

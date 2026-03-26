@@ -40,10 +40,12 @@ export default function GradesTable({
   subjects,
   periodId,
   yearId,
+  caption,
 }: {
   subjects: Subject[];
   periodId: string;
   yearId: string;
+  caption?: string;
 }) {
   const pathname = usePathname();
   const t = useTranslations("Dashboard.Tables.GradesTable");
@@ -56,7 +58,6 @@ export default function GradesTable({
   const {
     data: period,
     isError: isPeriodError,
-    isPending: isPeriodPending,
   } = usePeriod(periodId);
 
   useEffect(() => {
@@ -71,7 +72,6 @@ export default function GradesTable({
   const {
     data: customAverages,
     isError: isCustomAveragesError,
-    isPending: isCustomAveragesPending,
   } = useCustomAverages(yearId);
 
   // // Loading State
@@ -89,7 +89,8 @@ export default function GradesTable({
     return <SubjectEmptyState />;
   }
 
-  const periodName = periodId !== "full-year" ? period?.name : t("fullYear");
+  const periodName =
+    caption ?? (periodId !== "full-year" ? period?.name : t("fullYear"));
   const overallAverageVal = average(undefined, subjects);
 
   // const overallAverage =

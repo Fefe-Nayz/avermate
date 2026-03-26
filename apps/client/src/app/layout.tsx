@@ -8,6 +8,9 @@ import { ThemeColorMetaTag } from "@/components/color";
 import { Toaster } from "@/components/ui/sonner"
 import { cn } from "@/lib/utils";
 import ThemeProvider from "@/providers/theme-provider";
+import MokattamCelebrationProvider from "@/providers/mokattam-celebration-provider";
+import TimelineModeSync from "@/providers/timeline-mode-sync";
+import UserSettingsSync from "@/providers/user-settings-sync";
 import { Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -30,7 +33,6 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({
@@ -57,8 +59,11 @@ export default async function RootLayout({
       <body className={cn("", gabarito.className)} >
         <QueryProvider>
           <ThemeProvider>
+            <UserSettingsSync />
+            <TimelineModeSync />
             <ThemeColorMetaTag />
             <NextIntlClientProvider locale={locale} messages={messages}>
+              <MokattamCelebrationProvider />
               <AprilFools />
               <div data-vaul-drawer-wrapper="" className="bg-background scrollbar-hide" >
                 {children}
