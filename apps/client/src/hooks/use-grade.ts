@@ -1,4 +1,5 @@
 import { apiClient } from "@/lib/api";
+import { readLocalUserSettings } from "@/lib/user-settings-storage";
 import { Grade } from "@/types/grade";
 import { isGradeVisibleAtSnapshot } from "@/utils/grades-timeline";
 import { useQuery } from "@tanstack/react-query";
@@ -20,10 +21,12 @@ function modifyGradeForAprilFools(grade: Grade): Grade {
   return modifiedGrade;
 }
 
-// Check if today is April 1st
-function isAprilFoolsDay(): boolean {
+// Check if today is April 1st and seasonal themes are enabled
+function isAprilFoolsActive(): boolean {
   const today = new Date();
-  return today.getMonth() === 3 && today.getDate() === 1;
+  if (today.getMonth() !== 3 || today.getDate() !== 1) return false;
+  if (typeof window === "undefined") return false;
+  return readLocalUserSettings().settings.seasonalThemesEnabled;
 }
 
 export const useGrade = (gradeId?: string) => {
@@ -38,8 +41,8 @@ export const useGrade = (gradeId?: string) => {
       const res = await apiClient.get(`grades/${gradeId}`);
       const data = await res.json<{ grade: Grade }>();
 
-      // On April 1st, return modified grades with low values
-      if (isAprilFoolsDay()) {
+      // On April 1st with seasonal themes enabled, return modified grades with low values
+      if (isAprilFoolsActive()) {
         return modifyGradeForAprilFools(data.grade);
       }
 
