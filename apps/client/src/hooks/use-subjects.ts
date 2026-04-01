@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
+import { readLocalUserSettings } from "@/lib/user-settings-storage";
 import { GetSubjectsResponse } from "@/types/get-subjects-response";
 import { Grade } from "@/types/grade";
 import { filterSubjectsBySnapshotDate } from "@/utils/grades-timeline";
@@ -22,10 +23,12 @@ function modifyGradeForAprilFools(grade: Grade): Grade {
   return modifiedGrade;
 }
 
-// Check if today is April 1st
-function isAprilFoolsDay(): boolean {
+// Check if today is April 1st and seasonal themes are enabled
+function isAprilFoolsActive(): boolean {
   const today = new Date();
-  return today.getMonth() === 3 && today.getDate() === 1;
+  if (today.getMonth() !== 3 || today.getDate() !== 1) return false;
+  if (typeof window === "undefined") return false;
+  return readLocalUserSettings().settings.seasonalThemesEnabled;
 }
 
 export const useSubjects = (yearId: string) => {
@@ -37,7 +40,7 @@ export const useSubjects = (yearId: string) => {
       const res = await apiClient.get(`years/${yearId}/subjects`);
       const data = await res.json<GetSubjectsResponse>();
 
-      if (isAprilFoolsDay()) {
+      if (isAprilFoolsActive()) {
         // Apply April Fools modifications to each subject's grades
         return data.subjects.map((subject) => {
           return {
