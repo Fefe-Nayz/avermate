@@ -385,6 +385,7 @@ export function AddGradeForm({
                           setIsManualPeriod(false); // Reset manual period selection
                         }}
                         disabled={(date) =>
+                          date > new Date() ||
                           (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                         }
                         autoFocus
