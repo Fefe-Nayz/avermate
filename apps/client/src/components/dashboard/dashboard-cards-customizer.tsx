@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, LayoutGrid, Save, Settings2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,58 +37,6 @@ import type {
   DashboardCardTone,
 } from "@/types/cards";
 
-const labels: Record<DashboardCardId, string> = {
-  "general-average": "Moyenne générale",
-  "main-custom-averages": "Moyennes épinglées",
-  "selected-custom-average": "Moyenne personnalisée",
-  "target-average": "Objectif de moyenne",
-  "average-evolution": "Évolution",
-  "best-grade": "Meilleure note",
-  "latest-grade": "Dernière note",
-  "grades-count": "Nombre de notes",
-  "subjects-count": "Matières actives",
-  "best-subject": "Meilleure matière",
-  "worst-grade": "Moins bonne note",
-  "worst-subject": "Matière à surveiller",
-  "subject-average": "Moyenne d'une matière",
-  "median-grade": "Médiane",
-  "grade-standard-deviation": "Écart-type",
-  "average-trend": "Tendance",
-  "progression-streak": "Streak de progression",
-  "future-projection": "Projection",
-  "threshold-count": "Notes au seuil",
-};
-
-const descriptions: Record<DashboardCardId, string> = {
-  "general-average": "Affiche la moyenne globale de la période.",
-  "main-custom-averages": "Affiche les moyennes personnalisées épinglées.",
-  "selected-custom-average": "Affiche une moyenne personnalisée précise.",
-  "target-average": "Compare la moyenne globale à un objectif.",
-  "average-evolution": "Montre la variation depuis le début de la période.",
-  "best-grade": "Met en avant la meilleure note.",
-  "latest-grade": "Affiche la note ajoutée la plus récemment.",
-  "grades-count": "Compte les notes disponibles dans les matières chargées.",
-  "subjects-count": "Compte les matières avec au moins une note.",
-  "best-subject": "Met en avant la matière la plus forte.",
-  "worst-grade": "Met en avant la note la plus faible.",
-  "worst-subject": "Met en avant la matière à surveiller.",
-  "subject-average": "Affiche une moyenne ciblée sur une matière.",
-  "median-grade": "Affiche la note médiane du périmètre choisi.",
-  "grade-standard-deviation": "Mesure la dispersion des notes du périmètre.",
-  "average-trend": "Affiche la variation récente de moyenne.",
-  "progression-streak": "Compte la plus longue série d'amélioration.",
-  "future-projection": "Projette la prochaine moyenne probable.",
-  "threshold-count": "Compte les notes au-dessus ou sous un seuil.",
-};
-
-const toneLabels: Record<DashboardCardTone, string> = {
-  default: "Neutre",
-  blue: "Bleu",
-  green: "Vert",
-  amber: "Ambre",
-  rose: "Rose",
-};
-
 const toneClasses: Record<DashboardCardTone, string> = {
   default: "bg-muted",
   blue: "bg-blue-500",
@@ -96,35 +45,53 @@ const toneClasses: Record<DashboardCardTone, string> = {
   rose: "bg-rose-500",
 };
 
-function getSubjectLabel(subjects: Subject[], subjectId?: string) {
+const toneLabelKeys: Record<
+  DashboardCardTone,
+  "toneNeutral" | "toneBlue" | "toneGreen" | "toneAmber" | "toneRose"
+> = {
+  default: "toneNeutral",
+  blue: "toneBlue",
+  green: "toneGreen",
+  amber: "toneAmber",
+  rose: "toneRose",
+};
+
+type CustomizerTranslator = ReturnType<typeof useTranslations<"Dashboard.Cards.Customizer">>;
+
+function getSubjectLabel(
+  subjects: Subject[],
+  subjectId: string | undefined,
+  t: CustomizerTranslator
+) {
   if (!subjectId || subjectId === "global") {
-    return "Global";
+    return t("global");
   }
 
   return (
     subjects.find((subject) => subject.id === subjectId)?.name ??
-    "Matière inconnue"
+    t("unknownSubject")
   );
 }
 
 function getCardConfigSummary(
   card: DashboardCardLayoutItem,
   averages: Average[],
-  subjects: Subject[]
+  subjects: Subject[],
+  t: CustomizerTranslator
 ) {
   if (card.id === "target-average") {
-    return `Objectif ${card.config.targetAverage ?? 16}/20`;
+    return t("targetSummary", { target: card.config.targetAverage ?? 16 });
   }
 
   if (card.id === "selected-custom-average") {
     const average = averages.find(
       (entry) => entry.id === card.config.customAverageId
     );
-    return average?.name ?? "Aucune moyenne choisie";
+    return average?.name ?? t("noAverageChosen");
   }
 
   if (card.id === "main-custom-averages" && card.config.maxItems) {
-    return `${card.config.maxItems} carte(s) max`;
+    return t("maxItemsSummary", { count: card.config.maxItems });
   }
 
   if (
@@ -138,16 +105,20 @@ function getCardConfigSummary(
       "threshold-count",
     ].includes(card.id)
   ) {
-    const scope = getSubjectLabel(subjects, card.config.subjectId);
+    const scope = getSubjectLabel(subjects, card.config.subjectId, t);
     if (card.id === "threshold-count") {
       const comparator = card.config.comparator === "below" ? "<" : ">";
-      return `${scope} ${comparator} ${card.config.threshold ?? 15}/20`;
+      return t("thresholdSummary", {
+        scope,
+        comparator,
+        threshold: card.config.threshold ?? 15,
+      });
     }
 
     return scope;
   }
 
-  return card.config.compact ? "Compact" : "Standard";
+  return card.config.compact ? t("compactValue") : t("standardValue");
 }
 
 export function DashboardCardsCustomizer({
@@ -159,6 +130,7 @@ export function DashboardCardsCustomizer({
   customAverages?: Average[];
   subjects?: Subject[];
 }) {
+  const t = useTranslations("Dashboard.Cards.Customizer");
   const sortedLayout = useMemo(
     () => [...layout].sort((a, b) => a.position - b.position),
     [layout]
@@ -226,10 +198,10 @@ export function DashboardCardsCustomizer({
   const handleSave = () => {
     updateLayout.mutate(draft, {
       onSuccess: () => {
-        toast.success("Cartes enregistrées");
+        toast.success(t("savedToast"));
         setOpen(false);
       },
-      onError: () => toast.error("Impossible d'enregistrer les cartes."),
+      onError: () => toast.error(t("saveError")),
     });
   };
 
@@ -270,16 +242,13 @@ export function DashboardCardsCustomizer({
       <CredenzaTrigger asChild>
         <Button variant="outline" className="w-full sm:w-auto">
           <LayoutGrid className="size-4" />
-          Personnaliser les cartes
+          {t("trigger")}
         </Button>
       </CredenzaTrigger>
       <CredenzaContent className="flex max-h-[min(95svh,820px)] flex-col gap-0 p-0 sm:max-w-[min(1120px,calc(100vw-2rem))] md:max-w-[min(1120px,calc(100vw-2rem))]">
         <CredenzaHeader className="shrink-0 border-b px-5 py-4 text-left">
-          <CredenzaTitle>Cartes de l'accueil</CredenzaTitle>
-          <CredenzaDescription>
-            Choisissez les cartes visibles, leur ordre et les options propres à
-            chaque type de carte.
-          </CredenzaDescription>
+          <CredenzaTitle>{t("title")}</CredenzaTitle>
+          <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
 
         <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)]">
@@ -320,10 +289,12 @@ export function DashboardCardsCustomizer({
                             toneClasses[card.config.tone ?? "default"]
                           )}
                         />
-                        <p className="truncate font-medium">{labels[card.id]}</p>
+                        <p className="truncate font-medium">
+                          {t(`card_${card.id}` as `card_${DashboardCardId}`)}
+                        </p>
                       </div>
                       <p className="truncate text-xs text-muted-foreground">
-                        {getCardConfigSummary(card, customAverages, subjects)}
+                        {getCardConfigSummary(card, customAverages, subjects, t)}
                       </p>
                     </div>
                     <div className="flex gap-1">
@@ -338,7 +309,7 @@ export function DashboardCardsCustomizer({
                         disabled={index === 0}
                       >
                         <ArrowUp className="size-4" />
-                        <span className="sr-only">Monter</span>
+                        <span className="sr-only">{t("moveUp")}</span>
                       </Button>
                       <Button
                         type="button"
@@ -351,7 +322,7 @@ export function DashboardCardsCustomizer({
                         disabled={index === draft.length - 1}
                       >
                         <ArrowDown className="size-4" />
-                        <span className="sr-only">Descendre</span>
+                        <span className="sr-only">{t("moveDown")}</span>
                       </Button>
                     </div>
                   </div>
@@ -368,25 +339,27 @@ export function DashboardCardsCustomizer({
                     <Settings2 className="size-4" />
                   </div>
                   <div>
-                    <h3 className="font-medium">{labels[selectedCard.id]}</h3>
+                    <h3 className="font-medium">
+                      {t(`card_${selectedCard.id}` as `card_${DashboardCardId}`)}
+                    </h3>
                     <p className="text-sm text-muted-foreground">
-                      {descriptions[selectedCard.id]}
+                      {t(`desc_${selectedCard.id}` as `desc_${DashboardCardId}`)}
                     </p>
                   </div>
                 </div>
 
                 <Tabs defaultValue="general">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="general">Général</TabsTrigger>
-                    <TabsTrigger value="specific">Spécifique</TabsTrigger>
+                    <TabsTrigger value="general">{t("tabGeneral")}</TabsTrigger>
+                    <TabsTrigger value="specific">{t("tabSpecific")}</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="general" className="space-y-4 pt-3">
                     <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                       <div>
-                        <Label>Visible</Label>
+                        <Label>{t("visible")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Afficher cette carte sur l'accueil.
+                          {t("visibleDescription")}
                         </p>
                       </div>
                       <Switch
@@ -398,10 +371,12 @@ export function DashboardCardsCustomizer({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Titre personnalisé</Label>
+                      <Label>{t("customTitle")}</Label>
                       <Input
                         value={selectedCard.config.title ?? ""}
-                        placeholder={labels[selectedCard.id]}
+                        placeholder={t(
+                          `card_${selectedCard.id}` as `card_${DashboardCardId}`
+                        )}
                         onChange={(event) =>
                           patchCard(selectedCard.id, {
                             config: { title: event.target.value },
@@ -412,7 +387,7 @@ export function DashboardCardsCustomizer({
 
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                       <div className="space-y-2">
-                        <Label>Style</Label>
+                        <Label>{t("style")}</Label>
                         <SelectDrawer
                           value={selectedCard.config.tone ?? "default"}
                           onValueChange={(tone) =>
@@ -422,23 +397,25 @@ export function DashboardCardsCustomizer({
                           }
                         >
                           <SelectDrawerTrigger>
-                            {toneLabels[selectedCard.config.tone ?? "default"]}
+                            {t(toneLabelKeys[selectedCard.config.tone ?? "default"])}
                           </SelectDrawerTrigger>
-                          <SelectDrawerContent title="Style">
+                          <SelectDrawerContent title={t("styleDrawer")}>
                             <SelectDrawerGroup>
-                              {Object.entries(toneLabels).map(([tone, label]) => (
-                                <SelectDrawerItem key={tone} value={tone}>
-                                  <span className="flex items-center gap-2">
-                                    <span
-                                      className={cn(
-                                        "size-2 rounded-full",
-                                        toneClasses[tone as DashboardCardTone]
-                                      )}
-                                    />
-                                    {label}
-                                  </span>
-                                </SelectDrawerItem>
-                              ))}
+                              {(Object.keys(toneLabelKeys) as DashboardCardTone[]).map(
+                                (tone) => (
+                                  <SelectDrawerItem key={tone} value={tone}>
+                                    <span className="flex items-center gap-2">
+                                      <span
+                                        className={cn(
+                                          "size-2 rounded-full",
+                                          toneClasses[tone]
+                                        )}
+                                      />
+                                      {t(toneLabelKeys[tone])}
+                                    </span>
+                                  </SelectDrawerItem>
+                                )
+                              )}
                             </SelectDrawerGroup>
                           </SelectDrawerContent>
                         </SelectDrawer>
@@ -446,9 +423,9 @@ export function DashboardCardsCustomizer({
 
                       <div className="flex items-end justify-between gap-3 rounded-lg border p-3">
                         <div>
-                          <Label>Compact</Label>
+                          <Label>{t("compact")}</Label>
                           <p className="text-xs text-muted-foreground">
-                            Réduit la hauteur de la carte.
+                            {t("compactDescription")}
                           </p>
                         </div>
                         <Switch
@@ -466,7 +443,7 @@ export function DashboardCardsCustomizer({
                   <TabsContent value="specific" className="space-y-4 pt-3">
                     {selectedCard.id === "target-average" ? (
                       <div className="space-y-2">
-                        <Label>Objectif sur 20</Label>
+                        <Label>{t("targetLabel")}</Label>
                         <Input
                           type="number"
                           inputMode="decimal"
@@ -487,7 +464,7 @@ export function DashboardCardsCustomizer({
 
                     {selectedCard.id === "selected-custom-average" ? (
                       <div className="space-y-2">
-                        <Label>Moyenne personnalisée</Label>
+                        <Label>{t("customAverage")}</Label>
                         <SelectDrawer
                           value={selectedCard.config.customAverageId ?? ""}
                           onValueChange={(customAverageId) =>
@@ -502,10 +479,10 @@ export function DashboardCardsCustomizer({
                                 average.id === selectedCard.config.customAverageId
                             )?.name ??
                               (hasCustomAverageChoices
-                                ? "Choisir une moyenne"
-                                : "Aucune moyenne disponible")}
+                                ? t("chooseAverage")
+                                : t("noAveragesAvailable"))}
                           </SelectDrawerTrigger>
-                          <SelectDrawerContent title="Moyenne personnalisée">
+                          <SelectDrawerContent title={t("averagesDrawer")}>
                             <SelectDrawerGroup>
                               {customAverages.map((average) => (
                                 <SelectDrawerItem
@@ -523,13 +500,13 @@ export function DashboardCardsCustomizer({
 
                     {selectedCard.id === "main-custom-averages" ? (
                       <div className="space-y-2">
-                        <Label>Nombre maximal de cartes</Label>
+                        <Label>{t("maxItemsLabel")}</Label>
                         <Input
                           type="number"
                           min={1}
                           max={12}
                           value={selectedCard.config.maxItems ?? ""}
-                          placeholder="Toutes"
+                          placeholder={t("maxItemsPlaceholder")}
                           onChange={(event) =>
                             patchCard(selectedCard.id, {
                               config: {
@@ -547,8 +524,8 @@ export function DashboardCardsCustomizer({
                       <div className="space-y-2">
                         <Label>
                           {selectedCard.id === "subject-average"
-                            ? "Matière"
-                            : "Périmètre"}
+                            ? t("subject")
+                            : t("scope")}
                         </Label>
                         <SelectDrawer
                           value={
@@ -567,17 +544,18 @@ export function DashboardCardsCustomizer({
                             {selectedCard.config.subjectId
                               ? getSubjectLabel(
                                   subjects,
-                                  selectedCard.config.subjectId
+                                  selectedCard.config.subjectId,
+                                  t
                                 )
                               : selectedCard.id === "subject-average"
-                                ? "Choisir une matière"
-                                : "Global"}
+                                ? t("chooseSubject")
+                                : t("global")}
                           </SelectDrawerTrigger>
-                          <SelectDrawerContent title="Périmètre">
+                          <SelectDrawerContent title={t("scopeDrawer")}>
                             <SelectDrawerGroup>
                               {selectedCard.id !== "subject-average" ? (
                                 <SelectDrawerItem value="global">
-                                  Global
+                                  {t("global")}
                                 </SelectDrawerItem>
                               ) : null}
                               {selectableSubjects.map((subject) => (
@@ -597,7 +575,7 @@ export function DashboardCardsCustomizer({
                     {selectedCard.id === "threshold-count" ? (
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label>Condition</Label>
+                          <Label>{t("condition")}</Label>
                           <SelectDrawer
                             value={selectedCard.config.comparator ?? "above"}
                             onValueChange={(comparator) =>
@@ -610,23 +588,23 @@ export function DashboardCardsCustomizer({
                           >
                             <SelectDrawerTrigger>
                               {selectedCard.config.comparator === "below"
-                                ? "Sous le seuil"
-                                : "Au-dessus du seuil"}
+                                ? t("thresholdBelow")
+                                : t("thresholdAbove")}
                             </SelectDrawerTrigger>
-                            <SelectDrawerContent title="Condition">
+                            <SelectDrawerContent title={t("conditionDrawer")}>
                               <SelectDrawerGroup>
                                 <SelectDrawerItem value="above">
-                                  Au-dessus du seuil
+                                  {t("thresholdAbove")}
                                 </SelectDrawerItem>
                                 <SelectDrawerItem value="below">
-                                  Sous le seuil
+                                  {t("thresholdBelow")}
                                 </SelectDrawerItem>
                               </SelectDrawerGroup>
                             </SelectDrawerContent>
                           </SelectDrawer>
                         </div>
                         <div className="space-y-2">
-                          <Label>Seuil sur 20</Label>
+                          <Label>{t("thresholdLabel")}</Label>
                           <Input
                             type="number"
                             inputMode="decimal"
@@ -648,7 +626,7 @@ export function DashboardCardsCustomizer({
 
                     {selectedCard.id === "future-projection" ? (
                       <div className="space-y-2">
-                        <Label>Nombre de notes projetées</Label>
+                        <Label>{t("projectionStepsLabel")}</Label>
                         <Input
                           type="number"
                           min={1}
@@ -673,7 +651,7 @@ export function DashboardCardsCustomizer({
                       "future-projection",
                     ].includes(selectedCard.id) ? (
                       <div className="space-y-2">
-                        <Label>Décimales</Label>
+                        <Label>{t("decimalsLabel")}</Label>
                         <Input
                           type="number"
                           min={0}
@@ -697,9 +675,9 @@ export function DashboardCardsCustomizer({
                     ].includes(selectedCard.id) ? (
                       <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                         <div>
-                          <Label>Afficher la matière</Label>
+                          <Label>{t("showSubjectName")}</Label>
                           <p className="text-xs text-muted-foreground">
-                            Inclut le nom de la matière dans la description.
+                            {t("showSubjectNameDescription")}
                           </p>
                         </div>
                         <Switch
@@ -715,7 +693,7 @@ export function DashboardCardsCustomizer({
 
                     {!hasSpecificSettings ? (
                       <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                        Cette carte n'a pas de réglage spécifique pour le moment.
+                        {t("noSpecificSettings")}
                       </p>
                     ) : null}
                   </TabsContent>
@@ -728,7 +706,7 @@ export function DashboardCardsCustomizer({
         <CredenzaFooter className="shrink-0 border-t px-5 py-4">
           <Button onClick={handleSave} disabled={updateLayout.isPending}>
             <Save className="size-4" />
-            Enregistrer
+            {t("save")}
           </Button>
         </CredenzaFooter>
       </CredenzaContent>

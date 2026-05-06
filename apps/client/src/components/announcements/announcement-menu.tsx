@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Credenza,
-  CredenzaContent,
   CredenzaDescription,
   CredenzaHeader,
   CredenzaTitle,
@@ -22,6 +21,7 @@ import {
 import { authClient } from "@/lib/auth";
 import type { Announcement, AnnouncementTone } from "@/types/announcement";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 const toneIcons: Record<AnnouncementTone, typeof Info> = {
   info: Info,
@@ -29,18 +29,18 @@ const toneIcons: Record<AnnouncementTone, typeof Info> = {
   warning: AlertCircle,
 };
 
-const toneLabels: Record<AnnouncementTone, string> = {
-  info: "Info",
-  success: "Succès",
-  warning: "Attention",
+const toneLabelKeys: Record<AnnouncementTone, "toneInfo" | "toneSuccess" | "toneWarning"> = {
+  info: "toneInfo",
+  success: "toneSuccess",
+  warning: "toneWarning",
 };
 
-function formatViewedAt(value: Announcement["viewedAt"]) {
+function formatViewedAt(value: Announcement["viewedAt"], hiddenLabel: string) {
   if (!value) {
-    return "Masquée";
+    return hiddenLabel;
   }
 
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(undefined, {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -68,6 +68,7 @@ export function AnnouncementMenu({
 }: {
   children: React.ReactNode;
 }) {
+  const t = useTranslations("Dashboard.Notifications");
   const { data: session, isPending: isSessionPending } = authClient.useSession();
   const enabled = Boolean(session) && !isSessionPending;
   const [open, setOpen] = useState(false);
@@ -84,6 +85,7 @@ export function AnnouncementMenu({
     options?: { dismissed?: boolean }
   ) => {
     const Icon = toneIcons[announcement.tone] ?? Info;
+    const toneKey = toneLabelKeys[announcement.tone] ?? "toneInfo";
 
     return (
       <div
@@ -97,17 +99,15 @@ export function AnnouncementMenu({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium leading-tight">{announcement.title}</p>
-              <Badge variant="outline">
-                {toneLabels[announcement.tone] ?? "Info"}
-              </Badge>
+              <Badge variant="outline">{t(toneKey)}</Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {announcement.message}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               {options?.dismissed
-                ? formatViewedAt(announcement.viewedAt)
-                : "Non masquée"}
+                ? formatViewedAt(announcement.viewedAt, t("hidden"))
+                : t("shown")}
             </p>
           </div>
           {!options?.dismissed ? (
@@ -119,7 +119,7 @@ export function AnnouncementMenu({
               disabled={dismissAnnouncement.isPending}
             >
               <X className="size-4" />
-              <span className="sr-only">Masquer</span>
+              <span className="sr-only">{t("dismiss")}</span>
             </Button>
           ) : null}
         </div>
@@ -132,18 +132,15 @@ export function AnnouncementMenu({
       <CredenzaTrigger asChild>{children}</CredenzaTrigger>
       <CredenzaContentWrapper>
         <CredenzaHeader>
-          <CredenzaTitle>Notifications</CredenzaTitle>
-          <CredenzaDescription>
-            Les notifications masquées restent ici tant que l'annonce existe
-            côté admin.
-          </CredenzaDescription>
+          <CredenzaTitle>{t("title")}</CredenzaTitle>
+          <CredenzaDescription>{t("description")}</CredenzaDescription>
         </CredenzaHeader>
         <CredenzaBodyWrapper>
           <div className="space-y-3">
             {activeAnnouncements?.length ? (
               <section className="space-y-2">
                 <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  À lire
+                  {t("sectionUnread")}
                 </p>
                 {activeAnnouncements.map((announcement) =>
                   renderAnnouncement(announcement)
@@ -154,7 +151,7 @@ export function AnnouncementMenu({
             {dismissedAnnouncements?.length ? (
               <section className="space-y-2">
                 <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Masquées
+                  {t("sectionDismissed")}
                 </p>
                 {dismissedAnnouncements.map((announcement) =>
                   renderAnnouncement(announcement, { dismissed: true })
@@ -164,7 +161,7 @@ export function AnnouncementMenu({
 
             {!activeAnnouncements?.length && !dismissedAnnouncements?.length ? (
               <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-                Aucune notification pour le moment.
+                {t("empty")}
               </div>
             ) : null}
           </div>

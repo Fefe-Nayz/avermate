@@ -524,7 +524,7 @@ function SubjectWrapper({
               {chartTab === "average" && (
                 <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 sm:justify-start">
                   <Label htmlFor="show-sub-subjects" className="text-sm">
-                    Sous-matières
+                    {t("showSubSubjects")}
                   </Label>
                   <Switch
                     id="show-sub-subjects"

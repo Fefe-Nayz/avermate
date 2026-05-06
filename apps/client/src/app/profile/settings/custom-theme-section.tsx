@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
+import { useTranslations } from "next-intl";
 import { Dices, Moon, Palette, RotateCcw, Sun } from "lucide-react";
 
 import ProfileSection from "../profile-section";
@@ -45,10 +46,17 @@ import {
   type CustomThemeSettings,
 } from "@/types/user-settings";
 
+type PresetBadgeKey =
+  | "badgeSoft"
+  | "badgePunchy"
+  | "badgeBold"
+  | "badgeClean"
+  | "badgeDark";
+
 type ThemePreset = {
   id: string;
   label: string;
-  badge?: string;
+  badgeKey?: PresetBadgeKey;
   theme: CustomThemeSettings;
 };
 
@@ -122,68 +130,106 @@ const paletteKeyMap = {
   sidebarRing: "sidebar-ring",
 } satisfies Record<keyof CustomThemePalette, keyof StudioPalette>;
 
+type ColorGroupLabelKey =
+  | "groupBrand"
+  | "groupBase"
+  | "groupInterface"
+  | "groupChart"
+  | "groupNavigation";
+
+type ColorLabelKey =
+  | "color_primary"
+  | "color_primaryForeground"
+  | "color_secondary"
+  | "color_secondaryForeground"
+  | "color_destructive"
+  | "color_background"
+  | "color_foreground"
+  | "color_card"
+  | "color_cardForeground"
+  | "color_popover"
+  | "color_popoverForeground"
+  | "color_muted"
+  | "color_mutedForeground"
+  | "color_accent"
+  | "color_accentForeground"
+  | "color_border"
+  | "color_input"
+  | "color_ring"
+  | "color_chart1"
+  | "color_chart2"
+  | "color_chart3"
+  | "color_chart4"
+  | "color_chart5"
+  | "color_sidebar"
+  | "color_sidebarForeground"
+  | "color_sidebarPrimary"
+  | "color_sidebarAccent"
+  | "color_sidebarBorder"
+  | "color_sidebarRing";
+
 const colorGroups: Array<{
   id: string;
-  label: string;
-  keys: Array<{ key: keyof CustomThemePalette; label: string }>;
+  labelKey: ColorGroupLabelKey;
+  keys: Array<{ key: keyof CustomThemePalette; labelKey: ColorLabelKey }>;
 }> = [
   {
     id: "brand",
-    label: "Couleurs marque",
+    labelKey: "groupBrand",
     keys: [
-      { key: "primary", label: "Primary" },
-      { key: "primaryForeground", label: "Primary foreground" },
-      { key: "secondary", label: "Secondary" },
-      { key: "secondaryForeground", label: "Secondary foreground" },
-      { key: "destructive", label: "Destructive" },
+      { key: "primary", labelKey: "color_primary" },
+      { key: "primaryForeground", labelKey: "color_primaryForeground" },
+      { key: "secondary", labelKey: "color_secondary" },
+      { key: "secondaryForeground", labelKey: "color_secondaryForeground" },
+      { key: "destructive", labelKey: "color_destructive" },
     ],
   },
   {
     id: "base",
-    label: "Base",
+    labelKey: "groupBase",
     keys: [
-      { key: "background", label: "Background" },
-      { key: "foreground", label: "Foreground" },
-      { key: "card", label: "Card" },
-      { key: "cardForeground", label: "Card foreground" },
-      { key: "popover", label: "Popover" },
-      { key: "popoverForeground", label: "Popover foreground" },
+      { key: "background", labelKey: "color_background" },
+      { key: "foreground", labelKey: "color_foreground" },
+      { key: "card", labelKey: "color_card" },
+      { key: "cardForeground", labelKey: "color_cardForeground" },
+      { key: "popover", labelKey: "color_popover" },
+      { key: "popoverForeground", labelKey: "color_popoverForeground" },
     ],
   },
   {
     id: "other",
-    label: "Interface",
+    labelKey: "groupInterface",
     keys: [
-      { key: "muted", label: "Muted" },
-      { key: "mutedForeground", label: "Muted foreground" },
-      { key: "accent", label: "Accent" },
-      { key: "accentForeground", label: "Accent foreground" },
-      { key: "border", label: "Border" },
-      { key: "input", label: "Input" },
-      { key: "ring", label: "Ring" },
+      { key: "muted", labelKey: "color_muted" },
+      { key: "mutedForeground", labelKey: "color_mutedForeground" },
+      { key: "accent", labelKey: "color_accent" },
+      { key: "accentForeground", labelKey: "color_accentForeground" },
+      { key: "border", labelKey: "color_border" },
+      { key: "input", labelKey: "color_input" },
+      { key: "ring", labelKey: "color_ring" },
     ],
   },
   {
     id: "chart",
-    label: "Graphiques",
+    labelKey: "groupChart",
     keys: [
-      { key: "chart1", label: "Chart 1" },
-      { key: "chart2", label: "Chart 2" },
-      { key: "chart3", label: "Chart 3" },
-      { key: "chart4", label: "Chart 4" },
-      { key: "chart5", label: "Chart 5" },
+      { key: "chart1", labelKey: "color_chart1" },
+      { key: "chart2", labelKey: "color_chart2" },
+      { key: "chart3", labelKey: "color_chart3" },
+      { key: "chart4", labelKey: "color_chart4" },
+      { key: "chart5", labelKey: "color_chart5" },
     ],
   },
   {
     id: "sidebar",
-    label: "Navigation",
+    labelKey: "groupNavigation",
     keys: [
-      { key: "sidebar", label: "Sidebar" },
-      { key: "sidebarForeground", label: "Sidebar foreground" },
-      { key: "sidebarPrimary", label: "Sidebar primary" },
-      { key: "sidebarAccent", label: "Sidebar accent" },
-      { key: "sidebarBorder", label: "Sidebar border" },
-      { key: "sidebarRing", label: "Sidebar ring" },
+      { key: "sidebar", labelKey: "color_sidebar" },
+      { key: "sidebarForeground", labelKey: "color_sidebarForeground" },
+      { key: "sidebarPrimary", labelKey: "color_sidebarPrimary" },
+      { key: "sidebarAccent", labelKey: "color_sidebarAccent" },
+      { key: "sidebarBorder", labelKey: "color_sidebarBorder" },
+      { key: "sidebarRing", labelKey: "color_sidebarRing" },
     ],
   },
 ];
@@ -255,13 +301,13 @@ function makePalette(
 function makePreset({
   id,
   label,
-  badge,
+  badgeKey,
   light,
   dark,
 }: {
   id: string;
   label: string;
-  badge?: string;
+  badgeKey?: PresetBadgeKey;
   light: StudioPalette;
   dark: StudioPalette;
 }): ThemePreset {
@@ -273,7 +319,7 @@ function makePreset({
   return {
     id,
     label,
-    badge,
+    badgeKey,
     theme: {
       enabled: true,
       preset: id,
@@ -296,7 +342,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "marshmallow",
     label: "Marshmallow",
-    badge: "Soft",
+    badgeKey: "badgeSoft",
     light: {
       background: "oklch(0.97 0.01 264.53)",
       foreground: "oklch(0.22 0 0)",
@@ -382,7 +428,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "spotify",
     label: "Spotify",
-    badge: "Punchy",
+    badgeKey: "badgePunchy",
     light: {
       background: "oklch(0.98 0 0)",
       foreground: "oklch(0.13 0 0)",
@@ -417,7 +463,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "neo-brutalism",
     label: "Neo Brutalism",
-    badge: "Bold",
+    badgeKey: "badgeBold",
     light: {
       background: "oklch(1 0 0)",
       foreground: "oklch(0 0 0)",
@@ -523,7 +569,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "modern-minimal",
     label: "Modern Minimal",
-    badge: "Clean",
+    badgeKey: "badgeClean",
     light: {
       background: "oklch(0.99 0 0)",
       foreground: "oklch(0.16 0 0)",
@@ -589,7 +635,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "pastel-dreams",
     label: "Pastel Dreams",
-    badge: "Soft",
+    badgeKey: "badgeSoft",
     light: {
       background: "oklch(0.98 0.02 310)",
       foreground: "oklch(0.24 0.03 290)",
@@ -622,7 +668,7 @@ const presets: ThemePreset[] = [
   makePreset({
     id: "midnight-bloom",
     label: "Midnight Bloom",
-    badge: "Dark",
+    badgeKey: "badgeDark",
     light: {
       background: "oklch(0.98 0.01 270)",
       foreground: "oklch(0.18 0.03 285)",
@@ -844,6 +890,7 @@ function resolveThemeMode(
 }
 
 export function CustomThemeSection() {
+  const t = useTranslations("Settings.Profile.CustomTheme");
   const { setTheme, resolvedTheme, theme } = useTheme();
   const { data: session } = authClient.useSession();
   const { data: remoteSettings } = useUserSettings(Boolean(session));
@@ -890,7 +937,7 @@ export function CustomThemeSection() {
   );
   const previewPreset = selectedPreset ?? {
     id: "custom",
-    label: "Personnalisé",
+    label: t("customLabel"),
     theme: draft,
   };
 
@@ -949,7 +996,7 @@ export function CustomThemeSection() {
       enabled: presetId === "default" ? draft.enabled : true,
       preset: presetId,
     });
-    toast.success("Thème appliqué");
+    toast.success(t("appliedToast"));
   };
 
   const randomizePreset = () => {
@@ -969,8 +1016,8 @@ export function CustomThemeSection() {
 
   return (
     <ProfileSection
-      title="Thème personnalisé"
-      description="Créez un thème avec vos couleurs, polices et arrondis."
+      title={t("title")}
+      description={t("description")}
     >
       <div className="space-y-6 px-6 pb-6">
         <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
@@ -979,9 +1026,9 @@ export function CustomThemeSection() {
               <Palette className="size-4" />
             </div>
             <div>
-              <Label className="text-sm font-medium">Activer</Label>
+              <Label className="text-sm font-medium">{t("enable")}</Label>
               <p className="text-sm text-muted-foreground">
-                Le thème s'applique sur tous vos appareils connectés.
+                {t("enableDescription")}
               </p>
             </div>
           </div>
@@ -998,7 +1045,7 @@ export function CustomThemeSection() {
             onClick={() => handleModeChange("light")}
           >
             <Sun className="size-4" />
-            Light
+            {t("modeLight")}
           </Button>
           <Button
             type="button"
@@ -1006,17 +1053,17 @@ export function CustomThemeSection() {
             onClick={() => handleModeChange("dark")}
           >
             <Moon className="size-4" />
-            Dark
+            {t("modeDark")}
           </Button>
         </div>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-medium">Themes</h3>
+            <h3 className="text-lg font-medium">{t("themesHeading")}</h3>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={randomizePreset}>
                 <Dices className="size-4" />
-                Random
+                {t("random")}
               </Button>
               <Button
                 type="button"
@@ -1024,7 +1071,7 @@ export function CustomThemeSection() {
                 onClick={() => persistTheme(defaultUserSettings.customTheme)}
               >
                 <RotateCcw className="size-4" />
-                Reset
+                {t("reset")}
               </Button>
             </div>
           </div>
@@ -1036,16 +1083,16 @@ export function CustomThemeSection() {
                 {previewPreset.label}
               </span>
             </SelectDrawerTrigger>
-            <SelectDrawerContent title="Préréglage">
+            <SelectDrawerContent title={t("presetTitle")}>
               <SelectDrawerGroup>
                 {presets.map((preset) => (
                   <SelectDrawerItem key={preset.id} value={preset.id}>
                     <span className="flex items-center gap-3">
                       <PresetPreview preset={preset} />
                       <span>{preset.label}</span>
-                      {preset.badge ? (
+                      {preset.badgeKey ? (
                         <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-                          {preset.badge}
+                          {t(preset.badgeKey)}
                         </span>
                       ) : null}
                     </span>
@@ -1058,9 +1105,9 @@ export function CustomThemeSection() {
 
         <Tabs defaultValue="colors" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="colors">Colors</TabsTrigger>
-            <TabsTrigger value="typography">Typography</TabsTrigger>
-            <TabsTrigger value="other">Other</TabsTrigger>
+            <TabsTrigger value="colors">{t("tabColors")}</TabsTrigger>
+            <TabsTrigger value="typography">{t("tabTypography")}</TabsTrigger>
+            <TabsTrigger value="other">{t("tabOther")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="colors" className="pt-2">
@@ -1076,13 +1123,13 @@ export function CustomThemeSection() {
                   className="rounded-lg border px-4"
                 >
                   <AccordionTrigger className="py-3 text-base">
-                    {group.label}
+                    {t(group.labelKey)}
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
                     {group.keys.map((entry) => (
                       <ColorSwatch
                         key={entry.key}
-                        label={entry.label}
+                        label={t(entry.labelKey)}
                         value={draft[mode][entry.key]}
                         onChange={(value) => patchPalette(mode, entry.key, value)}
                       />
@@ -1095,7 +1142,7 @@ export function CustomThemeSection() {
 
           <TabsContent value="typography" className="space-y-5 pt-4">
             <div className="space-y-2">
-              <Label>Sans-serif font</Label>
+              <Label>{t("fontLabel")}</Label>
               <SelectDrawer
                 value={draft.fontSans}
                 onValueChange={(fontSans) =>
@@ -1105,7 +1152,7 @@ export function CustomThemeSection() {
                 <SelectDrawerTrigger>
                   {getThemeFontLabel(draft.fontSans)}
                 </SelectDrawerTrigger>
-                <SelectDrawerContent title="Police">
+                <SelectDrawerContent title={t("fontDrawerTitle")}>
                   <SelectDrawerGroup>
                     {themeFontOptions.map((font) => (
                       <SelectDrawerItem key={font.value} value={font.value}>
@@ -1117,14 +1164,13 @@ export function CustomThemeSection() {
               </SelectDrawer>
             </div>
             <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-              Les polices non installées retombent automatiquement sur la pile
-              système configurée.
+              {t("fontFallbackNote")}
             </p>
           </TabsContent>
 
           <TabsContent value="other" className="space-y-5 pt-4">
             <SliderWithInput
-              label="Radius"
+              label={t("radius")}
               value={draft.radius}
               min={0}
               max={2.5}
@@ -1166,9 +1212,9 @@ export function CustomThemeSection() {
                     style={{ backgroundColor: draft[mode].accent }}
                   />
                 </div>
-                <p className="font-medium">Preview</p>
+                <p className="font-medium">{t("previewTitle")}</p>
                 <p className="text-sm opacity-75">
-                  Boutons, cartes, graphes et navigation utilisent ces variables.
+                  {t("previewDescription")}
                 </p>
               </div>
             </div>

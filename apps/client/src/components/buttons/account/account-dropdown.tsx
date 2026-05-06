@@ -255,7 +255,7 @@ export default function AccountDropdown() {
                 >
                   <div className="flex items-center gap-2 w-full">
                     <Bell className="size-4" />
-                    <span>Notifications</span>
+                    <span>{t("notifications")}</span>
                     {totalCount > 0 ? (
                       <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
                         {unreadCount > 0 ? unreadCount : totalCount}

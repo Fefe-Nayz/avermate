@@ -292,9 +292,7 @@ export function UpdateGradeForm({
             <div className="grid grid-cols-2 gap-8">
               {isComposite ? (
                 <div className="col-span-2 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                  La note principale est calculée automatiquement depuis les
-                  sous-notes. Seule la valeur de la note est verrouillée — les
-                  autres champs restent modifiables.
+                  {t("compositeNotice")}
                 </div>
               ) : null}
 
