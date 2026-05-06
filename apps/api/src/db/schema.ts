@@ -6,6 +6,7 @@ import {
   integer,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 // TODO: Add index on userId and yearId
@@ -119,6 +120,8 @@ export const grades = sqliteTable("grades", {
   outOf: integer().notNull(),
   coefficient: integer().notNull(),
 
+  isComposite: integer({ mode: "boolean" }).notNull().default(false),
+
   passedAt: integer({ mode: "timestamp" }).notNull(),
   createdAt: integer({ mode: "timestamp" }).notNull(),
 
@@ -143,7 +146,48 @@ export const grades = sqliteTable("grades", {
   yearIdIdx: index("grades_year_id_idx").on(t.yearId),
 }));
 
-export const gradesRelations = relations(grades, ({ one }) => ({
+export const gradeComponents = sqliteTable("grade_components", {
+  id: text()
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => generateId("gc")),
+  gradeId: text()
+    .notNull()
+    .references(() => grades.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  name: text().notNull(),
+  value: integer().notNull(),
+  outOf: integer().notNull(),
+  coefficient: integer().notNull(),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  userId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
+}, (t) => ({
+  gradeIdIdx: index("grade_components_grade_id_idx").on(t.gradeId),
+  userIdIdx: index("grade_components_user_id_idx").on(t.userId),
+  yearIdIdx: index("grade_components_year_id_idx").on(t.yearId),
+}));
+
+export const gradeComponentsRelations = relations(gradeComponents, ({ one }) => ({
+  grade: one(grades, {
+    fields: [gradeComponents.gradeId],
+    references: [grades.id],
+  }),
+  user: one(users, {
+    fields: [gradeComponents.userId],
+    references: [users.id],
+  }),
+  year: one(years, {
+    fields: [gradeComponents.yearId],
+    references: [years.id],
+  }),
+}));
+
+export const gradesRelations = relations(grades, ({ one, many }) => ({
   subject: one(subjects, {
     fields: [grades.subjectId],
     references: [subjects.id],
@@ -160,6 +204,7 @@ export const gradesRelations = relations(grades, ({ one }) => ({
     fields: [grades.yearId],
     references: [years.id],
   }),
+  components: many(gradeComponents),
 }));
 
 export const users = sqliteTable("users", {
@@ -202,9 +247,75 @@ export const userSettings = sqliteTable("user_settings", {
   mokattamThemeEnabled: integer({ mode: "boolean" }).notNull().default(false),
   mokattamThemeCelebrationSeenAt: integer({ mode: "timestamp" }),
   hapticsEnabled: integer({ mode: "boolean" }).notNull().default(true),
+  customTheme: text().notNull().default("{}"),
   createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
+
+export const yearReviewViews = sqliteTable("year_review_views", {
+  id: text()
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => generateId("yrv")),
+  userId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  yearId: text()
+    .notNull()
+    .references(() => years.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  reviewKey: text().notNull(),
+  clickedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  userYearReviewKeyIdx: uniqueIndex("year_review_views_user_year_key_idx").on(
+    t.userId,
+    t.yearId,
+    t.reviewKey
+  ),
+  userIdIdx: index("year_review_views_user_id_idx").on(t.userId),
+  yearIdIdx: index("year_review_views_year_id_idx").on(t.yearId),
+}));
+
+export const announcements = sqliteTable("announcements", {
+  id: text()
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => generateId("ann")),
+  title: text().notNull(),
+  message: text().notNull(),
+  tone: text().notNull().default("info"),
+  active: integer({ mode: "boolean" }).notNull().default(true),
+  startsAt: integer({ mode: "timestamp" }),
+  endsAt: integer({ mode: "timestamp" }),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  createdByUserId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+}, (t) => ({
+  activeIdx: index("announcements_active_idx").on(t.active),
+  createdByUserIdIdx: index("announcements_created_by_user_id_idx").on(t.createdByUserId),
+}));
+
+export const announcementViews = sqliteTable("announcement_views", {
+  id: text()
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => generateId("annv")),
+  announcementId: text()
+    .notNull()
+    .references(() => announcements.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  userId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  viewedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  announcementUserIdx: uniqueIndex("announcement_views_announcement_user_idx").on(
+    t.announcementId,
+    t.userId
+  ),
+  userIdIdx: index("announcement_views_user_id_idx").on(t.userId),
+  announcementIdIdx: index("announcement_views_announcement_id_idx").on(t.announcementId),
+}));
 
 export const usersRelations = relations(users, ({ many, one }) => ({
   subjects: many(subjects),
@@ -215,8 +326,6 @@ export const usersRelations = relations(users, ({ many, one }) => ({
     fields: [users.id],
     references: [userSettings.userId],
   }),
-  // cardTemplates: many(cardTemplates),
-  // cardLayouts: many(cardLayouts),
 }));
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -335,51 +444,26 @@ export const customAverages = sqliteTable("custom_averages", {
   yearIdIdx: index("custom_averages_year_id_idx").on(t.yearId),
 }));
 
-// export const cardTemplates = sqliteTable("card_templates", {
-//   id: text()
-//     .notNull()
-//     .primaryKey()
-//     .$defaultFn(() => generateId("ct")),
+export const cardLayouts = sqliteTable("card_layouts", {
+  id: text()
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => generateId("cl")),
+  userId: text()
+    .notNull()
+    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+  page: text().notNull(),
+  cards: text().notNull(),
+  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => ({
+  userPageIdx: uniqueIndex("card_layouts_user_page_idx").on(t.userId, t.page),
+  userIdIdx: index("card_layouts_user_id_idx").on(t.userId),
+}));
 
-//   type: text().notNull(), // 'built_in' or 'custom'
-//   identifier: text().notNull(),
-
-//   config: text().notNull(), // JSON string containing title, description template, etc.
-
-//   userId: text() // Only for custom templates
-//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-
-//   createdAt: integer({ mode: "timestamp" }).notNull(),
-// });
-
-// export const cardTemplatesRelations = relations(cardTemplates, ({ one }) => ({
-//   user: one(users, {
-//     fields: [cardTemplates.userId],
-//     references: [users.id],
-//   }),
-// }));
-
-// export const cardLayouts = sqliteTable("card_layouts", {
-//   id: text()
-//     .notNull()
-//     .primaryKey()
-//     .$defaultFn(() => generateId("cl")),
-
-//   userId: text()
-//     .notNull()
-//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-
-//   page: text().notNull(), // 'dashboard', 'grade', or 'subject'
-
-//   cards: text().notNull(), // JSON array of card positions and customizations
-
-//   createdAt: integer({ mode: "timestamp" }).notNull(),
-//   updatedAt: integer({ mode: "timestamp" }).notNull(),
-// });
-
-// export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
-//   user: one(users, {
-//     fields: [cardLayouts.userId],
-//     references: [users.id],
-//   }),
-// }));
+export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
+  user: one(users, {
+    fields: [cardLayouts.userId],
+    references: [users.id],
+  }),
+}));

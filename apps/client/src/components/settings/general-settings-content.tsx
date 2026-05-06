@@ -1,4 +1,5 @@
 import { ChartSettingsSection } from "@/app/profile/settings/chart-settings-section";
+import { CustomThemeSection } from "@/app/profile/settings/custom-theme-section";
 import { HapticsSection } from "@/app/profile/settings/haptics-section";
 import { LanguageSection } from "@/app/profile/settings/language-section";
 import { MokattamThemeSection } from "@/app/profile/settings/mokattam-theme-section";
@@ -13,6 +14,9 @@ export function GeneralSettingsContent() {
     <div className="flex w-full flex-col gap-4 md:gap-8">
       <MobileSettingsAnchor settingId="theme">
         <ThemeSection />
+      </MobileSettingsAnchor>
+      <MobileSettingsAnchor settingId="custom-theme">
+        <CustomThemeSection />
       </MobileSettingsAnchor>
       <MobileSettingsAnchor settingId="language">
         <LanguageSection />

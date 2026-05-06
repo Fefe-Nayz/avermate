@@ -82,7 +82,7 @@ export const UpdateEmailForm = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormControl>
-                      <Input type="text" placeholder={defaultEmail} {...field} />
+                      <Input type="email" placeholder={defaultEmail} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

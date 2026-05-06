@@ -57,7 +57,10 @@ export default function SubjectPage() {
   }, []);
 
   const handleBack = () => {
-    router.replace(returnUrl);
+    sessionStorage.setItem("instantBackFromGradeOrSubject", "true");
+    document.documentElement.style.scrollBehavior = "auto";
+    document.body.style.scrollBehavior = "auto";
+    router.replace(returnUrl, { scroll: false });
     localStorage.removeItem("backFromGradeOrSubject");
   };
 

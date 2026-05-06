@@ -46,7 +46,10 @@ export default function GradePage() {
   }, []);
 
   const handleBack = () => {
-    router.push(returnUrl);
+    sessionStorage.setItem("instantBackFromGradeOrSubject", "true");
+    document.documentElement.style.scrollBehavior = "auto";
+    document.body.style.scrollBehavior = "auto";
+    router.push(returnUrl, { scroll: false });
     localStorage.removeItem("backFromGradeOrSubject");
   };
 

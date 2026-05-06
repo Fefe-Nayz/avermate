@@ -30,6 +30,7 @@ import { useTranslations } from "next-intl";
 import { useFormatDates } from "@/utils/format";
 import { useFormatter } from "next-intl";
 import { useChartSettings } from "@/hooks/use-chart-settings";
+import { startOfDay } from "date-fns";
 
 function getCumulativeStartDate(
   periods: Period[],
@@ -187,11 +188,13 @@ export default function SubjectAverageChart({
   period,
   subjects,
   periods,
+  showSubSubjects,
 }: {
   subjectId: string;
   period: Period;
   subjects: Subject[];
   periods: Period[];
+  showSubSubjects: boolean;
 }) {
   const formatter = useFormatter();
   const t = useTranslations("Dashboard.Charts.SubjectAverageChart");
@@ -202,10 +205,12 @@ export default function SubjectAverageChart({
 
   const { childrenAverage, chartData, chartConfig, yAxisDomain } = (() => {
     const childrenIds = getChildren(subjects, subjectId);
-    const endDate = getVisibleChartEndDate(new Date(period.endAt), {
-      snapshotDate: timelineEnabled ? snapshotDate : null,
-    });
-    const startDate = getCumulativeStartDate(periods, period);
+    const endDate = startOfDay(
+      getVisibleChartEndDate(new Date(period.endAt), {
+        snapshotDate: timelineEnabled ? snapshotDate : null,
+      })
+    );
+    const startDate = startOfDay(getCumulativeStartDate(periods, period));
 
     const dates: Date[] = [];
     for (
@@ -225,12 +230,14 @@ export default function SubjectAverageChart({
       (child) => child.depth === (mainSubject?.depth ?? 0) + 1
     );
 
-    const childrenAverage = childrenObjects.map((child, index) => ({
+    const childrenAverage = showSubSubjects
+      ? childrenObjects.map((child, index) => ({
       id: child.id,
       name: child.name,
       average: averageOverTime(subjects, child.id, period, periods),
       color: predefinedColors[index % predefinedColors.length],
-    }));
+      }))
+      : [];
 
     const mainAverages = averageOverTime(subjects, subjectId, period, periods);
 
@@ -253,7 +260,7 @@ export default function SubjectAverageChart({
     const chartConfig = {
       average: {
         label: t("average"),
-        color: "#2662d9",
+        color: "var(--chart-1)",
       },
       ...Object.fromEntries(
         childrenAverage.map((child) => [
@@ -329,7 +336,7 @@ export default function SubjectAverageChart({
             <Line
               dataKey="average"
               type="monotone"
-              stroke="#2662d9"
+              stroke="var(--chart-1)"
               strokeWidth={3}
               connectNulls={true}
               dot={false}
@@ -359,7 +366,7 @@ export default function SubjectAverageChart({
             ))}
             <SubjectActiveDot
               dataKey="average"
-              fill="#2662d9"
+              fill="var(--chart-1)"
               chartData={chartData}
             />
           </LineChart>

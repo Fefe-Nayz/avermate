@@ -19,9 +19,12 @@ import { useYears } from "@/hooks/use-years";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/hooks/use-session";
 import { useTranslations } from "next-intl";
+import { apiClient } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useScrollDirection } from "@/hooks/use-scroll-direction";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
-const USER_YEAR_REVIEW_WINDOW_BEFORE_END_RATIO = 0.1;
-const USER_YEAR_REVIEW_WINDOW_AFTER_END_RATIO = 0.05;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function isCalendarYearRange(yearStartTimestamp: number, yearEndTimestamp: number) {
@@ -37,7 +40,7 @@ function isCalendarYearRange(yearStartTimestamp: number, yearEndTimestamp: numbe
   );
 }
 
-function isWithinYearReviewRevealWindow({
+function getYearReviewKey({
   now,
   yearStartTimestamp,
   yearEndTimestamp,
@@ -46,41 +49,39 @@ function isWithinYearReviewRevealWindow({
   yearStartTimestamp: number;
   yearEndTimestamp: number;
 }) {
-  const revealAt = new Date(yearEndTimestamp);
-  revealAt.setHours(23, 59, 59, 999);
-  const endTimestamp = revealAt.getTime();
+  const endDate = new Date(yearEndTimestamp);
+  const endOfSchoolWindowStart = new Date(yearEndTimestamp - 30 * DAY_IN_MS);
+  const endOfSchoolWindowEnd = new Date(yearEndTimestamp + 14 * DAY_IN_MS);
+  endOfSchoolWindowEnd.setHours(23, 59, 59, 999);
 
   if (
-    Number.isNaN(yearStartTimestamp) ||
-    Number.isNaN(endTimestamp) ||
-    endTimestamp <= yearStartTimestamp
+    !Number.isNaN(yearStartTimestamp) &&
+    !Number.isNaN(yearEndTimestamp) &&
+    now >= endOfSchoolWindowStart &&
+    now <= endOfSchoolWindowEnd
   ) {
-    return false;
+    return `school-${endDate.getFullYear()}`;
   }
 
-  const yearEndDate = new Date(yearEndTimestamp);
-
-  // Calendar years reveal throughout December only.
-  if (isCalendarYearRange(yearStartTimestamp, yearEndTimestamp)) {
-    return now.getMonth() === 11 && now.getFullYear() === yearEndDate.getFullYear();
+  if (
+    now.getMonth() === 11 &&
+    (isCalendarYearRange(yearStartTimestamp, yearEndTimestamp) ||
+      now.getTime() >= yearStartTimestamp)
+  ) {
+    return `calendar-${now.getFullYear()}`;
   }
 
-  const duration = Math.max(endTimestamp - yearStartTimestamp, DAY_IN_MS);
-  const revealWindowStart =
-    endTimestamp - duration * USER_YEAR_REVIEW_WINDOW_BEFORE_END_RATIO;
-  const revealWindowEnd =
-    endTimestamp + duration * USER_YEAR_REVIEW_WINDOW_AFTER_END_RATIO;
-  const nowTimestamp = now.getTime();
-
-  return nowTimestamp >= revealWindowStart && nowTimestamp <= revealWindowEnd;
+  return null;
 }
 
 export function YearReviewTrigger() {
   const t = useTranslations("YearReview");
+  const queryClient = useQueryClient();
   const { activeId } = useActiveYearStore();
   const { data: years } = useYears();
-  const { data: reviewData } = useYearReview(activeId);
   const { data: session } = useSession();
+  const { scrollDirection } = useScrollDirection();
+  const isMobile = useIsMobile();
 
   const [isOpen, setIsOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
@@ -106,6 +107,15 @@ export function YearReviewTrigger() {
     yearEndTimestamp !== undefined && !Number.isNaN(yearEndTimestamp)
       ? new Date(yearEndTimestamp)
       : undefined;
+  const reviewKey =
+    yearStartTimestamp !== undefined && yearEndTimestamp !== undefined
+      ? getYearReviewKey({
+          now: new Date(),
+          yearStartTimestamp,
+          yearEndTimestamp,
+        })
+      : null;
+  const { data: reviewData } = useYearReview(activeId, reviewKey);
 
   const userName = session?.user?.name || undefined;
   const userAvatar = session?.user?.image || undefined;
@@ -117,7 +127,9 @@ export function YearReviewTrigger() {
       !isDashboard ||
       !activeId ||
       yearStartTimestamp === undefined ||
-      yearEndTimestamp === undefined
+      yearEndTimestamp === undefined ||
+      reviewData.viewed ||
+      !reviewKey
     ) {
       return;
     }
@@ -126,18 +138,8 @@ export function YearReviewTrigger() {
       return;
     }
 
-    if (
-      !isWithinYearReviewRevealWindow({
-        now: new Date(),
-        yearStartTimestamp,
-        yearEndTimestamp,
-      })
-    ) {
-      return;
-    }
-
-    const dismissedKey = `year-review-dismissed-${activeId}`;
-    const isDismissed = localStorage.getItem(dismissedKey);
+    const dismissedKey = `year-review-dismissed-${activeId}-${reviewKey}`;
+    const isDismissed = sessionStorage.getItem(dismissedKey);
 
     if (isDismissed) {
       return;
@@ -145,12 +147,35 @@ export function YearReviewTrigger() {
 
     const timer = setTimeout(() => setShowPopup(true), 2000);
     return () => clearTimeout(timer);
-  }, [reviewData?.hasData, isDashboard, activeId, yearStartTimestamp, yearEndTimestamp]);
+  }, [
+    activeId,
+    isDashboard,
+    reviewData?.hasData,
+    reviewData?.viewed,
+    reviewKey,
+    yearEndTimestamp,
+    yearStartTimestamp,
+  ]);
+
+  const markReviewClicked = async () => {
+    if (!activeId || !reviewKey) {
+      return;
+    }
+
+    await apiClient.post(`year-review/${activeId}/viewed`, {
+      json: { reviewKey },
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["year-review-percentile", activeId, reviewKey],
+    });
+  };
 
   const handleDismiss = () => {
     setShowPopup(false);
-    const dismissedKey = `year-review-dismissed-${activeId}`;
-    localStorage.setItem(dismissedKey, "true");
+    if (reviewKey) {
+      const dismissedKey = `year-review-dismissed-${activeId}-${reviewKey}`;
+      sessionStorage.setItem(dismissedKey, "true");
+    }
   };
   if (!reviewData?.hasData || !reviewData.stats) return null;
 
@@ -164,13 +189,17 @@ export function YearReviewTrigger() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: "spring", bounce: 0.14, duration: 0.4 }}
-            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 z-50 max-w-sm mx-auto md:mx-0"
+            className={cn(
+              "fixed left-4 right-4 md:left-auto md:right-8 z-50 max-w-sm mx-auto md:mx-0",
+              isMobile && scrollDirection === "down" ? "bottom-4" : "bottom-24 md:bottom-8"
+            )}
           >
             <div
               className="rounded-xl border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur supports-[backdrop-filter]:bg-popover/90 transition-colors hover:bg-accent/30"
               onClick={() => {
                 setIsOpen(true);
-                handleDismiss();
+                setShowPopup(false);
+                void markReviewClicked();
               }}
             >
               <div className="flex items-start gap-3 p-4">
@@ -192,7 +221,8 @@ export function YearReviewTrigger() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setIsOpen(true);
-                        handleDismiss();
+                        setShowPopup(false);
+                        void markReviewClicked();
                       }}
                     >
                       <Play className="size-3.5" />

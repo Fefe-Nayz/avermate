@@ -130,7 +130,7 @@ export const SignInForm = () => {
 
                 <FormControl>
                   <Input
-                    type="text"
+                    type="email"
                     placeholder={t("emailPlaceholder")}
                     {...field}
                   />

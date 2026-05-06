@@ -15,6 +15,14 @@ type AverageContext = {
   customConfig?: CustomConfig;
 };
 
+function toNormalizedGradeValue(grade: { value: number; outOf: number }) {
+  if (grade.outOf <= 0) {
+    return null;
+  }
+
+  return (grade.value / grade.outOf) * 20;
+}
+
 function getChildrenByParentId(subjects: Subject[]): Map<string, Subject[]> {
   const childrenByParentId = new Map<string, Subject[]>();
 
@@ -97,10 +105,11 @@ function computeSubjectAverage(subject: Subject, context: AverageContext): numbe
   let totalCoefficients = 0;
 
   for (const grade of subject.grades ?? []) {
-    if (!grade.outOf) continue;
+    const normalizedValue = toNormalizedGradeValue(grade);
+    if (normalizedValue === null) continue;
 
     const gradeCoefficient = toGradeCoefficient(grade.coefficient);
-    const percentage = grade.value / grade.outOf;
+    const percentage = normalizedValue / 20;
 
     totalWeightedPercentages += percentage * gradeCoefficient;
     totalCoefficients += gradeCoefficient;
@@ -593,8 +602,9 @@ export function isGradeIncludedInCustomAverage(
         return true;
       }
     }
-    current = allSubjects.find((s) => s.id === current.parentId) || current;
-    if (!current) break;
+    const parent = allSubjects.find((s) => s.id === current.parentId);
+    if (!parent) break;
+    current = parent;
   }
 
   return false;
@@ -885,8 +895,12 @@ export function getSubjectTrend(
     return null;
   }
 
-  const startDate = new Date(period.startAt);
-  const endDate = new Date(period.endAt);
+  const isFullYear = period.id === "full-year";
+  const relevantPeriods = getRelevantPeriodsForAverageTimeline(period, periods);
+  const startDate = startOfDay(
+    getAverageTimelineStartDate(period, relevantPeriods, isFullYear)
+  );
+  const endDate = startOfDay(getAverageTimelineEndDate(period));
   const dates = createDateRange(startDate, endDate, 1);
 
   const data = averages.map((avg, index) => ({
@@ -974,7 +988,7 @@ export function averageOverTime(
   const normalizedStartDate = startOfDay(
     getAverageTimelineStartDate(period, relevantPeriods, isFullYear)
   );
-  const normalizedEndDate = getAverageTimelineEndDate(period);
+  const normalizedEndDate = startOfDay(getAverageTimelineEndDate(period));
 
   // Create the day-by-day date range
   const dates = createDateRange(normalizedStartDate, normalizedEndDate, 1);
@@ -999,7 +1013,7 @@ export function averageOverTime(
 
   // 3) "Clamp" each grade date to [start, end] to build event dates
   const clampedGradeDates = relevantGrades.map((g) => {
-    const gDate = new Date(g.passedAt);
+    const gDate = startOfDay(new Date(g.passedAt));
     if (gDate < normalizedStartDate) return normalizedStartDate;
     if (gDate > normalizedEndDate) return normalizedEndDate;
     return gDate;
@@ -1032,7 +1046,7 @@ export function averageOverTime(
       // Clamp each grade date & keep only those <= current date
       const clamped = subjRelevantGrades
         .map((grade) => {
-          const originalDate = new Date(grade.passedAt);
+          const originalDate = startOfDay(new Date(grade.passedAt));
           let adjustedDate = originalDate;
           if (originalDate < normalizedStartDate) {
             adjustedDate = normalizedStartDate;
@@ -1044,7 +1058,9 @@ export function averageOverTime(
             passedAt: adjustedDate.toISOString(),
           };
         })
-        .filter((clampedGrade) => new Date(clampedGrade.passedAt) <= date);
+        .filter(
+          (clampedGrade) => new Date(clampedGrade.passedAt).getTime() <= date.getTime()
+        );
 
       return { ...subj, grades: clamped };
     });
@@ -1400,7 +1416,9 @@ export function getBestGrade(subjects: Subject[]): {
 
   for (const subject of subjects) {
     for (const grade of subject.grades) {
-      const percentage = grade.value / grade.outOf;
+      const normalizedValue = toNormalizedGradeValue(grade);
+      if (normalizedValue === null) continue;
+      const percentage = normalizedValue / 20;
       const coefficient = grade.coefficient ?? 100;
 
       if (bestGrade === null) {
@@ -1489,7 +1507,9 @@ export function getWorstGrade(subjects: Subject[]): {
 
   for (const subject of subjects) {
     for (const grade of subject.grades) {
-      const percentage = grade.value / grade.outOf;
+      const normalizedValue = toNormalizedGradeValue(grade);
+      if (normalizedValue === null) continue;
+      const percentage = normalizedValue / 20;
       const coefficient = grade.coefficient ?? 100;
 
       if (worstGrade === null) {
@@ -1800,7 +1820,8 @@ export function getMedianAverages(subjects: Subject[]): Map<string, number | nul
 
   subjects.forEach((subject) => {
     const sortedGrades = subject.grades
-      .map((grade) => grade.value / grade.outOf * 20)
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null)
       .sort((a, b) => a - b);
 
     const len = sortedGrades.length;
@@ -1850,7 +1871,9 @@ export function getGradeStandardDeviation(subjects: Subject[]): Map<string, numb
   const stdDevs = new Map<string, number | null>();
 
   subjects.forEach((subject) => {
-    const grades = subject.grades.map((grade) => grade.value / grade.outOf * 20);
+    const grades = subject.grades
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null);
     const len = grades.length;
     if (len === 0) {
       stdDevs.set(subject.id, null);
@@ -1895,7 +1918,12 @@ export function getGradeDistribution(subjects: Subject[]): Map<string, Map<strin
     const distribution = new Map<string, number>();
 
     subject.grades.forEach((grade) => {
-      const percentage = (grade.value / grade.outOf) * 100;
+      const normalizedValue = toNormalizedGradeValue(grade);
+      if (normalizedValue === null) {
+        return;
+      }
+
+      const percentage = normalizedValue * 5;
       let gradeLetter: string;
 
       if (percentage >= 90) gradeLetter = 'A';
@@ -1938,7 +1966,10 @@ export function getPassRates(subjects: Subject[], passingThreshold: number = 60)
   const passRates = new Map<string, number | null>();
 
   subjects.forEach((subject) => {
-    const grades = subject.grades.map((grade) => (grade.value / grade.outOf) * 100);
+    const grades = subject.grades
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null)
+      .map((grade) => grade * 5);
     const len = grades.length;
     if (len === 0) {
       passRates.set(subject.id, null);
@@ -1981,8 +2012,9 @@ export function getImprovementTrends(subjects: Subject[]): Map<string, number | 
     const sortedGrades = subject.grades
       .map((grade) => ({
         date: new Date(grade.passedAt),
-        value: (grade.value / grade.outOf) * 20, // Convert to percentage scale
+        value: toNormalizedGradeValue(grade),
       }))
+      .filter((grade): grade is { date: Date; value: number } => grade.value !== null)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
 
     if (sortedGrades.length === 0) {
@@ -2035,7 +2067,10 @@ export function getPredictedFinalAverages(
   const predictions = new Map<string, number | null>();
 
   subjects.forEach((subject) => {
-    const currentGrades = subject.grades.map((grade) => (grade.value / grade.outOf) * 100);
+    const currentGrades = subject.grades
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null)
+      .map((grade) => grade * 5);
     const currentCount = currentGrades.length;
 
     if (currentCount === 0 && remainingGradesCount === 0) {
@@ -2085,8 +2120,9 @@ export function getMovingAverages(
     const sortedGrades = subject.grades
       .map((grade) => ({
         date: new Date(grade.passedAt),
-        value: (grade.value / grade.outOf) * 20, // Convert to percentage scale
+        value: toNormalizedGradeValue(grade),
       }))
+      .filter((grade): grade is { date: Date; value: number } => grade.value !== null)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const averages: (number | null)[] = [];
@@ -2189,7 +2225,10 @@ export function getRequiredGradesForDesiredAverage(
       return requiredGrades;
     }
 
-    const currentGrades = subject.grades.map((grade) => (grade.value / grade.outOf) * 100);
+    const currentGrades = subject.grades
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null)
+      .map((grade) => grade * 5);
     const currentCount = currentGrades.length;
 
     if (currentCount > totalGradesCount) {
@@ -2223,7 +2262,12 @@ export function getRequiredGradesForDesiredAverage(
 
     includedSubjects.forEach((subject) => {
       subject.grades.forEach((grade) => {
-        const percentage = (grade.value / grade.outOf) * 100;
+        const normalizedValue = toNormalizedGradeValue(grade);
+        if (normalizedValue === null) {
+          return;
+        }
+
+        const percentage = normalizedValue * 5;
         const coefficient = (grade.coefficient ?? 100) / 100;
         currentGrades.push(percentage * coefficient);
       });
@@ -2255,7 +2299,10 @@ export function getRequiredGradesForDesiredAverage(
   // **Mode 3: Global Average**
   // Calculate across all subjects
   subjects.forEach((subject) => {
-    const currentGrades = subject.grades.map((grade) => (grade.value / grade.outOf) * 100);
+    const currentGrades = subject.grades
+      .map(toNormalizedGradeValue)
+      .filter((grade): grade is number => grade !== null)
+      .map((grade) => grade * 5);
     const currentCount = currentGrades.length;
 
     if (currentCount > totalGradesCount) {
@@ -2351,10 +2398,14 @@ export function getGradeCorrelation(
 
   // Assuming grades are ordered by date, align grades by their indices
   const grades1 = subject1.grades
-    .map((g) => (g.value / g.outOf) * 100)
+    .map(toNormalizedGradeValue)
+    .filter((grade): grade is number => grade !== null)
+    .map((grade) => grade * 5)
     .sort((a, b) => a - b);
   const grades2 = subject2.grades
-    .map((g) => (g.value / g.outOf) * 100)
+    .map(toNormalizedGradeValue)
+    .filter((grade): grade is number => grade !== null)
+    .map((grade) => grade * 5)
     .sort((a, b) => a - b);
 
   const len = Math.min(grades1.length, grades2.length);
@@ -2478,7 +2529,7 @@ export function getLeastConsistentSubjects(
  * 2. **Compute Trend Slope**: Determine the trend slope using the `getTrend` function.
  * 3. **Project Future Grades**:
  *    - Use the trend slope to estimate future grades.
- *    - Clamp projected grades between 0 and 100 to maintain realistic values.
+ *    - Clamp projected grades between 0 and 20 to maintain realistic values.
  * 4. **Store Results**: Populate the `projections` map with the array of projected grades for each subject.
  *
  * Note:
@@ -2495,8 +2546,9 @@ export function getFutureGradeProjections(
     const grades = subject.grades
       .map((grade) => ({
         date: new Date(grade.passedAt),
-        value: (grade.value / grade.outOf) * 20, // Convert to percentage scale
+        value: toNormalizedGradeValue(grade),
       }))
+      .filter((grade): grade is { date: Date; value: number } => grade.value !== null)
       .sort((a, b) => a.date.getTime() - b.date.getTime());
 
     const len = grades.length;
@@ -2512,7 +2564,7 @@ export function getFutureGradeProjections(
     const projectedGrades: number[] = [];
     for (let i = 1; i <= futureGradesCount; i++) {
       const projected = lastGrade + trend * i;
-      projectedGrades.push(Math.min(Math.max(projected, 0), 100)); // Clamp between 0 and 100
+      projectedGrades.push(Math.min(Math.max(projected, 0), 20));
     }
 
     projections.set(subject.id, projectedGrades);
@@ -2548,7 +2600,7 @@ export function calculateStreak(
     customAverage?: Average;
   }
 ): number {
-  let relevantGrades: { date: Date; value: number; coefficient?: number }[] = [];
+  let relevantGrades: { date: Date; value: number; coefficient: number }[] = [];
 
   // **Mode 1: Specific Subject Streak**
   if (options?.subjectId) {
@@ -2558,11 +2610,18 @@ export function calculateStreak(
       return 0;
     }
 
-    relevantGrades = subject.grades.map((grade) => ({
-      date: new Date(grade.passedAt),
-      value: (grade.value / grade.outOf) * 100,
-      coefficient: grade.coefficient,
-    }));
+    relevantGrades = subject.grades
+      .map((grade) => {
+        const value = toNormalizedGradeValue(grade);
+        return value === null
+          ? null
+          : {
+              date: new Date(grade.passedAt),
+              value,
+              coefficient: (grade.coefficient ?? 100) / 100,
+            };
+      })
+      .filter((grade): grade is { date: Date; value: number; coefficient: number } => grade !== null);
   }
   // **Mode 2: Custom Streak**
   else if (options?.customAverage) {
@@ -2571,12 +2630,13 @@ export function calculateStreak(
 
     includedSubjects.forEach((subject) => {
       subject.grades.forEach((grade) => {
-        const percentage = (grade.value / grade.outOf) * 100;
+        const value = toNormalizedGradeValue(grade);
+        if (value === null) return;
         const coefficient = (grade.coefficient ?? 100) / 100;
         relevantGrades.push({
           date: new Date(grade.passedAt),
-          value: percentage * coefficient,
-          coefficient: grade.coefficient,
+          value,
+          coefficient,
         });
       });
     });
@@ -2585,12 +2645,13 @@ export function calculateStreak(
   else {
     subjects.forEach((subject) => {
       subject.grades.forEach((grade) => {
-        const percentage = (grade.value / grade.outOf) * 100;
+        const value = toNormalizedGradeValue(grade);
+        if (value === null) return;
         const coefficient = (grade.coefficient ?? 100) / 100;
         relevantGrades.push({
           date: new Date(grade.passedAt),
-          value: percentage * coefficient,
-          coefficient: grade.coefficient,
+          value,
+          coefficient,
         });
       });
     });
@@ -2601,15 +2662,19 @@ export function calculateStreak(
 
   let streak = 0;
   let previousAverage: number | null = null;
+  let totalWeightedGrades = 0;
+  let totalCoefficients = 0;
 
   relevantGrades.forEach((grade) => {
+    totalWeightedGrades += grade.value * grade.coefficient;
+    totalCoefficients += grade.coefficient;
+    const newAverage = totalWeightedGrades / totalCoefficients;
+
     if (previousAverage === null) {
-      previousAverage = grade.value;
+      previousAverage = newAverage;
       streak = 1;
       return;
     }
-
-    const newAverage = (previousAverage + grade.value) / 2;
 
     if (newAverage > previousAverage) {
       streak += 1;
@@ -2639,7 +2704,7 @@ export function calculateLongestStreak(
     customAverage?: Average;
   }
 ): number {
-  let relevantGrades: { date: Date; value: number; coefficient?: number }[] = [];
+  let relevantGrades: { date: Date; value: number; coefficient: number }[] = [];
 
   // **Mode 1: Specific Subject Streak**
   if (options?.subjectId) {
@@ -2649,11 +2714,18 @@ export function calculateLongestStreak(
       return 0;
     }
 
-    relevantGrades = subject.grades.map((grade) => ({
-      date: new Date(grade.passedAt),
-      value: (grade.value / grade.outOf) * 100,
-      coefficient: grade.coefficient,
-    }));
+    relevantGrades = subject.grades
+      .map((grade) => {
+        const value = toNormalizedGradeValue(grade);
+        return value === null
+          ? null
+          : {
+              date: new Date(grade.passedAt),
+              value,
+              coefficient: (grade.coefficient ?? 100) / 100,
+            };
+      })
+      .filter((grade): grade is { date: Date; value: number; coefficient: number } => grade !== null);
   }
   // **Mode 2: Custom Streak**
   else if (options?.customAverage) {
@@ -2662,12 +2734,13 @@ export function calculateLongestStreak(
 
     includedSubjects.forEach((subject) => {
       subject.grades.forEach((grade) => {
-        const percentage = (grade.value / grade.outOf) * 100;
+        const value = toNormalizedGradeValue(grade);
+        if (value === null) return;
         const coefficient = (grade.coefficient ?? 100) / 100;
         relevantGrades.push({
           date: new Date(grade.passedAt),
-          value: percentage * coefficient,
-          coefficient: grade.coefficient,
+          value,
+          coefficient,
         });
       });
     });
@@ -2676,12 +2749,13 @@ export function calculateLongestStreak(
   else {
     subjects.forEach((subject) => {
       subject.grades.forEach((grade) => {
-        const percentage = (grade.value / grade.outOf) * 100;
+        const value = toNormalizedGradeValue(grade);
+        if (value === null) return;
         const coefficient = (grade.coefficient ?? 100) / 100;
         relevantGrades.push({
           date: new Date(grade.passedAt),
-          value: percentage * coefficient,
-          coefficient: grade.coefficient,
+          value,
+          coefficient,
         });
       });
     });
@@ -2693,16 +2767,20 @@ export function calculateLongestStreak(
   let currentStreak = 0;
   let longestStreak = 0;
   let previousAverage: number | null = null;
+  let totalWeightedGrades = 0;
+  let totalCoefficients = 0;
 
   relevantGrades.forEach((grade) => {
+    totalWeightedGrades += grade.value * grade.coefficient;
+    totalCoefficients += grade.coefficient;
+    const newAverage = totalWeightedGrades / totalCoefficients;
+
     if (previousAverage === null) {
-      previousAverage = grade.value;
+      previousAverage = newAverage;
       currentStreak = 1;
       longestStreak = 1;
       return;
     }
-
-    const newAverage = (previousAverage + grade.value) / 2;
 
     if (newAverage > previousAverage) {
       currentStreak += 1;
@@ -2861,7 +2939,11 @@ export function calculateYearReviewStats(
 
   // 2. Grades sum (normalized to 20)
   const gradesSum = allGrades.reduce((acc, g) => {
-    const gradeVal = (g.value / g.outOf) * 20;
+    const gradeVal = toNormalizedGradeValue(g);
+    if (gradeVal === null) {
+      return acc;
+    }
+
     return acc + gradeVal;
   }, 0);
 
@@ -3015,16 +3097,19 @@ function calculateBestComebackFromAverages(subjects: Subject[]): { subject: stri
 
   subjects.forEach((subj) => {
     // Need at least 2 grades to have a comeback
-    if (subj.grades.length < 2) return;
-
     // Sort grades by date
-    const sortedGrades = [...subj.grades].sort(
-      (a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime()
-    );
+    const sortedGrades = [...subj.grades]
+      .filter((grade) => toNormalizedGradeValue(grade) !== null)
+      .sort(
+        (a, b) => new Date(a.passedAt).getTime() - new Date(b.passedAt).getTime()
+      );
+
+    if (sortedGrades.length < 2) return;
 
     // Calculate average after just the first grade (which is the first grade itself normalized)
     const firstGrade = sortedGrades[0];
-    const firstAverage = (firstGrade.value / firstGrade.outOf) * 20;
+    const firstAverage = toNormalizedGradeValue(firstGrade);
+    if (firstAverage === null) return;
 
     // Calculate final average for this subject (using the proper average function)
     const finalAverage = average(subj.id, subjects);
@@ -3092,7 +3177,11 @@ function calculateAwardType(
   // Count grades under 8/20
   let gradesUnder8Count = 0;
   sortedGrades.forEach((g) => {
-    const gradeVal = (g.value / g.outOf) * 20;
+    const gradeVal = toNormalizedGradeValue(g);
+    if (gradeVal === null) {
+      return;
+    }
+
     if (gradeVal < 8) gradesUnder8Count++;
   });
 

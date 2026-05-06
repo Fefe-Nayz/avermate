@@ -35,6 +35,9 @@ import SubjectAverageChart from "./subject-average-chart";
 import SubjectGradesChart from "./subject-grades-chart";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useState } from "react";
 import ErrorStateCard from "@/components/skeleton/error-card";
 import { useTranslations } from "next-intl";
 import { EllipsisVerticalIcon, MinusIcon, PlusIcon } from "lucide-react";
@@ -52,6 +55,7 @@ import { Grade, PartialGrade } from "@/types/grade";
 import { GradeEmptyState } from "@/components/empty-states/grade-empty-state";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
+import { useChartSettings } from "@/hooks/use-chart-settings";
 
 function getRelevantPeriodIds(period: Period, periods: Period[]): string[] {
   if (period.id === "full-year") {
@@ -101,6 +105,14 @@ function SubjectWrapper({
   const { data: years } = useYears();
   const active = years?.find((year) => year.id === activeId);
   const yearDefaultOutOf = active?.defaultOutOf || 2000;
+  const {
+    settings: chartSettings,
+    updateSettings: updateChartSettings,
+    isLoaded: chartSettingsLoaded,
+  } = useChartSettings();
+  const showSubSubjects =
+    !chartSettingsLoaded || chartSettings.showSubSubjectsInSubjectCharts;
+  const [chartTab, setChartTab] = useState<"average" | "grades">("average");
 
   const isVirtualSubject =
     subject.id.startsWith("ca") || subject.id.startsWith("general-average");
@@ -501,13 +513,35 @@ function SubjectWrapper({
 
       {/* Charts */}
       <div className="flex flex-col gap-4">
-        <Tabs defaultValue="average" className="w-full">
-          <div className="flex items-center justify-between">
+        <Tabs
+          value={chartTab}
+          onValueChange={(value) => setChartTab(value as "average" | "grades")}
+          className="w-full"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold">{t("chartSectionTitle")}</h2>
-            <TabsList>
-              <TabsTrigger value="average">{t("averageOverTime")}</TabsTrigger>
-              <TabsTrigger value="grades">{t("gradesOverTime")}</TabsTrigger>
-            </TabsList>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {chartTab === "average" && (
+                <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 sm:justify-start">
+                  <Label htmlFor="show-sub-subjects" className="text-sm">
+                    Sous-matières
+                  </Label>
+                  <Switch
+                    id="show-sub-subjects"
+                    checked={showSubSubjects}
+                    onCheckedChange={(checked) =>
+                      updateChartSettings({
+                        showSubSubjectsInSubjectCharts: checked,
+                      })
+                    }
+                  />
+                </div>
+              )}
+              <TabsList>
+                <TabsTrigger value="average">{t("averageOverTime")}</TabsTrigger>
+                <TabsTrigger value="grades">{t("gradesOverTime")}</TabsTrigger>
+              </TabsList>
+            </div>
           </div>
           <TabsContent value="average">
             <SubjectAverageChart
@@ -515,6 +549,7 @@ function SubjectWrapper({
               period={period}
               subjects={subjects}
               periods={periods}
+              showSubSubjects={showSubSubjects}
             />
           </TabsContent>
           <TabsContent value="grades">

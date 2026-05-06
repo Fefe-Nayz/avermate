@@ -120,7 +120,7 @@ function GlobalActiveDot({ chartData }: { chartData: ChartDataPoint[] }) {
       x={nearestDatum.date}
       y={nearestDatum.average}
       r={4}
-      fill="#2662d9"
+      fill="var(--chart-1)"
       strokeWidth={0}
       opacity={0.8}
     />
@@ -151,7 +151,7 @@ function CustomTooltipContent({
               {
                 name: "Global Average",
                 value: value.toFixed(2),
-                color: "#2662d9",
+                color: "var(--chart-1)",
                 dataKey: "global-average",
                 payload: null,
               },
@@ -215,7 +215,7 @@ export default function GlobalAverageChart({
   const chartConfig = {
     average: {
       label: t("average"),
-      color: "#2662d9",
+      color: "var(--chart-1)",
     },
   };
 
@@ -348,8 +348,8 @@ export default function GlobalAverageChart({
                 <Area
                   dataKey="average"
                   type="monotone"
-                  fill="#2662d9"
-                  stroke="#2662d9"
+                  fill="var(--chart-1)"
+                  stroke="var(--chart-1)"
                   fillOpacity={0.1}
                   strokeWidth={2}
                   connectNulls={true}
@@ -390,8 +390,8 @@ export default function GlobalAverageChart({
                 <Radar
                   dataKey="average"
                   fillOpacity={0.1}
-                  stroke="#2662d9"
-                  fill="#2662d9"
+                  stroke="var(--chart-1)"
+                  fill="var(--chart-1)"
                   strokeWidth={2}
                 />
                 <PolarRadiusAxis domain={[0, 20]} stroke="#a1a1aa" />

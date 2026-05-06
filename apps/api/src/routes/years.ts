@@ -455,6 +455,7 @@ app.get("/:yearId/subjects/organized-by-periods", async (c) => {
                     value: true,
                     outOf: true,
                     coefficient: true,
+                    isComposite: true,
                     passedAt: true,
                     periodId: true,
                 },

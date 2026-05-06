@@ -14,8 +14,9 @@ import feedbackRoute from "@/routes/feedback";
 import yearsRoutes from "@/routes/years";
 import yearReviewRoutes from "@/routes/year-review";
 import adminRoutes from "@/routes/admin";
+import announcementsRoutes from "@/routes/announcements";
 import settingsRoutes from "@/routes/settings";
-// import cardsRoute from "@/routes/cards";
+import cardsRoute from "@/routes/cards";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -72,9 +73,11 @@ app.route("/year-review", yearReviewRoutes);
 
 app.route("/admin", adminRoutes);
 
+app.route("/announcements", announcementsRoutes);
+
 app.route("/settings", settingsRoutes);
 
-// app.route("/cards", cardsRoute);
+app.route("/cards", cardsRoute);
 
 if (!env.DISABLE_UPLOADTHING) {
   app.all("/uploadthing", (ctx) => uploadHandlers(ctx.req.raw));

@@ -15,8 +15,12 @@ import { LuGithub } from "react-icons/lu";
 import SignOutButton from "../sign-out-button";
 import ThemeSwitchButton from "../theme-switch-button";
 import Avatar from "./avatar";
-import { MessageSquareIcon, MessagesSquareIcon, Moon, Sun } from "lucide-react";
+import { Bell, MessageSquareIcon, MessagesSquareIcon, Moon, Sun } from "lucide-react";
 import FeedbackDialog from "@/components/dialogs/feedback-dialog";
+import {
+  AnnouncementMenu,
+  useAnnouncementsCount,
+} from "@/components/announcements/announcement-menu";
 import { useUserSettings } from "@/hooks/use-user-settings";
 import { useTranslations } from "next-intl";
 import EarlyBirdBadge from "./early-bird-badge";
@@ -37,6 +41,8 @@ export default function AccountDropdown() {
 
   const { data, error, isPending, refetch } = authClient.useSession();
   const { data: userSettings } = useUserSettings(Boolean(data?.user?.id));
+  const { enabled: announcementsEnabled, unreadCount, totalCount } =
+    useAnnouncementsCount();
 
   const handleClick = () => {
     const currentPath = pathname + window.location.search || "/dashboard";
@@ -237,6 +243,30 @@ export default function AccountDropdown() {
         </DropDrawerGroup>
 
         {/* <DropDrawerLabel>{t("appearance")}</DropDrawerLabel> */}
+
+        {announcementsEnabled ? (
+          <>
+            <DropDrawerSeparator />
+            <DropDrawerGroup>
+              <AnnouncementMenu>
+                <DropDrawerItem
+                  className="w-full sm:!bg-auto sm:!mx-auto sm:!my-auto sm:!rounded-auto max-sm:!mx-0 max-sm:!my-0 max-sm:!rounded-none max-sm:py-4"
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Bell className="size-4" />
+                    <span>Notifications</span>
+                    {totalCount > 0 ? (
+                      <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                        {unreadCount > 0 ? unreadCount : totalCount}
+                      </span>
+                    ) : null}
+                  </div>
+                </DropDrawerItem>
+              </AnnouncementMenu>
+            </DropDrawerGroup>
+          </>
+        ) : null}
 
         <DropDrawerSeparator />
 

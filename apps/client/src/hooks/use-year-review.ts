@@ -6,17 +6,22 @@ import { useSubjects } from "./use-subjects";
 import { useYears } from "./use-years";
 import { useMemo } from "react";
 
-export function useYearReview(yearId: string | null) {
+export function useYearReview(yearId: string | null, reviewKey?: string | null) {
   // Fetch subjects data (already available on client)
   const { data: subjects, isLoading: subjectsLoading } = useSubjects(yearId ?? "");
   const { data: years } = useYears();
 
   // Fetch only the percentile from server
   const { data: serverData, isLoading: serverLoading, error } = useQuery({
-    queryKey: ["year-review-percentile", yearId],
+    queryKey: ["year-review-percentile", yearId, reviewKey ?? "no-review-key"],
     queryFn: async () => {
       if (!yearId) return null;
-      return await apiClient.get(`year-review/${yearId}`).json<YearReviewServerResponse>();
+      const searchParams = reviewKey
+        ? `?${new URLSearchParams({ reviewKey }).toString()}`
+        : "";
+      return await apiClient
+        .get(`year-review/${yearId}${searchParams}`)
+        .json<YearReviewServerResponse>();
     },
     enabled: !!yearId,
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -53,6 +58,7 @@ export function useYearReview(yearId: string | null) {
     return {
       hasData: true,
       stats,
+      viewed: serverData?.viewed ?? false,
     };
   }, [yearId, subjects, years, serverData]);
 

@@ -202,7 +202,7 @@ export const SignUpForm = () => {
                 <FormLabel>{t("email")}</FormLabel>
                 <FormControl>
                   <Input
-                    type="text"
+                    type="email"
                     placeholder={t("emailPlaceholder")}
                     {...field}
                   />

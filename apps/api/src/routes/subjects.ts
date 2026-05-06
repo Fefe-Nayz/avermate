@@ -99,6 +99,7 @@ app.get(
             value: true,
             outOf: true,
             coefficient: true,
+            isComposite: true,
             passedAt: true,
             periodId: true,
           },

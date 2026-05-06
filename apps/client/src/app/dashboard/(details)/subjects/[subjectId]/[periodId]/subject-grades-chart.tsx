@@ -129,7 +129,7 @@ function GradeActiveDot({ chartData }: { chartData: GradeDataPoint[] }) {
             x={nearestDatum.date}
             y={nearestDatum.grade}
             r={5}
-            fill="#2662d9"
+            fill="var(--chart-1)"
             strokeWidth={0}
         />
     );
@@ -159,7 +159,7 @@ function CustomTooltipContent({
                         {
                             name: nearestDatum.subjectName || "",
                             value: `${nearestDatum.value! / 100}/${nearestDatum.outOf! / 100}`,
-                            color: "#2662d9",
+                            color: "var(--chart-1)",
                             dataKey: "grade",
                             payload: null,
                         },
@@ -276,7 +276,7 @@ export default function SubjectGradesChart({
         const chartConfig: ChartConfig = {
             grade: {
                 label: t("grades"),
-                color: "#2662d9",
+                color: "var(--chart-1)",
             },
         };
 
@@ -348,10 +348,10 @@ export default function SubjectGradesChart({
                         <Line
                             dataKey="grade"
                             type="monotone"
-                            stroke="#2662d9"
+                            stroke="var(--chart-1)"
                             strokeWidth={2}
                             connectNulls={true}
-                            dot={{ r: 4, fill: "#2662d9", strokeWidth: 0 }}
+                            dot={{ r: 4, fill: "var(--chart-1)", strokeWidth: 0 }}
                             activeDot={false}
                         />
                         {showTrendLine ? (

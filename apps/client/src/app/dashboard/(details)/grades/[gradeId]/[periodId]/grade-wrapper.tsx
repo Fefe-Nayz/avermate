@@ -3,6 +3,7 @@
 import GradeMoreButton from "@/components/buttons/dashboard/grade/grade-more-button";
 import DataCard from "@/components/dashboard/data-card";
 import GradeValue from "@/components/dashboard/grade-value";
+import { CompositeGradeSection } from "@/components/grades/composite-grade-section";
 import AddGradeDialog from "@/components/dialogs/add-grade-dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -32,7 +33,7 @@ import { useFormatter } from "next-intl";
 import { Period } from "@/types/period";
 import { useActiveYearStore } from "@/stores/active-year-store";
 import { useYears } from "@/hooks/use-years";
-import { format } from "node:path";
+import { useEffect, useState } from "react";
 
 export default function GradeWrapper({
   subjects,
@@ -56,6 +57,21 @@ export default function GradeWrapper({
   const { data: years } = useYears();
   const active = years?.find((year) => year.id === activeId);
   const yearDefaultOutOf = active?.defaultOutOf || 2000;
+  const [openCompositeEditorNonce, setOpenCompositeEditorNonce] = useState(0);
+
+  useEffect(() => {
+    if (!grade.isComposite) {
+      return;
+    }
+
+    const storageKey = `openCompositeEditor:${grade.id}`;
+    if (sessionStorage.getItem(storageKey) !== "true") {
+      return;
+    }
+
+    sessionStorage.removeItem(storageKey);
+    setOpenCompositeEditorNonce((nonce) => nonce + 1);
+  }, [grade.id, grade.isComposite]);
 
   const gradeParents = () => {
     if (!grade || !subjects) {
@@ -106,7 +122,12 @@ export default function GradeWrapper({
 
       <div className="flex justify-between items-center">
         <p className="text-2xl font-semibold">{grade.name}</p>
-        <GradeMoreButton grade={grade} />
+        <GradeMoreButton
+          grade={grade}
+          onCompositeActivated={() =>
+            setOpenCompositeEditorNonce((nonce) => nonce + 1)
+          }
+        />
       </div>
 
       <Separator />
@@ -165,6 +186,11 @@ export default function GradeWrapper({
           </p>
         </DataCard>
       </div>
+
+      <CompositeGradeSection
+        grade={grade}
+        openCreateNonce={openCompositeEditorNonce}
+      />
 
       {/* Impact Cards Section */}
       <div className="space-y-2">

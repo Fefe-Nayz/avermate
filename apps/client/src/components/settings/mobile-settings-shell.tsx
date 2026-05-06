@@ -201,6 +201,7 @@ export function MobileSettingsHub() {
       description: navT("generalDescription"),
       keywords: [
         settingsT("Theme.title"),
+        "Thème personnalisé",
         settingsT("Language.title"),
         settingsT("ChartSettings.title"),
         settingsT("TimelineMode.title"),
@@ -317,6 +318,16 @@ export function MobileSettingsHub() {
         settingsT("Theme.light"),
         settingsT("Theme.dark"),
       ],
+    },
+    {
+      id: "general-custom-theme",
+      href: "/profile/settings/general",
+      icon: Settings2,
+      parentTitle: navT("general"),
+      settingId: "custom-theme",
+      title: "Thème personnalisé",
+      description: "Couleurs, police, arrondis et préréglages visuels",
+      keywords: ["theme", "couleur", "font", "police", "preset"],
     },
     {
       id: "general-language",

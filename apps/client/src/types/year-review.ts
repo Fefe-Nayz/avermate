@@ -38,10 +38,12 @@ export type YearReviewStats = {
 export type YearReviewServerResponse = {
     hasData: boolean;
     topPercentile: number;
+    viewed?: boolean;
 };
 
 // Full response with client-calculated stats
 export type YearReviewResponse = {
     hasData: boolean;
     stats?: YearReviewStats;
+    viewed?: boolean;
 };
