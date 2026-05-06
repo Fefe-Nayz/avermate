@@ -319,7 +319,7 @@ function getActiveSeasonalTheme(): SeasonalTheme {
     return forcedTheme;
   }
 
-  // Check each seasonal theme in order (except April Fools which is always enabled)
+  // Check each seasonal theme in order
   for (const [themeKey, themeConfig] of Object.entries(SEASONAL_THEMES)) {
     if (
       themeKey !== "none" &&
@@ -330,7 +330,7 @@ function getActiveSeasonalTheme(): SeasonalTheme {
     }
   }
 
-  // April Fools is always checked last and cannot be disabled
+  // April Fools is checked last
   const aprilFoolsConfig = SEASONAL_THEMES["april-fools"];
   if (aprilFoolsConfig?.checkDate()) {
     return "april-fools";

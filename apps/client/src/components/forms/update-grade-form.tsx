@@ -393,6 +393,7 @@ export function UpdateGradeForm({
                           setIsManualPeriod(false);
                         }}
                         disabled={(date) =>
+                          date > new Date() ||
                           (year !== undefined && (date > new Date(year.endDate) || date < new Date(year.startDate)))
                         }
                         autoFocus
