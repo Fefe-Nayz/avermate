@@ -296,7 +296,9 @@
     "Step2": {
       "title": "Matières",
       "addSubject": "Ajouter une matière",
-      "addPresetSubjects": "Ajouter des matières prédéfinies",
+      "addPresetSubjects": "Ajouter à partir d'une section",
+      "presetExplanation": "Sélectionnez votre section pour ajouter automatiquement vos matières.",
+      "presetNotFound": "Vous ne trouvez pas votre formation ?",
       "mainSubjectsDescription": "Les matières principales (ex. <b>Mathématiques</b>) apparaissent sur la page d'accueil.",
       "categoriesDescription": "Les catégories (ex. <b>Langues</b>) regroupent des matières sans moyenne propre.",
       "subSubjectsDescription": "Les sous-matières (ex. <b>Écrit</b>, <b>Oral</b>) organisent les notes.",

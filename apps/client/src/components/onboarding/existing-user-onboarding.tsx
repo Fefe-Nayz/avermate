@@ -326,7 +326,7 @@ function YearOnboardingContent({
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden p-4 border-b">
+      <div className="md:hidden p-4 pb-2 border-b">
         <h1 className="text-xl font-bold">
           {currentStep.id === "year"
             ? t("year")
@@ -340,7 +340,7 @@ function YearOnboardingContent({
       </div>
 
       {/* Stepper Navigation */}
-      <div className="px-6 py-4 border-b">
+      <div className="px-6 py-2 border-b">
         <YearStepper.Navigation className="w-full">
           {steps.map((step) => {
             const isDisabled =
@@ -587,7 +587,7 @@ function ConfigOnboardingContent({
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden p-4 border-b">
+      <div className="md:hidden p-4 pb-2 border-b">
         <h1 className="text-xl font-bold">
           {currentStep.id === "subjects" ? t("matieres") : t("periodes")}
         </h1>
@@ -597,7 +597,7 @@ function ConfigOnboardingContent({
       </div>
 
       {/* Stepper Navigation */}
-      <div className="px-6 py-4 border-b">
+      <div className="px-6 py-2 border-b">
         <ConfigStepper.Navigation className="w-full">
           {steps.map((step) => (
             <ConfigStepper.Step

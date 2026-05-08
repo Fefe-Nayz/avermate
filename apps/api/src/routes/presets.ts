@@ -26,6 +26,8 @@ const presets: Preset[] = [
     name: "Prépa CPE Sup Numérique",
     description: "Préset des matières pour la prépa CPE Sup Numérique",
     tags: ["CPE", "2025-2026"],
+    isArchived: false,
+    featured: true,
     subjects: [
       {
         name: "Module Scientifique",
@@ -192,6 +194,8 @@ const presets: Preset[] = [
     name: "Prépa CPE Sup Chimie",
     description: "Préset des matières pour la prépa CPE Sup Chimie",
     tags: ["CPE", "2025-2026"],
+    isArchived: false,
+    featured: true,
     subjects: [
       {
         name: "Module Scientifique",
@@ -381,6 +385,8 @@ const presets: Preset[] = [
     name: "Prépa CPE Spé PSI",
     description: "Préset des matières pour la prépa CPE Spé PSI",
     tags: ["CPE", "2025-2026"],
+    isArchived: false,
+    featured: true,
     subjects: [
       {
         name: "Module Scientifique",
@@ -554,6 +560,8 @@ const presets: Preset[] = [
     name: "Prépa CPE Spé PC",
     description: "Préset des matières pour la prépa CPE Spé PC",
     tags: ["CPE", "2025-2026"],
+    isArchived: false,
+    featured: true,
     subjects: [
       {
         name: "Module Scientifique",
@@ -730,6 +738,8 @@ const presets: Preset[] = [
     name: "Terminale - Section Générale",
     description: "Préset pour la terminale générale.",
     tags: ["LYCEE"],
+    isArchived: false,
+    featured: true,
     subjects: [
       /**
        * Spécialité 1
@@ -813,6 +823,8 @@ const presets: Preset[] = [
     name: "1ère - Section Générale",
     description: "Préset pour la 1ère générale.",
     tags: ["LYCEE"],
+    isArchived: false,
+    featured: true,
     subjects: [
       /**
        * Spécialité 1
@@ -902,8 +914,10 @@ const presets: Preset[] = [
   {
     id: "LYCEE_2NDE_GT",
     name: "2nde - Section Générale & Technologique",
-    description: "Préset pour la 2nde générale & technologie.",
+    description: "Préset pour la 2nde générale & technologique.",
     tags: ["LYCEE"],
+    isArchived: false,
+    featured: true,
     subjects: [
       /**
        * Mathématiques
@@ -996,6 +1010,8 @@ type Preset = {
   subjects: PresetSubject[];
   customAverages?: CustomAveragePreset[];
   tags: string[];
+  isArchived: boolean;
+  featured: boolean;
 };
 
 type PresetSubject = {

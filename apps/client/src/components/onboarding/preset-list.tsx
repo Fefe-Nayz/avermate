@@ -13,11 +13,12 @@ import {
   CardTitle,
   CardHeader,
 } from "@/components/ui/card";
-import { Loader2Icon, CheckIcon, SearchIcon } from "lucide-react";
+import { Loader2Icon, CheckIcon, SearchIcon, PlusCircleIcon, SearchX } from "lucide-react";
 import { handleError } from "@/utils/error-utils";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Badge } from "../ui/badge";
+import AddSubjectDialog from "@/components/dialogs/add-subject-dialog";
 
 export const PresetList = ({
   close,
@@ -34,14 +35,23 @@ export const PresetList = ({
 }) => {
   const errorTranslations = useTranslations("Errors");
   const t = useTranslations("Onboarding.Step2.Presets");
+  const tStep2 = useTranslations("Onboarding.Step2");
   const queryClient = useQueryClient();
   const [loadingPresetId, setLoadingPresetId] = useState<string | null>(null);
 
   // Filter presets based on search term
   const filteredPresets = presets.filter(
-    (preset) =>
-      preset.name.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-      preset.description.toLowerCase().includes(state.searchTerm.toLowerCase())
+    (preset) => {
+      if (preset.isArchived) return false;
+      
+      const search = state.searchTerm.toLowerCase();
+      if (!search) {
+        return preset.featured;
+      }
+      
+      return preset.name.toLowerCase().includes(search) ||
+        preset.description.toLowerCase().includes(search);
+    }
   );
 
   // Define the mutation to apply a preset
@@ -86,8 +96,8 @@ export const PresetList = ({
   };
 
   return (
-    <div className="space-y-4 mx-1">
-      <div className="relative">
+    <div className="flex flex-col space-y-4 mx-1">
+      <div className="relative sticky top-0 bg-background z-10 pb-2 pt-1 -mt-1">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder={t("search")}
@@ -97,7 +107,7 @@ export const PresetList = ({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
         {filteredPresets.length > 0 ? (
           filteredPresets.map((preset) => (
             <Card key={preset.id}>
@@ -131,12 +141,21 @@ export const PresetList = ({
             </Card>
           ))
         ) : (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground text-sm">
+          <div className="flex flex-col items-center justify-center text-center py-16 px-4 border-2 border-dashed rounded-xl bg-muted/20 my-2">
+            <div className="bg-background p-4 rounded-full shadow-sm border mb-4">
+              <SearchX className="size-6 text-muted-foreground opacity-80" />
+            </div>
+            <p className="text-muted-foreground text-sm max-w-[280px] mx-auto mb-6 leading-relaxed">
               {state.searchTerm
                 ? t("noSearchResults", { search: state.searchTerm })
                 : t("noPresets")}
             </p>
+            <AddSubjectDialog yearId={yearId}>
+              <Button variant="outline" className="bg-background hover:bg-muted/50">
+                <PlusCircleIcon className="size-4 mr-2" />
+                {tStep2("addSubject")}
+              </Button>
+            </AddSubjectDialog>
           </div>
         )}
       </div>
