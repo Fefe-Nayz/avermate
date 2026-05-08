@@ -18,6 +18,9 @@ import { useSubjects } from "@/hooks/use-subjects";
 import { Subject } from "@/types/subject";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import { PlusCircleIcon } from "lucide-react";
+import { PresetList } from "./preset-list";
+import { usePresets } from "@/hooks/use-presets";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 interface SubjectsStepProps {
@@ -26,6 +29,7 @@ interface SubjectsStepProps {
 
 export default function SubjectsStep({ yearId }: SubjectsStepProps) {
   const t = useTranslations("Onboarding.Step2");
+  const [searchState, setSearchState] = useState({ searchTerm: "" });
 
   const shouldQuery = yearId && yearId !== "new";
   const {
@@ -33,6 +37,11 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
     isError,
     isLoading,
   } = useSubjects(shouldQuery ? yearId : "");
+
+  const {
+    data: presets,
+    isLoading: isLoadingPresets,
+  } = usePresets();
 
   if (!shouldQuery) {
     return (
@@ -74,12 +83,6 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
               {t("addSubject")}
             </Button>
           </AddSubjectDialog>
-          <ListPresetsDialog yearId={yearId}>
-            <Button disabled>
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addPresetSubjects")}
-            </Button>
-          </ListPresetsDialog>
         </div>
       </div>
     );
@@ -91,42 +94,28 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
 
   if (!subjects || subjects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center space-y-8 h-full min-h-[400px]">
-        <div className="text-center space-y-4">
-          <h2 className="text-2xl font-bold text-primary">{t("title")}</h2>
-          <div className="text-muted-foreground text-center max-w-2xl">
-            <ul className="text-left space-y-2">
-              <li>
-                {t.rich("mainSubjectsDescription", {
-                  b: (chunks) => <b className="text-foreground">{chunks}</b>,
-                })}
-              </li>
-              <li>
-                {t.rich("categoriesDescription", {
-                  b: (chunks) => <b className="text-foreground">{chunks}</b>,
-                })}
-              </li>
-              <li>
-                {t.rich("subSubjectsDescription", {
-                  b: (chunks) => <b className="text-foreground">{chunks}</b>,
-                })}
-              </li>
-            </ul>
-          </div>
+      <div className="flex flex-col flex-1 pb-8 md:pb-0">
+        {/* Preset list section directly in page */}
+        <div className="w-full flex-1">
+          {!isLoadingPresets && presets && (
+            <PresetList
+              presets={presets}
+              yearId={yearId}
+              state={searchState}
+              setState={setSearchState}
+              close={() => {}}
+            />
+          )}
         </div>
-        <div className="flex md:flex-row flex-col items-center justify-center md:space-x-4 space-y-2 md:space-y-0">
+
+        <div className="mt-auto flex flex-col items-center justify-center border-t pt-4 sticky bottom-0 bg-background z-10 pb-4">
+          <p className="text-sm text-muted-foreground mb-4">{t("presetNotFound")}</p>
           <AddSubjectDialog yearId={yearId}>
             <Button variant="outline">
               <PlusCircleIcon className="size-4 mr-2" />
               {t("addSubject")}
             </Button>
           </AddSubjectDialog>
-          <ListPresetsDialog yearId={yearId}>
-            <Button>
-              <PlusCircleIcon className="size-4 mr-2" />
-              {t("addPresetSubjects")}
-            </Button>
-          </ListPresetsDialog>
         </div>
       </div>
     );
@@ -205,13 +194,20 @@ export default function SubjectsStep({ yearId }: SubjectsStepProps) {
 
       <div>{renderSubjects(subjects ?? [])}</div>
 
-      <div className="flex flex-col items-center justify-center space-y-4">
+      <div className="flex md:flex-row flex-col items-center justify-center md:space-x-4 space-y-4 md:space-y-0 mt-4">
         <AddSubjectDialog yearId={yearId}>
           <Button variant="outline">
             <PlusCircleIcon className="size-4 mr-2" />
             {t("addNewSubject")}
           </Button>
         </AddSubjectDialog>
+        
+        <ListPresetsDialog yearId={yearId}>
+          <Button variant="secondary">
+            <PlusCircleIcon className="size-4 mr-2" />
+            {t("addPresetSubjects")}
+          </Button>
+        </ListPresetsDialog>
       </div>
     </div>
   );

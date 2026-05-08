@@ -16,4 +16,6 @@ export type Preset = {
     description: string;
     subjects: PresetSubject[];
     tags: string[];
+    isArchived: boolean;
+    featured?: boolean;
 };

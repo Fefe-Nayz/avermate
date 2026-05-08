@@ -302,7 +302,7 @@ function OnboardingContent({
       </div>
 
       {/* Mobile Header */}
-      <div className="md:hidden p-4 border-b">
+      <div className="md:hidden p-4 pb-2 border-b">
         <h1 className="text-xl font-bold">
           {currentStep.id === "welcome"
             ? t("welcome")
@@ -318,7 +318,7 @@ function OnboardingContent({
       </div>
 
       {/* Stepper Navigation */}
-      <div className="px-6 py-4 border-b">
+      <div className="px-6 py-2 border-b">
         <Stepper.Navigation className="w-full">
           {steps.map((step) => {
             const isDisabled =

@@ -294,7 +294,9 @@
     "Step2": {
       "title": "Subjects",
       "addSubject": "Add a subject",
-      "addPresetSubjects": "Add preset subjects",
+      "addPresetSubjects": "Add from a preset",
+      "presetExplanation": "Select your section to automatically add your subjects.",
+      "presetNotFound": "Can't find your program?",
       "mainSubjectsDescription": "Main subjects (e.g., <b>Mathematics</b>) appear on the homepage.",
       "categoriesDescription": "Categories (e.g., <b>Languages</b>) group subjects without their own average.",
       "subSubjectsDescription": "Sub-subjects (e.g., <b>Written</b>, <b>Oral</b>) organize grades.",
