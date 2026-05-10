@@ -21,9 +21,39 @@ const gabarito = Gabarito({
 });
 
 export const metadata: Metadata = {
-  title: "Avermate",
+  title: {
+    template: "%s | Avermate",
+    default: "Avermate - L'app de suivi étudiant pour calculer ses moyennes (Alternative Pronote & Ecole Directe)",
+  },
   description:
-    "Obtenez un aperçu instantané et précis de vos notes et de vos moyennes. Suivez votre progression en temps réel pour atteindre vos objectifs.",
+    "Avermate est la meilleure application de suivi étudiant pour simuler, calculer et stocker vos notes et moyennes. L'app pour stocker ses résultats de manière moderne et transparente, alternative indépendante à Pronote et École Directe.",
+  keywords: [
+    "suivi etudiant",
+    "moyenne note",
+    "calcul moyenne",
+    "alternative école directe",
+    "école directe",
+    "alternative pronote",
+    "pronote",
+    "app pour stocker ses résultats",
+    "suivi scolaire",
+    "étudiant",
+    "notes"
+  ],
+  authors: [{ name: "Avermate" }],
+  creator: "Avermate",
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    title: "Avermate - L'app de suivi étudiant (Alternative Pronote & École Directe)",
+    description: "Avermate est la meilleure application de suivi étudiant pour simuler, calculer et stocker vos notes et moyennes. L'alternative moderne et indépendante à Pronote et École Directe.",
+    siteName: "Avermate",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Avermate - L'app de suivi étudiant pour vos notes et moyennes",
+    description: "La meilleure alternative à Pronote et École Directe pour stocker ses résultats de manière moderne et transparente.",
+  },
 };
 
 export const viewport: Viewport = {
