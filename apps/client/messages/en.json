@@ -368,6 +368,7 @@
         "enableDescription": "The theme will apply across all your signed-in devices.",
         "modeLight": "Light",
         "modeDark": "Dark",
+        "modeSystem": "System",
         "themesHeading": "Themes",
         "random": "Random",
         "reset": "Reset",

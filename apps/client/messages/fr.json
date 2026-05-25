@@ -370,6 +370,7 @@
         "enableDescription": "Le thème s'applique sur tous vos appareils connectés.",
         "modeLight": "Clair",
         "modeDark": "Sombre",
+        "modeSystem": "Système",
         "themesHeading": "Thèmes",
         "random": "Aléatoire",
         "reset": "Réinitialiser",

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
-import { Dices, Moon, Palette, RotateCcw, Sun } from "lucide-react";
+import { Dices, Monitor, Moon, Palette, RotateCcw, Sun } from "lucide-react";
 
 import ProfileSection from "../profile-section";
 import {
@@ -891,6 +891,11 @@ export function CustomThemeSection() {
   const [mode, setMode] = useState<CustomThemeMode>(() =>
     resolveThemeMode(resolvedTheme, theme)
   );
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setMode(resolveThemeMode(resolvedTheme, theme));
@@ -996,9 +1001,15 @@ export function CustomThemeSection() {
     }
   };
 
-  const handleModeChange = (nextMode: CustomThemeMode) => {
-    setMode(nextMode);
-    setTheme(nextMode);
+  // Active selection reflects the next-themes setting ("system" | "light" | "dark"),
+  // while `mode` (light/dark) drives which palette is edited.
+  const selectedTheme = mounted ? theme ?? "system" : undefined;
+
+  const handleThemeSelect = (next: "system" | "light" | "dark") => {
+    if (next !== "system") {
+      setMode(next);
+    }
+    setTheme(next);
   };
 
   return (
@@ -1007,6 +1018,33 @@ export function CustomThemeSection() {
       description={t("description")}
     >
       <div className="space-y-6 px-6 pb-6">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Button
+            type="button"
+            variant={selectedTheme === "light" ? "default" : "outline"}
+            onClick={() => handleThemeSelect("light")}
+          >
+            <Sun className="size-4" />
+            {t("modeLight")}
+          </Button>
+          <Button
+            type="button"
+            variant={selectedTheme === "dark" ? "default" : "outline"}
+            onClick={() => handleThemeSelect("dark")}
+          >
+            <Moon className="size-4" />
+            {t("modeDark")}
+          </Button>
+          <Button
+            type="button"
+            variant={selectedTheme === "system" ? "default" : "outline"}
+            onClick={() => handleThemeSelect("system")}
+          >
+            <Monitor className="size-4" />
+            {t("modeSystem")}
+          </Button>
+        </div>
+
         <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
           <div className="flex items-start gap-3">
             <div className="rounded-md border bg-muted p-2 text-muted-foreground">
@@ -1025,25 +1063,8 @@ export function CustomThemeSection() {
           />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Button
-            type="button"
-            variant={mode === "light" ? "default" : "outline"}
-            onClick={() => handleModeChange("light")}
-          >
-            <Sun className="size-4" />
-            {t("modeLight")}
-          </Button>
-          <Button
-            type="button"
-            variant={mode === "dark" ? "default" : "outline"}
-            onClick={() => handleModeChange("dark")}
-          >
-            <Moon className="size-4" />
-            {t("modeDark")}
-          </Button>
-        </div>
-
+        {draft.enabled ? (
+          <>
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-lg font-medium">{t("themesHeading")}</h3>
@@ -1207,6 +1228,8 @@ export function CustomThemeSection() {
             </div>
           </TabsContent>
         </Tabs>
+          </>
+        ) : null}
       </div>
     </ProfileSection>
   );

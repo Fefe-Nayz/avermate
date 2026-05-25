@@ -200,7 +200,6 @@ export function MobileSettingsHub() {
       title: navT("general"),
       description: navT("generalDescription"),
       keywords: [
-        settingsT("Theme.title"),
         "Thème personnalisé",
         settingsT("Language.title"),
         settingsT("ChartSettings.title"),
@@ -303,21 +302,6 @@ export function MobileSettingsHub() {
       title: accountT("DeleteAccount.title"),
       description: accountT("DeleteAccount.description"),
       keywords: [navT("accountSecurity"), navT("accountDescription")],
-    },
-    {
-      id: "general-theme",
-      href: "/profile/settings/general",
-      icon: Settings2,
-      parentTitle: navT("general"),
-      settingId: "theme",
-      title: settingsT("Theme.title"),
-      description: settingsT("Theme.description"),
-      keywords: [
-        navT("general"),
-        settingsT("Theme.system"),
-        settingsT("Theme.light"),
-        settingsT("Theme.dark"),
-      ],
     },
     {
       id: "general-custom-theme",
