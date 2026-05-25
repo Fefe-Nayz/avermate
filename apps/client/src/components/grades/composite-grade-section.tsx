@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useFormatter, useTranslations } from "next-intl";
 import {
   Calculator,
   Info,
@@ -69,12 +70,6 @@ const emptyForm: CompositeFormState = {
   outOf: "20",
   coefficient: "1",
 };
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("fr-FR", {
-    maximumFractionDigits: 2,
-  }).format(value);
-}
 
 function componentToForm(component: GradeComponent): CompositeFormState {
   return {
@@ -161,6 +156,7 @@ function ComponentEditorDialog({
   onFormChange: (form: CompositeFormState) => void;
   onSubmit: () => void;
 }) {
+  const t = useTranslations("Dashboard.Pages.CompositeGradeSection");
   const parsedValue = form.value.trim() ? Number(form.value) : NaN;
   const parsedOutOf = form.outOf.trim() ? Number(form.outOf) : NaN;
   const previewValue =
@@ -177,11 +173,10 @@ function ComponentEditorDialog({
       <CredenzaContentWrapper>
         <CredenzaHeader>
           <CredenzaTitle>
-            {isEditing ? "Modifier la sous-note" : "Ajouter une sous-note"}
+            {isEditing ? t("editSubGradeTitle") : t("addSubGradeTitle")}
           </CredenzaTitle>
           <CredenzaDescription>
-            Chaque sous-note a son propre barème et son propre coefficient dans
-            la moyenne pondérée.
+            {t("editorDescription")}
           </CredenzaDescription>
         </CredenzaHeader>
 
@@ -193,7 +188,7 @@ function ComponentEditorDialog({
                 <Calculator className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium">Aperçu</p>
+                <p className="text-sm font-medium">{t("preview")}</p>
                 <div className="mt-2">
                   {previewValue !== null && previewOutOf !== null ? (
                     <GradeValue value={previewValue} outOf={previewOutOf} size="sm" />
@@ -204,28 +199,29 @@ function ComponentEditorDialog({
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Coefficient {form.coefficient || "1"} dans la moyenne
-                  pondérée de la note composite.
+                  {t("previewDescription", {
+                    coefficient: form.coefficient || "1",
+                  })}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="component-name">Nom de la sous-note</Label>
+            <Label htmlFor="component-name">{t("subGradeNameLabel")}</Label>
             <Input
               id="component-name"
               value={form.name}
               onChange={(event) =>
                 onFormChange({ ...form, name: event.target.value })
               }
-              placeholder="DS, exercice, oral..."
+              placeholder={t("subGradeNamePlaceholder")}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_0.8fr]">
             <div className="space-y-2">
-              <Label htmlFor="component-value">Note</Label>
+              <Label htmlFor="component-value">{t("valueLabel")}</Label>
               <Input
                 id="component-value"
                 type="number"
@@ -238,7 +234,7 @@ function ComponentEditorDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="component-out-of">Sur</Label>
+              <Label htmlFor="component-out-of">{t("outOfLabel")}</Label>
               <Input
                 id="component-out-of"
                 type="number"
@@ -251,7 +247,7 @@ function ComponentEditorDialog({
               />
             </div>
             <div className="col-span-2 space-y-2 sm:col-span-1">
-              <Label htmlFor="component-coefficient">Coef.</Label>
+              <Label htmlFor="component-coefficient">{t("coefficientLabel")}</Label>
               <Input
                 id="component-coefficient"
                 type="number"
@@ -267,9 +263,7 @@ function ComponentEditorDialog({
 
           <div className="flex gap-2 rounded-md border border-dashed bg-background px-3 py-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            La date, la matière et le coefficient global restent portés par la
-            note principale. Ici, seules les notes qui composent le résultat
-            sont modifiées.
+            {t("editorInfo")}
           </div>
           </div>
         </CredenzaBodyWrapper>
@@ -280,11 +274,11 @@ function ComponentEditorDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
           >
-            Annuler
+            {t("cancel")}
           </Button>
           <Button type="button" onClick={onSubmit} disabled={isPending}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {isEditing ? "Enregistrer" : "Ajouter"}
+            {isEditing ? t("save") : t("add")}
           </Button>
         </CredenzaFooter>
       </CredenzaContentWrapper>
@@ -299,6 +293,8 @@ export function CompositeGradeSection({
   grade: Grade;
   openCreateNonce?: number;
 }) {
+  const t = useTranslations("Dashboard.Pages.CompositeGradeSection");
+  const formatter = useFormatter();
   const queryClient = useQueryClient();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingComponentId, setEditingComponentId] = useState<string | null>(null);
@@ -311,6 +307,8 @@ export function CompositeGradeSection({
     (sum, component) => sum + component.coefficient / 100,
     0
   );
+  const formatNumber = (value: number) =>
+    formatter.number(value, { maximumFractionDigits: 2 });
 
   const invalidateGradeData = async () => {
     await Promise.all([
@@ -343,7 +341,9 @@ export function CompositeGradeSection({
       return response.json();
     },
     onSuccess: async () => {
-      toast.success(editingComponentId ? "Sous-note modifiée" : "Sous-note ajoutée");
+      toast.success(
+        editingComponentId ? t("toasts.subGradeUpdated") : t("toasts.subGradeAdded")
+      );
       autoRevertOnCancelRef.current = false;
       setForm(emptyForm);
       setEditingComponentId(null);
@@ -352,16 +352,16 @@ export function CompositeGradeSection({
     },
     onError: (error) => {
       if (error instanceof Error && error.message === "VALUE_EXCEEDS_OUT_OF") {
-        toast.error("La sous-note ne peut pas dépasser le barème.");
+        toast.error(t("toasts.valueExceedsOutOf"));
         return;
       }
 
       if (error instanceof Error && error.message === "INVALID_SCALE") {
-        toast.error("Le barème et le coefficient doivent être supérieurs à 0.");
+        toast.error(t("toasts.invalidScale"));
         return;
       }
 
-      toast.error("Impossible d'enregistrer la sous-note.");
+      toast.error(t("toasts.saveError"));
     },
   });
 
@@ -376,13 +376,13 @@ export function CompositeGradeSection({
     onSuccess: async (data) => {
       toast.success(
         data.grade.isComposite
-          ? "Sous-note supprimée"
-          : "Note composite convertie en note simple"
+          ? t("toasts.subGradeDeleted")
+          : t("toasts.revertedToSimpleGrade")
       );
       await invalidateGradeData();
     },
     onError: () => {
-      toast.error("Impossible de supprimer la sous-note.");
+      toast.error(t("toasts.deleteError"));
     },
   });
 
@@ -393,11 +393,11 @@ export function CompositeGradeSection({
       return response.json<{ grade: Grade; components: GradeComponent[] }>();
     },
     onSuccess: async () => {
-      toast.info("Note composite annulée");
+      toast.info(t("toasts.compositeCancelled"));
       await invalidateGradeData();
     },
     onError: () => {
-      toast.error("Impossible d'annuler la note composite.");
+      toast.error(t("toasts.cancelError"));
     },
   });
 
@@ -458,10 +458,9 @@ export function CompositeGradeSection({
               <Calculator className="size-4" />
             </div>
             <div className="space-y-1">
-              <CardTitle className="text-base">Note composite</CardTitle>
+              <CardTitle className="text-base">{t("title")}</CardTitle>
               <CardDescription>
-                La note principale est recalculée avec la moyenne pondérée des
-                sous-notes.
+                {t("description")}
               </CardDescription>
             </div>
           </div>
@@ -472,7 +471,7 @@ export function CompositeGradeSection({
             className="w-full sm:w-auto"
           >
             <Plus className="size-4" />
-            Ajouter une sous-note
+            {t("addSubGrade")}
           </Button>
         </div>
       </CardHeader>
@@ -480,15 +479,15 @@ export function CompositeGradeSection({
       <CardContent className="space-y-4 border-t pt-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Résultat actuel</p>
+            <p className="text-xs text-muted-foreground">{t("currentResult")}</p>
             <GradeValue value={grade.value} outOf={grade.outOf} size="sm" />
           </div>
           <div className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Sous-notes</p>
+            <p className="text-xs text-muted-foreground">{t("subGrades")}</p>
             <p className="text-lg font-semibold">{components.length}</p>
           </div>
           <div className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Coef. total</p>
+            <p className="text-xs text-muted-foreground">{t("totalCoefficient")}</p>
             <p className="flex items-center gap-2 text-lg font-semibold">
               <Weight className="size-4 text-muted-foreground" />
               {formatNumber(totalCoefficient)}
@@ -498,8 +497,7 @@ export function CompositeGradeSection({
 
         {components.length === 1 ? (
           <div className="rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-            La note originale a été conservée comme première sous-note. Ajoutez
-            une seconde sous-note pour obtenir une vraie moyenne composite.
+            {t("singleSubGradeHint")}
           </div>
         ) : null}
 
@@ -507,10 +505,14 @@ export function CompositeGradeSection({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead className="text-right">Note</TableHead>
-                <TableHead className="text-right">Coef.</TableHead>
-                <TableHead className="w-[96px] text-right">Actions</TableHead>
+                <TableHead>{t("table.name")}</TableHead>
+                <TableHead className="text-right">{t("table.grade")}</TableHead>
+                <TableHead className="text-right">
+                  {t("table.coefficient")}
+                </TableHead>
+                <TableHead className="w-[96px] text-right">
+                  {t("table.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -533,7 +535,7 @@ export function CompositeGradeSection({
                         onClick={() => openEditDialog(component)}
                       >
                         <Pencil className="size-4" />
-                        <span className="sr-only">Modifier</span>
+                        <span className="sr-only">{t("edit")}</span>
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -545,22 +547,20 @@ export function CompositeGradeSection({
                             disabled={deleteComponentMutation.isPending}
                           >
                             <Trash2 className="size-4" />
-                            <span className="sr-only">Supprimer</span>
+                            <span className="sr-only">{t("delete")}</span>
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              Supprimer cette sous-note ?
+                              {t("deleteDialog.title")}
                             </AlertDialogTitle>
                             <AlertDialogDescription>
-                              Cette action recalculera immédiatement la note
-                              principale. S'il ne reste qu'une sous-note, la
-                              note redeviendra une note simple.
+                              {t("deleteDialog.description")}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
                             <AlertDialogAction
                               className={cn(
                                 buttonVariants({ variant: "destructive" })
@@ -569,7 +569,7 @@ export function CompositeGradeSection({
                                 deleteComponentMutation.mutate(component.id)
                               }
                             >
-                              Supprimer
+                              {t("delete")}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -584,7 +584,7 @@ export function CompositeGradeSection({
 
         {previewValue !== null ? (
           <div className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm">
-            <span className="text-muted-foreground">Aperçu recalculé</span>
+            <span className="text-muted-foreground">{t("recalculatedPreview")}</span>
             <GradeValue value={previewValue} outOf={grade.outOf} size="sm" />
           </div>
         ) : null}

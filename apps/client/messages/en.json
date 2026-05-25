@@ -733,6 +733,13 @@
       "SubjectMoreButton": {
         "addGrade": "Add Grade"
       },
+      "GradeMoreButton": {
+        "activateComposite": "Enable composite grade",
+        "toasts": {
+          "compositeActivated": "Grade converted to a composite grade",
+          "compositeActivationError": "Unable to convert the grade."
+        }
+      },
       "SELECT_YEAR_PLACEHOLDER": "Select a year",
       "SELECT_YEAR_TITLE": "Select Year"
     },
@@ -1537,6 +1544,54 @@
         "averageOverTime": "Average",
         "gradesOverTime": "Grades",
         "showSubSubjects": "Sub-subjects"
+      },
+      "CompositeGradeSection": {
+        "title": "Composite grade",
+        "description": "The main grade is recalculated from the weighted average of its sub-grades.",
+        "addSubGrade": "Add a sub-grade",
+        "currentResult": "Current result",
+        "subGrades": "Sub-grades",
+        "totalCoefficient": "Total coef.",
+        "singleSubGradeHint": "The original grade was kept as the first sub-grade. Add a second sub-grade to get a real composite average.",
+        "recalculatedPreview": "Recalculated preview",
+        "edit": "Edit",
+        "delete": "Delete",
+        "cancel": "Cancel",
+        "save": "Save",
+        "add": "Add",
+        "addSubGradeTitle": "Add a sub-grade",
+        "editSubGradeTitle": "Edit sub-grade",
+        "editorDescription": "Each sub-grade has its own scale and coefficient in the weighted average.",
+        "preview": "Preview",
+        "previewDescription": "Coefficient {coefficient} in the weighted average of the composite grade.",
+        "subGradeNameLabel": "Sub-grade name",
+        "subGradeNamePlaceholder": "Test, exercise, oral...",
+        "valueLabel": "Grade",
+        "outOfLabel": "Out of",
+        "coefficientLabel": "Coef.",
+        "editorInfo": "The date, subject and global coefficient remain attached to the main grade. Here, only the grades that compose the result are edited.",
+        "table": {
+          "name": "Name",
+          "grade": "Grade",
+          "coefficient": "Coef.",
+          "actions": "Actions"
+        },
+        "deleteDialog": {
+          "title": "Delete this sub-grade?",
+          "description": "This action will immediately recalculate the main grade. If only one sub-grade remains, the grade will become a simple grade again."
+        },
+        "toasts": {
+          "subGradeAdded": "Sub-grade added",
+          "subGradeUpdated": "Sub-grade updated",
+          "subGradeDeleted": "Sub-grade deleted",
+          "revertedToSimpleGrade": "Composite grade converted back to a simple grade",
+          "compositeCancelled": "Composite grade cancelled",
+          "valueExceedsOutOf": "The sub-grade cannot exceed its scale.",
+          "invalidScale": "The scale and coefficient must be greater than 0.",
+          "saveError": "Unable to save the sub-grade.",
+          "deleteError": "Unable to delete the sub-grade.",
+          "cancelError": "Unable to cancel the composite grade."
+        }
       },
       "GradeWrapper": {
         "back": "Back",

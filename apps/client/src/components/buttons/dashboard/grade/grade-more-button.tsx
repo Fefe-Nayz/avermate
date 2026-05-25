@@ -16,6 +16,7 @@ import { PartialGrade } from "@/types/grade";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calculator, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 
 export default function GradeMoreButton({
@@ -27,6 +28,7 @@ export default function GradeMoreButton({
   shouldBackOnDelete?: boolean;
   onCompositeActivated?: () => void;
 }) {
+  const t = useTranslations("Dashboard.Buttons.GradeMoreButton");
   const queryClient = useQueryClient();
   const router = useRouter();
   const transformMutation = useMutation({
@@ -36,7 +38,7 @@ export default function GradeMoreButton({
       return response.json();
     },
     onSuccess: async () => {
-      toast.success("Note transformée en note composite");
+      toast.success(t("toasts.compositeActivated"));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["grades"] }),
         queryClient.invalidateQueries({ queryKey: ["grades", grade.id] }),
@@ -56,7 +58,7 @@ export default function GradeMoreButton({
       router.push(`/dashboard/grades/${grade.id}/${grade.periodId ?? "full-year"}`);
     },
     onError: () => {
-      toast.error("Impossible de transformer la note.");
+      toast.error(t("toasts.compositeActivationError"));
     },
   });
 
@@ -81,7 +83,7 @@ export default function GradeMoreButton({
                 ) : (
                   <Calculator className="size-4 mr-2" />
                 )}
-                Activer note composite
+                {t("activateComposite")}
               </div>
             </DropDrawerItem>
           ) : null}

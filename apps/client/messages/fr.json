@@ -735,6 +735,13 @@
       "SubjectMoreButton": {
         "addGrade": "Ajouter une note"
       },
+      "GradeMoreButton": {
+        "activateComposite": "Activer la note composite",
+        "toasts": {
+          "compositeActivated": "Note transformée en note composite",
+          "compositeActivationError": "Impossible de transformer la note."
+        }
+      },
       "SELECT_YEAR_PLACEHOLDER": "Sélectionnez une année",
       "SELECT_YEAR_TITLE": "Sélectionnez une année"
     },
@@ -1539,6 +1546,54 @@
         "averageOverTime": "Moyenne",
         "gradesOverTime": "Notes",
         "showSubSubjects": "Sous-matières"
+      },
+      "CompositeGradeSection": {
+        "title": "Note composite",
+        "description": "La note principale est recalculée avec la moyenne pondérée des sous-notes.",
+        "addSubGrade": "Ajouter une sous-note",
+        "currentResult": "Résultat actuel",
+        "subGrades": "Sous-notes",
+        "totalCoefficient": "Coef. total",
+        "singleSubGradeHint": "La note originale a été conservée comme première sous-note. Ajoutez une seconde sous-note pour obtenir une vraie moyenne composite.",
+        "recalculatedPreview": "Aperçu recalculé",
+        "edit": "Modifier",
+        "delete": "Supprimer",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "add": "Ajouter",
+        "addSubGradeTitle": "Ajouter une sous-note",
+        "editSubGradeTitle": "Modifier la sous-note",
+        "editorDescription": "Chaque sous-note a son propre barème et son propre coefficient dans la moyenne pondérée.",
+        "preview": "Aperçu",
+        "previewDescription": "Coefficient {coefficient} dans la moyenne pondérée de la note composite.",
+        "subGradeNameLabel": "Nom de la sous-note",
+        "subGradeNamePlaceholder": "DS, exercice, oral...",
+        "valueLabel": "Note",
+        "outOfLabel": "Sur",
+        "coefficientLabel": "Coef.",
+        "editorInfo": "La date, la matière et le coefficient global restent portés par la note principale. Ici, seules les notes qui composent le résultat sont modifiées.",
+        "table": {
+          "name": "Nom",
+          "grade": "Note",
+          "coefficient": "Coef.",
+          "actions": "Actions"
+        },
+        "deleteDialog": {
+          "title": "Supprimer cette sous-note ?",
+          "description": "Cette action recalculera immédiatement la note principale. S'il ne reste qu'une sous-note, la note redeviendra une note simple."
+        },
+        "toasts": {
+          "subGradeAdded": "Sous-note ajoutée",
+          "subGradeUpdated": "Sous-note modifiée",
+          "subGradeDeleted": "Sous-note supprimée",
+          "revertedToSimpleGrade": "Note composite convertie en note simple",
+          "compositeCancelled": "Note composite annulée",
+          "valueExceedsOutOf": "La sous-note ne peut pas dépasser le barème.",
+          "invalidScale": "Le barème et le coefficient doivent être supérieurs à 0.",
+          "saveError": "Impossible d'enregistrer la sous-note.",
+          "deleteError": "Impossible de supprimer la sous-note.",
+          "cancelError": "Impossible d'annuler la note composite."
+        }
       },
       "GradeWrapper": {
         "back": "Retour",
