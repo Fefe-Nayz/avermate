@@ -1,8 +1,8 @@
 import { db } from "@/db";
-import { grades } from "@/db/schema";
+import { grades, yearReviewViews } from "@/db/schema";
 import { type Session, type User } from "@/lib/auth";
 import { zValidator } from "@hono/zod-validator";
-import { and, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -21,11 +21,24 @@ const getYearReviewSchema = z.object({
   yearId: z.string().min(1),
 });
 
-app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
+const getYearReviewQuerySchema = z.object({
+  reviewKey: z.string().min(1).max(120).optional(),
+});
+
+const markYearReviewViewedSchema = z.object({
+  reviewKey: z.string().min(1).max(120),
+});
+
+app.get(
+  "/:yearId",
+  zValidator("param", getYearReviewSchema),
+  zValidator("query", getYearReviewQuerySchema),
+  async (c) => {
   const session = c.get("session");
   if (!session) throw new HTTPException(401);
 
   const { yearId } = c.req.valid("param");
+  const { reviewKey } = c.req.valid("query");
 
   const year = await getYearById(yearId);
 
@@ -72,10 +85,61 @@ app.get("/:yearId", zValidator("param", getYearReviewSchema), async (c) => {
 
   if (topPercentile < 1) topPercentile = 1;
 
+  const view = reviewKey
+    ? await db.query.yearReviewViews.findFirst({
+        where: and(
+          eq(yearReviewViews.userId, session.user.id),
+          eq(yearReviewViews.yearId, year.id),
+          eq(yearReviewViews.reviewKey, reviewKey)
+        ),
+      })
+    : null;
+
   return c.json({
     hasData: true,
     topPercentile,
+    viewed: Boolean(view),
   });
 });
+
+app.post(
+  "/:yearId/viewed",
+  zValidator("param", getYearReviewSchema),
+  zValidator("json", markYearReviewViewedSchema),
+  async (c) => {
+    const session = c.get("session");
+    if (!session) throw new HTTPException(401);
+
+    const { yearId } = c.req.valid("param");
+    const { reviewKey } = c.req.valid("json");
+    const year = await getYearById(yearId);
+
+    if (!year) {
+      throw new HTTPException(404, { message: "Year not found" });
+    }
+
+    if (year.userId !== session.user.id) {
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+
+    await db
+      .insert(yearReviewViews)
+      .values({
+        userId: session.user.id,
+        yearId: year.id,
+        reviewKey,
+        clickedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [
+          yearReviewViews.userId,
+          yearReviewViews.yearId,
+          yearReviewViews.reviewKey,
+        ],
+      });
+
+    return c.json({ viewed: true });
+  }
+);
 
 export default app;

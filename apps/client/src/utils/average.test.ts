@@ -2,8 +2,19 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { average, averageOverTime } from "./average";
-import type { PartialGrade } from "../types/grade";
+import {
+  average,
+  averageOverTime,
+  calculateLongestStreak,
+  calculateStreak,
+  getBestGrade,
+  getFutureGradeProjections,
+  getSubjectTrend,
+  getTrend,
+  getWorstGrade,
+  isGradeIncludedInCustomAverage,
+} from "./average";
+import type { Grade, PartialGrade } from "../types/grade";
 import type { Subject } from "../types/subject";
 import type { Average } from "../types/average";
 import type { Period } from "../types/period";
@@ -270,5 +281,144 @@ describe("averageOverTime() - périodes cumulatives", () => {
     const lastValue = values[values.length - 1];
 
     closeTo(lastValue, 20);
+  });
+
+  it("place une note horodatée sur le bon jour de la série", () => {
+    const subjects = makeSubjects([
+      {
+        id: "maths",
+        name: "Maths",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [
+          {
+            value: 1000,
+            outOf: 2000,
+            periodId: "p1",
+            passedAt: "2026-01-02T14:30:00.000Z",
+          },
+        ],
+      },
+    ]);
+    const period: Period = {
+      ...p1,
+      endAt: "2026-01-03T23:59:59.999Z",
+    };
+    const values = averageOverTime(subjects, undefined, period, [period]);
+
+    closeTo(values[1], 10);
+  });
+
+  it("aligne le trend sur les mêmes bornes que averageOverTime pour une période cumulative", () => {
+    const trend = getSubjectTrend(timelineSubjects, "maths", p2Cumulative, [p1, p2Cumulative]);
+    const values = averageOverTime(timelineSubjects, "maths", p2Cumulative, [p1, p2Cumulative]);
+    const startDate = new Date(p1.startAt);
+    const expectedTrend = getTrend(
+      values.map((value, index) => {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + index);
+        return { date, average: value };
+      })
+    );
+
+    assert.ok(trend !== null);
+    closeTo(trend, expectedTrend, 8);
+  });
+});
+
+describe("isGradeIncludedInCustomAverage()", () => {
+  it("ne boucle pas si une matière référence un parent absent", () => {
+    const subjects = makeSubjects([
+      {
+        id: "orphan",
+        name: "Orphan",
+        parentId: "missing-parent",
+        isDisplaySubject: false,
+        grades: [{ value: 1000, outOf: 2000, periodId: "p1" }],
+      },
+    ]);
+    const customAverage: Average = {
+      id: "ca-4",
+      name: "Dangling parent",
+      subjects: [{ id: "another-subject", customCoefficient: null, includeChildren: true }],
+      isMainAverage: false,
+      createdAt: Date.now(),
+      userId: "u1",
+      yearId: "y1",
+    };
+
+    assert.equal(
+      isGradeIncludedInCustomAverage(
+        subjects[0].grades[0] as Grade,
+        subjects,
+        customAverage
+      ),
+      false
+    );
+  });
+});
+
+describe("helpers analytiques", () => {
+  it("ignore les notes dont le barème est nul dans les meilleurs/pire notes", () => {
+    const subjects = makeSubjects([
+      {
+        id: "maths",
+        name: "Maths",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [
+          { name: "Invalide", value: 2000, outOf: 0 },
+          { name: "Valide", value: 1500, outOf: 2000 },
+        ],
+      },
+    ]);
+
+    assert.equal(getBestGrade(subjects)?.name, "Valide");
+    assert.equal(getWorstGrade(subjects)?.name, "Valide");
+  });
+
+  it("borne les projections futures sur l'échelle /20", () => {
+    const subjects = makeSubjects([
+      {
+        id: "maths",
+        name: "Maths",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [
+          {
+            value: 1000,
+            outOf: 2000,
+            passedAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            value: 2000,
+            outOf: 2000,
+            passedAt: "2026-01-02T00:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    assert.equal(getFutureGradeProjections(subjects, 2).get("maths")?.[0], 20);
+  });
+
+  it("calcule les streaks avec la vraie moyenne cumulée", () => {
+    const subjects = makeSubjects([
+      {
+        id: "maths",
+        name: "Maths",
+        parentId: null,
+        isDisplaySubject: false,
+        grades: [
+          { value: 0, outOf: 2000, passedAt: "2026-01-01T00:00:00.000Z" },
+          { value: 0, outOf: 2000, passedAt: "2026-01-02T00:00:00.000Z" },
+          { value: 2000, outOf: 2000, passedAt: "2026-01-03T00:00:00.000Z" },
+          { value: 800, outOf: 2000, passedAt: "2026-01-04T00:00:00.000Z" },
+        ],
+      },
+    ]);
+
+    assert.equal(calculateStreak(subjects), 3);
+    assert.equal(calculateLongestStreak(subjects), 3);
   });
 });

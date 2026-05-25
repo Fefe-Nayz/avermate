@@ -156,22 +156,15 @@ export default function DataCards({
 
       {/* 2) Main Custom Averages */}
       {mainCustomAverages?.map((ca) => {
-        const subjectsToGive = () => {
-          const customAverageId = ca.id;
-          const customAverage = customAverageId
-            ? customAverages?.find((ca) => ca.id === customAverageId)
-            : undefined;
-
-
-          return addGeneralAverageToSubjects(subjects, customAverage);
-        }
-        const subjectVirtual = () => {
-          return (
-            subjectsToGive().find((s) => s.id === ca.id) ||
-            buildGeneralAverageSubject()
-          );
-        };
-        const customVal = (average(subjectVirtual()?.id, subjectsToGive()));
+        const customAverage = customAverages?.find((item) => item.id === ca.id);
+        const augmentedSubjects = addGeneralAverageToSubjects(
+          subjects,
+          customAverage
+        );
+        const subjectVirtual =
+          augmentedSubjects.find((subject) => subject.id === ca.id) ||
+          buildGeneralAverageSubject();
+        const customVal = average(subjectVirtual.id, augmentedSubjects);
         if (customVal === null) {
           return null;
         }

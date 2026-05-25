@@ -291,7 +291,7 @@ function DropDrawerContent({
       >
         <DrawerContent
           data-slot="drop-drawer-content"
-          className={cn("max-h-[90vh]", className)}
+          className={cn("max-h-[calc(100svh-1rem)]", className)}
           {...props}
         >
           {activeSubmenu ? (
@@ -308,7 +308,7 @@ function DropDrawerContent({
                   <DrawerTitle>{submenuTitle || "Submenu"}</DrawerTitle>
                 </div>
               </DrawerHeader>
-              <div className="flex-1 relative overflow-y-auto max-h-[70vh]">
+              <div className="relative max-h-[70svh] flex-1 overflow-y-auto overscroll-contain">
                 {/* Use AnimatePresence to handle exit animations */}
                 <AnimatePresence
                   initial={false}
@@ -339,7 +339,7 @@ function DropDrawerContent({
               <DrawerHeader className="sr-only">
                 <DrawerTitle>Menu</DrawerTitle>
               </DrawerHeader>
-              <div className="overflow-y-auto max-h-[70vh]">
+              <div className="max-h-[70svh] overflow-y-auto overscroll-contain">
                 <AnimatePresence
                   initial={false}
                   mode="wait"

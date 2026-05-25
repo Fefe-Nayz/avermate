@@ -32,6 +32,7 @@ function toEditableSettingsPayload(settings: UserSettings): UpdateUserSettingsIn
     seasonalTheme: settings.seasonalTheme,
     mokattamThemeEnabled: settings.mokattamThemeEnabled,
     hapticsEnabled: settings.hapticsEnabled,
+    customTheme: settings.customTheme,
   };
 }
 
@@ -121,6 +122,7 @@ export default function UserSettingsSync() {
       mokattamThemeCelebrationSeenAt:
         remoteSettings.mokattamThemeCelebrationSeenAt,
       hapticsEnabled: remoteSettings.hapticsEnabled,
+      customTheme: remoteSettings.customTheme,
     };
 
     if (!remoteSettings.persisted) {

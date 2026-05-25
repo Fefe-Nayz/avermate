@@ -57,6 +57,9 @@ export function useChartSettings() {
       showTrendLine: updates.showTrendLine ?? settings.showTrendLine,
       trendLineSubdivisions:
         updates.trendLineSubdivisions ?? settings.trendLineSubdivisions,
+      showSubSubjectsInSubjectCharts:
+        updates.showSubSubjectsInSubjectCharts ??
+        settings.showSubSubjectsInSubjectCharts,
     };
 
     const newSettings = updateLocalUserSettings({

@@ -200,7 +200,7 @@ export function MobileSettingsHub() {
       title: navT("general"),
       description: navT("generalDescription"),
       keywords: [
-        settingsT("Theme.title"),
+        "Thème personnalisé",
         settingsT("Language.title"),
         settingsT("ChartSettings.title"),
         settingsT("TimelineMode.title"),
@@ -304,19 +304,14 @@ export function MobileSettingsHub() {
       keywords: [navT("accountSecurity"), navT("accountDescription")],
     },
     {
-      id: "general-theme",
+      id: "general-custom-theme",
       href: "/profile/settings/general",
       icon: Settings2,
       parentTitle: navT("general"),
-      settingId: "theme",
-      title: settingsT("Theme.title"),
-      description: settingsT("Theme.description"),
-      keywords: [
-        navT("general"),
-        settingsT("Theme.system"),
-        settingsT("Theme.light"),
-        settingsT("Theme.dark"),
-      ],
+      settingId: "custom-theme",
+      title: "Thème personnalisé",
+      description: "Couleurs, police, arrondis et préréglages visuels",
+      keywords: ["theme", "couleur", "font", "police", "preset"],
     },
     {
       id: "general-language",

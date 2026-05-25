@@ -22,6 +22,11 @@ export const queryKeys = {
     custom: (yearId: string) => ["custom-averages", yearId] as const,
     one: (id: string) => ["custom-averages", "detail", id] as const,
   },
+  announcements: {
+    active: ["announcements", "active"] as const,
+    history: ["announcements", "history"] as const,
+    admin: ["admin", "announcements"] as const,
+  },
   accounts: {
     all: ["accounts"] as const,
   },

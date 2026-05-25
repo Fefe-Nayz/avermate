@@ -117,11 +117,14 @@ function SelectDrawerContent({
 
     if (isMobile) {
         return (
-            <DrawerContent className={cn("max-h-[90vh]", className)} {...props}>
+            <DrawerContent
+                className={cn("max-h-[calc(100svh-1rem)]", className)}
+                {...props}
+            >
                 <DrawerHeader>
                     <DrawerTitle>{title}</DrawerTitle>
                 </DrawerHeader>
-                <div className="overflow-y-auto max-h-[70vh] pb-6">
+                <div className="max-h-[70svh] overflow-y-auto overscroll-contain pb-6">
                     {children}
                 </div>
             </DrawerContent>

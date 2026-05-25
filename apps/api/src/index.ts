@@ -14,6 +14,7 @@ import feedbackRoute from "@/routes/feedback";
 import yearsRoutes from "@/routes/years";
 import yearReviewRoutes from "@/routes/year-review";
 import adminRoutes from "@/routes/admin";
+import announcementsRoutes from "@/routes/announcements";
 import settingsRoutes from "@/routes/settings";
 // import cardsRoute from "@/routes/cards";
 import { Hono } from "hono";
@@ -71,6 +72,8 @@ app.route("/years", yearsRoutes);
 app.route("/year-review", yearReviewRoutes);
 
 app.route("/admin", adminRoutes);
+
+app.route("/announcements", announcementsRoutes);
 
 app.route("/settings", settingsRoutes);
 

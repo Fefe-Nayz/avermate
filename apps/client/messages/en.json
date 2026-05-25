@@ -363,6 +363,69 @@
         "successMessage": "Click the link sent to {email} to confirm the change.",
         "errorMessage": "Error updating email."
       },
+      "CustomTheme": {
+        "title": "Custom theme",
+        "description": "Build a theme with your own colors, fonts and radius.",
+        "enable": "Enable",
+        "enableDescription": "The theme will apply across all your signed-in devices.",
+        "modeLight": "Light",
+        "modeDark": "Dark",
+        "modeSystem": "System",
+        "themesHeading": "Themes",
+        "random": "Random",
+        "reset": "Reset",
+        "presetTitle": "Preset",
+        "customLabel": "Custom",
+        "tabColors": "Colors",
+        "tabTypography": "Typography",
+        "tabOther": "Other",
+        "groupBrand": "Brand colors",
+        "groupBase": "Base",
+        "groupInterface": "Interface",
+        "groupChart": "Charts",
+        "groupNavigation": "Navigation",
+        "color_primary": "Primary",
+        "color_primaryForeground": "Primary foreground",
+        "color_secondary": "Secondary",
+        "color_secondaryForeground": "Secondary foreground",
+        "color_destructive": "Destructive",
+        "color_background": "Background",
+        "color_foreground": "Foreground",
+        "color_card": "Card",
+        "color_cardForeground": "Card foreground",
+        "color_popover": "Popover",
+        "color_popoverForeground": "Popover foreground",
+        "color_muted": "Muted",
+        "color_mutedForeground": "Muted foreground",
+        "color_accent": "Accent",
+        "color_accentForeground": "Accent foreground",
+        "color_border": "Border",
+        "color_input": "Input",
+        "color_ring": "Ring",
+        "color_chart1": "Chart 1",
+        "color_chart2": "Chart 2",
+        "color_chart3": "Chart 3",
+        "color_chart4": "Chart 4",
+        "color_chart5": "Chart 5",
+        "color_sidebar": "Sidebar",
+        "color_sidebarForeground": "Sidebar foreground",
+        "color_sidebarPrimary": "Sidebar primary",
+        "color_sidebarAccent": "Sidebar accent",
+        "color_sidebarBorder": "Sidebar border",
+        "color_sidebarRing": "Sidebar ring",
+        "fontLabel": "Sans-serif font",
+        "fontDrawerTitle": "Font",
+        "fontFallbackNote": "Fonts that aren't installed automatically fall back to the configured system stack.",
+        "radius": "Radius",
+        "previewTitle": "Preview",
+        "previewDescription": "Buttons, cards, charts and navigation all use these variables.",
+        "appliedToast": "Theme applied",
+        "badgeSoft": "Soft",
+        "badgePunchy": "Punchy",
+        "badgeBold": "Bold",
+        "badgeClean": "Clean",
+        "badgeDark": "Dark"
+      },
       "Avatar": {
         "title": "Avatar",
         "description": "Change your avatar.",
@@ -634,7 +697,8 @@
       "feedback": "Feedback",
       "notLoggedInTitle": "Not logged in",
       "notLoggedInDescription": "You must be logged in to access this page.",
-      "general": "General"
+      "general": "General",
+      "notifications": "Notifications"
     }
   },
   "Dashboard": {
@@ -690,6 +754,19 @@
         "grades": "Grades",
         "noGrades": "No grades to display"
       }
+    },
+    "Notifications": {
+      "title": "Notifications",
+      "description": "Dismissed notifications stay here while the admin announcement is still live.",
+      "sectionUnread": "Unread",
+      "sectionDismissed": "Dismissed",
+      "empty": "No notifications for now.",
+      "toneInfo": "Info",
+      "toneSuccess": "Success",
+      "toneWarning": "Warning",
+      "hidden": "Dismissed",
+      "shown": "Not dismissed",
+      "dismiss": "Dismiss"
     },
     "Cards": {
       "RecentGradesCard": {
@@ -1089,7 +1166,8 @@
         "successTitle": "Grade Updated Successfully!",
         "successDescription": "Your grade has been updated.",
         "updateError": "Error updating the grade.",
-        "submit": "Submit"
+        "submit": "Submit",
+        "compositeNotice": "The main grade is computed automatically from sub-grades. The value, scale, subject and period are locked; the name, date and coefficient remain editable."
       },
       "UpdatePeriod": {
         "name": "Name",
@@ -1457,7 +1535,8 @@
         "impactSectionTitle": "Impacts of the subject",
         "chartSectionTitle": "Evolution",
         "averageOverTime": "Average",
-        "gradesOverTime": "Grades"
+        "gradesOverTime": "Grades",
+        "showSubSubjects": "Sub-subjects"
       },
       "GradeWrapper": {
         "back": "Back",

@@ -68,6 +68,7 @@ import {
     SelectDrawerItem,
     SelectDrawerTrigger,
 } from "@/components/ui/selectdrawer";
+import { AnnouncementAdminPanel } from "@/components/admin/announcement-admin-panel";
 
 const USERS_PER_PAGE = 20;
 const DEFAULT_TIMELINE_RANGE: AdminTimelineRange = "always" ;
@@ -672,6 +673,8 @@ export default function AdminDashboardPage() {
                             ))}
                         </div>
                     )}
+
+                    <AnnouncementAdminPanel />
 
                     <div className="grid gap-4 xl:grid-cols-3">
                         <Card className="min-w-0 overflow-hidden xl:col-span-2">

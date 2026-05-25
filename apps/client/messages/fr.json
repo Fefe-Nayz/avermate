@@ -365,6 +365,69 @@
         "successMessage": "Cliquez sur le lien envoyé à {email} pour confirmer le changement.",
         "errorMessage": "Erreur lors de la mise à jour de l'email."
       },
+      "CustomTheme": {
+        "title": "Thème personnalisé",
+        "description": "Créez un thème avec vos couleurs, polices et arrondis.",
+        "enable": "Activer",
+        "enableDescription": "Le thème s'applique sur tous vos appareils connectés.",
+        "modeLight": "Clair",
+        "modeDark": "Sombre",
+        "modeSystem": "Système",
+        "themesHeading": "Thèmes",
+        "random": "Aléatoire",
+        "reset": "Réinitialiser",
+        "presetTitle": "Préréglage",
+        "customLabel": "Personnalisé",
+        "tabColors": "Couleurs",
+        "tabTypography": "Typographie",
+        "tabOther": "Autres",
+        "groupBrand": "Couleurs marque",
+        "groupBase": "Base",
+        "groupInterface": "Interface",
+        "groupChart": "Graphiques",
+        "groupNavigation": "Navigation",
+        "color_primary": "Primary",
+        "color_primaryForeground": "Primary foreground",
+        "color_secondary": "Secondary",
+        "color_secondaryForeground": "Secondary foreground",
+        "color_destructive": "Destructive",
+        "color_background": "Background",
+        "color_foreground": "Foreground",
+        "color_card": "Card",
+        "color_cardForeground": "Card foreground",
+        "color_popover": "Popover",
+        "color_popoverForeground": "Popover foreground",
+        "color_muted": "Muted",
+        "color_mutedForeground": "Muted foreground",
+        "color_accent": "Accent",
+        "color_accentForeground": "Accent foreground",
+        "color_border": "Border",
+        "color_input": "Input",
+        "color_ring": "Ring",
+        "color_chart1": "Chart 1",
+        "color_chart2": "Chart 2",
+        "color_chart3": "Chart 3",
+        "color_chart4": "Chart 4",
+        "color_chart5": "Chart 5",
+        "color_sidebar": "Sidebar",
+        "color_sidebarForeground": "Sidebar foreground",
+        "color_sidebarPrimary": "Sidebar primary",
+        "color_sidebarAccent": "Sidebar accent",
+        "color_sidebarBorder": "Sidebar border",
+        "color_sidebarRing": "Sidebar ring",
+        "fontLabel": "Police sans-serif",
+        "fontDrawerTitle": "Police",
+        "fontFallbackNote": "Les polices non installées retombent automatiquement sur la pile système configurée.",
+        "radius": "Arrondi",
+        "previewTitle": "Aperçu",
+        "previewDescription": "Boutons, cartes, graphes et navigation utilisent ces variables.",
+        "appliedToast": "Thème appliqué",
+        "badgeSoft": "Doux",
+        "badgePunchy": "Vif",
+        "badgeBold": "Audacieux",
+        "badgeClean": "Épuré",
+        "badgeDark": "Sombre"
+      },
       "Avatar": {
         "title": "Avatar",
         "description": "Changez votre avatar.",
@@ -636,7 +699,8 @@
       "feedback": "Retour",
       "notLoggedInTitle": "Vous n'êtes pas connecté",
       "notLoggedInDescription": "Vous devez être connecté pour accéder à cette page.",
-      "general": "Général"
+      "general": "Général",
+      "notifications": "Notifications"
     }
   },
   "Dashboard": {
@@ -692,6 +756,19 @@
         "grades": "Notes",
         "noGrades": "Aucune note à afficher"
       }
+    },
+    "Notifications": {
+      "title": "Notifications",
+      "description": "Les notifications masquées restent ici tant que l'annonce existe côté admin.",
+      "sectionUnread": "À lire",
+      "sectionDismissed": "Masquées",
+      "empty": "Aucune notification pour le moment.",
+      "toneInfo": "Info",
+      "toneSuccess": "Succès",
+      "toneWarning": "Attention",
+      "hidden": "Masquée",
+      "shown": "Non masquée",
+      "dismiss": "Masquer"
     },
     "Cards": {
       "RecentGradesCard": {
@@ -1091,7 +1168,8 @@
         "successTitle": "Note modifiée avec succès !",
         "successDescription": "Votre note a été mise à jour.",
         "updateError": "Erreur lors de la modification de la note.",
-        "submit": "Modifier la note"
+        "submit": "Modifier la note",
+        "compositeNotice": "La note principale est calculée automatiquement depuis les sous-notes. La note, le barème, la matière et la période sont verrouillés ; le nom, la date et le coefficient restent modifiables."
       },
       "UpdatePeriod": {
         "name": "Nom",
@@ -1459,7 +1537,8 @@
         "impactSectionTitle": "Impacts de la matière",
         "chartSectionTitle": "Évolution",
         "averageOverTime": "Moyenne",
-        "gradesOverTime": "Notes"
+        "gradesOverTime": "Notes",
+        "showSubSubjects": "Sous-matières"
       },
       "GradeWrapper": {
         "back": "Retour",

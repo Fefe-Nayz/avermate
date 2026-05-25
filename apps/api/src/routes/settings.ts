@@ -20,6 +20,50 @@ const chartSettingsSchema = z.object({
   autoZoomYAxis: z.boolean(),
   showTrendLine: z.boolean(),
   trendLineSubdivisions: z.number().int().min(1).max(10),
+  showSubSubjectsInSubjectCharts: z.boolean(),
+});
+
+const customThemePaletteSchema = z.object({
+  background: z.string().min(1).max(80),
+  foreground: z.string().min(1).max(80),
+  primary: z.string().min(1).max(80),
+  primaryForeground: z.string().min(1).max(80),
+  secondary: z.string().min(1).max(80),
+  secondaryForeground: z.string().min(1).max(80),
+  destructive: z.string().min(1).max(80),
+  card: z.string().min(1).max(80),
+  cardForeground: z.string().min(1).max(80),
+  popover: z.string().min(1).max(80),
+  popoverForeground: z.string().min(1).max(80),
+  accent: z.string().min(1).max(80),
+  accentForeground: z.string().min(1).max(80),
+  muted: z.string().min(1).max(80),
+  mutedForeground: z.string().min(1).max(80),
+  border: z.string().min(1).max(80),
+  input: z.string().min(1).max(80),
+  ring: z.string().min(1).max(80),
+  chart1: z.string().min(1).max(80),
+  chart2: z.string().min(1).max(80),
+  chart3: z.string().min(1).max(80),
+  chart4: z.string().min(1).max(80),
+  chart5: z.string().min(1).max(80),
+  sidebar: z.string().min(1).max(80),
+  sidebarForeground: z.string().min(1).max(80),
+  sidebarPrimary: z.string().min(1).max(80),
+  sidebarPrimaryForeground: z.string().min(1).max(80),
+  sidebarAccent: z.string().min(1).max(80),
+  sidebarAccentForeground: z.string().min(1).max(80),
+  sidebarBorder: z.string().min(1).max(80),
+  sidebarRing: z.string().min(1).max(80),
+});
+
+const customThemeSchema = z.object({
+  enabled: z.boolean(),
+  preset: z.string().min(1).max(40),
+  radius: z.number().min(0).max(2),
+  fontSans: z.string().min(1).max(160),
+  light: customThemePaletteSchema,
+  dark: customThemePaletteSchema,
 });
 
 const updateUserSettingsSchema = z
@@ -34,6 +78,7 @@ const updateUserSettingsSchema = z
     mokattamThemeEnabled: z.boolean().optional(),
     markMokattamThemeCelebrationSeen: z.boolean().optional(),
     hapticsEnabled: z.boolean().optional(),
+    customTheme: customThemeSchema.partial().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one setting must be provided",
@@ -43,6 +88,7 @@ const defaultChartSettings = {
   autoZoomYAxis: true,
   showTrendLine: false,
   trendLineSubdivisions: 1,
+  showSubSubjectsInSubjectCharts: true,
 };
 
 const defaultSettings = {
@@ -55,6 +101,79 @@ const defaultSettings = {
   mokattamThemeEnabled: false,
   mokattamThemeCelebrationSeenAt: null as string | null,
   hapticsEnabled: true,
+  customTheme: {
+    enabled: false,
+    preset: "default",
+    radius: 0.625,
+    fontSans:
+      "var(--font-gabarito), var(--font-inter), ui-sans-serif, system-ui, sans-serif",
+    light: {
+      background: "oklch(1 0 0)",
+      foreground: "oklch(0.145 0 0)",
+      primary: "oklch(0.205 0 0)",
+      primaryForeground: "oklch(0.985 0 0)",
+      secondary: "oklch(0.97 0 0)",
+      secondaryForeground: "oklch(0.205 0 0)",
+      destructive: "oklch(0.577 0.245 27.325)",
+      card: "oklch(1 0 0)",
+      cardForeground: "oklch(0.145 0 0)",
+      popover: "oklch(1 0 0)",
+      popoverForeground: "oklch(0.145 0 0)",
+      accent: "oklch(0.97 0 0)",
+      accentForeground: "oklch(0.205 0 0)",
+      muted: "oklch(0.97 0 0)",
+      mutedForeground: "oklch(0.556 0 0)",
+      border: "oklch(0.922 0 0)",
+      input: "oklch(0.922 0 0)",
+      ring: "oklch(0.708 0 0)",
+      chart1: "#2662d9",
+      chart2: "oklch(0.6 0.118 184.704)",
+      chart3: "oklch(0.398 0.07 227.392)",
+      chart4: "oklch(0.828 0.189 84.429)",
+      chart5: "oklch(0.769 0.188 70.08)",
+      sidebar: "oklch(0.985 0 0)",
+      sidebarForeground: "oklch(0.145 0 0)",
+      sidebarPrimary: "oklch(0.205 0 0)",
+      sidebarPrimaryForeground: "oklch(0.985 0 0)",
+      sidebarAccent: "oklch(0.97 0 0)",
+      sidebarAccentForeground: "oklch(0.205 0 0)",
+      sidebarBorder: "oklch(0.922 0 0)",
+      sidebarRing: "oklch(0.708 0 0)",
+    },
+    dark: {
+      background: "oklch(0.145 0 0)",
+      foreground: "oklch(0.985 0 0)",
+      primary: "oklch(0.922 0 0)",
+      primaryForeground: "oklch(0.205 0 0)",
+      secondary: "oklch(0.269 0 0)",
+      secondaryForeground: "oklch(0.985 0 0)",
+      destructive: "oklch(0.704 0.191 22.216)",
+      card: "oklch(0.205 0 0)",
+      cardForeground: "oklch(0.985 0 0)",
+      popover: "oklch(0.205 0 0)",
+      popoverForeground: "oklch(0.985 0 0)",
+      accent: "oklch(0.269 0 0)",
+      accentForeground: "oklch(0.985 0 0)",
+      muted: "oklch(0.269 0 0)",
+      mutedForeground: "oklch(0.708 0 0)",
+      border: "oklch(1 0 0 / 10%)",
+      input: "oklch(1 0 0 / 15%)",
+      ring: "oklch(0.556 0 0)",
+      chart1: "#60a5fa",
+      chart2: "oklch(0.696 0.17 162.48)",
+      chart3: "oklch(0.769 0.188 70.08)",
+      chart4: "oklch(0.627 0.265 303.9)",
+      chart5: "oklch(0.645 0.246 16.439)",
+      sidebar: "oklch(0.205 0 0)",
+      sidebarForeground: "oklch(0.985 0 0)",
+      sidebarPrimary: "oklch(0.488 0.243 264.376)",
+      sidebarPrimaryForeground: "oklch(0.985 0 0)",
+      sidebarAccent: "oklch(0.269 0 0)",
+      sidebarAccentForeground: "oklch(0.985 0 0)",
+      sidebarBorder: "oklch(1 0 0 / 10%)",
+      sidebarRing: "oklch(0.556 0 0)",
+    },
+  },
 };
 
 function parseChartSettings(value?: string | null) {
@@ -63,10 +182,63 @@ function parseChartSettings(value?: string | null) {
   }
 
   try {
-    return chartSettingsSchema.parse(JSON.parse(value));
+    return chartSettingsSchema.parse({
+      ...defaultChartSettings,
+      ...JSON.parse(value),
+    });
   } catch {
     return defaultChartSettings;
   }
+}
+
+function getDefaultCustomTheme() {
+  return customThemeSchema.parse(defaultSettings.customTheme);
+}
+
+function parseCustomTheme(value?: string | null) {
+  if (!value) {
+    return getDefaultCustomTheme();
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return customThemeSchema.parse({
+      ...defaultSettings.customTheme,
+      ...parsed,
+      light: {
+        ...defaultSettings.customTheme.light,
+        ...parsed.light,
+      },
+      dark: {
+        ...defaultSettings.customTheme.dark,
+        ...parsed.dark,
+      },
+    });
+  } catch {
+    return getDefaultCustomTheme();
+  }
+}
+
+function mergeCustomTheme(
+  current: typeof defaultSettings.customTheme,
+  updates?: Partial<z.infer<typeof customThemeSchema>>
+) {
+  if (!updates) {
+    return current;
+  }
+
+  return customThemeSchema.parse({
+    ...current,
+    ...updates,
+    light: {
+      ...current.light,
+      ...updates.light,
+    },
+    dark: {
+      ...current.dark,
+      ...updates.dark,
+    },
+  });
 }
 
 function serializeSettings(row: typeof userSettings.$inferSelect | null) {
@@ -96,6 +268,7 @@ function serializeSettings(row: typeof userSettings.$inferSelect | null) {
       ? row.mokattamThemeCelebrationSeenAt.toISOString()
       : null,
     hapticsEnabled: row.hapticsEnabled,
+    customTheme: parseCustomTheme(row.customTheme),
     persisted: true,
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -133,6 +306,11 @@ app.patch("/", zValidator("json", updateUserSettingsSchema), async (c) => {
         ...updates.chartSettings,
       }
     : parseChartSettings(existing?.chartSettings);
+  const nextCustomThemeJson = updates.customTheme
+    ? JSON.stringify(
+        mergeCustomTheme(parseCustomTheme(existing?.customTheme), updates.customTheme)
+      )
+    : existing?.customTheme ?? "{}";
 
   const now = new Date();
   const mokattamThemeAvailable =
@@ -165,6 +343,7 @@ app.patch("/", zValidator("json", updateUserSettingsSchema), async (c) => {
       updates.hapticsEnabled ??
       existing?.hapticsEnabled ??
       defaultSettings.hapticsEnabled,
+    customTheme: nextCustomThemeJson,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -184,6 +363,7 @@ app.patch("/", zValidator("json", updateUserSettingsSchema), async (c) => {
         mokattamThemeEnabled: values.mokattamThemeEnabled,
         mokattamThemeCelebrationSeenAt: values.mokattamThemeCelebrationSeenAt,
         hapticsEnabled: values.hapticsEnabled,
+        customTheme: values.customTheme,
         updatedAt: values.updatedAt,
       },
     })

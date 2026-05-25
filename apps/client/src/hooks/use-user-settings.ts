@@ -5,6 +5,8 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   defaultUserSettings,
   type ChartSettings,
+  type CustomThemePalette,
+  type CustomThemeSettings,
   type PersistedUserSettings,
   type UserSettings,
 } from "@/types/user-settings";
@@ -28,6 +30,10 @@ export type UpdateUserSettingsInput = {
   seasonalTheme?: UserSettings["seasonalTheme"];
   mokattamThemeEnabled?: boolean;
   hapticsEnabled?: boolean;
+  customTheme?: Partial<Omit<CustomThemeSettings, "light" | "dark">> & {
+    light?: Partial<CustomThemePalette>;
+    dark?: Partial<CustomThemePalette>;
+  };
 };
 
 const SETTINGS_PATCH_DEBOUNCE_MS = 250;
@@ -59,6 +65,20 @@ function mergeSettings(
           ...updates.chartSettings,
         }
       : base.chartSettings,
+    customTheme: updates.customTheme
+      ? {
+          ...base.customTheme,
+          ...updates.customTheme,
+          light: {
+            ...base.customTheme.light,
+            ...updates.customTheme.light,
+          },
+          dark: {
+            ...base.customTheme.dark,
+            ...updates.customTheme.dark,
+          },
+        }
+      : base.customTheme,
     persisted: true,
     updatedAt: optimisticUpdatedAt,
   };
@@ -77,6 +97,20 @@ function mergeUpdatePayload(
           ...updates.chartSettings,
         }
       : current?.chartSettings,
+    customTheme: updates.customTheme
+      ? {
+          ...(current?.customTheme ?? {}),
+          ...updates.customTheme,
+          light: {
+            ...(current?.customTheme?.light ?? {}),
+            ...updates.customTheme.light,
+          },
+          dark: {
+            ...(current?.customTheme?.dark ?? {}),
+            ...updates.customTheme.dark,
+          },
+        }
+      : current?.customTheme,
   };
 }
 
@@ -128,7 +162,8 @@ function hasMeaningfulUpdates(
   }
 
   if (!updates.chartSettings) {
-    return false;
+    return updates.customTheme !== undefined &&
+      JSON.stringify(updates.customTheme) !== JSON.stringify(current.customTheme);
   }
 
   if (
@@ -149,6 +184,21 @@ function hasMeaningfulUpdates(
     updates.chartSettings.trendLineSubdivisions !== undefined &&
     updates.chartSettings.trendLineSubdivisions !==
       current.chartSettings.trendLineSubdivisions
+  ) {
+    return true;
+  }
+
+  if (
+    updates.chartSettings.showSubSubjectsInSubjectCharts !== undefined &&
+    updates.chartSettings.showSubSubjectsInSubjectCharts !==
+      current.chartSettings.showSubSubjectsInSubjectCharts
+  ) {
+    return true;
+  }
+
+  if (
+    updates.customTheme !== undefined &&
+    JSON.stringify(updates.customTheme) !== JSON.stringify(current.customTheme)
   ) {
     return true;
   }

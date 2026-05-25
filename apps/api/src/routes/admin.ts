@@ -1,6 +1,8 @@
 import { db } from "@/db";
 import {
   accounts,
+  announcementViews,
+  announcements,
   customAverages,
   grades,
   periods,
@@ -53,13 +55,39 @@ const updateMokattamAccessSchema = z.object({
   available: z.boolean(),
 });
 
+const announcementParamSchema = z.object({
+  announcementId: z.string().min(1).max(64),
+});
+
+const announcementSchema = z.object({
+  title: z.string().trim().min(1).max(96),
+  message: z.string().trim().min(1).max(600),
+  tone: z.enum(["info", "success", "warning"]).default("info"),
+  active: z.boolean().default(true),
+  startsAt: z.coerce.date().nullable().optional(),
+  endsAt: z.coerce.date().nullable().optional(),
+});
+
+const upsertAnnouncementSchema = announcementSchema.refine((value) => {
+  if (!value.startsAt || !value.endsAt) {
+    return true;
+  }
+
+  return value.startsAt <= value.endsAt;
+}, {
+  message: "startsAt must be before endsAt",
+  path: ["endsAt"],
+});
+
+const updateAnnouncementSchema = announcementSchema.partial();
+
 const configuredAdminUserIds = env.ADMIN_USER_IDS
   ?.split(",")
   .map((id) => id.trim())
   .filter(Boolean) ?? [];
 
 const defaultChartSettingsJson =
-  '{"autoZoomYAxis":true,"showTrendLine":false,"trendLineSubdivisions":1}';
+  '{"autoZoomYAxis":true,"showTrendLine":false,"trendLineSubdivisions":1,"showSubSubjectsInSubjectCharts":true}';
 
 function parseRoleList(role: string | null | undefined): string[] {
   if (!role) {
@@ -534,6 +562,114 @@ app.get("/access", async (c) => {
     isAdmin: isAdminSession(session),
   });
 });
+
+app.get("/announcements", async (c) => {
+  const session = c.get("session");
+  ensureAdminSession(session);
+
+  const rows = await db.query.announcements.findMany({
+    orderBy: (announcements, { desc }) => [desc(announcements.createdAt)],
+  });
+
+  return c.json({
+    announcements: rows,
+  });
+});
+
+app.post(
+  "/announcements",
+  zValidator("json", upsertAnnouncementSchema),
+  async (c) => {
+    const session = c.get("session");
+    ensureAdminSession(session);
+
+    const data = c.req.valid("json");
+    const now = new Date();
+    const announcement = await db
+      .insert(announcements)
+      .values({
+        ...data,
+        startsAt: data.startsAt ?? null,
+        endsAt: data.endsAt ?? null,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: session!.user.id,
+      })
+      .returning()
+      .get();
+
+    return c.json({ announcement }, 201);
+  }
+);
+
+app.patch(
+  "/announcements/:announcementId",
+  zValidator("param", announcementParamSchema),
+  zValidator("json", updateAnnouncementSchema),
+  async (c) => {
+    const session = c.get("session");
+    ensureAdminSession(session);
+
+    const { announcementId } = c.req.valid("param");
+    const data = c.req.valid("json");
+    const existing = await db.query.announcements.findFirst({
+      where: eq(announcements.id, announcementId),
+    });
+
+    if (!existing) {
+      throw new HTTPException(404);
+    }
+
+    const nextStartsAt =
+      data.startsAt === undefined ? existing.startsAt : data.startsAt;
+    const nextEndsAt = data.endsAt === undefined ? existing.endsAt : data.endsAt;
+
+    if (nextStartsAt && nextEndsAt && nextStartsAt > nextEndsAt) {
+      return c.json({ code: "INVALID_ANNOUNCEMENT_RANGE" }, 400);
+    }
+
+    const announcement = await db
+      .update(announcements)
+      .set({
+        ...data,
+        startsAt: nextStartsAt,
+        endsAt: nextEndsAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(announcements.id, announcementId))
+      .returning()
+      .get();
+
+    return c.json({ announcement });
+  }
+);
+
+app.delete(
+  "/announcements/:announcementId",
+  zValidator("param", announcementParamSchema),
+  async (c) => {
+    const session = c.get("session");
+    ensureAdminSession(session);
+
+    const { announcementId } = c.req.valid("param");
+
+    await db
+      .delete(announcementViews)
+      .where(eq(announcementViews.announcementId, announcementId));
+
+    const announcement = await db
+      .delete(announcements)
+      .where(eq(announcements.id, announcementId))
+      .returning()
+      .get();
+
+    if (!announcement) {
+      throw new HTTPException(404);
+    }
+
+    return c.json({ announcement });
+  }
+);
 
 app.get("/users", zValidator("query", listUsersQuerySchema), async (c) => {
   const session = c.get("session");

@@ -94,8 +94,9 @@ function makeColumns(
       cell: ({ row }) => (
         <Link
           href={`/dashboard/grades/${row.original.id}/${row.original.periodId}`}
+          className="inline-block rounded-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
         >
-          <p className="font-semibold underline truncate text-ellipsis max-w-[100px] md:max-w-[200px] xl:max-w-[300px]">
+          <p className="font-semibold underline decoration-dotted underline-offset-4 truncate text-ellipsis max-w-[100px] md:max-w-[200px] xl:max-w-[300px]">
             {row.getValue("name")}
           </p>
         </Link>
@@ -114,7 +115,7 @@ function makeColumns(
       ),
       accessorFn: (row) => {
         // Calculate percentage for sorting (value / outOf)
-        return row.value / row.outOf;
+        return row.outOf > 0 ? row.value / row.outOf : -Infinity;
       },
       cell: ({ row }) => {
         const { id, value, coefficient, periodId, subjectId, outOf } =

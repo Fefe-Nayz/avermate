@@ -34,7 +34,7 @@ import { useActiveYearStore } from "@/stores/active-year-store";
 import { formatAverageValue } from "@/utils/format";
 
 const tableLinkClass =
-  "border-b border-dotted border-foreground hover:opacity-80 text-primary transition-opacity rounded-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+  "underline decoration-dotted decoration-foreground decoration-1 underline-offset-4 hover:opacity-80 text-primary transition-opacity outline-none focus-visible:rounded-sm focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
 export default function GradesTable({
   subjects,
@@ -61,11 +61,66 @@ export default function GradesTable({
   } = usePeriod(periodId);
 
   useEffect(() => {
-    if (window.location.hash) {
-      const id = window.location.hash.slice(1);
-      const el = document.getElementById(id);
-      el?.scrollIntoView({ behavior: "smooth" });
+    if (!window.location.hash) {
+      return;
     }
+
+    const id = window.location.hash.slice(1);
+    const shouldScrollInstantly =
+      sessionStorage.getItem("instantBackFromGradeOrSubject") === "true";
+    sessionStorage.removeItem("instantBackFromGradeOrSubject");
+
+    if (shouldScrollInstantly) {
+      const previousRootScrollBehavior =
+        document.documentElement.style.scrollBehavior;
+      const previousBodyScrollBehavior = document.body.style.scrollBehavior;
+      const previousHtmlScrollSmoothClass =
+        document.documentElement.classList.contains("scroll-smooth");
+
+      document.documentElement.style.scrollBehavior = "auto";
+      document.body.style.scrollBehavior = "auto";
+      if (previousHtmlScrollSmoothClass) {
+        document.documentElement.classList.remove("scroll-smooth");
+      }
+
+      const scrollToTarget = () => {
+        const el = document.getElementById(id);
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const top = rect.top + window.scrollY;
+        window.scrollTo({
+          top,
+          left: 0,
+          behavior: "instant" as ScrollBehavior,
+        });
+        return true;
+      };
+
+      // Try immediately, then on the next frames, since some mobile browsers
+      // and Next.js may not have laid out the row at mount time.
+      scrollToTarget();
+      const frame1 = window.requestAnimationFrame(() => {
+        scrollToTarget();
+        const frame2 = window.requestAnimationFrame(() => {
+          scrollToTarget();
+          document.documentElement.style.scrollBehavior =
+            previousRootScrollBehavior;
+          document.body.style.scrollBehavior = previousBodyScrollBehavior;
+          if (previousHtmlScrollSmoothClass) {
+            document.documentElement.classList.add("scroll-smooth");
+          }
+          void frame2;
+        });
+        void frame1;
+      });
+      return;
+    }
+
+    const el = document.getElementById(id);
+    el?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   }, []);
 
   // Fetch all custom averages
@@ -98,7 +153,7 @@ export default function GradesTable({
   /**
    * Format overall average according to year default out of
    */
-  const overallAverage = overallAverageVal ? formatAverageValue(overallAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
+  const overallAverage = overallAverageVal !== null ? formatAverageValue(overallAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
   return (
     <Table>
@@ -191,7 +246,7 @@ export default function GradesTable({
               /**
                * Format overall average according to year default out of
                */
-              const customAvg = customAvgVal ? formatAverageValue(customAvgVal * 100, yearDefaultOutOf).toFixed(2) : "—";
+              const customAvg = customAvgVal !== null ? formatAverageValue(customAvgVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
               return (
                 <React.Fragment key={ca.id}>
@@ -316,7 +371,7 @@ function renderSubjects(
       /**
       * Format overall average according to year default out of
       */
-      const subjAverage = subjAverageVal ? formatAverageValue(subjAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
+      const subjAverage = subjAverageVal !== null ? formatAverageValue(subjAverageVal * 100, yearDefaultOutOf).toFixed(2) : "—";
 
 
 

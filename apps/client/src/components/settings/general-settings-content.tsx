@@ -1,9 +1,9 @@
 import { ChartSettingsSection } from "@/app/profile/settings/chart-settings-section";
+import { CustomThemeSection } from "@/app/profile/settings/custom-theme-section";
 import { HapticsSection } from "@/app/profile/settings/haptics-section";
 import { LanguageSection } from "@/app/profile/settings/language-section";
 import { MokattamThemeSection } from "@/app/profile/settings/mokattam-theme-section";
 import { SeasonalThemesSection } from "@/app/profile/settings/seasonal-themes-section";
-import { ThemeSection } from "@/app/profile/settings/theme-section";
 import { TimelineModeSection } from "@/app/profile/settings/timeline-mode-section";
 import { UserIdSection } from "@/app/profile/settings/user-id-section";
 import { MobileSettingsAnchor } from "@/components/settings/mobile-settings-anchor";
@@ -11,8 +11,8 @@ import { MobileSettingsAnchor } from "@/components/settings/mobile-settings-anch
 export function GeneralSettingsContent() {
   return (
     <div className="flex w-full flex-col gap-4 md:gap-8">
-      <MobileSettingsAnchor settingId="theme">
-        <ThemeSection />
+      <MobileSettingsAnchor settingId="custom-theme">
+        <CustomThemeSection />
       </MobileSettingsAnchor>
       <MobileSettingsAnchor settingId="language">
         <LanguageSection />

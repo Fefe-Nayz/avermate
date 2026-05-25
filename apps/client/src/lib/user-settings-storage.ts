@@ -136,6 +136,7 @@ function readLegacySettings(): LocalUserSettingsSnapshot {
         hapticsEnabledValue === null
           ? defaultUserSettings.hapticsEnabled
           : hapticsEnabledValue === "true",
+      customTheme: defaultUserSettings.customTheme,
     },
     updatedAt: 0,
     hasLocalData,
@@ -159,6 +160,10 @@ function dispatchUserSettingsEvent(settings: UserSettings, updatedAt: number) {
 
 export function getUserSettingsStorageEventName() {
   return USER_SETTINGS_EVENT;
+}
+
+export function getUserSettingsStorageKey() {
+  return USER_SETTINGS_CACHE_KEY;
 }
 
 export function readLocalUserSettings(): LocalUserSettingsSnapshot {
@@ -191,6 +196,18 @@ export function readLocalUserSettings(): LocalUserSettingsSnapshot {
           ...defaultChartSettings,
           ...parsed.settings.chartSettings,
         },
+        customTheme: {
+          ...defaultUserSettings.customTheme,
+          ...parsed.settings.customTheme,
+          light: {
+            ...defaultUserSettings.customTheme.light,
+            ...parsed.settings.customTheme?.light,
+          },
+          dark: {
+            ...defaultUserSettings.customTheme.dark,
+            ...parsed.settings.customTheme?.dark,
+          },
+        },
       },
       updatedAt: parsed.updatedAt,
       hasLocalData: true,
@@ -214,6 +231,18 @@ export function writeLocalUserSettings(
     chartSettings: {
       ...defaultChartSettings,
       ...settings.chartSettings,
+    },
+    customTheme: {
+      ...defaultUserSettings.customTheme,
+      ...settings.customTheme,
+      light: {
+        ...defaultUserSettings.customTheme.light,
+        ...settings.customTheme?.light,
+      },
+      dark: {
+        ...defaultUserSettings.customTheme.dark,
+        ...settings.customTheme?.dark,
+      },
     },
   };
 
@@ -272,6 +301,20 @@ export function updateLocalUserSettings(
           ...updates.chartSettings,
         }
       : current.chartSettings,
+    customTheme: updates.customTheme
+      ? {
+          ...current.customTheme,
+          ...updates.customTheme,
+          light: {
+            ...current.customTheme.light,
+            ...updates.customTheme.light,
+          },
+          dark: {
+            ...current.customTheme.dark,
+            ...updates.customTheme.dark,
+          },
+        }
+      : current.customTheme,
   };
 
   writeLocalUserSettings(nextSettings, updatedAt);

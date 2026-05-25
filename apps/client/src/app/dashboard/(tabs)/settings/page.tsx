@@ -35,7 +35,7 @@ export default function YearSettingsPage() {
                 title={t("YEAR_SETTINGS_PAGE_TITLE")}
             />
 
-            <div className="flex flex-wrap items-center justify-between min-h-9">
+            <div className="hidden flex-wrap items-center justify-between min-h-9 md:flex">
                 <h1 className="hidden text-xl font-bold md:block md:text-3xl">{t("YEAR_SETTINGS_PAGE_TITLE")}</h1>
             </div>
 

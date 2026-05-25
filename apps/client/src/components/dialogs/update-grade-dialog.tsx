@@ -79,6 +79,7 @@ export default function UpdateGradeDialog({ gradeId }: { gradeId: string }) {
           {!isPending && !isError && formData && grade && (
             <UpdateGradeForm
               gradeId={grade.id}
+              isComposite={Boolean(grade.isComposite)}
               close={() => setOpen(false)}
               formData={formData}
               setFormData={setFormData as React.Dispatch<React.SetStateAction<UpdateGradeSchema>>}

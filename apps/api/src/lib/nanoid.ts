@@ -11,10 +11,29 @@ per - period
 ca - custom average
 ct - card template
 cl - card layout
+gc - grade component
+yrv - year review view
+ann - announcement
+annv - announcement view
 y - year
 */
 
-type IdPrefix = "u" | "acc" | "ses" | "ver" | "sub" | "gra" | "per" | "ca" | "ct" | "cl" | "y";
+type IdPrefix =
+  | "u"
+  | "acc"
+  | "ses"
+  | "ver"
+  | "sub"
+  | "gra"
+  | "per"
+  | "ca"
+  | "ct"
+  | "cl"
+  | "gc"
+  | "yrv"
+  | "ann"
+  | "annv"
+  | "y";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
