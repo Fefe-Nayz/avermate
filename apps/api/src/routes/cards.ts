@@ -1,107 +1,205 @@
-import { db } from "@/db";
-import { cardLayouts } from "@/db/schema";
-import { type Session, type User } from "@/lib/auth";
-import { zValidator } from "@hono/zod-validator";
-import { and, eq } from "drizzle-orm";
-import { Hono } from "hono";
-import { HTTPException } from "hono/http-exception";
-import { z } from "zod";
+// import { db } from "@/db";
+// import { cardTemplates, cardLayouts } from "@/db/schema";
+// import { type Session, type User } from "@/lib/auth";
+// import { zValidator } from "@hono/zod-validator";
+// import { and, eq } from "drizzle-orm";
+// import { Hono } from "hono";
+// import { HTTPException } from "hono/http-exception";
+// import { z } from "zod";
 
-const app = new Hono<{
-  Variables: {
-    session: {
-      user: User;
-      session: Session;
-    } | null;
-  };
-}>();
+// const app = new Hono<{
+//   Variables: {
+//     session: {
+//       user: User;
+//       session: Session;
+//     } | null;
+//   };
+// }>();
 
-const pageParamSchema = z.object({
-  page: z.enum(["dashboard"]),
-});
+// // Schema Definitions
+// const cardConfigSchema = z.object({
+//   title: z.string(),
+//   description: z.object({
+//     template: z.string(),
+//     variables: z.record(z.object({
+//       type: z.enum(['static', 'dynamic', 'timeRange']),
+//       value: z.string(),
+//       options: z.any().optional(),
+//     })),
+//   }),
+//   mainData: z.object({
+//     type: z.enum(['grade', 'average', 'impact', 'text', 'custom']),
+//     calculator: z.string(),
+//     params: z.any().optional(),
+//   }),
+//   icon: z.string(),
+// });
 
-const cardLayoutCardSchema = z.object({
-  id: z.string().min(1).max(80),
-  enabled: z.boolean(),
-  position: z.number().int().min(0).max(100),
-  config: z.record(z.string(), z.unknown()).optional().default({}),
-});
+// const createTemplateSchema = z.object({
+//   type: z.enum(['built_in', 'custom']),
+//   identifier: z.string().min(1),
+//   config: cardConfigSchema,
+// });
 
-const updateLayoutSchema = z.object({
-  cards: z.array(cardLayoutCardSchema).max(40),
-});
+// const updateLayoutSchema = z.object({
+//   page: z.enum(['dashboard', 'grade', 'subject']),
+//   cards: z.array(z.object({
+//     templateId: z.string(),
+//     position: z.number(),
+//     customization: z.object({
+//       title: z.string().optional(),
+//       description: z.object({
+//         template: z.string(),
+//         variables: z.record(z.any()),
+//       }).optional(),
+//       mainData: z.object({
+//         params: z.record(z.any()),
+//       }).optional(),
+//     }).optional(),
+//   })),
+// });
 
-function ensureVerifiedSession(session: { user: User; session: Session } | null) {
-  if (!session) {
-    throw new HTTPException(401);
-  }
+// // Routes
+// app.get("/templates", async (c) => {
+//   const session = c.get("session");
+//   if (!session) throw new HTTPException(401);
+//   if (!session.user.emailVerified) {
+//     return c.json(
+//       { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+//       403
+//     );
+//   }
 
-  if (!session.user.emailVerified) {
-    throw new HTTPException(403, { message: "Email verification is required" });
-  }
-}
+//   const templates = await db.query.cardTemplates.findMany({
+//     where: and(
+//       eq(cardTemplates.type, "built_in"),
+//       eq(cardTemplates.userId, session.user.id)
+//     ),
+//   });
 
-app.get("/layouts/:page", zValidator("param", pageParamSchema), async (c) => {
-  const session = c.get("session");
-  ensureVerifiedSession(session);
+//   return c.json({ templates });
+// });
 
-  const { page } = c.req.valid("param");
-  const layout = await db.query.cardLayouts.findFirst({
-    where: and(
-      eq(cardLayouts.userId, session!.user.id),
-      eq(cardLayouts.page, page)
-    ),
-  });
+// app.post(
+//   "/templates",
+//   zValidator("json", createTemplateSchema),
+//   async (c) => {
+//     const session = c.get("session");
+//     if (!session) throw new HTTPException(401);
+//     if (!session.user.emailVerified) {
+//       return c.json(
+//         { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+//         403
+//       );
+//     }
 
-  return c.json({
-    layout: layout
-      ? {
-          ...layout,
-          cards: JSON.parse(layout.cards),
-        }
-      : null,
-  });
-});
+//     const data = c.req.valid("json");
 
-app.put(
-  "/layouts/:page",
-  zValidator("param", pageParamSchema),
-  zValidator("json", updateLayoutSchema),
-  async (c) => {
-    const session = c.get("session");
-    ensureVerifiedSession(session);
+//     const template = await db
+//       .insert(cardTemplates)
+//       .values({
+//         ...data,
+//         config: JSON.stringify(data.config),
+//         userId: session.user.id,
+//         createdAt: new Date(),
+//       })
+//       .returning()
+//       .get();
 
-    const { page } = c.req.valid("param");
-    const { cards } = c.req.valid("json");
-    const now = new Date();
-    const values = {
-      userId: session!.user.id,
-      page,
-      cards: JSON.stringify(cards),
-      createdAt: now,
-      updatedAt: now,
-    };
+//     return c.json({ template }, 201);
+//   }
+// );
 
-    const layout = await db
-      .insert(cardLayouts)
-      .values(values)
-      .onConflictDoUpdate({
-        target: [cardLayouts.userId, cardLayouts.page],
-        set: {
-          cards: values.cards,
-          updatedAt: values.updatedAt,
-        },
-      })
-      .returning()
-      .get();
+// app.get("/layouts/:page", async (c) => {
+//   const session = c.get("session");
+//   if (!session) throw new HTTPException(401);
+//   if (!session.user.emailVerified) {
+//     return c.json(
+//       { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+//       403
+//     );
+//   }
 
-    return c.json({
-      layout: {
-        ...layout,
-        cards,
-      },
-    });
-  }
-);
+//   const { page } = c.req.param();
 
-export default app;
+//   const layout = await db.query.cardLayouts.findFirst({
+//     where: and(
+//       eq(cardLayouts.userId, session.user.id),
+//       eq(cardLayouts.page, page)
+//     ),
+//   });
+
+//   return c.json({ layout });
+// });
+
+// app.put(
+//   "/layouts/:page",
+//   zValidator("json", updateLayoutSchema),
+//   async (c) => {
+//     const session = c.get("session");
+//     if (!session) throw new HTTPException(401);
+//     if (!session.user.emailVerified) {
+//       return c.json(
+//         { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+//         403
+//       );
+//     }
+
+//     const { page } = c.req.param();
+//     const data = c.req.valid("json");
+
+//     // Delete existing layout
+//     await db
+//       .delete(cardLayouts)
+//       .where(
+//         and(
+//           eq(cardLayouts.userId, session.user.id),
+//           eq(cardLayouts.page, page)
+//         )
+//       );
+
+//     // Create new layout
+//     const layout = await db
+//       .insert(cardLayouts)
+//       .values({
+//         userId: session.user.id,
+//         page,
+//         cards: JSON.stringify(data.cards),
+//         createdAt: new Date(),
+//         updatedAt: new Date(),
+//       })
+//       .returning()
+//       .get();
+
+//     return c.json({ layout });
+//   }
+// );
+
+// app.delete("/templates/:id", async (c) => {
+//   const session = c.get("session");
+//   if (!session) throw new HTTPException(401);
+//   if (!session.user.emailVerified) {
+//     return c.json(
+//       { code: "EMAIL_NOT_VERIFIED", message: "Email verification is required" },
+//       403
+//     );
+//   }
+
+//   const { id } = c.req.param();
+
+//   const template = await db
+//     .delete(cardTemplates)
+//     .where(
+//       and(
+//         eq(cardTemplates.id, id),
+//         eq(cardTemplates.userId, session.user.id),
+//         eq(cardTemplates.type, "custom")
+//       )
+//     )
+//     .returning()
+//     .get();
+
+//   return c.json({ template });
+// });
+
+// export default app;

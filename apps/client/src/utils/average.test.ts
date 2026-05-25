@@ -10,6 +10,7 @@ import {
   getBestGrade,
   getFutureGradeProjections,
   getSubjectTrend,
+  getTrend,
   getWorstGrade,
   isGradeIncludedInCustomAverage,
 } from "./average";
@@ -310,9 +311,18 @@ describe("averageOverTime() - périodes cumulatives", () => {
 
   it("aligne le trend sur les mêmes bornes que averageOverTime pour une période cumulative", () => {
     const trend = getSubjectTrend(timelineSubjects, "maths", p2Cumulative, [p1, p2Cumulative]);
+    const values = averageOverTime(timelineSubjects, "maths", p2Cumulative, [p1, p2Cumulative]);
+    const startDate = new Date(p1.startAt);
+    const expectedTrend = getTrend(
+      values.map((value, index) => {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + index);
+        return { date, average: value };
+      })
+    );
 
     assert.ok(trend !== null);
-    assert.ok(trend > 0);
+    closeTo(trend, expectedTrend, 8);
   });
 });
 

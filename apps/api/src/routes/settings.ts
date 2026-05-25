@@ -191,9 +191,13 @@ function parseChartSettings(value?: string | null) {
   }
 }
 
+function getDefaultCustomTheme() {
+  return customThemeSchema.parse(defaultSettings.customTheme);
+}
+
 function parseCustomTheme(value?: string | null) {
   if (!value) {
-    return defaultSettings.customTheme;
+    return getDefaultCustomTheme();
   }
 
   try {
@@ -211,7 +215,7 @@ function parseCustomTheme(value?: string | null) {
       },
     });
   } catch {
-    return defaultSettings.customTheme;
+    return getDefaultCustomTheme();
   }
 }
 
@@ -302,10 +306,11 @@ app.patch("/", zValidator("json", updateUserSettingsSchema), async (c) => {
         ...updates.chartSettings,
       }
     : parseChartSettings(existing?.chartSettings);
-  const nextCustomTheme = mergeCustomTheme(
-    parseCustomTheme(existing?.customTheme),
-    updates.customTheme
-  );
+  const nextCustomThemeJson = updates.customTheme
+    ? JSON.stringify(
+        mergeCustomTheme(parseCustomTheme(existing?.customTheme), updates.customTheme)
+      )
+    : existing?.customTheme ?? "{}";
 
   const now = new Date();
   const mokattamThemeAvailable =
@@ -338,7 +343,7 @@ app.patch("/", zValidator("json", updateUserSettingsSchema), async (c) => {
       updates.hapticsEnabled ??
       existing?.hapticsEnabled ??
       defaultSettings.hapticsEnabled,
-    customTheme: JSON.stringify(nextCustomTheme),
+    customTheme: nextCustomThemeJson,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

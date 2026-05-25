@@ -162,6 +162,10 @@ export function getUserSettingsStorageEventName() {
   return USER_SETTINGS_EVENT;
 }
 
+export function getUserSettingsStorageKey() {
+  return USER_SETTINGS_CACHE_KEY;
+}
+
 export function readLocalUserSettings(): LocalUserSettingsSnapshot {
   if (!isBrowser()) {
     return {

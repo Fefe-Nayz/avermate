@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 
 import {
   getUserSettingsStorageEventName,
+  getUserSettingsStorageKey,
   readLocalUserSettings,
 } from "@/lib/user-settings-storage";
 import { normalizeThemeFontStack } from "@/lib/theme-fonts";
@@ -49,15 +50,7 @@ const cssVariableMap: Record<keyof CustomThemePalette, string> = {
 };
 
 function getResolvedMode(theme: string | undefined): CustomThemeMode {
-  if (theme === "dark") {
-    return "dark";
-  }
-
-  if (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
-  }
-
-  return "light";
+  return theme === "dark" ? "dark" : "light";
 }
 
 function clearPaletteVariables(root: HTMLElement) {
@@ -72,10 +65,14 @@ function applyThemeVariables(theme: CustomThemeSettings, mode: CustomThemeMode) 
   const root = document.documentElement;
   const body = document.body;
 
+  // Font choice is intentionally independent from theme.enabled: disabling the
+  // custom palette should not reset the user's typography preference.
   const fontStack = normalizeThemeFontStack(theme.fontSans);
   root.style.setProperty("--font-sans", fontStack);
   if (body) {
     body.style.setProperty("--font-sans", fontStack);
+    // Force the selected font immediately even if downstream CSS cached the
+    // previous font-family before the CSS variable changed.
     body.style.fontFamily = `var(--font-sans)`;
   }
 
@@ -102,10 +99,18 @@ export default function CustomThemeSync() {
     };
 
     syncTheme();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === getUserSettingsStorageKey()) {
+        syncTheme();
+      }
+    };
+
     window.addEventListener(getUserSettingsStorageEventName(), syncTheme);
+    window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener(getUserSettingsStorageEventName(), syncTheme);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [resolvedTheme, theme]);
 

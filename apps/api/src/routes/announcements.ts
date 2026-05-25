@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { announcementViews, announcements } from "@/db/schema";
 import { type Session, type User } from "@/lib/auth";
 import { zValidator } from "@hono/zod-validator";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
@@ -20,37 +20,19 @@ const announcementParamSchema = z.object({
   announcementId: z.string().min(1).max(64),
 });
 
-function isAnnouncementVisible(
-  announcement: typeof announcements.$inferSelect,
-  now: Date
-) {
-  if (!announcement.active) {
-    return false;
-  }
-
-  if (announcement.startsAt && announcement.startsAt > now) {
-    return false;
-  }
-
-  if (announcement.endsAt && announcement.endsAt < now) {
-    return false;
-  }
-
-  return true;
-}
-
 app.get("/", async (c) => {
   const session = c.get("session");
   if (!session) throw new HTTPException(401);
 
   const now = new Date();
-  const rows = await db.query.announcements.findMany({
-    where: eq(announcements.active, true),
+  const visibleRows = await db.query.announcements.findMany({
+    where: and(
+      eq(announcements.active, true),
+      or(isNull(announcements.startsAt), lte(announcements.startsAt, now)),
+      or(isNull(announcements.endsAt), gte(announcements.endsAt, now))
+    ),
     orderBy: (announcements, { desc }) => [desc(announcements.createdAt)],
   });
-  const visibleRows = rows.filter((announcement) =>
-    isAnnouncementVisible(announcement, now)
-  );
 
   if (visibleRows.length === 0) {
     return c.json({ announcements: [] });

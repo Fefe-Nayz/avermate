@@ -208,6 +208,7 @@ export function UpdateGradeForm({
     mutate(vals);
   };
   const isValueLocked = isComposite || isPending;
+  const isCompositeRoutingLocked = isComposite || isPending;
 
   useEffect(() => {
     if (!isDesktop && openPeriod) {
@@ -320,7 +321,7 @@ export function UpdateGradeForm({
               <FormField
                 control={form.control}
                 name="outOf"
-                disabled={isPending}
+                disabled={isValueLocked}
                 render={({ field }) => (
                   <FormItem className="mx-1">
                     <FormLabel>{t("outOf")}</FormLabel>
@@ -328,6 +329,7 @@ export function UpdateGradeForm({
                       <Input
                         type="number"
                         {...field}
+                        disabled={isValueLocked}
                         value={field.value as number | string}
                         onChange={(e) => field.onChange(e.target.value)}
                       />
@@ -426,7 +428,7 @@ export function UpdateGradeForm({
                             role="combobox"
                             aria-expanded={openPeriod ? "true" : "false"}
                             className="justify-between"
-                            disabled={isPending}
+                            disabled={isCompositeRoutingLocked}
                             onClick={() => setOpenPeriod(!openPeriod)}
                           >
                             {selectedPeriod
@@ -498,7 +500,7 @@ export function UpdateGradeForm({
                             role="combobox"
                             aria-expanded={openPeriod ? "true" : "false"}
                             className="justify-between"
-                            disabled={isPending}
+                            disabled={isCompositeRoutingLocked}
                             onClick={() => setOpenPeriod(!openPeriod)}
                           >
                             {selectedPeriod
@@ -594,7 +596,7 @@ export function UpdateGradeForm({
                             role="combobox"
                             aria-expanded={openSubject ? "true" : "false"}
                             className="justify-between"
-                            disabled={isPending}
+                            disabled={isCompositeRoutingLocked}
                             onClick={() => setOpenSubject(!openSubject)}
                           >
                             {selectedSubject
@@ -647,7 +649,7 @@ export function UpdateGradeForm({
                             role="combobox"
                             aria-expanded={openSubject ? "true" : "false"}
                             className="justify-between"
-                            disabled={isPending}
+                            disabled={isCompositeRoutingLocked}
                             onClick={() => setOpenSubject(!openSubject)}
                           >
                             {selectedSubject

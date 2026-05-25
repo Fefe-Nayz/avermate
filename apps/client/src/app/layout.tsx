@@ -42,19 +42,19 @@ const gabarito = Gabarito({
 });
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const roboto = Roboto({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-roboto" });
-const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-poppins" });
-const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat" });
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
-const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-plus-jakarta" });
-const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
-const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito" });
-const lora = Lora({ subsets: ["latin"], variable: "--font-lora" });
-const merriweather = Merriweather({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-merriweather" });
-const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
-const firaCode = Fira_Code({ subsets: ["latin"], variable: "--font-fira-code" });
-const sourceCodePro = Source_Code_Pro({ subsets: ["latin"], variable: "--font-source-code-pro" });
+const roboto = Roboto({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--font-roboto", preload: false });
+const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-poppins", preload: false });
+const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat", preload: false });
+const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit", preload: false });
+const plusJakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-plus-jakarta", preload: false });
+const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans", preload: false });
+const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito", preload: false });
+const lora = Lora({ subsets: ["latin"], variable: "--font-lora", preload: false });
+const merriweather = Merriweather({ subsets: ["latin"], weight: ["400", "700"], variable: "--font-merriweather", preload: false });
+const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair", preload: false });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", preload: false });
+const firaCode = Fira_Code({ subsets: ["latin"], variable: "--font-fira-code", preload: false });
+const sourceCodePro = Source_Code_Pro({ subsets: ["latin"], variable: "--font-source-code-pro", preload: false });
 
 export const metadata: Metadata = {
   title: "Avermate",

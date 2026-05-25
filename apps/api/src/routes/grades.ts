@@ -16,8 +16,10 @@ const app = new Hono<{
   };
 }>();
 
-async function getMarkById(markId: string) {
-  const mark = await db.query.grades.findFirst({
+type DbClient = Pick<typeof db, "query" | "insert" | "update" | "delete">;
+
+async function getMarkById(markId: string, client: DbClient = db) {
+  const mark = await client.query.grades.findFirst({
     where: (marks, { eq }) => eq(marks.id, markId),
   });
   return mark;
@@ -64,13 +66,13 @@ function computeCompositeValue(
   return Math.round((totalWeightedPercentages / totalCoefficients) * outOf);
 }
 
-async function recalculateCompositeGrade(gradeId: string) {
-  const grade = await getMarkById(gradeId);
+async function recalculateCompositeGrade(gradeId: string, client: DbClient = db) {
+  const grade = await getMarkById(gradeId, client);
   if (!grade) {
     throw new HTTPException(404);
   }
 
-  const components = await db.query.gradeComponents.findMany({
+  const components = await client.query.gradeComponents.findMany({
     where: eq(gradeComponents.gradeId, grade.id),
     orderBy: asc(gradeComponents.createdAt),
   });
@@ -78,7 +80,7 @@ async function recalculateCompositeGrade(gradeId: string) {
   const nextValue = computeCompositeValue(grade.outOf, components);
 
   if (nextValue === null) {
-    return await db
+    return await client
       .update(grades)
       .set({ isComposite: true })
       .where(eq(grades.id, grade.id))
@@ -86,7 +88,7 @@ async function recalculateCompositeGrade(gradeId: string) {
       .get();
   }
 
-  return await db
+  return await client
     .update(grades)
     .set({
       value: nextValue,
@@ -99,9 +101,10 @@ async function recalculateCompositeGrade(gradeId: string) {
 
 async function activateCompositeGradeWithOriginalSeed(
   grade: NonNullable<Awaited<ReturnType<typeof getMarkById>>>,
-  userId: string
+  userId: string,
+  client: DbClient = db
 ) {
-  const components = await db.query.gradeComponents.findMany({
+  const components = await client.query.gradeComponents.findMany({
     where: eq(gradeComponents.gradeId, grade.id),
     orderBy: asc(gradeComponents.createdAt),
   });
@@ -110,7 +113,7 @@ async function activateCompositeGradeWithOriginalSeed(
     const seedCreatedAt =
       grade.createdAt instanceof Date ? grade.createdAt : new Date();
 
-    await db.insert(gradeComponents).values({
+    await client.insert(gradeComponents).values({
       gradeId: grade.id,
       name: grade.name,
       value: grade.value,
@@ -123,31 +126,34 @@ async function activateCompositeGradeWithOriginalSeed(
     });
   }
 
-  return await recalculateCompositeGrade(grade.id);
+  return await recalculateCompositeGrade(grade.id, client);
 }
 
-async function revertCompositeGradeWhenSingleComponent(gradeId: string) {
-  const grade = await getMarkById(gradeId);
+async function revertCompositeGradeWhenSingleComponent(
+  gradeId: string,
+  client: DbClient = db
+) {
+  const grade = await getMarkById(gradeId, client);
   if (!grade) {
     throw new HTTPException(404);
   }
 
-  const components = await db.query.gradeComponents.findMany({
+  const components = await client.query.gradeComponents.findMany({
     where: eq(gradeComponents.gradeId, grade.id),
     orderBy: asc(gradeComponents.createdAt),
   });
 
   if (components.length > 1) {
-    return await recalculateCompositeGrade(grade.id);
+    return await recalculateCompositeGrade(grade.id, client);
   }
 
   const remainingComponent = components[0];
 
-  await db
+  await client
     .delete(gradeComponents)
     .where(eq(gradeComponents.gradeId, grade.id));
 
-  return await db
+  return await client
     .update(grades)
     .set({
       value: remainingComponent?.value ?? grade.value,
@@ -300,7 +306,7 @@ const componentBodySchema = z.object({
   name: z.string().min(1).max(64),
   outOf: z
     .number()
-    .min(0)
+    .min(0.01)
     .max(1000 * 10)
     .transform((f) => Math.round(f * 100)),
   value: z
@@ -310,7 +316,7 @@ const componentBodySchema = z.object({
     .transform((f) => Math.round(f * 100)),
   coefficient: z
     .number()
-    .min(0)
+    .min(0.01)
     .max(1000 * 10)
     .transform((f) => Math.round(f * 100)),
 }).refine((data) => data.value <= data.outOf, {
@@ -355,9 +361,8 @@ app.post(
     const { gradeId } = c.req.valid("param");
     const grade = await ensureOwnedGrade(gradeId, session.user.id);
 
-    const updatedGrade = await activateCompositeGradeWithOriginalSeed(
-      grade,
-      session.user.id
+    const updatedGrade = await db.transaction((tx) =>
+      activateCompositeGradeWithOriginalSeed(grade, session.user.id, tx)
     );
     const components = await db.query.gradeComponents.findMany({
       where: eq(gradeComponents.gradeId, grade.id),
@@ -387,7 +392,9 @@ app.delete(
 
     const { gradeId } = c.req.valid("param");
     const grade = await ensureOwnedGrade(gradeId, session.user.id);
-    const updatedGrade = await revertCompositeGradeWhenSingleComponent(grade.id);
+    const updatedGrade = await db.transaction((tx) =>
+      revertCompositeGradeWhenSingleComponent(grade.id, tx)
+    );
     const components = await db.query.gradeComponents.findMany({
       where: eq(gradeComponents.gradeId, grade.id),
       orderBy: asc(gradeComponents.createdAt),
@@ -420,20 +427,22 @@ app.post(
     const data = c.req.valid("json");
     const now = new Date();
 
-    if (!grade.isComposite) {
-      await activateCompositeGradeWithOriginalSeed(grade, session.user.id);
-    }
+    const updatedGrade = await db.transaction(async (tx) => {
+      if (!grade.isComposite) {
+        await activateCompositeGradeWithOriginalSeed(grade, session.user.id, tx);
+      }
 
-    await db.insert(gradeComponents).values({
-      ...data,
-      gradeId: grade.id,
-      userId: session.user.id,
-      yearId: grade.yearId,
-      createdAt: now,
-      updatedAt: now,
+      await tx.insert(gradeComponents).values({
+        ...data,
+        gradeId: grade.id,
+        userId: session.user.id,
+        yearId: grade.yearId,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return await recalculateCompositeGrade(grade.id, tx);
     });
-
-    const updatedGrade = await recalculateCompositeGrade(grade.id);
     const components = await db.query.gradeComponents.findMany({
       where: eq(gradeComponents.gradeId, grade.id),
       orderBy: asc(gradeComponents.createdAt),
@@ -475,15 +484,17 @@ app.patch(
 
     const data = c.req.valid("json");
 
-    await db
-      .update(gradeComponents)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
-      .where(eq(gradeComponents.id, component.id));
+    const updatedGrade = await db.transaction(async (tx) => {
+      await tx
+        .update(gradeComponents)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(eq(gradeComponents.id, component.id));
 
-    const updatedGrade = await recalculateCompositeGrade(grade.id);
+      return await recalculateCompositeGrade(grade.id, tx);
+    });
     const components = await db.query.gradeComponents.findMany({
       where: eq(gradeComponents.gradeId, grade.id),
       orderBy: asc(gradeComponents.createdAt),
@@ -522,11 +533,13 @@ app.delete(
     if (!component) throw new HTTPException(404);
     if (component.userId !== session.user.id) throw new HTTPException(403);
 
-    await db
-      .delete(gradeComponents)
-      .where(eq(gradeComponents.id, component.id));
+    const updatedGrade = await db.transaction(async (tx) => {
+      await tx
+        .delete(gradeComponents)
+        .where(eq(gradeComponents.id, component.id));
 
-    const updatedGrade = await revertCompositeGradeWhenSingleComponent(grade.id);
+      return await revertCompositeGradeWhenSingleComponent(grade.id, tx);
+    });
     const components = await db.query.gradeComponents.findMany({
       where: eq(gradeComponents.gradeId, grade.id),
       orderBy: asc(gradeComponents.createdAt),

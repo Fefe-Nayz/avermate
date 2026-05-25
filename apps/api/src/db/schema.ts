@@ -326,6 +326,8 @@ export const usersRelations = relations(users, ({ many, one }) => ({
     fields: [users.id],
     references: [userSettings.userId],
   }),
+  // cardTemplates: many(cardTemplates),
+  // cardLayouts: many(cardLayouts),
 }));
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
@@ -444,26 +446,51 @@ export const customAverages = sqliteTable("custom_averages", {
   yearIdIdx: index("custom_averages_year_id_idx").on(t.yearId),
 }));
 
-export const cardLayouts = sqliteTable("card_layouts", {
-  id: text()
-    .notNull()
-    .primaryKey()
-    .$defaultFn(() => generateId("cl")),
-  userId: text()
-    .notNull()
-    .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
-  page: text().notNull(),
-  cards: text().notNull(),
-  createdAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer({ mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
-}, (t) => ({
-  userPageIdx: uniqueIndex("card_layouts_user_page_idx").on(t.userId, t.page),
-  userIdIdx: index("card_layouts_user_id_idx").on(t.userId),
-}));
+// export const cardTemplates = sqliteTable("card_templates", {
+//   id: text()
+//     .notNull()
+//     .primaryKey()
+//     .$defaultFn(() => generateId("ct")),
 
-export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
-  user: one(users, {
-    fields: [cardLayouts.userId],
-    references: [users.id],
-  }),
-}));
+//   type: text().notNull(), // 'built_in' or 'custom'
+//   identifier: text().notNull(),
+
+//   config: text().notNull(), // JSON string containing title, description template, etc.
+
+//   userId: text() // Only for custom templates
+//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+
+//   createdAt: integer({ mode: "timestamp" }).notNull(),
+// });
+
+// export const cardTemplatesRelations = relations(cardTemplates, ({ one }) => ({
+//   user: one(users, {
+//     fields: [cardTemplates.userId],
+//     references: [users.id],
+//   }),
+// }));
+
+// export const cardLayouts = sqliteTable("card_layouts", {
+//   id: text()
+//     .notNull()
+//     .primaryKey()
+//     .$defaultFn(() => generateId("cl")),
+
+//   userId: text()
+//     .notNull()
+//     .references(() => users.id, { onUpdate: "cascade", onDelete: "cascade" }),
+
+//   page: text().notNull(), // 'dashboard', 'grade', or 'subject'
+
+//   cards: text().notNull(), // JSON array of card positions and customizations
+
+//   createdAt: integer({ mode: "timestamp" }).notNull(),
+//   updatedAt: integer({ mode: "timestamp" }).notNull(),
+// });
+
+// export const cardLayoutsRelations = relations(cardLayouts, ({ one }) => ({
+//   user: one(users, {
+//     fields: [cardLayouts.userId],
+//     references: [users.id],
+//   }),
+// }));

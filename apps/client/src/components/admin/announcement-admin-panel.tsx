@@ -11,8 +11,19 @@ import {
 } from "@/hooks/use-admin-announcements";
 import { toast } from "@/lib/toast";
 import type { AnnouncementTone } from "@/types/announcement";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -45,6 +56,7 @@ export function AnnouncementAdminPanel() {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<AnnouncementTone>("info");
+  const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
 
   const handleCreate = () => {
     if (!title.trim() || !message.trim()) {
@@ -150,15 +162,49 @@ export function AnnouncementAdminPanel() {
                     })
                   }
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => deleteAnnouncement.mutate(announcement.id)}
-                  disabled={deleteAnnouncement.isPending}
+                <AlertDialog
+                  open={deleteDialogId === announcement.id}
+                  onOpenChange={(open) =>
+                    setDeleteDialogId(open ? announcement.id : null)
+                  }
                 >
-                  <Trash2 className="size-4" />
-                  <span className="sr-only">Supprimer</span>
-                </Button>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      disabled={deleteAnnouncement.isPending}
+                    >
+                      <Trash2 className="size-4" />
+                      <span className="sr-only">Supprimer</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Supprimer cette bannière ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Cette action supprimera définitivement la bannière
+                        "{announcement.title}" pour tous les utilisateurs.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={deleteAnnouncement.isPending}>
+                        Annuler
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        className={buttonVariants({ variant: "destructive" })}
+                        disabled={deleteAnnouncement.isPending}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          deleteAnnouncement.mutate(announcement.id, {
+                            onSettled: () => setDeleteDialogId(null),
+                          });
+                        }}
+                      >
+                        Supprimer
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           ))}

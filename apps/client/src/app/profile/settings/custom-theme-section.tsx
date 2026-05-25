@@ -874,32 +874,19 @@ function resolveThemeMode(
   theme: string | undefined
 ): CustomThemeMode {
   const value = resolvedTheme ?? theme;
-  if (value === "dark") {
-    return "dark";
-  }
-
-  if (
-    value === "system" &&
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  ) {
-    return "dark";
-  }
-
-  return "light";
+  return value === "dark" ? "dark" : "light";
 }
 
 export function CustomThemeSection() {
   const t = useTranslations("Settings.Profile.CustomTheme");
   const { setTheme, resolvedTheme, theme } = useTheme();
   const { data: session } = authClient.useSession();
-  const { data: remoteSettings } = useUserSettings(Boolean(session));
+  useUserSettings(Boolean(session));
   const updateSettings = useUpdateUserSettings();
   const [localCustomTheme, setLocalCustomTheme] = useState(
     () => readLocalUserSettings().settings.customTheme
   );
-  const currentSettings =
-    remoteSettings?.customTheme ?? localCustomTheme;
+  const currentSettings = localCustomTheme;
   const [draft, setDraft] = useState<CustomThemeSettings>(currentSettings);
   const [mode, setMode] = useState<CustomThemeMode>(() =>
     resolveThemeMode(resolvedTheme, theme)

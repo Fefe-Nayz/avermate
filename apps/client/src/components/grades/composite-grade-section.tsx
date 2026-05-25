@@ -85,15 +85,22 @@ function componentToForm(component: GradeComponent): CompositeFormState {
 }
 
 function parseForm(form: CompositeFormState) {
-  const value = Number(form.value);
-  const outOf = Number(form.outOf);
-  const coefficient = Number(form.coefficient);
+  const valueInput = form.value.trim();
+  const outOfInput = form.outOf.trim();
+  const coefficientInput = form.coefficient.trim();
+
+  if (!form.name.trim() || !valueInput || !outOfInput || !coefficientInput) {
+    throw new Error("FORM_INCOMPLETE");
+  }
+
+  const value = Number(valueInput);
+  const outOf = Number(outOfInput);
+  const coefficient = Number(coefficientInput);
 
   if (
-    !form.name.trim() ||
-    Number.isNaN(value) ||
-    Number.isNaN(outOf) ||
-    Number.isNaN(coefficient)
+    !Number.isFinite(value) ||
+    !Number.isFinite(outOf) ||
+    !Number.isFinite(coefficient)
   ) {
     throw new Error("FORM_INCOMPLETE");
   }
@@ -153,8 +160,8 @@ function ComponentEditorDialog({
   onFormChange: (form: CompositeFormState) => void;
   onSubmit: () => void;
 }) {
-  const parsedValue = Number(form.value);
-  const parsedOutOf = Number(form.outOf);
+  const parsedValue = form.value.trim() ? Number(form.value) : NaN;
+  const parsedOutOf = form.outOf.trim() ? Number(form.outOf) : NaN;
   const previewValue =
     Number.isFinite(parsedValue) && Number.isFinite(parsedOutOf) && parsedOutOf > 0
       ? Math.round(parsedValue * 100)

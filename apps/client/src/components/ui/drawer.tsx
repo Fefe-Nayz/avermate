@@ -224,7 +224,7 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] flex-col overflow-hidden overscroll-contain rounded-t-[10px] border bg-background pb-[var(--keyboard-inset-bottom,0px)] after:hidden after:content-none",
+        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] flex-col overflow-y-auto overflow-x-hidden overscroll-contain rounded-t-[10px] border bg-background pb-[var(--keyboard-inset-bottom,0px)] after:hidden after:content-none",
         className
       )}
       {...props}

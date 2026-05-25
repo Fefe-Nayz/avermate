@@ -57,11 +57,21 @@ export default function SubjectPage() {
   }, []);
 
   const handleBack = () => {
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlScrollBehavior = html.style.scrollBehavior;
+    const previousBodyScrollBehavior = body.style.scrollBehavior;
+
     sessionStorage.setItem("instantBackFromGradeOrSubject", "true");
-    document.documentElement.style.scrollBehavior = "auto";
-    document.body.style.scrollBehavior = "auto";
+    html.style.scrollBehavior = "auto";
+    body.style.scrollBehavior = "auto";
     router.replace(returnUrl, { scroll: false });
     localStorage.removeItem("backFromGradeOrSubject");
+
+    requestAnimationFrame(() => {
+      html.style.scrollBehavior = previousHtmlScrollBehavior;
+      body.style.scrollBehavior = previousBodyScrollBehavior;
+    });
   };
 
   const { activeId } = useActiveYearStore();
