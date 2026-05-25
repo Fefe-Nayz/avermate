@@ -33,13 +33,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Credenza,
+  CredenzaDescription,
+  CredenzaFooter,
+  CredenzaHeader,
+  CredenzaTitle,
+} from "@/components/ui/credenza";
+import CredenzaContentWrapper from "@/components/credenza/credenza-content-wrapper";
+import CredenzaBodyWrapper from "@/components/credenza/credenza-body-wrapper";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -172,19 +173,20 @@ function ComponentEditorDialog({
       : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
+    <Credenza open={open} onOpenChange={onOpenChange}>
+      <CredenzaContentWrapper>
+        <CredenzaHeader>
+          <CredenzaTitle>
             {isEditing ? "Modifier la sous-note" : "Ajouter une sous-note"}
-          </DialogTitle>
-          <DialogDescription>
+          </CredenzaTitle>
+          <CredenzaDescription>
             Chaque sous-note a son propre barème et son propre coefficient dans
             la moyenne pondérée.
-          </DialogDescription>
-        </DialogHeader>
+          </CredenzaDescription>
+        </CredenzaHeader>
 
-        <div className="grid gap-4">
+        <CredenzaBodyWrapper>
+          <div className="grid gap-4">
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="flex items-start gap-3">
               <div className="rounded-md border bg-background p-2 text-muted-foreground">
@@ -269,9 +271,10 @@ function ComponentEditorDialog({
             note principale. Ici, seules les notes qui composent le résultat
             sont modifiées.
           </div>
-        </div>
+          </div>
+        </CredenzaBodyWrapper>
 
-        <DialogFooter>
+        <CredenzaFooter className="px-4 pb-6 md:px-0 md:pb-0">
           <Button
             type="button"
             variant="outline"
@@ -283,9 +286,9 @@ function ComponentEditorDialog({
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             {isEditing ? "Enregistrer" : "Ajouter"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </CredenzaFooter>
+      </CredenzaContentWrapper>
+    </Credenza>
   );
 }
 

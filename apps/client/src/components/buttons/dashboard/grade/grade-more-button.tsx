@@ -74,15 +74,15 @@ export default function GradeMoreButton({
             <DropDrawerItem
               onSelect={() => transformMutation.mutate()}
               disabled={transformMutation.isPending}
-              icon={
-                transformMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Calculator className="size-4" />
-                )
-              }
             >
-              Activer note composite
+              <div className="flex items-center w-full">
+                {transformMutation.isPending ? (
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                ) : (
+                  <Calculator className="size-4 mr-2" />
+                )}
+                Activer note composite
+              </div>
             </DropDrawerItem>
           ) : null}
 
