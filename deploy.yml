@@ -1,32 +1,33 @@
 services:
-  # API
+  # API + oRPC
   api:
-    image: nayzbysodium/avermate-api:latest
+    image: ghcr.io/fefe-nayz/avermate-api:latest
     environment:
       # Database
       - DATABASE_URL=
       - DATABASE_AUTH_TOKEN=
-      # Cache
-      - REDIS_URL=
       # Better Auth
       - BETTER_AUTH_URL=
       - BETTER_AUTH_SECRET=
-      # Client
+      - ADMIN_USER_IDS=
+      # Web client
       - CLIENT_URL=
-      # OAuth
-      # Microsoft OAuth
+      - PORT=5000
+      - NODE_ENV=production
+      # OAuth — each provider is skipped unless both values are present
       - MICROSOFT_CLIENT_ID=
       - MICROSOFT_CLIENT_SECRET=
-      # Google OAuth
       - GOOGLE_CLIENT_ID=
       - GOOGLE_CLIENT_SECRET=
-      # Resend
+      # Email
       - RESEND_API_KEY=
       - EMAIL_FROM=
+      # Uploads
+      - UPLOADTHING_TOKEN=
+      # Feedback relay
+      - DISCORD_WEBHOOK_URL=
     expose:
       - 5000
-    depends_on:
-      - cache
     networks:
       - internal
       - webgateway
@@ -40,32 +41,22 @@ services:
 
   # Web
   web:
-    image: nayzbysodium/avermate-web:latest
+    image: ghcr.io/fefe-nayz/avermate-web:latest
     environment:
       - NEXT_PUBLIC_API_URL=
-      - NEXT_PUBLIC_CLIENT_URL=
+      - NEXT_PUBLIC_APP_URL=
     expose:
-      - 5000
+      - 3000
     networks:
       - internal
       - webgateway
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.avermate-web.rule=Host(`avermate.nayz.fr`)"
-      - "traefik.http.services.avermate-web.loadbalancer.server.port=5000"
+      - "traefik.http.services.avermate-web.loadbalancer.server.port=3000"
       - "traefik.http.routers.avermate-web.entrypoints=websecure"
       - "traefik.http.routers.avermate-web.tls.certresolver=myresolver"
       - "traefik.http.routers.avermate-web.tls=true"
-
-  # Cache
-  cache:
-    image: redis:latest
-    expose:
-      - 6379
-    networks:
-      - internal
-    environment:
-      - REDIS_PASSWORD=
 
 networks:
   # Internal network

@@ -1,17 +1,21 @@
 {
   "name": "avermate",
   "private": true,
-  "packageManager": "bun@1.3.4",
+  "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
-    "dev:client": "turbo -F client dev",
-    "dev:api": "turbo -F api dev",
-    "db:push": "turbo -F api db:push",
-    "db:studio": "turbo -F api db:studio",
-    "db:generate": "turbo -F api db:generate",
-    "db:migrate": "turbo -F api db:migrate"
+    "test": "turbo test",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F server dev",
+    "db:push": "turbo -F server db:push",
+    "db:studio": "turbo -F server db:studio",
+    "db:generate": "turbo -F server db:generate",
+    "db:migrate": "turbo -F server db:migrate",
+    "db:seed": "bun run --cwd apps/server scripts/seed-demo.ts",
+    "db:migrate-legacy": "bun run --cwd apps/server scripts/migrate-legacy.ts",
+    "admin:set": "bun run --cwd apps/server scripts/set-admin.ts"
   },
   "workspaces": [
     "apps/*",

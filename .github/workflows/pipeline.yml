@@ -1,16 +1,41 @@
 name: Deploy
 
 on:
- push:
-   branches:
-     - "main"
+  push:
+    branches:
+      - "main"
+  pull_request:
 
 permissions:
   packages: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run check-types
+
+      # Covers the averaging engine and the message catalogues: a missing
+      # French string would otherwise ship as silent English.
+      - name: Test
+        run: bun run test
+
   build-push:
     runs-on: ubuntu-latest
+    needs: verify
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,59 +47,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker API
+      - name: Build and push the API image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./apps/api/Dockerfile
+          file: ./apps/server/Dockerfile
           push: true
           tags: |
             ghcr.io/fefe-nayz/avermate-api:latest
             ghcr.io/fefe-nayz/avermate-api:${{ github.sha }}
 
-      - name: Build and push Docker Web
+      - name: Build and push the web image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./apps/client/Dockerfile
+          file: ./apps/web/Dockerfile
           push: true
           tags: |
             ghcr.io/fefe-nayz/avermate-web:latest
             ghcr.io/fefe-nayz/avermate-web:${{ github.sha }}
-
-  # deploy:
-  #   runs-on: ubuntu-latest
-  #   needs:
-  #     - build-push
-  #   steps:
-  #   - name: Checkout code
-  #     uses: actions/checkout@v2
-
-  #   - name: Deploying docker compose
-  #     uses: appleboy/ssh-action@v1.0.0
-  #     env:
-  #       DIRECTORY: ${{ secrets.DIRECTORY }}
-  #     with:
-  #       host: ${{ secrets.SSH_HOST }}
-  #       username: ${{ secrets.SSH_USERNAME }}
-  #       password: ${{ secrets.SSH_PASSWORD }}
-  #       port: 22
-  #       envs: DIRECTORY
-  #       script: |
-  #         cd $DIRECTORY
-  #         docker compose pull
-  #         docker compose up --no-deps -d api web
-
-    #- name: create env file
-    #  run: |
-    #    echo "GIT_COMMIT_HASH=${{ github.sha }}" >> ./envfile
-
-    #- name: Docker Stack Deploy
-    #  uses: cssnr/stack-deploy-action@v1
-    #  with:
-    #    name: avermate
-    #    file: stack.yaml
-    #    host: nayz.fr
-    #    user: deploy
-    #    ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-    #    env_file: ./envfile

@@ -1,9 +1,24 @@
+# Secrets — every app keeps its own, none of them are committed
 .env
-/node_modules/
+.env.local
+.env.*.local
+
+# Dependencies and build output, at any depth in the workspace
+node_modules/
+.turbo/
+dist/
+.next/
+
+# Local databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Editor
 .vscode/settings.json
-.hintrc
-avermate.code-workspace
 .vscode/tasks.json
-.turbo
+.hintrc
+
+# Agent scratch
 /.agents
-/settings refactor

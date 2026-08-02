@@ -1,0 +1,131 @@
+/**
+ * Application chrome.
+ *
+ * The rules here exist because a phone is not a narrow desktop: notches,
+ * home indicators, momentum scrolling and the address bar collapsing all need
+ * handling that Tailwind has no opinion about.
+ */
+
+@theme inline {
+  --spacing-safe-top: env(safe-area-inset-top, 0px);
+  --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --spacing-safe-left: env(safe-area-inset-left, 0px);
+  --spacing-safe-right: env(safe-area-inset-right, 0px);
+
+  /* Height of the mobile tab bar, referenced by every scroll container. */
+  --spacing-tabbar: 3.75rem;
+  --spacing-mobile-header: 3.5rem;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    /* Stops iOS enlarging text in landscape, which breaks fixed layouts. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* `svh` follows the collapsing address bar; `dvh` would jitter mid-scroll. */
+    min-height: 100svh;
+    overscroll-behavior-y: none;
+  }
+
+  /* Inputs under 16px make iOS zoom the viewport on focus, which then never
+     zooms back out. Enforced at the base layer so no component can regress it. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 26%, transparent);
+  }
+}
+
+@layer components {
+  /* A scroll region that behaves on touch: momentum, no rubber-banding into
+     the page behind it, and room for the tab bar at the bottom. */
+  .scroll-pane {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .pane-inset {
+    padding-bottom: calc(var(--spacing-tabbar) + var(--spacing-safe-bottom) + 1rem);
+  }
+
+  /* Horizontal rails: period pickers, subject chips, story cards. */
+  .snap-rail {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .snap-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .snap-rail > * {
+    scroll-snap-align: start;
+    flex: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Tabular figures keep a changing average from shifting the layout. */
+  .numeric {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+}
+
+@layer utilities {
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .h-screen-safe {
+    height: calc(100svh - env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Applied while a value animates so screen readers are not spammed. */
+  .animating-value {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Honoured by the "reduce motion" preference, independent of the OS setting. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

@@ -1,0 +1,307 @@
+/**
+ * Palettes.
+ *
+ * Each one only restates the tokens that carry personality — the surface,
+ * text and border scales come from the base theme so contrast stays correct
+ * whichever palette is on. A palette is set with `data-palette` on <html>, so
+ * it composes with the light/dark class rather than fighting it.
+ */
+
+:root[data-palette="ocean"] {
+  --primary: oklch(0.55 0.13 235);
+  --primary-foreground: oklch(0.99 0.005 235);
+  --accent: oklch(0.95 0.02 235);
+  --accent-foreground: oklch(0.35 0.09 235);
+  --ring: oklch(0.55 0.13 235);
+  --sidebar-primary: oklch(0.55 0.13 235);
+  --sidebar-ring: oklch(0.55 0.13 235);
+  --chart-1: oklch(0.62 0.14 235);
+  --chart-2: oklch(0.7 0.12 200);
+  --chart-3: oklch(0.55 0.11 265);
+  --chart-4: oklch(0.78 0.1 190);
+  --chart-5: oklch(0.45 0.1 250);
+}
+
+.dark:root[data-palette="ocean"],
+:root[data-palette="ocean"] .dark {
+  --primary: oklch(0.72 0.12 235);
+  --primary-foreground: oklch(0.2 0.04 235);
+  --accent: oklch(0.3 0.04 235);
+  --accent-foreground: oklch(0.95 0.02 235);
+}
+
+:root[data-palette="forest"] {
+  --primary: oklch(0.52 0.12 155);
+  --primary-foreground: oklch(0.99 0.005 155);
+  --accent: oklch(0.95 0.03 155);
+  --accent-foreground: oklch(0.32 0.08 155);
+  --ring: oklch(0.52 0.12 155);
+  --sidebar-primary: oklch(0.52 0.12 155);
+  --sidebar-ring: oklch(0.52 0.12 155);
+  --chart-1: oklch(0.6 0.13 155);
+  --chart-2: oklch(0.72 0.12 130);
+  --chart-3: oklch(0.5 0.1 185);
+  --chart-4: oklch(0.8 0.11 110);
+  --chart-5: oklch(0.42 0.09 170);
+}
+
+.dark:root[data-palette="forest"] {
+  --primary: oklch(0.72 0.13 155);
+  --primary-foreground: oklch(0.2 0.04 155);
+  --accent: oklch(0.3 0.04 155);
+  --accent-foreground: oklch(0.94 0.03 155);
+}
+
+:root[data-palette="sunset"] {
+  --primary: oklch(0.62 0.17 35);
+  --primary-foreground: oklch(0.99 0.01 35);
+  --accent: oklch(0.95 0.03 45);
+  --accent-foreground: oklch(0.4 0.12 35);
+  --ring: oklch(0.62 0.17 35);
+  --sidebar-primary: oklch(0.62 0.17 35);
+  --sidebar-ring: oklch(0.62 0.17 35);
+  --chart-1: oklch(0.68 0.17 35);
+  --chart-2: oklch(0.76 0.15 65);
+  --chart-3: oklch(0.6 0.16 15);
+  --chart-4: oklch(0.82 0.13 85);
+  --chart-5: oklch(0.5 0.14 350);
+}
+
+.dark:root[data-palette="sunset"] {
+  --primary: oklch(0.75 0.16 45);
+  --primary-foreground: oklch(0.22 0.05 35);
+  --accent: oklch(0.32 0.05 35);
+  --accent-foreground: oklch(0.94 0.03 45);
+}
+
+:root[data-palette="grape"] {
+  --primary: oklch(0.55 0.19 300);
+  --primary-foreground: oklch(0.99 0.01 300);
+  --accent: oklch(0.95 0.03 300);
+  --accent-foreground: oklch(0.36 0.13 300);
+  --ring: oklch(0.55 0.19 300);
+  --sidebar-primary: oklch(0.55 0.19 300);
+  --sidebar-ring: oklch(0.55 0.19 300);
+  --chart-1: oklch(0.62 0.19 300);
+  --chart-2: oklch(0.68 0.16 330);
+  --chart-3: oklch(0.55 0.17 270);
+  --chart-4: oklch(0.76 0.13 315);
+  --chart-5: oklch(0.45 0.15 285);
+}
+
+.dark:root[data-palette="grape"] {
+  --primary: oklch(0.74 0.16 300);
+  --primary-foreground: oklch(0.22 0.06 300);
+  --accent: oklch(0.32 0.06 300);
+  --accent-foreground: oklch(0.94 0.03 300);
+}
+
+:root[data-palette="rose"] {
+  --primary: oklch(0.58 0.19 12);
+  --primary-foreground: oklch(0.99 0.01 12);
+  --accent: oklch(0.95 0.03 12);
+  --accent-foreground: oklch(0.38 0.13 12);
+  --ring: oklch(0.58 0.19 12);
+  --sidebar-primary: oklch(0.58 0.19 12);
+  --sidebar-ring: oklch(0.58 0.19 12);
+  --chart-1: oklch(0.64 0.19 12);
+  --chart-2: oklch(0.72 0.15 350);
+  --chart-3: oklch(0.58 0.17 30);
+  --chart-4: oklch(0.8 0.12 5);
+  --chart-5: oklch(0.48 0.15 340);
+}
+
+.dark:root[data-palette="rose"] {
+  --primary: oklch(0.74 0.16 12);
+  --primary-foreground: oklch(0.22 0.06 12);
+  --accent: oklch(0.32 0.06 12);
+  --accent-foreground: oklch(0.94 0.03 12);
+}
+
+:root[data-palette="amber"] {
+  --primary: oklch(0.72 0.15 78);
+  --primary-foreground: oklch(0.22 0.05 78);
+  --accent: oklch(0.96 0.04 85);
+  --accent-foreground: oklch(0.4 0.1 70);
+  --ring: oklch(0.72 0.15 78);
+  --sidebar-primary: oklch(0.72 0.15 78);
+  --sidebar-ring: oklch(0.72 0.15 78);
+  --chart-1: oklch(0.76 0.15 78);
+  --chart-2: oklch(0.82 0.13 95);
+  --chart-3: oklch(0.68 0.15 55);
+  --chart-4: oklch(0.88 0.1 105);
+  --chart-5: oklch(0.58 0.14 45);
+}
+
+.dark:root[data-palette="amber"] {
+  --accent: oklch(0.32 0.05 78);
+  --accent-foreground: oklch(0.95 0.04 85);
+}
+
+/**
+ * Result bands. Used by grade badges, chart marks and the goal gauge so a
+ * "good" result looks the same everywhere. Hue rather than lightness carries
+ * the meaning, and each band keeps a matching foreground.
+ */
+:root {
+  --band-excellent: oklch(0.62 0.15 150);
+  --band-excellent-foreground: oklch(0.99 0.01 150);
+  --band-good: oklch(0.68 0.13 130);
+  --band-good-foreground: oklch(0.2 0.04 130);
+  --band-fair: oklch(0.76 0.14 85);
+  --band-fair-foreground: oklch(0.22 0.05 85);
+  --band-weak: oklch(0.7 0.16 45);
+  --band-weak-foreground: oklch(0.2 0.05 45);
+  --band-poor: oklch(0.61 0.2 25);
+  --band-poor-foreground: oklch(0.99 0.01 25);
+
+  --positive: oklch(0.6 0.15 150);
+  --negative: oklch(0.61 0.2 25);
+}
+
+.dark {
+  --band-excellent: oklch(0.72 0.15 150);
+  --band-excellent-foreground: oklch(0.18 0.04 150);
+  --band-good: oklch(0.76 0.13 130);
+  --band-good-foreground: oklch(0.18 0.04 130);
+  --band-fair: oklch(0.82 0.13 85);
+  --band-fair-foreground: oklch(0.2 0.05 85);
+  --band-weak: oklch(0.76 0.15 45);
+  --band-weak-foreground: oklch(0.2 0.05 45);
+  --band-poor: oklch(0.7 0.19 25);
+  --band-poor-foreground: oklch(0.18 0.05 25);
+
+  --positive: oklch(0.72 0.15 150);
+  --negative: oklch(0.7 0.19 25);
+}
+
+@theme inline {
+  --color-band-excellent: var(--band-excellent);
+  --color-band-excellent-foreground: var(--band-excellent-foreground);
+  --color-band-good: var(--band-good);
+  --color-band-good-foreground: var(--band-good-foreground);
+  --color-band-fair: var(--band-fair);
+  --color-band-fair-foreground: var(--band-fair-foreground);
+  --color-band-weak: var(--band-weak);
+  --color-band-weak-foreground: var(--band-weak-foreground);
+  --color-band-poor: var(--band-poor);
+  --color-band-poor-foreground: var(--band-poor-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+}
+
+/**
+ * Seasonal accents.
+ *
+ * Restrained on purpose — a shifted accent hue and nothing that moves — with
+ * one exception. April Fools is meant to look wrong, it only appears on the
+ * day, and it can be switched off like any other seasonal theme.
+ */
+
+:root[data-season="newYear"] {
+  --primary: oklch(0.62 0.16 265);
+  --accent: oklch(0.95 0.03 265);
+  --ring: oklch(0.62 0.16 265);
+  --chart-1: oklch(0.68 0.16 265);
+  --chart-2: oklch(0.78 0.11 250);
+}
+
+:root[data-season="spring"] {
+  --primary: oklch(0.62 0.14 145);
+  --accent: oklch(0.95 0.04 145);
+  --ring: oklch(0.62 0.14 145);
+  --chart-1: oklch(0.68 0.14 145);
+  --chart-2: oklch(0.8 0.12 120);
+}
+
+:root[data-season="summer"] {
+  --primary: oklch(0.68 0.15 205);
+  --accent: oklch(0.95 0.04 205);
+  --ring: oklch(0.68 0.15 205);
+  --chart-1: oklch(0.72 0.14 205);
+  --chart-2: oklch(0.82 0.12 190);
+}
+
+:root[data-season="autumn"] {
+  --primary: oklch(0.6 0.15 55);
+  --accent: oklch(0.95 0.04 55);
+  --ring: oklch(0.6 0.15 55);
+  --chart-1: oklch(0.68 0.15 55);
+  --chart-2: oklch(0.78 0.13 75);
+}
+
+:root[data-season="halloween"] {
+  --primary: oklch(0.66 0.19 45);
+  --primary-foreground: oklch(0.16 0.03 45);
+  --accent: oklch(0.95 0.04 45);
+  --ring: oklch(0.66 0.19 45);
+  --chart-1: oklch(0.68 0.19 45);
+  --chart-2: oklch(0.52 0.16 300);
+}
+
+:root[data-season="winter"] {
+  --primary: oklch(0.62 0.11 230);
+  --accent: oklch(0.95 0.025 230);
+  --ring: oklch(0.62 0.11 230);
+  --chart-1: oklch(0.7 0.11 230);
+  --chart-2: oklch(0.82 0.08 215);
+}
+
+:root[data-season="aprilFools"] {
+  --background: oklch(0.88 0.13 320);
+  --foreground: oklch(0.32 0.2 140);
+  --card: oklch(0.82 0.16 80);
+  --card-foreground: oklch(0.3 0.2 320);
+  --popover: oklch(0.85 0.14 350);
+  --popover-foreground: oklch(0.32 0.2 260);
+  --primary: oklch(0.62 0.26 40);
+  --primary-foreground: oklch(0.95 0.08 290);
+  --secondary: oklch(0.8 0.17 200);
+  --secondary-foreground: oklch(0.3 0.24 20);
+  --muted: oklch(0.85 0.12 140);
+  --muted-foreground: oklch(0.42 0.18 340);
+  --accent: oklch(0.84 0.17 30);
+  --accent-foreground: oklch(0.3 0.18 210);
+  --border: oklch(0.62 0.18 330);
+  --input: oklch(0.82 0.13 220);
+  --ring: oklch(0.7 0.26 50);
+  --chart-1: oklch(0.62 0.2 330);
+  --chart-2: oklch(0.66 0.26 50);
+  --chart-3: oklch(0.75 0.19 200);
+  --chart-4: oklch(0.7 0.24 140);
+  --chart-5: oklch(0.78 0.19 80);
+  --radius: 1.6rem;
+}
+
+.dark:root[data-season="aprilFools"] {
+  --background: oklch(0.24 0.11 50);
+  --foreground: oklch(0.88 0.2 130);
+  --card: oklch(0.3 0.13 300);
+  --card-foreground: oklch(0.9 0.14 60);
+}
+
+/**
+ * Mokattam — an unlockable theme, kept in the codebase rather than behind a
+ * flag so the people who earn it get it on every device they sign in on.
+ */
+:root[data-palette="mokattam"] {
+  --primary: oklch(0.64 0.19 45);
+  --primary-foreground: oklch(0.99 0.01 45);
+  --accent: oklch(0.95 0.04 45);
+  --accent-foreground: oklch(0.36 0.12 45);
+  --ring: oklch(0.64 0.19 45);
+  --sidebar-primary: oklch(0.64 0.19 45);
+  --sidebar-ring: oklch(0.64 0.19 45);
+  --chart-1: oklch(0.68 0.19 45);
+  --chart-2: oklch(0.76 0.16 65);
+  --chart-3: oklch(0.6 0.18 25);
+  --chart-4: oklch(0.82 0.13 85);
+  --chart-5: oklch(0.5 0.15 35);
+}
+
+.dark:root[data-palette="mokattam"] {
+  --primary: oklch(0.76 0.17 45);
+  --primary-foreground: oklch(0.22 0.06 45);
+  --accent: oklch(0.32 0.06 45);
+  --accent-foreground: oklch(0.94 0.04 45);
+}
