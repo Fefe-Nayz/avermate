@@ -1,6 +1,11 @@
 "use client";
 
-import { CalendarRangeIcon, CheckIcon, ChevronDownIcon } from "lucide-react";
+import {
+  CalendarRangeIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  GraduationCapIcon,
+} from "lucide-react";
 import { useFormatter, useExtracted } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useYear } from "@/components/year/year-provider";
+import { useYearSheet } from "./year-sheet";
 import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 
@@ -87,13 +93,46 @@ export function PeriodSwitcher({
   );
 }
 
-/** Horizontal rail used on mobile, where a dropdown costs an extra tap. */
+/**
+ * The scope rail: which year, then which period.
+ *
+ * On a phone this is the only place the year can be changed — the switcher it
+ * lives in on desktop is inside the sidebar, which does not exist under `md`.
+ * Putting it at the head of the period rail keeps both halves of the same
+ * question ("what am I looking at") in one place.
+ */
 export function PeriodRail({ className }: { className?: string }) {
-  const { periods, period, selectPeriod } = useYear();
-  if (periods.length <= 1) return null;
+  const t = useExtracted();
+  const { periods, period, selectPeriod, year, years } = useYear();
+  const yearSheet = useYearSheet();
+
+  const showYear = years.length > 1;
+  if (periods.length <= 1 && !showYear) return null;
 
   return (
     <div className={cn("snap-rail px-4", className)}>
+      {showYear ? (
+        <>
+          <button
+            type="button"
+            aria-label={t("Change school year")}
+            onClick={() => {
+              haptic("selection");
+              yearSheet.open();
+            }}
+            className="flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-sm font-medium transition-colors active:bg-accent"
+          >
+            <GraduationCapIcon className="size-4 opacity-70" />
+            <span className="max-w-28 truncate">{year?.name}</span>
+            <ChevronDownIcon className="size-3.5 opacity-60" />
+          </button>
+          <span
+            aria-hidden
+            className="my-2 w-px shrink-0 self-stretch bg-border"
+          />
+        </>
+      ) : null}
+
       {periods.map((item) => {
         const active = item.id === period.id;
         return (

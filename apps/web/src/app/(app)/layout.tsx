@@ -9,6 +9,7 @@ import { YearGate } from "@/components/year/year-gate";
 import { AppShell } from "@/components/shell/app-shell";
 import { PageChromeProvider } from "@/components/shell/page-chrome";
 import { QuickAddProvider } from "@/components/shell/quick-add";
+import { YearSheetProvider } from "@/components/shell/year-sheet";
 import { CommandPaletteProvider } from "@/components/command/command-palette";
 import { FeedbackProvider } from "@/components/feedback/feedback-provider";
 
@@ -37,9 +38,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <CommandPaletteProvider>
           <FeedbackProvider>
             <QuickAddProvider>
-              <AppShell user={session.user}>
-                <YearGate>{children}</YearGate>
-              </AppShell>
+              <YearSheetProvider>
+                <AppShell user={session.user}>
+                  <YearGate>{children}</YearGate>
+                </AppShell>
+              </YearSheetProvider>
             </QuickAddProvider>
           </FeedbackProvider>
         </CommandPaletteProvider>

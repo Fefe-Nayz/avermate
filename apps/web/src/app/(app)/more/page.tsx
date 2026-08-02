@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ChartNoAxesCombinedIcon,
   ChevronRightIcon,
+  GraduationCapIcon,
   InfoIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
@@ -27,6 +28,8 @@ import { initialsOf } from "@/components/shell/nav-user";
 import { authClient, useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { useIsAdmin } from "@/hooks/use-admin";
+import { useYear } from "@/components/year/year-provider";
+import { useYearSheet } from "@/components/shell/year-sheet";
 
 /**
  * The phone's fifth tab.
@@ -42,6 +45,8 @@ export default function MorePage() {
   const feedback = useFeedback();
 
   const { isAdmin } = useIsAdmin();
+  const { year, years } = useYear();
+  const yearSheet = useYearSheet();
 
   const groups: Array<{
     label?: string;
@@ -55,6 +60,15 @@ export default function MorePage() {
   }> = [
     {
       items: [
+        ...(years.length > 1
+          ? [
+              {
+                icon: GraduationCapIcon,
+                label: `${t("School year")} · ${year?.name ?? ""}`,
+                onClick: () => yearSheet.open(),
+              },
+            ]
+          : []),
         { icon: TargetIcon, label: t("Goals"), href: "/goals" },
         {
           icon: ChartNoAxesCombinedIcon,
