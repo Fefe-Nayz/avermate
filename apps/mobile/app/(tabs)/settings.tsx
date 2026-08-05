@@ -1,31 +1,32 @@
 import { useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
-import { Column } from "@expo/ui";
-import { Grouped, Label, Line, Loading, Row, Section, Text } from "@/components/native";
-import { PickerField, SwitchField } from "@/components/controls";
-import { Sign } from "@/components/icon";
+import { Card, Loading, Row, Section } from "@/components/ui";
+import { NativeSwitch } from "@/components/native-controls";
 import { useYear } from "@/components/year-provider";
 import { signOut, useSession } from "@/lib/auth-client";
 import { haptic, setHapticsEnabled } from "@/lib/haptics";
 import { locale, setLocale, t, type Locale } from "@/lib/i18n";
 import { queryClient } from "@/lib/orpc";
-import { radius, space, usePalette } from "@/lib/theme";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 const HAPTICS_KEY = "avermate.haptics";
 const LOCALE_KEY = "avermate.locale";
 
 /**
- * Settings — the hub for everything that is not a grade.
+ * Settings.
  *
- * Grouped rows, drawn by the platform, so this screen looks like the one the
- * user was in before they opened the app. Each group is one question: who you
- * are, what year you are in, how it feels, and how to get out.
+ * Everything here is either about you, about how the app feels, or about
+ * getting out. Preferences that only make sense with a mouse — chart
+ * subdivisions, theme presets, custom colours — deliberately stay on the web:
+ * shipping them here would double the surface for no one's benefit.
  */
 export default function Settings() {
   const palette = usePalette();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { data: session, isPending } = useSession();
   const { year, years, periods } = useYear();
@@ -45,15 +46,17 @@ export default function Settings() {
   const toggleHaptics = (value: boolean) => {
     setHaptics(value);
     setHapticsEnabled(value);
+    // Fire after enabling so the switch confirms itself in the hand.
     if (value) haptic("light");
     void SecureStore.setItemAsync(HAPTICS_KEY, String(value));
   };
 
-  const switchLanguage = (next: string) => {
-    setLanguage(next as Locale);
+  const switchLanguage = (next: Locale) => {
+    haptic("selection");
+    setLanguage(next);
     // The root layout listens and rebuilds the tree, so the tab bar and every
     // screen behind this one change language too, not just this screen.
-    setLocale(next as Locale);
+    setLocale(next);
     void SecureStore.setItemAsync(LOCALE_KEY, next);
   };
 
@@ -84,130 +87,156 @@ export default function Settings() {
     .join("")
     .toUpperCase();
 
-  const namedPeriods = periods
-    .slice(0, Math.max(0, periods.length - 1))
-    .map((period) => period.name);
-
   return (
-    <Grouped>
-      <Section>
-        <Row spacing={space.md}>
-          <Column
-            alignment="center"
+    <ScrollView
+      style={{ flex: 1, backgroundColor: palette.background }}
+      contentContainerStyle={{
+        paddingTop: insets.top + space.md,
+        paddingHorizontal: space.lg,
+        paddingBottom: space.xxxl,
+        gap: space.xl,
+      }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={[type.display, { color: palette.text }]}>
+        {t("Settings")}
+      </Text>
+
+      <Card>
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: space.md }}
+        >
+          <View
             style={{
-              width: 52,
-              height: 52,
+              width: 48,
+              height: 48,
               borderRadius: radius.pill,
               backgroundColor: palette.accentSoft,
-              paddingVertical: space.lg,
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <Text size="heading">{initials}</Text>
-          </Column>
-          <Column spacing={2}>
-            <Text size="heading">{session?.user.name ?? ""}</Text>
-            <Text size="footnote" tone="muted" numberOfLines={1}>
-              {session?.user.email ?? ""}
+            <Text style={[type.heading, { color: palette.text }]}>
+              {initials}
             </Text>
-          </Column>
-        </Row>
-      </Section>
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[type.heading, { color: palette.text }]}>
+              {session?.user.name}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[type.footnote, { color: palette.textMuted }]}
+            >
+              {session?.user.email}
+            </Text>
+          </View>
+        </View>
+      </Card>
 
       <Section title={t("School year")}>
-        <Line
-          leading="year"
-          title={t("Current year")}
-          detail={year?.name}
-          onPress={() => router.push("/settings/year")}
-          trailing={
-            <Text size="footnote" tone="faint">
-              {years.length === 1
-                ? t("1 year")
-                : t("{count} years", { count: years.length })}
-            </Text>
-          }
-        />
-        <Line
-          leading="period"
-          title={t("Periods")}
-          onPress={() => router.push("/settings/periods")}
-          detail={namedPeriods.length > 0 ? namedPeriods.join(" · ") : t("No split")}
-        />
-        <Line
-          leading="average"
-          title={t("Custom averages")}
-          onPress={() => router.push("/settings/averages")}
-        />
-        <Line
-          leading="card"
-          title={t("Dashboard cards")}
-          onPress={() => router.push("/settings/cards")}
-        />
-        <Line
-          leading="add"
-          title={t("Add a year")}
-          onPress={() => router.push("/year/new")}
-        />
+        <Card padded={false}>
+          <Row
+            first
+            title={t("Current year")}
+            subtitle={year?.name}
+            onPress={() => router.push("/settings/year")}
+            trailing={
+              <Text style={[type.footnote, { color: palette.textFaint }]}>
+                {years.length === 1
+                  ? t("1 year")
+                  : t("{count} years", { count: years.length })}
+              </Text>
+            }
+          />
+          <Row
+            title={t("Periods")}
+            onPress={() => router.push("/settings/periods")}
+            subtitle={
+              periods.length > 1
+                ? periods
+                    .slice(0, periods.length - 1)
+                    .map((period) => period.name)
+                    .join(" · ")
+                : t("No split")
+            }
+          />
+          <Row
+            title={t("Custom averages")}
+            onPress={() => router.push("/settings/averages")}
+          />
+          <Row
+            title={t("Dashboard cards")}
+            onPress={() => router.push("/settings/cards")}
+          />
+          <Row
+            title={t("Add a year")}
+            onPress={() => router.push("/year/new")}
+          />
+        </Card>
       </Section>
 
       <Section title={t("Appearance")}>
-        <SwitchField
-          label={t("Haptic feedback")}
-          detail={t("Small taps as you move through the app")}
-          value={haptics}
-          onValueChange={toggleHaptics}
-        />
-        <PickerField
-          label={t("Language")}
-          value={language}
-          onChange={switchLanguage}
-          choices={[
-            { value: "fr", label: "Français" },
-            { value: "en", label: "English" },
+        <Card padded={false}>
+          <Row
+            first
+            title={t("Haptic feedback")}
+            subtitle={t("Small taps as you move through the app")}
+            trailing={
+              <NativeSwitch value={haptics} onValueChange={toggleHaptics} />
+            }
+          />
+          <Row
+            title={t("Language")}
+            onPress={() => switchLanguage(language === "fr" ? "en" : "fr")}
+            trailing={
+              <Text style={[type.body, { color: palette.textMuted }]}>
+                {language === "fr" ? "Français" : "English"}
+              </Text>
+            }
+          />
+        </Card>
+        <Text
+          style={[
+            type.footnote,
+            { color: palette.textFaint, paddingHorizontal: space.xs },
           ]}
-        />
-        <Line
-          leading="appearance"
-          title={t("Theme")}
-          detail={t("Follows your device")}
-        />
+        >
+          {t("The app follows your device's light or dark setting.")}
+        </Text>
       </Section>
 
       <Section title={t("Account")}>
-        <Line
-          leading="account"
-          title={t("Profile and password")}
-          onPress={() => router.push("/settings/account")}
-        />
-        <Line
-          leading="feedback"
-          title={t("Send feedback")}
-          onPress={() => router.push("/settings/feedback")}
-        />
-        <Line
-          leading="info"
-          title={t("About")}
-          onPress={() => router.push("/settings/about")}
-        />
-        <Line
-          leading="signOut"
-          title={t("Sign out")}
-          destructive
-          onPress={leave}
-        />
+        <Card padded={false}>
+          <Row
+            first
+            title={t("Profile and password")}
+            onPress={() => router.push("/settings/account")}
+          />
+          <Row
+            title={t("Send feedback")}
+            onPress={() => router.push("/settings/feedback")}
+          />
+          <Row
+            title={t("About")}
+            onPress={() => router.push("/settings/about")}
+          />
+          <Row
+            title={t("Sign out")}
+            destructive
+            onPress={leave}
+          />
+        </Card>
       </Section>
 
-      <Section>
-        <Column alignment="center" spacing={space.xs}>
-          <Row spacing={space.xs}>
-            <Sign glyph="review" size={14} tone="faint" />
-            <Text size="footnote" tone="faint">
-              {`Avermate ${Constants.expoConfig?.version ?? ""}`}
-            </Text>
-          </Row>
-          <Label>{t("Made for students")}</Label>
-        </Column>
-      </Section>
-    </Grouped>
+      <View style={{ alignItems: "center", gap: space.xs }}>
+        <Text style={[type.footnote, { color: palette.textFaint }]}>
+          Avermate {Constants.expoConfig?.version ?? ""}
+        </Text>
+        <Text style={[type.footnote, { color: palette.textFaint }]}>
+          {t("Made for students")}
+        </Text>
+      </View>
+    </ScrollView>
   );
 }

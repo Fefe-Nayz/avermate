@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
-import { Button, Grouped, Section, Text } from "@/components/native";
-import { ChoiceField, TextField } from "@/components/controls";
+import {
+  Button,
+  Note,
+  Problem,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { ChoiceField, TextField } from "@/components/field";
 import { client } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * Feedback.
@@ -58,15 +62,13 @@ export default function Feedback() {
     return (
       <>
         <Stack.Screen options={{ title: t("Send feedback") }} />
-        <Grouped footer={<Button label={t("Done")} onPress={() => router.back()} />}>
+        <Screen footer={<Button label={t("Done")} onPress={() => router.back()} />}>
           <Section title={t("Thank you")}>
-            <Text size="callout" tone="muted">
-              {t(
+            <Note>{t(
                 "It has landed. Every message gets read, even when the reply takes a while.",
-              )}
-            </Text>
+              )}</Note>
           </Section>
-        </Grouped>
+      </Screen>
       </>
     );
   }
@@ -74,7 +76,7 @@ export default function Feedback() {
   return (
     <>
       <Stack.Screen options={{ title: t("Send feedback") }} />
-      <Grouped
+      <Screen
         footer={
           <Button
             label={t("Send")}
@@ -90,7 +92,7 @@ export default function Feedback() {
         }
       >
         <ChoiceField
-          title={t("What is it about?")}
+          label={t("What is it about?")}
           value={kind}
           onChange={setKind}
           choices={[
@@ -113,14 +115,10 @@ export default function Feedback() {
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

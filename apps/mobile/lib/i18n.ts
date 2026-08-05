@@ -231,8 +231,6 @@ const fr: Record<string, string> = {
 
   "Custom averages": "Moyennes personnalisées",
   "Dashboard cards": "Cartes du tableau de bord",
-  "Theme": "Thème",
-  "Follows your device": "Suit votre appareil",
   "Profile and password": "Profil et mot de passe",
   "Send feedback": "Envoyer un retour",
   "About": "À propos",
@@ -303,7 +301,6 @@ const fr: Record<string, string> = {
   "All the statistics": "Toutes les statistiques",
   "Among everyone using Avermate": "Parmi tous les utilisateurs d'Avermate",
   "An idea": "Une idée",
-  "Anything worth remembering": "Ce qui mérite d'être noté",
   "Ask away.": "Posez votre question.",
   "Average": "Moyenne",
   "Avermate on the web": "Avermate sur le web",
@@ -377,7 +374,6 @@ const fr: Record<string, string> = {
   "How grades are written": "Comment s'écrivent les notes",
   "How it looks": "Apparence",
   "How you worked": "Comment vous avez travaillé",
-  "I forgot my password": "J'ai oublié mon mot de passe",
   "Idea": "Idée",
   "If the trend holds": "Si la tendance se maintient",
   "Improvement": "Progression",
@@ -437,9 +433,7 @@ const fr: Record<string, string> = {
   "Question": "Question",
   "Record a few more grades and your year gets its recap.":
     "Saisissez encore quelques notes et votre année aura sa rétrospective.",
-  "Remove this part": "Retirer cette partie",
   "Reopen this goal": "Rouvrir cet objectif",
-  "Reorder and move": "Réorganiser et déplacer",
   "Reset your password": "Réinitialiser votre mot de passe",
   "Restore": "Rétablir",
   "Restore the default cards": "Rétablir les cartes d'origine",
@@ -454,7 +448,6 @@ const fr: Record<string, string> = {
   "Send": "Envoyer",
   "Send me a code": "Envoyez-moi un code",
   "Set the new password": "Définir le mot de passe",
-  "Showing": "Affichage",
   "Slipping the most": "Plus grand recul",
   "Something else": "Autre chose",
   "Something is broken": "Quelque chose ne marche pas",
@@ -495,7 +488,6 @@ const fr: Record<string, string> = {
   "The day your average was at its highest":
     "Le jour où votre moyenne était au plus haut",
   "The export could not be prepared.": "L'export n'a pas pu être préparé.",
-  "The grade as a whole": "La note dans son ensemble",
   "The grades stay; they just stop belonging to a period.":
     "Les notes restent ; elles n'appartiennent simplement plus à une période.",
   "The headline": "L'essentiel",
@@ -508,7 +500,6 @@ const fr: Record<string, string> = {
     "Les matières ne sont pas touchées. C'est définitif.",
   "The turnaround": "Le redressement",
   "The year itself": "L'année elle-même",
-  "The year so far": "L'année jusqu'ici",
   "This drives the colour of every result and the pass rate.":
     "C'est ce qui détermine la couleur de chaque note et le taux de réussite.",
   "This period is over": "Cette période est terminée",
@@ -537,9 +528,7 @@ const fr: Record<string, string> = {
   "What it looks at": "Ce qu'elle regarde",
   "What it measures": "Ce qu'elle mesure",
   "What you were best at": "Vos points forts",
-  "When": "Quand",
   "Where it lands": "Où ça atterrit",
-  "Where it sits": "Où elle se place",
   "Where the current trend puts you at the end":
     "Où la tendance actuelle vous mène à la fin",
   "Work it out from the date": "Déduire de la date",
@@ -572,6 +561,12 @@ const fr: Record<string, string> = {
   "{count} weeks left in this period":
     "{count} semaines restantes sur cette période",
 
+  "Choose a subject": "Choisissez une matière",
+  "No account yet?": "Pas encore de compte ?",
+  "Parts": "Parties",
+  "The app follows your device's light or dark setting.":
+    "L'application suit le thème clair ou sombre de votre appareil.",
+  "Which subject is this for?": "Pour quelle matière ?",
 };
 
 const dictionaries: Record<Locale, Record<string, string>> = { fr, en: {} };

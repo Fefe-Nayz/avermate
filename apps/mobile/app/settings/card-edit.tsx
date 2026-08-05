@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
 import {
   CARD_METRICS,
   allowedDisplays,
@@ -10,14 +9,21 @@ import {
   type CardMetric,
   type Subject,
 } from "@avermate/core";
-import { Button, Grouped, Line, Section, Text } from "@/components/native";
-import { PickerField, TextField, type Choice } from "@/components/controls";
+import {
+  Button,
+  Card,
+  Note,
+  Problem,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { PickerField, TextField, type Choice } from "@/components/field";
 import { metricHint, metricLabel, useCards } from "@/components/use-cards";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * One card, configured.
@@ -114,7 +120,7 @@ export default function CardEdit() {
       <Stack.Screen
         options={{ title: existing ? t("Edit card") : t("New card") }}
       />
-      <Grouped
+      <Screen
         footer={
           <Button
             label={t("Save")}
@@ -134,9 +140,7 @@ export default function CardEdit() {
             }))}
           />
           {metricHint(metric) ? (
-            <Text size="footnote" tone="muted">
-              {metricHint(metric) ?? ""}
-            </Text>
+            <Note>{metricHint(metric) ?? ""}</Note>
           ) : null}
         </Section>
 
@@ -209,41 +213,36 @@ export default function CardEdit() {
             onChangeText={setTitle}
             placeholder={metricLabel(metric)}
           />
-          <Text size="footnote" tone="muted">
-            {t("Leave it empty to use the metric's own name.")}
-          </Text>
+          <Note>{t("Leave it empty to use the metric's own name.")}</Note>
         </Section>
 
         {existing ? (
           <Section>
-            <Line
-              leading="remove"
-              title={t("Delete this card")}
-              destructive
-              onPress={() =>
-                Alert.alert(t("Delete this card?"), t("This cannot be undone."), [
-                  { text: t("Cancel"), style: "cancel" },
-                  {
-                    text: t("Delete"),
-                    style: "destructive",
-                    onPress: () => remove.mutate({ cardId: existing.id }),
-                  },
-                ])
-              }
-            />
-          </Section>
+          <Card padded={false}>
+              <Row
+                title={t("Delete this card")}
+                destructive
+                onPress={() =>
+                  Alert.alert(t("Delete this card?"), t("This cannot be undone."), [
+                    { text: t("Cancel"), style: "cancel" },
+                    {
+                      text: t("Delete"),
+                      style: "destructive",
+                      onPress: () => remove.mutate({ cardId: existing.id }),
+                    },
+                  ])
+                }
+              />
+          </Card>
+        </Section>
         ) : null}
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

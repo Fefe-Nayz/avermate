@@ -2,7 +2,6 @@ import { useState } from "react";
 import { View } from "react-native";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 import type { SeriesPoint } from "@avermate/core";
-import { FromReactNative } from "@/components/native";
 import { usePalette } from "@/lib/theme";
 
 /**
@@ -12,9 +11,6 @@ import { usePalette } from "@/lib/theme";
  * the message — climbing, flat, or slipping — and the exact numbers live one
  * screen deeper. The y-range fits the data rather than the full scale, because
  * a year spent between 12 and 14 is a flat line on a 0–20 axis.
- *
- * This is the one thing the platforms cannot draw for us, so it crosses back
- * into React Native through a single host and stays there.
  */
 export function Sparkline({
   series,
@@ -24,22 +20,6 @@ export function Sparkline({
   series: SeriesPoint[];
   height?: number;
   positive?: boolean;
-}) {
-  return (
-    <FromReactNative height={height}>
-      <SparklineBody series={series} height={height} positive={positive} />
-    </FromReactNative>
-  );
-}
-
-function SparklineBody({
-  series,
-  height,
-  positive,
-}: {
-  series: SeriesPoint[];
-  height: number;
-  positive: boolean;
 }) {
   const palette = usePalette();
   // Measured rather than assumed: a viewBox scaled to fit would either letterbox
@@ -85,7 +65,7 @@ function SparklineBody({
 
   return (
     <View
-      style={{ height, width: "100%" }}
+      style={{ height }}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
       {ready ? (
@@ -112,81 +92,36 @@ function SparklineBody({
 }
 
 /**
- * A bar that fills toward a goal. Capped, because overshooting is still done.
- * Drawn with plain views rather than SVG — a rectangle does not need a host.
- */
-export function ProgressBar({
-  value,
-  done = false,
-}: {
-  value: number;
-  done?: boolean;
-}) {
-  const palette = usePalette();
-  const clamped = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-
-  return (
-    <FromReactNative height={6}>
-      <View
-        style={{
-          height: 6,
-          width: "100%",
-          borderRadius: 3,
-          backgroundColor: palette.accentSoft,
-          overflow: "hidden",
-        }}
-      >
-        <View
-          style={{
-            width: `${clamped * 100}%`,
-            height: "100%",
-            borderRadius: 3,
-            backgroundColor: done ? palette.positive : palette.accent,
-          }}
-        />
-      </View>
-    </FromReactNative>
-  );
-}
-
-/**
- * A histogram of results, one bar per band. Used on the statistics screen,
- * where the shape of the distribution says more than any single average.
+ * A histogram of results, one bar per band. Used on the statistics screen and
+ * by distribution cards, where the shape of the spread says more than any
+ * single average does.
  */
 export function Distribution({
   buckets,
   height = 96,
 }: {
-  buckets: Array<{ from: number; to: number; count: number }>;
+  buckets: ReadonlyArray<{ from: number; to: number; count: number }>;
   height?: number;
 }) {
   const palette = usePalette();
   const peak = Math.max(1, ...buckets.map((bucket) => bucket.count));
 
   return (
-    <FromReactNative height={height}>
-      <View
-        style={{
-          height,
-          width: "100%",
-          flexDirection: "row",
-          alignItems: "flex-end",
-          gap: 6,
-        }}
-      >
-        {buckets.map((bucket) => (
-          <View
-            key={bucket.from}
-            style={{
-              flex: 1,
-              height: Math.max(3, (bucket.count / peak) * height),
-              borderRadius: 4,
-              backgroundColor:
-                bucket.count === 0 ? palette.hairline : palette.accent,
-            }}
-          />
-        ))}
-      </View>
-    </FromReactNative>
+    <View
+      style={{ height, flexDirection: "row", alignItems: "flex-end", gap: 6 }}
+    >
+      {buckets.map((bucket) => (
+        <View
+          key={bucket.from}
+          style={{
+            flex: 1,
+            height: Math.max(3, (bucket.count / peak) * height),
+            borderRadius: 4,
+            backgroundColor:
+              bucket.count === 0 ? palette.hairline : palette.accent,
+          }}
+        />
+      ))}
+    </View>
   );
 }

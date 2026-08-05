@@ -1,22 +1,16 @@
 import { useMemo } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Spacer } from "@expo/ui";
-import type { Subject, SubjectGraph } from "@avermate/core";
-import {
-  Button,
-  Empty,
-  Grouped,
-  Line,
-  Loading,
-  Row,
-  Section,
-  Text,
-} from "@/components/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import type { Subject } from "@avermate/core";
+import { Button, Card, Empty, Loading, Row } from "@/components/ui";
 import { AverageValue, CoefficientTag } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { useYear } from "@/components/year-provider";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * The subject tree, flattened for a phone.
@@ -27,41 +21,89 @@ import { space } from "@/lib/theme";
  * column.
  */
 export default function Subjects() {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isLoading, graph, yearId } = useYear();
+  const { isLoading, graph, yearId, refresh } = useYear();
 
-  const rows = useMemo(() => flatten(graph, graph.roots, 0), [graph]);
+  const rows = useMemo(() => flatten(graph.roots, graph, 0), [graph]);
 
   if (isLoading) return <Loading />;
 
   return (
-    <Grouped
-      footer={
-        yearId ? (
-          <Button
-            label={t("Add a subject")}
-            onPress={() => router.push("/subject/new")}
-          />
-        ) : undefined
+    <ScrollView
+      style={{ flex: 1, backgroundColor: palette.background }}
+      contentContainerStyle={{
+        paddingTop: insets.top + space.md,
+        paddingHorizontal: space.lg,
+        paddingBottom: space.xxxl,
+        gap: space.lg,
+      }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={false}
+          onRefresh={refresh}
+          tintColor={palette.textFaint}
+        />
       }
     >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text style={[type.display, { color: palette.text }]}>
+          {t("Subjects")}
+        </Text>
+        {yearId ? (
+          <Pressable
+            onPress={() => {
+              haptic("light");
+              router.push("/subject/new");
+            }}
+            hitSlop={10}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: radius.pill,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: palette.accent,
+            }}
+          >
+            <Ionicons name="add" size={18} color={palette.accentText} />
+          </Pressable>
+        ) : null}
+      </View>
+
       <ScopeBar />
 
       {rows.length === 0 ? (
-        <Section>
-          <Empty
-            glyph="subjects"
-            title={t("This year has no subjects yet.")}
-            body={t("Add them one by one, or start from a template on the web.")}
-          />
-        </Section>
+        <Empty
+          icon="albums-outline"
+          title={t("This year has no subjects yet.")}
+          body={t("Add them one by one, or start from a template on the web.")}
+          action={
+            <Button
+              label={t("Add a subject")}
+              onPress={() => router.push("/subject/new")}
+              variant="secondary"
+            />
+          }
+        />
       ) : (
-        <Section title={t("{count} subjects", { count: rows.length })}>
-          {rows.map((entry) => (
-            <Line
+        <Card padded={false}>
+          {rows.map((entry, index) => (
+            <Row
               key={entry.subject.id}
-              title={`${"    ".repeat(entry.depth)}${entry.subject.name}`}
-              detail={
+              first={index === 0}
+              indent={entry.depth}
+              title={entry.subject.name}
+              muted={entry.subject.kind === "category"}
+              subtitle={
                 entry.count > 0
                   ? entry.count === 1
                     ? t("1 grade")
@@ -70,36 +112,28 @@ export default function Subjects() {
               }
               onPress={() => router.push(`/subject/${entry.subject.id}`)}
               trailing={
-                <Row spacing={space.sm}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space.sm,
+                  }}
+                >
                   {entry.subject.kind === "subject" ? (
                     <CoefficientTag coefficient={entry.subject.coefficient} />
-                  ) : (
-                    <Text size="footnote" tone="faint">
-                      {t("Category")}
-                    </Text>
-                  )}
+                  ) : null}
                   <AverageValue
                     ratio={graph.ratio(entry.subject.id)}
                     size="callout"
                     colored
                   />
-                </Row>
+                </View>
               }
             />
           ))}
-        </Section>
+        </Card>
       )}
-
-      <Section>
-        <Line
-          leading="reorder"
-          title={t("Reorder and move")}
-          onPress={() => router.push("/subject/arrange")}
-        />
-      </Section>
-
-      <Spacer size={space.xxl} />
-    </Grouped>
+    </ScrollView>
   );
 }
 
@@ -110,14 +144,14 @@ interface FlatEntry {
 }
 
 function flatten(
-  graph: SubjectGraph,
   subjects: readonly Subject[],
+  graph: { childrenOf: (id: string) => readonly Subject[]; allGrades: (id?: string) => unknown[] },
   depth: number,
 ): FlatEntry[] {
   return [...subjects]
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
     .flatMap((subject) => [
       { subject, depth, count: graph.allGrades(subject.id).length },
-      ...flatten(graph, graph.childrenOf(subject.id), depth + 1),
+      ...flatten(graph.childrenOf(subject.id), graph, depth + 1),
     ]);
 }

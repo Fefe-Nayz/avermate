@@ -2,14 +2,19 @@ import { useState } from "react";
 import { Alert, Share } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
-import { Grouped, Line, Section, Text } from "@/components/native";
-import { TextField } from "@/components/controls";
+import {
+  Card,
+  Confirmation,
+  Problem,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { TextField } from "@/components/field";
 import { authClient, useSession } from "@/lib/auth-client";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * The account.
@@ -124,97 +129,94 @@ export default function Account() {
   return (
     <>
       <Stack.Screen options={{ title: t("Account") }} />
-      <Grouped>
+      <Screen>
         <Section title={t("Your name")}>
-          <TextField
-            label={t("Name")}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
-          <Line
-            leading="check"
-            title={t("Save name")}
-            onPress={() => void saveName()}
-          />
+          <Card padded={false}>
+            <TextField
+              label={t("Name")}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+            />
+            <Row
+              title={t("Save name")}
+              onPress={() => void saveName()}
+            />
+          </Card>
         </Section>
 
         <Section title={t("Email")}>
-          <TextField
-            label={t("Email")}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-          <Line
-            leading="email"
-            title={t("Change email")}
-            detail={t("You will get a link to confirm it.")}
-            onPress={() => void changeEmail()}
-          />
+          <Card padded={false}>
+            <TextField
+              label={t("Email")}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <Row
+              title={t("Change email")}
+              subtitle={t("You will get a link to confirm it.")}
+              onPress={() => void changeEmail()}
+            />
+          </Card>
         </Section>
 
         <Section title={t("Password")}>
-          <TextField
-            label={t("Current password")}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-          <TextField
-            label={t("New password")}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            error={
-              newPassword.length > 0 && newPassword.length < 8
-                ? t("Use at least 8 characters.")
-                : undefined
-            }
-          />
-          <Line
-            leading="password"
-            title={t("Change password")}
-            onPress={() => void changePassword()}
-          />
+          <Card padded={false}>
+            <TextField
+              label={t("Current password")}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <TextField
+              label={t("New password")}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              error={
+                newPassword.length > 0 && newPassword.length < 8
+                  ? t("Use at least 8 characters.")
+                  : undefined
+              }
+            />
+            <Row
+              title={t("Change password")}
+              onPress={() => void changePassword()}
+            />
+          </Card>
         </Section>
 
         <Section title={t("Your data")}>
-          <Line
-            leading="export"
-            title={t("Export everything")}
-            detail={t("Every year, subject and grade, as JSON.")}
-            onPress={() => exportData.mutate()}
-          />
-          <Line
-            leading="danger"
-            title={t("Delete every grade")}
-            destructive
-            onPress={confirmReset}
-          />
+          <Card padded={false}>
+            <Row
+              title={t("Export everything")}
+              subtitle={t("Every year, subject and grade, as JSON.")}
+              onPress={() => exportData.mutate()}
+            />
+            <Row
+              title={t("Delete every grade")}
+              destructive
+              onPress={confirmReset}
+            />
+          </Card>
         </Section>
 
         {status ? (
           <Section>
-            <Text size="footnote" tone="positive">
-              {status}
-            </Text>
+            <Confirmation>{status}</Confirmation>
           </Section>
         ) : null}
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

@@ -2,17 +2,22 @@ import { useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
 import type { CustomAverageEntry, Subject } from "@avermate/core";
-import { Button, Grouped, Line, Section, Text } from "@/components/native";
-import { SwitchField, TextField } from "@/components/controls";
-import { AverageValue } from "@/components/value";
+import {
+  Button,
+  Card,
+  Note,
+  Problem,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { SwitchField, TextField } from "@/components/field";
 import { parseNumber } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * Building a custom average.
@@ -111,7 +116,7 @@ export default function AverageEdit() {
           title: existing ? t("Edit custom average") : t("New custom average"),
         }}
       />
-      <Grouped
+      <Screen
         footer={
           <Button
             label={t("Save")}
@@ -142,7 +147,7 @@ export default function AverageEdit() {
               <SwitchField
                 key={subject.id}
                 label={`${"    ".repeat(depth)}${subject.name}`}
-                detail={
+                hint={
                   entry
                     ? entry.coefficient === null
                       ? t("Its own weight, ×{value}", {
@@ -180,47 +185,42 @@ export default function AverageEdit() {
                 />
               );
             })}
-            <Text size="footnote" tone="muted">
-              {t("Leave one empty to keep the subject's own coefficient.")}
-            </Text>
+            <Note>{t("Leave one empty to keep the subject's own coefficient.")}</Note>
           </Section>
         ) : null}
 
         {existing ? (
           <Section>
-            <Line
-              leading="remove"
-              title={t("Delete this average")}
-              destructive
-              onPress={() =>
-                Alert.alert(
-                  t("Delete {name}?", { name: existing.name }),
-                  t("The subjects are untouched. This cannot be undone."),
-                  [
-                    { text: t("Cancel"), style: "cancel" },
-                    {
-                      text: t("Delete"),
-                      style: "destructive",
-                      onPress: () =>
-                        remove.mutate({ averageId: existing.id }),
-                    },
-                  ],
-                )
-              }
-            />
-          </Section>
+          <Card padded={false}>
+              <Row
+                title={t("Delete this average")}
+                destructive
+                onPress={() =>
+                  Alert.alert(
+                    t("Delete {name}?", { name: existing.name }),
+                    t("The subjects are untouched. This cannot be undone."),
+                    [
+                      { text: t("Cancel"), style: "cancel" },
+                      {
+                        text: t("Delete"),
+                        style: "destructive",
+                        onPress: () =>
+                          remove.mutate({ averageId: existing.id }),
+                      },
+                    ],
+                  )
+                }
+              />
+          </Card>
+        </Section>
         ) : null}
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

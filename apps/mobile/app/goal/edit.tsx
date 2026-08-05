@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Empty, Loading } from "@/components/native";
+import { Empty, Loading } from "@/components/ui";
 import { GoalForm, goalDraftOf, type GoalDraft } from "@/components/goal-form";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
@@ -33,7 +33,7 @@ export default function EditGoal() {
 
   if (isLoading) return <Loading />;
   if (!goal) {
-    return <Empty glyph="help" title={t("Goal not found.")} />;
+    return <Empty icon="help-circle-outline" title={t("Goal not found.")} />;
   }
 
   return (

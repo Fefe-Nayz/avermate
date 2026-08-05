@@ -1,24 +1,15 @@
 import { useMemo } from "react";
+import { Text, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Column, Spacer } from "@expo/ui";
 import { buildYearReview, type AwardKind } from "@avermate/core";
-import {
-  Empty,
-  Grouped,
-  Label,
-  Line,
-  Loading,
-  Row,
-  Section,
-  Text,
-} from "@/components/native";
-import { AverageValue, PercentValue } from "@/components/value";
+import { Card, Empty, Label, Loading, Row, Screen, Section } from "@/components/ui";
+import { AverageValue } from "@/components/value";
 import { formatDate, formatNumber } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { orpc } from "@/lib/orpc";
 import { locale, t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { space, type, usePalette } from "@/lib/theme";
 
 /**
  * The end-of-year recap.
@@ -30,6 +21,7 @@ import { space } from "@/lib/theme";
  * subject that turned around.
  */
 export default function Review() {
+  const palette = usePalette();
   const router = useRouter();
   const { isLoading, subjects, year, yearId, graph } = useYear();
 
@@ -55,13 +47,11 @@ export default function Review() {
     return (
       <>
         <Stack.Screen options={{ title: t("Year in review") }} />
-        <Grouped>
-          <Empty
-            glyph="review"
-            title={t("The story is still being written.")}
-            body={t("Record a few more grades and your year gets its recap.")}
-          />
-        </Grouped>
+        <Empty
+          icon="sparkles-outline"
+          title={t("The story is still being written.")}
+          body={t("Record a few more grades and your year gets its recap.")}
+        />
       </>
     );
   }
@@ -76,159 +66,166 @@ export default function Review() {
     t("Saturday"),
   ];
 
+  const plain = (value: string) => (
+    <Text style={[type.body, { color: palette.text }]}>{value}</Text>
+  );
+
   return (
     <>
       <Stack.Screen options={{ title: t("Year in review") }} />
-      <Grouped>
-        <Section>
-          <Column spacing={space.md}>
-            <Label>{year?.name ?? ""}</Label>
-            <Text size="display">{awardTitle(review.award)}</Text>
-            <Text size="callout" tone="muted">
-              {awardBlurb(review.award)}
-            </Text>
-          </Column>
-        </Section>
+      <Screen>
+        <View style={{ gap: space.sm, paddingTop: space.sm }}>
+          <Label>{year?.name ?? ""}</Label>
+          <Text style={[type.display, { color: palette.text }]}>
+            {awardTitle(review.award)}
+          </Text>
+          <Text style={[type.callout, { color: palette.textMuted }]}>
+            {awardBlurb(review.award)}
+          </Text>
+        </View>
 
         <Section title={t("The headline")}>
-          <Line
-            title={t("Your average")}
-            trailing={
-              <AverageValue ratio={review.average} size="heading" colored />
-            }
-          />
-          {review.topPercentile > 0 ? (
-            <Line
-              title={t("Among everyone using Avermate")}
-              detail={t("Only the number matters — no names ever leave a device.")}
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Your average")}
               trailing={
-                <Text size="heading" mono>
-                  {t("top {percent}%", { percent: review.topPercentile })}
-                </Text>
+                <AverageValue ratio={review.average} size="heading" colored />
               }
             />
-          ) : null}
-          <Line
-            title={t("Grades recorded")}
-            trailing={<Text mono>{String(review.gradeCount)}</Text>}
-          />
+            {review.topPercentile > 0 ? (
+              <Row
+                title={t("Among everyone using Avermate")}
+                subtitle={t(
+                  "Only the number matters — no names ever leave a device.",
+                )}
+                trailing={plain(
+                  t("top {percent}%", { percent: review.topPercentile }),
+                )}
+              />
+            ) : null}
+            <Row
+              title={t("Grades recorded")}
+              trailing={plain(String(review.gradeCount))}
+            />
+          </Card>
         </Section>
 
         <Section title={t("How you worked")}>
-          {review.busiestMonth ? (
-            <Line
-              title={t("Busiest month")}
-              detail={monthName(review.busiestMonth.month)}
-              trailing={
-                <Text mono>
-                  {t("{count} grades", { count: review.busiestMonth.count })}
-                </Text>
-              }
-            />
-          ) : null}
-          {review.busiestWeekday ? (
-            <Line
-              title={t("The day it always lands on")}
-              trailing={
-                <Text>{weekdays[review.busiestWeekday.weekday] ?? ""}</Text>
-              }
-            />
-          ) : null}
-          <Line
-            title={t("Longest run of active days")}
-            trailing={
-              <Text mono>
-                {review.longestStreak === 1
+          <Card padded={false}>
+            {review.busiestMonth ? (
+              <Row
+                first
+                title={t("Busiest month")}
+                subtitle={monthName(review.busiestMonth.month)}
+                trailing={plain(
+                  t("{count} grades", { count: review.busiestMonth.count }),
+                )}
+              />
+            ) : null}
+            {review.busiestWeekday ? (
+              <Row
+                title={t("The day it always lands on")}
+                trailing={plain(weekdays[review.busiestWeekday.weekday] ?? "")}
+              />
+            ) : null}
+            <Row
+              title={t("Longest run of active days")}
+              trailing={plain(
+                review.longestStreak === 1
                   ? t("1 day")
-                  : t("{count} days", { count: review.longestStreak })}
-              </Text>
-            }
-          />
-          {review.firstGradeAt ? (
-            <Line
-              title={t("It started")}
-              trailing={<Text>{formatDate(review.firstGradeAt, "short")}</Text>}
+                  : t("{count} days", { count: review.longestStreak }),
+              )}
             />
-          ) : null}
-          {review.lastGradeAt ? (
-            <Line
-              title={t("Last one in")}
-              trailing={<Text>{formatDate(review.lastGradeAt, "short")}</Text>}
-            />
-          ) : null}
+            {review.firstGradeAt ? (
+              <Row
+                title={t("It started")}
+                trailing={plain(formatDate(review.firstGradeAt, "short"))}
+              />
+            ) : null}
+            {review.lastGradeAt ? (
+              <Row
+                title={t("Last one in")}
+                trailing={plain(formatDate(review.lastGradeAt, "short"))}
+              />
+            ) : null}
+          </Card>
         </Section>
 
         {review.primeTime ? (
           <Section title={t("Your peak")}>
-            <Line
-              title={formatDate(review.primeTime.date)}
-              detail={t("The day your average was at its highest")}
-              trailing={
-                <AverageValue
-                  ratio={review.primeTime.ratio}
-                  size="heading"
-                  colored
-                />
-              }
-            />
+            <Card padded={false}>
+              <Row
+                first
+                title={formatDate(review.primeTime.date)}
+                subtitle={t("The day your average was at its highest")}
+                trailing={
+                  <AverageValue
+                    ratio={review.primeTime.ratio}
+                    size="heading"
+                    colored
+                  />
+                }
+              />
+            </Card>
           </Section>
         ) : null}
 
         {review.topSubjects.length > 0 ? (
           <Section title={t("What you were best at")}>
-            {review.topSubjects.map((subject) => (
-              <Line
-                key={subject.subjectId}
-                title={subject.name}
-                onPress={() => router.push(`/subject/${subject.subjectId}`)}
-                trailing={
-                  <AverageValue ratio={subject.ratio} size="callout" colored />
-                }
-              />
-            ))}
+            <Card padded={false}>
+              {review.topSubjects.map((subject, index) => (
+                <Row
+                  key={subject.subjectId}
+                  first={index === 0}
+                  title={subject.name}
+                  onPress={() => router.push(`/subject/${subject.subjectId}`)}
+                  trailing={
+                    <AverageValue ratio={subject.ratio} size="callout" colored />
+                  }
+                />
+              ))}
+            </Card>
           </Section>
         ) : null}
 
         {review.bestProgression ? (
           <Section title={t("The turnaround")}>
-            <Line
-              title={review.bestProgression.name}
-              detail={t("Furthest travelled between the halves of the year")}
-              onPress={() =>
-                router.push(`/subject/${review.bestProgression!.subjectId}`)
-              }
-              trailing={
-                <Text size="heading" mono>
-                  {`+${formatNumber(review.bestProgression.delta * 100, 0)} %`}
-                </Text>
-              }
-            />
+            <Card padded={false}>
+              <Row
+                first
+                title={review.bestProgression.name}
+                subtitle={t("Furthest travelled between the halves of the year")}
+                onPress={() =>
+                  router.push(`/subject/${review.bestProgression!.subjectId}`)
+                }
+                trailing={plain(
+                  `+${formatNumber(review.bestProgression.delta * 100, 0)} %`,
+                )}
+              />
+            </Card>
           </Section>
         ) : null}
 
         <Section title={t("In total")}>
-          <Line
-            title={t("Everything you were graded on, added up")}
-            trailing={
-              <Text size="heading" mono>
-                {formatNumber(review.ratioSum, 1)}
-              </Text>
-            }
-          />
-          <Line
-            title={t("Subjects followed")}
-            trailing={
-              <Text mono>
-                {String(
-                  graph.subjects.filter((s) => s.kind !== "category").length,
-                )}
-              </Text>
-            }
-          />
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Everything you were graded on, added up")}
+              trailing={plain(formatNumber(review.ratioSum, 1))}
+            />
+            <Row
+              title={t("Subjects followed")}
+              trailing={plain(
+                String(
+                  graph.subjects.filter((item) => item.kind !== "category")
+                    .length,
+                ),
+              )}
+            />
+          </Card>
         </Section>
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

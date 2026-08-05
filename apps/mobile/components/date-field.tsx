@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { haptic } from "@/lib/haptics";
+import { formatDate, formatDay, formatMonth, formatNumber, parseNumber } from "@/components/format";
 import { locale, t } from "@/lib/i18n";
+
+export { formatDate, formatDay, formatMonth, formatNumber, parseNumber };
 import { numeric, radius, space, type, usePalette } from "@/lib/theme";
 
 /**
@@ -18,21 +21,6 @@ const DAY = 24 * 60 * 60 * 1000;
 
 function tag(locale: string) {
   return locale === "fr" ? "fr-FR" : "en-GB";
-}
-
-export function formatDate(date: Date, style: "long" | "short" = "long"): string {
-  return date.toLocaleDateString(tag(locale()), {
-    day: "numeric",
-    month: style === "long" ? "long" : "short",
-    year: "numeric",
-  });
-}
-
-export function formatDay(date: Date): string {
-  return date.toLocaleDateString(tag(locale()), {
-    day: "numeric",
-    month: "short",
-  });
 }
 
 function sameDay(a: Date, b: Date): boolean {

@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
-import { Spacer } from "@expo/ui";
-import { Button, Grouped, Section, Text, Title } from "@/components/native";
-import { TextField } from "@/components/controls";
+import {
+  Button,
+  Problem,
+  Screen,
+  Section,
+  Title,
+} from "@/components/ui";
+import { TextField } from "@/components/field";
 import { authClient } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { queryClient } from "@/lib/orpc";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * Getting back in.
@@ -68,7 +72,7 @@ export default function ForgotPassword() {
   return (
     <>
       <Stack.Screen options={{ title: "" }} />
-      <Grouped
+      <Screen
         footer={
           stage === "email" ? (
             <Button
@@ -135,14 +139,10 @@ export default function ForgotPassword() {
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

@@ -1,23 +1,18 @@
 import { useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import type { Grade } from "@avermate/core";
-import { gradeRatio } from "@avermate/core";
-import {
-  Button,
-  Empty,
-  Grouped,
-  Line,
-  Loading,
-  Row,
-  Section,
-} from "@/components/native";
-import { TextField } from "@/components/controls";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { gradeRatio, type Grade } from "@avermate/core";
+import { Button, Card, Empty, Label, Loading, Row } from "@/components/ui";
 import { PointsValue, ResultBadge } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
-import { formatDay, formatMonth } from "@/components/format";
+import { TextField } from "@/components/field";
+import { formatDay } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
-import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { haptic } from "@/lib/haptics";
+import { locale, t } from "@/lib/i18n";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * Every result, newest first.
@@ -28,8 +23,10 @@ import { space } from "@/lib/theme";
  * size, and it never surprises anyone.
  */
 export default function Grades() {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isLoading, graph } = useYear();
+  const { isLoading, graph, refresh } = useYear();
   const [query, setQuery] = useState("");
 
   const groups = useMemo(() => {
@@ -52,7 +49,10 @@ export default function Grades() {
       if (bucket) bucket.grades.push(grade);
       else {
         buckets.set(key, {
-          label: formatMonth(grade.passedAt),
+          label: grade.passedAt.toLocaleDateString(
+            locale() === "fr" ? "fr-FR" : "en-GB",
+            { month: "long", year: "numeric" },
+          ),
           grades: [grade],
         });
       }
@@ -65,60 +65,115 @@ export default function Grades() {
   const total = graph.allGrades().length;
 
   return (
-    <Grouped
-      footer={
-        <Button label={t("Add grade")} onPress={() => router.push("/grade/new")} />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: palette.background }}
+      contentContainerStyle={{
+        paddingTop: insets.top + space.md,
+        paddingHorizontal: space.lg,
+        paddingBottom: space.xxxl,
+        gap: space.lg,
+      }}
+      showsVerticalScrollIndicator={false}
+      keyboardDismissMode="on-drag"
+      refreshControl={
+        <RefreshControl
+          refreshing={false}
+          onRefresh={refresh}
+          tintColor={palette.textFaint}
+        />
       }
     >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text style={[type.display, { color: palette.text }]}>
+          {t("Grades")}
+        </Text>
+        <Pressable
+          onPress={() => {
+            haptic("light");
+            router.push("/grade/new");
+          }}
+          hitSlop={10}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: radius.pill,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.accent,
+          }}
+        >
+          <Ionicons name="add" size={18} color={palette.accentText} />
+        </Pressable>
+      </View>
+
       <ScopeBar />
 
       {total > 6 ? (
-        <Section>
-          <TextField
-            label={t("Search")}
-            value={query}
-            onChangeText={setQuery}
-            placeholder={t("Name or subject")}
-            autoCapitalize="none"
-          />
-        </Section>
+        <TextField
+          label={t("Search")}
+          value={query}
+          onChangeText={setQuery}
+          placeholder={t("Name or subject")}
+          autoCapitalize="none"
+        />
       ) : null}
 
       {groups.length === 0 ? (
-        <Section>
-          <Empty
-            glyph="grade"
-            title={total === 0 ? t("Nothing recorded yet.") : t("Nothing matches.")}
-            body={
-              total === 0
-                ? t("Add your first grade and the year starts drawing itself.")
-                : undefined
-            }
-          />
-        </Section>
+        <Empty
+          icon="document-text-outline"
+          title={
+            total === 0 ? t("Nothing recorded yet.") : t("Nothing matches.")
+          }
+          body={
+            total === 0
+              ? t("Add your first grade and the year starts drawing itself.")
+              : undefined
+          }
+          action={
+            total === 0 ? (
+              <Button
+                label={t("Add grade")}
+                onPress={() => router.push("/grade/new")}
+                variant="secondary"
+              />
+            ) : null
+          }
+        />
       ) : (
         groups.map((group) => (
-          <Section key={group.label} title={group.label}>
-            {group.grades.map((grade) => {
-              const subject = graph.byId(grade.subjectId);
-              return (
-                <Line
-                  key={grade.id}
-                  title={grade.name}
-                  detail={`${subject?.name ?? ""} · ${formatDay(grade.passedAt)}`}
-                  onPress={() => router.push(`/grade/${grade.id}`)}
-                  trailing={
-                    <Row spacing={space.sm}>
-                      <PointsValue value={grade.value} outOf={grade.outOf} />
-                      <ResultBadge ratio={gradeRatio(grade)} />
-                    </Row>
-                  }
-                />
-              );
-            })}
-          </Section>
+          <View key={group.label} style={{ gap: space.sm }}>
+            <View style={{ paddingHorizontal: space.xs }}>
+              <Label>{group.label}</Label>
+            </View>
+            <Card padded={false}>
+              {group.grades.map((grade, index) => {
+                const subject = graph.byId(grade.subjectId);
+                return (
+                  <Row
+                    key={grade.id}
+                    first={index === 0}
+                    title={grade.name}
+                    subtitle={`${subject?.name ?? ""} · ${formatDay(grade.passedAt)}`}
+                    onPress={() => router.push(`/grade/${grade.id}`)}
+                    trailing={
+                      <View style={{ alignItems: "flex-end", gap: 2 }}>
+                        <ResultBadge ratio={gradeRatio(grade)} />
+                        <PointsValue value={grade.value} outOf={grade.outOf} />
+                      </View>
+                    }
+                  />
+                );
+              })}
+            </Card>
+          </View>
         ))
       )}
-    </Grouped>
+    </ScrollView>
   );
 }

@@ -1,19 +1,19 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Spacer } from "@expo/ui";
+import { useMemo, useState } from "react";
+import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
 import type { Subject } from "@avermate/core";
-import { Button, Grouped, Section, Text } from "@/components/native";
+import { Button, Card, Label, Screen } from "@/components/ui";
+import { NativeSwitch } from "@/components/native-controls";
 import {
   ChoiceField,
+  FieldGroup,
   PickerField,
-  SwitchField,
   TextField,
   type Choice,
-} from "@/components/controls";
-import { parseNumber } from "@/components/format";
+} from "@/components/field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { space, type, usePalette } from "@/lib/theme";
 
 /**
  * A subject, or a category.
@@ -83,12 +83,13 @@ export function SubjectForm({
   error?: string | null;
   /** A subject cannot be moved inside itself or its own descendants. */
   excludeId?: string;
-  extra?: ReactNode;
+  extra?: React.ReactNode;
 }) {
+  const palette = usePalette();
   const { yearGraph } = useYear();
   const [touched, setTouched] = useState(false);
 
-  const parents = useMemo<Choice[]>(() => {
+  const parents = useMemo(() => {
     const banned = new Set<string>();
     if (excludeId) {
       banned.add(excludeId);
@@ -129,83 +130,103 @@ export function SubjectForm({
       shortName: draft.shortName.trim() || null,
       kind: draft.kind,
       parentId: draft.parentId,
-      coefficient: parseNumber(draft.coefficient) ?? 1,
+      coefficient: Number(draft.coefficient.replace(",", ".")) || 1,
       isMain: draft.isMain,
     });
   };
 
   return (
-    <Grouped footer={<Button label={submitLabel} onPress={submit} disabled={busy} />}>
-      <Section>
-        <TextField
-          label={t("Name")}
-          value={draft.name}
-          onChangeText={(name) => patch({ name })}
-          placeholder={t("Mathematics, Philosophy…")}
-          error={touched ? (nameProblem ?? undefined) : undefined}
-          autoFocus
-        />
-        <TextField
-          label={t("Short name")}
-          value={draft.shortName}
-          onChangeText={(shortName) => patch({ shortName })}
-          placeholder={t("Used where space is tight")}
-        />
-      </Section>
-
-      <ChoiceField
-        title={t("How does it count?")}
-        value={draft.kind}
-        onChange={(kind) => patch({ kind: kind as SubjectDraft["kind"] })}
-        choices={[
-          {
-            value: "subject",
-            label: t("Subject"),
-            hint: t("Counts once, with its own average and weight"),
-          },
-          {
-            value: "category",
-            label: t("Category"),
-            hint: t("Just a grouping — its children are weighed one by one"),
-          },
-        ]}
-      />
-
-      <Section title={t("Where it sits")}>
-        <PickerField
-          label={t("Inside")}
-          choices={parents}
-          value={draft.parentId ?? "__root__"}
-          onChange={(parentId) =>
-            patch({ parentId: parentId === "__root__" ? null : parentId })
-          }
-        />
-        {draft.kind === "subject" ? (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
+    >
+      <Screen
+        footer={<Button label={submitLabel} onPress={submit} loading={busy} />}
+      >
+        <FieldGroup>
           <TextField
-            label={t("Weight")}
-            value={draft.coefficient}
-            onChangeText={(coefficient) => patch({ coefficient })}
-            keyboardType="decimal-pad"
+            label={t("Name")}
+            value={draft.name}
+            onChangeText={(name) => patch({ name })}
+            placeholder={t("Mathematics, Philosophy…")}
+            error={touched ? (nameProblem ?? undefined) : undefined}
+            autoFocus
           />
-        ) : null}
-        <SwitchField
-          label={t("Show on the dashboard")}
-          detail={t("Keeps this one in front of you all year.")}
-          value={draft.isMain}
-          onValueChange={(isMain) => patch({ isMain })}
-        />
-      </Section>
 
-      {error ? (
-        <Section>
-          <Text size="footnote" tone="negative">
+          <TextField
+            label={t("Short name")}
+            value={draft.shortName}
+            onChangeText={(shortName) => patch({ shortName })}
+            placeholder={t("Used where space is tight")}
+          />
+
+          <ChoiceField
+            label={t("How does it count?")}
+            value={draft.kind}
+            onChange={(kind) => patch({ kind: kind as SubjectDraft["kind"] })}
+            choices={[
+              {
+                value: "subject",
+                label: t("Subject"),
+                hint: t("Counts once, with its own average and weight"),
+              },
+              {
+                value: "category",
+                label: t("Category"),
+                hint: t("Just a grouping — its children are weighed one by one"),
+              },
+            ]}
+          />
+
+          <PickerField
+            label={t("Inside")}
+            choices={parents}
+            value={draft.parentId ?? "__root__"}
+            onChange={(parentId) =>
+              patch({ parentId: parentId === "__root__" ? null : parentId })
+            }
+          />
+
+          {draft.kind === "subject" ? (
+            <TextField
+              label={t("Weight")}
+              value={draft.coefficient}
+              onChangeText={(coefficient) => patch({ coefficient })}
+              keyboardType="decimal-pad"
+              align="right"
+            />
+          ) : null}
+
+          <Card>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.md,
+              }}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <Label>{t("Show on the dashboard")}</Label>
+                <Text style={[type.footnote, { color: palette.textMuted }]}>
+                  {t("Keeps this one in front of you all year.")}
+                </Text>
+              </View>
+              <NativeSwitch
+                value={draft.isMain}
+                onValueChange={(isMain) => patch({ isMain })}
+              />
+            </View>
+          </Card>
+        </FieldGroup>
+
+        {error ? (
+          <Text style={[type.footnote, { color: palette.negative }]}>
             {error}
           </Text>
-        </Section>
-      ) : null}
+        ) : null}
 
-      {extra}
-      <Spacer size={space.xl} />
-    </Grouped>
+        {extra}
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }

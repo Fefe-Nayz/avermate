@@ -1,7 +1,5 @@
 import type { GoalAdvice, SubjectGraph } from "@avermate/core";
-import type { Glyph } from "@/components/icon";
-import { formatNumber } from "@/components/format";
-import { t } from "@/lib/i18n";
+import { locale, t } from "@/lib/i18n";
 
 /**
  * Advice, in sentences.
@@ -14,26 +12,31 @@ import { t } from "@/lib/i18n";
 export function adviceText(
   advice: GoalAdvice,
   context: { graph: SubjectGraph; scale: number; decimals: number },
-): { glyph: Glyph; text: string } | null {
+): { icon: string; text: string } | null {
   const { graph, scale, decimals } = context;
 
-  const show = (ratio: number) => formatNumber(ratio * scale, decimals);
+  const show = (ratio: number) =>
+    (ratio * scale).toLocaleString(locale() === "fr" ? "fr-FR" : "en-GB", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+
   const nameOf = (id: string) => graph.byId(id)?.name ?? "";
 
   switch (advice.kind) {
     case "achieved":
       return {
-        glyph: "achieved",
+        icon: "checkmark-circle",
         text: t("You are there. From here it is about holding it."),
       };
     case "secured":
       return {
-        glyph: "locked",
+        icon: "lock-closed",
         text: t("Locked in — nothing left this period can take it away."),
       };
     case "unreachable":
       return {
-        glyph: "unreachable",
+        icon: "alert-circle",
         text: t(
           "Even with perfect results from here you would land at {ceiling}. Worth adjusting the target.",
           { ceiling: show(advice.ceiling) },
@@ -41,17 +44,17 @@ export function adviceText(
       };
     case "no-data":
       return {
-        glyph: "waiting",
+        icon: "hourglass",
         text: t("Record a few grades and this will fill in."),
       };
     case "close":
       return {
-        glyph: "close_call",
+        icon: "flash",
         text: t("You are within a rounding error. One decent result does it."),
       };
     case "focus":
       return {
-        glyph: "rising",
+        icon: "trending-up",
         text: t(
           "{subject} is where a point moves the most. Getting it to {target} would do it on its own.",
           {
@@ -62,7 +65,7 @@ export function adviceText(
       };
     case "steady":
       return {
-        glyph: "steady",
+        icon: "repeat",
         text:
           advice.count === 1
             ? t("One more result at {target} gets you there.", {
@@ -75,15 +78,14 @@ export function adviceText(
       };
     case "protect":
       return {
-        glyph: "protect",
-        text: t(
-          "{subject} carries the most weight — a slip there costs you the most.",
-          { subject: nameOf(advice.subjectId) },
-        ),
+        icon: "shield-checkmark",
+        text: t("{subject} carries the most weight — a slip there costs you the most.", {
+          subject: nameOf(advice.subjectId),
+        }),
       };
     case "declining":
       return {
-        glyph: "falling",
+        icon: "trending-down",
         text: t("{subject} has been slipping. Worth a look.", {
           subject: nameOf(advice.subjectId),
         }),

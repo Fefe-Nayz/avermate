@@ -1,11 +1,17 @@
 import { Stack, useRouter } from "expo-router";
-import { Spacer } from "@expo/ui";
 import { resolveCustomAverage } from "@avermate/core";
-import { Button, Empty, Grouped, Line, Section, Text } from "@/components/native";
+import {
+  Button,
+  Card,
+  Empty,
+  Note,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
 import { AverageValue } from "@/components/value";
 import { useYear } from "@/components/year-provider";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * Custom averages.
@@ -23,7 +29,7 @@ export default function Averages() {
   return (
     <>
       <Stack.Screen options={{ title: t("Custom averages") }} />
-      <Grouped
+      <Screen
         footer={
           <Button
             label={t("New custom average")}
@@ -34,7 +40,7 @@ export default function Averages() {
         {customAverages.length === 0 ? (
           <Section>
             <Empty
-              glyph="average"
+              icon="cube-outline"
               title={t("No custom averages yet")}
               body={t(
                 "Pick a handful of subjects and weigh them your own way — useful when the official average is not the one you care about.",
@@ -43,44 +49,41 @@ export default function Averages() {
           </Section>
         ) : (
           <Section title={t("Yours")}>
-            {customAverages.map((average) => {
-              const resolved = resolveCustomAverage(graph, average);
-              return (
-                <Line
-                  key={average.id}
-                  leading="average"
-                  title={average.name}
-                  detail={
-                    average.entries.length === 1
-                      ? t("1 subject")
-                      : t("{count} subjects", { count: average.entries.length })
-                  }
-                  onPress={() =>
-                    router.push(`/settings/average-edit?id=${average.id}`)
-                  }
-                  trailing={
-                    <AverageValue
-                      ratio={resolved.graph.ratio(null, resolved.scope)}
-                      size="callout"
-                      colored
-                    />
-                  }
-                />
-              );
-            })}
-          </Section>
+          <Card padded={false}>
+              {customAverages.map((average) => {
+                const resolved = resolveCustomAverage(graph, average);
+                return (
+                  <Row
+                    key={average.id}
+                    title={average.name}
+                    subtitle={
+                      average.entries.length === 1
+                        ? t("1 subject")
+                        : t("{count} subjects", { count: average.entries.length })
+                    }
+                    onPress={() =>
+                      router.push(`/settings/average-edit?id=${average.id}`)
+                    }
+                    trailing={
+                      <AverageValue
+                        ratio={resolved.graph.ratio(null, resolved.scope)}
+                        size="callout"
+                        colored
+                      />
+                    }
+                  />
+                );
+              })}
+          </Card>
+        </Section>
         )}
 
         <Section>
-          <Text size="footnote" tone="muted">
-            {t(
+          <Note>{t(
               "A custom average can be the target of a goal, so this is also how you track something the school does not compute.",
-            )}
-          </Text>
+            )}</Note>
         </Section>
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

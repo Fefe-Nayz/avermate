@@ -1,22 +1,15 @@
 import { useMemo, useState } from "react";
-import { View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Column, Spacer } from "@expo/ui";
-import {
-  Button,
-  FromReactNative,
-  Grouped,
-  Line,
-  Section,
-  Title,
-} from "@/components/native";
-import { ChoiceField, DateField, TextField } from "@/components/controls";
+import { Button, Card, Screen, Title } from "@/components/ui";
+import { ChoiceField, FieldGroup, TextField } from "@/components/field";
+import { DateField } from "@/components/date-field";
 import { Wordmark } from "@/components/wordmark";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { radius, space, usePalette } from "@/lib/theme";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * First run.
@@ -47,8 +40,7 @@ function periodNames(templateId: string): string[] {
 /** September to July of the school year today falls in. */
 function defaultRange(): { startsAt: Date; endsAt: Date; name: string } {
   const now = new Date();
-  const startYear =
-    now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
   return {
     startsAt: new Date(startYear, 8, 1),
     endsAt: new Date(startYear + 1, 6, 5),
@@ -57,6 +49,7 @@ function defaultRange(): { startsAt: Date; endsAt: Date; name: string } {
 }
 
 export default function Onboarding() {
+  const palette = usePalette();
   const router = useRouter();
 
   const initial = useMemo(defaultRange, []);
@@ -115,153 +108,155 @@ export default function Onboarding() {
     else create.mutate();
   };
 
+  const back = () => {
+    haptic("light");
+    setStep(Math.max(0, step - 1));
+  };
+
   const canContinue =
     step !== 0 || (name.trim().length > 0 && endsAt > startsAt);
 
   return (
-    <Grouped
-      footer={
-        <Column spacing={space.sm}>
-          <Button
-            label={step === STEPS - 1 ? t("Create year") : t("Continue")}
-            onPress={next}
-            disabled={!canContinue || create.isPending}
-          />
-          {step > 0 ? (
-            <Button
-              label={t("Back")}
-              variant="quiet"
-              onPress={() => {
-                haptic("light");
-                setStep(Math.max(0, step - 1));
-              }}
-            />
-          ) : null}
-        </Column>
-      }
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
     >
-      <Section>
-        <Column spacing={space.lg}>
-          <FromReactNative height={30}>
-            <Wordmark />
-          </FromReactNative>
-          <FromReactNative height={3}>
-            <Dots count={STEPS} active={step} />
-          </FromReactNative>
-        </Column>
-      </Section>
+      <Screen
+        footer={
+          <View style={{ gap: space.sm }}>
+            <Button
+              label={step === STEPS - 1 ? t("Create year") : t("Continue")}
+              onPress={next}
+              disabled={!canContinue}
+              loading={create.isPending}
+            />
+            {step > 0 ? (
+              <Pressable onPress={back} style={{ paddingVertical: space.sm }}>
+                <Text
+                  style={[
+                    type.callout,
+                    { color: palette.textMuted, textAlign: "center" },
+                  ]}
+                >
+                  {t("Back")}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        }
+      >
+        <View style={{ paddingTop: space.xl, gap: space.lg }}>
+          <Wordmark />
+          <Dots count={STEPS} active={step} />
+        </View>
 
-      {step === 0 ? (
-        <>
-          <Section>
+        {step === 0 ? (
+          <>
             <Title subtitle={t("You can change all of this later.")}>
               {t("Set up your year")}
             </Title>
-          </Section>
-          <Section>
-            <TextField
-              label={t("Year name")}
-              value={name}
-              onChangeText={setName}
-              placeholder={initial.name}
-            />
-            <DateField label={t("Starts")} value={startsAt} onChange={setStartsAt} />
-            <DateField
-              label={t("Ends")}
-              value={endsAt}
-              onChange={setEndsAt}
-              min={startsAt}
-            />
-          </Section>
-          <ChoiceField
-            title={t("Grades are out of")}
-            value={scale}
-            onChange={setScale}
-            choices={[
-              { value: "20", label: "20", hint: t("France") },
-              { value: "100", label: "100", hint: t("Percentage") },
-              { value: "6", label: "6", hint: t("Germany") },
-              { value: "4", label: "4", hint: t("GPA") },
-            ]}
-          />
-        </>
-      ) : null}
+            <FieldGroup>
+              <TextField
+                label={t("Year name")}
+                value={name}
+                onChangeText={setName}
+                placeholder={initial.name}
+              />
+              <DateField
+                label={t("Starts")}
+                value={startsAt}
+                onChange={setStartsAt}
+              />
+              <DateField
+                label={t("Ends")}
+                value={endsAt}
+                onChange={setEndsAt}
+                min={startsAt}
+              />
+              <ChoiceField
+                label={t("Grades are out of")}
+                columns={2}
+                value={scale}
+                onChange={setScale}
+                choices={[
+                  { value: "20", label: "20", hint: t("France") },
+                  { value: "100", label: "100", hint: t("Percentage") },
+                  { value: "6", label: "6", hint: t("Germany") },
+                  { value: "4", label: "4", hint: t("GPA") },
+                ]}
+              />
+            </FieldGroup>
+          </>
+        ) : null}
 
-      {step === 1 ? (
-        <>
-          <Section>
-            <Title
-              subtitle={t("Grades will fall into the right one on their own.")}
-            >
+        {step === 1 ? (
+          <>
+            <Title subtitle={t("Grades will fall into the right one on their own.")}>
               {t("How is your year split?")}
             </Title>
-          </Section>
-          <ChoiceField
-            value={template}
-            onChange={setTemplate}
-            choices={[
-              {
-                value: "trimesters",
-                label: t("Three terms"),
-                hint: t("The usual French layout"),
-              },
-              { value: "semesters", label: t("Two semesters") },
-              {
-                value: "semesters-cumulative",
-                label: t("Two semesters, cumulative"),
-                hint: t("The second one includes the first"),
-              },
-              { value: "quarters", label: t("Four quarters") },
-              {
-                value: "none",
-                label: t("No split"),
-                hint: t("One average for the whole year"),
-              },
-            ]}
-          />
-        </>
-      ) : null}
+            <ChoiceField
+              value={template}
+              onChange={setTemplate}
+              choices={[
+                {
+                  value: "trimesters",
+                  label: t("Three terms"),
+                  hint: t("The usual French layout"),
+                },
+                { value: "semesters", label: t("Two semesters") },
+                {
+                  value: "semesters-cumulative",
+                  label: t("Two semesters, cumulative"),
+                  hint: t("The second one includes the first"),
+                },
+                { value: "quarters", label: t("Four quarters") },
+                {
+                  value: "none",
+                  label: t("No split"),
+                  hint: t("One average for the whole year"),
+                },
+              ]}
+            />
+          </>
+        ) : null}
 
-      {step === 2 ? (
-        <>
-          <Section>
-            <Title
-              subtitle={t(
-                "Pick the closest one — you can rename and reweigh everything after.",
-              )}
-            >
+        {step === 2 ? (
+          <>
+            <Title subtitle={t("Pick the closest one — you can rename and reweigh everything after.")}>
               {t("What do you study?")}
             </Title>
-          </Section>
-          <ChoiceField
-            value={presetId ?? "__none__"}
-            onChange={(value) =>
-              setPresetId(value === "__none__" ? null : value)
-            }
-            choices={[
-              {
-                value: "__none__",
-                label: t("Start from scratch"),
-                hint: t("Add your own subjects"),
-              },
-              ...(presets.data ?? []).map((preset) => ({
-                value: preset.id,
-                label: preset.name,
-                hint: t("{count} subjects", { count: preset.subjectCount }),
-              })),
-            ]}
-          />
-        </>
-      ) : null}
+            <ChoiceField
+              value={presetId ?? "__none__"}
+              onChange={(value) =>
+                setPresetId(value === "__none__" ? null : value)
+              }
+              choices={[
+                {
+                  value: "__none__",
+                  label: t("Start from scratch"),
+                  hint: t("Add your own subjects"),
+                },
+                ...(presets.data ?? []).map((preset) => ({
+                  value: preset.id,
+                  label: preset.name,
+                  hint: t("{count} subjects", {
+                    count: preset.subjectCount,
+                  }),
+                })),
+              ]}
+            />
+          </>
+        ) : null}
 
-      {error ? (
-        <Section>
-          <Line title={error} destructive />
-        </Section>
-      ) : null}
-
-      <Spacer size={space.xl} />
-    </Grouped>
+        {error ? (
+          <Card>
+            <Text style={[type.footnote, { color: palette.negative }]}>
+              {error}
+            </Text>
+          </Card>
+        ) : null}
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }
 

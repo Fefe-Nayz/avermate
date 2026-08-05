@@ -1,24 +1,16 @@
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Column } from "@expo/ui";
-import {
-  Button,
-  Empty,
-  Grouped,
-  Label,
-  Line,
-  Loading,
-  Row,
-  Section,
-  Text,
-} from "@/components/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Button, Card, Empty, Loading, ProgressBar } from "@/components/ui";
 import { AverageValue } from "@/components/value";
-import { ProgressBar } from "@/components/chart";
 import { StatusPill } from "@/components/goal-status";
 import { ScopeBar } from "@/components/scope-bar";
 import { useGoalPlans } from "@/components/use-goal-plans";
 import { useYear } from "@/components/year-provider";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * Goals, each one showing the only two numbers that matter at a glance: where
@@ -26,67 +18,134 @@ import { space } from "@/lib/theme";
  * — is one tap deeper, because advice you have already read is clutter.
  */
 export default function Goals() {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isLoading } = useYear();
+  const { isLoading, refresh } = useYear();
   const plans = useGoalPlans();
 
   if (isLoading) return <Loading />;
 
   return (
-    <Grouped
-      footer={
-        <Button label={t("New goal")} onPress={() => router.push("/goal/new")} />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: palette.background }}
+      contentContainerStyle={{
+        paddingTop: insets.top + space.md,
+        paddingHorizontal: space.lg,
+        paddingBottom: space.xxxl,
+        gap: space.lg,
+      }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={false}
+          onRefresh={refresh}
+          tintColor={palette.textFaint}
+        />
       }
     >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text style={[type.display, { color: palette.text }]}>{t("Goals")}</Text>
+        <Pressable
+          onPress={() => {
+            haptic("light");
+            router.push("/goal/new");
+          }}
+          hitSlop={10}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: radius.pill,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.accent,
+          }}
+        >
+          <Ionicons name="add" size={18} color={palette.accentText} />
+        </Pressable>
+      </View>
+
       <ScopeBar />
 
       {plans.length === 0 ? (
-        <Section>
-          <Empty
-            glyph="goals"
-            title={t("No goals yet")}
-            body={t("Set a target and Avermate works out what it takes.")}
-          />
-        </Section>
+        <Empty
+          icon="flag-outline"
+          title={t("No goals yet")}
+          body={t("Set a target and Avermate works out what it takes.")}
+          action={
+            <Button
+              label={t("New goal")}
+              onPress={() => router.push("/goal/new")}
+              variant="secondary"
+            />
+          }
+        />
       ) : (
-        plans.map((plan) => {
-          const done =
-            plan.status === "achieved" || plan.status === "secured";
+        plans.map((plan) => (
+          <Pressable
+            key={plan.goal.id}
+            onPress={() => {
+              haptic("selection");
+              router.push(`/goal/${plan.goal.id}`);
+            }}
+          >
+            <Card>
+              <View style={{ gap: space.md }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    gap: space.sm,
+                  }}
+                >
+                  <Text
+                    style={[type.heading, { flex: 1, color: palette.text }]}
+                  >
+                    {plan.goal.name}
+                  </Text>
+                  <StatusPill status={plan.status} />
+                </View>
 
-          return (
-            <Section key={plan.goal.id}>
-              <Line
-                title={plan.goal.name}
-                onPress={() => router.push(`/goal/${plan.goal.id}`)}
-                trailing={<StatusPill status={plan.status} />}
-              />
-              <Column spacing={space.sm}>
-                <Row spacing={space.sm} alignment="end">
-                  <AverageValue ratio={plan.current} size="title" colored />
-                  <Text size="footnote" tone="faint">
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-end",
+                    gap: space.sm,
+                  }}
+                >
+                  <AverageValue ratio={plan.current} size="display" colored />
+                  <Text
+                    style={[
+                      type.footnote,
+                      { color: palette.textFaint, paddingBottom: 6 },
+                    ]}
+                  >
                     {t("of")}
                   </Text>
-                  <AverageValue ratio={plan.target} size="callout" />
-                </Row>
+                  <View style={{ paddingBottom: 4 }}>
+                    <AverageValue ratio={plan.target} size="heading" />
+                  </View>
+                </View>
+
                 <ProgressBar
                   value={
                     plan.current === null || plan.target === 0
                       ? 0
                       : plan.current / plan.target
                   }
-                  done={done}
+                  done={plan.status === "achieved" || plan.status === "secured"}
                 />
-                {plan.gap !== null && plan.gap > 0 ? (
-                  <Row spacing={space.xs}>
-                    <Label>{t("Still to go")}</Label>
-                    <AverageValue ratio={plan.gap} size="footnote" />
-                  </Row>
-                ) : null}
-              </Column>
-            </Section>
-          );
-        })
+              </View>
+            </Card>
+          </Pressable>
+        ))
       )}
-    </Grouped>
+    </ScrollView>
   );
 }

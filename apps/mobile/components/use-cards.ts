@@ -12,6 +12,45 @@ import { orpc } from "@/lib/orpc";
 import { t } from "@/lib/i18n";
 
 /**
+ * A stored card row, as the database holds it.
+ *
+ * The table is flat — `targetKind` and `targetId` are columns — while the
+ * engine takes a nested `target`. Converting here rather than casting is the
+ * whole point: a cast claims the two shapes match, and they do not.
+ */
+interface CardRow {
+  id: string;
+  metric: string;
+  targetKind: string;
+  targetId: string | null;
+  display: string;
+  span: number;
+  title: string | null;
+  accent: string | null;
+  goalId: string | null;
+  sortOrder: number;
+  hidden: boolean;
+}
+
+function toSpec(row: CardRow): CardSpec {
+  return {
+    id: row.id,
+    metric: row.metric as CardSpec["metric"],
+    target: {
+      kind: row.targetKind as CardSpec["target"]["kind"],
+      referenceId: row.targetId,
+    },
+    display: row.display as CardSpec["display"],
+    span: Math.min(4, Math.max(1, row.span)) as CardSpec["span"],
+    title: row.title,
+    accent: row.accent,
+    goalId: row.goalId,
+    sortOrder: row.sortOrder,
+    hidden: row.hidden,
+  };
+}
+
+/**
  * The dashboard's cards, computed.
  *
  * A card is data — a metric, something to point it at, and how it should look —
@@ -39,7 +78,7 @@ export function useCards(surface: "overview" | "subject" | "grade" = "overview")
   });
 
   const specs = useMemo(
-    () => (query.data ?? []) as unknown as CardSpec[],
+    () => (query.data ?? []).map(toSpec),
     [query.data],
   );
 

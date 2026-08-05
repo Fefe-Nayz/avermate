@@ -2,15 +2,22 @@ import { useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
-import { Button, Grouped, Line, Section, Text } from "@/components/native";
-import { DateField, SliderField, TextField } from "@/components/controls";
+import {
+  Button,
+  Card,
+  Note,
+  Problem,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { SliderField, TextField } from "@/components/field";
+import { DateField } from "@/components/date-field";
 import { formatNumber, parseNumber } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * How this year counts.
@@ -88,7 +95,7 @@ export default function YearSettings() {
   return (
     <>
       <Stack.Screen options={{ title: t("School year") }} />
-      <Grouped
+      <Screen
         footer={
           <Button
             label={t("Save")}
@@ -152,40 +159,36 @@ export default function YearSettings() {
               `${formatNumber(value * numericScale, 1)} / ${formatNumber(numericScale)}`
             }
           />
-          <Text size="footnote" tone="muted">
-            {t("This drives the colour of every result and the pass rate.")}
-          </Text>
+          <Note>{t("This drives the colour of every result and the pass rate.")}</Note>
         </Section>
 
         <Section title={t("Structure")}>
-          <Line
-            leading="period"
-            title={t("Periods")}
-            onPress={() => router.push("/settings/periods")}
-          />
+          <Card padded={false}>
+            <Row
+              title={t("Periods")}
+              onPress={() => router.push("/settings/periods")}
+            />
+          </Card>
         </Section>
 
         {years.length > 1 ? (
           <Section>
-            <Line
-              leading="danger"
-              title={t("Delete this year")}
-              destructive
-              onPress={confirmDelete}
-            />
-          </Section>
+          <Card padded={false}>
+              <Row
+                title={t("Delete this year")}
+                destructive
+                onPress={confirmDelete}
+              />
+          </Card>
+        </Section>
         ) : null}
 
         {error ? (
           <Section>
-            <Text size="footnote" tone="negative">
-              {error}
-            </Text>
+            <Problem>{error}</Problem>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
-import { Stack } from "expo-router";
-import { useRouter } from "expo-router";
-import { Column, Spacer } from "@expo/ui";
+import { ScrollView, Text, View } from "react-native";
+import { Stack, useRouter } from "expo-router";
 import {
   averageOverTime,
   consistency,
@@ -20,23 +19,14 @@ import {
   standardDeviation,
   trend,
 } from "@avermate/core";
-import {
-  Empty,
-  Grouped,
-  Label,
-  Line,
-  Loading,
-  Row,
-  Section,
-  Text,
-} from "@/components/native";
+import { Card, Empty, Label, Loading, Row, Section } from "@/components/ui";
 import { AverageValue, DeltaValue, PercentValue } from "@/components/value";
-import { Distribution, Sparkline } from "@/components/chart";
+import { Distribution, Sparkline } from "@/components/sparkline";
 import { ScopeBar } from "@/components/scope-bar";
 import { formatNumber } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
+import { space, type, usePalette } from "@/lib/theme";
 
 /**
  * The statistics screen.
@@ -47,6 +37,7 @@ import { space } from "@/lib/theme";
  * end up if nothing changes, and which subjects are pulling which way.
  */
 export default function Insights() {
+  const palette = usePalette();
   const router = useRouter();
   const { isLoading, graph, period, year, passingRatio, scale, decimals } =
     useYear();
@@ -77,182 +68,213 @@ export default function Insights() {
     return (
       <>
         <Stack.Screen options={{ title: t("Insights") }} />
-        <Grouped>
-          <Empty
-            glyph="insights"
-            title={t("Not enough data yet")}
-            body={t("A handful of grades and this screen fills in.")}
-          />
-        </Grouped>
+        <Empty
+          icon="stats-chart-outline"
+          title={t("Not enough data yet")}
+          body={t("A handful of grades and this screen fills in.")}
+        />
       </>
     );
   }
 
   const slope = trend(series);
-  const weeksLeft = year
-    ? Math.max(
-        0,
-        Math.round(
-          (period.endAt.getTime() - Date.now()) / (7 * 24 * 60 * 60 * 1000),
-        ),
-      )
-    : 0;
+  const weeksLeft = Math.max(
+    0,
+    Math.round((period.endAt.getTime() - Date.now()) / (7 * 24 * 60 * 60 * 1000)),
+  );
   const projection = projectedRatio(series, weeksLeft);
   const spread = standardDeviation(ratios);
   const declining = [...improving].reverse()[0];
 
+  const stat = (value: string) => (
+    <Text style={[type.body, { color: palette.text }]}>{value}</Text>
+  );
+
   return (
     <>
       <Stack.Screen options={{ title: t("Insights") }} />
-      <Grouped>
-        <ScopeBar />
-
-        <Section title={t("The year so far")}>
-          <Column spacing={space.md}>
-            <Row spacing={space.sm} alignment="end">
-              <AverageValue ratio={graph.ratio(null)} size="display" showScale colored />
+      <ScrollView
+        style={{ flex: 1, backgroundColor: palette.background }}
+        contentContainerStyle={{
+          paddingHorizontal: space.lg,
+          paddingBottom: space.xxxl,
+          gap: space.xl,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={{ gap: space.md, paddingTop: space.sm }}>
+          <View
+            style={{ flexDirection: "row", alignItems: "flex-end", gap: space.sm }}
+          >
+            <AverageValue
+              ratio={graph.ratio(null)}
+              size="hero"
+              showScale
+              colored
+            />
+            <View style={{ paddingBottom: space.sm }}>
               <DeltaValue
-                delta={slope === null ? null : slope * Math.max(1, series.length - 1)}
+                delta={
+                  slope === null ? null : slope * Math.max(1, series.length - 1)
+                }
                 size="callout"
               />
-            </Row>
-            {series.length > 2 ? (
-              <Sparkline series={series} positive={(slope ?? 0) >= 0} />
-            ) : null}
-          </Column>
-        </Section>
+            </View>
+          </View>
+          {series.length > 2 ? (
+            <Sparkline series={series} positive={(slope ?? 0) >= 0} />
+          ) : null}
+          <ScopeBar />
+        </View>
 
         <Section title={t("Where it lands")}>
-          <Line
-            title={t("If the trend holds")}
-            detail={
-              weeksLeft > 0
-                ? t("{count} weeks left in this period", { count: weeksLeft })
-                : t("This period is over")
-            }
-            trailing={<AverageValue ratio={projection} size="heading" colored />}
-          />
+          <Card padded={false}>
+            <Row
+              first
+              title={t("If the trend holds")}
+              subtitle={
+                weeksLeft > 0
+                  ? t("{count} weeks left in this period", { count: weeksLeft })
+                  : t("This period is over")
+              }
+              trailing={
+                <AverageValue ratio={projection} size="heading" colored />
+              }
+            />
+          </Card>
         </Section>
 
         <Section title={t("The shape of your results")}>
-          <Column spacing={space.sm}>
-            <Distribution buckets={buckets} />
-            <Row>
-              <Label>{t("Weak")}</Label>
-              <Spacer flexible />
-              <Label>{t("Strong")}</Label>
-            </Row>
-          </Column>
+          <Card>
+            <View style={{ gap: space.sm }}>
+              <Distribution buckets={buckets} />
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Label>{t("Weak")}</Label>
+                <Label>{t("Strong")}</Label>
+              </View>
+            </View>
+          </Card>
         </Section>
 
         <Section title={t("Numbers")}>
-          <Line
-            title={t("Grades recorded")}
-            trailing={<Text mono>{String(ratios.length)}</Text>}
-          />
-          <Line
-            title={t("Pass rate")}
-            trailing={<PercentValue ratio={passRate(ratios, passingRatio)} />}
-          />
-          <Line
-            title={t("Median result")}
-            trailing={<AverageValue ratio={median(ratios)} size="body" />}
-          />
-          <Line
-            title={t("Mean result")}
-            detail={t("Unweighted — every grade counts once")}
-            trailing={<AverageValue ratio={mean(ratios)} size="body" />}
-          />
-          <Line
-            title={t("Spread")}
-            detail={t("How far a typical result sits from your average")}
-            trailing={
-              <Text mono>
-                {spread === null
-                  ? "—"
-                  : formatNumber(spread * scale, decimals)}
-              </Text>
-            }
-          />
-          <Line
-            title={t("Consistency")}
-            trailing={<PercentValue ratio={consistency(ratios)} />}
-          />
-          <Line
-            title={t("Second half vs first")}
-            trailing={<DeltaValue delta={improvement(ratios)} size="body" />}
-          />
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Grades recorded")}
+              trailing={stat(String(ratios.length))}
+            />
+            <Row
+              title={t("Pass rate")}
+              trailing={<PercentValue ratio={passRate(ratios, passingRatio)} />}
+            />
+            <Row
+              title={t("Median result")}
+              trailing={<AverageValue ratio={median(ratios)} size="body" />}
+            />
+            <Row
+              title={t("Mean result")}
+              subtitle={t("Unweighted — every grade counts once")}
+              trailing={<AverageValue ratio={mean(ratios)} size="body" />}
+            />
+            <Row
+              title={t("Spread")}
+              subtitle={t("How far a typical result sits from your average")}
+              trailing={stat(
+                spread === null ? "—" : formatNumber(spread * scale, decimals),
+              )}
+            />
+            <Row
+              title={t("Consistency")}
+              trailing={<PercentValue ratio={consistency(ratios)} />}
+            />
+            <Row
+              title={t("Second half vs first")}
+              trailing={<DeltaValue delta={improvement(ratios)} size="body" />}
+            />
+          </Card>
         </Section>
 
         <Section title={t("Streaks")}>
-          <Line
-            title={t("Passing right now")}
-            trailing={
-              <Text mono>
-                {streaks.current.length === 1
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Passing right now")}
+              trailing={stat(
+                streaks.current.length === 1
                   ? t("1 result")
-                  : t("{count} results", { count: streaks.current.length })}
-              </Text>
-            }
-          />
-          <Line
-            title={t("Best run this year")}
-            trailing={
-              <Text mono>
-                {streaks.longest.length === 1
+                  : t("{count} results", { count: streaks.current.length }),
+              )}
+            />
+            <Row
+              title={t("Best run this year")}
+              trailing={stat(
+                streaks.longest.length === 1
                   ? t("1 result")
-                  : t("{count} results", { count: streaks.longest.length })}
-              </Text>
-            }
-          />
+                  : t("{count} results", { count: streaks.longest.length }),
+              )}
+            />
+          </Card>
         </Section>
 
         {ranked.length > 1 ? (
           <Section title={t("Subjects, best first")}>
-            {ranked.map((entry) => (
-              <Line
-                key={entry.subject.id}
-                title={entry.subject.name}
-                onPress={() => router.push(`/subject/${entry.subject.id}`)}
-                trailing={
-                  <AverageValue ratio={entry.ratio} size="callout" colored />
-                }
-              />
-            ))}
+            <Card padded={false}>
+              {ranked.map((entry, index) => (
+                <Row
+                  key={entry.subject.id}
+                  first={index === 0}
+                  title={entry.subject.name}
+                  onPress={() => router.push(`/subject/${entry.subject.id}`)}
+                  trailing={
+                    <AverageValue ratio={entry.ratio} size="callout" colored />
+                  }
+                />
+              ))}
+            </Card>
           </Section>
         ) : null}
 
         {improving.length > 0 ? (
           <Section title={t("Moving the most")}>
-            {improving[0] ? (
-              <Line
-                title={t("Most improved")}
-                detail={improving[0].subject.name}
-                onPress={() => router.push(`/subject/${improving[0]!.subject.id}`)}
-                trailing={<DeltaValue delta={improving[0].delta} size="body" />}
-              />
-            ) : null}
-            {declining && declining.subject.id !== improving[0]?.subject.id ? (
-              <Line
-                title={t("Slipping the most")}
-                detail={declining.subject.name}
-                onPress={() => router.push(`/subject/${declining.subject.id}`)}
-                trailing={<DeltaValue delta={declining.delta} size="body" />}
-              />
-            ) : null}
-            {steadiest[0] ? (
-              <Line
-                title={t("Steadiest")}
-                detail={steadiest[0].subject.name}
-                onPress={() => router.push(`/subject/${steadiest[0]!.subject.id}`)}
-                trailing={<PercentValue ratio={steadiest[0].consistency} />}
-              />
-            ) : null}
+            <Card padded={false}>
+              {improving[0] ? (
+                <Row
+                  first
+                  title={t("Most improved")}
+                  subtitle={improving[0].subject.name}
+                  onPress={() =>
+                    router.push(`/subject/${improving[0]!.subject.id}`)
+                  }
+                  trailing={<DeltaValue delta={improving[0].delta} size="body" />}
+                />
+              ) : null}
+              {declining && declining.subject.id !== improving[0]?.subject.id ? (
+                <Row
+                  title={t("Slipping the most")}
+                  subtitle={declining.subject.name}
+                  onPress={() => router.push(`/subject/${declining.subject.id}`)}
+                  trailing={<DeltaValue delta={declining.delta} size="body" />}
+                />
+              ) : null}
+              {steadiest[0] ? (
+                <Row
+                  title={t("Steadiest")}
+                  subtitle={steadiest[0].subject.name}
+                  onPress={() =>
+                    router.push(`/subject/${steadiest[0]!.subject.id}`)
+                  }
+                  trailing={<PercentValue ratio={steadiest[0].consistency} />}
+                />
+              ) : null}
+            </Card>
           </Section>
         ) : null}
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </ScrollView>
     </>
   );
 }

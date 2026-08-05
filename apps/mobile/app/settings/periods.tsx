@@ -2,16 +2,23 @@ import { useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Spacer } from "@expo/ui";
 import { FULL_YEAR_PERIOD_ID } from "@avermate/core";
-import { Button, Empty, Grouped, Line, Section, Text } from "@/components/native";
-import { DateField, SwitchField, TextField } from "@/components/controls";
+import {
+  Button,
+  Card,
+  Empty,
+  Note,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
+import { SwitchField, TextField } from "@/components/field";
+import { DateField } from "@/components/date-field";
 import { formatDate } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space } from "@/lib/theme";
 
 /**
  * Terms and semesters.
@@ -79,11 +86,11 @@ export default function Periods() {
   return (
     <>
       <Stack.Screen options={{ title: t("Periods") }} />
-      <Grouped footer={<Button label={t("Add a period")} onPress={addPeriod} />}>
+      <Screen footer={<Button label={t("Add a period")} onPress={addPeriod} />}>
         {real.length === 0 ? (
           <Section>
             <Empty
-              glyph="period"
+              icon="cube-outline"
               title={t("No split")}
               body={t("One average for the whole year. Add a period to change that.")}
             />
@@ -114,34 +121,32 @@ export default function Periods() {
               />
             ) : (
               <Section key={period.id}>
-                <Line
-                  leading="period"
-                  title={period.name}
-                  detail={`${formatDate(period.startAt, "short")} → ${formatDate(period.endAt, "short")}`}
-                  onPress={() => setEditing(period.id)}
-                  trailing={
-                    period.isCumulative ? (
-                      <Text size="footnote" tone="faint">
-                        {t("Cumulative")}
-                      </Text>
-                    ) : undefined
-                  }
-                />
-              </Section>
+          <Card padded={false}>
+                  <Row
+                    title={period.name}
+                    subtitle={`${formatDate(period.startAt, "short")} → ${formatDate(period.endAt, "short")}`}
+                    onPress={() => setEditing(period.id)}
+                    trailing={
+                      period.isCumulative ? (
+                        <Note>{t("Cumulative")}</Note>
+                      ) : undefined
+                    }
+                  />
+          </Card>
+        </Section>
             ),
           )
         )}
 
         <Section>
-          <Line
-            leading="year"
-            title={t("Back to the year")}
-            onPress={() => router.back()}
-          />
+          <Card padded={false}>
+            <Row
+              title={t("Back to the year")}
+              onPress={() => router.back()}
+            />
+          </Card>
         </Section>
-
-        <Spacer size={space.xl} />
-      </Grouped>
+      </Screen>
     </>
   );
 }
@@ -171,34 +176,34 @@ function PeriodEditor({
 
   return (
     <Section title={t("Editing")}>
-      <TextField label={t("Name")} value={name} onChangeText={setName} autoFocus />
-      <DateField label={t("Starts")} value={startAt} onChange={setStartAt} />
-      <DateField
-        label={t("Ends")}
-        value={endAt}
-        onChange={setEndAt}
-        min={startAt}
-      />
-      <SwitchField
-        label={t("Cumulative")}
-        detail={t("Counts everything since the start of the year, not just this span.")}
-        value={cumulative}
-        onValueChange={setCumulative}
-      />
-      <Line
-        leading="check"
-        title={busy ? t("Saving…") : t("Save")}
-        onPress={() =>
-          onSave({ name: name.trim(), startAt, endAt, isCumulative: cumulative })
-        }
-      />
-      <Line leading="close" title={t("Cancel")} onPress={onCancel} />
-      <Line
-        leading="remove"
-        title={t("Delete this period")}
-        destructive
-        onPress={onDelete}
-      />
-    </Section>
+          <Card padded={false}>
+        <TextField label={t("Name")} value={name} onChangeText={setName} autoFocus />
+        <DateField label={t("Starts")} value={startAt} onChange={setStartAt} />
+        <DateField
+          label={t("Ends")}
+          value={endAt}
+          onChange={setEndAt}
+          min={startAt}
+        />
+        <SwitchField
+          label={t("Cumulative")}
+          hint={t("Counts everything since the start of the year, not just this span.")}
+          value={cumulative}
+          onValueChange={setCumulative}
+        />
+        <Row
+          title={busy ? t("Saving…") : t("Save")}
+          onPress={() =>
+            onSave({ name: name.trim(), startAt, endAt, isCumulative: cumulative })
+          }
+        />
+        <Row leading="close" title={t("Cancel")} onPress={onCancel} />
+        <Row
+          title={t("Delete this period")}
+          destructive
+          onPress={onDelete}
+        />
+          </Card>
+        </Section>
   );
 }

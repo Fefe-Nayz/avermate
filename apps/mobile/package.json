@@ -15,7 +15,6 @@
   "dependencies": {
     "@avermate/core": "workspace:*",
     "@better-auth/expo": "1.6.25",
-    "@expo/material-symbols": "^0.1.1",
     "@expo/ui": "~57.0.7",
     "@expo/vector-icons": "^15.1.1",
     "@orpc/client": "^1.14.13",
