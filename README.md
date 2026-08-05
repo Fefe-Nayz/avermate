@@ -56,9 +56,20 @@ bun run dev
 
 The API listens on `:5000`, the web app on `:3000`.
 
-`bun run db:seed` creates a demo account (`demo@avermate.fr`) with a plausible
-year of results — an empty dashboard tells you nothing about whether the
-dashboard works.
+`bun run db:seed` creates two accounts, both with the password
+`demo-account-2026`:
+
+- `demo@avermate.fr` — a complete account. Two years so the switcher has
+  somewhere to go, a cumulative period, a three-level subject tree, a subject
+  with nothing in it, composite grades, notes, two custom averages, a goal in
+  each of the six states the planner can report, and cards covering every
+  display. "Complete" means every shape the app can be asked to draw, not a lot
+  of grades — a screen that only ever meets tidy data breaks the first time it
+  meets a real year.
+- `new@avermate.fr` — empty. Onboarding runs once per account and there is no
+  undo, so this is the only way to see it twice.
+
+Add `--full` or `--blank` to seed just one.
 
 ## The phone app
 
