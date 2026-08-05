@@ -1,7 +1,8 @@
-import { Text, View } from "react-native";
+import { Column } from "@expo/ui";
 import type { GoalStatus } from "@avermate/core";
+import { Text } from "@/components/native";
 import { t } from "@/lib/i18n";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { radius, space, usePalette } from "@/lib/theme";
 
 /**
  * A goal has six states and every one of them needs a different sentence.
@@ -41,7 +42,8 @@ export function StatusPill({ status }: { status: GoalStatus }) {
   const tone = colors[status];
 
   return (
-    <View
+    <Column
+      alignment="center"
       style={{
         paddingHorizontal: space.sm,
         paddingVertical: 3,
@@ -49,9 +51,9 @@ export function StatusPill({ status }: { status: GoalStatus }) {
         backgroundColor: tone.bg,
       }}
     >
-      <Text style={[type.footnote, { color: tone.fg, fontWeight: "600" }]}>
+      <Text size="footnote" color={tone.fg}>
         {statusLabel(status)}
       </Text>
-    </View>
+    </Column>
   );
 }

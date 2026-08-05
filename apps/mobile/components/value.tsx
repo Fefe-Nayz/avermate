@@ -1,8 +1,9 @@
-import { Text, View, type StyleProp, type TextStyle } from "react-native";
 import { bandOf, type Ratio } from "@avermate/core";
-import { numeric, space, type, usePalette } from "@/lib/theme";
+import { Row, Text } from "@/components/native";
 import { useYear } from "@/components/year-provider";
 import { locale } from "@/lib/i18n";
+import { radius, space, type, usePalette } from "@/lib/theme";
+import { Column } from "@expo/ui";
 
 /**
  * How a number looks.
@@ -25,14 +26,12 @@ export function AverageValue({
   showScale = false,
   colored = false,
   decimals,
-  style,
 }: {
   ratio: Ratio;
-  size?: "hero" | "display" | "title" | "heading" | "body" | "callout" | "footnote";
+  size?: keyof typeof type;
   showScale?: boolean;
   colored?: boolean;
   decimals?: number;
-  style?: StyleProp<TextStyle>;
 }) {
   const palette = usePalette();
   const { scale, decimals: yearDecimals, passingRatio } = useYear();
@@ -40,35 +39,33 @@ export function AverageValue({
 
   if (ratio === null) {
     return (
-      <Text style={[type[size], numeric, { color: palette.textFaint }, style]}>
+      <Text size={size} tone="faint" mono>
         —
       </Text>
     );
   }
 
   const band = bandOf(ratio, passingRatio);
-  const color = colored && band ? palette.band[band] : palette.text;
+  const color = colored && band ? palette.band[band] : undefined;
+  const value = format(ratio * scale, digits);
+
+  if (!showScale) {
+    return (
+      <Text size={size} color={color} mono>
+        {value}
+      </Text>
+    );
+  }
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "baseline" }}>
-      <Text style={[type[size], numeric, { color }, style]}>
-        {format(ratio * scale, digits)}
+    <Row spacing={2} alignment="end">
+      <Text size={size} color={color} mono>
+        {value}
       </Text>
-      {showScale ? (
-        <Text
-          style={[
-            numeric,
-            {
-              color: palette.textFaint,
-              fontSize: Math.round(type[size].fontSize * 0.45),
-              marginLeft: 3,
-            },
-          ]}
-        >
-          /{format(scale, 0)}
-        </Text>
-      ) : null}
-    </View>
+      <Text size="callout" tone="faint" mono>
+        {`/${format(scale, 0)}`}
+      </Text>
+    </Row>
   );
 }
 
@@ -79,7 +76,7 @@ export function DeltaValue({
   decimals,
 }: {
   delta: number | null;
-  size?: "heading" | "body" | "callout" | "footnote" | "title";
+  size?: keyof typeof type;
   decimals?: number;
 }) {
   const palette = usePalette();
@@ -88,7 +85,9 @@ export function DeltaValue({
 
   if (delta === null) {
     return (
-      <Text style={[type[size], numeric, { color: palette.textFaint }]}>—</Text>
+      <Text size={size} tone="faint" mono>
+        —
+      </Text>
     );
   }
 
@@ -100,10 +99,11 @@ export function DeltaValue({
       ? palette.positive
       : palette.negative;
 
+  const sign = neutral ? "±" : value > 0 ? "+" : "−";
+
   return (
-    <Text style={[type[size], numeric, { color }]}>
-      {neutral ? "±" : value > 0 ? "+" : "−"}
-      {format(Math.abs(value), digits)}
+    <Text size={size} color={color} mono>
+      {`${sign}${format(Math.abs(value), digits)}`}
     </Text>
   );
 }
@@ -115,57 +115,69 @@ export function ResultBadge({ ratio }: { ratio: Ratio }) {
   const band = ratio === null ? null : bandOf(ratio, passingRatio);
 
   return (
-    <View
+    <Column
+      alignment="center"
       style={{
         paddingHorizontal: space.sm,
         paddingVertical: 3,
-        borderRadius: 8,
+        borderRadius: radius.sm,
         backgroundColor: band ? palette.bandSoft[band] : palette.accentSoft,
-        minWidth: 56,
-        alignItems: "center",
       }}
     >
       <Text
-        style={[
-          type.callout,
-          numeric,
-          { color: band ? palette.band[band] : palette.textFaint },
-        ]}
+        size="callout"
+        mono
+        color={band ? palette.band[band] : palette.textFaint}
       >
         {ratio === null ? "—" : format(ratio * scale, decimals)}
       </Text>
-    </View>
+    </Column>
   );
 }
 
 /** Raw points as entered, never normalised. */
-export function PointsValue({
-  value,
-  outOf,
-}: {
-  value: number;
-  outOf: number;
-}) {
-  const palette = usePalette();
+export function PointsValue({ value, outOf }: { value: number; outOf: number }) {
   const show = (input: number) =>
     input.toLocaleString(locale() === "fr" ? "fr-FR" : "en-GB", {
       maximumFractionDigits: 2,
     });
 
   return (
-    <Text style={[type.footnote, numeric, { color: palette.textMuted }]}>
-      {show(value)} / {show(outOf)}
+    <Text size="footnote" tone="muted" mono>
+      {`${show(value)} / ${show(outOf)}`}
     </Text>
   );
 }
 
 export function CoefficientTag({ coefficient }: { coefficient: number }) {
-  const palette = usePalette();
   if (coefficient === 1) return null;
 
   return (
-    <Text style={[type.footnote, numeric, { color: palette.textFaint }]}>
-      ×{coefficient.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+    <Text size="footnote" tone="faint" mono>
+      {`×${coefficient.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+    </Text>
+  );
+}
+
+/** A percentage, for rates and shares. */
+export function PercentValue({
+  ratio,
+  size = "body",
+}: {
+  ratio: number | null;
+  size?: keyof typeof type;
+}) {
+  if (ratio === null) {
+    return (
+      <Text size={size} tone="faint" mono>
+        —
+      </Text>
+    );
+  }
+
+  return (
+    <Text size={size} mono>
+      {`${Math.round(ratio * 100)} %`}
     </Text>
   );
 }

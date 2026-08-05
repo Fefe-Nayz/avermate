@@ -1,7 +1,7 @@
 import { Redirect, Tabs } from "expo-router";
 import { StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Loading } from "@/components/ui";
+import { Loading } from "@/components/native";
 import { useYear } from "@/components/year-provider";
 import { useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";

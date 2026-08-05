@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Button, Empty, Loading } from "@/components/ui";
+import { Button, Empty, Loading } from "@/components/native";
 import {
   SubjectForm,
   subjectDraftOf,
@@ -49,7 +49,7 @@ export default function EditSubject() {
 
   if (isLoading) return <Loading />;
   if (!subject) {
-    return <Empty icon="help-circle-outline" title={t("Subject not found.")} />;
+    return <Empty glyph="help" title={t("Subject not found.")} />;
   }
 
   const current = draft ?? subjectDraftOf(subject);
@@ -108,7 +108,7 @@ export default function EditSubject() {
             label={t("Delete subject")}
             onPress={confirmDelete}
             variant="destructive"
-            loading={remove.isPending}
+            disabled={remove.isPending}
           />
         }
       />

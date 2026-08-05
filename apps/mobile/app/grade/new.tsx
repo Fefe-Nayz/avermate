@@ -37,7 +37,7 @@ export default function NewGrade() {
       onChange={setDraft}
       onSubmit={(payload) => {
         setError(null);
-        create.mutate({ ...payload, note: null, periodId: null });
+        create.mutate(payload);
       }}
       submitLabel={t("Add grade")}
       busy={create.isPending}

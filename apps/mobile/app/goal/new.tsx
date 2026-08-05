@@ -37,7 +37,7 @@ export default function NewGoal() {
       onSubmit={(payload) => {
         if (!yearId) return;
         setError(null);
-        create.mutate({ ...payload, yearId, dueAt: null });
+        create.mutate({ ...payload, yearId });
       }}
       submitLabel={t("Create goal")}
       busy={create.isPending}

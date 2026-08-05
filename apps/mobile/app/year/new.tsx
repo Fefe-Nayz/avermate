@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Text } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Button, Screen } from "@/components/ui";
-import { ChoiceField, FieldGroup, TextField } from "@/components/field";
-import { DateField } from "@/components/date-field";
+import { Spacer } from "@expo/ui";
+import { Button, Grouped, Section, Text } from "@/components/native";
+import { ChoiceField, DateField, TextField } from "@/components/controls";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { type, usePalette } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
 /**
  * A second year, a third, a fourth.
@@ -19,7 +18,6 @@ import { type, usePalette } from "@/lib/theme";
  * the scale they already use saves the one setting people get wrong.
  */
 export default function NewYear() {
-  const palette = usePalette();
   const router = useRouter();
   const { years, selectYear, scale: currentScale } = useYear();
 
@@ -30,7 +28,8 @@ export default function NewYear() {
 
     if (!latest) {
       const now = new Date();
-      const start = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+      const start =
+        now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
       return {
         name: `${start} – ${start + 1}`,
         startsAt: new Date(start, 8, 1),
@@ -103,70 +102,69 @@ export default function NewYear() {
   return (
     <>
       <Stack.Screen options={{ title: t("New school year") }} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
+      <Grouped
+        footer={
+          <Button
+            label={t("Create year")}
+            onPress={() => create.mutate()}
+            disabled={!ready || create.isPending}
+          />
+        }
       >
-        <Screen
-          footer={
-            <Button
-              label={t("Create year")}
-              onPress={() => create.mutate()}
-              disabled={!ready}
-              loading={create.isPending}
-            />
-          }
-        >
-          <FieldGroup>
-            <TextField
-              label={t("Year name")}
-              value={name}
-              onChangeText={setName}
-              autoFocus
-            />
-            <DateField label={t("Starts")} value={startsAt} onChange={setStartsAt} />
-            <DateField
-              label={t("Ends")}
-              value={endsAt}
-              onChange={setEndsAt}
-              min={startsAt}
-            />
-            <ChoiceField
-              label={t("Grades are out of")}
-              columns={2}
-              value={scale}
-              onChange={setScale}
-              choices={[
-                { value: "20", label: "20" },
-                { value: "100", label: "100" },
-                { value: "6", label: "6" },
-                { value: "4", label: "4" },
-              ]}
-            />
-            <ChoiceField
-              label={t("How is your year split?")}
-              value={template}
-              onChange={setTemplate}
-              choices={[
-                { value: "trimesters", label: t("Three terms") },
-                { value: "semesters", label: t("Two semesters") },
-                {
-                  value: "semesters-cumulative",
-                  label: t("Two semesters, cumulative"),
-                },
-                { value: "quarters", label: t("Four quarters") },
-                { value: "none", label: t("No split") },
-              ]}
-            />
-          </FieldGroup>
+        <Section>
+          <TextField
+            label={t("Year name")}
+            value={name}
+            onChangeText={setName}
+            autoFocus
+          />
+          <DateField label={t("Starts")} value={startsAt} onChange={setStartsAt} />
+          <DateField
+            label={t("Ends")}
+            value={endsAt}
+            onChange={setEndsAt}
+            min={startsAt}
+          />
+        </Section>
 
-          {error ? (
-            <Text style={[type.footnote, { color: palette.negative }]}>
+        <ChoiceField
+          title={t("Grades are out of")}
+          value={scale}
+          onChange={setScale}
+          choices={[
+            { value: "20", label: "20", hint: t("France") },
+            { value: "100", label: "100", hint: t("Percentage") },
+            { value: "6", label: "6", hint: t("Germany") },
+            { value: "4", label: "4", hint: t("GPA") },
+          ]}
+        />
+
+        <ChoiceField
+          title={t("How is your year split?")}
+          value={template}
+          onChange={setTemplate}
+          choices={[
+            { value: "trimesters", label: t("Three terms") },
+            { value: "semesters", label: t("Two semesters") },
+            {
+              value: "semesters-cumulative",
+              label: t("Two semesters, cumulative"),
+            },
+            { value: "quarters", label: t("Four quarters") },
+            { value: "none", label: t("No split") },
+          ]}
+        />
+
+        {error ? (
+          <Section>
+            <Text size="footnote" tone="negative">
               {error}
             </Text>
-          ) : null}
-        </Screen>
-      </KeyboardAvoidingView>
+          </Section>
+        ) : null}
+
+        <Spacer size={space.xl} />
+      </Grouped>
     </>
   );
 }

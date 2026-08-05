@@ -11,7 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { YearProvider } from "@/components/year-provider";
-import { Loading } from "@/components/ui";
+import { Loading } from "@/components/native";
 import { queryClient } from "@/lib/orpc";
 import { setHapticsEnabled } from "@/lib/haptics";
 import {

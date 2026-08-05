@@ -3,7 +3,7 @@ import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Grade } from "@avermate/core";
-import { Button, Loading } from "@/components/ui";
+import { Button, Loading } from "@/components/native";
 import { GradeForm, draftOf, type GradeDraft } from "@/components/grade-form";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
@@ -83,7 +83,7 @@ export default function EditGrade() {
             label={t("Delete grade")}
             onPress={confirmDelete}
             variant="destructive"
-            loading={remove.isPending}
+            disabled={remove.isPending}
           />
         }
       />

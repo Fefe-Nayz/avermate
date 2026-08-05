@@ -1,4 +1,5 @@
 import { expoClient, getCookie } from "@better-auth/expo/client";
+import type { BetterAuthClientPlugin } from "better-auth";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
@@ -25,24 +26,29 @@ const STORAGE_PREFIX = env.scheme;
  */
 const COOKIE_PREFIX = "avermate";
 
+/**
+ * `@better-auth/expo` and `better-auth` ship separate copies of the
+ * `@better-fetch/fetch` types, so the plugin's `getActions` is nominally
+ * distinct from the signature `BetterAuthClientPlugin` declares even though it
+ * is structurally the same function.
+ *
+ * Only that one member is re-typed. The blunter fixes both cost more than they
+ * look: `@ts-expect-error` on the array element, or an `as any`, widens the
+ * whole `plugins` array — and every other plugin's inferred actions vanish
+ * with it. That is how `authClient.emailOtp` silently stops existing.
+ */
+const expo = expoClient({
+  scheme: env.scheme,
+  storagePrefix: STORAGE_PREFIX,
+  cookiePrefix: COOKIE_PREFIX,
+  storage: SecureStore,
+}) as unknown as Omit<ReturnType<typeof expoClient>, "getActions"> &
+  Pick<BetterAuthClientPlugin, "getActions">;
+
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   basePath: "/api/auth",
-  plugins: [
-    emailOTPClient(),
-    // `@better-auth/expo` and `better-auth` ship separate copies of the
-    // `@better-fetch/fetch` types, so the plugin's `getActions` signature is
-    // nominally distinct from the one `BetterAuthClientPlugin` declares even
-    // though it is structurally the same function. Suppressing it beats
-    // casting: a cast here collapses the client's inferred session type.
-    // @ts-expect-error upstream type-identity mismatch, not a real one
-    expoClient({
-      scheme: env.scheme,
-      storagePrefix: STORAGE_PREFIX,
-      cookiePrefix: COOKIE_PREFIX,
-      storage: SecureStore,
-    }),
-  ],
+  plugins: [emailOTPClient(), expo],
 });
 
 /**

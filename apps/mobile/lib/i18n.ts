@@ -22,7 +22,6 @@ const fr: Record<string, string> = {
   "Create an account": "Créer un compte",
   "Free, and your grades stay yours.":
     "Gratuit, et vos notes restent les vôtres.",
-  "No account yet?": "Pas encore de compte ?",
   Email: "E-mail",
   Password: "Mot de passe",
   Name: "Nom",
@@ -132,7 +131,6 @@ const fr: Record<string, string> = {
   "Out of": "Sur",
   Weight: "Coefficient",
   Date: "Date",
-  "Which subject is this for?": "Pour quelle matière ?",
   "Give this grade a name.": "Donnez un nom à cette note.",
   "Pick the subject it belongs to.": "Choisissez la matière concernée.",
   "Enter the result you were given.": "Saisissez le résultat obtenu.",
@@ -143,7 +141,6 @@ const fr: Record<string, string> = {
   "general average": "moyenne générale",
   "This grade is made of several parts": "Cette note se décompose en plusieurs parties",
   "Use a single result": "Revenir à une seule note",
-  Parts: "Parties",
   Part: "Partie",
   "Part {number}": "Partie {number}",
   "Add a part": "Ajouter une partie",
@@ -168,7 +165,6 @@ const fr: Record<string, string> = {
   "One subject": "Une matière",
   "A custom average": "Une moyenne personnalisée",
   "Custom average": "Moyenne personnalisée",
-  "Choose a subject": "Choisissez une matière",
   "Pick what this goal is about.": "Choisissez ce que vise cet objectif.",
   Target: "Cible",
   Period: "Période",
@@ -226,14 +222,20 @@ const fr: Record<string, string> = {
   "Small taps as you move through the app":
     "De petites vibrations quand vous naviguez",
   Language: "Langue",
-  "The app follows your device's light or dark setting.":
-    "L'application suit le thème clair ou sombre de votre appareil.",
   "Made for students": "Fait pour les élèves",
   "School year": "Année scolaire",
   "Current year": "Année en cours",
   Periods: "Périodes",
   "1 year": "1 année",
   "{count} years": "{count} années",
+
+  "Custom averages": "Moyennes personnalisées",
+  "Dashboard cards": "Cartes du tableau de bord",
+  "Theme": "Thème",
+  "Follows your device": "Suit votre appareil",
+  "Profile and password": "Profil et mot de passe",
+  "Send feedback": "Envoyer un retour",
+  "About": "À propos",
 
   // ------------------------------------------------------------- onboarding
   "Set up your year": "Configurez votre année",
@@ -277,6 +279,299 @@ const fr: Record<string, string> = {
   "Quarter 2": "2e quadrimestre",
   "Quarter 3": "3e quadrimestre",
   "Quarter 4": "4e quadrimestre",
+
+  // ------------------------------------------- statistics, recap and setup
+  "1 day": "1 jour",
+  "1 result": "1 résultat",
+  "1 subject": "1 matière",
+  "A bar": "Une barre",
+  "A chart": "Un graphique",
+  "A custom average can be the target of a goal, so this is also how you track something the school does not compute.":
+    "Une moyenne personnalisée peut servir de cible à un objectif — c'est donc aussi comme ça qu'on suit ce que l'établissement ne calcule pas.",
+  "A handful of grades and this screen fills in.":
+    "Quelques notes et cet écran se remplit.",
+  "A list": "Une liste",
+  "A question": "Une question",
+  "A year that will be hard to beat — including by you.":
+    "Une année difficile à battre — y compris par vous.",
+  "Activity streak": "Série de jours actifs",
+  "Add a card": "Ajouter une carte",
+  "Add a period": "Ajouter une période",
+  "Add one, or restore the ones the app starts with.":
+    "Ajoutez-en une, ou remettez celles d'origine.",
+  "All In": "Tapis",
+  "All the statistics": "Toutes les statistiques",
+  "Among everyone using Avermate": "Parmi tous les utilisateurs d'Avermate",
+  "An idea": "Une idée",
+  "Anything worth remembering": "Ce qui mérite d'être noté",
+  "Ask away.": "Posez votre question.",
+  "Average": "Moyenne",
+  "Avermate on the web": "Avermate sur le web",
+  "Back to the year": "Retour à l'année",
+  "Best result": "Meilleure note",
+  "Best run this year": "Meilleure série de l'année",
+  "Best this year: {count}": "Record de l'année : {count}",
+  "Brilliant, then baffling. Never the same twice.":
+    "Brillant, puis déroutant. Jamais deux fois pareil.",
+  "Bug report": "Bug",
+  "Busiest month": "Mois le plus chargé",
+  "By": "Avant le",
+  "Cards are per year, so a new year starts from the defaults.":
+    "Les cartes sont propres à chaque année ; une nouvelle année repart des cartes d'origine.",
+  "Careless mistakes, missed the last question…":
+    "Étourderies, dernière question ratée…",
+  "Change email": "Changer l'e-mail",
+  "Change password": "Changer le mot de passe",
+  "Check your inbox to confirm the new address.":
+    "Consultez votre boîte mail pour confirmer la nouvelle adresse.",
+  "Close to the line all year, and you never fell off it.":
+    "Sur le fil toute l'année, sans jamais tomber.",
+  "Code": "Code",
+  "Consecutive days with a grade recorded":
+    "Jours consécutifs avec une note saisie",
+  "Consecutive results at or above the passing mark":
+    "Résultats consécutifs au-dessus de la moyenne",
+  "Counts everything since the start of the year, not just this span.":
+    "Compte tout depuis le début de l'année, pas seulement cette période.",
+  "Cumulative": "Cumulative",
+  "Current password": "Mot de passe actuel",
+  "Decimal places": "Décimales",
+  "Default maximum": "Maximum par défaut",
+  "Delete every grade": "Supprimer toutes les notes",
+  "Delete every grade?": "Supprimer toutes les notes ?",
+  "Delete this average": "Supprimer cette moyenne",
+  "Delete this card": "Supprimer cette carte",
+  "Delete this card?": "Supprimer cette carte ?",
+  "Delete this period": "Supprimer cette période",
+  "Delete this year": "Supprimer cette année",
+  "Display": "Affichage",
+  "Done": "Terminé",
+  "Edit card": "Modifier la carte",
+  "Edit custom average": "Modifier la moyenne",
+  "Editing": "Modification",
+  "Enter the code, then pick something new.":
+    "Saisissez le code, puis choisissez un nouveau mot de passe.",
+  "Every subject and grade in this year goes with it. This cannot be undone.":
+    "Toutes les matières et notes de cette année disparaissent avec elle. C'est définitif.",
+  "Every year, subject and grade, as JSON.":
+    "Toutes vos années, matières et notes, en JSON.",
+  "Everything you were graded on, added up":
+    "Tout ce sur quoi vous avez été noté, cumulé",
+  "Export everything": "Tout exporter",
+  "Feedback": "Retour",
+  "Fine tuning": "Ajustements",
+  "Friday": "Vendredi",
+  "Furthest travelled between the halves of the year":
+    "Plus grand écart entre les deux moitiés de l'année",
+  "Give it a deadline": "Fixer une échéance",
+  "Goal": "Objectif",
+  "Goal progress": "Avancement d'un objectif",
+  "Hidden": "Masquées",
+  "Hide": "Masquer",
+  "High, and it stayed high. That is the hard part.":
+    "Haut, et ça l'est resté. C'est ça le plus dur.",
+  "How far a typical result sits from your average":
+    "L'écart habituel entre un résultat et votre moyenne",
+  "How far the average has moved across the period":
+    "De combien la moyenne a bougé sur la période",
+  "How grades are written": "Comment s'écrivent les notes",
+  "How it looks": "Apparence",
+  "How you worked": "Comment vous avez travaillé",
+  "I forgot my password": "J'ai oublié mon mot de passe",
+  "Idea": "Idée",
+  "If the trend holds": "Si la tendance se maintient",
+  "Improvement": "Progression",
+  "In total": "Au total",
+  "Insights": "Statistiques",
+  "It has landed. Every message gets read, even when the reply takes a while.":
+    "C'est bien arrivé. Chaque message est lu, même si la réponse peut tarder.",
+  "It started": "Ça a commencé",
+  "It started badly. That is not how it ended.":
+    "Ça avait mal commencé. Ça ne s'est pas fini comme ça.",
+  "Its own weight, ×{value}": "Son propre coefficient, ×{value}",
+  "Just the number": "Le nombre seul",
+  "Last one in": "Dernière saisie",
+  "Latest result": "Dernière note",
+  "Leave it empty to use the metric's own name.":
+    "Laissez vide pour reprendre le nom de la mesure.",
+  "Leave one empty to keep the subject's own coefficient.":
+    "Laissez vide pour garder le coefficient de la matière.",
+  "Longest run of active days": "Plus longue série de jours actifs",
+  "Mark as reached": "Marquer comme atteint",
+  "Mean result": "Note moyenne",
+  "Median result": "Note médiane",
+  "Message": "Message",
+  "Metric": "Mesure",
+  "Monday": "Lundi",
+  "Most improved": "Plus grande progression",
+  "Move down": "Descendre",
+  "Move up": "Monter",
+  "Moving the most": "Ce qui bouge le plus",
+  "Name updated.": "Nom mis à jour.",
+  "New card": "Nouvelle carte",
+  "New custom average": "Nouvelle moyenne personnalisée",
+  "New password": "Nouveau mot de passe",
+  "No cards": "Aucune carte",
+  "No custom averages yet": "Aucune moyenne personnalisée",
+  "Nobody recorded more than you did.": "Personne n'a saisi plus que vous.",
+  "Not enough data yet": "Pas encore assez de données",
+  "Note": "Remarque",
+  "Nothing to show yet": "Rien à afficher pour l'instant",
+  "Nothing was deleted.": "Rien n'a été supprimé.",
+  "Number and a line": "Le nombre et une courbe",
+  "Numbers": "Les chiffres",
+  "One average for the whole year. Add a period to change that.":
+    "Une seule moyenne pour toute l'année. Ajoutez une période pour changer ça.",
+  "Only the number matters — no names ever leave a device.":
+    "Seul le classement compte — aucun nom ne quitte jamais un appareil.",
+  "Open": "Ouvrir",
+  "Passing mark": "Seuil de réussite",
+  "Passing right now": "Série en cours",
+  "Passing streak": "Série de réussites",
+  "Password changed. Other devices have been signed out.":
+    "Mot de passe changé. Vos autres appareils ont été déconnectés.",
+  "Period {number}": "Période {number}",
+  "Pick a handful of subjects and weigh them your own way — useful when the official average is not the one you care about.":
+    "Choisissez quelques matières et pondérez-les à votre façon — utile quand la moyenne officielle n'est pas celle qui vous intéresse.",
+  "Privacy": "Confidentialité",
+  "Question": "Question",
+  "Record a few more grades and your year gets its recap.":
+    "Saisissez encore quelques notes et votre année aura sa rétrospective.",
+  "Remove this part": "Retirer cette partie",
+  "Reopen this goal": "Rouvrir cet objectif",
+  "Reorder and move": "Réorganiser et déplacer",
+  "Reset your password": "Réinitialiser votre mot de passe",
+  "Restore": "Rétablir",
+  "Restore the default cards": "Rétablir les cartes d'origine",
+  "Restore the defaults?": "Rétablir les cartes d'origine ?",
+  "Saturday": "Samedi",
+  "Save name": "Enregistrer le nom",
+  "Saving…": "Enregistrement…",
+  "Science average, mock exams…": "Moyenne scientifique, bacs blancs…",
+  "Scope": "Portée",
+  "Second half of the period against the first":
+    "Seconde moitié de la période contre la première",
+  "Send": "Envoyer",
+  "Send me a code": "Envoyez-moi un code",
+  "Set the new password": "Définir le mot de passe",
+  "Showing": "Affichage",
+  "Slipping the most": "Plus grand recul",
+  "Something else": "Autre chose",
+  "Something is broken": "Quelque chose ne marche pas",
+  "Spread": "Dispersion",
+  "Spread of results": "Répartition des notes",
+  "Steadiest": "Plus régulière",
+  "Steadiest subjects": "Matières les plus régulières",
+  "Streaks": "Séries",
+  "Strong": "Fort",
+  "Structure": "Structure",
+  "Subjects followed": "Matières suivies",
+  "Subjects ranked": "Classement des matières",
+  "Subjects, best first": "Matières, les meilleures d'abord",
+  "Sunday": "Dimanche",
+  "Terms": "Conditions d'utilisation",
+  "Thank you": "Merci",
+  "That address could not be used.": "Cette adresse n'a pas pu être utilisée.",
+  "That code could not be sent. Check the address.":
+    "Le code n'a pas pu être envoyé. Vérifiez l'adresse.",
+  "That code did not work. It may have expired.":
+    "Ce code n'a pas fonctionné. Il a peut-être expiré.",
+  "That could not be saved.": "Impossible d'enregistrer.",
+  "That could not be sent. Try again in a moment.":
+    "L'envoi a échoué. Réessayez dans un instant.",
+  "That did not match. Nothing was deleted.":
+    "Ça ne correspond pas. Rien n'a été supprimé.",
+  "That password could not be changed.":
+    "Le mot de passe n'a pas pu être changé.",
+  "The Avermatian": "L'Avermatien",
+  "The Comeback": "La Remontada",
+  "The Legend": "La Légende",
+  "The Masterclass": "Le Sans-Faute",
+  "The Metronome": "Le Métronome",
+  "The Tightrope Walker": "Le Funambule",
+  "The Visitor": "Le Visiteur",
+  "The Wildcard": "L'Imprévisible",
+  "The day it always lands on": "Le jour où ça tombe toujours",
+  "The day your average was at its highest":
+    "Le jour où votre moyenne était au plus haut",
+  "The export could not be prepared.": "L'export n'a pas pu être préparé.",
+  "The grade as a whole": "La note dans son ensemble",
+  "The grades stay; they just stop belonging to a period.":
+    "Les notes restent ; elles n'appartiennent simplement plus à une période.",
+  "The headline": "L'essentiel",
+  "The long version": "La version longue",
+  "The same result, again and again. Uncanny.":
+    "Le même résultat, encore et encore. Troublant.",
+  "The shape of your results": "La forme de vos résultats",
+  "The story is still being written.": "L'histoire s'écrit encore.",
+  "The subjects are untouched. This cannot be undone.":
+    "Les matières ne sont pas touchées. C'est définitif.",
+  "The turnaround": "Le redressement",
+  "The year itself": "L'année elle-même",
+  "The year so far": "L'année jusqu'ici",
+  "This drives the colour of every result and the pass rate.":
+    "C'est ce qui détermine la couleur de chaque note et le taux de réussite.",
+  "This period is over": "Cette période est terminée",
+  "Thursday": "Jeudi",
+  "Title": "Titre",
+  "Track your grades, understand what moves your average, and get a plan for the result you are aiming at.":
+    "Suivez vos notes, comprenez ce qui fait bouger votre moyenne, et sachez quoi faire pour atteindre le résultat que vous visez.",
+  "Trend": "Tendance",
+  "Tuesday": "Mardi",
+  "Type RESET to confirm. Your account stays, everything in it goes.":
+    "Tapez RESET pour confirmer. Votre compte reste, tout ce qu'il contient part.",
+  "Unweighted — every grade counts once":
+    "Sans coefficient — chaque note compte une fois",
+  "Version {version}": "Version {version}",
+  "We will send a six-digit code to your address.":
+    "Nous enverrons un code à six chiffres à votre adresse.",
+  "Weak": "Faible",
+  "Wednesday": "Mercredi",
+  "Weighted ×{value} here": "Pondérée ×{value} ici",
+  "What are you trying to do that the app makes hard?":
+    "Qu'essayez-vous de faire que l'application rend compliqué ?",
+  "What counts as a pass": "Ce qui compte comme réussite",
+  "What did you do, and what happened instead?":
+    "Qu'avez-vous fait, et que s'est-il passé à la place ?",
+  "What goes in": "Ce qu'elle contient",
+  "What it looks at": "Ce qu'elle regarde",
+  "What it measures": "Ce qu'elle mesure",
+  "What you were best at": "Vos points forts",
+  "When": "Quand",
+  "Where it lands": "Où ça atterrit",
+  "Where it sits": "Où elle se place",
+  "Where the current trend puts you at the end":
+    "Où la tendance actuelle vous mène à la fin",
+  "Work it out from the date": "Déduire de la date",
+  "Worst result": "Moins bonne note",
+  "Year in review": "Rétrospective de l'année",
+  "You have used this app more than the app expected.":
+    "Vous avez utilisé cette application plus que prévu.",
+  "You passed through. The year barely knew you were there.":
+    "Vous êtes passé par là. L'année vous a à peine vu.",
+  "You will get a link to confirm it.":
+    "Vous recevrez un lien pour la confirmer.",
+  "Your account stays, everything in it goes. This cannot be undone.":
+    "Votre compte reste, tout ce qu'il contient part. C'est définitif.",
+  "Your average": "Votre moyenne",
+  "Your current cards are replaced. Nothing else changes.":
+    "Vos cartes actuelles sont remplacées. Rien d'autre ne change.",
+  "Your data": "Vos données",
+  "Your grades are yours. Averages are computed on this device, not on a server, and nothing identifying you is ever compared against anybody else.":
+    "Vos notes vous appartiennent. Les moyennes sont calculées sur cet appareil, pas sur un serveur, et rien qui vous identifie n'est jamais comparé à qui que ce soit.",
+  "Your message": "Votre message",
+  "Your name": "Votre nom",
+  "Your peak": "Votre sommet",
+  "Your year, told back to you": "Votre année, racontée",
+  "Yours": "Les vôtres",
+  "and counting": "et ça continue",
+  "right now": "actuellement",
+  "top {percent}%": "top {percent} %",
+  "{count} days": "{count} jours",
+  "{count} results": "{count} résultats",
+  "{count} weeks left in this period":
+    "{count} semaines restantes sur cette période",
+
 };
 
 const dictionaries: Record<Locale, Record<string, string>> = { fr, en: {} };

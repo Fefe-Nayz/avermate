@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Column } from "@expo/ui";
 import {
   averageOverTime,
   consistency,
@@ -13,14 +13,32 @@ import {
   subjectImpact,
   trend,
 } from "@avermate/core";
-import { Card, Empty, Label, Loading, Row, Section } from "@/components/ui";
-import { AverageValue, CoefficientTag, DeltaValue, PointsValue, ResultBadge } from "@/components/value";
-import { Sparkline } from "@/components/sparkline";
-import { formatDay } from "@/components/date-field";
+import {
+  Button,
+  Empty,
+  Grouped,
+  Label,
+  Line,
+  Loading,
+  Row,
+  Section,
+  Text,
+} from "@/components/native";
+import {
+  AverageValue,
+  CoefficientTag,
+  DeltaValue,
+  PercentValue,
+  PointsValue,
+  ResultBadge,
+} from "@/components/value";
+import { Sparkline } from "@/components/chart";
+import { Sign } from "@/components/icon";
+import { formatDay } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
 /**
  * One subject, in full.
@@ -31,7 +49,6 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  * a coefficient — the weighting is hierarchical.
  */
 export default function SubjectDetail() {
-  const palette = usePalette();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isLoading, graph, period, passingRatio, year } = useYear();
@@ -68,10 +85,7 @@ export default function SubjectDetail() {
   if (isLoading) return <Loading />;
   if (!subject) {
     return (
-      <Empty
-        icon="help-circle-outline"
-        title={t("This subject is not in the current period.")}
-      />
+      <Empty glyph="help" title={t("This subject is not in the current period.")} />
     );
   }
 
@@ -96,201 +110,116 @@ export default function SubjectDetail() {
               }}
               hitSlop={10}
             >
-              <Ionicons
-                name="options-outline"
-                size={20}
-                color={palette.textMuted}
-              />
+              <Sign glyph="settings" size={20} />
             </Pressable>
           ),
         }}
       />
-      <ScrollView
-        style={{ flex: 1, backgroundColor: palette.background }}
-        contentContainerStyle={{
-          paddingHorizontal: space.lg,
-          paddingBottom: space.xxxl,
-          gap: space.xl,
-        }}
-        showsVerticalScrollIndicator={false}
+      <Grouped
+        footer={
+          <Button
+            label={t("Add a grade here")}
+            onPress={() => router.push(`/grade/new?subjectId=${subject.id}`)}
+          />
+        }
       >
-        <View style={{ gap: space.md, paddingTop: space.sm }}>
-          <View style={{ gap: space.xs }}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
-            >
+        <Section>
+          <Column spacing={space.md}>
+            <Row spacing={space.sm}>
               <Label>
                 {subject.kind === "category" ? t("Category") : t("Subject")}
               </Label>
               <CoefficientTag coefficient={subject.coefficient} />
-            </View>
-            <Text style={[type.title, { color: palette.text }]}>
-              {subject.name}
-            </Text>
-          </View>
-
-          <AverageValue ratio={ratio} size="hero" showScale colored />
-
-          {series.length > 2 ? (
-            <Sparkline series={series} positive={(slope ?? 0) >= 0} />
-          ) : null}
-
-          <Pressable
-            onPress={() => {
-              haptic("light");
-              router.push(`/grade/new?subjectId=${subject.id}`);
-            }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: space.sm,
-              minHeight: 44,
-              borderRadius: radius.md,
-              backgroundColor: palette.accentSoft,
-            }}
-          >
-            <Ionicons name="add" size={16} color={palette.text} />
-            <Text style={[type.callout, { color: palette.text }]}>
-              {t("Add a grade here")}
-            </Text>
-          </Pressable>
-        </View>
+            </Row>
+            <AverageValue ratio={ratio} size="hero" showScale colored />
+            {series.length > 2 ? (
+              <Sparkline series={series} positive={(slope ?? 0) >= 0} />
+            ) : null}
+          </Column>
+        </Section>
 
         {impact.delta !== null ? (
           <Section title={t("Effect on the general average")}>
-            <Card>
-              <View style={{ gap: space.sm }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: space.sm,
-                  }}
-                >
-                  <DeltaValue delta={impact.delta} size="title" />
-                  <Text
-                    style={[type.footnote, { flex: 1, color: palette.textMuted }]}
-                  >
-                    {impact.delta >= 0
-                      ? t("Without this subject you would be lower.")
-                      : t("Without this subject you would be higher.")}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: space.sm,
-                  }}
-                >
-                  <AverageValue ratio={impact.withoutValue} size="callout" />
-                  <Ionicons
-                    name="arrow-forward"
-                    size={13}
-                    color={palette.textFaint}
-                  />
-                  <AverageValue ratio={impact.withValue} size="callout" colored />
-                </View>
-              </View>
-            </Card>
+            <Column spacing={space.sm}>
+              <Row spacing={space.sm}>
+                <DeltaValue delta={impact.delta} size="title" />
+                <Text size="footnote" tone="muted">
+                  {impact.delta >= 0
+                    ? t("Without this subject you would be lower.")
+                    : t("Without this subject you would be higher.")}
+                </Text>
+              </Row>
+              <Row spacing={space.sm}>
+                <AverageValue ratio={impact.withoutValue} size="callout" />
+                <Sign glyph="arrowRight" size={13} tone="faint" />
+                <AverageValue ratio={impact.withValue} size="callout" colored />
+              </Row>
+            </Column>
           </Section>
         ) : null}
 
         {children.length > 0 ? (
           <Section title={t("Inside this one")}>
-            <Card padded={false}>
-              {children.map((child, index) => (
-                <Row
-                  key={child.id}
-                  first={index === 0}
-                  title={child.name}
-                  muted={child.kind === "category"}
-                  onPress={() => router.push(`/subject/${child.id}`)}
-                  trailing={
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: space.sm,
-                      }}
-                    >
-                      <CoefficientTag coefficient={child.coefficient} />
-                      <AverageValue
-                        ratio={graph.ratio(child.id)}
-                        size="callout"
-                        colored
-                      />
-                    </View>
-                  }
-                />
-              ))}
-            </Card>
+            {children.map((child) => (
+              <Line
+                key={child.id}
+                title={child.name}
+                onPress={() => router.push(`/subject/${child.id}`)}
+                trailing={
+                  <Row spacing={space.sm}>
+                    <CoefficientTag coefficient={child.coefficient} />
+                    <AverageValue
+                      ratio={graph.ratio(child.id)}
+                      size="callout"
+                      colored
+                    />
+                  </Row>
+                }
+              />
+            ))}
           </Section>
         ) : null}
 
         <Section title={t("Grades")}>
-          <Card padded={false}>
-            {grades.length === 0 ? (
-              <Empty
-                icon="document-text-outline"
-                title={t("No grade recorded here yet.")}
+          {grades.length === 0 ? (
+            <Empty glyph="grade" title={t("No grade recorded here yet.")} />
+          ) : (
+            grades.map((grade) => (
+              <Line
+                key={grade.id}
+                title={grade.name}
+                detail={formatDay(grade.passedAt)}
+                onPress={() => router.push(`/grade/${grade.id}`)}
+                trailing={
+                  <Row spacing={space.sm}>
+                    <PointsValue value={grade.value} outOf={grade.outOf} />
+                    <ResultBadge ratio={gradeRatio(grade)} />
+                  </Row>
+                }
               />
-            ) : (
-              grades.map((grade, index) => (
-                <Row
-                  key={grade.id}
-                  first={index === 0}
-                  title={grade.name}
-                  subtitle={formatDay(grade.passedAt)}
-                  onPress={() => router.push(`/grade/${grade.id}`)}
-                  trailing={
-                    <View style={{ alignItems: "flex-end", gap: 2 }}>
-                      <ResultBadge ratio={gradeRatio(grade)} />
-                      <PointsValue value={grade.value} outOf={grade.outOf} />
-                    </View>
-                  }
-                />
-              ))
-            )}
-          </Card>
+            ))
+          )}
         </Section>
 
         {ratios.length > 1 ? (
           <Section title={t("Patterns")}>
-            <Card padded={false}>
-              {pass !== null ? (
-                <Row
-                  first
-                  title={t("Pass rate")}
-                  trailing={
-                    <Text style={[type.body, { color: palette.text }]}>
-                      {`${Math.round(pass * 100)}%`}
-                    </Text>
-                  }
-                />
-              ) : null}
-              {steadiness !== null ? (
-                <Row
-                  title={t("Consistency")}
-                  subtitle={t("How tightly your results cluster")}
-                  trailing={
-                    <Text style={[type.body, { color: palette.text }]}>
-                      {`${Math.round(steadiness * 100)}%`}
-                    </Text>
-                  }
-                />
-              ) : null}
-              {progress !== null ? (
-                <Row
-                  title={t("Second half vs first")}
-                  trailing={<DeltaValue delta={progress} size="body" />}
-                />
-              ) : null}
-            </Card>
+            <Line title={t("Pass rate")} trailing={<PercentValue ratio={pass} />} />
+            {steadiness !== null ? (
+              <Line
+                title={t("Consistency")}
+                detail={t("How tightly your results cluster")}
+                trailing={<PercentValue ratio={steadiness} />}
+              />
+            ) : null}
+            {progress !== null ? (
+              <Line
+                title={t("Second half vs first")}
+                trailing={<DeltaValue delta={progress} size="body" />}
+              />
+            ) : null}
           </Section>
         ) : null}
-      </ScrollView>
+      </Grouped>
     </>
   );
 }
