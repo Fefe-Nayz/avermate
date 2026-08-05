@@ -153,6 +153,9 @@ export const auth = betterAuth({
   ],
 
   advanced: {
+    // Keep in step with `COOKIE_PREFIX` in apps/mobile/lib/auth-client.ts. The
+    // Expo plugin stores only the cookies whose name starts with the prefix it
+    // was given, so a mismatch signs you in and then loses the session.
     cookiePrefix: "avermate",
     database: { generateId: false },
   },

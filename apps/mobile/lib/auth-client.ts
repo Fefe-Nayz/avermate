@@ -14,6 +14,17 @@ import { env } from "./env";
 
 const STORAGE_PREFIX = env.scheme;
 
+/**
+ * Must match `advanced.cookiePrefix` on the server.
+ *
+ * The Expo plugin only stores a `Set-Cookie` whose name starts with this — it
+ * is how it tells our session apart from a third-party cookie it should leave
+ * alone. Its default is `better-auth`, so leaving it unset against a server
+ * that renames its cookies means every sign-in succeeds and every session is
+ * dropped on the floor a moment later.
+ */
+const COOKIE_PREFIX = "avermate";
+
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   basePath: "/api/auth",
@@ -28,6 +39,7 @@ export const authClient = createAuthClient({
     expoClient({
       scheme: env.scheme,
       storagePrefix: STORAGE_PREFIX,
+      cookiePrefix: COOKIE_PREFIX,
       storage: SecureStore,
     }),
   ],

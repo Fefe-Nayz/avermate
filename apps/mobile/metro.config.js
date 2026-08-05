@@ -22,4 +22,27 @@ config.resolver.nodeModulesPaths = [
 // app's direct dependencies and nothing deeper.
 config.resolver.unstable_enableSymlinks = true;
 
+/**
+ * Keep the file crawl off everything the app cannot import.
+ *
+ * Watching the workspace root is what makes `packages/core` and the `.bun`
+ * store resolvable, but it also hands Metro the other two apps — including a
+ * built `.next` directory, which on Windows without Watchman means minutes of
+ * crawling and gigabytes of file map before the server will even bind. None of
+ * it is reachable from this app, so none of it needs indexing.
+ */
+const ignored = [
+  /[\\/]\.git[\\/]/,
+  /[\\/]\.turbo[\\/]/,
+  /[\\/]\.expo[\\/]/,
+  /[\\/]apps[\\/]web[\\/]/,
+  /[\\/]apps[\\/]server[\\/]/,
+];
+
+config.resolver.blockList = ignored;
+config.watcher = {
+  ...config.watcher,
+  healthCheck: { ...config.watcher?.healthCheck, enabled: false },
+};
+
 module.exports = config;
