@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@avermate/core": "workspace:*",
+    "@better-auth/expo": "1.6.25",
     "@libsql/client": "^0.17.4",
     "@orpc/server": "^1.14.13",
     "@orpc/zod": "^1.14.13",

@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin as adminPlugin, emailOTP } from "better-auth/plugins";
+import { expo } from "@better-auth/expo";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { env, isProduction } from "./env";
@@ -60,11 +61,13 @@ export const auth = betterAuth({
   // trust. In development that has to include the LAN address the app is
   // opened on; in production it is the configured client and nothing else.
   trustedOrigins: (request?: Request) => {
-    if (isProduction || !request) return [env.CLIENT_URL];
+    // The mobile app redirects back through its own URL scheme, which has to
+    // be trusted in every environment — it is the app, not an origin on the
+    // network.
+    const always = [env.CLIENT_URL, `${env.MOBILE_SCHEME}://`];
+    if (isProduction || !request) return always;
     const origin = request.headers.get("origin");
-    return origin && isAllowedOrigin(origin)
-      ? [env.CLIENT_URL, origin]
-      : [env.CLIENT_URL];
+    return origin && isAllowedOrigin(origin) ? [...always, origin] : always;
   },
 
   session: {
@@ -125,6 +128,9 @@ export const auth = betterAuth({
   socialProviders,
 
   plugins: [
+    // The native app has no cookie jar: this hands the session back as a
+    // token the client stores in the keychain and replays as a header.
+    expo(),
     emailOTP({
       otpLength: 6,
       expiresIn: 600,

@@ -8,13 +8,14 @@ result you are aiming at.
 ```
 apps/server     Hono + oRPC API, Drizzle over libSQL, better-auth
 apps/web        Next.js app — the whole product, desktop and mobile
+apps/mobile     Expo app for iOS and Android
 packages/core   The domain engine: averages, analytics, goals, year in review
 ```
 
-`packages/core` is consumed as TypeScript source by both apps. It knows nothing
-about the database or the network, which is what lets the same code compute an
-average on the server, in the browser while a coefficient slider is being
-dragged, and in a unit test.
+`packages/core` is consumed as TypeScript source by all three apps. It knows
+nothing about the database or the network, which is what lets the same code
+compute an average on the server, in the browser while a coefficient slider is
+being dragged, on a phone in a tunnel, and in a unit test.
 
 ## How averages work
 
@@ -59,6 +60,23 @@ The API listens on `:5000`, the web app on `:3000`.
 year of results — an empty dashboard tells you nothing about whether the
 dashboard works.
 
+## The phone app
+
+```bash
+bun run dev:mobile
+```
+
+It reads the API host off the Metro packager URL, so a device on the same Wi-Fi
+reaches your machine rather than itself — nothing to configure, as long as the
+server is up. Set `EXPO_PUBLIC_SERVER_URL` to point at a deployed API instead.
+
+It is not the web app in a shell. Forms are screens with pinned actions rather
+than sheets, the date picker expands in place instead of covering the field
+being filled, and the switch and the slider are the real SwiftUI and Jetpack
+Compose controls via `@expo/ui` — the two things people have muscle memory for.
+Everything else is drawn to the same tokens as the web app, so a colour means
+the same thing in both.
+
 ## Migrating from v1
 
 ```bash
@@ -76,6 +94,9 @@ bun run check-types
 bun run test
 ```
 
-The tests cover the averaging engine, the preset data, and the message
+The tests cover the averaging engine, the preset data, and both message
 catalogues — a missing French translation fails rather than silently rendering
 English.
+
+`cd apps/mobile && bunx expo export --platform ios` bundles the app without a
+device, which is the cheapest way to catch a broken import.

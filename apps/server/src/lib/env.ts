@@ -18,6 +18,8 @@ export const env = createEnv({
     ADMIN_USER_IDS: z.string().optional(),
 
     CLIENT_URL: z.url(),
+    /** URL scheme the mobile app returns to after an OAuth round trip. */
+    MOBILE_SCHEME: z.string().default("avermate"),
     PORT: z.coerce.number().default(3000),
     NODE_ENV: z
       .enum(["development", "production", "test"])
