@@ -96,10 +96,16 @@ export default function SubjectsPage() {
    * the hierarchy, which is what the edit screen is for. Each level of the
    * tree gets its own sortable group, and a drag can never leave it.
    */
-  const reorderSiblings = (parentId: string | null, siblingIds: string[]) => {
+  const reorderSiblings = (
+    subjectId: string,
+    parentId: string | null,
+    siblingIds: string[]
+  ) => {
     if (move.isPending) return
-    const subjectId = siblingIds[0]
-    if (!subjectId) return
+    // `subjectId` is the subject the server reparents; the rest of the list
+    // only gets a new sort order. Since a reorder never changes the parent,
+    // passing any sibling would work — but naming the one that actually moved
+    // is what makes the request readable in a log.
     move.mutate({ subjectId, parentId, siblingIds })
   }
 
@@ -305,7 +311,7 @@ export default function SubjectsPage() {
                   if (from < 0 || to < 0) return
                   const next = [...siblings]
                   next.splice(to, 0, ...next.splice(from, 1))
-                  reorderSiblings(active.parentId, next)
+                  reorderSiblings(activeId, active.parentId, next)
                 }}
               >
                 <ul className="overflow-hidden rounded-xl border bg-card">

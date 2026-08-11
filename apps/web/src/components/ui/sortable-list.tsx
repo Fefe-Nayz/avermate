@@ -1,6 +1,12 @@
 "use client"
 
-import { createContext, useContext, useMemo, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
 import {
   DndContext,
   KeyboardSensor,
@@ -226,12 +232,15 @@ export function SortableRow({
   id,
   disabled = false,
   className,
+  style,
   as: Element = "li",
   children,
 }: {
   id: string
   disabled?: boolean
   className?: string
+  /** Merged under the drag transform — indentation, mostly. */
+  style?: CSSProperties
   as?: "li" | "div"
   children: ReactNode
 }) {
@@ -253,7 +262,11 @@ export function SortableRow({
     <HandleContext.Provider value={handle}>
       <Element
         ref={setNodeRef as never}
-        style={{ transform: CSS.Translate.toString(transform), transition }}
+        style={{
+          ...style,
+          transform: CSS.Translate.toString(transform),
+          transition,
+        }}
         className={cn(
           isDragging && "relative z-10 bg-card opacity-90 shadow-lg",
           className

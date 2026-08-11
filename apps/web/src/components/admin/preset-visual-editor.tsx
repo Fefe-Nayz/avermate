@@ -1,9 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
   FolderPlusIcon,
   PlusIcon,
   Trash2Icon,
@@ -12,7 +10,9 @@ import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import {
   DragHandle,
+  SortableGroup,
   SortableList,
+  SortableRoot,
   SortableRow,
 } from "@/components/ui/sortable-list"
 import { Input } from "@/components/ui/input"
@@ -135,28 +135,6 @@ function insertNode(
   }))
 }
 
-function reorderNode(
-  nodes: readonly PresetEditorSubject[],
-  key: string,
-  offset: -1 | 1
-): PresetEditorSubject[] {
-  const index = nodes.findIndex((node) => node.key === key)
-  if (index >= 0) {
-    const target = index + offset
-    if (target < 0 || target >= nodes.length) return [...nodes]
-    const next = [...nodes]
-    const current = next[index]
-    const sibling = next[target]
-    if (!current || !sibling) return next
-    next[index] = sibling
-    next[target] = current
-    return next
-  }
-  return nodes.map((node) => ({
-    ...node,
-    children: reorderNode(node.children, key, offset),
-  }))
-}
 
 function collectKeys(node: PresetEditorSubject): string[] {
   return [node.key, ...node.children.flatMap(collectKeys)]
@@ -218,6 +196,32 @@ export function PresetVisualEditor({
     })
   }
 
+  const reorderSubjects = (activeKey: string, overKey: string) => {
+    const active = subjectByKey.get(activeKey)
+    const over = subjectByKey.get(overKey)
+    // Levels are separate sortable groups, but a stray cross-level drop would
+    // otherwise reorder the wrong list. Reparenting has its own control.
+    if (!active || !over || active.parentKey !== over.parentKey) return
+
+    const reorder = (
+      nodes: readonly PresetEditorSubject[]
+    ): PresetEditorSubject[] => {
+      const from = nodes.findIndex((node) => node.key === activeKey)
+      const to = nodes.findIndex((node) => node.key === overKey)
+      if (from >= 0 && to >= 0) {
+        const next = [...nodes]
+        next.splice(to, 0, ...next.splice(from, 1))
+        return next
+      }
+      return nodes.map((node) => ({
+        ...node,
+        children: reorder(node.children),
+      }))
+    }
+
+    updateSubjects(reorder(value.subjects))
+  }
+
   const moveToParent = (key: string, parentKey: string | null) => {
     const current = subjectByKey.get(key)
     if (!current || current.descendantKeys.includes(parentKey ?? "")) return
@@ -226,76 +230,46 @@ export function PresetVisualEditor({
     updateSubjects(insertNode(result.nodes, parentKey, result.removed))
   }
 
-  return (
-    <div className="flex flex-col gap-5">
-      <section className="rounded-xl border bg-card">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
-          <div>
-            <h3 className="text-sm font-semibold">
-              {t("Subjects and categories")}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Names, hierarchy, order and coefficients are versioned together."
-              )}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                updateSubjects([...value.subjects, makeSubject("category")])
-              }
-            >
-              <FolderPlusIcon className="size-4" /> {t("Add category")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => updateSubjects([...value.subjects, makeSubject()])}
-            >
-              <PlusIcon className="size-4" /> {t("Add subject")}
-            </Button>
-          </div>
-        </div>
+  /**
+   * One level of the tree, draggable.
+   *
+   * The editor drew the whole hierarchy as a flat list with a left margin per
+   * depth, which is fine to read and impossible to sort: an order only means
+   * something among siblings. Rendering it recursively puts each level in its
+   * own sortable group, so a drag can reorder a level but never reparent a
+   * subject — the parent select beside each row is still the way to do that,
+   * and it stays a deliberate choice.
+   */
+  const renderSubjectLevel = (
+    nodes: readonly PresetEditorSubject[],
+    depth: number
+  ): ReactNode => {
+    if (nodes.length === 0) return null
 
-        <div className="flex flex-col gap-2 p-3">
-          {flat.map((subject, index) => {
-            const node = (() => {
-              const find = (
-                nodes: readonly PresetEditorSubject[]
-              ): PresetEditorSubject | null => {
-                for (const item of nodes) {
-                  if (item.key === subject.key) return item
-                  const nested = find(item.children)
-                  if (nested) return nested
-                }
-                return null
-              }
-              return find(value.subjects)
-            })()
-            if (!node) return null
-            const siblings = flat.filter(
-              (item) => item.parentKey === subject.parentKey
-            )
-            const siblingIndex = siblings.findIndex(
-              (item) => item.key === subject.key
-            )
-            const disallowedParents = new Set([
-              subject.key,
-              ...subject.descendantKeys,
-            ])
+    return (
+      <SortableGroup ids={nodes.map((node) => node.key)}>
+        {nodes.map((node) => {
+          const subject = subjectByKey.get(node.key)
+          if (!subject) return null
+          const disallowedParents = new Set([
+            subject.key,
+            ...subject.descendantKeys,
+          ])
 
-            return (
+          return (
+            <SortableRow
+              key={node.key}
+              id={node.key}
+              as="div"
+              className="flex flex-col gap-2"
+              style={{ marginLeft: `${Math.min(depth, 4) * 16}px` }}
+            >
               <article
                 key={node.key}
                 className="rounded-lg border bg-background p-3"
-                style={{ marginLeft: `${Math.min(subject.depth, 4) * 16}px` }}
               >
-                <div className="grid gap-2 @2xl/main:grid-cols-[minmax(10rem,1.4fr)_8rem_7rem_minmax(9rem,1fr)_auto]">
+                <div className="grid gap-2 @2xl/main:grid-cols-[auto_minmax(10rem,1.4fr)_8rem_7rem_minmax(9rem,1fr)_auto]">
+                  <DragHandle className="-ml-1 self-center" />
                   <Input
                     aria-label={t("Subject name")}
                     className="h-8"
@@ -361,34 +335,6 @@ export function PresetVisualEditor({
                       ))}
                   </select>
                   <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t("Move up")}
-                      disabled={siblingIndex <= 0}
-                      onClick={() =>
-                        updateSubjects(
-                          reorderNode(value.subjects, node.key, -1)
-                        )
-                      }
-                    >
-                      <ArrowUpIcon className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t("Move down")}
-                      disabled={
-                        siblingIndex < 0 || siblingIndex >= siblings.length - 1
-                      }
-                      onClick={() =>
-                        updateSubjects(reorderNode(value.subjects, node.key, 1))
-                      }
-                    >
-                      <ArrowDownIcon className="size-4" />
-                    </Button>
                     {node.kind === "category" ? (
                       <Button
                         type="button"
@@ -413,7 +359,7 @@ export function PresetVisualEditor({
                       size="icon-sm"
                       className="text-destructive"
                       aria-label={t("Remove")}
-                      disabled={value.subjects.length === 1 && index === 0}
+                      disabled={value.subjects.length === 1 && depth === 0}
                       onClick={() => removeSubject(node.key)}
                     >
                       <Trash2Icon className="size-4" />
@@ -459,8 +405,57 @@ export function PresetVisualEditor({
                   </span>
                 </div>
               </article>
-            )
-          })}
+              {renderSubjectLevel(node.children, depth + 1)}
+            </SortableRow>
+          )
+        })}
+      </SortableGroup>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="rounded-xl border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("Subjects and categories")}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Names, hierarchy, order and coefficients are versioned together."
+              )}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                updateSubjects([...value.subjects, makeSubject("category")])
+              }
+            >
+              <FolderPlusIcon className="size-4" /> {t("Add category")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => updateSubjects([...value.subjects, makeSubject()])}
+            >
+              <PlusIcon className="size-4" /> {t("Add subject")}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 p-3">
+          <SortableRoot
+            ids={flat.map((item) => item.key)}
+            onDrop={reorderSubjects}
+          >
+            {renderSubjectLevel(value.subjects, 0)}
+          </SortableRoot>
         </div>
       </section>
 
