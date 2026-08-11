@@ -1,113 +1,280 @@
 # Avermate
 
-Track your grades, understand what moves your average, and get a plan for the
-result you are aiming at.
+Avermate is a grade tracker that explains the number, not just records it.
+Model a school year with real coefficients and nested subjects, see what each
+result changed, and work backwards from a target to the marks that can reach it.
 
-## What is in the repository
+The repository contains an SSR-first web application, a native Expo client, a
+typed oRPC API, and one shared calculation engine.
 
+## What Avermate does
+
+- Tracks ordinary and composite grades, coefficients, notes, periods, and
+  multiple school years.
+- Models nested subjects and transparent categories without changing the
+  weighting rules.
+- Calculates general, subject, and custom averages from the same domain engine.
+- Explains grade and subject impact, trends, distributions, consistency,
+  streaks, and projected results.
+- Turns goals into concrete required marks and flags targets that are secured,
+  at risk, achieved, or unreachable.
+- Provides configurable dashboard cards, year review, themes, and English/
+  French localization.
+- Runs as a responsive Next.js web app and a dedicated Expo iOS/Android app.
+- Includes optional email/OAuth authentication, data export, uploads, feedback,
+  announcements, and administration when their services are configured.
+
+Interactive analytics use TanStack Charts. Time-series views support localized
+tooltips, independently resolved active points, mouse/trackpad/touch zoom and
+pan, keyboard controls, responsive layouts, reduced motion, and light/dark
+themes. Small decorative charts intentionally omit interaction.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  browser["Browser"] --> web["Next.js 16 SSR"]
+  web -->|"private oRPC transport"| api["Hono + oRPC API"]
+  web -->|"HTML + hydrated query state"| browser
+  browser -->|"mutations and intentional live reads"| api
+  mobile["Expo app"] --> api
+  api --> db["libSQL / Turso"]
+  core["@avermate/core"] --> web
+  core --> api
+  core --> mobile
 ```
-apps/server     Hono + oRPC API, Drizzle over libSQL, better-auth
-apps/web        Next.js app — the whole product, desktop and mobile
-apps/mobile     Expo app for iOS and Android
-packages/core   The domain engine: averages, analytics, goals, year in review
+
+The web app treats Server Components as the default. Next authenticates and
+prefetches common read models on the server, then TanStack Query hydrates only
+the small browser islands that need a live cache. The same generated oRPC query
+options are used on both sides, avoiding duplicate keys and immediate refetches.
+Production SSR calls the API over its private service address; the browser does
+not relay data the server already knows.
+
+TanStack Charts `0.11.0` is pinned exactly because the package is pre-alpha.
+Charts are built from native marks, scales, focus strategies and tooltips; the
+application adds a reusable semantic-domain interaction controller instead of
+recreating the old Recharts component API.
+
+For implementation details and measured request reductions, see
+[SSR and data loading](docs/ssr-data-loading.md) and
+[chart architecture](docs/charts.md).
+
+## Technology
+
+| Layer          | Main technology                                                 |
+| -------------- | --------------------------------------------------------------- |
+| Web            | Next.js 16, React 19, TypeScript, Tailwind CSS 4, next-intl     |
+| Server state   | TanStack Query 5, oRPC 1.14                                     |
+| Charts         | TanStack Charts 0.11, D3 shape primitives                       |
+| API            | Bun, Hono, oRPC, Zod                                            |
+| Authentication | Better Auth with Drizzle, email OTP, OAuth and Expo support     |
+| Database       | Drizzle ORM over libSQL/Turso or a local SQLite-compatible file |
+| Mobile         | Expo SDK 57, Expo Router, React Native 0.86                     |
+| Workspace      | Bun 1.3.14 workspaces and Turborepo                             |
+
+## Repository layout
+
+```text
+apps/
+  server/    Hono/oRPC API, authentication, database schema and scripts
+  web/       Next.js application and SSR/query/chart integration
+  mobile/    Expo Router application for iOS and Android
+packages/
+  core/      Pure averages, analytics, goals and review domain engine
+docs/
+  charts.md
+  ssr-data-loading.md
+deploy.yml   Reference Traefik/Docker Compose deployment
 ```
 
-`packages/core` is consumed as TypeScript source by all three apps. It knows
-nothing about the database or the network, which is what lets the same code
-compute an average on the server, in the browser while a coefficient slider is
-being dragged, on a phone in a tunnel, and in a unit test.
+`@avermate/core` is consumed as TypeScript source by all three applications. It
+has no database or network dependency, so the same arithmetic drives server
+responses, interactive simulations, native screens, and unit tests.
 
-## How averages work
+## Requirements
 
-A grade is `value / outOf`, normalised to a ratio in 0..1. A subject averages
-its grades by coefficient, then averages in whatever sits underneath it.
+- [Bun 1.3.14](https://bun.sh/) — the version pinned by `packageManager` and CI.
+- A libSQL database. `file:./dev.db` is enough locally; Turso or another durable
+  libSQL endpoint is recommended for deployment.
+- For native development, the platform requirements for Expo, Xcode and/or
+  Android Studio.
+- Docker and an existing Traefik `webgateway` network only if using the supplied
+  deployment file.
 
-The one idea worth learning is the difference between a **subject** and a
-**category**:
-
-- a *subject* is counted once, with its own coefficient, using its own average;
-- a *category* is transparent — the subjects inside it are weighed one by one
-  at the level above, and the category is only a heading.
-
-That distinction is what lets the same model fit a lycée (a handful of subjects
-with flat coefficients) and a prépa (written/oral/practical splits with global
-coefficients) without either of them feeling bolted on.
-
-Everything downstream — impacts, trends, goal plans, the year in review — is
-derived from that one calculation, so nothing can disagree with anything else.
-
-## Goals
-
-Set a target and the app inverts the arithmetic: with the coefficients fixed,
-an average is affine in any single input it depends on, so pinning a subject to
-0 and to 1 gives its whole response curve. That is what produces the mark your
-next assessment has to be, the subject where a point is worth the most, and an
-honest answer when a target has stopped being reachable.
-
-## Running it
+## Local setup
 
 ```bash
-bun install
-cp apps/server/.env.example apps/server/.env   # fill in BETTER_AUTH_SECRET
+git clone https://github.com/Fefe-Nayz/avermate.git
+cd avermate
+bun install --frozen-lockfile
+
+cp apps/server/.env.example apps/server/.env
 cp apps/web/.env.example apps/web/.env.local
+```
+
+On PowerShell, use `Copy-Item` instead of `cp`. Set a unique
+`BETTER_AUTH_SECRET` of at least 32 characters in `apps/server/.env`, then create
+the local schema and start the workspace:
+
+```bash
 bun run db:push
 bun run dev
 ```
 
-The API listens on `:5000`, the web app on `:3000`.
+The API listens on `http://localhost:5000` and the web app on
+`http://localhost:3000` with the example configuration. Run one process at a
+time with `bun run dev:server`, `bun run dev:web`, or `bun run dev:mobile`.
 
-`bun run db:seed` creates two accounts, both with the password
+### Environment variables
+
+The checked-in example files are the source of truth:
+
+- `apps/server/.env.example`
+- `apps/web/.env.example`
+
+Required server values:
+
+| Variable             | Purpose                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `DATABASE_URL`       | libSQL/Turso URL or local `file:` URL                    |
+| `BETTER_AUTH_URL`    | Public API/auth origin, normally `http://localhost:5000` |
+| `BETTER_AUTH_SECRET` | Unique signing/encryption secret, minimum 32 characters  |
+| `CLIENT_URL`         | Trusted public web origin                                |
+
+Required web values:
+
+| Variable              | Purpose                                           |
+| --------------------- | ------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | API origin used by browser islands                |
+| `NEXT_PUBLIC_APP_URL` | Public web origin                                 |
+| `API_INTERNAL_URL`    | Optional private API origin used only by Next SSR |
+
+Optional server integrations include `DATABASE_AUTH_TOKEN`, Google and
+Microsoft OAuth credentials, `RESEND_API_KEY`, `EMAIL_FROM`,
+`UPLOADTHING_TOKEN`, `DISCORD_WEBHOOK_URL`, `ADMIN_USER_IDS`, and
+`MOBILE_SCHEME`. The `DISABLE_EMAIL`, `DISABLE_FEEDBACK`, and `DISABLE_UPLOADS`
+flags are local-development escape hatches.
+
+When production web and API hosts are trusted sibling subdomains, set
+`AUTH_COOKIE_DOMAIN` to the narrowest parent they share. Leave it unset for
+host-only local cookies. Do not include unrelated or untrusted subdomains in
+that scope.
+
+The mobile app usually discovers the Metro host automatically. Set
+`EXPO_PUBLIC_SERVER_URL` when it should use a deployed API or discovery is not
+available.
+
+## Useful commands
+
+Run these from the repository root unless noted otherwise.
+
+| Command                                          | Purpose                                            |
+| ------------------------------------------------ | -------------------------------------------------- |
+| `bun run dev`                                    | Start all development tasks                        |
+| `bun run dev:web`                                | Start Next on port 3000                            |
+| `bun run dev:server`                             | Start the API on port 5000                         |
+| `bun run dev:mobile`                             | Start Expo/Metro                                   |
+| `bun run build`                                  | Build all workspaces for production                |
+| `bun run check-types`                            | Typecheck all workspaces                           |
+| `bun run lint`                                   | Run the web ESLint gate                            |
+| `bun run format:check`                           | Check web-workspace formatting                     |
+| `bun run format`                                 | Format the web workspace                           |
+| `bun run test`                                   | Run unit, contract and integration tests           |
+| `bun run db:push`                                | Push the current schema to the configured database |
+| `bun run db:generate`                            | Generate Drizzle migrations                        |
+| `bun run db:migrate`                             | Apply generated migrations                         |
+| `bun run db:studio`                              | Open Drizzle Studio                                |
+| `bun run admin:set -- user@example.com`          | Grant an existing user the admin role              |
+| `bun run admin:set -- user@example.com --revoke` | Revoke the database admin role                     |
+
+Native builds are available through `bun run --cwd apps/mobile ios` and
+`bun run --cwd apps/mobile android` once the platform toolchain is installed.
+
+## Demo data
+
+```bash
+bun run db:seed
+```
+
+This recreates two verified demo accounts with password
 `demo-account-2026`:
 
-- `demo@avermate.fr` — a complete account. Two years so the switcher has
-  somewhere to go, a cumulative period, a three-level subject tree, a subject
-  with nothing in it, composite grades, notes, two custom averages, a goal in
-  each of the six states the planner can report, and cards covering every
-  display. "Complete" means every shape the app can be asked to draw, not a lot
-  of grades — a screen that only ever meets tidy data breaks the first time it
-  meets a real year.
-- `new@avermate.fr` — empty. Onboarding runs once per account and there is no
-  undo, so this is the only way to see it twice.
+- `demo@avermate.fr` contains two years, periods, a nested subject tree,
+  ordinary and composite grades, notes, custom averages, goals in every planner
+  state, and dashboard cards.
+- `new@avermate.fr` is empty and opens onboarding.
 
-Add `--full` or `--blank` to seed just one.
+Use `--full` or `--blank` to seed one account. The seed script also accepts
+`--email`, `--name`, and `--password` for a custom demo identity. Never run it
+against data you need to preserve: matching demo accounts are deleted and
+recreated intentionally.
 
-## The phone app
+## Production and deployment
 
-```bash
-bun run dev:mobile
-```
-
-It reads the API host off the Metro packager URL, so a device on the same Wi-Fi
-reaches your machine rather than itself — nothing to configure, as long as the
-server is up. Set `EXPO_PUBLIC_SERVER_URL` to point at a deployed API instead.
-
-It is not the web app in a shell. Forms are screens with pinned actions rather
-than sheets, the date picker expands in place instead of covering the field
-being filled, and the switch and the slider are the real SwiftUI and Jetpack
-Compose controls via `@expo/ui` — the two things people have muscle memory for.
-Everything else is drawn to the same tokens as the web app, so a colour means
-the same thing in both.
-
-## Migrating from v1
+Build and run the applications directly:
 
 ```bash
-LEGACY_DATABASE_URL=file:/path/to/old.db bun run db:migrate-legacy -- --dry-run
+bun run build
+bun run --cwd apps/server start
+bun run --cwd apps/web start
 ```
 
-Drop `--dry-run` to write. Ids are preserved, coefficients are unscaled from
-their old ×100 integers, display subjects become categories, and custom
-averages move from a JSON blob into rows. The script is idempotent.
+The supplied Dockerfiles produce a Bun API image and a Next standalone image.
+The GitHub Actions workflow checks formatting, lint, types and tests on pull
+requests, then publishes both images to GHCR from `main`. `deploy.yml` is a
+reference deployment for the canonical `avermate.nayz.fr` and
+`api.avermate.nayz.fr` hosts behind Traefik.
 
-## Checks
+Before using it:
+
+1. Fill every required API/web environment value and use a strong auth secret.
+2. Set `API_INTERNAL_URL` to the API service address and, for sibling hosts,
+   configure the narrow shared `AUTH_COOKIE_DOMAIN`.
+3. Use a durable remote libSQL database or add an explicit persistent volume
+   for a file database; the reference Compose file does not provide one.
+4. Create or rename the external Traefik network expected as `webgateway`.
+5. For other public domains, change the web Dockerfile's build-time
+   `NEXT_PUBLIC_*` values before building. Next inlines public variables into
+   the client bundle; runtime Compose values cannot replace them afterward.
+
+The API container applies migrations on startup and falls back to a schema push
+for older databases. Review backups and migration output before a production
+upgrade.
+
+## Migrating an Avermate v1 database
+
+Start with a dry run:
 
 ```bash
-bun run check-types
-bun run test
+LEGACY_DATABASE_URL=file:/path/to/old.db \
+  bun run db:migrate-legacy -- --dry-run
 ```
 
-The tests cover the averaging engine, the preset data, and both message
-catalogues — a missing French translation fails rather than silently rendering
-English.
+For a remote legacy database, also set `LEGACY_DATABASE_AUTH_TOKEN`. Remove
+`--dry-run` to write. The migration preserves ids, converts scaled
+coefficients/values, maps display subjects to categories, normalizes custom
+average entries, and is designed to be idempotent. Back up both databases
+before the write run.
 
-`cd apps/mobile && bunx expo export --platform ios` bundles the app without a
-device, which is the cheapest way to catch a broken import.
+## Contributing
+
+1. Create a focused branch from the branch you intend to target.
+2. Keep domain logic in `packages/core` when it is independent of transport or
+   presentation, and keep client boundaries as small as the interaction needs.
+3. Add or update English and French messages together.
+4. Run `bun run format:check`, `bun run lint`, `bun run check-types`,
+   `bun run test`, and `bun run build` before opening a pull request.
+5. Describe database, environment, SSR/cache, and network-behavior changes in
+   the pull request when relevant.
+
+## Project status
+
+The rewrite architecture is active development. TanStack Charts is pinned to a
+pre-alpha release, so interaction contract tests and manual browser/touch/
+assistive-technology checks are required for chart upgrades. Production email,
+OAuth, uploads, feedback, durable database storage, domains, and reverse proxy
+are operator-configured rather than bundled services.
+
+No project license is currently declared in this repository. Do not assume
+permission to redistribute the code until the maintainers add one.
