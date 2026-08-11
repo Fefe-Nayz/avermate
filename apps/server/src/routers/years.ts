@@ -26,6 +26,8 @@ import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireYear } from "../lib/ownership";
 import { newId } from "../lib/id";
 import { defaultCards } from "@avermate/core";
+import { assertPeriodRangesWithinYear } from "../lib/academic-periods";
+import { getYearPresetStatus } from "../lib/preset-membership";
 
 const yearInput = z.object({
   name: z.string().trim().min(1).max(64),
@@ -77,6 +79,67 @@ export const yearsRouter = {
       requireYear(context.session.user.id, input.yearId),
     ),
 
+  /**
+   * Small, ownership-scoped resume payload for the year configuration flow.
+   * Counts are intentionally computed on the server so clients do not need to
+   * download a full snapshot merely to choose the next onboarding step.
+   */
+  configurationStatus: protectedProcedure
+    .input(z.object({ yearId: z.string() }))
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const year = await requireYear(userId, input.yearId);
+      const [subjectRows, periodRows, averageRows, gradeRows, goalRows, preset] =
+        await Promise.all([
+          db
+            .select({ id: subjects.id })
+            .from(subjects)
+            .where(eq(subjects.yearId, year.id)),
+          db
+            .select({ id: periods.id })
+            .from(periods)
+            .where(eq(periods.yearId, year.id)),
+          db
+            .select({ id: customAverages.id })
+            .from(customAverages)
+            .where(eq(customAverages.yearId, year.id)),
+          db
+            .select({ id: grades.id })
+            .from(grades)
+            .where(eq(grades.yearId, year.id)),
+          db
+            .select({ id: goals.id })
+            .from(goals)
+            .where(eq(goals.yearId, year.id)),
+          getYearPresetStatus(userId, year.id),
+        ]);
+      const counts = {
+        subjects: subjectRows.length,
+        periods: periodRows.length,
+        customAverages: averageRows.length,
+        grades: gradeRows.length,
+        goals: goalRows.length,
+      };
+      const recommendedStep =
+        counts.subjects === 0
+          ? ("subjects" as const)
+          : counts.periods === 0
+            ? ("periods" as const)
+            : ("complete" as const);
+
+      return {
+        year,
+        counts,
+        preset: {
+          state: preset.state,
+          presetId:
+            preset.membership?.presetId ?? preset.preset?.id ?? year.presetId,
+        },
+        recommendedStep,
+        canReplacePreset: counts.grades === 0,
+      };
+    }),
+
   create: protectedProcedure
     .input(yearInput)
     .handler(async ({ context, input }) => {
@@ -107,6 +170,18 @@ export const yearsRouter = {
       const startsAt = patch.startsAt ?? existing.startsAt;
       const endsAt = patch.endsAt ?? existing.endsAt;
       assertRange(startsAt, endsAt);
+      if (patch.startsAt !== undefined || patch.endsAt !== undefined) {
+        const periodRows = await db
+          .select({
+            name: periods.name,
+            startAt: periods.startAt,
+            endAt: periods.endAt,
+            isCumulative: periods.isCumulative,
+          })
+          .from(periods)
+          .where(eq(periods.yearId, yearId));
+        assertPeriodRangesWithinYear({ startsAt, endsAt }, periodRows);
+      }
 
       const [updated] = await db
         .update(years)

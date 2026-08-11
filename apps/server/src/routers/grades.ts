@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { gradeComponents, grades, periods, subjects } from "../db/schema";
@@ -65,7 +65,8 @@ async function inferPeriod(
   const rows = await db
     .select()
     .from(periods)
-    .where(eq(periods.yearId, yearId));
+    .where(eq(periods.yearId, yearId))
+    .orderBy(asc(periods.sortOrder), asc(periods.startAt), asc(periods.id));
 
   const time = passedAt.getTime();
   const matches = rows.filter(

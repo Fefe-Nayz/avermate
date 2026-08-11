@@ -5,7 +5,7 @@ import { periods } from "../db/schema";
 import { newId } from "../lib/id";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requirePeriod, requireYear } from "../lib/ownership";
-import { detachYearPresetStatement } from "../lib/preset-membership";
+import { assertPeriodRangesWithinYear } from "../lib/academic-periods";
 
 const periodInput = z.object({
   name: z.string().trim().min(1).max(64),
@@ -30,10 +30,8 @@ export const periodsRouter = {
     .input(periodInput.extend({ yearId: z.string() }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireYear(userId, input.yearId);
-      if (input.endAt.getTime() <= input.startAt.getTime()) {
-        badRequest("A period must end after it starts");
-      }
+      const year = await requireYear(userId, input.yearId);
+      assertPeriodRangesWithinYear(year, [input]);
 
       const existing = await db
         .select({ sortOrder: periods.sortOrder })
@@ -41,18 +39,15 @@ export const periodsRouter = {
         .where(eq(periods.yearId, input.yearId));
 
       const periodId = newId("per");
-      await db.batch([
-        db.insert(periods).values({
-          id: periodId,
-          ...input,
-          sortOrder: existing.reduce(
-            (max, row) => Math.max(max, row.sortOrder + 1),
-            0,
-          ),
-          userId,
-        }),
-        detachYearPresetStatement(userId, input.yearId, "period_created"),
-      ]);
+      await db.insert(periods).values({
+        id: periodId,
+        ...input,
+        sortOrder: existing.reduce(
+          (max, row) => Math.max(max, row.sortOrder + 1),
+          0,
+        ),
+        userId,
+      });
       const [created] = await db
         .select()
         .from(periods)
@@ -69,21 +64,20 @@ export const periodsRouter = {
 
       const startAt = patch.startAt ?? existing.startAt;
       const endAt = patch.endAt ?? existing.endAt;
-      if (endAt.getTime() <= startAt.getTime()) {
-        badRequest("A period must end after it starts");
-      }
-
-      await db.batch([
-        db
-          .update(periods)
-          .set({ ...patch, updatedAt: new Date() })
-          .where(eq(periods.id, periodId)),
-        detachYearPresetStatement(
-          context.session.user.id,
-          existing.yearId,
-          "period_updated",
-        ),
+      const year = await requireYear(context.session.user.id, existing.yearId);
+      assertPeriodRangesWithinYear(year, [
+        {
+          name: patch.name ?? existing.name,
+          startAt,
+          endAt,
+          isCumulative: patch.isCumulative ?? existing.isCumulative,
+        },
       ]);
+
+      await db
+        .update(periods)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(periods.id, periodId));
       const [updated] = await db
         .select()
         .from(periods)
@@ -134,7 +128,6 @@ export const periodsRouter = {
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(and(eq(periods.id, id), eq(periods.userId, userId))),
         ),
-        detachYearPresetStatement(userId, first.yearId, "period_reordered"),
       ];
       await db.batch(
         statements as [
@@ -152,10 +145,7 @@ export const periodsRouter = {
       const existing = await requirePeriod(userId, input.periodId);
       // Grades keep their `periodId` set to null and fall back to date
       // matching, so deleting a period never deletes results.
-      await db.batch([
-        db.delete(periods).where(eq(periods.id, input.periodId)),
-        detachYearPresetStatement(userId, existing.yearId, "period_deleted"),
-      ]);
+      await db.delete(periods).where(eq(periods.id, input.periodId));
       return { ok: true };
     }),
 
@@ -175,13 +165,8 @@ export const periodsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireYear(userId, input.yearId);
-
-      for (const period of input.periods) {
-        if (period.endAt.getTime() <= period.startAt.getTime()) {
-          badRequest(`"${period.name}" must end after it starts`);
-        }
-      }
+      const year = await requireYear(userId, input.yearId);
+      assertPeriodRangesWithinYear(year, input.periods);
 
       const requestedIds = input.periods.flatMap((period) =>
         period.periodId ? [period.periodId] : [],
@@ -251,7 +236,6 @@ export const periodsRouter = {
         deleteRemoved,
         ...updates,
         ...insertAdditions,
-        detachYearPresetStatement(userId, input.yearId, "periods_replaced"),
       ];
 
       // libSQL batches are atomic and, unlike opening a transaction on a

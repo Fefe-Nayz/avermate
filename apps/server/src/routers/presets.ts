@@ -7,6 +7,7 @@ import {
   customAverages,
   dashboardCards,
   grades,
+  goals,
   periods,
   presetDefinitions,
   presetVersions,
@@ -192,18 +193,100 @@ async function gradeCountForYear(yearId: string): Promise<number> {
   ).length;
 }
 
-async function configurationCounts(yearId: string) {
-  const [subjectRows, averageRows] = await Promise.all([
-    db
-      .select({ id: subjects.id })
-      .from(subjects)
-      .where(eq(subjects.yearId, yearId)),
-    db
-      .select({ id: customAverages.id })
-      .from(customAverages)
-      .where(eq(customAverages.yearId, yearId)),
+async function presetReplacementPlan(
+  userId: string,
+  year: Awaited<ReturnType<typeof requireYear>>,
+  preset: Awaited<ReturnType<typeof currentPresetConfiguration>>,
+) {
+  const [existingSubjectRows, existingAverageRows] = await Promise.all([
+    db.select().from(subjects).where(eq(subjects.yearId, year.id)),
+    db.select().from(customAverages).where(eq(customAverages.yearId, year.id)),
   ]);
-  return { subjects: subjectRows.length, averages: averageRows.length };
+  const hasConfiguration =
+    existingSubjectRows.length > 0 || existingAverageRows.length > 0;
+
+  // Reapplying the same logical preset keeps stable IDs. Goals and dashboard
+  // cards can therefore continue pointing at nodes that still exist.
+  const canPreservePresetIds = year.presetId === preset.definition.id;
+  const existingSubjectIds = canPreservePresetIds
+    ? new Map(
+        existingSubjectRows.flatMap((row) =>
+          row.presetNodeKey ? [[row.presetNodeKey, row.id] as const] : [],
+        ),
+      )
+    : new Map<string, string>();
+  const existingAverageIds = canPreservePresetIds
+    ? new Map(
+        existingAverageRows.flatMap((row) =>
+          row.presetNodeKey ? [[row.presetNodeKey, row.id] as const] : [],
+        ),
+      )
+    : new Map<string, string>();
+  const materialized = materializePresetConfiguration(
+    preset.configuration,
+    year.id,
+    userId,
+    existingSubjectIds,
+    existingAverageIds,
+  );
+  const nextSubjectIds = new Set(
+    materialized.subjectRows.map((row) => row.id as string),
+  );
+  const nextAverageIds = new Set(
+    materialized.averageRows.map((row) => row.id as string),
+  );
+  const oldSubjectIds = new Set(existingSubjectRows.map((row) => row.id));
+  const oldAverageIds = new Set(existingAverageRows.map((row) => row.id));
+  const [yearGoals, yearCards] = hasConfiguration
+    ? await Promise.all([
+        db.select().from(goals).where(eq(goals.yearId, year.id)),
+        db
+          .select()
+          .from(dashboardCards)
+          .where(eq(dashboardCards.yearId, year.id)),
+      ])
+    : [[], []];
+  const targetWouldDisappear = (
+    kind: string,
+    referenceId: string | null,
+  ): boolean => {
+    if (!referenceId) return false;
+    if (kind === "subject") {
+      return oldSubjectIds.has(referenceId) && !nextSubjectIds.has(referenceId);
+    }
+    if (kind === "custom") {
+      return oldAverageIds.has(referenceId) && !nextAverageIds.has(referenceId);
+    }
+    return false;
+  };
+  const referenceBlockers = [
+    ...yearGoals
+      .filter((goal) => targetWouldDisappear(goal.kind, goal.referenceId))
+      .map((goal) => ({
+        resource: "goal" as const,
+        id: goal.id,
+        label: goal.name,
+        targetKind: goal.kind,
+        targetId: goal.referenceId,
+      })),
+    ...yearCards
+      .filter((card) => targetWouldDisappear(card.targetKind, card.targetId))
+      .map((card) => ({
+        resource: "dashboard_card" as const,
+        id: card.id,
+        label: card.title ?? card.metric,
+        targetKind: card.targetKind,
+        targetId: card.targetId,
+      })),
+  ];
+
+  return {
+    existingSubjectRows,
+    existingAverageRows,
+    hasConfiguration,
+    materialized,
+    referenceBlockers,
+  };
 }
 
 async function applyManagedPreset(
@@ -214,8 +297,8 @@ async function applyManagedPreset(
 ) {
   const year = await requireYear(userId, yearId);
   const preset = await currentPresetConfiguration(presetId);
-  const existing = await configurationCounts(yearId);
-  const hasConfiguration = existing.subjects > 0 || existing.averages > 0;
+  const plan = await presetReplacementPlan(userId, year, preset);
+  const { hasConfiguration, materialized, referenceBlockers } = plan;
   if (hasConfiguration && !replaceExisting) {
     badRequest(
       "This year already has a configuration; preview and explicitly reapply the preset instead",
@@ -224,12 +307,11 @@ async function applyManagedPreset(
   if (hasConfiguration && (await gradeCountForYear(yearId)) > 0) {
     badRequest("A preset can never replace subjects that already carry grades");
   }
-
-  const materialized = materializePresetConfiguration(
-    preset.configuration,
-    yearId,
-    userId,
-  );
+  if (referenceBlockers.length > 0) {
+    badRequest(
+      "This preset replacement would invalidate goals or dashboard cards; retarget them before continuing",
+    );
+  }
   const statements = [
     ...(hasConfiguration
       ? [
@@ -368,21 +450,26 @@ export const presetsRouter = {
   previewApply: protectedProcedure
     .input(z.object({ yearId: z.string(), presetId: z.string() }))
     .handler(async ({ context, input }) => {
-      await requireYear(context.session.user.id, input.yearId);
-      const [existing, preset, gradeCount] = await Promise.all([
-        configurationCounts(input.yearId),
+      const userId = context.session.user.id;
+      const [year, preset, gradeCount] = await Promise.all([
+        requireYear(userId, input.yearId),
         currentPresetConfiguration(input.presetId),
         gradeCountForYear(input.yearId),
       ]);
+      const plan = await presetReplacementPlan(userId, year, preset);
       return {
-        existing,
+        existing: {
+          subjects: plan.existingSubjectRows.length,
+          averages: plan.existingAverageRows.length,
+        },
         replacement: {
           subjects: subjectCount(preset.configuration),
           averages: preset.configuration.averages.length,
           version: preset.definition.currentVersion,
         },
         gradeCount,
-        canReplace: gradeCount === 0,
+        referenceBlockers: plan.referenceBlockers,
+        canReplace: gradeCount === 0 && plan.referenceBlockers.length === 0,
       };
     }),
 
@@ -443,6 +530,29 @@ export const presetsRouter = {
       await requireYear(userId, input.yearId);
       await detachYearPresetStatement(userId, input.yearId, "detached_by_user");
       return getYearPresetStatus(userId, input.yearId);
+    }),
+
+  /** Resolve a possibly lost setup response without replaying the write. */
+  setupYearStatus: protectedProcedure
+    .input(
+      z.object({
+        idempotencyKey: z.string().trim().min(8).max(128),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const [request] = await db
+        .select()
+        .from(yearSetupRequests)
+        .where(
+          and(
+            eq(yearSetupRequests.userId, userId),
+            eq(yearSetupRequests.idempotencyKey, input.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (!request) return null;
+      return { year: await requireYear(userId, request.yearId) };
     }),
 
   /**
@@ -567,9 +677,9 @@ export const presetsRouter = {
 
   /**
    * Lay an independently chosen period template over an existing year. This
-   * is user customization rather than application of a managed preset
-   * version, so linked memberships detach in the same atomic batch. Grades
-   * survive through SET NULL.
+   * remains independent from the managed curriculum preset (subjects and
+   * custom averages), so choosing periods never detaches that membership.
+   * Grades survive through SET NULL.
    */
   applyPeriods: protectedProcedure
     .input(
@@ -586,16 +696,11 @@ export const presetsRouter = {
       const removeExisting = db
         .delete(periods)
         .where(eq(periods.yearId, year.id));
-      const detach = detachYearPresetStatement(
-        userId,
-        year.id,
-        "period_template_applied",
-      );
       if (rows.length === 0) {
-        await db.batch([removeExisting, detach]);
+        await removeExisting;
         return [];
       }
-      await db.batch([removeExisting, db.insert(periods).values(rows), detach]);
+      await db.batch([removeExisting, db.insert(periods).values(rows)]);
       return db
         .select()
         .from(periods)

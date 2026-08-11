@@ -29,6 +29,7 @@ type Api = ReturnType<
 
 let api: Api;
 let adminApi: Api;
+let managedApi: Api;
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
 
@@ -181,6 +182,37 @@ beforeAll(async () => {
       },
     } as never,
   });
+  managedApi = createRouterClient(appRouter, {
+    context: {
+      headers: new Headers(),
+      session: {
+        user: {
+          id: "managed-user",
+          name: "Managed User",
+          email: "managed@example.com",
+          emailVerified: true,
+          image: null,
+          role: "user",
+          banned: false,
+          banReason: null,
+          banExpires: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        session: {
+          id: "managed-session",
+          token: "managed-token",
+          userId: "managed-user",
+          expiresAt: new Date("2027-01-01T00:00:00.000Z"),
+          createdAt: now,
+          updatedAt: now,
+          ipAddress: null,
+          userAgent: null,
+          impersonatedBy: null,
+        },
+      },
+    } as never,
+  });
 });
 
 afterAll(async () => {
@@ -201,6 +233,85 @@ describe("router year invariants", () => {
     await api.years.archive({ yearId: "year-a", archived: false });
     const listed = await api.years.list();
     expect(listed.filter((year) => !year.archivedAt)).toHaveLength(2);
+  });
+
+  test("reports an ownership-scoped year configuration resume status", async () => {
+    const status = await api.years.configurationStatus({ yearId: "year-a" });
+    expect(status).toMatchObject({
+      year: { id: "year-a", userId: "user-a" },
+      counts: { subjects: 1, periods: 1, customAverages: 0 },
+      preset: { state: "none", presetId: null },
+      recommendedStep: "complete",
+    });
+    expect(typeof status.canReplacePreset).toBe("boolean");
+
+    await expect(
+      managedApi.years.configurationStatus({ yearId: "year-a" }),
+    ).rejects.toThrow("Year not found");
+  });
+
+  test("keeps every period inside its year while allowing ordered overlapping views", async () => {
+    const year = await api.years.create({
+      name: "Period invariant year",
+      startsAt: new Date("2038-09-01T00:00:00.000Z"),
+      endsAt: new Date("2039-07-01T00:00:00.000Z"),
+    });
+    expect(year).toBeDefined();
+    const first = await api.periods.create({
+      yearId: year?.id ?? "",
+      name: "Main term",
+      startAt: new Date("2038-09-01T00:00:00.000Z"),
+      endAt: new Date("2039-02-01T00:00:00.000Z"),
+      isCumulative: false,
+    });
+    const overlapping = await api.periods.create({
+      yearId: year?.id ?? "",
+      name: "Exam window",
+      startAt: new Date("2038-12-01T00:00:00.000Z"),
+      endAt: new Date("2038-12-20T00:00:00.000Z"),
+      isCumulative: false,
+    });
+    expect(overlapping).toBeDefined();
+
+    const subject = await api.subjects.create({
+      yearId: year?.id ?? "",
+      name: "Period resolution subject",
+    });
+    const grade = await api.grades.create({
+      name: "Overlapping date",
+      value: 15,
+      outOf: 20,
+      passedAt: new Date("2038-12-10T00:00:00.000Z"),
+      subjectId: subject?.id ?? "",
+    });
+    expect(grade?.periodId).toBe(first?.id);
+
+    await expect(
+      api.periods.create({
+        yearId: year?.id ?? "",
+        name: "Outside",
+        startAt: new Date("2038-08-01T00:00:00.000Z"),
+        endAt: new Date("2038-09-15T00:00:00.000Z"),
+        isCumulative: false,
+      }),
+    ).rejects.toThrow("must stay within the academic year");
+    await expect(
+      api.periods.update({
+        periodId: overlapping?.id ?? "",
+        endAt: new Date("2039-08-01T00:00:00.000Z"),
+      }),
+    ).rejects.toThrow("must stay within the academic year");
+    await expect(
+      api.years.update({
+        yearId: year?.id ?? "",
+        startsAt: new Date("2038-10-01T00:00:00.000Z"),
+      }),
+    ).rejects.toThrow("must stay within the academic year");
+
+    const unchanged = await api.years.get({ yearId: year?.id ?? "" });
+    expect(unchanged.startsAt).toEqual(
+      new Date("2038-09-01T00:00:00.000Z"),
+    );
   });
 
   test("rejects cross-year grade, hierarchy, average, goal and card references", async () => {
@@ -1353,6 +1464,12 @@ describe("managed preset lifecycle", () => {
     await expect(api.presets.setupYear(request)).rejects.toThrow();
     await database.$client.execute("DROP TRIGGER fail_setup_subject");
 
+    expect(
+      await api.presets.setupYearStatus({
+        idempotencyKey: request.idempotencyKey,
+      }),
+    ).toBeNull();
+
     const afterFailure = await database
       .select()
       .from(schema.years)
@@ -1367,8 +1484,17 @@ describe("managed preset lifecycle", () => {
     expect(setupRowsAfterFailure).toHaveLength(0);
 
     const created = await api.presets.setupYear(request);
+    const resolved = await api.presets.setupYearStatus({
+      idempotencyKey: request.idempotencyKey,
+    });
     const retried = await api.presets.setupYear(request);
+    expect(resolved?.year).toEqual(created);
     expect(retried.id).toBe(created.id);
+    expect(
+      await managedApi.presets.setupYearStatus({
+        idempotencyKey: request.idempotencyKey,
+      }),
+    ).toBeNull();
 
     const [createdSubjects, createdPeriods, createdCards, membership] =
       await Promise.all([
@@ -1403,6 +1529,193 @@ describe("managed preset lifecycle", () => {
         year: { ...request.year, name: "Different payload" },
       }),
     ).rejects.toThrow("already used with different options");
+  });
+
+  test("keeps stable preset references and blocks replacement before any user data loss", async () => {
+    const presetId = "INTEGRATION_REAPPLY_REFERENCES";
+    await adminApi.presets.admin.create({
+      id: presetId,
+      name: "Reference-safe curriculum",
+      description: "Reference preservation coverage",
+      tags: ["test"],
+      featured: false,
+      configuration: baseConfiguration,
+    });
+    const year = await api.presets.setupYear({
+      idempotencyKey: "reference-safe-reapply-setup",
+      year: {
+        name: "Reference-safe year",
+        startsAt: new Date("2039-09-01T00:00:00.000Z"),
+        endsAt: new Date("2040-07-01T00:00:00.000Z"),
+      },
+      presetId,
+      periodTemplateId: "none",
+      periodNames: [],
+    });
+    const [configuredSubjectsBefore, configuredAveragesBefore] =
+      await Promise.all([
+        database
+          .select()
+          .from(schema.subjects)
+          .where(eq(schema.subjects.yearId, year.id)),
+        database
+          .select()
+          .from(schema.customAverages)
+          .where(eq(schema.customAverages.yearId, year.id)),
+      ]);
+    const mathematics = configuredSubjectsBefore.find(
+      (subject) => subject.presetNodeKey === "mathematics",
+    );
+    const physics = configuredSubjectsBefore.find(
+      (subject) => subject.presetNodeKey === "physics",
+    );
+    const scienceAverage = configuredAveragesBefore.find(
+      (average) => average.presetNodeKey === "science-average",
+    );
+    expect(mathematics).toBeDefined();
+    expect(physics).toBeDefined();
+    expect(scienceAverage).toBeDefined();
+
+    const mathematicsGoal = await api.goals.create({
+      yearId: year.id,
+      name: "Mathematics target",
+      kind: "subject",
+      referenceId: mathematics?.id,
+      targetRatio: 0.8,
+    });
+    const averageGoal = await api.goals.create({
+      yearId: year.id,
+      name: "Science target",
+      kind: "custom",
+      referenceId: scienceAverage?.id,
+      targetRatio: 0.75,
+    });
+    const physicsGoal = await api.goals.create({
+      yearId: year.id,
+      name: "Physics target",
+      kind: "subject",
+      referenceId: physics?.id,
+      targetRatio: 0.7,
+    });
+    const mathematicsCard = await api.cards.create({
+      yearId: year.id,
+      metric: "average",
+      targetKind: "subject",
+      targetId: mathematics?.id,
+    });
+    const averageCard = await api.cards.create({
+      yearId: year.id,
+      metric: "average",
+      targetKind: "custom",
+      targetId: scienceAverage?.id,
+    });
+    const physicsCard = await api.cards.create({
+      yearId: year.id,
+      metric: "average",
+      targetKind: "subject",
+      targetId: physics?.id,
+    });
+
+    await api.presets.reapply({
+      yearId: year.id,
+      presetId,
+      acknowledgeReplacement: true,
+    });
+    const [configuredSubjectsAfter, configuredAveragesAfter] =
+      await Promise.all([
+        database
+          .select()
+          .from(schema.subjects)
+          .where(eq(schema.subjects.yearId, year.id)),
+        database
+          .select()
+          .from(schema.customAverages)
+          .where(eq(schema.customAverages.yearId, year.id)),
+      ]);
+    expect(
+      configuredSubjectsAfter.find(
+        (subject) => subject.presetNodeKey === "mathematics",
+      )?.id,
+    ).toBe(mathematics?.id);
+    expect(
+      configuredAveragesAfter.find(
+        (average) => average.presetNodeKey === "science-average",
+      )?.id,
+    ).toBe(scienceAverage?.id);
+    expect(await api.goals.list({ yearId: year.id })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: mathematicsGoal?.id }),
+        expect.objectContaining({ id: averageGoal?.id }),
+        expect.objectContaining({ id: physicsGoal?.id }),
+      ]),
+    );
+    expect(await api.cards.list({ yearId: year.id, surface: "overview" })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: mathematicsCard?.id }),
+        expect.objectContaining({ id: averageCard?.id }),
+        expect.objectContaining({ id: physicsCard?.id }),
+      ]),
+    );
+
+    await adminApi.presets.admin.publish({
+      presetId,
+      name: "Reference-safe curriculum",
+      description: "Reference preservation coverage",
+      tags: ["test"],
+      featured: false,
+      changeNote: "Remove physics",
+      configuration: {
+        ...baseConfiguration,
+        subjects: baseConfiguration.subjects.map((root) => ({
+          ...root,
+          children: root.children.filter((subject) => subject.key !== "physics"),
+        })),
+      },
+    });
+    const preview = await api.presets.previewApply({
+      yearId: year.id,
+      presetId,
+    });
+    expect(preview.canReplace).toBe(false);
+    expect(preview.referenceBlockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ resource: "goal", id: physicsGoal?.id }),
+        expect.objectContaining({
+          resource: "dashboard_card",
+          id: physicsCard?.id,
+        }),
+      ]),
+    );
+    await expect(
+      api.presets.reapply({
+        yearId: year.id,
+        presetId,
+        acknowledgeReplacement: true,
+      }),
+    ).rejects.toThrow("would invalidate goals or dashboard cards");
+
+    const goalsAfterRemoval = await api.goals.list({ yearId: year.id });
+    const cardsAfterRemoval = await api.cards.list({
+      yearId: year.id,
+      surface: "overview",
+    });
+    expect(goalsAfterRemoval.some((goal) => goal.id === physicsGoal?.id)).toBe(
+      true,
+    );
+    expect(cardsAfterRemoval.some((card) => card.id === physicsCard?.id)).toBe(
+      true,
+    );
+    expect(goalsAfterRemoval.some((goal) => goal.id === mathematicsGoal?.id)).toBe(
+      true,
+    );
+    expect(cardsAfterRemoval.some((card) => card.id === averageCard?.id)).toBe(
+      true,
+    );
+    expect(
+      (await api.snapshot.get({ yearId: year.id })).subjects.some(
+        (subject) => subject.id === physics?.id,
+      ),
+    ).toBe(true);
   });
 
   test("versions, synchronizes without changing IDs, then detaches on configuration edits", async () => {
@@ -1510,12 +1823,12 @@ describe("managed preset lifecycle", () => {
     expect(stillCustom?.name).toBe("My mathematics");
   });
 
-  test("detaches a linked preset atomically for every period mutation", async () => {
+  test("keeps curriculum presets linked across independent period mutations", async () => {
     const presetId = "INTEGRATION_PERIOD_MUTATION_PRESET";
     await adminApi.presets.admin.create({
       id: presetId,
       name: "Period mutation curriculum",
-      description: "Period detachment coverage",
+      description: "Independent period coverage",
       tags: ["test"],
       featured: false,
       configuration: baseConfiguration,
@@ -1532,27 +1845,10 @@ describe("managed preset lifecycle", () => {
       periodNames: ["Term 1", "Term 2", "Term 3"],
     });
 
-    const relink = async () => {
-      await database
-        .update(schema.yearPresetMemberships)
-        .set({
-          mode: "linked",
-          detachedReason: null,
-          detachedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.yearPresetMemberships.yearId, year.id));
-    };
-    const expectDetached = async (reason: string) => {
-      const [membership] = await database
-        .select()
-        .from(schema.yearPresetMemberships)
-        .where(eq(schema.yearPresetMemberships.yearId, year.id));
-      expect(membership).toMatchObject({
-        mode: "customized",
-        detachedReason: reason,
-      });
-      expect(membership?.detachedAt).toBeInstanceOf(Date);
+    const expectCurrent = async () => {
+      expect((await api.presets.status({ yearId: year.id })).state).toBe(
+        "current",
+      );
     };
 
     const created = await api.periods.create({
@@ -1563,27 +1859,23 @@ describe("managed preset lifecycle", () => {
       isCumulative: false,
     });
     expect(created).toBeDefined();
-    await expectDetached("period_created");
+    await expectCurrent();
 
-    await relink();
     await api.periods.update({
       periodId: created?.id ?? "",
       name: "Final revision",
     });
-    await expectDetached("period_updated");
+    await expectCurrent();
 
-    await relink();
     const beforeReorder = await api.periods.list({ yearId: year.id });
     await api.periods.reorder({
       periodIds: beforeReorder.map((period) => period.id).reverse(),
     });
-    await expectDetached("period_reordered");
+    await expectCurrent();
 
-    await relink();
     await api.periods.delete({ periodId: created?.id ?? "" });
-    await expectDetached("period_deleted");
+    await expectCurrent();
 
-    await relink();
     const beforeReplace = await api.periods.list({ yearId: year.id });
     await api.periods.replaceAll({
       yearId: year.id,
@@ -1595,17 +1887,15 @@ describe("managed preset lifecycle", () => {
         isCumulative: period.isCumulative,
       })),
     });
-    await expectDetached("periods_replaced");
+    await expectCurrent();
 
-    await relink();
     await api.presets.applyPeriods({
       yearId: year.id,
       templateId: "semesters",
       names: ["Semester 1", "Semester 2"],
     });
-    await expectDetached("period_template_applied");
+    await expectCurrent();
 
-    await relink();
     expect(
       await api.presets.applyPeriods({
         yearId: year.id,
@@ -1613,7 +1903,7 @@ describe("managed preset lifecycle", () => {
         names: [],
       }),
     ).toEqual([]);
-    await expectDetached("period_template_applied");
+    await expectCurrent();
   });
 
   test("requires action instead of deleting a subject that carries grades", async () => {
