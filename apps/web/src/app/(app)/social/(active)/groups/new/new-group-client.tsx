@@ -223,7 +223,7 @@ export function NewGroupClient() {
         ) : null}
 
         <div className="flex justify-end">
-          <Button disabled={!valid || create.isPending}>
+          <Button type="submit" disabled={!valid || create.isPending}>
             {create.isPending ? <Spinner /> : null}
             {t("Create private group")}
           </Button>

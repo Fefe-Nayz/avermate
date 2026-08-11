@@ -170,6 +170,49 @@ describe("social server and privacy boundaries", () => {
     expect(files[2]).toContain("profile.previewMineAs")
   })
 
+  test("gives every social form an explicit Base UI submit button", async () => {
+    const files = await Promise.all([
+      source("../app/(app)/social/(active)/friends/friends-client.tsx"),
+      source(
+        "../app/(app)/social/(active)/groups/new/new-group-client.tsx"
+      ),
+      source(
+        "../app/(app)/social/(active)/profile/profile-sharing-client.tsx"
+      ),
+      source("../components/social/circles-manager.tsx"),
+      source("../components/social/guardian-request-manager.tsx"),
+    ])
+
+    const forms = files.flatMap(
+      (file) => file.match(/<form\b[\s\S]*?<\/form>/g) ?? []
+    )
+    expect(forms).toHaveLength(6)
+    for (const form of forms) {
+      expect(form).toContain("onSubmit=")
+      expect(form).toMatch(/<Button\b[\s\S]*?type="submit"/)
+    }
+  })
+
+  test("keeps grant failures visible without exposing backend errors", async () => {
+    const profile = await source(
+      "../app/(app)/social/(active)/profile/profile-sharing-client.tsx"
+    )
+    const addGrant = profile.slice(
+      profile.indexOf("const addGrant"),
+      profile.indexOf("const revokeGrant")
+    )
+    const revokeGrant = profile.slice(
+      profile.indexOf("const revokeGrant"),
+      profile.indexOf("const busy")
+    )
+
+    for (const mutation of [addGrant, revokeGrant]) {
+      expect(mutation).toContain("onError:")
+      expect(mutation).toContain("toast.error")
+      expect(mutation).not.toContain("error.message")
+    }
+  })
+
   test("keeps avatar formatting in a shared pure helper", async () => {
     const [preview, socialUi, nameHelper, navUser] = await Promise.all([
       source("../components/social/profile-preview.tsx"),

@@ -146,7 +146,7 @@ export function CirclesManager() {
           aria-label={t("New circle name")}
           maxLength={60}
         />
-        <Button disabled={busy || !newName.trim()}>
+        <Button type="submit" disabled={busy || !newName.trim()}>
           {create.isPending ? <Spinner /> : <FolderPlusIcon />}
           <span className="hidden sm:inline">{t("Create")}</span>
         </Button>

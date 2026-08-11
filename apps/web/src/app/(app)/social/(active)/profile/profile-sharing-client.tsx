@@ -122,6 +122,8 @@ export function ProfileSharingClient() {
       toast.success(t("Sharing permission updated."))
       await refresh()
     },
+    onError: () =>
+      toast.error(t("The request could not be processed. Try again later.")),
   })
   const revokeGrant = useMutation({
     ...orpc.social.grants.revoke.mutationOptions(),
@@ -130,6 +132,8 @@ export function ProfileSharingClient() {
       toast.success(t("Sharing permission withdrawn immediately."))
       await refresh()
     },
+    onError: () =>
+      toast.error(t("The request could not be processed. Try again later.")),
   })
 
   const busy =
@@ -338,6 +342,7 @@ export function ProfileSharingClient() {
 
                 <div className="flex justify-end">
                   <Button
+                    type="submit"
                     disabled={
                       busy ||
                       displayName.trim().length === 0 ||
@@ -398,6 +403,7 @@ export function ProfileSharingClient() {
                     />
                   ) : null}
                   <Button
+                    type="submit"
                     disabled={busy || (audience !== "friends" && !audienceId)}
                   >
                     {addGrant.isPending ? <Spinner /> : <PlusIcon />}
