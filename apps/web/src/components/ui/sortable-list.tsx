@@ -66,12 +66,19 @@ export function SortableRoot({
   ids,
   onDrop,
   disabled = false,
+  restrictToParent = true,
   children,
 }: {
   /** Every draggable id, in visual order. Used only for announcements. */
   ids: string[]
   onDrop: (activeId: string, overId: string) => void
   disabled?: boolean
+  /**
+   * Keep the dragged row inside its parent element. Right for a flat list,
+   * wrong for a tree: a nested row's parent element is the row that contains
+   * it, so the clamp pins the child roughly where it already is.
+   */
+  restrictToParent?: boolean
   children: ReactNode
 }) {
   const t = useExtracted()
@@ -109,16 +116,18 @@ export function SortableRoot({
     [ids, t]
   )
 
-  if (disabled) return <>{children}</>
-
   return (
     <DndContext
       accessibility={{ announcements }}
       sensors={sensors}
       collisionDetection={closestCenter}
-      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      modifiers={
+        restrictToParent
+          ? [restrictToVerticalAxis, restrictToParentElement]
+          : [restrictToVerticalAxis]
+      }
       onDragEnd={({ active, over }) => {
-        if (!over || active.id === over.id) return
+        if (disabled || !over || active.id === over.id) return
         haptic("light")
         onDrop(String(active.id), String(over.id))
       }}
@@ -197,7 +206,7 @@ export function SortableList({
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
-    if (!over || active.id === over.id) return
+    if (disabled || !over || active.id === over.id) return
 
     const from = ids.indexOf(String(active.id))
     const to = ids.indexOf(String(over.id))
@@ -206,8 +215,6 @@ export function SortableList({
     haptic("light")
     onReorder(arrayMove(ids, from, to))
   }
-
-  if (disabled) return <>{children}</>
 
   return (
     <DndContext

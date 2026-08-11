@@ -452,6 +452,7 @@ export function PresetVisualEditor({
         <div className="flex flex-col gap-2 p-3">
           <SortableRoot
             ids={flat.map((item) => item.key)}
+            restrictToParent={false}
             onDrop={reorderSubjects}
           >
             {renderSubjectLevel(value.subjects, 0)}

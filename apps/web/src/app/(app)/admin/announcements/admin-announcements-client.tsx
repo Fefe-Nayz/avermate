@@ -10,7 +10,11 @@ import {
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import { toast } from "sonner"
-import { ChoiceField, TextField } from "@/components/forms/controls"
+import {
+  ChoiceField,
+  DateTimeField,
+  TextField,
+} from "@/components/forms/controls"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
@@ -483,22 +487,19 @@ function AnnouncementFields({
         </Field>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextField
+        <DateTimeField
           label={t("Starts (optional)")}
-          type="datetime-local"
           value={draft.startsAt}
-          onChange={(event) =>
-            onChange({ ...draft, startsAt: event.target.value })
-          }
+          max={draft.endsAt || undefined}
+          placeholder={t("Immediately")}
+          onValueChange={(startsAt) => onChange({ ...draft, startsAt })}
         />
-        <TextField
+        <DateTimeField
           label={t("Ends (optional)")}
-          type="datetime-local"
           value={draft.endsAt}
           min={draft.startsAt || undefined}
-          onChange={(event) =>
-            onChange({ ...draft, endsAt: event.target.value })
-          }
+          placeholder={t("Never")}
+          onValueChange={(endsAt) => onChange({ ...draft, endsAt })}
         />
       </div>
       <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm font-medium">

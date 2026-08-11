@@ -2,7 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react"
 import { CalendarIcon, CheckIcon } from "lucide-react"
-import { useLocale } from "next-intl"
+import { useExtracted, useLocale } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -464,6 +464,111 @@ export function DateField({
         className="h-11 w-full md:h-9"
         {...picker}
       />
+
+      {description && !error ? (
+        <FieldDescription>{description}</FieldDescription>
+      ) : null}
+      {error ? <FieldError>{error}</FieldError> : null}
+    </Field>
+  )
+}
+
+/**
+ * A moment: the app's calendar, plus a time.
+ *
+ * `<input type="datetime-local">` is the last native control left in the
+ * admin, and it is the worst of them — every browser draws a different widget,
+ * Chrome plants a grey system panel mid-form, and Firefox on Linux gives you
+ * three spinboxes. The date half is the same popover calendar the rest of the
+ * app uses; the time half stays a plain `time` input, which is a small,
+ * consistently rendered field rather than an overlay, and typing `09:30` in it
+ * is genuinely the fastest way to set a time.
+ *
+ * The value stays a `YYYY-MM-DDTHH:mm` string — exactly what the native input
+ * produced and what the API already accepts — so nothing downstream changes.
+ */
+export function DateTimePicker({
+  id,
+  value,
+  onValueChange,
+  min,
+  max,
+  disabled,
+  invalid,
+  placeholder,
+  className,
+}: {
+  id?: string
+  /** `YYYY-MM-DDTHH:mm`, or an empty string for no moment. */
+  value: string
+  onValueChange: (value: string) => void
+  /** Lower bound, same shape. Only its date part restricts the calendar. */
+  min?: string
+  max?: string
+  disabled?: boolean
+  invalid?: boolean
+  placeholder?: string
+  className?: string
+}) {
+  const t = useExtracted()
+  const [datePart = "", timePart = ""] = value ? value.split("T") : []
+
+  const commit = (nextDate: string, nextTime: string) => {
+    if (!nextDate) return onValueChange("")
+    // A date with no time is midnight — the same assumption the native control
+    // makes, and the one that keeps "starts on the 3rd" meaning the whole day.
+    onValueChange(`${nextDate}T${nextTime || "00:00"}`)
+  }
+
+  return (
+    <div className={cn("flex gap-2", className)}>
+      <DatePicker
+        id={id}
+        value={datePart}
+        onValueChange={(next) => commit(next, timePart)}
+        min={min ? min.split("T")[0] : undefined}
+        max={max ? max.split("T")[0] : undefined}
+        disabled={disabled}
+        invalid={invalid}
+        placeholder={placeholder}
+        format="short"
+        className="h-11 min-w-0 flex-1 md:h-9"
+      />
+      <Input
+        type="time"
+        aria-label={t("Time")}
+        value={timePart}
+        disabled={disabled || !datePart}
+        onChange={(event) => commit(datePart, event.target.value)}
+        className="h-11 w-28 shrink-0 md:h-9"
+      />
+    </div>
+  )
+}
+
+export function DateTimeField({
+  label,
+  description,
+  error,
+  required,
+  className,
+  ...picker
+}: React.ComponentProps<typeof DateTimePicker> & {
+  label: string
+  description?: string
+  error?: string
+  required?: boolean
+}) {
+  const id = useId()
+
+  return (
+    <Field data-invalid={error ? true : undefined} className={className}>
+      <FieldLabel htmlFor={id}>
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </FieldLabel>
+
+      <DateTimePicker id={id} invalid={Boolean(error)} {...picker} />
 
       {description && !error ? (
         <FieldDescription>{description}</FieldDescription>

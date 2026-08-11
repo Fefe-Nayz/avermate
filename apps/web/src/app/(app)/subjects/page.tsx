@@ -294,6 +294,7 @@ export default function SubjectsPage() {
               <SortableRoot
                 ids={graph.flatten().map((subject) => subject.id)}
                 disabled={move.isPending}
+                restrictToParent={false}
                 onDrop={(activeId, overId) => {
                   const active = graph.byId(activeId)
                   const over = graph.byId(overId)
@@ -314,14 +315,14 @@ export default function SubjectsPage() {
                   reorderSiblings(activeId, active.parentId, next)
                 }}
               >
-                <ul className="overflow-hidden rounded-xl border bg-card">
+                <div className="rounded-xl border bg-card">
                   <SubjectOrderLevel
                     parentId={null}
                     depth={0}
                     subjects={graph.flatten()}
                     pending={move.isPending}
                   />
-                </ul>
+                </div>
               </SortableRoot>
             ) : (
               <ul className="overflow-hidden rounded-xl border bg-card">
@@ -369,9 +370,14 @@ function SubjectOrderLevel({
   return (
     <SortableGroup ids={siblings.map((item) => item.id)}>
       {siblings.map((subject) => (
-        <SortableRow key={subject.id} id={subject.id} disabled={pending}>
+        <SortableRow
+          key={subject.id}
+          id={subject.id}
+          as="div"
+          disabled={pending}
+        >
           <div
-            className="flex min-h-13 items-center gap-2 border-t py-2 pe-3 first:border-t-0"
+            className="flex min-h-13 items-center gap-2 border-b py-2 pe-3"
             style={{ paddingInlineStart: `${0.5 + depth * 1}rem` }}
           >
             <DragHandle />

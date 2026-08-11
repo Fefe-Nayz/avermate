@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { DateTimeField } from "@/components/forms/controls"
 import { Textarea } from "@/components/ui/textarea"
 import { orpc } from "@/lib/orpc"
 
@@ -223,15 +224,13 @@ export function AdminUserActions({
               placeholder={t("Explain why this account is suspended")}
             />
           </label>
-          <label className="space-y-1.5 text-sm font-medium">
-            {t("Expires (optional)")}
-            <Input
-              type="datetime-local"
-              value={expiresAt}
-              min={minimumExpiry}
-              onChange={(event) => setExpiresAt(event.target.value)}
-            />
-          </label>
+          <DateTimeField
+            label={t("Expires (optional)")}
+            value={expiresAt}
+            min={minimumExpiry}
+            placeholder={t("No end date")}
+            onValueChange={setExpiresAt}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)}>
               {t("Cancel")}
