@@ -43,9 +43,11 @@ export interface AverageFormValues {
 export function AverageForm({
   initial,
   mode,
+  returnTo,
 }: {
   initial?: Partial<AverageFormValues>
   mode: "create" | "edit"
+  returnTo?: string
 }) {
   const t = useExtracted()
   const router = useRouter()
@@ -104,7 +106,7 @@ export function AverageForm({
         }),
         invalidateAnnouncementAudience(queryClient),
       ])
-      router.push("/settings/averages")
+      router.push(returnTo ?? "/settings/averages")
     },
     onError: (error: Error) => {
       haptic("error")
@@ -133,7 +135,7 @@ export function AverageForm({
         }),
         invalidateAnnouncementAudience(queryClient),
       ])
-      router.push("/settings/averages")
+      router.push(returnTo ?? "/settings/averages")
     },
   })
 
@@ -173,7 +175,7 @@ export function AverageForm({
         mode === "create" ? t("New custom average") : t("Edit custom average")
       }
       description={t("Combine any subjects, with weights of your own.")}
-      backHref="/settings/averages"
+      backHref={returnTo ?? "/settings/averages"}
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Create") : t("Save changes")}
       submitting={create.isPending || update.isPending}

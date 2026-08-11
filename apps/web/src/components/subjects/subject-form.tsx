@@ -53,9 +53,11 @@ export interface SubjectFormValues {
 export function SubjectForm({
   initial,
   mode,
+  returnTo,
 }: {
   initial?: Partial<SubjectFormValues>
   mode: "create" | "edit"
+  returnTo?: string
 }) {
   const t = useExtracted()
   const router = useRouter()
@@ -116,7 +118,8 @@ export function SubjectForm({
         }),
         invalidateAnnouncementAudience(queryClient),
       ])
-      router.back()
+      if (returnTo) router.push(returnTo)
+      else router.back()
     },
     onError: (error: Error) => {
       haptic("error")
@@ -147,7 +150,7 @@ export function SubjectForm({
         }),
         invalidateAnnouncementAudience(queryClient),
       ])
-      router.push("/subjects")
+      router.push(returnTo ?? "/subjects")
     },
   })
 
@@ -188,7 +191,7 @@ export function SubjectForm({
   return (
     <FormPage
       title={mode === "create" ? t("New subject") : t("Edit subject")}
-      backHref="/subjects"
+      backHref={returnTo ?? "/subjects"}
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Add subject") : t("Save changes")}
       submitting={saving}

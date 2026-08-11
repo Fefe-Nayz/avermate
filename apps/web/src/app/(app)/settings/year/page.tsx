@@ -29,47 +29,23 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Switch } from "@/components/ui/switch"
 import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
 import {
-  SettingsRow,
   SettingsSection,
 } from "@/components/settings/settings-section"
 import { DateField, NumberField, TextField } from "@/components/forms/controls"
+import { PeriodDraftEditor } from "@/components/year/period-draft-editor"
 import { useYear } from "@/components/year/year-provider"
 import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
-
-function toDateInput(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
-}
-
-interface PeriodDraft {
-  key: string
-  id?: string
-  name: string
-  startAt: string
-  endAt: string
-  isCumulative: boolean
-}
-
-function createPeriodDrafts(
-  periods: ReturnType<typeof useYear>["periods"]
-): PeriodDraft[] {
-  return periods
-    .filter((period) => period.id !== "__full_year__")
-    .map((period) => ({
-      key: period.id,
-      id: period.id,
-      name: period.name,
-      startAt: toDateInput(new Date(period.startAt)),
-      endAt: toDateInput(new Date(period.endAt)),
-      isCumulative: period.isCumulative,
-    }))
-}
+import {
+  dateInputValue,
+  periodDraftProblems,
+  periodDraftsFromRows,
+  type PeriodDraft,
+} from "@/lib/period-drafts"
 
 /**
  * The year itself: its dates, its scale, and how it is split.
@@ -88,10 +64,10 @@ export default function YearSettingsPage() {
   const [sourceYear, setSourceYear] = useState(year)
   const [name, setName] = useState(year?.name ?? "")
   const [startsAt, setStartsAt] = useState(() =>
-    year ? toDateInput(new Date(year.startsAt)) : ""
+    year ? dateInputValue(new Date(year.startsAt)) : ""
   )
   const [endsAt, setEndsAt] = useState(() =>
-    year ? toDateInput(new Date(year.endsAt)) : ""
+    year ? dateInputValue(new Date(year.endsAt)) : ""
   )
   const [scale, setScale] = useState(() => String(year?.scale ?? 20))
   const [defaultOutOf, setDefaultOutOf] = useState(() =>
@@ -103,7 +79,9 @@ export default function YearSettingsPage() {
   const [decimals, setDecimals] = useState(() => String(year?.decimals ?? 2))
   const [sourcePeriods, setSourcePeriods] = useState(periods)
   const [drafts, setDrafts] = useState<PeriodDraft[]>(() =>
-    createPeriodDrafts(periods)
+    periodDraftsFromRows(
+      periods.filter((period) => period.id !== "__full_year__")
+    )
   )
 
   // A refreshed snapshot replaces the editing baseline. Adjusting guarded
@@ -113,8 +91,8 @@ export default function YearSettingsPage() {
     setSourceYear(year)
     if (year) {
       setName(year.name)
-      setStartsAt(toDateInput(new Date(year.startsAt)))
-      setEndsAt(toDateInput(new Date(year.endsAt)))
+      setStartsAt(dateInputValue(new Date(year.startsAt)))
+      setEndsAt(dateInputValue(new Date(year.endsAt)))
       setScale(String(year.scale))
       setDefaultOutOf(String(year.defaultOutOf))
       setPassing(String(year.passingRatio * year.scale))
@@ -124,7 +102,11 @@ export default function YearSettingsPage() {
 
   if (sourcePeriods !== periods) {
     setSourcePeriods(periods)
-    setDrafts(createPeriodDrafts(periods))
+    setDrafts(
+      periodDraftsFromRows(
+        periods.filter((period) => period.id !== "__full_year__")
+      )
+    )
   }
 
   const invalidate = () =>
@@ -234,16 +216,6 @@ export default function YearSettingsPage() {
   })
 
   const scaleNumber = Number.parseFloat(scale) || 20
-
-  const reorderPeriods = (keys: string[]) => {
-    setDrafts((current) => {
-      const byKey = new Map(current.map((draft) => [draft.key, draft]))
-      const next = keys
-        .map((key) => byKey.get(key))
-        .filter((draft): draft is PeriodDraft => draft !== undefined)
-      return next.length === current.length ? next : current
-    })
-  }
 
   const reorderYearList = (yearIds: string[]) => {
     if (reorderYears.isPending) return
@@ -372,7 +344,10 @@ export default function YearSettingsPage() {
               <Button
                 size="sm"
                 className="ml-auto"
-                disabled={savePeriods.isPending}
+                disabled={
+                  savePeriods.isPending ||
+                  periodDraftProblems(drafts, { startsAt, endsAt }).length > 0
+                }
                 onClick={() =>
                   savePeriods.mutate({
                     yearId: yearId as string,
@@ -396,102 +371,12 @@ export default function YearSettingsPage() {
             </>
           }
         >
-          {drafts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("No periods — the whole year counts as one.")}
-            </p>
-          ) : null}
-
-          <SortableList
-            ids={drafts.map((draft) => draft.key)}
-            onReorder={reorderPeriods}
-          >
-            {drafts.map((draft, index) => (
-              <SortableRow
-                key={draft.key}
-                id={draft.key}
-                as="div"
-                className="rounded-xl border p-3"
-              >
-                <div className="flex items-center gap-2 pb-3">
-                  <DragHandle className="-ml-1" />
-                  <input
-                    value={draft.name}
-                    onChange={(event) =>
-                      setDrafts((current) =>
-                        current.map((item, position) =>
-                          position === index
-                            ? { ...item, name: event.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("Remove")}
-                    onClick={() => {
-                      haptic("light")
-                      setDrafts((current) =>
-                        current.filter((_, position) => position !== index)
-                      )
-                    }}
-                  >
-                    <Trash2Icon className="size-4" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <DateField
-                    label={t("Starts")}
-                    value={draft.startAt}
-                    onValueChange={(value) =>
-                      setDrafts((current) =>
-                        current.map((item, position) =>
-                          position === index
-                            ? { ...item, startAt: value }
-                            : item
-                        )
-                      )
-                    }
-                  />
-                  <DateField
-                    label={t("Ends")}
-                    value={draft.endAt}
-                    onValueChange={(value) =>
-                      setDrafts((current) =>
-                        current.map((item, position) =>
-                          position === index ? { ...item, endAt: value } : item
-                        )
-                      )
-                    }
-                  />
-                </div>
-                <div className="pt-3">
-                  <SettingsRow
-                    label={t("Cumulative")}
-                    description={t(
-                      "Includes everything since the start of the year."
-                    )}
-                  >
-                    <Switch
-                      checked={draft.isCumulative}
-                      onCheckedChange={(checked) =>
-                        setDrafts((current) =>
-                          current.map((item, position) =>
-                            position === index
-                              ? { ...item, isCumulative: checked }
-                              : item
-                          )
-                        )
-                      }
-                    />
-                  </SettingsRow>
-                </div>
-              </SortableRow>
-            ))}
-          </SortableList>
+          <PeriodDraftEditor
+            value={drafts}
+            onChange={setDrafts}
+            year={{ startsAt, endsAt }}
+            allowAdd={false}
+          />
         </SettingsSection>
 
         <SettingsSection

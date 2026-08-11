@@ -1,4 +1,5 @@
 import { SubjectForm } from "@/components/subjects/subject-form"
+import { safeReturnPath } from "@/lib/safe-return-path"
 
 export default async function NewSubjectPage({
   searchParams,
@@ -6,6 +7,7 @@ export default async function NewSubjectPage({
   searchParams: Promise<{
     kind?: string | string[]
     parent?: string | string[]
+    returnTo?: string | string[]
   }>
 }) {
   const params = await searchParams
@@ -14,11 +16,13 @@ export default async function NewSubjectPage({
     ? params.parent[0]
     : params.parent
   const kind = rawKind === "category" ? "category" : "subject"
+  const returnTo = safeReturnPath(params.returnTo, "/subjects")
 
   return (
     <SubjectForm
       mode="create"
       initial={{ kind, parentId: rawParent ?? null }}
+      returnTo={returnTo}
     />
   )
 }

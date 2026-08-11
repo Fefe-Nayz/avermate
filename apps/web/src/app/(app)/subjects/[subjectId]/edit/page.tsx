@@ -12,13 +12,18 @@ import {
 } from "@/components/ui/empty"
 import { SubjectForm } from "@/components/subjects/subject-form"
 import { useYear } from "@/components/year/year-provider"
+import { safeReturnPath } from "@/lib/safe-return-path"
 
 export default function EditSubjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ subjectId: string }>
+  searchParams: Promise<{ returnTo?: string | string[] }>
 }) {
   const { subjectId } = use(params)
+  const query = use(searchParams)
+  const returnTo = safeReturnPath(query.returnTo, "/subjects")
   const t = useExtracted()
   const { graph, isLoading } = useYear()
   const subject = graph.byId(subjectId)
@@ -43,6 +48,7 @@ export default function EditSubjectPage({
   return (
     <SubjectForm
       mode="edit"
+      returnTo={returnTo}
       initial={{
         id: subject.id,
         name: subject.name,

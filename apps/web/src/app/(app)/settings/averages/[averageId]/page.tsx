@@ -12,13 +12,18 @@ import {
 } from "@/components/ui/empty"
 import { AverageForm } from "@/components/averages/average-form"
 import { useYear } from "@/components/year/year-provider"
+import { safeReturnPath } from "@/lib/safe-return-path"
 
 export default function EditAveragePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ averageId: string }>
+  searchParams: Promise<{ returnTo?: string | string[] }>
 }) {
   const { averageId } = use(params)
+  const query = use(searchParams)
+  const returnTo = safeReturnPath(query.returnTo, "/settings/averages")
   const t = useExtracted()
   const { customAverages, isLoading } = useYear()
   const average = customAverages.find((item) => item.id === averageId)
@@ -43,6 +48,7 @@ export default function EditAveragePage({
   return (
     <AverageForm
       mode="edit"
+      returnTo={returnTo}
       initial={{
         id: average.id,
         name: average.name,
