@@ -35,6 +35,7 @@ export function TextField({
   align = "left",
   suffix,
   multiline,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -50,6 +51,7 @@ export function TextField({
   suffix?: string;
   /** Grows to several lines; the label moves above the box. */
   multiline?: boolean;
+  maxLength?: number;
 }) {
   const palette = usePalette();
   const [focused, setFocused] = useState(false);
@@ -86,6 +88,7 @@ export function TextField({
           autoComplete={autoComplete}
           secureTextEntry={secureTextEntry}
           autoFocus={autoFocus}
+          maxLength={maxLength}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={[
@@ -112,8 +115,8 @@ export function TextField({
   );
 }
 
-export interface Choice {
-  value: string;
+export interface Choice<TValue extends string = string> {
+  value: TValue;
   label: string;
   hint?: string;
   disabled?: boolean;
@@ -121,7 +124,7 @@ export interface Choice {
 }
 
 /** Radio behaviour, card presentation — usable with one thumb. */
-export function ChoiceField({
+export function ChoiceField<TValue extends string = string>({
   label,
   choices,
   value,
@@ -130,9 +133,9 @@ export function ChoiceField({
   columns = 1,
 }: {
   label?: string;
-  choices: Choice[];
-  value: string | null;
-  onChange: (value: string) => void;
+  choices: Choice<TValue>[];
+  value: TValue | null;
+  onChange: (value: TValue) => void;
   error?: string;
   columns?: 1 | 2;
 }) {

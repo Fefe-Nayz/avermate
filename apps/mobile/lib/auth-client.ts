@@ -1,4 +1,5 @@
 import { expoClient, getCookie } from "@better-auth/expo/client";
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import type { BetterAuthClientPlugin } from "better-auth";
 import { emailOTPClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
@@ -48,7 +49,7 @@ const expo = expoClient({
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   basePath: "/api/auth",
-  plugins: [emailOTPClient(), expo],
+  plugins: [emailOTPClient(), oauthProviderClient(), expo],
 });
 
 /**
@@ -63,6 +64,40 @@ export function sessionCookie(): string | null {
   if (!stored) return null;
   const header = getCookie(stored);
   return header.length > 0 ? header : null;
+}
+
+interface SessionAtomState {
+  data: (typeof authClient.$Infer.Session) | null;
+  error: unknown;
+  isPending: boolean;
+  isRefetching: boolean;
+  refetch: (query?: { query?: { disableCookieCache?: boolean } }) => Promise<void>;
+}
+
+/** Force a server check and let Better Auth update the same atom useSession reads. */
+export async function refreshSessionForUnauthorized(): Promise<boolean> {
+  const atom = authClient.$store.atoms.session;
+  const before = atom.get() as SessionAtomState;
+  await before.refetch({ query: { disableCookieCache: true } });
+  const after = atom.get() as SessionAtomState;
+  return Boolean(after.data?.user.id);
+}
+
+/** Clear both the Expo cookie mirror and the reactive Better Auth session. */
+export async function expireLocalSession(): Promise<void> {
+  await Promise.all([
+    SecureStore.setItemAsync(`${STORAGE_PREFIX}_cookie`, "{}"),
+    SecureStore.setItemAsync(`${STORAGE_PREFIX}_session_data`, "{}"),
+  ]);
+  const atom = authClient.$store.atoms.session;
+  const current = atom.get() as SessionAtomState;
+  atom.set({
+    ...current,
+    data: null,
+    error: null,
+    isPending: false,
+    isRefetching: false,
+  });
 }
 
 export const { useSession, signIn, signOut, signUp } = authClient;

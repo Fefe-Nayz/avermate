@@ -18,8 +18,9 @@ import {
   Screen,
   Section,
 } from "@/components/ui";
-import { PickerField, TextField, type Choice } from "@/components/field";
+import { ChoiceField, PickerField, TextField, type Choice } from "@/components/field";
 import { metricHint, metricLabel, useCards } from "@/components/use-cards";
+import { widgetCatalogEntry } from "@/components/widget-catalog";
 import { useYear } from "@/components/year-provider";
 import { client, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
@@ -35,17 +36,25 @@ import { t } from "@/lib/i18n";
  */
 export default function CardEdit() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, metric: requestedMetric } = useLocalSearchParams<{
+    id?: string;
+    metric?: string;
+  }>();
   const { yearId, yearGraph, customAverages, goals } = useYear();
   const { specs, hidden } = useCards("overview");
 
   const existing = [...specs, ...hidden].find((spec) => spec.id === id);
 
+  const initialMetric: CardMetric =
+    requestedMetric && CARD_METRICS.includes(requestedMetric as CardMetric)
+      ? (requestedMetric as CardMetric)
+      : "average";
+  const recommendation = widgetCatalogEntry(initialMetric);
   const [metric, setMetric] = useState<CardMetric>(
-    existing?.metric ?? "average",
+    existing?.metric ?? initialMetric,
   );
   const [display, setDisplay] = useState<CardDisplay>(
-    existing?.display ?? "value",
+    existing?.display ?? recommendation.recommendedDisplay,
   );
   const [targetKind, setTargetKind] = useState(existing?.target.kind ?? "general");
   const [referenceId, setReferenceId] = useState<string | null>(
@@ -53,6 +62,9 @@ export default function CardEdit() {
   );
   const [goalId, setGoalId] = useState<string | null>(existing?.goalId ?? null);
   const [title, setTitle] = useState(existing?.title ?? "");
+  const [span, setSpan] = useState<1 | 2 | 3 | 4>(
+    existing?.span ?? recommendation.recommendedSpan,
+  );
   const [error, setError] = useState<string | null>(null);
 
   const displays = useMemo(() => allowedDisplays(metric), [metric]);
@@ -80,7 +92,7 @@ export default function CardEdit() {
         targetId: targetKind === "general" ? null : referenceId,
         goalId: metric === "goalProgress" ? goalId : null,
         display: effectiveDisplay,
-        span: 2 as const,
+        span,
         title: title.trim() || null,
         accent: null,
         hidden: false,
@@ -205,6 +217,19 @@ export default function CardEdit() {
             />
           </Section>
         ) : null}
+
+        <Section title={t("Width")}>
+          <ChoiceField
+            value={String(span)}
+            onChange={(value) => setSpan(Number(value) as 1 | 2 | 3 | 4)}
+            columns={2}
+            choices={[
+              { value: "1", label: t("Quarter") },
+              { value: "2", label: t("Half") },
+              { value: "4", label: t("Full") },
+            ]}
+          />
+        </Section>
 
         <Section title={t("Title")}>
           <TextField

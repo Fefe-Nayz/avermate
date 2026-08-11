@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "avermate",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fr.avermate.app"
@@ -40,6 +39,35 @@
           "dark": {
             "backgroundColor": "#0A0A0A"
           }
+        }
+      ],
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Avermate to choose an image for your profile or feedback.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-audio",
+      "expo-sharing",
+      "expo-asset",
+      [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.fr.avermate.app",
+          "enableAndroid": false,
+          "widgets": [
+            {
+              "name": "AvermateSummaryWidget",
+              "displayName": "Avermate — Progress",
+              "description": "Your private academic progress at a glance.",
+              "supportedFamilies": ["systemSmall", "systemMedium"],
+              "contentMarginsDisabled": false,
+              "android": null
+            }
+          ]
         }
       ]
     ],

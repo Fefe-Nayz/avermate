@@ -2,22 +2,29 @@ import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { RouterClient } from "@orpc/server";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
-import { QueryClient } from "@tanstack/react-query";
 import { Platform } from "react-native";
+import { router } from "expo-router";
 import type { AppRouter } from "../../server/src/routers";
-import { sessionCookie } from "./auth-client";
+import {
+  expireLocalSession,
+  refreshSessionForUnauthorized,
+  sessionCookie,
+} from "./auth-client";
 import { env } from "./env";
+import { clearLocalUserSettings } from "./local-settings";
+import { queryClient, queryScope, setQueryIdentity } from "./query-client";
+import { createUnauthorizedSessionHandler } from "./auth-unauthorized";
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // A year changes when the user changes it. A generous stale time is what
-      // makes moving between tabs feel instant on a phone.
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      retry: 1,
-    },
-    mutations: { retry: 0 },
+export { queryClient } from "./query-client";
+
+const handleUnauthorized = createUnauthorizedSessionHandler({
+  clearExpiredIdentity: clearLocalUserSettings,
+  expireSession: expireLocalSession,
+  getIdentity: () => queryScope().identity,
+  redirectToSignIn: () => router.replace("/sign-in"),
+  refreshSession: refreshSessionForUnauthorized,
+  setAnonymousIdentity: () => {
+    setQueryIdentity("anonymous");
   },
 });
 
@@ -27,13 +34,17 @@ export const queryClient = new QueryClient({
  */
 async function expoFetch(request: Request, init?: RequestInit) {
   const { fetch } = await import("expo/fetch");
-  return fetch(request.url, {
+  const response = (await fetch(request.url, {
     body: request.method === "GET" ? undefined : await request.blob(),
     headers: request.headers,
     method: request.method,
     signal: request.signal,
     ...init,
-  }) as unknown as Promise<Response>;
+  })) as unknown as Response;
+  if (response.status === 401) {
+    await handleUnauthorized();
+  }
+  return response;
 }
 
 const link = new RPCLink({

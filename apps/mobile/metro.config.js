@@ -15,12 +15,9 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-// Hierarchical lookup stays ON. Bun installs this workspace with the isolated
-// linker: every package is a symlink into `node_modules/.bun/<name>@<version>/`,
-// and its own dependencies sit in a `node_modules` beside it there. Only
-// walking up from the requiring file finds them — the two paths above cover the
-// app's direct dependencies and nothing deeper.
-config.resolver.unstable_enableSymlinks = true;
+// Hierarchical lookup and workspace symlinks are handled by Metro's current
+// defaults. Overriding `unstable_enableSymlinks` now diverges from Expo's
+// supported configuration and is rejected by expo-doctor.
 
 /**
  * Keep the file crawl off everything the app cannot import.

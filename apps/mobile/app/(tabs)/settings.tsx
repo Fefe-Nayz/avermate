@@ -1,28 +1,23 @@
-import { useEffect, useState } from "react";
 import { Alert, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
+import { useQuery } from "@tanstack/react-query";
 import { Card, Loading, Row, Section } from "@/components/ui";
-import { NativeSwitch } from "@/components/native-controls";
 import { useYear } from "@/components/year-provider";
 import { signOut, useSession } from "@/lib/auth-client";
-import { haptic, setHapticsEnabled } from "@/lib/haptics";
-import { locale, setLocale, t, type Locale } from "@/lib/i18n";
-import { queryClient } from "@/lib/orpc";
+import { haptic } from "@/lib/haptics";
+import { t } from "@/lib/i18n";
+import { orpc, queryClient } from "@/lib/orpc";
+import { clearLocalUserSettings } from "@/lib/local-settings";
 import { radius, space, type, usePalette } from "@/lib/theme";
-
-const HAPTICS_KEY = "avermate.haptics";
-const LOCALE_KEY = "avermate.locale";
 
 /**
  * Settings.
  *
  * Everything here is either about you, about how the app feels, or about
- * getting out. Preferences that only make sense with a mouse — chart
- * subdivisions, theme presets, custom colours — deliberately stay on the web:
- * shipping them here would double the surface for no one's benefit.
+ * getting out. Cross-device appearance and interaction preferences live on a
+ * dedicated screen so this index stays quick to scan.
  */
 export default function Settings() {
   const palette = usePalette();
@@ -30,35 +25,8 @@ export default function Settings() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
   const { year, years, periods } = useYear();
-
-  const [haptics, setHaptics] = useState(true);
-  const [language, setLanguage] = useState<Locale>(locale());
-
-  useEffect(() => {
-    void SecureStore.getItemAsync(HAPTICS_KEY).then((stored) => {
-      if (stored === null) return;
-      const enabled = stored === "true";
-      setHaptics(enabled);
-      setHapticsEnabled(enabled);
-    });
-  }, []);
-
-  const toggleHaptics = (value: boolean) => {
-    setHaptics(value);
-    setHapticsEnabled(value);
-    // Fire after enabling so the switch confirms itself in the hand.
-    if (value) haptic("light");
-    void SecureStore.setItemAsync(HAPTICS_KEY, String(value));
-  };
-
-  const switchLanguage = (next: Locale) => {
-    haptic("selection");
-    setLanguage(next);
-    // The root layout listens and rebuilds the tree, so the tab bar and every
-    // screen behind this one change language too, not just this screen.
-    setLocale(next);
-    void SecureStore.setItemAsync(LOCALE_KEY, next);
-  };
+  const announcements = useQuery(orpc.announcements.active.queryOptions());
+  const admin = useQuery(orpc.admin.access.queryOptions());
 
   const leave = () => {
     Alert.alert(t("Sign out"), t("You will need your password to come back."), [
@@ -68,7 +36,12 @@ export default function Settings() {
         style: "destructive",
         onPress: () => {
           haptic("warning");
-          void signOut().then(() => {
+          void signOut().then(async () => {
+            if (session?.user.id) {
+              await clearLocalUserSettings(session.user.id).catch(
+                () => undefined,
+              );
+            }
             queryClient.clear();
             router.replace("/sign-in");
           });
@@ -89,6 +62,7 @@ export default function Settings() {
 
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
         paddingTop: insets.top + space.md,
@@ -162,12 +136,22 @@ export default function Settings() {
             }
           />
           <Row
+            title={t("Year preset")}
+            subtitle={t("Official curriculum and updates")}
+            onPress={() => router.push("/settings/preset")}
+          />
+          <Row
             title={t("Custom averages")}
             onPress={() => router.push("/settings/averages")}
           />
           <Row
             title={t("Dashboard cards")}
             onPress={() => router.push("/settings/cards")}
+          />
+          <Row
+            title={t("Home screen widget")}
+            subtitle={t("Private, aggregate-only progress")}
+            onPress={() => router.push("/settings/system-widget")}
           />
           <Row
             title={t("Add a year")}
@@ -180,30 +164,11 @@ export default function Settings() {
         <Card padded={false}>
           <Row
             first
-            title={t("Haptic feedback")}
-            subtitle={t("Small taps as you move through the app")}
-            trailing={
-              <NativeSwitch value={haptics} onValueChange={toggleHaptics} />
-            }
-          />
-          <Row
-            title={t("Language")}
-            onPress={() => switchLanguage(language === "fr" ? "en" : "fr")}
-            trailing={
-              <Text style={[type.body, { color: palette.textMuted }]}>
-                {language === "fr" ? "Français" : "English"}
-              </Text>
-            }
+            title={t("Theme, language and interaction")}
+            subtitle={t("Shared with the web app")}
+            onPress={() => router.push("/settings/appearance")}
           />
         </Card>
-        <Text
-          style={[
-            type.footnote,
-            { color: palette.textFaint, paddingHorizontal: space.xs },
-          ]}
-        >
-          {t("The app follows your device's light or dark setting.")}
-        </Text>
       </Section>
 
       <Section title={t("Account")}>
@@ -212,6 +177,25 @@ export default function Settings() {
             first
             title={t("Profile and password")}
             onPress={() => router.push("/settings/account")}
+          />
+          <Row
+            title={t("Announcements")}
+            subtitle={
+              (announcements.data?.length ?? 0) > 0
+                ? t("{count} unread", { count: announcements.data?.length ?? 0 })
+                : t("Your inbox")
+            }
+            onPress={() => router.push("/announcements")}
+          />
+          <Row
+            title={t("Integrations")}
+            subtitle={t("Connect AI assistants with OAuth")}
+            onPress={() => router.push("/settings/integrations")}
+          />
+          <Row
+            title={t("Social, friends and groups")}
+            subtitle={t("Private by default; sharing is always explicit")}
+            onPress={() => router.push("/social")}
           />
           <Row
             title={t("Send feedback")}
@@ -228,6 +212,19 @@ export default function Settings() {
           />
         </Card>
       </Section>
+
+      {admin.data?.isAdmin ? (
+        <Section title={t("Administration")}>
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Open admin console")}
+              subtitle={t("Users, announcements and feedback")}
+              onPress={() => router.push("/admin")}
+            />
+          </Card>
+        </Section>
+      ) : null}
 
       <View style={{ alignItems: "center", gap: space.xs }}>
         <Text style={[type.footnote, { color: palette.textFaint }]}>

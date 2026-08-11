@@ -1,4 +1,9 @@
+import { useSyncExternalStore } from "react";
 import { useColorScheme } from "react-native";
+import {
+  nativeSeasonOverrides,
+  nativeThemeOverrides,
+} from "@/lib/theme-presets";
 
 /**
  * The palette.
@@ -104,12 +109,66 @@ const dark: Palette = {
   },
 };
 
+export type ThemePreference = "system" | "light" | "dark";
+let preferredTheme: ThemePreference = "system";
+const themeListeners = new Set<() => void>();
+let paletteOverrides = { light: {}, dark: {} } as {
+  light: Partial<Palette>;
+  dark: Partial<Palette>;
+};
+let seasonOverrides = { light: {}, dark: {} } as {
+  light: Partial<Palette>;
+  dark: Partial<Palette>;
+};
+let appearanceRevision = 0;
+
+export function setThemePreference(value: ThemePreference): void {
+  if (preferredTheme === value) return;
+  preferredTheme = value;
+  appearanceRevision += 1;
+  for (const listener of themeListeners) listener();
+}
+
+export function setThemePalette(
+  id: string,
+  customTheme: unknown,
+): void {
+  paletteOverrides = nativeThemeOverrides(id, customTheme);
+  appearanceRevision += 1;
+  for (const listener of themeListeners) listener();
+}
+
+export function setSeasonalTheme(enabled: boolean, preference: string): void {
+  seasonOverrides = nativeSeasonOverrides(enabled, preference);
+  appearanceRevision += 1;
+  for (const listener of themeListeners) listener();
+}
+
+export function themePreference(): ThemePreference {
+  return preferredTheme;
+}
+
+function subscribeTheme(listener: () => void): () => void {
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
+}
+
+export function useThemePreference(): ThemePreference {
+  return useSyncExternalStore(subscribeTheme, themePreference, themePreference);
+}
+
 export function usePalette(): Palette {
-  return useColorScheme() === "dark" ? dark : light;
+  const isDark = useIsDark();
+  useSyncExternalStore(subscribeTheme, () => appearanceRevision, () => 0);
+  return isDark
+    ? { ...dark, ...paletteOverrides.dark, ...seasonOverrides.dark }
+    : { ...light, ...paletteOverrides.light, ...seasonOverrides.light };
 }
 
 export function useIsDark(): boolean {
-  return useColorScheme() === "dark";
+  const system = useColorScheme();
+  const preference = useThemePreference();
+  return preference === "system" ? system === "dark" : preference === "dark";
 }
 
 /** A four-step rhythm. Anything between these values is a mistake. */

@@ -1,15 +1,22 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Text } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Screen } from "@/components/ui";
 import { ChoiceField, FieldGroup, TextField } from "@/components/field";
 import { DateField } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { type, usePalette } from "@/lib/theme";
+
+type PeriodTemplateChoice =
+  | "none"
+  | "trimesters"
+  | "semesters"
+  | "semesters-cumulative"
+  | "quarters";
 
 /**
  * A second year, a third, a fourth.
@@ -56,35 +63,40 @@ export default function NewYear() {
   const [startsAt, setStartsAt] = useState(suggested.startsAt);
   const [endsAt, setEndsAt] = useState(suggested.endsAt);
   const [scale, setScale] = useState(String(currentScale));
-  const [template, setTemplate] = useState("trimesters");
+  const [template, setTemplate] =
+    useState<PeriodTemplateChoice>("trimesters");
+  const [presetId, setPresetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const presets = useQuery(orpc.presets.list.queryOptions());
+  const setupKey = useRef(
+    `mobile-new-year-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   const create = useMutation({
     mutationFn: async () => {
       const numericScale = Number(scale) || 20;
-      const year = await client.years.create({
-        name: name.trim(),
-        startsAt,
-        endsAt,
-        scale: numericScale,
-        defaultOutOf: numericScale,
-        passingRatio: 0.5,
-        decimals: 2,
-      });
-
-      if (template !== "none") {
-        await client.presets.applyPeriods({
-          yearId: year.id,
-          templateId: template,
-          names:
-            template === "quarters"
-              ? [t("Quarter 1"), t("Quarter 2"), t("Quarter 3"), t("Quarter 4")]
-              : template === "trimesters"
-                ? [t("Term 1"), t("Term 2"), t("Term 3")]
+      return client.presets.setupYear({
+        idempotencyKey: setupKey.current,
+        year: {
+          name: name.trim(),
+          startsAt,
+          endsAt,
+          scale: numericScale,
+          defaultOutOf: numericScale,
+          passingRatio: 0.5,
+          decimals: 2,
+        },
+        presetId,
+        periodTemplateId: template,
+        periodNames:
+          template === "quarters"
+            ? [t("Quarter 1"), t("Quarter 2"), t("Quarter 3"), t("Quarter 4")]
+            : template === "trimesters"
+              ? [t("Term 1"), t("Term 2"), t("Term 3")]
+              : template === "none"
+                ? []
                 : [t("Semester 1"), t("Semester 2")],
-        });
-      }
-      return year;
+      });
     },
     onSuccess: (year) => {
       haptic("success");
@@ -156,6 +168,25 @@ export default function NewYear() {
                 },
                 { value: "quarters", label: t("Four quarters") },
                 { value: "none", label: t("No split") },
+              ]}
+            />
+            <ChoiceField
+              label={t("What do you study?")}
+              value={presetId ?? "__none__"}
+              onChange={(value) =>
+                setPresetId(value === "__none__" ? null : value)
+              }
+              choices={[
+                {
+                  value: "__none__",
+                  label: t("Start from scratch"),
+                  hint: t("Add your own subjects"),
+                },
+                ...(presets.data ?? []).map((preset) => ({
+                  value: preset.id,
+                  label: preset.name,
+                  hint: t("{count} subjects", { count: preset.subjectCount }),
+                })),
               ]}
             />
           </FieldGroup>

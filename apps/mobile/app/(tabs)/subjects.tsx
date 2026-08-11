@@ -1,10 +1,16 @@
 import { useMemo } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import type { Subject } from "@avermate/core";
-import { Button, Card, Empty, Loading, Row } from "@/components/ui";
+import { resolveCustomAverage, type Subject } from "@avermate/core";
+import { Button, Card, Empty, Loading, Row, Section } from "@/components/ui";
 import { AverageValue, CoefficientTag } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { useYear } from "@/components/year-provider";
@@ -24,9 +30,26 @@ export default function Subjects() {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isLoading, graph, yearId, refresh } = useYear();
+  const { customAverages, isLoading, graph, yearId, refresh } = useYear();
 
   const rows = useMemo(() => flatten(graph.roots, graph, 0), [graph]);
+  const averageRows = useMemo(
+    () =>
+      customAverages
+        .toSorted(
+          (left, right) =>
+            left.sortOrder - right.sortOrder ||
+            left.name.localeCompare(right.name),
+        )
+        .map((average) => {
+          const resolved = resolveCustomAverage(graph, average);
+          return {
+            ...average,
+            ratio: resolved.graph.ratio(null, resolved.scope),
+          };
+        }),
+    [customAverages, graph],
+  );
 
   if (isLoading) return <Loading />;
 
@@ -80,6 +103,79 @@ export default function Subjects() {
       </View>
 
       <ScopeBar />
+
+      <Section
+        title={t("Averages")}
+        action={
+          <Pressable
+            accessibilityLabel={t("Edit custom averages")}
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={() => {
+              haptic("light");
+              router.push("/settings/averages");
+            }}
+          >
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={palette.textMuted}
+            />
+          </Pressable>
+        }
+      >
+        <Card padded={false}>
+          <Row
+            first
+            title={t("General average")}
+            subtitle={t("{count} subjects", { count: graph.subjects.length })}
+            leading={
+              <Ionicons
+                name="analytics-outline"
+                size={19}
+                color={palette.textMuted}
+              />
+            }
+            onPress={() => router.push("/average/general")}
+            trailing={
+              <AverageValue
+                ratio={graph.ratio(null)}
+                size="heading"
+                showScale
+                colored
+              />
+            }
+          />
+          {averageRows.map((average) => (
+            <Row
+              key={average.id}
+              title={average.name}
+              subtitle={
+                average.entries.length === 1
+                  ? t("1 subject")
+                  : t("{count} subjects", {
+                      count: average.entries.length,
+                    })
+              }
+              leading={
+                average.isMain ? (
+                  <Ionicons name="star" size={18} color={palette.accent} />
+                ) : (
+                  <Ionicons
+                    name="calculator-outline"
+                    size={18}
+                    color={palette.textFaint}
+                  />
+                )
+              }
+              onPress={() => router.push(`/average/${average.id}`)}
+              trailing={
+                <AverageValue ratio={average.ratio} size="callout" colored />
+              }
+            />
+          ))}
+        </Card>
+      </Section>
 
       {rows.length === 0 ? (
         <Empty
@@ -145,7 +241,10 @@ interface FlatEntry {
 
 function flatten(
   subjects: readonly Subject[],
-  graph: { childrenOf: (id: string) => readonly Subject[]; allGrades: (id?: string) => unknown[] },
+  graph: {
+    childrenOf: (id: string) => readonly Subject[];
+    allGrades: (id?: string) => unknown[];
+  },
   depth: number,
 ): FlatEntry[] {
   return [...subjects]
