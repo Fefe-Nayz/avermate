@@ -25,7 +25,12 @@ export default function Settings() {
   const router = useRouter();
   const { data: session, isPending } = useSession();
   const { year, years, periods } = useYear();
-  const announcements = useQuery(orpc.announcements.active.queryOptions());
+  const announcements = useQuery({
+    ...orpc.announcements.active.queryOptions({
+      input: { yearId: year?.id ?? "" },
+    }),
+    enabled: Boolean(year?.id),
+  });
   const admin = useQuery(orpc.admin.access.queryOptions());
 
   const leave = () => {
@@ -182,7 +187,9 @@ export default function Settings() {
             title={t("Announcements")}
             subtitle={
               (announcements.data?.length ?? 0) > 0
-                ? t("{count} unread", { count: announcements.data?.length ?? 0 })
+                ? t("{count} unread", {
+                    count: announcements.data?.length ?? 0,
+                  })
                 : t("Your inbox")
             }
             onPress={() => router.push("/announcements")}
@@ -205,11 +212,7 @@ export default function Settings() {
             title={t("About")}
             onPress={() => router.push("/settings/about")}
           />
-          <Row
-            title={t("Sign out")}
-            destructive
-            onPress={leave}
-          />
+          <Row title={t("Sign out")} destructive onPress={leave} />
         </Card>
       </Section>
 

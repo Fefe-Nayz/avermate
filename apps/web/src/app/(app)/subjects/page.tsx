@@ -28,6 +28,7 @@ import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 
 /**
  * The subject tree.
@@ -75,11 +76,14 @@ export default function SubjectsPage() {
   const move = useMutation({
     ...orpc.subjects.move.mutationOptions(),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      }),
+        invalidateAnnouncementAudience(queryClient),
+      ]),
   })
 
   const moveSubject = (subject: Subject, direction: -1 | 1) => {

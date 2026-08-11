@@ -72,10 +72,6 @@ export const prepareAuthenticatedShell = cache(
         staleTime: COMMON_QUERY_STALE_TIME,
       }),
       queryClient.prefetchQuery({
-        ...orpc.announcements.active.queryOptions(),
-        staleTime: COMMON_QUERY_STALE_TIME,
-      }),
-      queryClient.prefetchQuery({
         ...orpc.admin.access.queryOptions(),
         staleTime: COMMON_QUERY_STALE_TIME,
         retry: false,
@@ -93,10 +89,20 @@ export const prepareAuthenticatedShell = cache(
     const activeYearId = resolveActiveYearId(years, preferredYearId)
     if (!activeYearId) redirect("/onboarding")
 
-    // This is a cache hit when the valid cookie started the snapshot above.
-    await queryClient.prefetchQuery(
-      orpc.snapshot.get.queryOptions({ input: { yearId: activeYearId } })
-    )
+    // The snapshot is a cache hit when the valid cookie started it above.
+    // Announcements start as soon as the semantic year is known and hydrate
+    // the exact year-scoped key consumed by the interactive banner.
+    await Promise.all([
+      queryClient.prefetchQuery(
+        orpc.snapshot.get.queryOptions({ input: { yearId: activeYearId } })
+      ),
+      queryClient.prefetchQuery({
+        ...orpc.announcements.active.queryOptions({
+          input: { yearId: activeYearId },
+        }),
+        staleTime: COMMON_QUERY_STALE_TIME,
+      }),
+    ])
 
     return { activeYearId, queryClient, renderedAt, user }
   }

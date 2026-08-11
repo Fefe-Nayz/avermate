@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { BookMarkedIcon, FolderIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -107,11 +108,14 @@ export function SubjectForm({
       toast.success(
         mode === "create" ? t("Subject added") : t("Subject updated")
       )
-      void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      })
+        invalidateAnnouncementAudience(queryClient),
+      ])
       router.back()
     },
     onError: (error: Error) => {
@@ -135,11 +139,14 @@ export function SubjectForm({
     onSuccess: () => {
       haptic("success")
       toast.success(t("Subject deleted"))
-      void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      })
+        invalidateAnnouncementAudience(queryClient),
+      ])
       router.push("/subjects")
     },
   })

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db";
 import {
   accounts,
+  announcementPresetTargets,
   announcementViews,
   announcements,
   customAverageEntries,
@@ -288,6 +289,7 @@ export const preferencesRouter = {
       reviewViewRows,
       announcementViewRows,
       createdAnnouncementRows,
+      createdAnnouncementTargetRows,
       feedbackRows,
       socialData,
     ] = await Promise.all([
@@ -340,13 +342,21 @@ export const preferencesRouter = {
         .select()
         .from(announcements)
         .where(eq(announcements.createdByUserId, userId)),
+      db
+        .select({ target: announcementPresetTargets })
+        .from(announcementPresetTargets)
+        .innerJoin(
+          announcements,
+          eq(announcementPresetTargets.announcementId, announcements.id),
+        )
+        .where(eq(announcements.createdByUserId, userId)),
       db.select().from(feedback).where(eq(feedback.userId, userId)),
       exportSocialData(userId),
     ]);
 
     return {
       exportedAt: new Date().toISOString(),
-      version: 4,
+      version: 5,
       account: account[0] ?? null,
       authentication: {
         providers: [...new Set(providerRows.map((row) => row.providerId))],
@@ -370,6 +380,9 @@ export const preferencesRouter = {
       yearReviewViews: reviewViewRows,
       announcementViews: announcementViewRows,
       createdAnnouncements: createdAnnouncementRows,
+      createdAnnouncementPresetTargets: createdAnnouncementTargetRows.map(
+        (row) => row.target,
+      ),
       feedback: feedbackRows,
       social: socialData,
     };

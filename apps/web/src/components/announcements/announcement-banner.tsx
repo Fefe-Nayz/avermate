@@ -9,6 +9,7 @@ import {
   XIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 import { cn } from "@/lib/utils"
@@ -33,9 +34,13 @@ const TONE = {
 /** Product notices. One at a time, dismissible, and never over the content. */
 export function AnnouncementBanner() {
   const t = useExtracted()
+  const { yearId } = useYear()
   const queryClient = useQueryClient()
   const { data } = useQuery({
-    ...orpc.announcements.active.queryOptions(),
+    ...orpc.announcements.active.queryOptions({
+      input: { yearId: yearId ?? "" },
+    }),
+    enabled: Boolean(yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
 
@@ -43,7 +48,7 @@ export function AnnouncementBanner() {
     ...orpc.announcements.dismiss.mutationOptions(),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: orpc.announcements.active.queryKey(),
+        queryKey: orpc.announcements.active.key(),
       })
     },
   })
@@ -72,7 +77,10 @@ export function AnnouncementBanner() {
         aria-label={t("Dismiss")}
         onClick={() => {
           haptic("light")
-          dismiss.mutate({ announcementId: announcement.id })
+          dismiss.mutate({
+            announcementId: announcement.id,
+            yearId: yearId ?? undefined,
+          })
         }}
         className="-mr-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
       >

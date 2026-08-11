@@ -34,6 +34,7 @@ import {
 } from "@/components/settings/settings-section"
 import { NumberField, TextField } from "@/components/forms/controls"
 import { useYear } from "@/components/year/year-provider"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 
@@ -150,7 +151,10 @@ export default function YearSettingsPage() {
     onSuccess: () => {
       haptic("success")
       toast.success(t("Periods updated."))
-      void invalidate()
+      void Promise.all([
+        invalidate(),
+        invalidateAnnouncementAudience(queryClient),
+      ])
     },
     onError: (error: Error) => {
       haptic("error")

@@ -550,13 +550,48 @@ export const announcements = sqliteTable(
     message: text().notNull(),
     /** "info" | "success" | "warning" | "danger" */
     tone: text().notNull().default("info"),
+    /** "global" | "preset". Preset targets live in `announcementPresetTargets`. */
+    audience: text().notNull().default("global"),
     active: integer({ mode: "boolean" }).notNull().default(true),
     startsAt: integer({ mode: "timestamp" }),
     endsAt: integer({ mode: "timestamp" }),
     createdByUserId: owner(),
     ...timestamps,
   },
-  (t) => [index("announcements_active_idx").on(t.active)],
+  (t) => [
+    index("announcements_active_idx").on(t.active),
+    index("announcements_audience_idx").on(t.audience),
+  ],
+);
+
+/**
+ * Logical preset targets for an announcement. Targets intentionally follow a
+ * preset across versions; users are eligible only while their year remains a
+ * linked, non-detached member of that preset.
+ */
+export const announcementPresetTargets = sqliteTable(
+  "announcement_preset_targets",
+  {
+    announcementId: text()
+      .notNull()
+      .references(() => announcements.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    presetId: text()
+      .notNull()
+      .references(() => presetDefinitions.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+  },
+  (t) => [
+    uniqueIndex("announcement_preset_targets_unique").on(
+      t.announcementId,
+      t.presetId,
+    ),
+    index("announcement_preset_targets_preset_idx").on(t.presetId),
+  ],
 );
 
 export const announcementViews = sqliteTable(

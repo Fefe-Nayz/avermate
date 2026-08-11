@@ -1836,5 +1836,15 @@
   "uQDRsY": "Later",
   "Wct3et": "Activate Mokattam",
   "ti6fnu": "Toggle color theme",
-  "1zDSk4": "Whole year"
+  "1zDSk4": "Whole year",
+  "2XDuH4": "Everyone",
+  "hwBMT8": "Preset targeting follows active memberships across preset updates. Users who customize their year leave that audience.",
+  "rcfaTG": "All signed-in users",
+  "tsqRbo": "Selected presets",
+  "NLioWr": "Only linked members of the selected presets",
+  "6vVIpm": "Target presets",
+  "XtMk4i": "Create a managed preset before targeting an announcement.",
+  "d3MLS2": "Select at least one preset.",
+  "deeL1a": "One preset selected",
+  "vuIlEt": "{count} presets selected"
 }

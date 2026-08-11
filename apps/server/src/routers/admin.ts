@@ -1,14 +1,16 @@
 import { SubjectGraph } from "@avermate/core";
-import { and, asc, desc, eq, gte, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, like, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
   accounts,
+  announcementPresetTargets,
   announcements,
   customAverages,
   feedback,
   grades,
   periods,
+  presetDefinitions,
   preferences,
   sessions,
   subjects,
@@ -18,6 +20,7 @@ import {
 import { isAdmin } from "../lib/admin";
 import { isSuspensionActive } from "../lib/access-policy";
 import { auth } from "../lib/auth";
+import { newId } from "../lib/id";
 import {
   adminProcedure,
   badRequest,
@@ -57,6 +60,81 @@ function listOf(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+const announcementAudience = z.enum(["global", "preset"]);
+const announcementPresetIds = z
+  .array(z.string().trim().min(1))
+  .max(50)
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "Preset targets must be unique",
+  });
+
+async function normalizeAnnouncementTargets(
+  audience: z.infer<typeof announcementAudience>,
+  presetIds: string[],
+): Promise<string[]> {
+  if (audience === "global") {
+    if (presetIds.length > 0) {
+      badRequest("Global announcements cannot have preset targets");
+    }
+    return [];
+  }
+  if (presetIds.length === 0) {
+    badRequest("A preset announcement needs at least one preset target");
+  }
+
+  const ids = [...new Set(presetIds)];
+  const existing = await db
+    .select({ id: presetDefinitions.id })
+    .from(presetDefinitions)
+    .where(inArray(presetDefinitions.id, ids));
+  if (existing.length !== ids.length) {
+    badRequest("One or more preset targets do not exist");
+  }
+  return ids;
+}
+
+async function listAdminAnnouncements() {
+  const [messages, targetRows] = await Promise.all([
+    db.select().from(announcements).orderBy(desc(announcements.createdAt)),
+    db
+      .select({
+        announcementId: announcementPresetTargets.announcementId,
+        id: presetDefinitions.id,
+        name: presetDefinitions.name,
+        archived: presetDefinitions.archived,
+      })
+      .from(announcementPresetTargets)
+      .innerJoin(
+        presetDefinitions,
+        eq(presetDefinitions.id, announcementPresetTargets.presetId),
+      )
+      .orderBy(asc(presetDefinitions.name)),
+  ]);
+
+  const targetsByAnnouncement = new Map<
+    string,
+    Array<{ id: string; name: string; archived: boolean }>
+  >();
+  for (const target of targetRows) {
+    const targets = targetsByAnnouncement.get(target.announcementId) ?? [];
+    targets.push({
+      id: target.id,
+      name: target.name,
+      archived: target.archived,
+    });
+    targetsByAnnouncement.set(target.announcementId, targets);
+  }
+
+  return messages.map((announcement) => {
+    const presets = targetsByAnnouncement.get(announcement.id) ?? [];
+    return {
+      ...announcement,
+      presetIds: presets.map((preset) => preset.id),
+      presets,
+    };
+  });
 }
 
 function roleList(role: string | null | undefined): string[] {
@@ -866,9 +944,7 @@ export const adminRouter = {
       };
     }),
 
-  announcements: adminProcedure.handler(() =>
-    db.select().from(announcements).orderBy(desc(announcements.createdAt)),
-  ),
+  announcements: adminProcedure.handler(listAdminAnnouncements),
 
   createAnnouncement: adminProcedure
     .input(
@@ -879,6 +955,8 @@ export const adminRouter = {
           tone: z
             .enum(["info", "success", "warning", "danger"])
             .default("info"),
+          audience: announcementAudience.default("global"),
+          presetIds: announcementPresetIds.default([]),
           active: z.boolean().default(true),
           startsAt: z.coerce.date().nullable().default(null),
           endsAt: z.coerce.date().nullable().default(null),
@@ -893,10 +971,38 @@ export const adminRouter = {
         ),
     )
     .handler(async ({ context, input }) => {
-      const [created] = await db
-        .insert(announcements)
-        .values({ ...input, createdByUserId: context.session.user.id })
-        .returning();
+      const { presetIds, ...announcement } = input;
+      const targets = await normalizeAnnouncementTargets(
+        announcement.audience,
+        presetIds,
+      );
+      const id = newId("ann");
+      const statements = [
+        db.insert(announcements).values({
+          ...announcement,
+          id,
+          createdByUserId: context.session.user.id,
+        }),
+        ...(targets.length > 0
+          ? [
+              db
+                .insert(announcementPresetTargets)
+                .values(
+                  targets.map((presetId) => ({ announcementId: id, presetId })),
+                ),
+            ]
+          : []),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+      const created = (await listAdminAnnouncements()).find(
+        (created) => created.id === id,
+      );
+      if (!created) notFound("Announcement");
       return created;
     }),
 
@@ -907,19 +1013,38 @@ export const adminRouter = {
         title: z.string().trim().min(1).max(120).optional(),
         message: z.string().trim().min(1).max(2000).optional(),
         tone: z.enum(["info", "success", "warning", "danger"]).optional(),
+        audience: announcementAudience.optional(),
+        presetIds: announcementPresetIds.optional(),
         active: z.boolean().optional(),
         startsAt: z.coerce.date().nullable().optional(),
         endsAt: z.coerce.date().nullable().optional(),
       }),
     )
     .handler(async ({ input }) => {
-      const { announcementId, ...patch } = input;
-      const [existing] = await db
-        .select()
-        .from(announcements)
-        .where(eq(announcements.id, announcementId))
-        .limit(1);
+      const { announcementId, presetIds, ...patch } = input;
+      const [[existing], existingTargets] = await Promise.all([
+        db
+          .select()
+          .from(announcements)
+          .where(eq(announcements.id, announcementId))
+          .limit(1),
+        db
+          .select({ presetId: announcementPresetTargets.presetId })
+          .from(announcementPresetTargets)
+          .where(eq(announcementPresetTargets.announcementId, announcementId)),
+      ]);
       if (!existing) notFound("Announcement");
+      const currentAudience = announcementAudience.parse(existing.audience);
+      const finalAudience = patch.audience ?? currentAudience;
+      const requestedTargets =
+        presetIds ??
+        (patch.audience === "global"
+          ? []
+          : existingTargets.map((target) => target.presetId));
+      const targets = await normalizeAnnouncementTargets(
+        finalAudience,
+        requestedTargets,
+      );
       const startsAt =
         patch.startsAt === undefined ? existing.startsAt : patch.startsAt;
       const endsAt =
@@ -927,11 +1052,34 @@ export const adminRouter = {
       if (startsAt && endsAt && startsAt > endsAt) {
         badRequest("The end must be after the start");
       }
-      const [updated] = await db
-        .update(announcements)
-        .set({ ...patch, updatedAt: new Date() })
-        .where(eq(announcements.id, announcementId))
-        .returning();
+      const statements = [
+        db
+          .update(announcements)
+          .set({ ...patch, audience: finalAudience, updatedAt: new Date() })
+          .where(eq(announcements.id, announcementId)),
+        db
+          .delete(announcementPresetTargets)
+          .where(eq(announcementPresetTargets.announcementId, announcementId)),
+        ...(targets.length > 0
+          ? [
+              db
+                .insert(announcementPresetTargets)
+                .values(
+                  targets.map((presetId) => ({ announcementId, presetId })),
+                ),
+            ]
+          : []),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+      const updated = (await listAdminAnnouncements()).find(
+        (updated) => updated.id === announcementId,
+      );
+      if (!updated) notFound("Announcement");
       return updated;
     }),
 

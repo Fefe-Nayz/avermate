@@ -7,6 +7,8 @@ import {
   prepareMigrationBaseline,
 } from "./migrate";
 
+const expectedMigrationCount = 11;
+
 async function migrationRows(client: Client) {
   const result = await client.execute(
     "SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at",
@@ -29,12 +31,26 @@ async function installUnjournaledBaseline(client: Client) {
   `);
 }
 
+async function expectAnnouncementAudienceSchema(client: Client) {
+  const [targetTable, audienceColumn] = await Promise.all([
+    client.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'announcement_preset_targets'",
+    ),
+    client.execute(
+      "SELECT name FROM pragma_table_info('announcements') WHERE name = 'audience'",
+    ),
+  ]);
+  expect(targetTable.rows).toHaveLength(1);
+  expect(audienceColumn.rows).toHaveLength(1);
+}
+
 describe("migration baseline adoption", () => {
   test("migrates a fresh database without manufacturing a baseline", async () => {
     const client = createClient({ url: ":memory:" });
     try {
       expect(await migrateClient(client)).toBe("fresh");
-      expect((await migrationRows(client)).length).toBe(10);
+      expect((await migrationRows(client)).length).toBe(expectedMigrationCount);
+      await expectAnnouncementAudienceSchema(client);
     } finally {
       client.close();
     }
@@ -45,7 +61,8 @@ describe("migration baseline adoption", () => {
     try {
       await installUnjournaledBaseline(client);
       expect(await migrateClient(client)).toBe("adopted");
-      expect((await migrationRows(client)).length).toBe(10);
+      expect((await migrationRows(client)).length).toBe(expectedMigrationCount);
+      await expectAnnouncementAudienceSchema(client);
 
       const social = await client.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'social_profiles'",
@@ -78,6 +95,9 @@ describe("migration baseline adoption", () => {
       const before = await migrationRows(client);
       expect(await prepareMigrationBaseline(client)).toBe("journaled");
       expect(await migrationRows(client)).toEqual(before);
+      await migrateClient(client);
+      expect(await migrationRows(client)).toEqual(before);
+      await expectAnnouncementAudienceSchema(client);
     } finally {
       client.close();
     }

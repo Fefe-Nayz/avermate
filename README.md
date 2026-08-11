@@ -31,9 +31,10 @@ typed oRPC API with a protected MCP server, and one shared calculation engine.
   shared only after explicit consent; there is no Internet-public grade
   profile.
 - Runs as a responsive Next.js web app and a dedicated Expo iOS/Android app.
-- Includes email/OAuth authentication, data export, announcements, centralized
-  bug/feature-request triage, social moderation, and administration. Email and
-  upload integrations activate when their services are configured.
+- Includes email/OAuth authentication, data export, global or preset-targeted
+  announcements, centralized bug/feature-request triage, social moderation,
+  and administration. Email and upload integrations activate when their
+  services are configured.
 - Exposes scoped academic and social operations to compatible AI assistants
   through an OAuth-protected MCP 2026-07-28 endpoint.
 

@@ -71,6 +71,13 @@
       "when": 1786460996732,
       "tag": "0009_lowly_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786465968598,
+      "tag": "0010_easy_firebrand",
+      "breakpoints": true
     }
   ]
 }

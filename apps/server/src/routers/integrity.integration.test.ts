@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createRouterClient } from "@orpc/server";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,9 +19,7 @@ const migrationDirectory = join(import.meta.dir, "../../drizzle");
 const migration = readdirSync(migrationDirectory)
   .filter((file) => /^\d+.*\.sql$/.test(file))
   .sort((left, right) => left.localeCompare(right))
-  .map((file) =>
-    readFileSync(join(migrationDirectory, file), "utf8"),
-  )
+  .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
 
 type AppRouter = typeof import("./index").appRouter;
@@ -289,7 +287,9 @@ describe("router year invariants", () => {
 
     await api.cards.reorder({ cardIds: [cardA?.id ?? ""] });
     const cards = await api.cards.list({ yearId: "year-a" });
-    expect(new Set(cards.map((card) => card.sortOrder)).size).toBe(cards.length);
+    expect(new Set(cards.map((card) => card.sortOrder)).size).toBe(
+      cards.length,
+    );
   });
 
   test("loads composite components only for the requested year", async () => {
@@ -586,7 +586,6 @@ describe("router year invariants", () => {
       .where(eq(schema.customAverages.name, "Atomic average"));
     expect(stored).toHaveLength(0);
 
-
     const unchanged = await api.averages.get({ averageId: original.id });
     expect(unchanged).toMatchObject({
       name: "Stable average",
@@ -711,6 +710,274 @@ describe("account-safe reads", () => {
     ).rejects.toThrow("Active announcement not found");
   });
 
+  test("preset announcements follow only linked memberships without leaking history", async () => {
+    await database
+      .insert(schema.presetDefinitions)
+      .values([
+        {
+          id: "announcement-preset-a",
+          name: "Announcement preset A",
+          createdByUserId: "admin-a",
+        },
+        {
+          id: "announcement-preset-b",
+          name: "Announcement preset B",
+          createdByUserId: "admin-a",
+        },
+      ])
+      .onConflictDoNothing();
+    await database.insert(schema.years).values([
+      {
+        id: "announcement-year-a",
+        name: "Announcement year A",
+        startsAt: new Date("2025-09-01T00:00:00.000Z"),
+        endsAt: new Date("2026-07-01T00:00:00.000Z"),
+        userId: "user-a",
+      },
+      {
+        id: "announcement-year-b",
+        name: "Announcement year B",
+        startsAt: new Date("2026-09-01T00:00:00.000Z"),
+        endsAt: new Date("2027-07-01T00:00:00.000Z"),
+        userId: "user-a",
+      },
+    ]);
+    await database.insert(schema.yearPresetMemberships).values([
+      {
+        yearId: "announcement-year-a",
+        presetId: "announcement-preset-a",
+        appliedVersion: 1,
+        mode: "linked",
+        userId: "user-a",
+      },
+      {
+        yearId: "announcement-year-b",
+        presetId: "announcement-preset-b",
+        appliedVersion: 1,
+        mode: "linked",
+        userId: "user-a",
+      },
+    ]);
+    await database.insert(schema.announcements).values([
+      {
+        id: "announcement-global-scope",
+        title: "Everyone",
+        message: "Global remains visible",
+        audience: "global",
+        createdByUserId: "admin-a",
+      },
+      {
+        id: "announcement-for-preset-a",
+        title: "Only A",
+        message: "Preset A members",
+        audience: "preset",
+        createdByUserId: "admin-a",
+      },
+      {
+        id: "announcement-for-preset-b",
+        title: "Only B",
+        message: "Preset B members",
+        audience: "preset",
+        createdByUserId: "admin-a",
+      },
+      {
+        id: "announcement-without-target",
+        title: "Invalid legacy target",
+        message: "Nobody should see this",
+        audience: "preset",
+        createdByUserId: "admin-a",
+      },
+    ]);
+    await database.insert(schema.announcementPresetTargets).values([
+      {
+        announcementId: "announcement-for-preset-a",
+        presetId: "announcement-preset-a",
+      },
+      {
+        announcementId: "announcement-for-preset-b",
+        presetId: "announcement-preset-b",
+      },
+    ]);
+
+    const visibleForA = await api.announcements.active({
+      yearId: "announcement-year-a",
+    });
+    expect(visibleForA.map((announcement) => announcement.id)).toContain(
+      "announcement-global-scope",
+    );
+    expect(visibleForA.map((announcement) => announcement.id)).toContain(
+      "announcement-for-preset-a",
+    );
+    expect(
+      visibleForA.find(
+        (announcement) => announcement.id === "announcement-for-preset-a",
+      ),
+    ).not.toHaveProperty("audience");
+    expect(
+      visibleForA.find(
+        (announcement) => announcement.id === "announcement-for-preset-a",
+      ),
+    ).not.toHaveProperty("createdByUserId");
+    expect(visibleForA.map((announcement) => announcement.id)).not.toContain(
+      "announcement-for-preset-b",
+    );
+    expect(visibleForA.map((announcement) => announcement.id)).not.toContain(
+      "announcement-without-target",
+    );
+
+    const visibleForAnyYear = await api.announcements.active();
+    expect(visibleForAnyYear.map((announcement) => announcement.id)).toContain(
+      "announcement-for-preset-a",
+    );
+    expect(visibleForAnyYear.map((announcement) => announcement.id)).toContain(
+      "announcement-for-preset-b",
+    );
+    await database
+      .update(schema.years)
+      .set({ archivedAt: new Date() })
+      .where(eq(schema.years.id, "announcement-year-b"));
+    expect(
+      (await api.announcements.active()).map((announcement) => announcement.id),
+    ).not.toContain("announcement-for-preset-b");
+    await expect(
+      api.announcements.dismiss({
+        announcementId: "announcement-for-preset-a",
+        yearId: "announcement-year-b",
+      }),
+    ).rejects.toThrow("Active announcement not found");
+
+    await api.announcements.dismiss({
+      announcementId: "announcement-for-preset-a",
+      yearId: "announcement-year-a",
+    });
+    expect(
+      (
+        await api.announcements.history({
+          yearId: "announcement-year-a",
+        })
+      ).map((announcement) => announcement.id),
+    ).toContain("announcement-for-preset-a");
+
+    await database
+      .update(schema.yearPresetMemberships)
+      .set({
+        mode: "customized",
+        detachedAt: new Date(),
+        detachedReason: "configuration_changed",
+      })
+      .where(eq(schema.yearPresetMemberships.yearId, "announcement-year-a"));
+    expect(
+      (
+        await api.announcements.history({
+          yearId: "announcement-year-a",
+        })
+      ).map((announcement) => announcement.id),
+    ).not.toContain("announcement-for-preset-a");
+
+    await database
+      .delete(schema.announcements)
+      .where(
+        inArray(schema.announcements.id, [
+          "announcement-global-scope",
+          "announcement-for-preset-a",
+          "announcement-for-preset-b",
+          "announcement-without-target",
+        ]),
+      );
+    await database
+      .delete(schema.years)
+      .where(
+        inArray(schema.years.id, [
+          "announcement-year-a",
+          "announcement-year-b",
+        ]),
+      );
+    await database
+      .delete(schema.presetDefinitions)
+      .where(
+        inArray(schema.presetDefinitions.id, [
+          "announcement-preset-a",
+          "announcement-preset-b",
+        ]),
+      );
+  });
+
+  test("admin announcement mutations validate and atomically replace preset targets", async () => {
+    await database
+      .insert(schema.presetDefinitions)
+      .values({
+        id: "announcement-preset-b",
+        name: "Announcement preset B",
+        createdByUserId: "admin-a",
+      })
+      .onConflictDoNothing();
+    const created = await adminApi.admin.createAnnouncement({
+      title: "Targeted",
+      message: "For preset B",
+      audience: "preset",
+      presetIds: ["announcement-preset-b"],
+      tone: "info",
+      active: true,
+      startsAt: null,
+      endsAt: null,
+    });
+    expect(created).toMatchObject({
+      audience: "preset",
+      presetIds: ["announcement-preset-b"],
+    });
+
+    const toggled = await adminApi.admin.updateAnnouncement({
+      announcementId: created.id,
+      active: false,
+    });
+    expect(toggled).toMatchObject({
+      active: false,
+      audience: "preset",
+      presetIds: ["announcement-preset-b"],
+    });
+
+    const updated = await adminApi.admin.updateAnnouncement({
+      announcementId: created.id,
+      audience: "global",
+    });
+    expect(updated).toMatchObject({ audience: "global", presetIds: [] });
+    const remainingTargets = await database
+      .select()
+      .from(schema.announcementPresetTargets)
+      .where(eq(schema.announcementPresetTargets.announcementId, created.id));
+    expect(remainingTargets).toHaveLength(0);
+
+    await expect(
+      adminApi.admin.createAnnouncement({
+        title: "Missing target",
+        message: "Must fail",
+        audience: "preset",
+        presetIds: [],
+        tone: "info",
+        active: true,
+        startsAt: null,
+        endsAt: null,
+      }),
+    ).rejects.toThrow("needs at least one preset target");
+    await expect(
+      adminApi.admin.createAnnouncement({
+        title: "Unknown target",
+        message: "Must fail",
+        audience: "preset",
+        presetIds: ["missing-preset"],
+        tone: "info",
+        active: true,
+        startsAt: null,
+        endsAt: null,
+      }),
+    ).rejects.toThrow("do not exist");
+
+    await adminApi.admin.deleteAnnouncement({ announcementId: created.id });
+    await database
+      .delete(schema.presetDefinitions)
+      .where(eq(schema.presetDefinitions.id, "announcement-preset-b"));
+  });
+
   test("exports every reconstructible application relation without auth secrets", async () => {
     const exported = await api.preferences.exportData();
     expect(exported).toHaveProperty("periods");
@@ -719,6 +986,7 @@ describe("account-safe reads", () => {
     expect(exported).toHaveProperty("dashboardCards");
     expect(exported).toHaveProperty("yearReviewViews");
     expect(exported).toHaveProperty("announcementViews");
+    expect(exported).toHaveProperty("createdAnnouncementPresetTargets");
     expect(exported).toHaveProperty("feedback");
 
     const serialized = JSON.stringify(exported);
@@ -963,7 +1231,9 @@ describe("managed preset lifecycle", () => {
     const setupRowsAfterFailure = await database
       .select()
       .from(schema.yearSetupRequests)
-      .where(eq(schema.yearSetupRequests.idempotencyKey, request.idempotencyKey));
+      .where(
+        eq(schema.yearSetupRequests.idempotencyKey, request.idempotencyKey),
+      );
     expect(setupRowsAfterFailure).toHaveLength(0);
 
     const created = await api.presets.setupYear(request);
@@ -990,7 +1260,9 @@ describe("managed preset lifecycle", () => {
           .where(eq(schema.yearPresetMemberships.yearId, created.id)),
       ]);
     expect(createdSubjects.length).toBeGreaterThan(0);
-    expect(createdSubjects.every((subject) => Boolean(subject.presetNodeKey))).toBe(true);
+    expect(
+      createdSubjects.every((subject) => Boolean(subject.presetNodeKey)),
+    ).toBe(true);
     expect(createdPeriods).toHaveLength(3);
     expect(createdCards.length).toBeGreaterThan(0);
     expect(membership[0]).toMatchObject({ mode: "linked", appliedVersion: 1 });
@@ -1077,13 +1349,17 @@ describe("managed preset lifecycle", () => {
       .where(eq(schema.grades.id, grade?.id ?? ""));
     expect(mathAfter).toMatchObject({ id: mathBefore?.id, coefficient: 5 });
     expect(gradeAfter?.subjectId).toBe(mathBefore?.id);
-    expect((await api.presets.status({ yearId: year.id })).state).toBe("current");
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "current",
+    );
 
     await api.subjects.update({
       subjectId: mathBefore?.id ?? "",
       name: "My mathematics",
     });
-    expect((await api.presets.status({ yearId: year.id })).state).toBe("customized");
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "customized",
+    );
 
     await adminApi.presets.admin.publish({
       presetId,
@@ -1102,6 +1378,94 @@ describe("managed preset lifecycle", () => {
       .from(schema.subjects)
       .where(eq(schema.subjects.id, mathBefore?.id ?? ""));
     expect(stillCustom?.name).toBe("My mathematics");
+  });
+
+  test("detaches a linked preset atomically for every period mutation", async () => {
+    const presetId = "INTEGRATION_PERIOD_MUTATION_PRESET";
+    await adminApi.presets.admin.create({
+      id: presetId,
+      name: "Period mutation curriculum",
+      description: "Period detachment coverage",
+      tags: ["test"],
+      featured: false,
+      configuration: baseConfiguration,
+    });
+    const year = await api.presets.setupYear({
+      idempotencyKey: "managed-period-mutation-setup",
+      year: {
+        name: "Managed period year",
+        startsAt: new Date("2032-09-01T00:00:00.000Z"),
+        endsAt: new Date("2033-07-01T00:00:00.000Z"),
+      },
+      presetId,
+      periodTemplateId: "trimesters",
+      periodNames: ["Term 1", "Term 2", "Term 3"],
+    });
+
+    const relink = async () => {
+      await database
+        .update(schema.yearPresetMemberships)
+        .set({
+          mode: "linked",
+          detachedReason: null,
+          detachedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.yearPresetMemberships.yearId, year.id));
+    };
+    const expectDetached = async (reason: string) => {
+      const [membership] = await database
+        .select()
+        .from(schema.yearPresetMemberships)
+        .where(eq(schema.yearPresetMemberships.yearId, year.id));
+      expect(membership).toMatchObject({
+        mode: "customized",
+        detachedReason: reason,
+      });
+      expect(membership?.detachedAt).toBeInstanceOf(Date);
+    };
+
+    const created = await api.periods.create({
+      yearId: year.id,
+      name: "Revision",
+      startAt: new Date("2033-06-01T00:00:00.000Z"),
+      endAt: new Date("2033-06-30T00:00:00.000Z"),
+      isCumulative: false,
+    });
+    expect(created).toBeDefined();
+    await expectDetached("period_created");
+
+    await relink();
+    await api.periods.update({
+      periodId: created?.id ?? "",
+      name: "Final revision",
+    });
+    await expectDetached("period_updated");
+
+    await relink();
+    const beforeReorder = await api.periods.list({ yearId: year.id });
+    await api.periods.reorder({
+      periodIds: beforeReorder.map((period) => period.id).reverse(),
+    });
+    await expectDetached("period_reordered");
+
+    await relink();
+    await api.periods.delete({ periodId: created?.id ?? "" });
+    await expectDetached("period_deleted");
+
+    await relink();
+    const beforeReplace = await api.periods.list({ yearId: year.id });
+    await api.periods.replaceAll({
+      yearId: year.id,
+      periods: beforeReplace.map((period, index) => ({
+        periodId: period.id,
+        name: index === 0 ? `${period.name} adjusted` : period.name,
+        startAt: period.startAt,
+        endAt: period.endAt,
+        isCumulative: period.isCumulative,
+      })),
+    });
+    await expectDetached("periods_replaced");
   });
 
   test("requires action instead of deleting a subject that carries grades", async () => {
@@ -1152,7 +1516,9 @@ describe("managed preset lifecycle", () => {
         ...baseConfiguration,
         subjects: baseConfiguration.subjects.map((root) => ({
           ...root,
-          children: root.children.filter((subject) => subject.key !== "physics"),
+          children: root.children.filter(
+            (subject) => subject.key !== "physics",
+          ),
         })),
       },
     });

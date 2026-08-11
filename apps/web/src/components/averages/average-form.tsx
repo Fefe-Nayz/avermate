@@ -18,6 +18,7 @@ import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 
 interface Entry {
   subjectId: string
@@ -95,11 +96,14 @@ export function AverageForm({
       toast.success(
         mode === "create" ? t("Average created") : t("Average updated")
       )
-      void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      })
+        invalidateAnnouncementAudience(queryClient),
+      ])
       router.push("/settings/averages")
     },
     onError: (error: Error) => {
@@ -121,11 +125,14 @@ export function AverageForm({
     onSuccess: () => {
       haptic("success")
       toast.success(t("Average deleted"))
-      void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      })
+        invalidateAnnouncementAudience(queryClient),
+      ])
       router.push("/settings/averages")
     },
   })

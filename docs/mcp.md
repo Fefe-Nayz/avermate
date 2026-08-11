@@ -162,7 +162,8 @@ The catalog covers:
 - private groups/classes, immutable sharing policies, re-consent,
   threshold-protected aggregate statistics and opt-in rankings;
 - privacy-safe social notifications, reports and account export/reset;
-- administrator overview, users, announcements, feedback, roles, and
+- administrator overview, users, managed preset identities, announcements,
+  feedback, roles, and
   suspensions, gated by both scope and role;
 - social moderation overview, reports, value-free audit history and confirmed
   profile/group freezes, gated independently by `avermate:social.moderate` and
@@ -176,6 +177,16 @@ still pass through the same feature flag, eligibility/guardian consent,
 field-grant, group-policy, cohort-threshold, ownership, and moderation checks as
 the web and Expo applications. MCP never exposes raw grades, notes, subject
 names, email addresses, or internal account identifiers through social DTOs.
+
+Announcement reads accept an optional `yearId`. When present, preset-targeted
+messages are authorized against that owned year's current linked membership;
+without it, any linked, non-detached membership on an active year may match.
+Global messages keep their existing behavior. Administrators can create or
+update an announcement with `audience: "global"` and no targets, or
+`audience: "preset"` plus one or more `presetIds`. Targets refer to the stable
+preset identity rather than a frozen version. The same authoritative filter is
+used for active messages, history, dismissal, Web SSR, Expo, MCP tools, and the
+announcement resource, so no transport can enumerate an unauthorized target.
 
 Resources include account, years, preferences, announcements, and eligible
 recaps. Resource templates provide:

@@ -5,22 +5,29 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { space, type, usePalette } from "@/lib/theme";
+import { useYear } from "@/components/year-provider";
 
 /** The newest unread announcement, kept outside route content. */
 export function AnnouncementBanner() {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const active = useQuery(orpc.announcements.active.queryOptions());
+  const { yearId } = useYear();
+  const active = useQuery({
+    ...orpc.announcements.active.queryOptions({
+      input: { yearId: yearId ?? "" },
+    }),
+    enabled: Boolean(yearId),
+  });
   const dismiss = useMutation({
     ...orpc.announcements.dismiss.mutationOptions(),
     onSuccess: async () => {
       haptic("light");
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: orpc.announcements.active.queryKey(),
+          queryKey: orpc.announcements.active.key(),
         }),
         queryClient.invalidateQueries({
-          queryKey: orpc.announcements.history.queryKey(),
+          queryKey: orpc.announcements.history.key(),
         }),
       ]);
     },
@@ -47,13 +54,26 @@ export function AnnouncementBanner() {
         borderBottomWidth: 1,
       }}
     >
-      <View style={{ flexDirection: "row", gap: space.md, alignItems: "flex-start" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: space.md,
+          alignItems: "flex-start",
+        }}
+      >
         <Ionicons name="megaphone-outline" size={19} color={tone} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Text selectable style={[type.callout, { color: tone, fontWeight: "700" }]}>
+          <Text
+            selectable
+            style={[type.callout, { color: tone, fontWeight: "700" }]}
+          >
             {announcement.title}
           </Text>
-          <Text selectable numberOfLines={2} style={[type.footnote, { color: palette.textMuted }]}>
+          <Text
+            selectable
+            numberOfLines={2}
+            style={[type.footnote, { color: palette.textMuted }]}
+          >
             {announcement.message}
           </Text>
         </View>
@@ -62,7 +82,12 @@ export function AnnouncementBanner() {
           accessibilityLabel="Dismiss"
           hitSlop={12}
           disabled={dismiss.isPending}
-          onPress={() => dismiss.mutate({ announcementId: announcement.id })}
+          onPress={() =>
+            dismiss.mutate({
+              announcementId: announcement.id,
+              yearId: yearId ?? undefined,
+            })
+          }
         >
           <Ionicons name="close" size={20} color={palette.textFaint} />
         </Pressable>

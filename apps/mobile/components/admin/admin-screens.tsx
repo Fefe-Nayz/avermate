@@ -462,11 +462,15 @@ export function AdminUserScreen() {
 
 export function AdminAnnouncementsScreen() {
   const palette = usePalette();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<"info" | "success" | "warning" | "danger">(
     "info",
   );
+  const [audience, setAudience] = useState<"global" | "preset">("global");
+  const [presetIds, setPresetIds] = useState<string[]>([]);
+  const [active, setActive] = useState(true);
   const [scheduled, setScheduled] = useState(false);
   const [startsAt, setStartsAt] = useState(() => {
     const value = new Date();
@@ -479,13 +483,34 @@ export function AdminAnnouncementsScreen() {
     return value;
   });
   const announcements = useQuery(orpc.admin.announcements.queryOptions());
-  const refresh = () => invalidate(orpc.admin.announcements.key());
+  const presets = useQuery(orpc.presets.admin.list.queryOptions());
+  const refresh = () =>
+    Promise.all([
+      invalidate(orpc.admin.announcements.key()),
+      invalidate(orpc.announcements.active.key()),
+      invalidate(orpc.announcements.history.key()),
+    ]);
+  const resetEditor = () => {
+    const nextStart = new Date();
+    nextStart.setDate(nextStart.getDate() + 1);
+    const nextEnd = new Date(nextStart);
+    nextEnd.setDate(nextEnd.getDate() + 7);
+    setEditingId(null);
+    setTitle("");
+    setMessage("");
+    setTone("info");
+    setAudience("global");
+    setPresetIds([]);
+    setActive(true);
+    setScheduled(false);
+    setStartsAt(nextStart);
+    setEndsAt(nextEnd);
+  };
   const create = useMutation({
     ...orpc.admin.createAnnouncement.mutationOptions(),
     onSuccess: async () => {
       haptic("success");
-      setTitle("");
-      setMessage("");
+      resetEditor();
       await refresh();
     },
   });
@@ -493,6 +518,15 @@ export function AdminAnnouncementsScreen() {
     ...orpc.admin.updateAnnouncement.mutationOptions(),
     onSuccess: refresh,
   });
+  const saveUpdate = useMutation({
+    ...orpc.admin.updateAnnouncement.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      resetEditor();
+      await refresh();
+    },
+  });
+  const editorError = create.error ?? saveUpdate.error;
   const remove = useMutation({
     ...orpc.admin.deleteAnnouncement.mutationOptions(),
     onSuccess: refresh,
@@ -502,7 +536,9 @@ export function AdminAnnouncementsScreen() {
     <AdminGate>
       <Stack.Screen options={{ title: t("Announcements") }} />
       <Screen>
-        <Section title={t("New announcement")}>
+        <Section
+          title={editingId ? t("Edit announcement") : t("New announcement")}
+        >
           <TextField label={t("Title")} value={title} onChangeText={setTitle} />
           <TextField
             label={t("Message")}
@@ -522,6 +558,72 @@ export function AdminAnnouncementsScreen() {
               { value: "danger", label: t("Danger") },
             ]}
           />
+          <ChoiceField
+            label={t("Audience")}
+            value={audience}
+            onChange={(value) => {
+              const next = value as typeof audience;
+              setAudience(next);
+              if (next === "global") setPresetIds([]);
+            }}
+            columns={2}
+            choices={[
+              {
+                value: "global",
+                label: t("Everyone"),
+                hint: t("All signed-in users"),
+              },
+              {
+                value: "preset",
+                label: t("Selected presets"),
+                hint: t("Only active linked members"),
+              },
+            ]}
+          />
+          {audience === "preset" ? (
+            <View style={{ gap: space.sm }}>
+              <Text style={[type.label, { color: palette.textFaint }]}>
+                {t("Target presets")}
+              </Text>
+              {(presets.data ?? []).map((preset) => (
+                <SwitchField
+                  key={preset.id}
+                  label={preset.name}
+                  hint={preset.archived ? t("Archived") : undefined}
+                  value={presetIds.includes(preset.id)}
+                  onValueChange={(selected) =>
+                    setPresetIds((current) =>
+                      selected
+                        ? [...current, preset.id]
+                        : current.filter((id) => id !== preset.id),
+                    )
+                  }
+                />
+              ))}
+              {(presets.data?.length ?? 0) === 0 ? (
+                <Note>
+                  {t(
+                    "Create a managed preset before targeting an announcement.",
+                  )}
+                </Note>
+              ) : presetIds.length === 0 ? (
+                <Problem>{t("Select at least one preset.")}</Problem>
+              ) : (
+                <Note>
+                  {presetIds.length === 1
+                    ? t("One preset selected")
+                    : t("{count} presets selected", {
+                        count: presetIds.length,
+                      })}
+                </Note>
+              )}
+              <Note>
+                {t(
+                  "Targeting follows the preset across updates. Customized years leave the audience.",
+                )}
+              </Note>
+            </View>
+          ) : null}
           <SwitchField
             label={t("Schedule publication")}
             hint={t("Keep it hidden until the start date")}
@@ -543,21 +645,44 @@ export function AdminAnnouncementsScreen() {
               />
             </>
           ) : null}
+          <SwitchField
+            label={t("Active")}
+            hint={t("Inactive announcements remain drafts")}
+            value={active}
+            onValueChange={setActive}
+          />
           <Button
-            label={t("Publish")}
-            disabled={!title.trim() || !message.trim()}
-            loading={create.isPending}
-            onPress={() =>
-              create.mutate({
+            label={editingId ? t("Save changes") : t("Publish")}
+            disabled={
+              !title.trim() ||
+              !message.trim() ||
+              (audience === "preset" && presetIds.length === 0)
+            }
+            loading={editingId ? saveUpdate.isPending : create.isPending}
+            onPress={() => {
+              const values = {
                 title: title.trim(),
                 message: message.trim(),
                 tone,
-                active: true,
+                audience,
+                presetIds,
+                active,
                 startsAt: scheduled ? startsAt : null,
                 endsAt: scheduled ? endsAt : null,
-              })
-            }
+              };
+              if (editingId) {
+                saveUpdate.mutate({ announcementId: editingId, ...values });
+              } else {
+                create.mutate(values);
+              }
+            }}
           />
+          {editingId ? (
+            <Button label={t("Cancel")} variant="ghost" onPress={resetEditor} />
+          ) : null}
+          {editorError instanceof Error ? (
+            <Problem>{editorError.message}</Problem>
+          ) : null}
         </Section>
         <Section title={t("History")}>
           <View style={{ gap: space.md }}>
@@ -572,12 +697,51 @@ export function AdminAnnouncementsScreen() {
                 <Text selectable style={[type.body, { color: palette.text }]}>
                   {announcement.message}
                 </Text>
+                <Note>
+                  {announcement.audience === "preset"
+                    ? t("Sent to: {presets}", {
+                        presets: announcement.presets
+                          .map((preset) => preset.name)
+                          .join(", "),
+                      })
+                    : t("Sent to everyone")}
+                </Note>
                 <SwitchField
                   label={t("Active")}
                   value={announcement.active}
                   onValueChange={(active) =>
                     update.mutate({ announcementId: announcement.id, active })
                   }
+                />
+                <Button
+                  label={t("Edit")}
+                  variant="secondary"
+                  onPress={() => {
+                    const fallbackStart = new Date();
+                    fallbackStart.setDate(fallbackStart.getDate() + 1);
+                    const existingEnd = announcement.endsAt
+                      ? new Date(announcement.endsAt)
+                      : null;
+                    const nextStart = announcement.startsAt
+                      ? new Date(announcement.startsAt)
+                      : existingEnd
+                        ? new Date(existingEnd.getTime() - 7 * 86_400_000)
+                        : fallbackStart;
+                    const fallbackEnd = new Date(nextStart);
+                    fallbackEnd.setDate(fallbackEnd.getDate() + 7);
+                    setEditingId(announcement.id);
+                    setTitle(announcement.title);
+                    setMessage(announcement.message);
+                    setTone(announcement.tone as typeof tone);
+                    setAudience(announcement.audience as typeof audience);
+                    setPresetIds(announcement.presetIds);
+                    setActive(announcement.active);
+                    setScheduled(
+                      Boolean(announcement.startsAt || announcement.endsAt),
+                    );
+                    setStartsAt(nextStart);
+                    setEndsAt(existingEnd ?? fallbackEnd);
+                  }}
                 />
                 <Button
                   label={t("Delete")}

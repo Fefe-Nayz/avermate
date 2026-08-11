@@ -37,6 +37,12 @@ export default function PresetSettings() {
         queryKey: orpc.snapshot.get.queryKey({ input: { yearId } }),
       }),
       queryClient.invalidateQueries({ queryKey: orpc.years.list.key() }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.announcements.active.key(),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.announcements.history.key(),
+      }),
     ]);
 
   const synchronize = useMutation({
@@ -129,7 +135,9 @@ export default function PresetSettings() {
       icon: "sparkles" as const,
       color: palette.textMuted,
       title: t("No linked preset"),
-      body: t("Choose a curriculum below, or keep managing this year yourself."),
+      body: t(
+        "Choose a curriculum below, or keep managing this year yourself.",
+      ),
     },
   }[state];
 
@@ -194,11 +202,17 @@ export default function PresetSettings() {
               <Text selectable style={[type.heading, { color: palette.text }]}>
                 {statePresentation.title}
               </Text>
-              <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
+              <Text
+                selectable
+                style={[type.footnote, { color: palette.textMuted }]}
+              >
                 {statePresentation.body}
               </Text>
               {data?.preset ? (
-                <Text selectable style={[type.label, { color: palette.textFaint }]}>
+                <Text
+                  selectable
+                  style={[type.label, { color: palette.textFaint }]}
+                >
                   {data.preset.name} · v{data.membership?.appliedVersion}
                 </Text>
               ) : null}
@@ -215,9 +229,18 @@ export default function PresetSettings() {
               }}
             >
               {[
-                [t("Added"), data.changes.subjectsAdded + data.changes.averagesAdded],
-                [t("Changed"), data.changes.subjectsChanged + data.changes.averagesChanged],
-                [t("Removed"), data.changes.subjectsRemoved + data.changes.averagesRemoved],
+                [
+                  t("Added"),
+                  data.changes.subjectsAdded + data.changes.averagesAdded,
+                ],
+                [
+                  t("Changed"),
+                  data.changes.subjectsChanged + data.changes.averagesChanged,
+                ],
+                [
+                  t("Removed"),
+                  data.changes.subjectsRemoved + data.changes.averagesRemoved,
+                ],
               ].map(([label, count]) => (
                 <View
                   key={String(label)}
@@ -231,11 +254,17 @@ export default function PresetSettings() {
                 >
                   <Text
                     selectable
-                    style={[type.heading, { color: palette.text, fontVariant: ["tabular-nums"] }]}
+                    style={[
+                      type.heading,
+                      { color: palette.text, fontVariant: ["tabular-nums"] },
+                    ]}
                   >
                     {count}
                   </Text>
-                  <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
+                  <Text
+                    selectable
+                    style={[type.footnote, { color: palette.textMuted }]}
+                  >
                     {label}
                   </Text>
                 </View>
@@ -247,7 +276,10 @@ export default function PresetSettings() {
             <Text
               key={blocker.subjectId}
               selectable
-              style={[type.footnote, { color: palette.negative, paddingTop: space.sm }]}
+              style={[
+                type.footnote,
+                { color: palette.negative, paddingTop: space.sm },
+              ]}
             >
               {t("{name}: {count} grades would be affected", {
                 name: blocker.subjectName,
@@ -283,7 +315,11 @@ export default function PresetSettings() {
           ) : null}
         </Card>
 
-        <Section title={data?.preset ? t("Choose another preset") : t("Choose a preset")}>
+        <Section
+          title={
+            data?.preset ? t("Choose another preset") : t("Choose a preset")
+          }
+        >
           <View style={{ gap: space.sm }}>
             {presets.data?.map((preset) => {
               const selected = preset.id === selectedPresetId;
@@ -310,21 +346,43 @@ export default function PresetSettings() {
                         : palette.surface,
                   })}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                    <Text selectable style={[type.heading, { color: palette.text, flex: 1 }]}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space.sm,
+                    }}
+                  >
+                    <Text
+                      selectable
+                      style={[type.heading, { color: palette.text, flex: 1 }]}
+                    >
                       {preset.name}
                     </Text>
-                    <Text selectable style={[type.label, { color: palette.textFaint }]}>
+                    <Text
+                      selectable
+                      style={[type.label, { color: palette.textFaint }]}
+                    >
                       v{preset.version}
                     </Text>
                     {selected ? (
-                      <Ionicons name="checkmark-circle" size={20} color={palette.accent} />
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={palette.accent}
+                      />
                     ) : null}
                   </View>
-                  <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
+                  <Text
+                    selectable
+                    style={[type.footnote, { color: palette.textMuted }]}
+                  >
                     {preset.description}
                   </Text>
-                  <Text selectable style={[type.label, { color: palette.textFaint }]}>
+                  <Text
+                    selectable
+                    style={[type.label, { color: palette.textFaint }]}
+                  >
                     {t("{subjects} subjects · {averages} averages", {
                       subjects: preset.subjectCount,
                       averages: preset.averageCount,
@@ -338,8 +396,12 @@ export default function PresetSettings() {
 
         {selectedPresetId && preview.data ? (
           <Card>
-            <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
-              {preview.data.existing.subjects > 0 || preview.data.existing.averages > 0
+            <Text
+              selectable
+              style={[type.footnote, { color: palette.textMuted }]}
+            >
+              {preview.data.existing.subjects > 0 ||
+              preview.data.existing.averages > 0
                 ? t(
                     "This replaces {subjects} current subjects and {averages} current averages.",
                     {
@@ -373,7 +435,10 @@ export default function PresetSettings() {
 
         {error ? (
           <Card style={{ borderColor: palette.negative }}>
-            <Text selectable style={[type.footnote, { color: palette.negative }]}>
+            <Text
+              selectable
+              style={[type.footnote, { color: palette.negative }]}
+            >
               {error}
             </Text>
           </Card>

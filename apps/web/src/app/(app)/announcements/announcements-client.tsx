@@ -20,7 +20,9 @@ import {
 import { PageMeta } from "@/components/shell/page-chrome"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
+import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 import { cn } from "@/lib/utils"
+import { useYear } from "@/components/year/year-provider"
 
 const TONE = {
   info: { icon: InfoIcon, className: "bg-primary/8" },
@@ -32,8 +34,15 @@ const TONE = {
 export function AnnouncementsClient() {
   const t = useExtracted()
   const format = useFormatter()
+  const { yearId } = useYear()
   const queryClient = useQueryClient()
-  const history = useQuery(orpc.announcements.history.queryOptions())
+  const history = useQuery({
+    ...orpc.announcements.history.queryOptions({
+      input: { yearId: yearId ?? "" },
+    }),
+    enabled: Boolean(yearId),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
   const dismiss = useMutation({
     ...orpc.announcements.dismiss.mutationOptions(),
     onSuccess: async () => {
@@ -107,7 +116,10 @@ export function AnnouncementsClient() {
                           size="xs"
                           disabled={dismiss.isPending}
                           onClick={() =>
-                            dismiss.mutate({ announcementId: announcement.id })
+                            dismiss.mutate({
+                              announcementId: announcement.id,
+                              yearId: yearId ?? undefined,
+                            })
                           }
                         >
                           {t("Mark as read")}

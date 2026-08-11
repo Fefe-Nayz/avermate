@@ -11,6 +11,7 @@ import {
 import { useFormatter, useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { ChoiceField, TextField } from "@/components/forms/controls"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { Badge } from "@/components/ui/badge"
@@ -23,19 +24,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
+import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 
 type Tone = "info" | "success" | "warning" | "danger"
+type Audience = "global" | "preset"
 interface Draft {
   id?: string
   title: string
   message: string
   tone: Tone
+  audience: Audience
+  presetIds: string[]
   active: boolean
   startsAt: string
   endsAt: string
@@ -45,6 +50,8 @@ const emptyDraft = (): Draft => ({
   title: "",
   message: "",
   tone: "info",
+  audience: "global",
+  presetIds: [],
   active: true,
   startsAt: "",
   endsAt: "",
@@ -69,7 +76,14 @@ export function AdminAnnouncementsClient() {
   const [editing, setEditing] = useState<Draft | null>(null)
   const [renderedAt] = useState(() => Date.now())
 
-  const list = useQuery(orpc.admin.announcements.queryOptions())
+  const list = useQuery({
+    ...orpc.admin.announcements.queryOptions(),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const presets = useQuery({
+    ...orpc.presets.admin.list.queryOptions(),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
   const invalidate = () =>
     Promise.all([
       queryClient.invalidateQueries({
@@ -116,6 +130,8 @@ export function AdminAnnouncementsClient() {
       title: draft.title.trim(),
       message: draft.message.trim(),
       tone: draft.tone,
+      audience: draft.audience,
+      presetIds: draft.presetIds,
       active: draft.active,
       startsAt: asDate(draft.startsAt),
       endsAt: asDate(draft.endsAt),
@@ -140,7 +156,10 @@ export function AdminAnnouncementsClient() {
             <Button
               size="sm"
               disabled={
-                create.isPending || !draft.title.trim() || !draft.message.trim()
+                create.isPending ||
+                !draft.title.trim() ||
+                !draft.message.trim() ||
+                (draft.audience === "preset" && draft.presetIds.length === 0)
               }
               onClick={saveDraft}
             >
@@ -153,7 +172,11 @@ export function AdminAnnouncementsClient() {
             </Button>
           }
         >
-          <AnnouncementFields draft={draft} onChange={setDraft} />
+          <AnnouncementFields
+            draft={draft}
+            presets={presets.data ?? []}
+            onChange={setDraft}
+          />
         </SettingsSection>
 
         <ul className="flex flex-col gap-2">
@@ -188,10 +211,22 @@ export function AdminAnnouncementsClient() {
                         {state}
                       </Badge>
                       <Badge variant="outline">{announcement.tone}</Badge>
+                      <Badge variant="outline">
+                        {announcement.audience === "preset"
+                          ? t("Selected presets")
+                          : t("Everyone")}
+                      </Badge>
                     </div>
                     <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">
                       {announcement.message}
                     </p>
+                    {announcement.audience === "preset" ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {announcement.presets
+                          .map((preset) => preset.name)
+                          .join(", ")}
+                      </p>
+                    ) : null}
                     <p className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                       <CalendarClockIcon className="size-3.5" />
                       {announcement.startsAt
@@ -236,6 +271,8 @@ export function AdminAnnouncementsClient() {
                         title: announcement.title,
                         message: announcement.message,
                         tone: announcement.tone as Tone,
+                        audience: announcement.audience as Audience,
+                        presetIds: announcement.presetIds,
                         active: announcement.active,
                         startsAt: localDateTime(announcement.startsAt),
                         endsAt: localDateTime(announcement.endsAt),
@@ -283,7 +320,11 @@ export function AdminAnnouncementsClient() {
             </DialogDescription>
           </DialogHeader>
           {editing ? (
-            <AnnouncementFields draft={editing} onChange={setEditing} />
+            <AnnouncementFields
+              draft={editing}
+              presets={presets.data ?? []}
+              onChange={setEditing}
+            />
           ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>
@@ -293,6 +334,8 @@ export function AdminAnnouncementsClient() {
               disabled={
                 !editing?.title.trim() ||
                 !editing.message.trim() ||
+                (editing.audience === "preset" &&
+                  editing.presetIds.length === 0) ||
                 update.isPending
               }
               onClick={() => {
@@ -302,6 +345,8 @@ export function AdminAnnouncementsClient() {
                   title: editing.title.trim(),
                   message: editing.message.trim(),
                   tone: editing.tone,
+                  audience: editing.audience,
+                  presetIds: editing.presetIds,
                   active: editing.active,
                   startsAt: asDate(editing.startsAt),
                   endsAt: asDate(editing.endsAt),
@@ -320,9 +365,11 @@ export function AdminAnnouncementsClient() {
 
 function AnnouncementFields({
   draft,
+  presets,
   onChange,
 }: {
   draft: Draft
+  presets: Array<{ id: string; name: string; archived: boolean }>
   onChange: (draft: Draft) => void
 }) {
   const t = useExtracted()
@@ -357,6 +404,84 @@ function AnnouncementFields({
         onValueChange={(tone) => onChange({ ...draft, tone })}
         columns={2}
       />
+      <ChoiceField
+        label={t("Audience")}
+        description={t(
+          "Preset targeting follows active memberships across preset updates. Users who customize their year leave that audience."
+        )}
+        choices={[
+          {
+            value: "global",
+            label: t("Everyone"),
+            description: t("All signed-in users"),
+          },
+          {
+            value: "preset",
+            label: t("Selected presets"),
+            description: t("Only linked members of the selected presets"),
+          },
+        ]}
+        value={draft.audience}
+        onValueChange={(audience) =>
+          onChange({
+            ...draft,
+            audience,
+            presetIds: audience === "global" ? [] : draft.presetIds,
+          })
+        }
+        columns={2}
+      />
+      {draft.audience === "preset" ? (
+        <Field>
+          <FieldLabel>{t("Target presets")}</FieldLabel>
+          <div
+            role="group"
+            aria-label={t("Target presets")}
+            className="grid gap-2 sm:grid-cols-2"
+          >
+            {presets.map((preset) => {
+              const checked = draft.presetIds.includes(preset.id)
+              return (
+                <label
+                  key={preset.id}
+                  className="flex min-h-11 items-center gap-3 rounded-xl border bg-card p-3 text-sm"
+                >
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={(next) =>
+                      onChange({
+                        ...draft,
+                        presetIds: next
+                          ? [...draft.presetIds, preset.id]
+                          : draft.presetIds.filter((id) => id !== preset.id),
+                      })
+                    }
+                  />
+                  <span className="min-w-0 flex-1 truncate">{preset.name}</span>
+                  {preset.archived ? (
+                    <Badge variant="outline">{t("Archived")}</Badge>
+                  ) : null}
+                </label>
+              )
+            })}
+          </div>
+          {presets.length === 0 ? (
+            <FieldDescription>
+              {t("Create a managed preset before targeting an announcement.")}
+            </FieldDescription>
+          ) : (
+            <FieldDescription>
+              {draft.presetIds.length === 0
+                ? t("Select at least one preset.")
+                : draft.presetIds.length === 1
+                  ? t("One preset selected")
+                  : t("{count} presets selected", {
+                      count: String(draft.presetIds.length),
+                    })}
+            </FieldDescription>
+          )}
+        </Field>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField
           label={t("Starts (optional)")}

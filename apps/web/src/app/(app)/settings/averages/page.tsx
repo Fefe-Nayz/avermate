@@ -26,6 +26,7 @@ import { AverageValue } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 
 export default function AveragesSettingsPage() {
   const t = useExtracted()
@@ -36,11 +37,14 @@ export default function AveragesSettingsPage() {
     ...orpc.averages.reorder.mutationOptions(),
     onSuccess: () => {
       haptic("success")
-      void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({
-          input: { yearId: yearId ?? "" },
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({
+            input: { yearId: yearId ?? "" },
+          }),
         }),
-      })
+        invalidateAnnouncementAudience(queryClient),
+      ])
     },
     onError: (error: Error) => {
       haptic("error")

@@ -432,6 +432,7 @@ describe("MCP authorization, scopes and ownership", () => {
       "admin.overview",
     );
     expect(toolNames(admin.json.result)).toContain("admin.overview");
+    expect(toolNames(admin.json.result)).toContain("admin.presets");
   });
 
   test("cannot invoke an unregistered mutation through a read-only handler", async () => {

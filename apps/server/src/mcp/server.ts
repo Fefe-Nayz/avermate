@@ -548,22 +548,24 @@ function registerReadSurface(server: McpServer, api: Api): void {
   server.registerTool(
     "announcements.active",
     {
-      description: "Read active, undismissed announcements.",
-      inputSchema: z.object({}),
+      description:
+        "Read active, undismissed announcements, optionally scoped to one academic year's preset membership.",
+      inputSchema: z.object({ yearId: id.optional() }),
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.announcements.active()),
+    (input) => call(() => api.announcements.active(input)),
   );
   server.registerTool(
     "announcements.history",
     {
-      description: "Read the user's announcement history.",
-      inputSchema: z.object({}),
+      description:
+        "Read the user's authorized announcement history, optionally scoped to one academic year.",
+      inputSchema: z.object({ yearId: id.optional() }),
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.announcements.history()),
+    (input) => call(() => api.announcements.history(input)),
   );
   server.registerTool(
     "analytics.snapshot",
@@ -1637,8 +1639,9 @@ function registerWriteSurface(server: McpServer, api: Api): void {
   server.registerTool(
     "announcements.dismiss",
     {
-      description: "Dismiss one active announcement.",
-      inputSchema: z.object({ announcementId: id }),
+      description:
+        "Dismiss one active announcement, optionally enforcing one academic year's audience.",
+      inputSchema: z.object({ announcementId: id, yearId: id.optional() }),
       _meta: writeMeta,
     },
     (input) => call(() => api.announcements.dismiss(input)),
@@ -1927,6 +1930,17 @@ function registerAdminSurface(
     (input) => call(() => api.admin.user(input)),
   );
   server.registerTool(
+    "admin.presets",
+    {
+      description:
+        "List managed preset identities, archive state, versions and adoption counts for announcement targeting.",
+      inputSchema: z.object({}),
+      annotations: readOnly,
+      _meta: adminRead,
+    },
+    () => call(() => api.presets.admin.list()),
+  );
+  server.registerTool(
     "admin.announcements",
     {
       description:
@@ -1957,6 +1971,8 @@ function registerAdminSurface(
       title: z.string().trim().min(1).max(120),
       message: z.string().trim().min(1).max(2000),
       tone: z.enum(["info", "success", "warning", "danger"]).default("info"),
+      audience: z.enum(["global", "preset"]).default("global"),
+      presetIds: z.array(id).max(50).default([]),
       active: z.boolean().default(true),
       startsAt: optionalDate.default(null),
       endsAt: optionalDate.default(null),
@@ -1964,7 +1980,8 @@ function registerAdminSurface(
     server.registerTool(
       "admin.announcements.create",
       {
-        description: "Create an announcement.",
+        description:
+          "Create a global announcement or target one or more stable preset identities.",
         inputSchema: z.object(announcementFields),
         _meta: adminWrite,
       },
@@ -1980,7 +1997,8 @@ function registerAdminSurface(
     server.registerTool(
       "admin.announcements.update",
       {
-        description: "Update an announcement.",
+        description:
+          "Update an announcement and atomically replace its preset audience when supplied.",
         inputSchema: z
           .object(announcementFields)
           .partial()
@@ -2264,7 +2282,8 @@ function registerResources(server: McpServer, api: Api): void {
     "avermate://announcements",
     {
       title: "Announcement history",
-      description: "Visible and previously dismissed announcements.",
+      description:
+        "Currently authorized global or preset announcements, including dismissed history.",
       mimeType: "application/json",
       cacheHint,
     },

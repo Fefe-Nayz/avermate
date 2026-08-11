@@ -40,7 +40,7 @@ subjects, periods and analytics must nevertheless produce equivalent results.
 | Account security            | Providers, password, sessions, export/delete                         | Link/unlink, add/change password, sessions, complete export, reset/delete                                                       | Equivalent native account controls                                                                     | Implemented                                                  |
 | Appearance                  | Light/dark/system, custom palette, fonts/radius, seasons, Mokattam   | Structured light/dark studio, fonts, radius, seasons and guarded custom CSS                                                     | Native presets and synced preferences                                                                  | Implemented; final theme QA pending                          |
 | Chart preferences           | Auto Y, trend controls, descendants                                  | Persisted and consumed by charts                                                                                                | Synced native preferences                                                                              | Implemented                                                  |
-| Announcements               | Active banner, dismiss and history                                   | SSR-prefetched banner and inbox/history                                                                                         | Native banner and inbox                                                                                | Implemented                                                  |
+| Announcements               | Active banner, dismiss and history                                   | Year-scoped SSR-prefetched banner/inbox plus global or multi-preset admin audiences                                             | Native banner/inbox and equivalent targeted admin editor                                               | Implemented                                                  |
 | Feedback                    | Categorised report with optional image                               | Manual and deduplicated automatic reports stored in Avermate; searchable admin triage, labels, assignment, comments and replies | Native submission/history and role-guarded triage                                                      | Implemented; no Discord relay                                |
 | Administration              | Metrics, users, roles/bans, Mokattam, announcements                  | SSR-guarded analytics, deep users, announcements, presets, feedback and social moderation/audit                                 | Equivalent role-guarded native workflows                                                               | Implemented; device QA remains a release gate                |
 | Private profile and friends | None                                                                 | Opt-in friend profile, field grants, requests/invitations, circles, blocks and reports                                          | Equivalent native flows                                                                                | Rewrite enhancement implemented                              |
@@ -67,8 +67,14 @@ subjects, periods and analytics must nevertheless produce equivalent results.
 - Personalised SSR data is request scoped and is never placed in a shared
   server cache.
 - A linked year receives a preset update only after review. As soon as a
-  student changes preset-managed subjects or custom averages, that year enters
-  the visible `customized` state and later admin versions cannot overwrite it.
+  student changes preset-managed subjects, custom averages, or periods, that
+  year atomically enters the visible `customized` state and later admin
+  versions cannot overwrite it.
+- An announcement can remain global or target one or more logical presets.
+  Targeting follows new preset versions, but only linked, non-detached
+  memberships on active years qualify. Selecting a current year scopes the
+  banner and inbox to that year; dismissed history is filtered by the same
+  rule, so changing or leaving a preset cannot leak old targeted messages.
 - Social access fails closed. A missing field grant shares nothing; a new group
   policy version stops projections until each member reconsents to its exact
   digest; undersized aggregate/ranking cohorts are suppressed.

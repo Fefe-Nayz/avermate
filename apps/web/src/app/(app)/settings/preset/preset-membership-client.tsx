@@ -30,6 +30,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc, rpc } from "@/lib/orpc"
+import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { cn } from "@/lib/utils"
 
 export function PresetMembershipClient() {
@@ -67,6 +68,7 @@ export function PresetMembershipClient() {
         }),
       }),
       queryClient.invalidateQueries({ queryKey: orpc.years.list.key() }),
+      invalidateAnnouncementAudience(queryClient),
     ])
   }
   const synchronize = useMutation({
