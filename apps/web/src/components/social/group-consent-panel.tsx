@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { orpc } from "@/lib/orpc"
 import type { SocialMetric } from "@/components/social/group-policy-editor"
@@ -131,22 +131,17 @@ export function GroupConsentPanel({
             <label htmlFor="consent-year" className="text-sm font-medium">
               {t("Academic year used to derive these summaries")}
             </label>
-            <NativeSelect
+            <SelectControl
               id="consent-year"
-              className="w-full"
               value={yearId}
               disabled={reconsent.isPending}
-              onChange={(event) => setYearId(event.target.value)}
-            >
-              <NativeSelectOption value="">
-                {t("Choose an academic year…")}
-              </NativeSelectOption>
-              {activeYears.map((year) => (
-                <NativeSelectOption key={year.id} value={year.id}>
-                  {year.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={setYearId}
+              placeholder={t("Choose an academic year…")}
+              options={activeYears.map((year) => ({
+                value: year.id,
+                label: year.name,
+              }))}
+            />
           </div>
 
           <Alert>

@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
@@ -239,24 +239,16 @@ export function CirclesManager() {
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <NativeSelect
+                  <SelectControl
                     aria-label={t("Friend to add")}
-                    className="w-full"
                     value={friendshipId}
-                    onChange={(event) => setFriendshipId(event.target.value)}
-                  >
-                    <NativeSelectOption value="">
-                      {t("Choose a friend…")}
-                    </NativeSelectOption>
-                    {availableFriends.map((friend) => (
-                      <NativeSelectOption
-                        key={friend.friendshipId}
-                        value={friend.friendshipId}
-                      >
-                        {friend.profile?.displayName || t("Private friend")}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    onValueChange={setFriendshipId}
+                    placeholder={t("Choose a friend…")}
+                    options={availableFriends.map((friend) => ({
+                      value: friend.friendshipId,
+                      label: friend.profile?.displayName || t("Private friend"),
+                    }))}
+                  />
                   <Button
                     type="button"
                     disabled={busy || !friendshipId}

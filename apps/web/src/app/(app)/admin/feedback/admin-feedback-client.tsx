@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import {
   adminFeedbackQueueInput,
@@ -191,111 +191,71 @@ export function AdminFeedbackClient() {
               </Button>
             </form>
             <div className="grid gap-2 sm:grid-cols-2 @xl/main:grid-cols-5">
-              <NativeSelect
+              <SelectControl
                 aria-label={t("Status filter")}
-                className="w-full"
                 value={filters.status}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    status: event.target.value as FeedbackStatus | "all",
+                    status: value as FeedbackStatus | "all",
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All statuses")}
-                </NativeSelectOption>
-                <NativeSelectOption value="open">
-                  {t("Open")}
-                </NativeSelectOption>
-                <NativeSelectOption value="triaged">
-                  {t("Triaged")}
-                </NativeSelectOption>
-                <NativeSelectOption value="in_progress">
-                  {t("In progress")}
-                </NativeSelectOption>
-                <NativeSelectOption value="waiting">
-                  {t("Waiting")}
-                </NativeSelectOption>
-                <NativeSelectOption value="resolved">
-                  {t("Resolved")}
-                </NativeSelectOption>
-                <NativeSelectOption value="closed">
-                  {t("Closed")}
-                </NativeSelectOption>
-                <NativeSelectOption value="rejected">
-                  {t("Rejected")}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
+                options={[
+                  { value: "all", label: t("All statuses") },
+                  { value: "open", label: t("Open") },
+                  { value: "triaged", label: t("Triaged") },
+                  { value: "in_progress", label: t("In progress") },
+                  { value: "waiting", label: t("Waiting") },
+                  { value: "resolved", label: t("Resolved") },
+                  { value: "closed", label: t("Closed") },
+                  { value: "rejected", label: t("Rejected") },
+                ]}
+              />
+              <SelectControl
                 aria-label={t("Priority filter")}
-                className="w-full"
                 value={filters.priority}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    priority: event.target.value as FeedbackPriority | "all",
+                    priority: value as FeedbackPriority | "all",
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All priorities")}
-                </NativeSelectOption>
-                <NativeSelectOption value="low">{t("Low")}</NativeSelectOption>
-                <NativeSelectOption value="normal">
-                  {t("Normal")}
-                </NativeSelectOption>
-                <NativeSelectOption value="high">
-                  {t("High")}
-                </NativeSelectOption>
-                <NativeSelectOption value="urgent">
-                  {t("Urgent")}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
+                options={[
+                  { value: "all", label: t("All priorities") },
+                  { value: "low", label: t("Low") },
+                  { value: "normal", label: t("Normal") },
+                  { value: "high", label: t("High") },
+                  { value: "urgent", label: t("Urgent") },
+                ]}
+              />
+              <SelectControl
                 aria-label={t("Source filter")}
-                className="w-full"
                 value={filters.source}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    source: event.target.value as FeedbackSource,
+                    source: value as FeedbackSource,
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All sources")}
-                </NativeSelectOption>
-                <NativeSelectOption value="form">
-                  {t("Forms")}
-                </NativeSelectOption>
-                <NativeSelectOption value="auto:web">
-                  {t("Automatic · Web")}
-                </NativeSelectOption>
-                <NativeSelectOption value="auto:mobile">
-                  {t("Automatic · Mobile")}
-                </NativeSelectOption>
-                <NativeSelectOption value="auto:server">
-                  {t("Automatic · Server")}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
+                options={[
+                  { value: "all", label: t("All sources") },
+                  { value: "form", label: t("Forms") },
+                  { value: "auto:web", label: t("Automatic · Web") },
+                  { value: "auto:mobile", label: t("Automatic · Mobile") },
+                  { value: "auto:server", label: t("Automatic · Server") },
+                ]}
+              />
+              <SelectControl
                 aria-label={t("Assignment filter")}
-                className="w-full"
                 value={filters.assignee}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    assignee: event.target.value as FeedbackAssigneeFilter,
+                    assignee: value as FeedbackAssigneeFilter,
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All assignments")}
-                </NativeSelectOption>
-                <NativeSelectOption value="unassigned">
-                  {t("Unassigned")}
-                </NativeSelectOption>
-                <NativeSelectOption value="mine">
-                  {t("Assigned to me")}
-                </NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "all", label: t("All assignments") },
+                  { value: "unassigned", label: t("Unassigned") },
+                  { value: "mine", label: t("Assigned to me") },
+                ]}
+              />
               <Input
                 value={filters.label}
                 onChange={(event) =>
@@ -314,31 +274,20 @@ export function AdminFeedbackClient() {
               <Badge>
                 {t("{count} selected", { count: String(checked.size) })}
               </Badge>
-              <NativeSelect
+              <SelectControl
                 value={bulkStatus}
-                onChange={(event) =>
-                  setBulkStatus(event.target.value as FeedbackStatus)
+                onValueChange={(value) =>
+                  setBulkStatus(value as FeedbackStatus)
                 }
-              >
-                <NativeSelectOption value="triaged">
-                  {t("Triaged")}
-                </NativeSelectOption>
-                <NativeSelectOption value="in_progress">
-                  {t("In progress")}
-                </NativeSelectOption>
-                <NativeSelectOption value="waiting">
-                  {t("Waiting")}
-                </NativeSelectOption>
-                <NativeSelectOption value="resolved">
-                  {t("Resolved")}
-                </NativeSelectOption>
-                <NativeSelectOption value="closed">
-                  {t("Closed")}
-                </NativeSelectOption>
-                <NativeSelectOption value="rejected">
-                  {t("Rejected")}
-                </NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "triaged", label: t("Triaged") },
+                  { value: "in_progress", label: t("In progress") },
+                  { value: "waiting", label: t("Waiting") },
+                  { value: "resolved", label: t("Resolved") },
+                  { value: "closed", label: t("Closed") },
+                  { value: "rejected", label: t("Rejected") },
+                ]}
+              />
               <Button
                 size="sm"
                 disabled={bulk.isPending}
@@ -355,23 +304,18 @@ export function AdminFeedbackClient() {
                 {bulk.isPending ? <Spinner /> : null}
                 {t("Apply status")}
               </Button>
-              <NativeSelect
+              <SelectControl
                 value={bulkPriority}
-                onChange={(event) =>
-                  setBulkPriority(event.target.value as FeedbackPriority)
+                onValueChange={(value) =>
+                  setBulkPriority(value as FeedbackPriority)
                 }
-              >
-                <NativeSelectOption value="low">{t("Low")}</NativeSelectOption>
-                <NativeSelectOption value="normal">
-                  {t("Normal")}
-                </NativeSelectOption>
-                <NativeSelectOption value="high">
-                  {t("High")}
-                </NativeSelectOption>
-                <NativeSelectOption value="urgent">
-                  {t("Urgent")}
-                </NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "low", label: t("Low") },
+                  { value: "normal", label: t("Normal") },
+                  { value: "high", label: t("High") },
+                  { value: "urgent", label: t("Urgent") },
+                ]}
+              />
               <Button
                 size="sm"
                 variant="outline"
@@ -388,19 +332,15 @@ export function AdminFeedbackClient() {
               >
                 {t("Apply priority")}
               </Button>
-              <NativeSelect
+              <SelectControl
                 value={bulkAssignee}
-                onChange={(event) => setBulkAssignee(event.target.value)}
-              >
-                <NativeSelectOption value="">
-                  {t("Unassigned")}
-                </NativeSelectOption>
-                {assignees.data?.map((assignee) => (
-                  <NativeSelectOption key={assignee.id} value={assignee.id}>
-                    {assignee.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                onValueChange={setBulkAssignee}
+                placeholder={t("Unassigned")}
+                options={(assignees.data ?? []).map((assignee) => ({
+                  value: assignee.id,
+                  label: assignee.name,
+                }))}
+              />
               <Button
                 size="sm"
                 variant="outline"

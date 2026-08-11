@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
@@ -119,26 +119,20 @@ export function NewGroupClient() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-group-type">{t("Group type")}</Label>
-              <NativeSelect
+              <SelectControl
                 id="new-group-type"
-                className="w-full"
                 value={type}
-                onChange={(event) => {
-                  setType(event.target.value as GroupType)
-                  if (event.target.value !== "class")
+                onValueChange={(value) => {
+                  setType(value as GroupType)
+                  if (value !== "class")
                     setClassSelfDeclared(false)
                 }}
-              >
-                <NativeSelectOption value="friends">
-                  {t("Friends group")}
-                </NativeSelectOption>
-                <NativeSelectOption value="study_group">
-                  {t("Study group")}
-                </NativeSelectOption>
-                <NativeSelectOption value="class">
-                  {t("Class group")}
-                </NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "friends", label: t("Friends group") },
+                  { value: "study_group", label: t("Study group") },
+                  { value: "class", label: t("Class group") },
+                ]}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-group-alias">{t("Your group alias")}</Label>
@@ -159,22 +153,16 @@ export function NewGroupClient() {
               <Label htmlFor="new-group-year">
                 {t("Academic year used for your metrics")}
               </Label>
-              <NativeSelect
+              <SelectControl
                 id="new-group-year"
-                className="w-full"
                 value={yearId}
-                onChange={(event) => setYearId(event.target.value)}
-                required
-              >
-                <NativeSelectOption value="">
-                  {t("Choose an academic year…")}
-                </NativeSelectOption>
-                {availableYears.map((year) => (
-                  <NativeSelectOption key={year.id} value={year.id}>
-                    {year.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                onValueChange={setYearId}
+                placeholder={t("Choose an academic year…")}
+                options={(availableYears).map((year) => ({
+                  value: year.id,
+                  label: year.name,
+                }))}
+              />
             </div>
             {type === "class" ? (
               <label className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:col-span-2">

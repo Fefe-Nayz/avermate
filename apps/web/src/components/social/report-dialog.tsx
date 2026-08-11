@@ -16,7 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
@@ -82,30 +82,18 @@ export function ReportDialog({
             <Label htmlFor={`report-category-${sourceId}`}>
               {t("Category")}
             </Label>
-            <NativeSelect
+            <SelectControl
               id={`report-category-${sourceId}`}
-              className="w-full"
               value={category}
-              onChange={(event) =>
-                setCategory(event.target.value as ReportCategory)
-              }
-            >
-              <NativeSelectOption value="harassment">
-                {t("Harassment")}
-              </NativeSelectOption>
-              <NativeSelectOption value="privacy">
-                {t("Privacy")}
-              </NativeSelectOption>
-              <NativeSelectOption value="impersonation">
-                {t("Impersonation")}
-              </NativeSelectOption>
-              <NativeSelectOption value="unsafe_content">
-                {t("Unsafe content")}
-              </NativeSelectOption>
-              <NativeSelectOption value="other">
-                {t("Other")}
-              </NativeSelectOption>
-            </NativeSelect>
+              onValueChange={(value) => setCategory(value as ReportCategory)}
+              options={[
+                { value: "harassment", label: t("Harassment") },
+                { value: "privacy", label: t("Privacy") },
+                { value: "impersonation", label: t("Impersonation") },
+                { value: "unsafe_content", label: t("Unsafe content") },
+                { value: "other", label: t("Other") },
+              ]}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor={`report-message-${sourceId}`}>

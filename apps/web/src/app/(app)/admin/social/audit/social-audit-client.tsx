@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { INITIAL_ADMIN_SOCIAL_AUDIT_INPUT } from "@/lib/admin-social-inputs"
 import { orpc } from "@/lib/orpc"
 
@@ -132,72 +132,40 @@ export function AdminSocialAuditClient() {
 
         <Card className="py-4">
           <CardContent className="grid gap-2 px-4 sm:grid-cols-2">
-            <NativeSelect
-              className="w-full"
+            <SelectControl
               aria-label={t("Audit action filter")}
               value={filters.action}
-              onChange={(event) =>
-                updateFilters({ action: event.target.value })
+              onValueChange={(value) =>
+                updateFilters({ action: value })
               }
-            >
-              <NativeSelectOption value="">
-                {t("All actions")}
-              </NativeSelectOption>
-              <NativeSelectOption value="feature.enabled">
-                {t("Feature enabled")}
-              </NativeSelectOption>
-              <NativeSelectOption value="feature.disabled">
-                {t("Feature disabled")}
-              </NativeSelectOption>
-              <NativeSelectOption value="group.frozen">
-                {t("Group frozen")}
-              </NativeSelectOption>
-              <NativeSelectOption value="group.unfrozen">
-                {t("Group unfrozen")}
-              </NativeSelectOption>
-              <NativeSelectOption value="profile.frozen">
-                {t("Profile frozen")}
-              </NativeSelectOption>
-              <NativeSelectOption value="report.moderated">
-                {t("Report moderated")}
-              </NativeSelectOption>
-              <NativeSelectOption value="eligibility.reviewed">
-                {t("Eligibility reviewed")}
-              </NativeSelectOption>
-              <NativeSelectOption value="guardian.provider_verified">
-                {t("Guardian assurance verified")}
-              </NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
-              className="w-full"
+              placeholder={t("All actions")}
+              options={[
+                { value: "feature.enabled", label: t("Feature enabled") },
+                { value: "feature.disabled", label: t("Feature disabled") },
+                { value: "group.frozen", label: t("Group frozen") },
+                { value: "group.unfrozen", label: t("Group unfrozen") },
+                { value: "profile.frozen", label: t("Profile frozen") },
+                { value: "report.moderated", label: t("Report moderated") },
+                { value: "eligibility.reviewed", label: t("Eligibility reviewed") },
+                { value: "guardian.provider_verified", label: t("Guardian assurance verified") },
+              ]}
+            />
+            <SelectControl
               aria-label={t("Audit entity filter")}
               value={filters.entityType}
-              onChange={(event) =>
-                updateFilters({ entityType: event.target.value })
+              onValueChange={(value) =>
+                updateFilters({ entityType: value })
               }
-            >
-              <NativeSelectOption value="">
-                {t("All entity types")}
-              </NativeSelectOption>
-              <NativeSelectOption value="social_feature_flag">
-                {t("Social feature flag")}
-              </NativeSelectOption>
-              <NativeSelectOption value="social_group">
-                {t("Social group")}
-              </NativeSelectOption>
-              <NativeSelectOption value="social_profile">
-                {t("Social profile")}
-              </NativeSelectOption>
-              <NativeSelectOption value="social_report">
-                {t("Social report")}
-              </NativeSelectOption>
-              <NativeSelectOption value="social_eligibility">
-                {t("Social eligibility")}
-              </NativeSelectOption>
-              <NativeSelectOption value="guardian_consent_request">
-                {t("Guardian request")}
-              </NativeSelectOption>
-            </NativeSelect>
+              placeholder={t("All entity types")}
+              options={[
+                { value: "social_feature_flag", label: t("Social feature flag") },
+                { value: "social_group", label: t("Social group") },
+                { value: "social_profile", label: t("Social profile") },
+                { value: "social_report", label: t("Social report") },
+                { value: "social_eligibility", label: t("Social eligibility") },
+                { value: "guardian_consent_request", label: t("Guardian request") },
+              ]}
+            />
           </CardContent>
         </Card>
 

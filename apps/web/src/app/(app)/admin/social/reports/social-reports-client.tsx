@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { INITIAL_ADMIN_SOCIAL_REPORTS_INPUT } from "@/lib/admin-social-inputs"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
@@ -129,56 +129,38 @@ export function AdminSocialReportsClient() {
               </Button>
             </form>
             <div className="grid gap-2 sm:grid-cols-2">
-              <NativeSelect
-                className="w-full"
+              <SelectControl
                 aria-label={t("Report status filter")}
                 value={filters.status}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    status: event.target.value as ReportStatus | "all",
+                    status: value as ReportStatus | "all",
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All statuses")}
-                </NativeSelectOption>
-                <NativeSelectOption value="open">
-                  {t("Open")}
-                </NativeSelectOption>
-                <NativeSelectOption value="investigating">
-                  {t("Investigating")}
-                </NativeSelectOption>
-                <NativeSelectOption value="resolved">
-                  {t("Resolved")}
-                </NativeSelectOption>
-                <NativeSelectOption value="dismissed">
-                  {t("Dismissed")}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
-                className="w-full"
+                options={[
+                  { value: "all", label: t("All statuses") },
+                  { value: "open", label: t("Open") },
+                  { value: "investigating", label: t("Investigating") },
+                  { value: "resolved", label: t("Resolved") },
+                  { value: "dismissed", label: t("Dismissed") },
+                ]}
+              />
+              <SelectControl
                 aria-label={t("Report priority filter")}
                 value={filters.priority}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   updateFilters({
-                    priority: event.target.value as ReportPriority | "all",
+                    priority: value as ReportPriority | "all",
                   })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All priorities")}
-                </NativeSelectOption>
-                <NativeSelectOption value="urgent">
-                  {t("Urgent")}
-                </NativeSelectOption>
-                <NativeSelectOption value="high">
-                  {t("High")}
-                </NativeSelectOption>
-                <NativeSelectOption value="normal">
-                  {t("Normal")}
-                </NativeSelectOption>
-                <NativeSelectOption value="low">{t("Low")}</NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "all", label: t("All priorities") },
+                  { value: "urgent", label: t("Urgent") },
+                  { value: "high", label: t("High") },
+                  { value: "normal", label: t("Normal") },
+                  { value: "low", label: t("Low") },
+                ]}
+              />
             </div>
           </CardContent>
         </Card>

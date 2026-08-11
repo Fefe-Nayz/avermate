@@ -11,11 +11,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { FormPage } from "@/components/forms/form-page"
-import {
-  ChoiceField,
-  FormSection,
-  TextField,
-} from "@/components/forms/controls"
+import { ChoiceField, DateField, FormSection, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { AverageValue } from "@/components/data/value"
 import { GoalPlanView } from "./goal-plan-view"
@@ -365,11 +361,10 @@ export function GoalForm({
             setPeriodId(value === "__full_year__" ? null : value)
           }
         />
-        <TextField
+        <DateField
           label={t("Deadline (optional)")}
-          type="date"
           value={dueAt}
-          onChange={(event) => setDueAt(event.target.value)}
+          onValueChange={setDueAt}
         />
       </FormSection>
 

@@ -15,11 +15,7 @@ import {
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
-import {
-  ChoiceField,
-  NumberField,
-  TextField,
-} from "@/components/forms/controls"
+import { ChoiceField, DateField, NumberField, TextField } from "@/components/forms/controls"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
@@ -175,17 +171,15 @@ export function YearSetupWizard({
                 autoFocus
               />
               <div className="grid grid-cols-2 gap-3">
-                <TextField
+                <DateField
                   label={t("Starts")}
-                  type="date"
                   value={startsAt}
-                  onChange={(event) => setStartsAt(event.target.value)}
+                  onValueChange={setStartsAt}
                 />
-                <TextField
+                <DateField
                   label={t("Ends")}
-                  type="date"
                   value={endsAt}
-                  onChange={(event) => setEndsAt(event.target.value)}
+                  onValueChange={setEndsAt}
                 />
               </div>
               <NumberField

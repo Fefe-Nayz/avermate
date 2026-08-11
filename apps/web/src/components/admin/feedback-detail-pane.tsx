@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -154,77 +154,54 @@ export function FeedbackDetailPane({ feedbackId }: { feedbackId: string }) {
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="feedback-status">{t("Status")}</Label>
-            <NativeSelect
+            <SelectControl
               id="feedback-status"
-              className="w-full"
               value={item.status}
               disabled={busy}
-              onChange={(event) =>
-                patch({ status: event.target.value as FeedbackStatus })
+              onValueChange={(value) =>
+                patch({ status: value as FeedbackStatus })
               }
-            >
-              <NativeSelectOption value="open">{t("Open")}</NativeSelectOption>
-              <NativeSelectOption value="triaged">
-                {t("Triaged")}
-              </NativeSelectOption>
-              <NativeSelectOption value="in_progress">
-                {t("In progress")}
-              </NativeSelectOption>
-              <NativeSelectOption value="waiting">
-                {t("Waiting")}
-              </NativeSelectOption>
-              <NativeSelectOption value="resolved">
-                {t("Resolved")}
-              </NativeSelectOption>
-              <NativeSelectOption value="closed">
-                {t("Closed")}
-              </NativeSelectOption>
-              <NativeSelectOption value="rejected">
-                {t("Rejected")}
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "open", label: t("Open") },
+                { value: "triaged", label: t("Triaged") },
+                { value: "in_progress", label: t("In progress") },
+                { value: "waiting", label: t("Waiting") },
+                { value: "resolved", label: t("Resolved") },
+                { value: "closed", label: t("Closed") },
+                { value: "rejected", label: t("Rejected") },
+              ]}
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="feedback-priority">{t("Priority")}</Label>
-            <NativeSelect
+            <SelectControl
               id="feedback-priority"
-              className="w-full"
               value={item.priority}
               disabled={busy}
-              onChange={(event) =>
-                patch({ priority: event.target.value as FeedbackPriority })
+              onValueChange={(value) =>
+                patch({ priority: value as FeedbackPriority })
               }
-            >
-              <NativeSelectOption value="low">{t("Low")}</NativeSelectOption>
-              <NativeSelectOption value="normal">
-                {t("Normal")}
-              </NativeSelectOption>
-              <NativeSelectOption value="high">{t("High")}</NativeSelectOption>
-              <NativeSelectOption value="urgent">
-                {t("Urgent")}
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "low", label: t("Low") },
+                { value: "normal", label: t("Normal") },
+                { value: "high", label: t("High") },
+                { value: "urgent", label: t("Urgent") },
+              ]}
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="feedback-assignee">{t("Assignee")}</Label>
-            <NativeSelect
+            <SelectControl
               id="feedback-assignee"
-              className="w-full"
               value={item.assignedToUserId ?? ""}
               disabled={busy}
-              onChange={(event) =>
-                patch({ assignedToUserId: event.target.value || null })
-              }
-            >
-              <NativeSelectOption value="">
-                {t("Unassigned")}
-              </NativeSelectOption>
-              {assignees.data?.map((assignee) => (
-                <NativeSelectOption key={assignee.id} value={assignee.id}>
-                  {assignee.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={(value) => patch({ assignedToUserId: value || null })}
+              placeholder={t("Unassigned")}
+              options={(assignees.data ?? []).map((assignee) => ({
+                value: assignee.id,
+                label: assignee.name,
+              }))}
+            />
           </div>
         </div>
 

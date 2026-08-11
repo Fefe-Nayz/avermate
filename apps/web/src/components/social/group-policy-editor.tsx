@@ -4,7 +4,7 @@ import { useExtracted } from "next-intl"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -145,28 +145,22 @@ export function GroupPolicyEditor({
       </div>
       <div className="space-y-2">
         <Label htmlFor="group-window">{t("Data window")}</Label>
-        <NativeSelect
+        <SelectControl
           id="group-window"
-          className="w-full"
           value={value.window}
           disabled={disabled}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              window: event.target.value as PolicyDraft["window"],
-            })
+          onValueChange={(next) =>
+            onChange({ ...value, window: next as PolicyDraft["window"] })
           }
-        >
-          <NativeSelectOption value="current_academic_year">
-            {t("Current academic year")}
-          </NativeSelectOption>
-          <NativeSelectOption value="last_90_days">
-            {t("Last 90 days")}
-          </NativeSelectOption>
-          <NativeSelectOption value="last_30_days">
-            {t("Last 30 days")}
-          </NativeSelectOption>
-        </NativeSelect>
+          options={[
+            {
+              value: "current_academic_year",
+              label: t("Current academic year"),
+            },
+            { value: "last_90_days", label: t("Last 90 days") },
+            { value: "last_30_days", label: t("Last 30 days") },
+          ]}
+        />
       </div>
 
       <fieldset className="space-y-3">
@@ -199,31 +193,36 @@ export function GroupPolicyEditor({
                 </label>
                 {field ? (
                   <div className="grid gap-3 pl-7 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <NativeSelect
+                    <SelectControl
                       aria-label={t("Exposure for {metric}", {
                         metric: metricLabel(metric),
                       })}
-                      className="w-full"
                       value={field.exposure}
                       disabled={disabled}
-                      onChange={(event) =>
+                      onValueChange={(next) =>
                         updateMetric(metric, {
-                          exposure: event.target.value as MetricExposure,
+                          exposure: next as MetricExposure,
                         })
                       }
-                    >
-                      <NativeSelectOption value="aggregate_only">
-                        {t("Group aggregate only")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="member_visible">
-                        {t("Visible per participating member")}
-                      </NativeSelectOption>
-                      {canRank(metric) && value.rankingsEnabled ? (
-                        <NativeSelectOption value="ranking">
-                          {t("Optional named ranking")}
-                        </NativeSelectOption>
-                      ) : null}
-                    </NativeSelect>
+                      options={[
+                        {
+                          value: "aggregate_only",
+                          label: t("Group aggregate only"),
+                        },
+                        {
+                          value: "member_visible",
+                          label: t("Visible per participating member"),
+                        },
+                        ...(canRank(metric) && value.rankingsEnabled
+                          ? [
+                              {
+                                value: "ranking",
+                                label: t("Optional named ranking"),
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={field.required}

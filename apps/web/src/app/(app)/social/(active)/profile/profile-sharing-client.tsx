@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
@@ -237,48 +237,34 @@ export function ProfileSharingClient() {
                   <Label htmlFor="social-education">
                     {t("Education level")}
                   </Label>
-                  <NativeSelect
+                  <SelectControl
                     id="social-education"
-                    className="w-full"
                     value={educationBand}
-                    onChange={(event) =>
-                      setEducationBand(event.target.value as EducationBand)
+                    onValueChange={(value) =>
+                      setEducationBand(value as EducationBand)
                     }
-                  >
-                    <NativeSelectOption value="unknown">
-                      {t("Not specified")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="middle_school">
-                      {t("Middle school")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="high_school">
-                      {t("High school")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="higher_education">
-                      {t("Higher education")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="other">
-                      {t("Other education")}
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    options={[
+                      { value: "unknown", label: t("Not specified") },
+                      { value: "middle_school", label: t("Middle school") },
+                      { value: "high_school", label: t("High school") },
+                      { value: "higher_education", label: t("Higher education") },
+                      { value: "other", label: t("Other education") },
+                    ]}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="social-discovery">{t("Discovery")}</Label>
-                  <NativeSelect
+                  <SelectControl
                     id="social-discovery"
-                    className="w-full"
                     value={discovery}
-                    onChange={(event) =>
-                      setDiscovery(event.target.value as typeof discovery)
+                    onValueChange={(value) =>
+                      setDiscovery(value as typeof discovery)
                     }
-                  >
-                    <NativeSelectOption value="invite_only">
-                      {t("Invite only")}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="exact_handle">
-                      {t("Exact handle only")}
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    options={[
+                      { value: "invite_only", label: t("Invite only") },
+                      { value: "exact_handle", label: t("Exact handle only") },
+                    ]}
+                  />
                 </div>
                 {discovery === "exact_handle" ? (
                   <div className="space-y-2">
@@ -322,69 +308,50 @@ export function ProfileSharingClient() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="grant-field">{t("Profile field")}</Label>
-                    <NativeSelect
+                    <SelectControl
                       id="grant-field"
-                      className="w-full"
                       value={field}
-                      onChange={(event) =>
-                        setField(event.target.value as ProfileField)
+                      onValueChange={(value) =>
+                        setField(value as ProfileField)
                       }
-                    >
-                      <NativeSelectOption value="displayName">
-                        {t("Display name")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="avatar">
-                        {t("Avatar")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="bio">
-                        {t("Bio")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="educationBand">
-                        {t("Education level")}
-                      </NativeSelectOption>
-                    </NativeSelect>
+                      options={[
+                        { value: "displayName", label: t("Display name") },
+                        { value: "avatar", label: t("Avatar") },
+                        { value: "bio", label: t("Bio") },
+                        { value: "educationBand", label: t("Education level") },
+                      ]}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="grant-audience">{t("Audience")}</Label>
-                    <NativeSelect
+                    <SelectControl
                       id="grant-audience"
-                      className="w-full"
                       value={audience}
-                      onChange={(event) => {
-                        setAudience(event.target.value as Audience)
+                      onValueChange={(value) => {
+                        setAudience(value as Audience)
                         setAudienceId("")
                       }}
-                    >
-                      <NativeSelectOption value="friends">
-                        {t("All friends")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="circle">
-                        {t("One circle")}
-                      </NativeSelectOption>
-                      <NativeSelectOption value="specific_user">
-                        {t("One friend")}
-                      </NativeSelectOption>
-                    </NativeSelect>
+                      options={[
+                        { value: "friends", label: t("All friends") },
+                        { value: "circle", label: t("One circle") },
+                        { value: "specific_user", label: t("One friend") },
+                      ]}
+                    />
                   </div>
                 </div>
                 {audience !== "friends" ? (
                   <div className="space-y-2">
                     <Label htmlFor="grant-target">{t("Choose audience")}</Label>
-                    <NativeSelect
+                    <SelectControl
                       id="grant-target"
-                      className="w-full"
                       value={audienceId}
-                      onChange={(event) => setAudienceId(event.target.value)}
-                    >
-                      <NativeSelectOption value="">
-                        {t("Choose…")}
-                      </NativeSelectOption>
-                      {targets.map((target) => (
-                        <NativeSelectOption key={target.id} value={target.id}>
-                          {target.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      onValueChange={setAudienceId}
+                      placeholder={t("Choose…")}
+                      options={targets.map((target) => ({
+                        value: target.id,
+                        label: target.label,
+                      }))}
+                    />
                   </div>
                 ) : null}
                 <Button
@@ -462,42 +429,31 @@ export function ProfileSharingClient() {
                 <Label htmlFor="preview-audience">
                   {t("Preview audience")}
                 </Label>
-                <NativeSelect
+                <SelectControl
                   id="preview-audience"
-                  className="w-full"
                   value={previewAudience}
-                  onChange={(event) => {
-                    setPreviewAudience(event.target.value as Audience)
+                  onValueChange={(value) => {
+                    setPreviewAudience(value as Audience)
                     setPreviewAudienceId("")
                   }}
-                >
-                  <NativeSelectOption value="friends">
-                    {t("All friends")}
-                  </NativeSelectOption>
-                  <NativeSelectOption value="circle">
-                    {t("One circle")}
-                  </NativeSelectOption>
-                  <NativeSelectOption value="specific_user">
-                    {t("One friend")}
-                  </NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "friends", label: t("All friends") },
+                    { value: "circle", label: t("One circle") },
+                    { value: "specific_user", label: t("One friend") },
+                  ]}
+                />
               </div>
               {previewAudience !== "friends" ? (
-                <NativeSelect
+                <SelectControl
                   aria-label={t("Preview target")}
-                  className="w-full"
                   value={previewAudienceId}
-                  onChange={(event) => setPreviewAudienceId(event.target.value)}
-                >
-                  <NativeSelectOption value="">
-                    {t("Choose…")}
-                  </NativeSelectOption>
-                  {previewTargets.map((target) => (
-                    <NativeSelectOption key={target.id} value={target.id}>
-                      {target.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  onValueChange={setPreviewAudienceId}
+                  placeholder={t("Choose…")}
+                  options={previewTargets.map((target) => ({
+                    value: target.id,
+                    label: target.label,
+                  }))}
+                />
               ) : null}
               <Badge variant="outline">{t("Server-calculated")}</Badge>
             </div>

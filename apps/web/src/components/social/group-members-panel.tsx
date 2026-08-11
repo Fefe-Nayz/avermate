@@ -19,7 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
@@ -170,25 +170,23 @@ export function GroupMembersPanel({
                 {!self ? (
                   <div className="flex flex-wrap items-center gap-2">
                     {viewerRole === "owner" && member.role !== "owner" ? (
-                      <NativeSelect
+                      <SelectControl
                         aria-label={t("Member role")}
                         value={member.role}
                         disabled={busy}
-                        onChange={(event) =>
+                        className="w-36"
+                        onValueChange={(value) =>
                           setRole.mutate({
                             groupId,
                             membershipId: member.membershipId,
-                            role: event.target.value as "member" | "moderator",
+                            role: value as "member" | "moderator",
                           })
                         }
-                      >
-                        <NativeSelectOption value="member">
-                          {t("Member")}
-                        </NativeSelectOption>
-                        <NativeSelectOption value="moderator">
-                          {t("Moderator")}
-                        </NativeSelectOption>
-                      </NativeSelect>
+                        options={[
+                          { value: "member", label: t("Member") },
+                          { value: "moderator", label: t("Moderator") },
+                        ]}
+                      />
                     ) : null}
 
                     {manager && member.role !== "owner" ? (

@@ -2,8 +2,8 @@
 
 import { HistoryIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
+import { DatePicker } from "@/components/forms/controls"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
@@ -85,13 +85,13 @@ export function TimelineBanner() {
             {t("{count} grades visible", { count: String(visibleGrades) })}
           </p>
         </div>
-        <Input
-          type="date"
+        <DatePicker
           value={timelineDate}
           min={isoDay(minimum)}
           max={isoDay(maximum)}
-          onChange={(event) => setTimelineDate(event.target.value || null)}
-          className="h-9 w-40"
+          onValueChange={(value) => setTimelineDate(value || null)}
+          format="short"
+          className="h-9 w-44"
         />
         <Button
           type="button"

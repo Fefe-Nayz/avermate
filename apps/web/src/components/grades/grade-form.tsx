@@ -12,11 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { FormPage } from "@/components/forms/form-page"
-import {
-  FormSection,
-  NumberField,
-  TextField,
-} from "@/components/forms/controls"
+import { DateField, FormSection, NumberField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { AverageValue, DeltaValue } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
@@ -520,11 +516,10 @@ export function GradeForm({
           min={0}
         />
 
-        <TextField
+        <DateField
           label={t("Date")}
-          type="date"
           value={passedAt}
-          onChange={(event) => setPassedAt(event.target.value)}
+          onValueChange={setPassedAt}
         />
       </FormSection>
 

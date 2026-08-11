@@ -32,7 +32,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/settings-section"
-import { NumberField, TextField } from "@/components/forms/controls"
+import { DateField, NumberField, TextField } from "@/components/forms/controls"
 import { useYear } from "@/components/year/year-provider"
 import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { orpc } from "@/lib/orpc"
@@ -305,17 +305,15 @@ export default function YearSettingsPage() {
             onChange={(event) => setName(event.target.value)}
           />
           <div className="grid grid-cols-2 gap-3">
-            <TextField
+            <DateField
               label={t("Starts")}
-              type="date"
               value={startsAt}
-              onChange={(event) => setStartsAt(event.target.value)}
+              onValueChange={setStartsAt}
             />
-            <TextField
+            <DateField
               label={t("Ends")}
-              type="date"
               value={endsAt}
-              onChange={(event) => setEndsAt(event.target.value)}
+              onValueChange={setEndsAt}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -466,29 +464,27 @@ export default function YearSettingsPage() {
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <TextField
+                <DateField
                   label={t("Starts")}
-                  type="date"
                   value={draft.startAt}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDrafts((current) =>
                       current.map((item, position) =>
                         position === index
-                          ? { ...item, startAt: event.target.value }
+                          ? { ...item, startAt: value }
                           : item
                       )
                     )
                   }
                 />
-                <TextField
+                <DateField
                   label={t("Ends")}
-                  type="date"
                   value={draft.endAt}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setDrafts((current) =>
                       current.map((item, position) =>
                         position === index
-                          ? { ...item, endAt: event.target.value }
+                          ? { ...item, endAt: value }
                           : item
                       )
                     )

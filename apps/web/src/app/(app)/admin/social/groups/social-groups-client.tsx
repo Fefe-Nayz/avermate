@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
@@ -165,48 +165,32 @@ export function AdminSocialGroupsClient() {
               </Button>
             </form>
             <div className="grid gap-2 sm:grid-cols-2">
-              <NativeSelect
-                className="w-full"
+              <SelectControl
                 aria-label={t("Group state filter")}
                 value={filters.state}
-                onChange={(event) =>
-                  updateFilters({ state: event.target.value as GroupState })
+                onValueChange={(value) =>
+                  updateFilters({ state: value as GroupState })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All states")}
-                </NativeSelectOption>
-                <NativeSelectOption value="active">
-                  {t("Active")}
-                </NativeSelectOption>
-                <NativeSelectOption value="frozen">
-                  {t("Frozen")}
-                </NativeSelectOption>
-                <NativeSelectOption value="archived">
-                  {t("Archived")}
-                </NativeSelectOption>
-              </NativeSelect>
-              <NativeSelect
-                className="w-full"
+                options={[
+                  { value: "all", label: t("All states") },
+                  { value: "active", label: t("Active") },
+                  { value: "frozen", label: t("Frozen") },
+                  { value: "archived", label: t("Archived") },
+                ]}
+              />
+              <SelectControl
                 aria-label={t("Group type filter")}
                 value={filters.type}
-                onChange={(event) =>
-                  updateFilters({ type: event.target.value as GroupType })
+                onValueChange={(value) =>
+                  updateFilters({ type: value as GroupType })
                 }
-              >
-                <NativeSelectOption value="all">
-                  {t("All group types")}
-                </NativeSelectOption>
-                <NativeSelectOption value="friends">
-                  {t("Friend groups")}
-                </NativeSelectOption>
-                <NativeSelectOption value="study_group">
-                  {t("Study groups")}
-                </NativeSelectOption>
-                <NativeSelectOption value="class">
-                  {t("Self-declared classes")}
-                </NativeSelectOption>
-              </NativeSelect>
+                options={[
+                  { value: "all", label: t("All group types") },
+                  { value: "friends", label: t("Friend groups") },
+                  { value: "study_group", label: t("Study groups") },
+                  { value: "class", label: t("Self-declared classes") },
+                ]}
+              />
             </div>
           </CardContent>
         </Card>
