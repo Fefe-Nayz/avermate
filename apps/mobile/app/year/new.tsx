@@ -10,13 +10,12 @@ import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { type, usePalette } from "@/lib/theme";
-
-type PeriodTemplateChoice =
-  | "none"
-  | "trimesters"
-  | "semesters"
-  | "semesters-cumulative"
-  | "quarters";
+import {
+  isValidYearSetup,
+  nativeSchoolYearSuggestion,
+  periodNamesForTemplate,
+  type PeriodTemplateChoice,
+} from "@/lib/year-setup";
 
 /**
  * A second year, a third, a fourth.
@@ -28,43 +27,18 @@ type PeriodTemplateChoice =
 export default function NewYear() {
   const palette = usePalette();
   const router = useRouter();
-  const { years, selectYear, scale: currentScale } = useYear();
+  const { allYears, selectYear } = useYear();
 
-  const suggested = useMemo(() => {
-    const latest = [...years].sort(
-      (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime(),
-    )[0];
-
-    if (!latest) {
-      const now = new Date();
-      const start = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-      return {
-        name: `${start} – ${start + 1}`,
-        startsAt: new Date(start, 8, 1),
-        endsAt: new Date(start + 1, 6, 5),
-      };
-    }
-
-    const start = new Date(latest.startsAt);
-    const end = new Date(latest.endsAt);
-    const next = new Date(start);
-    next.setFullYear(start.getFullYear() + 1);
-    const nextEnd = new Date(end);
-    nextEnd.setFullYear(end.getFullYear() + 1);
-
-    return {
-      name: `${next.getFullYear()} – ${next.getFullYear() + 1}`,
-      startsAt: next,
-      endsAt: nextEnd,
-    };
-  }, [years]);
+  const suggested = useMemo(
+    () => nativeSchoolYearSuggestion(new Date(), allYears),
+    [allYears],
+  );
 
   const [name, setName] = useState(suggested.name);
   const [startsAt, setStartsAt] = useState(suggested.startsAt);
   const [endsAt, setEndsAt] = useState(suggested.endsAt);
-  const [scale, setScale] = useState(String(currentScale));
-  const [template, setTemplate] =
-    useState<PeriodTemplateChoice>("trimesters");
+  const [scale, setScale] = useState(String(suggested.scale));
+  const [template, setTemplate] = useState<PeriodTemplateChoice>("trimesters");
   const [presetId, setPresetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const presets = useQuery(orpc.presets.list.queryOptions());
@@ -88,19 +62,17 @@ export default function NewYear() {
         },
         presetId,
         periodTemplateId: template,
-        periodNames:
-          template === "quarters"
-            ? [t("Quarter 1"), t("Quarter 2"), t("Quarter 3"), t("Quarter 4")]
-            : template === "trimesters"
-              ? [t("Term 1"), t("Term 2"), t("Term 3")]
-              : template === "none"
-                ? []
-                : [t("Semester 1"), t("Semester 2")],
+        periodNames: periodNamesForTemplate(template),
       });
     },
     onSuccess: (year) => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      queryClient.setQueryData(
+        orpc.years.list.queryKey(),
+        (
+          current: Awaited<ReturnType<typeof client.years.list>> | undefined,
+        ) => [year, ...(current ?? []).filter((item) => item.id !== year.id)],
+      );
       selectYear(year.id);
       router.back();
     },
@@ -110,7 +82,7 @@ export default function NewYear() {
     },
   });
 
-  const ready = name.trim().length > 0 && endsAt > startsAt;
+  const ready = isValidYearSetup(name, startsAt, endsAt, scale);
 
   return (
     <>
@@ -136,7 +108,11 @@ export default function NewYear() {
               onChangeText={setName}
               autoFocus
             />
-            <DateField label={t("Starts")} value={startsAt} onChange={setStartsAt} />
+            <DateField
+              label={t("Starts")}
+              value={startsAt}
+              onChange={setStartsAt}
+            />
             <DateField
               label={t("Ends")}
               value={endsAt}

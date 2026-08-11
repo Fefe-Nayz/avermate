@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
@@ -498,6 +499,12 @@ export default function YearSettingsPage() {
           description={t(
             "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents."
           )}
+          footer={
+            <Button size="sm" render={<Link href="/onboarding/new-year" />}>
+              <PlusIcon className="size-4" />
+              {t("Add a year")}
+            </Button>
+          }
         >
           <SortableList
             ids={years.map((item) => item.id)}

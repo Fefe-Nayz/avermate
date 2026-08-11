@@ -35,6 +35,9 @@ function usedKeys(): Map<string, string> {
   for (const path of [
     ...sources(join(root, "app")),
     ...sources(join(root, "components")),
+    ...sources(join(root, "lib")).filter(
+      (path) => !path.endsWith(`${join("lib", "i18n.ts")}`),
+    ),
   ]) {
     const text = readFileSync(path, "utf8");
     for (const pattern of patterns) {

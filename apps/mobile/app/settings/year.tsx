@@ -81,7 +81,9 @@ export default function YearSettings() {
   const [startsAt, setStartsAt] = useState(
     year ? new Date(year.startsAt) : new Date(),
   );
-  const [endsAt, setEndsAt] = useState(year ? new Date(year.endsAt) : new Date());
+  const [endsAt, setEndsAt] = useState(
+    year ? new Date(year.endsAt) : new Date(),
+  );
   const [scale, setScale] = useState(String(year?.scale ?? 20));
   const [defaultOutOf, setDefaultOutOf] = useState(
     String(year?.defaultOutOf ?? 20),
@@ -120,7 +122,9 @@ export default function YearSettings() {
         if (fallback) selectYear(fallback.id);
       }
       queryClient.removeQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: input.yearId } }),
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: input.yearId },
+        }),
       });
       await refreshYears();
       if (input.yearId === year?.id) router.dismissTo("/(tabs)");
@@ -212,8 +216,16 @@ export default function YearSettings() {
         }
       >
         <Section title={t("The year itself")}>
-          <TextField label={t("Year name")} value={name} onChangeText={setName} />
-          <DateField label={t("Starts")} value={startsAt} onChange={setStartsAt} />
+          <TextField
+            label={t("Year name")}
+            value={name}
+            onChangeText={setName}
+          />
+          <DateField
+            label={t("Starts")}
+            value={startsAt}
+            onChange={setStartsAt}
+          />
           <DateField
             label={t("Ends")}
             value={endsAt}
@@ -255,7 +267,9 @@ export default function YearSettings() {
               `${formatNumber(value * numericScale, 1)} / ${formatNumber(numericScale)}`
             }
           />
-          <Note>{t("This drives the colour of every result and the pass rate.")}</Note>
+          <Note>
+            {t("This drives the colour of every result and the pass rate.")}
+          </Note>
         </Section>
 
         <Section title={t("Structure")}>
@@ -267,10 +281,18 @@ export default function YearSettings() {
           </Card>
         </Section>
 
-        <Section title={t("School years") }>
+        <Section title={t("School years")}>
           <Note>
-            {t("Reorder the picker, archive old years, or permanently delete one.")}
+            {t(
+              "Reorder the picker, archive old years, or permanently delete one.",
+            )}
           </Note>
+          <Button
+            label={t("Add a year")}
+            icon="add"
+            variant="secondary"
+            onPress={() => router.push("/year/new")}
+          />
           <Card padded={false}>
             {allYears.map((item, index) => {
               const isArchived = Boolean(item.archivedAt);
@@ -319,7 +341,9 @@ export default function YearSettings() {
                   <YearIconButton
                     icon="arrow-down-outline"
                     label={t("Move {name} down", { name: item.name })}
-                    disabled={index === allYears.length - 1 || reorder.isPending}
+                    disabled={
+                      index === allYears.length - 1 || reorder.isPending
+                    }
                     onPress={() => moveYear(index, 1)}
                   />
                   <YearIconButton
@@ -346,7 +370,11 @@ export default function YearSettings() {
             })}
           </Card>
           {activeYearCount === 1 ? (
-            <Note>{t("Restore another year before archiving or deleting the active one.")}</Note>
+            <Note>
+              {t(
+                "Restore another year before archiving or deleting the active one.",
+              )}
+            </Note>
           ) : null}
         </Section>
 

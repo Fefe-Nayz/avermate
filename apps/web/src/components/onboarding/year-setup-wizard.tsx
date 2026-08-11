@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -14,8 +14,14 @@ import {
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { suggestSchoolYear } from "@avermate/core"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
-import { ChoiceField, DateField, NumberField, TextField } from "@/components/forms/controls"
+import {
+  ChoiceField,
+  DateField,
+  NumberField,
+  TextField,
+} from "@/components/forms/controls"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
@@ -31,17 +37,6 @@ type SetupMode = "first" | "additional"
 type PeriodTemplate =
   "trimesters" | "semesters" | "semesters-cumulative" | "quarters" | "none"
 
-function defaultYearRange(initialNow: string) {
-  const now = new Date(initialNow)
-  const startYear =
-    now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
-  return {
-    name: `${startYear}–${startYear + 1}`,
-    start: `${startYear}-09-01`,
-    end: `${startYear + 1}-07-15`,
-  }
-}
-
 /** Shared first-run and additional-year setup, without duplicating product rules. */
 export function YearSetupWizard({
   initialNow,
@@ -54,19 +49,23 @@ export function YearSetupWizard({
   const router = useRouter()
   const queryClient = useQueryClient()
   const user = useAuthenticatedUser()
-  const defaults = useMemo(() => defaultYearRange(initialNow), [initialNow])
+
+  // OnboardingLayout hydrates this query before the wizard renders. Reading
+  // the same option here gives additional years a useful next-year default
+  // without a second browser request or a separate creation flow.
+  const yearsOptions = orpc.years.list.queryOptions()
+  const existing = useQuery(yearsOptions)
+  const defaults = suggestSchoolYear(initialNow, existing.data ?? [])
 
   const [step, setStep] = useState<Step>("year")
   const [name, setName] = useState(defaults.name)
-  const [startsAt, setStartsAt] = useState(defaults.start)
-  const [endsAt, setEndsAt] = useState(defaults.end)
-  const [scale, setScale] = useState("20")
+  const [startsAt, setStartsAt] = useState(defaults.startDay)
+  const [endsAt, setEndsAt] = useState(defaults.endDay)
+  const [scale, setScale] = useState(String(defaults.scale))
   const [presetId, setPresetId] = useState<string | null>(null)
   const [template, setTemplate] = useState<PeriodTemplate>("trimesters")
   const setupKey = useRef(crypto.randomUUID())
 
-  const yearsOptions = orpc.years.list.queryOptions()
-  const existing = useQuery({ ...yearsOptions, enabled: mode === "first" })
   const presets = useQuery(orpc.presets.list.queryOptions())
   const setupYear = useMutation(orpc.presets.setupYear.mutationOptions())
 
@@ -105,7 +104,10 @@ export function YearSetupWizard({
 
       writeActiveYearCookie(created.id)
       localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(created.id))
-      await queryClient.invalidateQueries()
+      queryClient.setQueryData(yearsOptions.queryKey, [
+        created,
+        ...(existing.data ?? []).filter((year) => year.id !== created.id),
+      ])
       haptic("success")
       toast.success(mode === "first" ? t("You are ready.") : t("Year created."))
       router.replace("/dashboard")
@@ -122,6 +124,9 @@ export function YearSetupWizard({
   const steps: Step[] = ["year", "preset", "periods"]
   const index = steps.indexOf(step)
   const busy = setupYear.isPending
+  const numericScale = Number(scale)
+  const scaleValid =
+    Number.isFinite(numericScale) && numericScale > 0 && numericScale <= 1000
   const datesValid =
     Boolean(startsAt) && Boolean(endsAt) && startsAt.localeCompare(endsAt) < 0
 
@@ -188,6 +193,7 @@ export function YearSetupWizard({
                 value={scale}
                 onValueChange={setScale}
                 min={1}
+                max={1000}
               />
             </div>
 
@@ -205,7 +211,7 @@ export function YearSetupWizard({
               <Button
                 size="lg"
                 className="flex-1"
-                disabled={!name.trim() || !datesValid}
+                disabled={!name.trim() || !datesValid || !scaleValid}
                 onClick={() => setStep("preset")}
               >
                 {t("Continue")}

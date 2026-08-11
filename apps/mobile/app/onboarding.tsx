@@ -1,15 +1,28 @@
 import { useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Card, Screen, Title } from "@/components/ui";
 import { ChoiceField, FieldGroup, TextField } from "@/components/field";
 import { DateField } from "@/components/date-field";
 import { Wordmark } from "@/components/wordmark";
+import { useYear } from "@/components/year-provider";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { radius, space, type, usePalette } from "@/lib/theme";
+import {
+  isValidYearSetup,
+  nativeSchoolYearSuggestion,
+  periodNamesForTemplate,
+  type PeriodTemplateChoice,
+} from "@/lib/year-setup";
 
 /**
  * First run.
@@ -22,42 +35,15 @@ import { radius, space, type, usePalette } from "@/lib/theme";
 
 const STEPS = 3;
 
-type PeriodTemplateChoice =
-  | "none"
-  | "trimesters"
-  | "semesters"
-  | "semesters-cumulative"
-  | "quarters";
-
-/** Template period keys → the names a French school actually uses. */
-function periodNames(templateId: PeriodTemplateChoice): string[] {
-  switch (templateId) {
-    case "trimesters":
-      return [t("Term 1"), t("Term 2"), t("Term 3")];
-    case "semesters":
-    case "semesters-cumulative":
-      return [t("Semester 1"), t("Semester 2")];
-    case "quarters":
-      return [t("Quarter 1"), t("Quarter 2"), t("Quarter 3"), t("Quarter 4")];
-    default:
-      return [];
-  }
-}
-
 /** September to July of the school year today falls in. */
 function defaultRange(): { startsAt: Date; endsAt: Date; name: string } {
-  const now = new Date();
-  const startYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-  return {
-    startsAt: new Date(startYear, 8, 1),
-    endsAt: new Date(startYear + 1, 6, 5),
-    name: `${startYear} – ${startYear + 1}`,
-  };
+  return nativeSchoolYearSuggestion(new Date());
 }
 
 export default function Onboarding() {
   const palette = usePalette();
   const router = useRouter();
+  const { selectYear } = useYear();
 
   const initial = useMemo(defaultRange, []);
   const [step, setStep] = useState(0);
@@ -65,8 +51,7 @@ export default function Onboarding() {
   const [startsAt, setStartsAt] = useState(initial.startsAt);
   const [endsAt, setEndsAt] = useState(initial.endsAt);
   const [scale, setScale] = useState("20");
-  const [template, setTemplate] =
-    useState<PeriodTemplateChoice>("trimesters");
+  const [template, setTemplate] = useState<PeriodTemplateChoice>("trimesters");
   const [presetId, setPresetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const setupKey = useRef(
@@ -91,12 +76,18 @@ export default function Onboarding() {
         },
         presetId,
         periodTemplateId: template,
-        periodNames: periodNames(template),
+        periodNames: periodNamesForTemplate(template),
       });
     },
-    onSuccess: () => {
+    onSuccess: (year) => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      queryClient.setQueryData(
+        orpc.years.list.queryKey(),
+        (
+          current: Awaited<ReturnType<typeof client.years.list>> | undefined,
+        ) => [year, ...(current ?? []).filter((item) => item.id !== year.id)],
+      );
+      selectYear(year.id);
       router.replace("/(tabs)");
     },
     onError: () => {
@@ -117,7 +108,7 @@ export default function Onboarding() {
   };
 
   const canContinue =
-    step !== 0 || (name.trim().length > 0 && endsAt > startsAt);
+    step !== 0 || isValidYearSetup(name, startsAt, endsAt, scale);
 
   return (
     <KeyboardAvoidingView
@@ -194,7 +185,9 @@ export default function Onboarding() {
 
         {step === 1 ? (
           <>
-            <Title subtitle={t("Grades will fall into the right one on their own.")}>
+            <Title
+              subtitle={t("Grades will fall into the right one on their own.")}
+            >
               {t("How is your year split?")}
             </Title>
             <ChoiceField
@@ -225,7 +218,11 @@ export default function Onboarding() {
 
         {step === 2 ? (
           <>
-            <Title subtitle={t("Pick the closest one — you can rename and reweigh everything after.")}>
+            <Title
+              subtitle={t(
+                "Pick the closest one — you can rename and reweigh everything after.",
+              )}
+            >
               {t("What do you study?")}
             </Title>
             <ChoiceField
