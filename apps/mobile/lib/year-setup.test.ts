@@ -70,10 +70,14 @@ describe("native year setup", () => {
   });
 
   test("marks only the cumulative semester and validates manual edits", () => {
+    const range = {
+      startsAt: new Date("2026-09-01T12:00:00.000Z"),
+      endsAt: new Date("2027-07-01T12:00:00.000Z"),
+    };
     const periods = periodDraftsForTemplate(
       "semesters-cumulative",
-      new Date("2026-09-01T12:00:00.000Z"),
-      new Date("2027-07-01T12:00:00.000Z"),
+      range.startsAt,
+      range.endsAt,
     );
 
     expect(periods.map((period) => period.isCumulative)).toEqual([false, true]);
@@ -89,6 +93,47 @@ describe("native year setup", () => {
         },
       ]),
     ).toBe(false);
+    expect(
+      validPeriodDrafts(
+        [
+          periods[0]!,
+          {
+            ...periods[1]!,
+            startsAt: new Date(
+              new Date(periods[0]!.endsAt).getTime() - 86_400_000,
+            ).toISOString(),
+          },
+        ],
+        range,
+      ),
+    ).toBe(false);
+    expect(
+      validPeriodDrafts(
+        [
+          {
+            ...periods[0]!,
+            startsAt: new Date(
+              range.startsAt.getTime() - 86_400_000,
+            ).toISOString(),
+          },
+          periods[1]!,
+        ],
+        range,
+      ),
+    ).toBe(false);
+    expect(
+      validPeriodDrafts(
+        [
+          periods[0]!,
+          {
+            ...periods[1]!,
+            endsAt: new Date(range.endsAt.getTime() + 86_400_000).toISOString(),
+          },
+        ],
+        range,
+      ),
+    ).toBe(false);
+    expect(validPeriodDrafts([], range)).toBe(true);
   });
 
   test("builds the same targeted resume route for every setup entry point", () => {

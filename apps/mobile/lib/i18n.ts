@@ -551,8 +551,8 @@ const fr: Record<string, string> = {
     "Partez d'un découpage, puis ajustez précisément chaque date.",
   "One average will cover the whole school year.":
     "Une seule moyenne couvrira toute l'année scolaire.",
-  "Periods must be named, ordered and must not overlap.":
-    "Les périodes doivent être nommées, ordonnées et ne pas se chevaucher.",
+  "Periods need a name, must stay within the year, be ordered and not overlap.":
+    "Les périodes doivent avoir un nom, rester dans l'année, être ordonnées et ne pas se chevaucher.",
   "The periods could not be saved. Your progress is kept on this device.":
     "Impossible d'enregistrer les périodes. Votre progression reste sauvegardée sur cet appareil.",
   "Remove {name}": "Supprimer {name}",

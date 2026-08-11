@@ -108,7 +108,10 @@ export function periodDraftsForTemplate(
 
 export function validPeriodDrafts(
   periods: readonly Pick<NativePeriodDraft, "name" | "startsAt" | "endsAt">[],
+  year?: { startsAt: Date; endsAt: Date },
 ): boolean {
+  const yearStartsAt = year?.startsAt.getTime() ?? Number.NEGATIVE_INFINITY;
+  const yearEndsAt = year?.endsAt.getTime() ?? Number.POSITIVE_INFINITY;
   let previousEnd = Number.NEGATIVE_INFINITY;
   return periods.every((period) => {
     const startsAt = new Date(period.startsAt).getTime();
@@ -118,6 +121,8 @@ export function validPeriodDrafts(
       Number.isFinite(startsAt) &&
       Number.isFinite(endsAt) &&
       endsAt > startsAt &&
+      startsAt >= yearStartsAt &&
+      endsAt <= yearEndsAt &&
       startsAt >= previousEnd;
     previousEnd = endsAt;
     return valid;

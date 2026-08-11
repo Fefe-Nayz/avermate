@@ -432,9 +432,18 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
 
   const finish = async () => {
     if (!draft || !draft.periods || !userId || !yearId) return;
-    if (!validPeriodDrafts(draft.periods)) {
+    if (
+      !validPeriodDrafts(draft.periods, {
+        startsAt: new Date(draft.year.startsAt),
+        endsAt: new Date(draft.year.endsAt),
+      })
+    ) {
       haptic("error");
-      setError(t("Periods must be named, ordered and must not overlap."));
+      setError(
+        t(
+          "Periods need a name, must stay within the year, be ordered and not overlap.",
+        ),
+      );
       return;
     }
     setError(null);
@@ -502,10 +511,9 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
           text: t("Replace"),
           style: "destructive",
           onPress: () => {
-            void clearYearSetupDraft(
-              userId,
-              otherDraft.idempotencyKey,
-            ).then(() => setOtherDraft(null));
+            void clearYearSetupDraft(userId, otherDraft.idempotencyKey).then(
+              () => setOtherDraft(null),
+            );
           },
         },
       ],
