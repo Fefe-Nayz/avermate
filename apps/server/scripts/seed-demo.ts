@@ -1,10 +1,16 @@
 /**
- * Seeds the two demo accounts.
+ * Seeds the showcase accounts and a synthetic cohort for the admin panel.
  *
- *   bun scripts/seed-demo.ts            both
+ *   bun scripts/seed-demo.ts            showcase + cohort + empty account
  *   bun scripts/seed-demo.ts --blank    only the empty one
  *   bun scripts/seed-demo.ts --full     only the complete one
+ *   bun scripts/seed-demo.ts --cohort   only the synthetic cohort
+ *   bun scripts/seed-demo.ts --cohort --users 80 --seed 1234
  *   bun scripts/seed-demo.ts --full --email me@example.com --name "…"
+ *
+ * Destructive demo seeding only runs against local file or in-memory databases
+ * and is always rejected in production. Synthetic users are confined to
+ * `@seed.avermate.example`.
  *
  * They exist for opposite reasons. The empty account is the only way to see
  * onboarding twice, because it runs once per account and there is no undo. The
@@ -18,9 +24,10 @@
  * composite grades, notes, custom averages, a goal in each of the states the
  * planner can report, and cards covering every display.
  */
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { db } from "../src/db";
 import {
+  accounts,
   customAverageEntries,
   customAverages,
   dashboardCards,
@@ -40,6 +47,7 @@ import {
   socialGroups,
   socialProfileGrants,
   socialProfiles,
+  sessions,
   subjects,
   users,
   years,
@@ -53,6 +61,11 @@ import {
   groupPolicyDigest,
 } from "../src/lib/social-policy";
 import { defaultCards } from "@avermate/core";
+import {
+  buildDemoCohort,
+  type DemoProfile,
+  type DemoUser,
+} from "./seed-demo-data";
 
 function argument(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -61,10 +74,54 @@ function argument(flag: string): string | undefined {
 
 const ONLY_BLANK = process.argv.includes("--blank");
 const ONLY_FULL = process.argv.includes("--full");
+const ONLY_COHORT = process.argv.includes("--cohort");
+const SHOW_HELP = process.argv.includes("--help");
 const PASSWORD = argument("--password") ?? "demo-account-2026";
 const SOCIAL_DEMO_ENABLED =
   process.env.SOCIAL_DEMO_SEED_ENABLED === "true" &&
   process.env.NODE_ENV !== "production";
+
+const selectedModes = [ONLY_BLANK, ONLY_FULL, ONLY_COHORT].filter(Boolean);
+if (selectedModes.length > 1) {
+  throw new Error("Use only one of --blank, --full, or --cohort.");
+}
+
+function integerArgument(flag: string): number | undefined {
+  const raw = argument(flag);
+  if (raw === undefined) {
+    if (process.argv.includes(flag)) {
+      throw new Error(`${flag} requires a value.`);
+    }
+    return undefined;
+  }
+  if (!/^-?\d+$/.test(raw)) {
+    throw new Error(`${flag} must be a whole number.`);
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`${flag} must be a safe integer.`);
+  }
+  return value;
+}
+
+const COHORT_SIZE = integerArgument("--users") ?? 48;
+const COHORT_SEED = integerArgument("--seed");
+
+function assertSeedAllowed() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Demo seeding is disabled when NODE_ENV=production.");
+  }
+  const databaseUrl = (
+    process.env.DATABASE_URL ?? "file:./dev.db"
+  ).toLowerCase();
+  const localDatabase =
+    databaseUrl === ":memory:" || databaseUrl.startsWith("file:");
+  if (!localDatabase) {
+    throw new Error(
+      "Demo seeding is restricted to :memory: and file: databases.",
+    );
+  }
+}
 
 /** Wipe and recreate, so re-running always lands on the same starting point. */
 async function account(email: string, name: string) {
@@ -1107,10 +1164,415 @@ async function seedBlank(email: string, name: string) {
   console.info("  Signing in lands straight on onboarding.");
 }
 
-async function main() {
-  const both = !ONLY_BLANK && !ONLY_FULL;
+// -------------------------------------------------------------- the cohort
 
-  if (both || ONLY_FULL) {
+const COHORT_EMAIL_DOMAIN = "@seed.avermate.example";
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+
+function dateAtLeast(value: Date, minimum: Date): Date {
+  return new Date(Math.max(value.getTime(), minimum.getTime()));
+}
+
+function activityDates(
+  profile: DemoProfile,
+  count: number,
+  now: Date,
+  last30Only = false,
+): Date[] {
+  if (count <= 0) return [];
+  const endsAt = profile.activity.lastActiveAt;
+  const lowerBound = dateAtLeast(
+    new Date(now.getTime() - 29 * DAY_MS),
+    profile.activity.createdAt,
+  );
+  if (last30Only && endsAt.getTime() < lowerBound.getTime()) return [];
+  const startsAt = last30Only
+    ? lowerBound
+    : new Date(Math.min(endsAt.getTime(), lowerBound.getTime()));
+  const duration = endsAt.getTime() - startsAt.getTime();
+  return Array.from(
+    { length: count },
+    (_, index) =>
+      new Date(startsAt.getTime() + (duration * (index + 1)) / count),
+  );
+}
+
+function gradeActivityById(demo: DemoUser, now: Date): Map<string, Date> {
+  const allGrades = demo.years
+    .flatMap((year) => year.grades)
+    .filter(
+      (grade) =>
+        grade.passedAt.getTime() <=
+        demo.profile.activity.lastActiveAt.getTime(),
+    )
+    .sort((left, right) => left.passedAt.getTime() - right.passedAt.getTime());
+  const requestedCount = Math.min(
+    demo.profile.activity.gradeEvents30,
+    allGrades.length,
+  );
+  const dates = activityDates(demo.profile, requestedCount, now, true);
+  const recentGrades = dates.length === 0 ? [] : allGrades.slice(-dates.length);
+  return new Map(
+    recentGrades.map(
+      (grade, index) =>
+        [grade.id, dateAtLeast(dates[index]!, grade.passedAt)] as const,
+    ),
+  );
+}
+
+async function insertBatches<T>(
+  rows: readonly T[],
+  insert: (batch: T[]) => unknown,
+  size = 40,
+): Promise<void> {
+  for (let offset = 0; offset < rows.length; offset += size) {
+    await insert(rows.slice(offset, offset + size));
+  }
+}
+
+function sessionRowsFor(
+  profile: DemoProfile,
+  profileIndex: number,
+  now: Date,
+): Array<typeof sessions.$inferInsert> {
+  const count = Math.max(
+    1,
+    Math.min(3, Math.ceil(profile.activity.activeDays30 / 10)),
+  );
+  const dates = activityDates(profile, count, now);
+  const agents = [
+    "Avermate demo · Chrome desktop",
+    "Avermate demo · Expo mobile",
+    "Avermate demo · Safari tablet",
+  ];
+
+  return dates.map((updatedAt, index) => {
+    const createdAt = dateAtLeast(
+      new Date(
+        updatedAt.getTime() -
+          Math.max(1, Math.floor(profile.activity.activeDays30 / count)) *
+            DAY_MS,
+      ),
+      profile.activity.createdAt,
+    );
+    return {
+      id: `${profile.id}_session_${index + 1}`,
+      token: newId("seed_ses", 32),
+      createdAt,
+      updatedAt,
+      expiresAt: new Date(
+        updatedAt.getTime() + (profile.banned ? HOUR_MS : 30 * DAY_MS),
+      ),
+      ipAddress: `192.0.2.${((profileIndex * 3 + index) % 250) + 1}`,
+      userAgent: agents[index]!,
+      userId: profile.id,
+    };
+  });
+}
+
+async function seedCohort(size: number, seed: number | undefined) {
+  assertSeedAllowed();
+
+  const now = new Date();
+  const cohort = buildDemoCohort({ size, seed, now });
+  if (
+    cohort.some(({ profile }) => !profile.email.endsWith(COHORT_EMAIL_DOMAIN))
+  ) {
+    throw new Error("The synthetic cohort escaped its reserved email domain.");
+  }
+
+  const credentialPassword = await Bun.password.hash(PASSWORD, "argon2id");
+  const userRows: Array<typeof users.$inferInsert> = [];
+  const accountRows: Array<typeof accounts.$inferInsert> = [];
+  const sessionRows: Array<typeof sessions.$inferInsert> = [];
+  const yearRows: Array<typeof years.$inferInsert> = [];
+  const periodRows: Array<typeof periods.$inferInsert> = [];
+  const subjectRows: Array<typeof subjects.$inferInsert> = [];
+  const gradeRows: Array<typeof grades.$inferInsert> = [];
+  const componentRows: Array<typeof gradeComponents.$inferInsert> = [];
+  const averageRows: Array<typeof customAverages.$inferInsert> = [];
+  const averageEntryRows: Array<typeof customAverageEntries.$inferInsert> = [];
+  const goalRows: Array<typeof goals.$inferInsert> = [];
+  const cardRows: Array<typeof dashboardCards.$inferInsert> = [];
+
+  for (const [profileIndex, demo] of cohort.entries()) {
+    const { profile } = demo;
+    const providerId = profile.provider;
+    const profileUpdatedAt = dateAtLeast(
+      profile.activity.lastActiveAt,
+      profile.activity.createdAt,
+    );
+    const recentGradeActivity = gradeActivityById(demo, now);
+    userRows.push({
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      emailVerified: profile.emailVerified,
+      role: profile.role,
+      banned: profile.banned,
+      banReason: profile.banReason,
+      createdAt: profile.activity.createdAt,
+      updatedAt: profileUpdatedAt,
+    });
+    accountRows.push({
+      id: `${profile.id}_account_${providerId}`,
+      accountId:
+        providerId === "credential"
+          ? profile.id
+          : `${providerId}:${profile.id}`,
+      providerId,
+      userId: profile.id,
+      password: providerId === "credential" ? credentialPassword : null,
+      createdAt: profile.activity.createdAt,
+      updatedAt: profileUpdatedAt,
+    });
+    sessionRows.push(...sessionRowsFor(profile, profileIndex, now));
+
+    for (const year of demo.years) {
+      const createdAt = dateAtLeast(year.startsAt, profile.activity.createdAt);
+      const updatedAt = dateAtLeast(profile.activity.lastActiveAt, createdAt);
+      yearRows.push({
+        id: year.id,
+        name: `${year.name} · ${year.track}`,
+        startsAt: year.startsAt,
+        endsAt: year.endsAt,
+        scale: year.scale,
+        defaultOutOf: year.defaultOutOf,
+        passingRatio: year.passingRatio,
+        decimals: year.decimals,
+        sortOrder: year.sortOrder,
+        userId: profile.id,
+        createdAt,
+        updatedAt,
+      });
+      periodRows.push(
+        ...year.periods.map((period) => ({
+          ...period,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        })),
+      );
+      subjectRows.push(
+        ...year.subjects.map((subject) => ({
+          ...subject,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        })),
+      );
+
+      for (const grade of year.grades) {
+        const recordedAt = dateAtLeast(
+          dateAtLeast(
+            recentGradeActivity.get(grade.id) ?? grade.passedAt,
+            grade.passedAt,
+          ),
+          profile.activity.createdAt,
+        );
+        gradeRows.push({
+          id: grade.id,
+          name: grade.name,
+          value: grade.value,
+          outOf: grade.outOf,
+          coefficient: grade.coefficient,
+          isComposite: grade.isComposite,
+          note: grade.note,
+          passedAt: grade.passedAt,
+          subjectId: grade.subjectId,
+          periodId: grade.periodId,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt: recordedAt,
+          updatedAt: recordedAt,
+        });
+        componentRows.push(
+          ...grade.components.map((component) => ({
+            ...component,
+            gradeId: grade.id,
+            userId: profile.id,
+            createdAt: recordedAt,
+            updatedAt: recordedAt,
+          })),
+        );
+      }
+
+      for (const average of year.customAverages) {
+        averageRows.push({
+          id: average.id,
+          name: average.name,
+          isMain: average.isMain,
+          sortOrder: average.sortOrder,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        });
+        averageEntryRows.push(
+          ...average.entries.map((entry, index) => ({
+            id: `${average.id}_entry_${index + 1}`,
+            averageId: average.id,
+            subjectId: entry.subjectId,
+            coefficient: entry.coefficient,
+            includeChildren: entry.includeChildren,
+          })),
+        );
+      }
+
+      goalRows.push(
+        ...year.goals.map((goal) => ({
+          ...goal,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        })),
+      );
+
+      const defaultCardRows = defaultCards().map((card, index) => ({
+        id: `${year.id}_card_${index + 1}`,
+        surface: "overview",
+        metric: card.metric,
+        targetKind: card.target.kind,
+        targetId: card.target.referenceId,
+        goalId: null,
+        display: card.display,
+        span: card.span,
+        title: card.title,
+        accent: card.accent,
+        sortOrder: card.sortOrder,
+        hidden: card.hidden,
+        yearId: year.id,
+        userId: profile.id,
+        createdAt,
+        updatedAt,
+      }));
+      const featuredAverage = year.customAverages[1] ?? year.customAverages[0];
+      const featuredGoal = year.goals[0];
+      cardRows.push(...defaultCardRows);
+      if (featuredAverage) {
+        cardRows.push({
+          id: `${year.id}_card_custom_average`,
+          surface: "overview",
+          metric: "average",
+          targetKind: "custom",
+          targetId: featuredAverage.id,
+          goalId: null,
+          display: "sparkline",
+          span: 2,
+          title: featuredAverage.name,
+          accent: null,
+          sortOrder: defaultCardRows.length + 1,
+          hidden: false,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        });
+      }
+      if (featuredGoal) {
+        cardRows.push({
+          id: `${year.id}_card_goal`,
+          surface: "overview",
+          metric: "goalProgress",
+          targetKind: featuredGoal.kind,
+          targetId: featuredGoal.referenceId,
+          goalId: featuredGoal.id,
+          display: "gauge",
+          span: 2,
+          title: featuredGoal.name,
+          accent: null,
+          sortOrder: defaultCardRows.length + 2,
+          hidden: false,
+          yearId: year.id,
+          userId: profile.id,
+          createdAt,
+          updatedAt,
+        });
+      }
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    // This is the only destructive cohort operation: showcase, local and real
+    // accounts use another domain and can never match this suffix.
+    await tx.delete(users).where(like(users.email, `%${COHORT_EMAIL_DOMAIN}`));
+    await insertBatches(userRows, (batch) => tx.insert(users).values(batch));
+    await insertBatches(accountRows, (batch) =>
+      tx.insert(accounts).values(batch),
+    );
+    await insertBatches(sessionRows, (batch) =>
+      tx.insert(sessions).values(batch),
+    );
+    await insertBatches(yearRows, (batch) => tx.insert(years).values(batch));
+    await insertBatches(periodRows, (batch) =>
+      tx.insert(periods).values(batch),
+    );
+    await insertBatches(subjectRows, (batch) =>
+      tx.insert(subjects).values(batch),
+    );
+    await insertBatches(gradeRows, (batch) => tx.insert(grades).values(batch));
+    await insertBatches(componentRows, (batch) =>
+      tx.insert(gradeComponents).values(batch),
+    );
+    await insertBatches(averageRows, (batch) =>
+      tx.insert(customAverages).values(batch),
+    );
+    await insertBatches(averageEntryRows, (batch) =>
+      tx.insert(customAverageEntries).values(batch),
+    );
+    await insertBatches(goalRows, (batch) => tx.insert(goals).values(batch));
+    await insertBatches(cardRows, (batch) =>
+      tx.insert(dashboardCards).values(batch),
+    );
+  });
+
+  console.info(
+    `Synthetic cohort: ${cohort.length} users · ${yearRows.length} years · ${subjectRows.length} subjects · ${gradeRows.length} grades`,
+  );
+  console.info(
+    `  Reserved accounts: *${COHORT_EMAIL_DOMAIN} / ${PASSWORD} (credentials only)`,
+  );
+}
+
+async function main() {
+  if (SHOW_HELP) {
+    console.info(`Usage: bun scripts/seed-demo.ts [mode] [options]
+
+Modes (mutually exclusive):
+  --full                 Seed only the showcase account
+  --blank                Seed only the onboarding account
+  --cohort               Seed only synthetic admin-panel data
+  no mode                Seed showcase, cohort, then onboarding account
+
+Cohort options:
+  --users N              Synthetic users (default 48, maximum 500)
+  --seed N               Reproducible safe-integer random seed
+
+Account options:
+  --email VALUE          Override --full or --blank email
+  --name VALUE           Override --full or --blank display name
+  --password VALUE       Demo credential password
+
+All demo modes are blocked in production and only run against :memory: or
+file: databases.`);
+    return;
+  }
+
+  assertSeedAllowed();
+  const everything = selectedModes.length === 0;
+  const includeCohort = everything || ONLY_COHORT;
+
+  if (
+    (ONLY_BLANK || ONLY_FULL) &&
+    (argument("--users") !== undefined || argument("--seed") !== undefined)
+  ) {
+    throw new Error("--users and --seed can only be used with the cohort.");
+  }
+  if (everything || ONLY_FULL) {
     const full = await seedFull(
       argument("--email") ?? "demo@avermate.fr",
       argument("--name") ?? "Camille Demo",
@@ -1118,7 +1580,11 @@ async function main() {
     if (SOCIAL_DEMO_ENABLED) await seedSocialDemo(full);
   }
 
-  if (both || ONLY_BLANK) {
+  if (includeCohort) {
+    await seedCohort(COHORT_SIZE, COHORT_SEED);
+  }
+
+  if (everything || ONLY_BLANK) {
     await seedBlank(
       (ONLY_BLANK ? argument("--email") : undefined) ?? "new@avermate.fr",
       (ONLY_BLANK ? argument("--name") : undefined) ?? "Nouvel Élève",

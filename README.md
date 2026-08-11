@@ -240,18 +240,31 @@ official `expo-widgets` integration and is opt-in.
 bun run db:seed
 ```
 
-This recreates two verified demo accounts with password
-`demo-account-2026`:
+This recreates two showcase accounts and a deterministic synthetic cohort with
+password `demo-account-2026`:
 
 - `demo@avermate.fr` contains two years, periods, a nested subject tree,
   ordinary and composite grades, notes, custom averages, goals in every planner
   state, and dashboard cards.
 - `new@avermate.fr` is empty and opens onboarding.
+- 48 identities under `@seed.avermate.example` populate the administration
+  views with varied roles, verification and suspension states, sign-in
+  providers, sessions, activity dates, 90 academic years, roughly 2,250
+  hierarchical subjects, and roughly 8,000 grades. Three accounts intentionally
+  remain pre-onboarding. The distribution mirrors
+  anonymised CPGE usage patterns without containing any real account data.
 
-Use `--full` or `--blank` to seed one account. The seed script also accepts
-`--email`, `--name`, and `--password` for a custom demo identity. Never run it
-against data you need to preserve: matching demo accounts are deleted and
-recreated intentionally.
+Seed only the cohort, choose its size, or reproduce another distribution with:
+
+```bash
+bun run db:seed -- --cohort
+bun run db:seed -- --cohort --users 80 --seed 1234
+```
+
+Use `--full` or `--blank` to seed only one showcase account. The script also
+accepts `--email`, `--name`, and `--password` for a custom showcase identity.
+Synthetic cleanup is restricted to the reserved `.example` namespace. Every
+seed mode is rejected in production and on non-file databases.
 
 ## Production and deployment
 
