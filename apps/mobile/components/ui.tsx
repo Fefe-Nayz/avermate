@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { haptic, type Tone } from "@/lib/haptics";
+import { useInteractionPreferences } from "@/lib/interaction-preferences";
 import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
@@ -33,13 +34,15 @@ export function Screen({
 }) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
+  const { compactMode } = useInteractionPreferences();
 
   const body = scroll ? (
     <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
-        paddingHorizontal: space.lg,
+        paddingHorizontal: compactMode ? space.md : space.lg,
         paddingBottom: insets.bottom + (footer ? space.xxxl * 2 : space.xxxl),
-        gap: space.lg,
+        gap: compactMode ? space.md : space.lg,
       }}
       showsVerticalScrollIndicator={false}
       keyboardDismissMode="on-drag"
@@ -48,7 +51,13 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={{ flex: 1, paddingHorizontal: space.lg, gap: space.lg }}>
+    <View
+      style={{
+        flex: 1,
+        paddingHorizontal: compactMode ? space.md : space.lg,
+        gap: compactMode ? space.md : space.lg,
+      }}
+    >
       {children}
     </View>
   );
@@ -140,6 +149,7 @@ export function Card({
   padded?: boolean;
 }) {
   const palette = usePalette();
+  const { compactMode } = useInteractionPreferences();
   return (
     <View
       style={[
@@ -148,7 +158,7 @@ export function Card({
           borderRadius: radius.lg,
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: palette.border,
-          padding: padded ? space.lg : 0,
+          padding: padded ? (compactMode ? space.md : space.lg) : 0,
           overflow: "hidden",
         },
         style,
@@ -184,6 +194,7 @@ export function Row({
   destructive?: boolean;
 }) {
   const palette = usePalette();
+  const { compactMode } = useInteractionPreferences();
 
   const content = (
     <View
@@ -191,7 +202,7 @@ export function Row({
         flexDirection: "row",
         alignItems: "center",
         gap: space.md,
-        minHeight: 52,
+        minHeight: compactMode ? 46 : 52,
         paddingVertical: space.sm,
         paddingRight: space.lg,
         paddingLeft: space.lg + indent * 14,

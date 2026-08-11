@@ -31,9 +31,11 @@ import { useYear } from "@/components/year-provider";
 import { useGoalPlans } from "@/components/use-goal-plans";
 import { useCards } from "@/components/use-cards";
 import { CardView } from "@/components/card-view";
+import { SeasonalReviewInvitation } from "@/components/review/seasonal-review-invitation";
 import { useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { timelineCutoffTimestamp } from "@/lib/timeline";
 import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
@@ -59,6 +61,8 @@ export default function Dashboard() {
     period,
     passingRatio,
     refresh,
+    timelineDate,
+    now,
   } = useYear();
   const plans = useGoalPlans();
   const cards = useCards("overview");
@@ -70,12 +74,17 @@ export default function Dashboard() {
   const series = useMemo(() => {
     if (!year) return [];
     const from = period.startAt;
-    const to = new Date(Math.min(Date.now(), period.endAt.getTime()));
+    const to = new Date(
+      Math.min(
+        timelineCutoffTimestamp(timelineDate) ?? now,
+        period.endAt.getTime(),
+      ),
+    );
     if (to.getTime() <= from.getTime()) return [];
     const span = to.getTime() - from.getTime();
     const step = Math.max(1, Math.round(span / (24 * 60 * 60 * 1000) / 60));
     return averageOverTime(graph.subjects, dayRange(from, to, step));
-  }, [graph, period, year]);
+  }, [graph, now, period, timelineDate, year]);
 
   const recent = useMemo(
     () =>
@@ -186,6 +195,8 @@ export default function Dashboard() {
 
         <ScopeBar />
       </View>
+
+      <SeasonalReviewInvitation />
 
       {cards.specs.map((spec) => (
         <CardView key={spec.id} spec={spec} result={cards.results.get(spec.id)} />

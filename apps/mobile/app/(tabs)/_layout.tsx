@@ -1,7 +1,8 @@
 import { Redirect, Tabs } from "expo-router";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Loading } from "@/components/ui";
+import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { useYear } from "@/components/year-provider";
 import { useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
@@ -29,7 +30,9 @@ export default function TabsLayout() {
   if (years.length === 0) return <Redirect href="/onboarding" />;
 
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <AnnouncementBanner />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: palette.text,
@@ -89,6 +92,7 @@ export default function TabsLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
+    </View>
   );
 }

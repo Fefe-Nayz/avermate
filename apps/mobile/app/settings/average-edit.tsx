@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import type { CustomAverageEntry, Subject } from "@avermate/core";
@@ -169,7 +169,8 @@ export default function AverageEdit() {
               const subject = yearGraph.byId(entry.subjectId);
               if (!subject) return null;
               return (
-                <TextField
+                <View key={entry.subjectId} style={{ gap: 12 }}>
+                  <TextField
                   key={entry.subjectId}
                   label={subject.name}
                   value={
@@ -182,7 +183,18 @@ export default function AverageEdit() {
                     })
                   }
                   keyboardType="decimal-pad"
-                />
+                  />
+                  {yearGraph.childrenOf(subject.id).length > 0 ? (
+                    <SwitchField
+                      label={t("Include nested subjects")}
+                      hint={t("Use the results inside this group as well")}
+                      value={entry.includeChildren}
+                      onValueChange={(includeChildren) =>
+                        patchEntry(entry.subjectId, { includeChildren })
+                      }
+                    />
+                  ) : null}
+                </View>
               );
             })}
             <Note>{t("Leave one empty to keep the subject's own coefficient.")}</Note>

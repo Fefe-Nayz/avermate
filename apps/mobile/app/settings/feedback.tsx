@@ -1,17 +1,16 @@
 import { useState } from "react";
+import { Text, View } from "react-native";
+import { Image } from "expo-image";
+import Constants from "expo-constants";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import {
-  Button,
-  Note,
-  Problem,
-  Screen,
-  Section,
-} from "@/components/ui";
+import { Button, Card, Note, Problem, Screen, Section } from "@/components/ui";
 import { ChoiceField, TextField } from "@/components/field";
 import { client } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { ImageSelectionError, selectImage } from "@/lib/image-file";
+import { space, type, usePalette } from "@/lib/theme";
 
 /**
  * Feedback.
@@ -21,11 +20,31 @@ import { t } from "@/lib/i18n";
  * wants the problem behind it.
  */
 export default function Feedback() {
+  const palette = usePalette();
   const router = useRouter();
   const [kind, setKind] = useState("idea");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [image, setImage] = useState<{ file: File; uri: string } | null>(null);
+
+  const chooseImage = async () => {
+    try {
+      const selected = await selectImage();
+      if (selected) setImage(selected);
+    } catch (cause) {
+      if (cause instanceof ImageSelectionError && cause.code === "size") {
+        setError(t("Choose an image smaller than 2 MB."));
+      } else if (
+        cause instanceof ImageSelectionError &&
+        cause.code === "permission"
+      ) {
+        setError(t("Allow photo access to choose an image."));
+      } else {
+        setError(t("Choose a PNG, JPEG or WebP image."));
+      }
+    }
+  };
 
   const submit = useMutation({
     mutationFn: (input: Parameters<typeof client.feedback.submit>[0]) =>
@@ -62,13 +81,17 @@ export default function Feedback() {
     return (
       <>
         <Stack.Screen options={{ title: t("Send feedback") }} />
-        <Screen footer={<Button label={t("Done")} onPress={() => router.back()} />}>
+        <Screen
+          footer={<Button label={t("Done")} onPress={() => router.back()} />}
+        >
           <Section title={t("Thank you")}>
-            <Note>{t(
+            <Note>
+              {t(
                 "It has landed. Every message gets read, even when the reply takes a while.",
-              )}</Note>
+              )}
+            </Note>
           </Section>
-      </Screen>
+        </Screen>
       </>
     );
   }
@@ -85,6 +108,12 @@ export default function Feedback() {
                 kind: kind as "bug" | "idea" | "question" | "other",
                 subject: subjectLine(kind),
                 message: message.trim(),
+                context: {
+                  route: "/settings/feedback",
+                  platform: process.env.EXPO_OS ?? "unknown",
+                  appVersion: Constants.expoConfig?.version ?? "unknown",
+                },
+                image: image?.file,
               })
             }
             disabled={message.trim().length < 10 || submit.isPending}
@@ -111,6 +140,38 @@ export default function Feedback() {
             placeholder={placeholder}
             multiline
           />
+        </Section>
+
+        <Section title={t("Screenshot (optional)")}>
+          {image ? (
+            <Card>
+              <View style={{ gap: space.md }}>
+                <Image
+                  source={image.uri}
+                  contentFit="contain"
+                  style={{ width: "100%", height: 180, borderRadius: 12 }}
+                />
+                <Text
+                  selectable
+                  style={[type.footnote, { color: palette.textMuted }]}
+                >
+                  {t("PNG, JPEG or WebP, up to 2 MB.")}
+                </Text>
+                <Button
+                  label={t("Remove screenshot")}
+                  variant="ghost"
+                  onPress={() => setImage(null)}
+                />
+              </View>
+            </Card>
+          ) : (
+            <Button
+              label={t("Choose a screenshot")}
+              variant="secondary"
+              icon="image-outline"
+              onPress={() => void chooseImage()}
+            />
+          )}
         </Section>
 
         {error ? (

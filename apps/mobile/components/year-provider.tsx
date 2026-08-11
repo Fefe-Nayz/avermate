@@ -23,7 +23,13 @@ import {
   type Year,
 } from "@avermate/core";
 import { orpc } from "@/lib/orpc";
+import { useSession } from "@/lib/auth-client";
 import { t } from "@/lib/i18n";
+import { localUserKey } from "@/lib/local-settings";
+import {
+  clampTimelineDay,
+  subjectsAtTimelineDay,
+} from "@/lib/timeline";
 
 /**
  * The year in scope, and everything derived from it.
@@ -36,7 +42,10 @@ import { t } from "@/lib/i18n";
 
 interface YearContextValue {
   isLoading: boolean;
+  /** Active years shown in everyday pickers. */
   years: Year[];
+  /** Includes archived years for the dedicated management screen. */
+  allYears: Year[];
   year: Year | null;
   yearId: string | null;
   selectYear: (id: string) => void;
@@ -49,6 +58,10 @@ interface YearContextValue {
   graph: SubjectGraph;
   yearGraph: SubjectGraph;
 
+  /** ISO calendar day used as a global historical cutoff; null means today. */
+  timelineDate: string | null;
+  setTimelineDate: (value: string | null) => void;
+
   customAverages: CustomAverage[];
   goals: Goal[];
 
@@ -60,13 +73,11 @@ interface YearContextValue {
   scale: number;
   decimals: number;
   passingRatio: number;
+  now: number;
   refresh: () => void;
 }
 
 const YearContext = createContext<YearContextValue | null>(null);
-
-const YEAR_KEY = "avermate.year";
-const PERIOD_KEY = "avermate.period";
 
 /** SecureStore is async, so a stored choice arrives one render after mount. */
 function useStoredChoice(key: string) {
@@ -74,6 +85,7 @@ function useStoredChoice(key: string) {
 
   useEffect(() => {
     let alive = true;
+    setValue(null);
     void SecureStore.getItemAsync(key).then((stored) => {
       if (alive && stored) setValue(stored);
     });
@@ -95,13 +107,29 @@ function useStoredChoice(key: string) {
 }
 
 export function YearProvider({ children }: { children: ReactNode }) {
-  const [storedYearId, setStoredYearId] = useStoredChoice(YEAR_KEY);
-  const [storedPeriodId, setStoredPeriodId] = useStoredChoice(PERIOD_KEY);
+  const session = useSession();
+  const [now, setNow] = useState(() => Date.now());
+  const storageOwner = session.data?.user.id ?? "anonymous";
+  const [storedYearId, setStoredYearId] = useStoredChoice(
+    localUserKey(storageOwner, "year"),
+  );
+  const [storedPeriodId, setStoredPeriodId] = useStoredChoice(
+    localUserKey(storageOwner, "period"),
+  );
 
-  const yearsQuery = useQuery(orpc.years.list.queryOptions());
-  const years = useMemo(
+  const yearsQuery = useQuery({
+    ...orpc.years.list.queryOptions(),
+    // Auth routes share the root layout. Waiting for an authenticated session
+    // avoids a guaranteed 401 (and retry) on every cold sign-in screen.
+    enabled: Boolean(session.data?.user),
+  });
+  const allYears = useMemo(
     () => (yearsQuery.data ?? []) as unknown as Year[],
     [yearsQuery.data],
+  );
+  const years = useMemo(
+    () => allYears.filter((item) => !item.archivedAt),
+    [allYears],
   );
 
   // Falling back to the year containing today beats the most recent one: in
@@ -119,6 +147,15 @@ export function YearProvider({ children }: { children: ReactNode }) {
     );
     return current?.id ?? years[0]?.id ?? null;
   }, [years, storedYearId]);
+
+  const [storedTimelineDate, setStoredTimelineDate] = useStoredChoice(
+    localUserKey(storageOwner, `timeline.${resolvedYearId ?? "none"}`),
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const snapshotQuery = useQuery({
     ...orpc.snapshot.get.queryOptions({
@@ -138,7 +175,14 @@ export function YearProvider({ children }: { children: ReactNode }) {
     | undefined;
 
   const year = snapshot?.year ?? null;
-  const subjects = useMemo(() => snapshot?.subjects ?? [], [snapshot]);
+  const timelineDate = useMemo(
+    () => clampTimelineDay(storedTimelineDate, year, now),
+    [now, storedTimelineDate, year],
+  );
+  const subjects = useMemo(
+    () => subjectsAtTimelineDay(snapshot?.subjects ?? [], timelineDate),
+    [snapshot, timelineDate],
+  );
 
   const periods = useMemo(() => {
     const real = snapshot?.periods ?? [];
@@ -198,6 +242,7 @@ export function YearProvider({ children }: { children: ReactNode }) {
     () => ({
       isLoading: yearsQuery.isLoading || snapshotQuery.isLoading,
       years,
+      allYears,
       year,
       yearId: resolvedYearId,
       selectYear: (id) => {
@@ -210,12 +255,16 @@ export function YearProvider({ children }: { children: ReactNode }) {
       subjects,
       graph,
       yearGraph,
+      timelineDate,
+      setTimelineDate: (value) =>
+        setStoredTimelineDate(clampTimelineDay(value, year, now)),
       customAverages,
       goals: snapshot?.goals ?? [],
       resolve,
       scale: year?.scale ?? 20,
       decimals: year?.decimals ?? 2,
       passingRatio: year?.passingRatio ?? 0.5,
+      now,
       refresh: () => {
         void snapshotQuery.refetch();
       },
@@ -224,6 +273,7 @@ export function YearProvider({ children }: { children: ReactNode }) {
       yearsQuery.isLoading,
       snapshotQuery,
       years,
+      allYears,
       year,
       resolvedYearId,
       setStoredYearId,
@@ -233,9 +283,12 @@ export function YearProvider({ children }: { children: ReactNode }) {
       subjects,
       graph,
       yearGraph,
+      timelineDate,
+      setStoredTimelineDate,
       customAverages,
       snapshot,
       resolve,
+      now,
     ],
   );
 

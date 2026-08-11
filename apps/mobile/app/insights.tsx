@@ -22,10 +22,20 @@ import {
 import { Card, Empty, Label, Loading, Row, Section } from "@/components/ui";
 import { AverageValue, DeltaValue, PercentValue } from "@/components/value";
 import { Distribution, Sparkline } from "@/components/sparkline";
+import {
+  TimeSeriesCard,
+  TIME_SERIES_COLORS,
+} from "@/components/charts/time-series-card";
+import {
+  averageSeriesInput,
+  createSerializableTimeSeriesModel,
+  gradeSeriesInputs,
+} from "@/components/charts/time-series-model";
 import { ScopeBar } from "@/components/scope-bar";
 import { formatNumber } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { t } from "@/lib/i18n";
+import { timelineCutoffTimestamp } from "@/lib/timeline";
 import { space, type, usePalette } from "@/lib/theme";
 
 /**
@@ -39,18 +49,65 @@ import { space, type, usePalette } from "@/lib/theme";
 export default function Insights() {
   const palette = usePalette();
   const router = useRouter();
-  const { isLoading, graph, period, year, passingRatio, scale, decimals } =
-    useYear();
+  const {
+    isLoading,
+    graph,
+    period,
+    year,
+    passingRatio,
+    scale,
+    decimals,
+    subjects,
+    timelineDate,
+    now,
+  } = useYear();
 
   const series = useMemo(() => {
     if (!year) return [];
     const from = period.startAt;
-    const to = new Date(Math.min(Date.now(), period.endAt.getTime()));
+    const to = new Date(
+      Math.min(
+        timelineCutoffTimestamp(timelineDate) ?? now,
+        period.endAt.getTime(),
+      ),
+    );
     if (to.getTime() <= from.getTime()) return [];
     const span = to.getTime() - from.getTime();
     const step = Math.max(1, Math.round(span / (24 * 60 * 60 * 1000) / 60));
     return averageOverTime(graph.subjects, dayRange(from, to, step));
-  }, [graph, period, year]);
+  }, [graph, now, period, timelineDate, year]);
+
+  const averageModel = useMemo(
+    () =>
+      createSerializableTimeSeriesModel({
+        autoZoom: true,
+        maximumScale: scale,
+        series: [
+          averageSeriesInput({
+            color: TIME_SERIES_COLORS[0],
+            id: "general",
+            label: t("General average"),
+            scale,
+            series,
+          }),
+        ],
+      }),
+    [scale, series],
+  );
+
+  const resultsModel = useMemo(
+    () =>
+      createSerializableTimeSeriesModel({
+        maximumScale: scale,
+        series: gradeSeriesInputs({
+          colors: TIME_SERIES_COLORS,
+          grades: graph.allGrades(),
+          scale,
+          subjects,
+        }),
+      }),
+    [graph, scale, subjects],
+  );
 
   const ratios = useMemo(() => gradeRatios(graph), [graph]);
   const ranked = useMemo(() => rankSubjects(graph), [graph]);
@@ -126,6 +183,24 @@ export default function Insights() {
           ) : null}
           <ScopeBar />
         </View>
+
+        <TimeSeriesCard
+          title={t("Average over time")}
+          description={t(
+            "A semantic date viewport: pan, zoom and inspect without changing the underlying results.",
+          )}
+          model={averageModel}
+          passingValue={passingRatio * scale}
+        />
+
+        <TimeSeriesCard
+          title={t("Grade results")}
+          description={t(
+            "Every subject resolves its nearest real assessment independently, even on irregular dates.",
+          )}
+          model={resultsModel}
+          passingValue={passingRatio * scale}
+        />
 
         <Section title={t("Where it lands")}>
           <Card padded={false}>

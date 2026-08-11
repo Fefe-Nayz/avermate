@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -22,8 +22,15 @@ import { radius, space, type, usePalette } from "@/lib/theme";
 
 const STEPS = 3;
 
+type PeriodTemplateChoice =
+  | "none"
+  | "trimesters"
+  | "semesters"
+  | "semesters-cumulative"
+  | "quarters";
+
 /** Template period keys → the names a French school actually uses. */
-function periodNames(templateId: string): string[] {
+function periodNames(templateId: PeriodTemplateChoice): string[] {
   switch (templateId) {
     case "trimesters":
       return [t("Term 1"), t("Term 2"), t("Term 3")];
@@ -58,38 +65,34 @@ export default function Onboarding() {
   const [startsAt, setStartsAt] = useState(initial.startsAt);
   const [endsAt, setEndsAt] = useState(initial.endsAt);
   const [scale, setScale] = useState("20");
-  const [template, setTemplate] = useState("trimesters");
+  const [template, setTemplate] =
+    useState<PeriodTemplateChoice>("trimesters");
   const [presetId, setPresetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const setupKey = useRef(
+    `mobile-onboarding-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   const presets = useQuery(orpc.presets.list.queryOptions());
 
   const create = useMutation({
     mutationFn: async () => {
       const numericScale = Number(scale) || 20;
-      const year = await client.years.create({
-        name: name.trim(),
-        startsAt,
-        endsAt,
-        scale: numericScale,
-        defaultOutOf: numericScale,
-        passingRatio: 0.5,
-        decimals: 2,
+      return client.presets.setupYear({
+        idempotencyKey: setupKey.current,
+        year: {
+          name: name.trim(),
+          startsAt,
+          endsAt,
+          scale: numericScale,
+          defaultOutOf: numericScale,
+          passingRatio: 0.5,
+          decimals: 2,
+        },
+        presetId,
+        periodTemplateId: template,
+        periodNames: periodNames(template),
       });
-
-      // Periods before subjects: a grade added straight after onboarding then
-      // lands in the right term without anyone choosing one.
-      if (template !== "none") {
-        await client.presets.applyPeriods({
-          yearId: year.id,
-          templateId: template,
-          names: periodNames(template),
-        });
-      }
-      if (presetId) {
-        await client.presets.apply({ yearId: year.id, presetId });
-      }
-      return year;
     },
     onSuccess: () => {
       haptic("success");

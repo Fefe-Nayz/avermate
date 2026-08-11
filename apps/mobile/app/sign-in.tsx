@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, Text, View } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui";
 import { FieldGroup, TextField } from "@/components/field";
 import { Wordmark } from "@/components/wordmark";
-import { signIn } from "@/lib/auth-client";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
+import { authClient, signIn } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { queryClient } from "@/lib/orpc";
@@ -30,6 +31,18 @@ export default function SignIn() {
 
     if (result.error) {
       haptic("error");
+      if (result.error.status === 403) {
+        await authClient.emailOtp.sendVerificationOtp({
+          email: email.trim(),
+          type: "email-verification",
+        });
+        router.push({
+          pathname: "/verify-email",
+          params: { email: email.trim() },
+        });
+        setBusy(false);
+        return;
+      }
       setError(
         result.error.status === 401
           ? t("That email and password do not match.")
@@ -49,7 +62,7 @@ export default function SignIn() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
       style={{
         flex: 1,
         backgroundColor: palette.background,
@@ -76,6 +89,7 @@ export default function SignIn() {
         </View>
 
         <FieldGroup>
+          <SocialAuthButtons mode="sign-in" />
           <TextField
             label={t("Email")}
             value={email}
@@ -93,6 +107,13 @@ export default function SignIn() {
             autoComplete="password"
             autoCapitalize="none"
           />
+          <Link href="/forgot-password" asChild>
+            <Pressable hitSlop={8} style={{ alignSelf: "flex-end" }}>
+              <Text style={[type.footnote, { color: palette.text, fontWeight: "600" }]}>
+                {t("Forgot password?")}
+              </Text>
+            </Pressable>
+          </Link>
           {error ? (
             <Text style={[type.footnote, { color: palette.negative }]}>
               {error}

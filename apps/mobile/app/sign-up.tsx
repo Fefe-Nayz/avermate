@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
+import { KeyboardAvoidingView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Button, Screen, Title } from "@/components/ui";
 import { FieldGroup, TextField } from "@/components/field";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import { signUp } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
@@ -39,9 +40,10 @@ export default function SignUp() {
 
     haptic("success");
     queryClient.clear();
-    // Straight to onboarding: a brand-new account has no year, and the first
-    // thing worth doing is creating one.
-    router.replace("/onboarding");
+    router.replace({
+      pathname: "/verify-email",
+      params: { email: email.trim() },
+    });
   };
 
   const ready =
@@ -49,7 +51,7 @@ export default function SignUp() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
     >
       <Screen
@@ -69,6 +71,7 @@ export default function SignUp() {
         <View style={{ height: space.sm }} />
 
         <FieldGroup>
+          <SocialAuthButtons mode="sign-in" />
           <TextField
             label={t("Name")}
             value={name}

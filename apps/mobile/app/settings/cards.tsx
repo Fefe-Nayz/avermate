@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { Alert, Text } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -13,9 +13,10 @@ import {
 } from "@/components/ui";
 import { metricLabel, useCards } from "@/components/use-cards";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { type, usePalette } from "@/lib/theme";
 
 /**
  * The dashboard, as a list of choices.
@@ -27,19 +28,28 @@ import { t } from "@/lib/i18n";
  */
 export default function Cards() {
   const router = useRouter();
+  const palette = usePalette();
   const { yearId } = useYear();
   const { isLoading, specs, hidden } = useCards("overview");
+  const listKey = orpc.cards.list.queryKey({
+    input: { yearId: yearId ?? "", surface: "overview" },
+  });
+
+  const refresh = () =>
+    yearId
+      ? queryClient.invalidateQueries({ queryKey: listKey })
+      : Promise.resolve();
 
   const reorder = useMutation({
     mutationFn: (input: Parameters<typeof client.cards.reorder>[0]) =>
       client.cards.reorder(input),
-    onSuccess: () => void queryClient.invalidateQueries(),
+    onSuccess: () => void refresh(),
   });
 
   const update = useMutation({
     mutationFn: (input: Parameters<typeof client.cards.update>[0]) =>
       client.cards.update(input),
-    onSuccess: () => void queryClient.invalidateQueries(),
+    onSuccess: () => void refresh(),
   });
 
   const reset = useMutation({
@@ -47,7 +57,30 @@ export default function Cards() {
       client.cards.reset(input),
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      void refresh();
+    },
+  });
+
+  const duplicate = useMutation({
+    mutationFn: (spec: (typeof specs)[number]) => {
+      if (!yearId) throw new Error("No year selected");
+      return client.cards.create({
+        yearId,
+        surface: "overview",
+        metric: spec.metric,
+        targetKind: spec.target.kind,
+        targetId: spec.target.referenceId,
+        goalId: spec.goalId,
+        display: spec.display,
+        span: spec.span,
+        title: spec.title ? `${spec.title} · ${t("Copy")}`.slice(0, 48) : null,
+        accent: spec.accent,
+        hidden: false,
+      });
+    },
+    onSuccess: () => {
+      haptic("success");
+      void refresh();
     },
   });
 
@@ -69,11 +102,24 @@ export default function Cards() {
       <Screen
         footer={
           <Button
-            label={t("Add a card")}
-            onPress={() => router.push("/settings/card-edit")}
+            label={t("Browse widget library")}
+            onPress={() => router.push("/settings/widget-library")}
           />
         }
       >
+        <Section>
+          <Card>
+            <Text selectable style={[type.heading, { color: palette.text }]}>
+              {t("{visible} visible · {hidden} hidden", {
+                visible: specs.length,
+                hidden: hidden.length,
+              })}
+            </Text>
+            <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
+              {t("Build this year’s dashboard from 21 reusable analytics widgets.")}
+            </Text>
+          </Card>
+        </Section>
         {specs.length === 0 && hidden.length === 0 ? (
           <Section>
             <Empty
@@ -106,6 +152,10 @@ export default function Cards() {
                   haptic("light");
                   update.mutate({ cardId: spec.id, hidden: true });
                 }}
+              />
+              <Row
+                title={t("Duplicate")}
+                onPress={() => duplicate.mutate(spec)}
               />
           </Card>
         </Section>

@@ -14,13 +14,30 @@ import {
   trend,
 } from "@avermate/core";
 import { Card, Empty, Label, Loading, Row, Section } from "@/components/ui";
-import { AverageValue, CoefficientTag, DeltaValue, PointsValue, ResultBadge } from "@/components/value";
+import {
+  AverageValue,
+  CoefficientTag,
+  DeltaValue,
+  PointsValue,
+  ResultBadge,
+} from "@/components/value";
 import { Sparkline } from "@/components/sparkline";
+import {
+  TimeSeriesCard,
+  TIME_SERIES_COLORS,
+} from "@/components/charts/time-series-card";
+import {
+  averageSeriesInput,
+  createSerializableTimeSeriesModel,
+  gradeSeriesInputs,
+} from "@/components/charts/time-series-model";
 import { formatDay } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { timelineCutoffTimestamp } from "@/lib/timeline";
 import { radius, space, type, usePalette } from "@/lib/theme";
+import { chartChildren, useChartSettings } from "@/lib/chart-settings";
 
 /**
  * One subject, in full.
@@ -33,8 +50,18 @@ import { radius, space, type, usePalette } from "@/lib/theme";
 export default function SubjectDetail() {
   const palette = usePalette();
   const router = useRouter();
+  const chartSettings = useChartSettings();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { isLoading, graph, period, passingRatio, year } = useYear();
+  const {
+    isLoading,
+    graph,
+    period,
+    passingRatio,
+    scale,
+    timelineDate,
+    now,
+    year,
+  } = useYear();
 
   const subject = graph.byId(id);
 
@@ -51,18 +78,89 @@ export default function SubjectDetail() {
   const series = useMemo(() => {
     if (!subject || !year) return [];
     const from = period.startAt;
-    const to = new Date(Math.min(Date.now(), period.endAt.getTime()));
+    const to = new Date(
+      Math.min(
+        timelineCutoffTimestamp(timelineDate) ?? now,
+        period.endAt.getTime(),
+      ),
+    );
     if (to.getTime() <= from.getTime()) return [];
     const step = Math.max(
       1,
       Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000) / 40),
     );
-    return averageOverTime(graph.subjects, dayRange(from, to, step), subject.id);
-  }, [graph, subject, period, year]);
+    return averageOverTime(
+      graph.subjects,
+      dayRange(from, to, step),
+      subject.id,
+    );
+  }, [graph, now, period, subject, timelineDate, year]);
 
   const children = useMemo(
     () => (subject ? [...graph.childrenOf(subject.id)] : []),
     [graph, subject],
+  );
+
+  const visibleChartChildren = useMemo(
+    () => chartChildren(children, chartSettings.showSubSubjects),
+    [chartSettings.showSubSubjects, children],
+  );
+
+  const averageModel = useMemo(() => {
+    if (!subject || series.length === 0) {
+      return createSerializableTimeSeriesModel({
+        maximumScale: scale,
+        series: [],
+      });
+    }
+    const dates = series.map((point) => point.date);
+    const inputs = [
+      averageSeriesInput({
+        color: TIME_SERIES_COLORS[0],
+        id: subject.id,
+        label: subject.name,
+        scale,
+        series,
+      }),
+      ...visibleChartChildren.map((child, index) =>
+        averageSeriesInput({
+          color:
+            TIME_SERIES_COLORS[(index + 1) % TIME_SERIES_COLORS.length] ??
+            TIME_SERIES_COLORS[0],
+          id: child.id,
+          label: child.name,
+          scale,
+          series: averageOverTime(graph.subjects, dates, child.id),
+        }),
+      ),
+    ];
+    return createSerializableTimeSeriesModel({
+      autoZoom: chartSettings.autoZoom,
+      maximumScale: scale,
+      series: inputs,
+    });
+  }, [
+    chartSettings.autoZoom,
+    graph.subjects,
+    scale,
+    series,
+    subject,
+    visibleChartChildren,
+  ]);
+
+  const gradeModel = useMemo(
+    () =>
+      createSerializableTimeSeriesModel({
+        autoZoom: chartSettings.autoZoom,
+        maximumScale: scale,
+        series: gradeSeriesInputs({
+          colors: TIME_SERIES_COLORS,
+          grades,
+          scale,
+          subjects: graph.subjects,
+        }),
+      }),
+    [chartSettings.autoZoom, grades, graph.subjects, scale],
   );
 
   if (isLoading) return <Loading />;
@@ -117,7 +215,11 @@ export default function SubjectDetail() {
         <View style={{ gap: space.md, paddingTop: space.sm }}>
           <View style={{ gap: space.xs }}>
             <View
-              style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.sm,
+              }}
             >
               <Label>
                 {subject.kind === "category" ? t("Category") : t("Subject")}
@@ -170,7 +272,10 @@ export default function SubjectDetail() {
                 >
                   <DeltaValue delta={impact.delta} size="title" />
                   <Text
-                    style={[type.footnote, { flex: 1, color: palette.textMuted }]}
+                    style={[
+                      type.footnote,
+                      { flex: 1, color: palette.textMuted },
+                    ]}
                   >
                     {impact.delta >= 0
                       ? t("Without this subject you would be lower.")
@@ -190,12 +295,36 @@ export default function SubjectDetail() {
                     size={13}
                     color={palette.textFaint}
                   />
-                  <AverageValue ratio={impact.withValue} size="callout" colored />
+                  <AverageValue
+                    ratio={impact.withValue}
+                    size="callout"
+                    colored
+                  />
                 </View>
               </View>
             </Card>
           </Section>
         ) : null}
+
+        <Section title={t("Evolution")}>
+          <TimeSeriesCard
+            title={t("Average over time")}
+            description={t(
+              "Each visible series keeps its own nearest real result while you inspect or zoom.",
+            )}
+            model={averageModel}
+            passingValue={passingRatio * scale}
+          />
+        </Section>
+
+        <Section title={t("Results over time")}>
+          <TimeSeriesCard
+            title={t("Grade results")}
+            description={t("Drag to pan, pinch or use the wheel to zoom.")}
+            model={gradeModel}
+            passingValue={passingRatio * scale}
+          />
+        </Section>
 
         {children.length > 0 ? (
           <Section title={t("Inside this one")}>
