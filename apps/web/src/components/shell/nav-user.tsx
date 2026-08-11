@@ -35,18 +35,10 @@ import {
 import { signOut as signOutAndReset } from "@/lib/auth-client"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
 import { haptic } from "@/lib/haptics"
+import { initialsOf } from "@/lib/name"
 import { useFeedback } from "@/components/feedback/feedback-provider"
 import { AccountBadges } from "@/components/settings/account-badges"
 import { useSocialAccess } from "@/hooks/use-social-access"
-
-export function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-}
 
 export function NavUser({ user }: { user: AuthenticatedUser }) {
   const t = useExtracted()

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
 import { PAGE_ACTIONS_SLOT, usePageChrome } from "./page-chrome"
-import { initialsOf } from "./nav-user"
+import { initialsOf } from "@/lib/name"
 
 /**
  * The phone header.

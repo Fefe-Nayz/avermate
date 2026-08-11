@@ -11,8 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { initialsOf } from "@/components/shell/nav-user"
 import { cn } from "@/lib/utils"
+import { initialsOf } from "@/lib/name"
 
 export function SocialPageHeading({
   title,

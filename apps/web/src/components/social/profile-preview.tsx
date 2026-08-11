@@ -3,7 +3,7 @@ import { useExtracted } from "next-intl"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { initialsOf } from "@/components/shell/nav-user"
+import { initialsOf } from "@/lib/name"
 
 export interface SocialProfileProjection {
   displayName?: string | null

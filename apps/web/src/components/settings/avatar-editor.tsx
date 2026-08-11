@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Spinner } from "@/components/ui/spinner"
-import { initialsOf } from "@/components/shell/nav-user"
+import { initialsOf } from "@/lib/name"
 import {
   useAuthenticatedUser,
   useUpdateAuthenticatedUser,
