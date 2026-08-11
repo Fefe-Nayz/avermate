@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
@@ -50,9 +50,20 @@ export const snapshotRouter = {
           .where(eq(grades.yearId, year.id))
           .orderBy(asc(grades.passedAt)),
         db
-          .select()
+          .select({
+            id: gradeComponents.id,
+            gradeId: gradeComponents.gradeId,
+            name: gradeComponents.name,
+            value: gradeComponents.value,
+            outOf: gradeComponents.outOf,
+            coefficient: gradeComponents.coefficient,
+            sortOrder: gradeComponents.sortOrder,
+          })
           .from(gradeComponents)
-          .where(eq(gradeComponents.userId, userId))
+          .innerJoin(grades, eq(gradeComponents.gradeId, grades.id))
+          .where(
+            and(eq(grades.yearId, year.id), eq(grades.userId, userId)),
+          )
           .orderBy(asc(gradeComponents.sortOrder)),
         db
           .select()

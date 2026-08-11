@@ -19,6 +19,17 @@ export const env = createEnv({
     AUTH_COOKIE_DOMAIN: z.string().min(1).optional(),
     ADMIN_USER_IDS: z.string().optional(),
 
+    /** Canonical OAuth resource identifier exposed in access-token audiences. */
+    MCP_RESOURCE_URL: z.url().optional(),
+    /** Separate HMAC key for multi-round-trip requestState (falls back to BETTER_AUTH_SECRET). */
+    MCP_REQUEST_STATE_SECRET: z.string().min(32).optional(),
+    /** Additional comma-separated HTTP Host values accepted by the MCP endpoint. */
+    MCP_ALLOWED_HOSTS: z.string().optional(),
+    /** Additional comma-separated browser Origins accepted by the MCP endpoint. */
+    MCP_ALLOWED_ORIGINS: z.string().optional(),
+    /** Temporary RFC 7591 bridge. Off unless explicitly enabled; CIMD is preferred. */
+    MCP_ENABLE_DCR: bool,
+
     CLIENT_URL: z.url(),
     /** URL scheme the mobile app returns to after an OAuth round trip. */
     MOBILE_SCHEME: z.string().default("avermate"),
@@ -37,11 +48,8 @@ export const env = createEnv({
 
     UPLOADTHING_TOKEN: z.string().optional(),
 
-    DISCORD_WEBHOOK_URL: z.url().optional(),
-
     // Escape hatches for local development, where no third party is reachable.
     DISABLE_EMAIL: bool,
-    DISABLE_FEEDBACK: bool,
     DISABLE_UPLOADS: bool,
   },
   runtimeEnv: process.env,

@@ -21,6 +21,8 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "../src/db";
 import {
   accounts,
+  announcementViews,
+  announcements,
   customAverageEntries,
   customAverages,
   dashboardCards,
@@ -32,9 +34,11 @@ import {
   subjects,
   users,
   verifications,
+  yearReviewViews,
   years,
 } from "../src/db/schema";
 import { defaultCards } from "@avermate/core";
+import { migrateLegacySeason, migrateLegacyTheme } from "./legacy-converters";
 
 const LEGACY_URL = process.env.LEGACY_DATABASE_URL ?? "file:../api/dev.db";
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -136,6 +140,9 @@ async function main() {
     legacyGrades,
     legacyComponents,
     legacyAverages,
+    legacyYearReviewViews,
+    legacyAnnouncements,
+    legacyAnnouncementViews,
   ] = await Promise.all([
     read("users"),
     read("accounts"),
@@ -148,6 +155,9 @@ async function main() {
     read("grades"),
     read("grade_components"),
     read("custom_averages"),
+    read("year_review_views"),
+    read("announcements"),
+    read("announcement_views"),
   ]);
 
   const counts = {
@@ -158,6 +168,9 @@ async function main() {
     grades: legacyGrades.length,
     components: legacyComponents.length,
     averages: legacyAverages.length,
+    yearReviewViews: legacyYearReviewViews.length,
+    announcements: legacyAnnouncements.length,
+    announcementViews: legacyAnnouncementViews.length,
   };
   console.info("Found:", counts);
 
@@ -188,26 +201,26 @@ async function main() {
   await insertMany(
     (rows) => db.insert(accounts).values(rows).onConflictDoNothing(),
     legacyAccounts
-        .filter((row) => userIds.has(String(row.userId)))
-        .map((row) => ({
-          id: String(row.id),
-          accountId: String(row.accountId),
-          providerId: String(row.providerId),
-          userId: String(row.userId),
-          accessToken: asString(row.accessToken),
-          accessTokenExpiresAt: row.accessTokenExpiresAt
-            ? asDate(row.accessTokenExpiresAt)
-            : null,
-          refreshToken: asString(row.refreshToken),
-          refreshTokenExpiresAt: row.refreshTokenExpiresAt
-            ? asDate(row.refreshTokenExpiresAt)
-            : null,
-          scope: asString(row.scope),
-          idToken: asString(row.idToken),
-          password: asString(row.password),
-          createdAt: asDate(row.createdAt),
-          updatedAt: asDate(row.updatedAt),
-        })),
+      .filter((row) => userIds.has(String(row.userId)))
+      .map((row) => ({
+        id: String(row.id),
+        accountId: String(row.accountId),
+        providerId: String(row.providerId),
+        userId: String(row.userId),
+        accessToken: asString(row.accessToken),
+        accessTokenExpiresAt: row.accessTokenExpiresAt
+          ? asDate(row.accessTokenExpiresAt)
+          : null,
+        refreshToken: asString(row.refreshToken),
+        refreshTokenExpiresAt: row.refreshTokenExpiresAt
+          ? asDate(row.refreshTokenExpiresAt)
+          : null,
+        scope: asString(row.scope),
+        idToken: asString(row.idToken),
+        password: asString(row.password),
+        createdAt: asDate(row.createdAt),
+        updatedAt: asDate(row.updatedAt),
+      })),
   );
 
   // Sessions carry over so nobody is signed out by the migration.
@@ -215,18 +228,18 @@ async function main() {
     await insertMany(
       (rows) => db.insert(sessions).values(rows).onConflictDoNothing(),
       legacySessions
-          .filter((row) => userIds.has(String(row.userId)))
-          .map((row) => ({
-            id: String(row.id),
-            token: String(row.token),
-            expiresAt: asDate(row.expiresAt),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.updatedAt),
-            ipAddress: asString(row.ipAddress),
-            userAgent: asString(row.userAgent),
-            impersonatedBy: asString(row.impersonatedBy),
-            userId: String(row.userId),
-          })),
+        .filter((row) => userIds.has(String(row.userId)))
+        .map((row) => ({
+          id: String(row.id),
+          token: String(row.token),
+          expiresAt: asDate(row.expiresAt),
+          createdAt: asDate(row.createdAt),
+          updatedAt: asDate(row.updatedAt),
+          ipAddress: asString(row.ipAddress),
+          userAgent: asString(row.userAgent),
+          impersonatedBy: asString(row.impersonatedBy),
+          userId: String(row.userId),
+        })),
     );
   }
 
@@ -234,105 +247,149 @@ async function main() {
     await insertMany(
       (rows) => db.insert(verifications).values(rows).onConflictDoNothing(),
       legacyVerifications.map((row) => ({
-          id: String(row.id),
-          identifier: String(row.identifier),
-          value: String(row.value),
-          expiresAt: asDate(row.expiresAt),
-          createdAt: asDate(row.createdAt),
-          updatedAt: asDate(row.updatedAt),
+        id: String(row.id),
+        identifier: String(row.identifier),
+        value: String(row.value),
+        expiresAt: asDate(row.expiresAt),
+        createdAt: asDate(row.createdAt),
+        updatedAt: asDate(row.updatedAt),
       })),
     );
   }
 
   // v1 kept the display scale implicit at 20 and `defaultOutOf` scaled by 100.
-  const yearIds = new Set(legacyYears.map((row) => String(row.id)));
+  const eligibleYears = legacyYears.filter((row) =>
+    userIds.has(String(row.userId)),
+  );
+  const yearIds = new Set(eligibleYears.map((row) => String(row.id)));
+  const yearOwners = new Map(
+    eligibleYears.map((row) => [String(row.id), String(row.userId)]),
+  );
   {
     await insertMany(
       (rows) => db.insert(years).values(rows).onConflictDoNothing(),
-      legacyYears
-          .filter((row) => userIds.has(String(row.userId)))
-          .map((row, index) => ({
-            id: String(row.id),
-            name: asString(row.name) ?? "",
-            startsAt: asDate(row.startDate),
-            endsAt: asDate(row.endDate),
-            scale: 20,
-            defaultOutOf: unscale(row.defaultOutOf, 20) || 20,
-            passingRatio: 0.5,
-            decimals: 2,
-            sortOrder: index,
-            userId: String(row.userId),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.createdAt),
-          })),
+      eligibleYears.map((row, index) => ({
+        id: String(row.id),
+        name: asString(row.name) ?? "",
+        startsAt: asDate(row.startDate),
+        endsAt: asDate(row.endDate),
+        scale: 20,
+        defaultOutOf: unscale(row.defaultOutOf, 20) || 20,
+        passingRatio: 0.5,
+        decimals: 2,
+        sortOrder: index,
+        userId: String(row.userId),
+        createdAt: asDate(row.createdAt),
+        updatedAt: asDate(row.createdAt),
+      })),
     );
   }
 
+  const eligiblePeriods = legacyPeriods.filter(
+    (row) =>
+      yearIds.has(String(row.yearId)) &&
+      yearOwners.get(String(row.yearId)) === String(row.userId),
+  );
+  const periodYears = new Map(
+    eligiblePeriods.map((row) => [String(row.id), String(row.yearId)]),
+  );
   {
     await insertMany(
       (rows) => db.insert(periods).values(rows).onConflictDoNothing(),
-      legacyPeriods
-          .filter((row) => yearIds.has(String(row.yearId)))
-          .map((row, index) => ({
-            id: String(row.id),
-            name: asString(row.name) ?? "",
-            startAt: asDate(row.startAt),
-            endAt: asDate(row.endAt),
-            isCumulative: asBoolean(row.isCumulative),
-            sortOrder: index,
-            yearId: String(row.yearId),
-            userId: String(row.userId),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.createdAt),
-          })),
+      eligiblePeriods.map((row, index) => ({
+        id: String(row.id),
+        name: asString(row.name) ?? "",
+        startAt: asDate(row.startAt),
+        endAt: asDate(row.endAt),
+        isCumulative: asBoolean(row.isCumulative),
+        sortOrder: index,
+        yearId: String(row.yearId),
+        userId: String(row.userId),
+        createdAt: asDate(row.createdAt),
+        updatedAt: asDate(row.createdAt),
+      })),
     );
   }
 
-  const subjectIds = new Set(legacySubjects.map((row) => String(row.id)));
+  const eligibleSubjects = legacySubjects.filter(
+    (row) =>
+      yearIds.has(String(row.yearId)) &&
+      yearOwners.get(String(row.yearId)) === String(row.userId),
+  );
+  const subjectYears = new Map(
+    eligibleSubjects.map((row) => [String(row.id), String(row.yearId)]),
+  );
+  const subjectOwners = new Map(
+    eligibleSubjects.map((row) => [String(row.id), String(row.userId)]),
+  );
+  const subjectIds = new Set(subjectYears.keys());
   {
     await insertMany(
       (rows) => db.insert(subjects).values(rows).onConflictDoNothing(),
-      legacySubjects
-          .filter((row) => yearIds.has(String(row.yearId)))
-          .map((row, index) => ({
-            id: String(row.id),
-            name: asString(row.name) ?? "",
-            shortName: null,
-            parentId: asString(row.parentId),
-            coefficient: unscale(row.coefficient, 1),
-            kind: asBoolean(row.isDisplaySubject) ? "category" : "subject",
-            isMain: asBoolean(row.isMainSubject),
-            sortOrder: index,
-            yearId: String(row.yearId),
-            userId: String(row.userId),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.createdAt),
-          })),
+      eligibleSubjects.map((row, index) => {
+        const parentId = asString(row.parentId);
+        const validParent =
+          parentId &&
+          subjectYears.get(parentId) === String(row.yearId) &&
+          subjectOwners.get(parentId) === String(row.userId)
+            ? parentId
+            : null;
+        return {
+          id: String(row.id),
+          name: asString(row.name) ?? "",
+          shortName: null,
+          parentId: validParent,
+          coefficient: unscale(row.coefficient, 1),
+          kind: asBoolean(row.isDisplaySubject) ? "category" : "subject",
+          isMain: asBoolean(row.isMainSubject),
+          sortOrder: index,
+          yearId: String(row.yearId),
+          userId: String(row.userId),
+          createdAt: asDate(row.createdAt),
+          updatedAt: asDate(row.createdAt),
+        };
+      }),
     );
   }
 
-  const gradeIds = new Set(legacyGrades.map((row) => String(row.id)));
+  const eligibleGrades = legacyGrades.filter((row) => {
+    const subjectId = String(row.subjectId);
+    return (
+      subjectIds.has(subjectId) &&
+      subjectOwners.get(subjectId) === String(row.userId)
+    );
+  });
+  const gradeIds = new Set(eligibleGrades.map((row) => String(row.id)));
+  const gradeOwners = new Map(
+    eligibleGrades.map((row) => [String(row.id), String(row.userId)]),
+  );
   {
     await insertMany(
       (rows) => db.insert(grades).values(rows).onConflictDoNothing(),
-      legacyGrades
-          .filter((row) => subjectIds.has(String(row.subjectId)))
-          .map((row) => ({
-            id: String(row.id),
-            name: asString(row.name) ?? "",
-            value: unscale(row.value, 0),
-            outOf: unscale(row.outOf, 20) || 20,
-            coefficient: unscale(row.coefficient, 1),
-            isComposite: asBoolean(row.isComposite),
-            note: null,
-            passedAt: asDate(row.passedAt),
-            subjectId: String(row.subjectId),
-            periodId: asString(row.periodId),
-            yearId: String(row.yearId),
-            userId: String(row.userId),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.createdAt),
-          })),
+      eligibleGrades.map((row) => {
+        const yearId = subjectYears.get(String(row.subjectId)) as string;
+        const legacyPeriodId = asString(row.periodId);
+        const periodId =
+          legacyPeriodId && periodYears.get(legacyPeriodId) === yearId
+            ? legacyPeriodId
+            : null;
+        return {
+          id: String(row.id),
+          name: asString(row.name) ?? "",
+          value: unscale(row.value, 0),
+          outOf: unscale(row.outOf, 20) || 20,
+          coefficient: unscale(row.coefficient, 1),
+          isComposite: asBoolean(row.isComposite),
+          note: null,
+          passedAt: asDate(row.passedAt),
+          subjectId: String(row.subjectId),
+          periodId,
+          yearId,
+          userId: String(row.userId),
+          createdAt: asDate(row.createdAt),
+          updatedAt: asDate(row.createdAt),
+        };
+      }),
     );
   }
 
@@ -340,19 +397,23 @@ async function main() {
     await insertMany(
       (rows) => db.insert(gradeComponents).values(rows).onConflictDoNothing(),
       legacyComponents
-          .filter((row) => gradeIds.has(String(row.gradeId)))
-          .map((row, index) => ({
-            id: String(row.id),
-            gradeId: String(row.gradeId),
-            name: asString(row.name) ?? "",
-            value: unscale(row.value, 0),
-            outOf: unscale(row.outOf, 20) || 20,
-            coefficient: unscale(row.coefficient, 1),
-            sortOrder: index,
-            userId: String(row.userId),
-            createdAt: asDate(row.createdAt),
-            updatedAt: asDate(row.updatedAt),
-          })),
+        .filter(
+          (row) =>
+            gradeIds.has(String(row.gradeId)) &&
+            gradeOwners.get(String(row.gradeId)) === String(row.userId),
+        )
+        .map((row, index) => ({
+          id: String(row.id),
+          gradeId: String(row.gradeId),
+          name: asString(row.name) ?? "",
+          value: unscale(row.value, 0),
+          outOf: unscale(row.outOf, 20) || 20,
+          coefficient: unscale(row.coefficient, 1),
+          sortOrder: index,
+          userId: String(row.userId),
+          createdAt: asDate(row.createdAt),
+          updatedAt: asDate(row.updatedAt),
+        })),
     );
   }
 
@@ -365,7 +426,14 @@ async function main() {
   }
 
   for (const [index, row] of legacyAverages.entries()) {
-    if (!yearIds.has(String(row.yearId))) continue;
+    const averageYearId = String(row.yearId);
+    const averageUserId = String(row.userId);
+    if (
+      !yearIds.has(averageYearId) ||
+      yearOwners.get(averageYearId) !== averageUserId
+    ) {
+      continue;
+    }
 
     await db
       .insert(customAverages)
@@ -382,30 +450,90 @@ async function main() {
       .onConflictDoNothing();
 
     const entries = parseJson<LegacyEntry[]>(row.subjects, []).filter(
-      (entry) => entry.id && subjectIds.has(entry.id),
+      (entry) =>
+        entry.id &&
+        subjectIds.has(entry.id) &&
+        subjectYears.get(entry.id) === averageYearId &&
+        subjectOwners.get(entry.id) === averageUserId,
     );
     if (entries.length === 0) continue;
 
     await insertMany(
-      (rows) => db.insert(customAverageEntries).values(rows).onConflictDoNothing(),
+      (rows) =>
+        db.insert(customAverageEntries).values(rows).onConflictDoNothing(),
       entries.map((entry) => ({
-          averageId: String(row.id),
-          subjectId: String(entry.id),
-          coefficient:
-            entry.customCoefficient === null ||
-            entry.customCoefficient === undefined
-              ? null
-              : Number(entry.customCoefficient),
+        averageId: String(row.id),
+        subjectId: String(entry.id),
+        coefficient:
+          entry.customCoefficient === null ||
+          entry.customCoefficient === undefined
+            ? null
+            : Number(entry.customCoefficient),
         includeChildren: entry.includeChildren ?? true,
       })),
     );
   }
+
+  const eligibleReviewViews = legacyYearReviewViews.filter(
+    (row) =>
+      userIds.has(String(row.userId)) &&
+      yearIds.has(String(row.yearId)) &&
+      yearOwners.get(String(row.yearId)) === String(row.userId),
+  );
+  await insertMany(
+    (rows) => db.insert(yearReviewViews).values(rows).onConflictDoNothing(),
+    eligibleReviewViews.map((row) => ({
+      id: String(row.id),
+      userId: String(row.userId),
+      yearId: String(row.yearId),
+      reviewKey: asString(row.reviewKey) ?? "end-of-year",
+      seenAt: asDate(row.clickedAt ?? row.seenAt),
+    })),
+  );
+
+  const eligibleAnnouncements = legacyAnnouncements.filter((row) =>
+    userIds.has(String(row.createdByUserId)),
+  );
+  const announcementIds = new Set(
+    eligibleAnnouncements.map((row) => String(row.id)),
+  );
+  await insertMany(
+    (rows) => db.insert(announcements).values(rows).onConflictDoNothing(),
+    eligibleAnnouncements.map((row) => ({
+      id: String(row.id),
+      title: asString(row.title) ?? "",
+      message: asString(row.message) ?? "",
+      tone: asString(row.tone) ?? "info",
+      active: asBoolean(row.active),
+      startsAt: row.startsAt ? asDate(row.startsAt) : null,
+      endsAt: row.endsAt ? asDate(row.endsAt) : null,
+      createdByUserId: String(row.createdByUserId),
+      createdAt: asDate(row.createdAt),
+      updatedAt: asDate(row.updatedAt ?? row.createdAt),
+    })),
+  );
+
+  const eligibleAnnouncementViews = legacyAnnouncementViews.filter(
+    (row) =>
+      announcementIds.has(String(row.announcementId)) &&
+      userIds.has(String(row.userId)),
+  );
+  await insertMany(
+    (rows) => db.insert(announcementViews).values(rows).onConflictDoNothing(),
+    eligibleAnnouncementViews.map((row) => ({
+      id: String(row.id),
+      announcementId: String(row.announcementId),
+      userId: String(row.userId),
+      seenAt: asDate(row.viewedAt ?? row.seenAt),
+    })),
+  );
 
   // Preferences move across where the shapes still line up; the rest fall back
   // to defaults, which is the honest outcome for settings that no longer exist.
   for (const row of legacySettings) {
     if (!userIds.has(String(row.userId))) continue;
     const chart = parseJson<Record<string, unknown>>(row.chartSettings, {});
+    const migratedTheme = migrateLegacyTheme(row);
 
     await db
       .insert(preferences)
@@ -413,13 +541,15 @@ async function main() {
         userId: String(row.userId),
         theme: asString(row.theme) ?? "system",
         language: asString(row.language) ?? "system",
-        themePreset: "default",
-        customTheme: typeof row.customTheme === "string" ? row.customTheme : "{}",
-        themeShape: "{}",
+        themePreset: migratedTheme.themePreset,
+        customTheme: JSON.stringify(migratedTheme.customTheme),
+        themeShape: JSON.stringify(migratedTheme.themeShape),
         seasonalThemesEnabled: asBoolean(row.seasonalThemesEnabled),
-        seasonalTheme: asString(row.seasonalTheme) ?? "auto",
+        seasonalTheme: migrateLegacySeason(row.seasonalTheme),
         hapticsEnabled:
-          row.hapticsEnabled === undefined ? true : asBoolean(row.hapticsEnabled),
+          row.hapticsEnabled === undefined
+            ? true
+            : asBoolean(row.hapticsEnabled),
         reduceMotion: false,
         compactMode: false,
         chartSettings: JSON.stringify({
@@ -427,18 +557,22 @@ async function main() {
           showTrend: chart.showTrendLine ?? false,
           trendSubdivisions: chart.trendLineSubdivisions ?? 1,
           showPoints: true,
+          showSubSubjects:
+            chart.showSubSubjectsInSubjectCharts === undefined
+              ? true
+              : asBoolean(chart.showSubSubjectsInSubjectCharts),
         }),
-        unlockedThemes: asBoolean(row.mokattamThemeAvailable)
-          ? JSON.stringify(["mokattam"])
-          : "[]",
-        seenCelebrations: "[]",
+        unlockedThemes: JSON.stringify(migratedTheme.unlockedThemes),
+        seenCelebrations: JSON.stringify(migratedTheme.seenCelebrations),
       })
       .onConflictDoNothing();
   }
 
   // v1 had no dashboard cards, so every migrated year starts on the default
   // layout instead of an empty grid.
-  const migratedYears = await db.select({ id: years.id, userId: years.userId }).from(years);
+  const migratedYears = await db
+    .select({ id: years.id, userId: years.userId })
+    .from(years);
   for (const year of migratedYears) {
     const [{ total = 0 } = {}] = await db
       .select({ total: sql<number>`count(*)` })
@@ -463,6 +597,80 @@ async function main() {
         userId: year.userId,
       })),
     );
+  }
+
+  const [
+    migratedReviewViews,
+    migratedAnnouncements,
+    migratedAnnouncementViews,
+  ] = await Promise.all([
+    db
+      .select({
+        userId: yearReviewViews.userId,
+        yearId: yearReviewViews.yearId,
+        reviewKey: yearReviewViews.reviewKey,
+      })
+      .from(yearReviewViews),
+    db.select({ id: announcements.id }).from(announcements),
+    db
+      .select({
+        announcementId: announcementViews.announcementId,
+        userId: announcementViews.userId,
+      })
+      .from(announcementViews),
+  ]);
+
+  const reviewKeys = new Set(
+    migratedReviewViews.map(
+      (row) => `${row.userId}\u0000${row.yearId}\u0000${row.reviewKey}`,
+    ),
+  );
+  const announcementKeys = new Set(migratedAnnouncements.map((row) => row.id));
+  const viewKeys = new Set(
+    migratedAnnouncementViews.map(
+      (row) => `${row.announcementId}\u0000${row.userId}`,
+    ),
+  );
+  const reviewPresent = eligibleReviewViews.filter((row) =>
+    reviewKeys.has(
+      `${String(row.userId)}\u0000${String(row.yearId)}\u0000${asString(row.reviewKey) ?? "end-of-year"}`,
+    ),
+  ).length;
+  const announcementsPresent = eligibleAnnouncements.filter((row) =>
+    announcementKeys.has(String(row.id)),
+  ).length;
+  const announcementViewsPresent = eligibleAnnouncementViews.filter((row) =>
+    viewKeys.has(`${String(row.announcementId)}\u0000${String(row.userId)}`),
+  ).length;
+
+  const reconciliation = {
+    yearReviewViews: {
+      source: legacyYearReviewViews.length,
+      eligible: eligibleReviewViews.length,
+      present: reviewPresent,
+      skipped: legacyYearReviewViews.length - eligibleReviewViews.length,
+    },
+    announcements: {
+      source: legacyAnnouncements.length,
+      eligible: eligibleAnnouncements.length,
+      present: announcementsPresent,
+      skipped: legacyAnnouncements.length - eligibleAnnouncements.length,
+    },
+    announcementViews: {
+      source: legacyAnnouncementViews.length,
+      eligible: eligibleAnnouncementViews.length,
+      present: announcementViewsPresent,
+      skipped:
+        legacyAnnouncementViews.length - eligibleAnnouncementViews.length,
+    },
+  };
+  console.info("Historical-data reconciliation:", reconciliation);
+  if (
+    reviewPresent !== eligibleReviewViews.length ||
+    announcementsPresent !== eligibleAnnouncements.length ||
+    announcementViewsPresent !== eligibleAnnouncementViews.length
+  ) {
+    throw new Error("Historical-data reconciliation failed");
   }
 
   console.info("Migration complete.");

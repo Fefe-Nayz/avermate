@@ -1,9 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { UTApi } from "uploadthing/server";
 import { db } from "../db";
-import { users } from "../db/schema";
+import { accounts, users } from "../db/schema";
+import { auth } from "../lib/auth";
 import { env } from "../lib/env";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 
@@ -42,6 +43,7 @@ export const profileRouter = {
         name: users.name,
         email: users.email,
         image: users.avatarUrl,
+        createdAt: users.createdAt,
       })
       .from(users)
       .where(eq(users.id, context.session.user.id))
@@ -50,7 +52,7 @@ export const profileRouter = {
     if (!user) {
       throw new ORPCError("UNAUTHORIZED", { message: "Session user missing" });
     }
-    return user;
+    return { ...user, createdAt: user.createdAt.toISOString() };
   }),
 
   uploadAvatar: protectedProcedure
@@ -68,7 +70,12 @@ export const profileRouter = {
         badRequest("Avatar uploads are not configured on this server");
       }
 
-      const previous = keyOf(user.image ?? null);
+      const [current] = await db
+        .select({ avatarUrl: users.avatarUrl })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      const previous = keyOf(current?.avatarUrl ?? null);
       const result = await uploads.uploadFiles(
         new File([input.image], `${user.id}.png`, { type: input.image.type }),
       );
@@ -90,7 +97,12 @@ export const profileRouter = {
 
   removeAvatar: protectedProcedure.handler(async ({ context }) => {
     const user = context.session.user;
-    const key = keyOf(user.image ?? null);
+    const [current] = await db
+      .select({ avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    const key = keyOf(current?.avatarUrl ?? null);
 
     await db
       .update(users)
@@ -105,4 +117,44 @@ export const profileRouter = {
   uploadsEnabled: protectedProcedure.handler(() => ({
     enabled: Boolean(uploads) && !env.DISABLE_UPLOADS,
   })),
+
+  /**
+   * OAuth-only accounts have no credential row. Better Auth intentionally
+   * keeps `setPassword` server-only, so this narrow bridge is authenticated by
+   * the same session headers and refuses to overwrite an existing password.
+   */
+  setPassword: protectedProcedure
+    .input(
+      z.object({
+        newPassword: z.string().min(8).max(128),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const [credential] = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            eq(accounts.providerId, "credential"),
+          ),
+        )
+        .limit(1);
+      if (credential) {
+        badRequest("Use change password for an account that already has one");
+      }
+
+      try {
+        await auth.api.setPassword({
+          body: { newPassword: input.newPassword },
+          headers: context.headers,
+        });
+      } catch (error) {
+        console.error("[auth] set password failed", error);
+        badRequest("The password could not be set");
+      }
+
+      return { ok: true };
+    }),
 };

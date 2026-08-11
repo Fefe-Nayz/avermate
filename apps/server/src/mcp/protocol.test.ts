@@ -1,0 +1,25 @@
+import { expect, test } from "bun:test";
+import { join } from "node:path";
+
+/**
+ * The server exports a process-wide libSQL client. Run the protocol suite in
+ * its own process so Bun's parallel test workers cannot close or migrate the
+ * database underneath unrelated router suites.
+ */
+test("MCP protocol, OAuth and destructive-flow conformance", async () => {
+  const child = Bun.spawn(["bun", "test", "./src/mcp/protocol.harness.ts"], {
+    cwd: join(import.meta.dir, "../.."),
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, BUN_TEST_QUIET: "1" },
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (exitCode !== 0) {
+    console.error([stdout, stderr].filter(Boolean).join("\n"));
+  }
+  expect(exitCode).toBe(0);
+}, 60_000);

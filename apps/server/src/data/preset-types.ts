@@ -1,4 +1,6 @@
 export interface PresetSubject {
+  /** Stable across versions. Omitted only by the legacy bootstrap dataset. */
+  key?: string;
   name: string;
   shortName?: string;
   /** Omitted means a plain subject; "category" lets children weigh in above it. */
@@ -9,13 +11,16 @@ export interface PresetSubject {
 }
 
 export interface PresetAverageEntry {
-  /** Matched against the subject names the preset itself creates. */
-  name: string;
+  /** Legacy presets match by name; managed versions use `subjectKey`. */
+  name?: string;
+  subjectKey?: string;
   coefficient?: number | null;
   includeChildren?: boolean;
 }
 
 export interface PresetAverage {
+  /** Stable across versions. Omitted only by the legacy bootstrap dataset. */
+  key?: string;
   name: string;
   isMain?: boolean;
   entries: PresetAverageEntry[];
@@ -40,4 +45,33 @@ export interface Preset {
   subjects: PresetSubject[];
   averages: PresetAverage[];
   periods?: PresetPeriod[];
+}
+
+export interface ManagedPresetSubject {
+  key: string;
+  name: string;
+  shortName?: string;
+  kind: "subject" | "category";
+  isMain: boolean;
+  coefficient: number;
+  children: ManagedPresetSubject[];
+}
+
+export interface ManagedPresetAverageEntry {
+  subjectKey: string;
+  coefficient: number | null;
+  includeChildren: boolean;
+}
+
+export interface ManagedPresetAverage {
+  key: string;
+  name: string;
+  isMain: boolean;
+  entries: ManagedPresetAverageEntry[];
+}
+
+/** The immutable payload stored for every published preset version. */
+export interface ManagedPresetConfiguration {
+  subjects: ManagedPresetSubject[];
+  averages: ManagedPresetAverage[];
 }

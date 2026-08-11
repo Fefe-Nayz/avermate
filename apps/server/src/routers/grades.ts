@@ -1,8 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { gradeComponents, grades, periods, subjects } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
+import { assertSameYear } from "../lib/domain-integrity";
+import { newId } from "../lib/id";
 import {
   requireGrade,
   requirePeriod,
@@ -43,6 +45,9 @@ function rollUp(
   let total = 0;
   for (const component of components) {
     if (component.outOf <= 0) continue;
+    if (component.value > component.outOf) {
+      badRequest("A grade component cannot be worth more than its maximum");
+    }
     const coefficient = component.coefficient > 0 ? component.coefficient : 0;
     if (coefficient === 0) continue;
     weighted += (component.value / component.outOf) * coefficient;
@@ -86,7 +91,12 @@ export const gradesRouter = {
     }),
 
   recent: protectedProcedure
-    .input(z.object({ yearId: z.string(), limit: z.number().int().min(1).max(50).default(5) }))
+    .input(
+      z.object({
+        yearId: z.string(),
+        limit: z.number().int().min(1).max(50).default(5),
+      }),
+    )
     .handler(async ({ context, input }) => {
       await requireYear(context.session.user.id, input.yearId);
       return db
@@ -112,7 +122,10 @@ export const gradesRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const subject = await requireSubject(userId, input.subjectId);
-      if (input.periodId) await requirePeriod(userId, input.periodId);
+      if (input.periodId) {
+        const period = await requirePeriod(userId, input.periodId);
+        assertSameYear("Period", subject.yearId, period.yearId);
+      }
 
       const isComposite = input.components.length > 0;
       const value = isComposite
@@ -125,9 +138,9 @@ export const gradesRouter = {
       const periodId =
         input.periodId ?? (await inferPeriod(subject.yearId, input.passedAt));
 
-      const [created] = await db
-        .insert(grades)
-        .values({
+      const gradeId = newId("gra");
+      const insertGrade = db.insert(grades).values({
+          id: gradeId,
           name: input.name,
           value,
           outOf: input.outOf,
@@ -139,24 +152,36 @@ export const gradesRouter = {
           periodId,
           yearId: subject.yearId,
           userId,
-        })
-        .returning();
+        });
+      const insertComponents = isComposite
+        ? [
+            db.insert(gradeComponents).values(
+              input.components.map((component, index) => ({
+                gradeId,
+                name: component.name,
+                value: component.value,
+                outOf: component.outOf,
+                coefficient: component.coefficient,
+                sortOrder: index,
+                userId,
+              })),
+            ),
+          ]
+        : [];
+      const statements = [insertGrade, ...insertComponents];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+
+      const [created] = await db
+        .select()
+        .from(grades)
+        .where(eq(grades.id, gradeId))
+        .limit(1);
       if (!created) badRequest("The grade could not be saved");
-
-      if (isComposite) {
-        await db.insert(gradeComponents).values(
-          input.components.map((component, index) => ({
-            gradeId: created.id,
-            name: component.name,
-            value: component.value,
-            outOf: component.outOf,
-            coefficient: component.coefficient,
-            sortOrder: index,
-            userId,
-          })),
-        );
-      }
-
       return created;
     }),
 
@@ -172,7 +197,24 @@ export const gradesRouter = {
         const subject = await requireSubject(userId, patch.subjectId);
         yearId = subject.yearId;
       }
-      if (patch.periodId) await requirePeriod(userId, patch.periodId);
+      let periodId = existing.periodId;
+      if (patch.periodId) {
+        const period = await requirePeriod(userId, patch.periodId);
+        assertSameYear("Period", yearId, period.yearId);
+        periodId = period.id;
+      } else if (patch.periodId === null) {
+        periodId = null;
+      } else if (yearId !== existing.yearId) {
+        periodId = await inferPeriod(
+          yearId,
+          patch.passedAt ?? existing.passedAt,
+        );
+      } else if (periodId) {
+        // Protect old/imported rows as they are edited, rather than carrying a
+        // pre-existing cross-year reference forward forever.
+        const period = await requirePeriod(userId, periodId);
+        assertSameYear("Period", yearId, period.yearId);
+      }
 
       const outOf = patch.outOf ?? existing.outOf;
       let value = patch.value ?? existing.value;
@@ -180,22 +222,8 @@ export const gradesRouter = {
 
       if (components !== undefined) {
         isComposite = components.length > 0;
-        await db
-          .delete(gradeComponents)
-          .where(eq(gradeComponents.gradeId, gradeId));
         if (isComposite) {
           value = rollUp(components, outOf);
-          await db.insert(gradeComponents).values(
-            components.map((component, index) => ({
-              gradeId,
-              name: component.name,
-              value: component.value,
-              outOf: component.outOf,
-              coefficient: component.coefficient,
-              sortOrder: index,
-              userId,
-            })),
-          );
         }
       }
 
@@ -203,7 +231,7 @@ export const gradesRouter = {
         badRequest("A grade cannot be worth more than its maximum");
       }
 
-      const [updated] = await db
+      const updateGrade = db
         .update(grades)
         .set({
           ...patch,
@@ -211,10 +239,50 @@ export const gradesRouter = {
           outOf,
           isComposite,
           yearId,
+          periodId,
           updatedAt: new Date(),
         })
+        .where(eq(grades.id, gradeId));
+
+      if (components === undefined) {
+        await updateGrade;
+      } else {
+        const deleteComponents = db
+          .delete(gradeComponents)
+          .where(eq(gradeComponents.gradeId, gradeId));
+        const insertComponents = isComposite
+          ? [
+              db.insert(gradeComponents).values(
+                components.map((component, index) => ({
+                  gradeId,
+                  name: component.name,
+                  value: component.value,
+                  outOf: component.outOf,
+                  coefficient: component.coefficient,
+                  sortOrder: index,
+                  userId,
+                })),
+              ),
+            ]
+          : [];
+        const statements = [
+          deleteComponents,
+          ...insertComponents,
+          updateGrade,
+        ];
+        await db.batch(
+          statements as [
+            (typeof statements)[number],
+            ...(typeof statements)[number][],
+          ],
+        );
+      }
+
+      const [updated] = await db
+        .select()
+        .from(grades)
         .where(eq(grades.id, gradeId))
-        .returning();
+        .limit(1);
       return updated;
     }),
 
@@ -222,7 +290,13 @@ export const gradesRouter = {
   reassign: protectedProcedure
     .input(
       z.object({
-        gradeIds: z.array(z.string()).min(1).max(200),
+        gradeIds: z
+          .array(z.string())
+          .min(1)
+          .max(200)
+          .refine((ids) => new Set(ids).size === ids.length, {
+            message: "Each grade may only be selected once",
+          }),
         subjectId: z.string().optional(),
         periodId: z.string().nullable().optional(),
       }),
@@ -232,25 +306,60 @@ export const gradesRouter = {
       const target = input.subjectId
         ? await requireSubject(userId, input.subjectId)
         : null;
-      if (input.periodId) await requirePeriod(userId, input.periodId);
+      const selectedPeriod = input.periodId
+        ? await requirePeriod(userId, input.periodId)
+        : null;
 
-      await Promise.all(
-        input.gradeIds.map(async (gradeId) => {
-          await requireGrade(userId, gradeId);
-          await db
+      const selectedGrades = await db
+        .select()
+        .from(grades)
+        .where(
+          and(
+            eq(grades.userId, userId),
+            inArray(grades.id, input.gradeIds),
+          ),
+        );
+      if (selectedGrades.length !== input.gradeIds.length) {
+        badRequest("At least one selected grade is unavailable");
+      }
+      const updates = await Promise.all(
+        selectedGrades.map(async (grade) => {
+          const yearId = target?.yearId ?? grade.yearId;
+          if (selectedPeriod) assertSameYear("Period", yearId, selectedPeriod.yearId);
+          return {
+            grade,
+            periodId:
+              input.periodId !== undefined
+                ? input.periodId
+                : target && target.yearId !== grade.yearId
+                  ? await inferPeriod(target.yearId, grade.passedAt)
+                  : grade.periodId,
+          };
+        }),
+      );
+      await db.transaction(async (tx) => {
+        for (const update of updates) {
+          const rows = await tx
             .update(grades)
             .set({
               ...(target
                 ? { subjectId: target.id, yearId: target.yearId }
                 : {}),
-              ...(input.periodId !== undefined
-                ? { periodId: input.periodId }
-                : {}),
+              periodId: update.periodId,
               updatedAt: new Date(),
             })
-            .where(and(eq(grades.id, gradeId), eq(grades.userId, userId)));
-        }),
-      );
+            .where(
+              and(
+                eq(grades.id, update.grade.id),
+                eq(grades.userId, userId),
+              ),
+            )
+            .returning({ id: grades.id });
+          if (rows.length !== 1) {
+            throw new Error("A selected grade changed during reassignment");
+          }
+        }
+      });
 
       return { ok: true, count: input.gradeIds.length };
     }),

@@ -53,7 +53,11 @@ export function gradeImpact(
 ): Impact {
   const withValue = graph.ratio(target, scope);
   const withoutValue = withoutGrade(graph, gradeId).ratio(target, scope);
-  return { delta: ratioDelta(withValue, withoutValue), withValue, withoutValue };
+  return {
+    delta: ratioDelta(withValue, withoutValue),
+    withValue,
+    withoutValue,
+  };
 }
 
 /** How much a whole subject (and its sub-tree) moves an average. */
@@ -65,7 +69,11 @@ export function subjectImpact(
 ): Impact {
   const withValue = graph.ratio(target, scope);
   const withoutValue = withoutSubtree(graph, subjectId).ratio(target, scope);
-  return { delta: ratioDelta(withValue, withoutValue), withValue, withoutValue };
+  return {
+    delta: ratioDelta(withValue, withoutValue),
+    withValue,
+    withoutValue,
+  };
 }
 
 // ---------------------------------------------------------------- time series
@@ -161,6 +169,103 @@ export function trendLine(points: readonly SeriesPoint[]): SeriesPoint[] {
   }));
 }
 
+/**
+ * A piecewise least-squares trend over real timestamps.
+ *
+ * `subdivisions = 1` is a single global trend. Higher values split the
+ * observations into equally sized chronological groups, which reveals local
+ * changes without turning the trend into a moving average. Missing readings
+ * remain missing outside the first/last observed sample, and predictions are
+ * clamped to a valid ratio so a chart can never draw beyond the grading scale.
+ */
+export function segmentedTrendLine(
+  points: readonly SeriesPoint[],
+  subdivisions = 1,
+): SeriesPoint[] {
+  const observed = points
+    .map((point, index) => ({
+      date: point.date,
+      index,
+      ratio: point.ratio,
+      timestamp: point.date.getTime(),
+    }))
+    .filter(
+      (
+        point,
+      ): point is {
+        date: Date;
+        index: number;
+        ratio: number;
+        timestamp: number;
+      } => point.ratio !== null && Number.isFinite(point.timestamp),
+    );
+
+  if (observed.length < 2) return [];
+
+  const firstTimestamp = observed[0]?.timestamp ?? 0;
+  const normalised = observed.map((point) => ({
+    ...point,
+    x: (point.timestamp - firstTimestamp) / 86_400_000,
+  }));
+  const segmentCount = Math.min(
+    normalised.length,
+    Math.max(1, Math.round(subdivisions)),
+  );
+
+  const segments: Array<{
+    endX: number;
+    intercept: number;
+    slope: number;
+  }> = [];
+
+  for (let segment = 0; segment < segmentCount; segment += 1) {
+    const start = Math.floor((segment * normalised.length) / segmentCount);
+    const end = Math.max(
+      start,
+      Math.floor(((segment + 1) * normalised.length) / segmentCount) - 1,
+    );
+    const sample = normalised.slice(start, end + 1);
+    if (sample.length === 0) continue;
+
+    const count = sample.length;
+    const sumX = sample.reduce((sum, point) => sum + point.x, 0);
+    const sumY = sample.reduce((sum, point) => sum + point.ratio, 0);
+    const sumXY = sample.reduce((sum, point) => sum + point.x * point.ratio, 0);
+    const sumXX = sample.reduce((sum, point) => sum + point.x * point.x, 0);
+    const denominator = count * sumXX - sumX * sumX;
+    const slope =
+      denominator === 0 ? 0 : (count * sumXY - sumX * sumY) / denominator;
+    const intercept = (sumY - slope * sumX) / count;
+    segments.push({
+      endX: sample.at(-1)?.x ?? 0,
+      intercept,
+      slope,
+    });
+  }
+
+  const firstIndex = observed[0]?.index ?? 0;
+  const lastIndex = observed.at(-1)?.index ?? points.length - 1;
+
+  return points.map((point, index) => {
+    if (index < firstIndex || index > lastIndex || segments.length === 0) {
+      return { date: point.date, ratio: null };
+    }
+
+    const x = (point.date.getTime() - firstTimestamp) / 86_400_000;
+    const segment =
+      segments.find((candidate) => x <= candidate.endX) ?? segments.at(-1);
+    const prediction = segment
+      ? segment.intercept + segment.slope * x
+      : Number.NaN;
+    return {
+      date: point.date,
+      ratio: Number.isFinite(prediction)
+        ? Math.min(1, Math.max(0, prediction))
+        : null,
+    };
+  });
+}
+
 /** Rolling mean over the last `window` grades of a subject. */
 export function movingAverage(
   grades: readonly Grade[],
@@ -214,10 +319,7 @@ export function standardDeviation(values: readonly number[]): number | null {
 }
 
 /** Ratios of every grade under a subject, in chronological order. */
-export function gradeRatios(
-  graph: SubjectGraph,
-  subjectId?: string,
-): number[] {
+export function gradeRatios(graph: SubjectGraph, subjectId?: string): number[] {
   return graph
     .allGrades(subjectId)
     .map((grade) => gradeRatio(grade))
@@ -324,7 +426,8 @@ export function projectedRatio(
 ): number | null {
   const slope = trend(series);
   const last = [...series].reverse().find((point) => point.ratio !== null);
-  if (slope === null || !last || last.ratio === null) return last?.ratio ?? null;
+  if (slope === null || !last || last.ratio === null)
+    return last?.ratio ?? null;
   return Math.min(1, Math.max(0, last.ratio + slope * stepsAhead));
 }
 

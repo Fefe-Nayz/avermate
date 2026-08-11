@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import {
   customAverages,
+  dashboardCards,
   goals,
   grades,
   periods,
@@ -77,5 +78,17 @@ export async function requireGoal(userId: string, goalId: string) {
     .where(and(eq(goals.id, goalId), eq(goals.userId, userId)))
     .limit(1);
   if (!row) notFound("Goal");
+  return row;
+}
+
+export async function requireDashboardCard(userId: string, cardId: string) {
+  const [row] = await db
+    .select()
+    .from(dashboardCards)
+    .where(
+      and(eq(dashboardCards.id, cardId), eq(dashboardCards.userId, userId)),
+    )
+    .limit(1);
+  if (!row) notFound("Dashboard card");
   return row;
 }
