@@ -3,7 +3,6 @@
 import * as React from "react"
 import { PipetteIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
@@ -24,8 +23,8 @@ import { cn } from "@/lib/utils"
  * This one is a saturation square and a hue slider, which is the arrangement
  * every design tool uses, plus the raw value kept editable underneath: the
  * square is for choosing, the field is for pasting the exact token a design
- * hands you. Anything the square cannot represent is left alone rather than
- * rounded to hex behind your back.
+ * hands you. Every notation is draggable, because the browser is asked to
+ * convert it rather than this file trying to.
  */
 
 interface Hsv {
@@ -49,48 +48,56 @@ function hsvToHex({ h, s, v }: Hsv): string {
   return `#${f(5)}${f(3)}${f(1)}`
 }
 
-function hexToHsv(hex: string): Hsv | null {
-  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!match) return null
 
-  const int = Number.parseInt(match[1] as string, 16)
-  const r = ((int >> 16) & 255) / 255
-  const g = ((int >> 8) & 255) / 255
-  const b = (int & 255) / 255
+/**
+ * Any CSS colour, as the three channels the square needs.
+ *
+ * Reading a computed `color` back is no good here: a browser hands `oklch()`
+ * back as `oklab()` or `lab()`, which still needs parsing. A 1×1 canvas makes
+ * the browser do the conversion and hands over plain bytes, so `oklch(…)`, a
+ * keyword and a hex string all arrive in the same shape — and an unparseable
+ * value simply leaves the fill untouched, which is how we detect it.
+ */
+function toRgb(value: string): [number, number, number] | null {
+  if (typeof document === "undefined" || !value.trim()) return null
 
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
+  const context = document.createElement("canvas").getContext("2d")
+  if (!context) return null
+
+  // Two passes against different backstops: an invalid value leaves the
+  // previous fill in place, so a single pass cannot tell "invalid" from
+  // "happens to equal the backstop".
+  context.fillStyle = "#000000"
+  context.fillStyle = value
+  const first = context.fillStyle
+  context.fillStyle = "#ffffff"
+  context.fillStyle = value
+  if (first !== context.fillStyle) return null
+
+  context.fillRect(0, 0, 1, 1)
+  const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+  return [r as number, g as number, b as number]
+}
+
+function rgbToHsv([r, g, b]: [number, number, number]): Hsv {
+  const red = r / 255
+  const green = g / 255
+  const blue = b / 255
+
+  const max = Math.max(red, green, blue)
+  const min = Math.min(red, green, blue)
   const delta = max - min
 
   let h = 0
   if (delta !== 0) {
-    if (max === r) h = ((g - b) / delta) % 6
-    else if (max === g) h = (b - r) / delta + 2
-    else h = (r - g) / delta + 4
+    if (max === red) h = ((green - blue) / delta) % 6
+    else if (max === green) h = (blue - red) / delta + 2
+    else h = (red - green) / delta + 4
   }
   h = Math.round(h * 60)
   if (h < 0) h += 360
 
   return { h, s: max === 0 ? 0 : delta / max, v: max }
-}
-
-/**
- * What the browser makes of an arbitrary CSS colour. `oklch(…)`, a named
- * colour and a hex string all round-trip through here, so the swatch shows the
- * real thing rather than a guess.
- */
-function resolveCss(value: string): string | null {
-  if (typeof document === "undefined" || !value.trim()) return null
-  const probe = document.createElement("span")
-  probe.style.color = ""
-  probe.style.color = value
-  if (!probe.style.color) return null
-
-  probe.style.display = "none"
-  document.body.appendChild(probe)
-  const resolved = getComputedStyle(probe).color
-  probe.remove()
-  return resolved || null
 }
 
 export function ColorPicker({
@@ -110,15 +117,21 @@ export function ColorPicker({
   const [open, setOpen] = React.useState(false)
   const [draft, setDraft] = React.useState(value)
   const areaRef = React.useRef<HTMLDivElement>(null)
+  const dragging = React.useRef(false)
 
   React.useEffect(() => setDraft(value), [value])
 
-  // The square can only represent what it can parse. Everything else keeps its
-  // own notation and simply is not draggable, which is better than rewriting a
-  // designer's `oklch()` into a lossy hex the moment the popover opens.
-  const hsv = hexToHsv(value) ?? { h: 210, s: 0.5, v: 0.6 }
-  const editable = hexToHsv(value) !== null
-  const swatch = resolveCss(value) ?? "transparent"
+  const rgb = React.useMemo(() => toRgb(value), [value])
+
+  /**
+   * Everything is draggable. The first version refused unless the value was
+   * already a hex string, which disabled the square for exactly the two cases
+   * that matter most: a token that is still unset, and one written as
+   * `oklch(…)`. Since the canvas parses both, dragging simply starts from
+   * whatever colour is really there — and only rewrites it once you drag.
+   */
+  const hsv = rgb ? rgbToHsv(rgb) : { h: 210, s: 0.6, v: 0.7 }
+  const swatch = rgb ? `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]})` : "transparent"
 
   const commit = (next: Hsv) => onValueChange(hsvToHex(next))
 
@@ -134,34 +147,36 @@ export function ColorPicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
+      {/*
+       * A plain button, not the `Button` component. That one brings its own
+       * height, padding and min-width, which fought `size-7` and left the
+       * swatch an oval with the colour showing as a sliver down the middle.
+       * A swatch is a coloured circle; it needs none of that.
+       */}
       <PopoverTrigger
         render={
-          <Button
+          <button
             type="button"
-            variant="outline"
-            size="sm"
             disabled={disabled}
             aria-label={label}
-            className={cn("size-7 shrink-0 rounded-full border p-0", className)}
+            className={cn(
+              "block size-6 shrink-0 rounded-full ring-1 ring-border transition-shadow outline-none hover:ring-2 hover:ring-ring/40 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+              className
+            )}
+            style={
+              swatch === "transparent"
+                ? {
+                    // An unset token reads as a hole, not as black.
+                    backgroundImage:
+                      "linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%), linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%)",
+                    backgroundSize: "6px 6px",
+                    backgroundPosition: "0 0, 3px 3px",
+                  }
+                : { background: swatch }
+            }
           />
         }
-      >
-        <span
-          aria-hidden
-          className="size-full rounded-full"
-          style={
-            swatch === "transparent"
-              ? {
-                  // An unset token reads as a hole, not as black.
-                  backgroundImage:
-                    "linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%), linear-gradient(45deg, var(--muted) 25%, transparent 25%, transparent 75%, var(--muted) 75%)",
-                  backgroundSize: "6px 6px",
-                  backgroundPosition: "0 0, 3px 3px",
-                }
-              : { background: swatch }
-          }
-        />
-      </PopoverTrigger>
+      />
 
       <PopoverContent className="w-60 space-y-3 p-3" align="start">
         <div
@@ -169,18 +184,23 @@ export function ColorPicker({
           role="application"
           aria-label={label}
           onPointerDown={(event) => {
-            if (!editable) return
+            // Capture on the square itself, so a drag that leaves its bounds
+            // keeps reporting instead of stopping at the edge.
             event.currentTarget.setPointerCapture(event.pointerId)
+            dragging.current = true
             pickFromEvent(event)
           }}
           onPointerMove={(event) => {
-            if (!editable || event.buttons !== 1) return
-            pickFromEvent(event)
+            if (dragging.current) pickFromEvent(event)
           }}
-          className={cn(
-            "relative h-32 w-full rounded-lg border",
-            editable ? "cursor-crosshair" : "cursor-not-allowed opacity-40"
-          )}
+          onPointerUp={(event) => {
+            dragging.current = false
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }}
+          onPointerCancel={() => {
+            dragging.current = false
+          }}
+          className="relative h-32 w-full cursor-crosshair rounded-lg border touch-none"
           style={{
             backgroundColor: `hsl(${hsv.h} 100% 50%)`,
             backgroundImage:
@@ -203,12 +223,11 @@ export function ColorPicker({
           min={0}
           max={360}
           value={hsv.h}
-          disabled={!editable}
           aria-label={label ? `${label} — hue` : "Hue"}
           onChange={(event) =>
             commit({ ...hsv, h: Number(event.target.value) })
           }
-          className="h-3 w-full cursor-pointer appearance-none rounded-full disabled:opacity-40 [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:shadow"
+          className="h-3 w-full cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-transparent [&::-webkit-slider-thumb]:shadow"
           style={{
             background:
               "linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)",
