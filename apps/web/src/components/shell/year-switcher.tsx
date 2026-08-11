@@ -97,7 +97,7 @@ export function YearSwitcher() {
               </>
             ) : null}
             <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/onboarding/new-year" />}>
+            <DropdownMenuItem render={<Link href="/onboarding/year/new" />}>
               <PlusIcon className="size-4" />
               {t("Add a year")}
             </DropdownMenuItem>

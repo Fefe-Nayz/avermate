@@ -500,7 +500,7 @@ export default function YearSettingsPage() {
             "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents."
           )}
           footer={
-            <Button size="sm" render={<Link href="/onboarding/new-year" />}>
+            <Button size="sm" render={<Link href="/onboarding/year/new" />}>
               <PlusIcon className="size-4" />
               {t("Add a year")}
             </Button>

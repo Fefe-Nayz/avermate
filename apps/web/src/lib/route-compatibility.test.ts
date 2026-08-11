@@ -7,9 +7,9 @@ const nextConfig = readFileSync(
 )
 
 describe("canonical onboarding routes", () => {
-  test("does not let a legacy dynamic redirect capture the new-year wizard", () => {
+  test("keeps the new-year wizard outside the legacy one-segment route", () => {
     expect(nextConfig).toContain('source: "/onboarding/new"')
-    expect(nextConfig).toContain('destination: "/onboarding/new-year"')
+    expect(nextConfig).toContain('destination: "/onboarding/year/new"')
     expect(nextConfig).not.toContain('source: "/onboarding/:yearId"')
   })
 })

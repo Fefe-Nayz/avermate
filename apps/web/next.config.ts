@@ -91,7 +91,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/onboarding/new",
-        destination: "/onboarding/new-year",
+        destination: "/onboarding/year/new",
         permanent: true,
       },
       {

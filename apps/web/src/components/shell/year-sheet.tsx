@@ -127,7 +127,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
             ) : null}
 
             <Link
-              href="/onboarding/new-year"
+              href="/onboarding/year/new"
               onClick={() => setOpen(false)}
               className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
             >
