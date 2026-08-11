@@ -266,7 +266,6 @@ export function AverageChart({
             ],
           },
         ],
-        margin: { top: 8, right: 8, bottom: 0, left: 8 },
         clip: true,
         focus,
         maxFocusDistance: Number.POSITIVE_INFINITY,

@@ -163,7 +163,6 @@ export function AdminActivityChart({
           grid: false,
           axis: false,
         },
-        margin: { top: 6, right: 6, bottom: 0, left: 6 },
         clip: true,
         focus,
         maxFocusDistance: Number.POSITIVE_INFINITY,
