@@ -12,7 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "bun scripts/migrate.ts",
     "db:local": "bunx turso dev --db-file dev.db",
     "migrate:legacy": "bun scripts/migrate-legacy.ts",
     "admin:set": "bun scripts/set-admin.ts"

@@ -43,6 +43,14 @@ authorization server's local public-key set, as well as `iss`, `aud`, expiry,
 subject, authorized party, scopes, verified-email status, and current account
 suspension state.
 
+This intentionally uses Better Auth's stable OAuth Provider rather than its
+legacy `mcp()` convenience plugin. Better Auth 1.6 documents that plugin as
+being replaced by OAuth Provider, while protocol revision `2026-07-28` still
+requires an explicit modern MCP SDK handler. The split is therefore deliberate:
+Better Auth owns authorization, PKCE, tokens, consent, discovery and resource
+metadata; the official MCP SDK owns the stateless wire protocol, MRTR, routing
+headers and cache hints.
+
 Public clients use:
 
 - authorization-code grant;
