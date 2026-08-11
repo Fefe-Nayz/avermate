@@ -4,12 +4,12 @@ import { SearchIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
-import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ResponsiveBreadcrumb } from "@/components/breadcrumb/responsive-breadcrumb"
 import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
 import { PeriodSwitcher } from "./period-switcher"
 import { useCommandPalette } from "@/components/command/command-palette"
+import { TimelineTrigger } from "./timeline-banner"
 
 export function SiteHeader() {
   const t = useExtracted()
@@ -19,7 +19,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 hidden h-12 shrink-0 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur-sm md:flex">
       <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-1 h-4" />
+      <span aria-hidden className="mr-1 h-4 w-px shrink-0 bg-border" />
 
       <ResponsiveBreadcrumb items={crumbs} />
 
@@ -43,6 +43,7 @@ export function SiteHeader() {
         >
           <SearchIcon className="size-4" />
         </Button>
+        <TimelineTrigger />
         <PeriodSwitcher />
       </div>
     </header>

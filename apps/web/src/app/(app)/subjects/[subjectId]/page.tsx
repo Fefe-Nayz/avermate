@@ -2,7 +2,12 @@
 
 import Link from "next/link"
 import { use, useMemo } from "react"
-import { ChevronRightIcon, PencilIcon, PlusIcon } from "lucide-react"
+import {
+  ChevronRightIcon,
+  LayersIcon,
+  PencilIcon,
+  PlusIcon,
+} from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
   averageOverTime,
@@ -11,6 +16,7 @@ import {
   gradeRatio,
   gradeRatios,
   passRate,
+  resolveCustomAverage,
   standardDeviation,
   subjectImpact,
 } from "@avermate/core"
@@ -30,9 +36,17 @@ import {
   DeltaValue,
   ResultBadge,
 } from "@/components/data/value"
-import { AverageChart } from "@/components/charts/average-chart"
+import {
+  AVERAGE_SERIES_COLORS,
+  MultiSeriesAverageChart,
+  type AverageSeries,
+} from "@/components/charts/multi-series-average-chart"
+import { GradeResultsChart } from "@/components/charts/grade-results-chart"
+import { ImpactGrid } from "@/components/analytics/impact-grid"
 import { useYear } from "@/components/year/year-provider"
+import { usePreferences } from "@/hooks/use-preferences"
 import { cn } from "@/lib/utils"
+import { TimelineTrigger } from "@/components/shell/timeline-banner"
 
 /**
  * One subject.
@@ -49,11 +63,21 @@ export default function SubjectPage({
   const { subjectId } = use(params)
   const t = useExtracted()
   const format = useFormatter()
-  const { graph, subjects, period, year, passingRatio, scale, now } = useYear()
+  const {
+    graph,
+    customAverages,
+    period,
+    year,
+    passingRatio,
+    scale,
+    timelineDate,
+    now,
+  } = useYear()
+  const { preferences, update: updatePreferences } = usePreferences()
 
   const subject = graph.byId(subjectId)
 
-  const series = useMemo(() => {
+  const dates = useMemo(() => {
     if (!year || !subject) return []
     const from = new Date(
       Math.max(
@@ -61,15 +85,43 @@ export default function SubjectPage({
         new Date(year.startsAt).getTime()
       )
     )
-    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
+    const timelineEnd = timelineDate
+      ? new Date(`${timelineDate}T23:59:59`).getTime()
+      : now
+    const to = new Date(Math.min(timelineEnd, new Date(period.endAt).getTime()))
     if (to <= from) return []
     const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
-    return averageOverTime(
-      subjects,
-      dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      subjectId
-    )
-  }, [subjects, subjectId, period, year, subject, now])
+    return dayRange(from, to, Math.max(1, Math.ceil(span / 60)))
+  }, [period, timelineDate, year, subject, now])
+
+  const averageSeries = useMemo<AverageSeries[]>(() => {
+    if (!subject || dates.length === 0) return []
+    const children = preferences.chartSettings.showSubSubjects
+      ? graph.childrenOf(subjectId)
+      : []
+    return [
+      ...children.map((child, index) => ({
+        id: child.id,
+        label: child.name,
+        color:
+          AVERAGE_SERIES_COLORS[(index + 1) % AVERAGE_SERIES_COLORS.length],
+        points: averageOverTime(graph.subjects, dates, child.id),
+      })),
+      {
+        id: subject.id,
+        label: subject.name,
+        color: AVERAGE_SERIES_COLORS[0],
+        points: averageOverTime(graph.subjects, dates, subject.id),
+        primary: true,
+      },
+    ]
+  }, [
+    dates,
+    graph,
+    preferences.chartSettings.showSubSubjects,
+    subject,
+    subjectId,
+  ])
 
   if (!subject) {
     return (
@@ -89,11 +141,42 @@ export default function SubjectPage({
 
   const ratio = graph.ratio(subjectId)
   const general = graph.ratio(null)
-  const impact = subjectImpact(graph, subjectId, null)
   const children = graph.childrenOf(subjectId)
   const ratios = gradeRatios(graph, subjectId)
   const grades = [...graph.allGrades(subjectId)].reverse()
   const isCategory = subject.kind === "category"
+
+  const impacts = [
+    {
+      id: "general",
+      label: t("General average"),
+      href: "/averages/general",
+      impact: subjectImpact(graph, subjectId, null),
+    },
+    ...graph.ancestorsOf(subjectId).map((ancestor) => ({
+      id: `subject:${ancestor.id}`,
+      label: ancestor.name,
+      href: `/subjects/${ancestor.id}`,
+      impact: subjectImpact(graph, subjectId, ancestor.id),
+    })),
+    ...customAverages.flatMap((average) => {
+      const resolved = resolveCustomAverage(graph, average)
+      if (!resolved.graph.has(subjectId)) return []
+      return [
+        {
+          id: `custom:${average.id}`,
+          label: average.name,
+          href: `/averages/${average.id}`,
+          impact: subjectImpact(
+            resolved.graph,
+            subjectId,
+            null,
+            resolved.scope
+          ),
+        },
+      ]
+    }),
+  ]
 
   const stats = [
     {
@@ -135,6 +218,7 @@ export default function SubjectPage({
         subtitle={isCategory ? t("Category") : undefined}
       />
       <PageActions>
+        <TimelineTrigger />
         <Button
           variant="ghost"
           size="icon"
@@ -198,32 +282,45 @@ export default function SubjectPage({
               ) : null}
             </CardContent>
           </Card>
-
-          <Card className="col-span-2 gap-1 py-4 @md/main:col-span-1">
-            <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {t("Effect on the general average")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-              <DeltaValue
-                delta={impact.delta}
-                className="text-3xl font-semibold"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {impact.delta === null
-                  ? t("Not enough data yet")
-                  : impact.delta >= 0
-                    ? t("Without this subject you would be lower.")
-                    : t("Without this subject you would be higher.")}
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
-        {series.length > 1 ? (
-          <AverageChart title={t("Over time")} series={series} />
+        {children.length > 0 ? (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={preferences.chartSettings.showSubSubjects}
+              onClick={() =>
+                updatePreferences({
+                  chartSettings: {
+                    ...preferences.chartSettings,
+                    showSubSubjects: !preferences.chartSettings.showSubSubjects,
+                  },
+                })
+              }
+            >
+              <LayersIcon className="size-4" />
+              {preferences.chartSettings.showSubSubjects
+                ? t("Hide child series")
+                : t("Show child series")}
+            </Button>
+          </div>
         ) : null}
+
+        <MultiSeriesAverageChart
+          title={t("Average over time")}
+          series={averageSeries}
+          height={340}
+          emptyHint={t("Record a few grades and the curve will appear here.")}
+        />
+
+        <GradeResultsChart
+          grades={graph.allGrades(subjectId)}
+          subjects={graph.subjects}
+          title={t("Grade results")}
+        />
+
+        <ImpactGrid readings={impacts} title={t("Impact on averages")} />
 
         {!isCategory ? (
           <div className="grid grid-cols-4 gap-2">

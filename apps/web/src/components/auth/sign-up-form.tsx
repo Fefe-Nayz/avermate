@@ -6,6 +6,7 @@ import PasswordEntropy from "@rabbit-company/password-entropy"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { TextField } from "@/components/forms/controls"
+import { PasswordField } from "@/components/auth/password-field"
 import { Button } from "@/components/ui/button"
 import { FieldGroup } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
@@ -91,19 +92,28 @@ export function SignUpForm() {
           onChange={(event) => setEmail(event.target.value)}
         />
         <div className="flex flex-col gap-2">
-          <TextField
+          <PasswordField
             label={t("Password")}
-            type="password"
             autoComplete="new-password"
             required
             minLength={8}
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={setPassword}
             error={error ?? undefined}
+            description={t(
+              "Use a long, unique password. The meter estimates how hard it is to guess."
+            )}
           />
           {strength !== null ? (
-            <div className="flex items-center gap-2">
-              <div className="flex flex-1 gap-1">
+            <div
+              className="flex items-center gap-2"
+              role="progressbar"
+              aria-label={t("Password strength")}
+              aria-valuemin={0}
+              aria-valuemax={4}
+              aria-valuenow={strength + 1}
+            >
+              <div className="flex flex-1 gap-1" aria-hidden="true">
                 {[0, 1, 2, 3].map((step) => (
                   <span
                     key={step}
@@ -128,7 +138,7 @@ export function SignUpForm() {
             </div>
           ) : null}
         </div>
-        <Button type="submit" size="lg" disabled={pending}>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? <Spinner className="size-4" /> : null}
           {t("Create account")}
         </Button>

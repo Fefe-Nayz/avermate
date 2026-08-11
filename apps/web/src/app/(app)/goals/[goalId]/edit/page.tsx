@@ -50,6 +50,7 @@ export default function EditGoalPage({
         referenceId: goal.referenceId,
         targetRatio: goal.targetRatio,
         periodId: goal.periodId,
+        dueAt: goal.dueAt,
         isPinned: (goal as { isPinned?: boolean }).isPinned ?? false,
       }}
     />

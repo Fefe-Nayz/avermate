@@ -97,6 +97,39 @@ export function useBreadcrumbs(): Crumb[] {
         return crumbs
       }
 
+      case "averages": {
+        const averageId = segments[1]
+        const average = year?.customAverages.find(
+          (candidate) => candidate.id === averageId
+        )
+        return [
+          {
+            key: "averages",
+            label: t("Averages"),
+            href: "/settings/averages",
+          },
+          {
+            key: averageId ?? "general",
+            label:
+              averageId === "general"
+                ? t("General average")
+                : (average?.name ?? t("Average")),
+            siblings: [
+              {
+                key: "general",
+                label: t("General average"),
+                href: "/averages/general",
+              },
+              ...(year?.customAverages.map((item) => ({
+                key: item.id,
+                label: item.name,
+                href: `/averages/${item.id}`,
+              })) ?? []),
+            ],
+          },
+        ]
+      }
+
       case "goals": {
         const crumbs: Crumb[] = [
           { key: "goals", label: t("Goals"), href: "/goals" },
@@ -127,6 +160,26 @@ export function useBreadcrumbs(): Crumb[] {
       case "review":
         return [{ key: "review", label: t("Year in review") }]
 
+      case "social": {
+        const crumbs: Crumb[] = [
+          { key: "social", label: t("Social"), href: "/social" },
+        ]
+        const section = segments[1]
+        const labels: Record<string, string> = {
+          friends: t("Friends"),
+          groups: t("Groups"),
+          profile: t("Sharing"),
+          notifications: t("Updates"),
+          invitations: t("Invitation"),
+          invitation: t("Invitation"),
+          guardian: t("Guardian consent"),
+        }
+        if (section && labels[section]) {
+          crumbs.push({ key: section, label: labels[section] as string })
+        }
+        return crumbs
+      }
+
       case "settings": {
         const crumbs: Crumb[] = [
           { key: "settings", label: t("Settings"), href: "/settings" },
@@ -137,6 +190,7 @@ export function useBreadcrumbs(): Crumb[] {
           year: t("Year & periods"),
           averages: t("Custom averages"),
           account: t("Account"),
+          social: t("Social & sharing"),
           about: t("About"),
         }
         if (section && labels[section]) {
@@ -154,9 +208,28 @@ export function useBreadcrumbs(): Crumb[] {
           users: t("Users"),
           announcements: t("Announcements"),
           feedback: t("Feedback"),
+          social: t("Social moderation"),
         }
         if (section && labels[section]) {
-          crumbs.push({ key: section, label: labels[section] as string })
+          crumbs.push({
+            key: section,
+            label: labels[section] as string,
+            href: section === "social" ? "/admin/social" : undefined,
+          })
+        }
+        if (section === "social") {
+          const socialSection = segments[2]
+          const socialLabels: Record<string, string> = {
+            groups: t("Groups"),
+            reports: t("Reports"),
+            audit: t("Audit trail"),
+          }
+          if (socialSection && socialLabels[socialSection]) {
+            crumbs.push({
+              key: `social-${socialSection}`,
+              label: socialLabels[socialSection] as string,
+            })
+          }
         }
         return crumbs
       }

@@ -8,7 +8,7 @@ export default async function ReviewPage() {
   const { activeYearId } = await prepareAuthenticatedShell()
   const queryClient = createServerQueryClient()
 
-  await queryClient.fetchQuery(
+  const status = await queryClient.fetchQuery(
     getServerOrpc().review.status.queryOptions({
       input: reviewStatusInput(activeYearId),
     })
@@ -16,7 +16,7 @@ export default async function ReviewPage() {
 
   return (
     <HydrateClient queryClient={queryClient}>
-      <ReviewClient />
+      <ReviewClient initialTopPercentile={status.topPercentile} />
     </HydrateClient>
   )
 }

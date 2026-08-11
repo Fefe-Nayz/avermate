@@ -15,7 +15,13 @@ import { authClient } from "@/lib/auth-client"
 import { haptic } from "@/lib/haptics"
 
 /** Six digits from the email. Submits itself once the last one lands. */
-export function VerifyEmailForm({ email }: { email: string }) {
+export function VerifyEmailForm({
+  email,
+  next = "/onboarding",
+}: {
+  email: string
+  next?: string
+}) {
   const t = useExtracted()
   const router = useRouter()
   const [code, setCode] = useState("")
@@ -50,11 +56,11 @@ export function VerifyEmailForm({ email }: { email: string }) {
 
       haptic("success")
       toast.success(t("Email confirmed."))
-      router.replace("/onboarding")
+      router.replace(next)
     }
 
     void run()
-  }, [code, pending, email, router, t])
+  }, [code, pending, email, next, router, t])
 
   const resend = async () => {
     haptic("light")

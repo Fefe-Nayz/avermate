@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ChartNoAxesCombinedIcon,
+  BellIcon,
   ChevronRightIcon,
   GraduationCapIcon,
   InfoIcon,
@@ -16,6 +17,7 @@ import {
   SunIcon,
   TargetIcon,
   UserIcon,
+  UsersRoundIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -31,6 +33,7 @@ import { haptic } from "@/lib/haptics"
 import { useIsAdmin } from "@/hooks/use-admin"
 import { useYear } from "@/components/year/year-provider"
 import { useYearSheet } from "@/components/shell/year-sheet"
+import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
  * The phone's fifth tab.
@@ -48,6 +51,7 @@ export default function MorePage() {
   const { isAdmin } = useIsAdmin()
   const { year, years } = useYear()
   const yearSheet = useYearSheet()
+  const { canAccess: canAccessSocial } = useSocialAccess()
 
   const groups: Array<{
     label?: string
@@ -71,12 +75,16 @@ export default function MorePage() {
             ]
           : []),
         { icon: TargetIcon, label: t("Goals"), href: "/goals" },
+        ...(canAccessSocial
+          ? [{ icon: UsersRoundIcon, label: t("Social"), href: "/social" }]
+          : []),
         {
           icon: ChartNoAxesCombinedIcon,
           label: t("Insights"),
           href: "/insights",
         },
         { icon: SparklesIcon, label: t("Year in review"), href: "/review" },
+        { icon: BellIcon, label: t("Announcements"), href: "/announcements" },
       ],
     },
     {

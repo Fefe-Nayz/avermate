@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { TextField } from "@/components/forms/controls"
+import { PasswordField } from "@/components/auth/password-field"
 import { Button } from "@/components/ui/button"
 import { FieldGroup } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
@@ -25,7 +26,7 @@ export function SignInForm({ next }: { next: string }) {
     setError(null)
     haptic("light")
 
-    const { error: failure } = await authClient.signIn.email({
+    const { data, error: failure } = await authClient.signIn.email({
       email: email.trim(),
       password,
     })
@@ -40,6 +41,23 @@ export function SignInForm({ next }: { next: string }) {
       )
       return
     }
+
+    if (data && !data.user.emailVerified) {
+      await authClient.emailOtp.sendVerificationOtp({
+        email: data.user.email,
+        type: "email-verification",
+      })
+      haptic("warning")
+      toast.info(t("Confirm your email to continue."))
+      router.replace(
+        `/auth/verify?email=${encodeURIComponent(data.user.email)}&next=${encodeURIComponent(next)}`
+      )
+      return
+    }
+
+    // During an OAuth request Better Auth restores the signed transaction and
+    // its redirect plugin takes over. Do not race it with an app navigation.
+    if (data && "redirect" in data && data.redirect) return
 
     haptic("success")
     toast.success(t("Welcome back."))
@@ -58,16 +76,15 @@ export function SignInForm({ next }: { next: string }) {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <TextField
+        <PasswordField
           label={t("Password")}
-          type="password"
           autoComplete="current-password"
           required
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={setPassword}
           error={error ?? undefined}
         />
-        <Button type="submit" size="lg" disabled={pending}>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? <Spinner className="size-4" /> : null}
           {t("Sign in")}
         </Button>

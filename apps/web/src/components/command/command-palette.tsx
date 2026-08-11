@@ -17,6 +17,7 @@ import {
   MoonIcon,
   PlusIcon,
   SunIcon,
+  SigmaIcon,
   TargetIcon,
 } from "lucide-react"
 import {
@@ -32,6 +33,8 @@ import {
 import { NAV_ENTRIES } from "@/lib/nav"
 import { useMaybeYear } from "@/components/year/year-provider"
 import { AverageValue } from "@/components/data/value"
+import { useIsAdmin } from "@/hooks/use-admin"
+import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
  * Search everything: screens, subjects, grades, goals, and a few commands.
@@ -51,6 +54,8 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const t = useExtracted()
   const router = useRouter()
   const year = useMaybeYear()
+  const { isAdmin } = useIsAdmin()
+  const { canAccess: canAccessSocial } = useSocialAccess()
   const { setTheme, resolvedTheme } = useTheme()
   const [open, setOpen] = useState(false)
 
@@ -81,12 +86,14 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
     Grades: t("Grades"),
     Goals: t("Goals"),
     Insights: t("Insights"),
+    Social: t("Social"),
     "Year in review": t("Year in review"),
     Settings: t("Settings"),
     Admin: t("Admin"),
   }
 
   const subjects = year?.subjects ?? []
+  const averages = year?.customAverages ?? []
   const grades = year?.graph.allGrades().slice(-60).reverse() ?? []
 
   return (
@@ -130,7 +137,11 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
             <CommandSeparator />
 
             <CommandGroup heading={t("Go to")}>
-              {NAV_ENTRIES.map((entry) => (
+              {NAV_ENTRIES.filter(
+                (entry) =>
+                  (!entry.adminOnly || isAdmin) &&
+                  (!entry.socialOnly || canAccessSocial)
+              ).map((entry) => (
                 <CommandItem
                   key={entry.href}
                   value={labels[entry.label] ?? entry.label}
@@ -161,6 +172,30 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
                       colored
                       className="ml-auto text-xs"
                     />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+
+            {year ? (
+              <CommandGroup heading={t("Averages")}>
+                <CommandItem
+                  value={t("General average")}
+                  onSelect={() => run(() => router.push("/averages/general"))}
+                >
+                  <SigmaIcon />
+                  {t("General average")}
+                </CommandItem>
+                {averages.map((average) => (
+                  <CommandItem
+                    key={average.id}
+                    value={average.name}
+                    onSelect={() =>
+                      run(() => router.push(`/averages/${average.id}`))
+                    }
+                  >
+                    <SigmaIcon />
+                    <span className="truncate">{average.name}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

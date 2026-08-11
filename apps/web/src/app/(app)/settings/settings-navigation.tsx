@@ -4,17 +4,24 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useExtracted } from "next-intl"
 import { cn } from "@/lib/utils"
+import { useSocialAccess } from "@/hooks/use-social-access"
 
 /** Only the active-route highlight needs the browser. */
 export function SettingsNavigation() {
   const t = useExtracted()
   const pathname = usePathname()
+  const { canConfigure: canConfigureSocial } = useSocialAccess()
   const sections = [
     { href: "/settings", label: t("Profile"), exact: true },
     { href: "/settings/appearance", label: t("Appearance") },
     { href: "/settings/year", label: t("Year & periods") },
+    { href: "/settings/preset", label: t("Year preset") },
     { href: "/settings/averages", label: t("Custom averages") },
     { href: "/settings/account", label: t("Account") },
+    { href: "/settings/integrations", label: t("Integrations") },
+    ...(canConfigureSocial
+      ? [{ href: "/settings/social", label: t("Social & sharing") }]
+      : []),
     { href: "/settings/about", label: t("About") },
   ]
 

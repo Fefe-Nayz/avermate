@@ -5,7 +5,6 @@ import type {
   DomChartDefinition,
   ResolvedScale,
 } from "@tanstack/charts"
-import { Chart } from "@tanstack/charts/react/tooltip"
 import { RotateCcw } from "lucide-react"
 import {
   type CSSProperties,
@@ -27,6 +26,7 @@ import {
   shouldHandleChartWheel,
   zoomDomainAt,
 } from "./time-series-interaction"
+import { ResponsiveChart } from "./responsive-chart"
 
 interface InteractiveTimeSeriesChartProps<TDatum> {
   ariaDescription?: string
@@ -502,7 +502,7 @@ export function InteractiveTimeSeriesChart<TDatum>({
         ref={gestureHostRef}
         style={{ touchAction: "none", ...style }}
       >
-        <Chart
+        <ResponsiveChart
           ariaDescription={`${ariaDescription ? `${ariaDescription} ` : ""}${interactionHint}`}
           ariaLabel={ariaLabel}
           definition={definition}

@@ -32,6 +32,90 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "graph.microsoft.com" },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/grades/:gradeId/:periodId",
+        destination: "/grades/:gradeId",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/subjects/:subjectId/:periodId",
+        destination: "/subjects/:subjectId",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/grades",
+        destination: "/grades",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/settings/grades",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/settings",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/admin",
+        destination: "/admin",
+        permanent: true,
+      },
+      {
+        source: "/profile/account",
+        destination: "/settings/account",
+        permanent: true,
+      },
+      {
+        source: "/profile/about",
+        destination: "/settings/about",
+        permanent: true,
+      },
+      {
+        source: "/profile/settings/general",
+        destination: "/settings/appearance",
+        permanent: true,
+      },
+      {
+        source: "/profile/settings",
+        destination: "/settings/appearance",
+        permanent: true,
+      },
+      {
+        source: "/profile",
+        destination: "/settings",
+        permanent: true,
+      },
+      {
+        source: "/onboarding/new",
+        destination: "/onboarding/new-year",
+        permanent: true,
+      },
+      {
+        source: "/onboarding/:yearId",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/auth/verify-email",
+        destination: "/auth/verify",
+        permanent: true,
+      },
+      {
+        source: "/legal/privacy-policy",
+        destination: "/legal/privacy",
+        permanent: true,
+      },
+      {
+        source: "/legal/terms-of-service",
+        destination: "/legal/terms",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
@@ -53,17 +137,23 @@ const nextConfig: NextConfig = {
 // No locale routing: the locale comes from a cookie (see src/i18n/request.ts).
 // `useExtracted` pulls the inline English strings into messages/en.json and
 // keeps fr.json in step, so a screen can never ship with a missing key.
-const withNextIntl = createNextIntlPlugin({
-  experimental: {
-    extract: true,
-    messages: {
-      path: "./messages",
-      format: "json",
-      locales: ["en", "fr"],
-      sourceLocale: "en",
-    },
-    srcPath: "./src",
-  },
-})
+// The experimental extractor writes message files while modules compile.
+// Running it during incremental development can leave a partial catalogue
+// when several Turbopack compilations overlap, so extraction is build-only.
+const withNextIntl =
+  process.env.NODE_ENV === "development"
+    ? createNextIntlPlugin()
+    : createNextIntlPlugin({
+        experimental: {
+          extract: true,
+          messages: {
+            path: "./messages",
+            format: "json",
+            locales: ["en", "fr"],
+            sourceLocale: "en",
+          },
+          srcPath: "./src",
+        },
+      })
 
 export default withNextIntl(nextConfig)

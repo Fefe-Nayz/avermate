@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { ArrowDownUpIcon, PlusIcon, SearchIcon } from "lucide-react"
+import {
+  ArrowDownUpIcon,
+  CalendarDaysIcon,
+  ListIcon,
+  PlusIcon,
+  SearchIcon,
+  TablePropertiesIcon,
+} from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import { gradeRatio } from "@avermate/core"
 import { Button } from "@/components/ui/button"
@@ -20,8 +27,13 @@ import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { CoefficientBadge, ResultBadge } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
+import { HierarchicalGradeTable } from "@/components/grades/hierarchical-grade-table"
+import { TimelineTrigger } from "@/components/shell/timeline-banner"
+import { GradeCalendar } from "@/components/grades/grade-calendar"
+import { useStickyState } from "@/hooks/use-sticky-state"
 
 type SortKey = "date" | "result" | "subject"
+type ViewMode = "timeline" | "table" | "calendar"
 
 /**
  * Every result in the period, grouped by month.
@@ -36,8 +48,12 @@ export default function GradesPage() {
   const { graph } = useYear()
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<SortKey>("date")
+  const [view, setView] = useStickyState<ViewMode>(
+    "avermate:grades-view",
+    "timeline"
+  )
 
-  const groups = useMemo(() => {
+  const grades = useMemo(() => {
     const needle = query.trim().toLowerCase()
     let grades = graph.allGrades()
 
@@ -63,9 +79,11 @@ export default function GradesPage() {
       grades = [...grades].reverse()
     }
 
-    if (sort !== "date") {
-      return [{ key: "all", label: null, grades }]
-    }
+    return grades
+  }, [graph, query, sort])
+
+  const groups = useMemo(() => {
+    if (sort !== "date") return [{ key: "all", label: null, grades }]
 
     const byMonth = new Map<string, typeof grades>()
     for (const grade of grades) {
@@ -83,9 +101,9 @@ export default function GradesPage() {
       }),
       grades: list,
     }))
-  }, [graph, query, sort, format])
+  }, [grades, sort, format])
 
-  const total = groups.reduce((sum, group) => sum + group.grades.length, 0)
+  const total = grades.length
 
   return (
     <>
@@ -94,6 +112,7 @@ export default function GradesPage() {
         subtitle={t("{count} results", { count: String(total) })}
       />
       <PageActions>
+        <TimelineTrigger />
         <Button
           variant="ghost"
           size="icon"
@@ -173,9 +192,76 @@ export default function GradesPage() {
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div
+            className="hidden items-center rounded-lg border p-0.5 md:flex"
+            role="group"
+            aria-label={t("View")}
+          >
+            <Button
+              variant={view === "timeline" ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label={t("Timeline view")}
+              aria-pressed={view === "timeline"}
+              onClick={() => setView("timeline")}
+            >
+              <ListIcon className="size-4" />
+            </Button>
+            <Button
+              variant={view === "table" ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label={t("Table view")}
+              aria-pressed={view === "table"}
+              onClick={() => setView("table")}
+            >
+              <TablePropertiesIcon className="size-4" />
+            </Button>
+            <Button
+              variant={view === "calendar" ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-label={t("Calendar view")}
+              aria-pressed={view === "calendar"}
+              onClick={() => setView("calendar")}
+            >
+              <CalendarDaysIcon className="size-4" />
+            </Button>
+          </div>
         </div>
 
-        {total === 0 ? (
+        <div className="grid grid-cols-3 gap-2 md:hidden">
+          <Button
+            variant={view === "timeline" ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={view === "timeline"}
+            onClick={() => setView("timeline")}
+          >
+            <ListIcon className="size-4" />
+            {t("Timeline")}
+          </Button>
+          <Button
+            variant={view === "table" ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={view === "table"}
+            onClick={() => setView("table")}
+          >
+            <TablePropertiesIcon className="size-4" />
+            {t("Table")}
+          </Button>
+          <Button
+            variant={view === "calendar" ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={view === "calendar"}
+            onClick={() => setView("calendar")}
+          >
+            <CalendarDaysIcon className="size-4" />
+            {t("Calendar")}
+          </Button>
+        </div>
+
+        {view === "calendar" ? (
+          <GradeCalendar grades={grades} />
+        ) : view === "table" ? (
+          <HierarchicalGradeTable query={query} />
+        ) : total === 0 ? (
           <div className="rounded-xl border border-dashed p-10 text-center">
             <p className="text-sm text-muted-foreground">
               {query

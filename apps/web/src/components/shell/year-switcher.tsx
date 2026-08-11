@@ -6,6 +6,7 @@ import {
   ChevronsUpDownIcon,
   PlusIcon,
   GraduationCapIcon,
+  ArchiveRestoreIcon,
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
@@ -31,6 +32,8 @@ export function YearSwitcher() {
   const format = useFormatter()
   const { years, year, selectYear } = useYear()
   const { state } = useSidebar()
+  const activeYears = years.filter((item) => !item.archivedAt)
+  const hasArchivedYears = activeYears.length !== years.length
 
   const subtitle = year
     ? `${format.dateTime(new Date(year.startsAt), { month: "short", year: "numeric" })} → ${format.dateTime(new Date(year.endsAt), { month: "short", year: "numeric" })}`
@@ -69,7 +72,7 @@ export function YearSwitcher() {
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel>{t("School years")}</DropdownMenuLabel>
-              {years.map((item) => (
+              {activeYears.map((item) => (
                 <DropdownMenuItem
                   key={item.id}
                   onClick={() => {
@@ -84,6 +87,15 @@ export function YearSwitcher() {
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
+            {hasArchivedYears ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem render={<Link href="/settings/year" />}>
+                  <ArchiveRestoreIcon className="size-4" />
+                  {t("Manage archived years")}
+                </DropdownMenuItem>
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem render={<Link href="/onboarding/new-year" />}>
               <PlusIcon className="size-4" />

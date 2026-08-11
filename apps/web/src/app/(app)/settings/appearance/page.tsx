@@ -1,10 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { MonitorIcon, MoonIcon, RotateCcwIcon, SunIcon } from "lucide-react"
+import {
+  FlameIcon,
+  MonitorIcon,
+  MoonIcon,
+  RotateCcwIcon,
+  SparklesIcon,
+  SunIcon,
+} from "lucide-react"
 import { useTheme } from "next-themes"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { PageMeta } from "@/components/shell/page-chrome"
@@ -16,12 +24,15 @@ import { ChoiceField } from "@/components/forms/controls"
 import { usePreferences } from "@/hooks/use-preferences"
 import {
   PALETTES,
+  FONT_CHOICES,
+  fontChoiceOf,
   SEASONS,
   THEME_TOKENS,
   UNLOCKABLE_PALETTES,
 } from "@/lib/theme"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+import { THEME_STUDIO_PRESETS } from "@/lib/theme-presets"
 
 /**
  * Appearance.
@@ -37,6 +48,11 @@ export default function AppearanceSettingsPage() {
   const [showCustom, setShowCustom] = useState(
     preferences.themePreset === "custom"
   )
+  const [trendSubdivisions, setTrendSubdivisions] = useState(
+    preferences.chartSettings.trendSubdivisions
+  )
+
+  const [customMode, setCustomMode] = useState<"light" | "dark">("light")
 
   // Earned themes sit alongside the standard ones rather than in a section of
   // their own: once unlocked, it is just another colour you can pick.
@@ -65,6 +81,27 @@ export default function AppearanceSettingsPage() {
     autumn: t("Autumn"),
     halloween: t("Halloween"),
     winter: t("Winter"),
+  }
+  const presetDescriptions: Record<string, string> = {
+    marshmallow: t("Soft pastels and airy surfaces."),
+    "vs-code": t("A precise editor-inspired blue palette."),
+    spotify: t("High-energy green on deep neutral surfaces."),
+    "neo-brutalism": t("Hard edges, ink borders and unapologetic colour."),
+    caffeine: t("Warm coffee browns and creamy paper."),
+    "material-design": t("Clear hierarchy with familiar indigo accents."),
+    "modern-minimal": t("Quiet monochrome surfaces with a cobalt focus."),
+    nature: t("Moss, stone and sun-warmed earth."),
+    "pastel-dreams": t("Lilac, mint and peach without sacrificing contrast."),
+    "midnight-bloom": t("A nocturnal floral palette that shines in dark mode."),
+    claude: t("Editorial warmth with terracotta accents."),
+    perplexity: t("Technical teal with crisp, information-dense surfaces."),
+  }
+  const presetBadges = {
+    soft: t("Soft"),
+    punchy: t("Punchy"),
+    bold: t("Bold"),
+    clean: t("Clean"),
+    dark: t("Dark-first"),
   }
 
   return (
@@ -140,6 +177,110 @@ export default function AppearanceSettingsPage() {
             })}
           </div>
 
+          <div className="space-y-2 border-t pt-4">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <SparklesIcon className="size-4 text-primary" />
+                {t("Theme studio")}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t(
+                  "Complete light and dark designs, including charts, navigation, typography and shape."
+                )}
+              </p>
+            </div>
+            <div className="grid gap-2 @sm/main:grid-cols-2 @lg/main:grid-cols-3">
+              {THEME_STUDIO_PRESETS.map((preset) => {
+                const active = preferences.themePreset === preset.id
+                const light = preset.palette.light
+                const dark = preset.palette.dark
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      haptic("selection")
+                      setShowCustom(false)
+                      update({
+                        themePreset: preset.id,
+                        themeShape: preset.shape,
+                      })
+                    }}
+                    className={cn(
+                      "group rounded-xl border p-3 text-left transition-colors",
+                      active
+                        ? "border-primary ring-1 ring-primary/40"
+                        : "hover:bg-accent/50"
+                    )}
+                  >
+                    <span className="mb-2 flex h-9 overflow-hidden rounded-lg border">
+                      <span
+                        className="flex-1"
+                        style={{ background: light.background }}
+                      >
+                        <span
+                          className="m-2 block size-3 rounded-full"
+                          style={{ background: light.primary }}
+                        />
+                      </span>
+                      <span
+                        className="flex-1"
+                        style={{ background: dark.background }}
+                      >
+                        <span
+                          className="m-2 block size-3 rounded-full"
+                          style={{ background: dark.primary }}
+                        />
+                      </span>
+                    </span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {preset.label}
+                      </span>
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground capitalize">
+                        {presetBadges[preset.badge]}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                      {presetDescriptions[preset.id]}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {preferences.unlockedThemes.includes("mokattam") ? (
+            <div className="rounded-xl border border-orange-300/60 bg-gradient-to-br from-orange-100/80 via-amber-50/60 to-card p-3 dark:border-orange-500/30 dark:from-orange-500/15 dark:via-amber-500/5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-medium text-orange-900 dark:text-orange-100">
+                    <FlameIcon className="size-4" />
+                    {t("Mokattam supporter theme")}
+                  </p>
+                  <p className="mt-1 text-xs text-orange-900/70 dark:text-orange-100/70">
+                    {t("A permanent thank-you, available on every device.")}
+                  </p>
+                </div>
+                <Button
+                  variant={
+                    preferences.themePreset === "mokattam"
+                      ? "default"
+                      : "outline"
+                  }
+                  size="sm"
+                  onClick={() => update({ themePreset: "mokattam" })}
+                >
+                  <FlameIcon className="size-4" />
+                  {preferences.themePreset === "mokattam"
+                    ? t("Selected")
+                    : t("Use theme")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <SettingsRow
             label={t("Build my own")}
             description={t("Set every colour token by hand.")}
@@ -155,44 +296,124 @@ export default function AppearanceSettingsPage() {
           </SettingsRow>
 
           {showCustom ? (
-            <div className="grid grid-cols-2 gap-2 @sm/main:grid-cols-3">
-              {THEME_TOKENS.map((token) => (
-                <label
-                  key={token}
-                  className="flex items-center gap-2 rounded-lg border p-2"
-                >
-                  <input
-                    type="color"
-                    value={hexOf(preferences.customTheme[token])}
-                    onChange={(event) =>
-                      update({
-                        customTheme: {
-                          ...preferences.customTheme,
-                          [token]: event.target.value,
+            <div className="flex flex-col gap-3">
+              <ChoiceField
+                choices={[
+                  { value: "light", label: t("Light palette") },
+                  { value: "dark", label: t("Dark palette") },
+                ]}
+                value={customMode}
+                onValueChange={setCustomMode}
+                columns={2}
+              />
+              <div className="grid grid-cols-2 gap-2 @sm/main:grid-cols-3">
+                {THEME_TOKENS.map((token) => {
+                  const value = preferences.customTheme[customMode][token] ?? ""
+                  const patchToken = (nextValue: string) =>
+                    update({
+                      customTheme: {
+                        ...preferences.customTheme,
+                        [customMode]: {
+                          ...preferences.customTheme[customMode],
+                          [token]: nextValue,
                         },
-                      })
-                    }
-                    className="size-6 cursor-pointer rounded border-0 bg-transparent p-0"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-                    {token}
-                  </span>
-                </label>
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="col-span-2 @sm/main:col-span-3"
-                onClick={() => update({ customTheme: {} })}
-              >
-                <RotateCcwIcon className="size-4" />
-                {t("Clear my colours")}
-              </Button>
+                      },
+                    })
+                  return (
+                    <div
+                      key={token}
+                      className="space-y-1.5 rounded-lg border p-2"
+                    >
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {token}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          aria-label={token}
+                          value={hexOf(value)}
+                          onChange={(event) => patchToken(event.target.value)}
+                          className="size-7 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+                        />
+                        <Input
+                          key={`${customMode}:${token}:${value}`}
+                          defaultValue={value}
+                          aria-label={`${token} CSS`}
+                          placeholder="#rrggbb, oklch(…)"
+                          className="h-8 min-w-0 font-mono text-[11px]"
+                          onBlur={(event) => {
+                            const nextValue = event.target.value.trim()
+                            if (nextValue !== value) patchToken(nextValue)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter")
+                              event.currentTarget.blur()
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="col-span-2 @sm/main:col-span-3"
+                  onClick={() =>
+                    update({
+                      customTheme: {
+                        ...preferences.customTheme,
+                        [customMode]: {},
+                      },
+                    })
+                  }
+                >
+                  <RotateCcwIcon className="size-4" />
+                  {t("Clear this palette")}
+                </Button>
+              </div>
             </div>
           ) : null}
         </SettingsSection>
 
-        <SettingsSection title={t("Shape")}>
+        <SettingsSection
+          title={t("Typography and shape")}
+          description={t("Choose body and heading styles independently.")}
+        >
+          <ChoiceField
+            label={t("Body font")}
+            choices={FONT_CHOICES.map((font) => ({
+              value: font.id,
+              label: font.label,
+            }))}
+            value={fontChoiceOf(preferences.themeShape.font)}
+            onValueChange={(font) =>
+              update({
+                themeShape: { ...preferences.themeShape, font },
+              })
+            }
+            columns={2}
+          />
+          <ChoiceField
+            label={t("Heading font")}
+            choices={[
+              { value: "inherit", label: t("Same as body") },
+              ...FONT_CHOICES.map((font) => ({
+                value: font.id,
+                label: font.label,
+              })),
+            ]}
+            value={
+              preferences.themeShape.headingFont === "inherit"
+                ? "inherit"
+                : fontChoiceOf(preferences.themeShape.headingFont)
+            }
+            onValueChange={(headingFont) =>
+              update({
+                themeShape: { ...preferences.themeShape, headingFont },
+              })
+            }
+            columns={2}
+          />
           <div>
             <SettingsRow
               label={t("Corner rounding")}
@@ -276,6 +497,59 @@ export default function AppearanceSettingsPage() {
                   chartSettings: {
                     ...preferences.chartSettings,
                     showTrend: checked,
+                  },
+                })
+              }
+            />
+          </SettingsRow>
+          {preferences.chartSettings.showTrend ? (
+            <div className="space-y-2 px-1 py-2">
+              <SettingsRow
+                label={t("Trend detail")}
+                description={t(
+                  "One segment shows the overall direction; more segments reveal local changes."
+                )}
+              >
+                <span className="numeric text-sm text-muted-foreground">
+                  {trendSubdivisions}
+                </span>
+              </SettingsRow>
+              <Slider
+                min={1}
+                max={10}
+                step={1}
+                value={[trendSubdivisions]}
+                aria-label={t("Trend detail")}
+                onValueChange={(values) =>
+                  setTrendSubdivisions(
+                    typeof values === "number" ? values : (values[0] ?? 1)
+                  )
+                }
+                onValueCommitted={(values) =>
+                  update({
+                    chartSettings: {
+                      ...preferences.chartSettings,
+                      trendSubdivisions:
+                        typeof values === "number" ? values : (values[0] ?? 1),
+                    },
+                  })
+                }
+              />
+            </div>
+          ) : null}
+          <SettingsRow
+            label={t("Show child subject series")}
+            description={t(
+              "Compare a subject with its direct children on the same chart."
+            )}
+          >
+            <Switch
+              checked={preferences.chartSettings.showSubSubjects}
+              onCheckedChange={(checked) =>
+                update({
+                  chartSettings: {
+                    ...preferences.chartSettings,
+                    showSubSubjects: checked,
                   },
                 })
               }

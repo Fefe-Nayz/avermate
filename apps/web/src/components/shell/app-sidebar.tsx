@@ -23,6 +23,7 @@ import { YearSwitcher } from "./year-switcher"
 import { SidebarSubjectTree } from "./sidebar-subject-tree"
 import { haptic } from "@/lib/haptics"
 import { useIsAdmin } from "@/hooks/use-admin"
+import { useSocialAccess } from "@/hooks/use-social-access"
 
 export function AppSidebar({ user }: { user: AuthenticatedUser }) {
   const t = useExtracted()
@@ -30,15 +31,22 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
   // An account can administer the site through ADMIN_USER_IDS without its
   // role column saying so, so the server is the one that answers this.
   const { isAdmin } = useIsAdmin()
+  const { canAccess: canAccessSocial } = useSocialAccess()
 
   // Two groups rather than one long list: the first is the year you are
   // living in, the second is everything you occasionally reach for.
   const primary = NAV_ENTRIES.filter(
     (entry) =>
       !entry.adminOnly &&
-      ["/dashboard", "/subjects", "/grades", "/goals", "/insights"].includes(
-        entry.href
-      )
+      (!entry.socialOnly || canAccessSocial) &&
+      [
+        "/dashboard",
+        "/subjects",
+        "/grades",
+        "/goals",
+        "/insights",
+        "/social",
+      ].includes(entry.href)
   )
   const secondary = NAV_ENTRIES.filter(
     (entry) =>
@@ -52,6 +60,7 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
     Grades: t("Grades"),
     Goals: t("Goals"),
     Insights: t("Insights"),
+    Social: t("Social"),
     "Year in review": t("Year in review"),
     Settings: t("Settings"),
     Admin: t("Admin"),

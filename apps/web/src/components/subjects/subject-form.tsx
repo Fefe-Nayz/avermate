@@ -2,12 +2,23 @@
 
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { BookMarkedIcon, FolderIcon, StarIcon } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { BookMarkedIcon, FolderIcon, StarIcon, Trash2Icon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { FormPage } from "@/components/forms/form-page"
 import {
   ChoiceField,
@@ -60,6 +71,7 @@ export function SubjectForm({
     initial?.kind ?? "subject"
   )
   const [isMain, setIsMain] = useState(initial?.isMain ?? false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const initialId = initial?.id
 
@@ -132,6 +144,13 @@ export function SubjectForm({
     },
   })
 
+  const impact = useQuery({
+    ...orpc.subjects.impact.queryOptions({
+      input: { subjectId: initialId ?? "" },
+    }),
+    enabled: deleteOpen && Boolean(initialId),
+  })
+
   const submit = () => {
     const next: Record<string, string> = {}
     if (!name.trim()) next.name = t("Give this subject a name.")
@@ -157,7 +176,7 @@ export function SubjectForm({
     }
   }
 
-  const childCount = initial?.id ? graph.childrenOf(initial.id).length : 0
+  const childCount = initial?.id ? graph.descendantsOf(initial.id).length : 0
 
   return (
     <FormPage
@@ -170,11 +189,7 @@ export function SubjectForm({
         mode === "edit" && initial?.id
           ? {
               label: t("Delete"),
-              onClick: () =>
-                remove.mutate({
-                  subjectId: initial.id as string,
-                  promoteChildren: false,
-                }),
+              onClick: () => setDeleteOpen(true),
             }
           : undefined
       }
@@ -275,6 +290,61 @@ export function SubjectForm({
           />
         </Field>
       </FormSection>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2Icon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{t("Delete {name}?", { name })}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {impact.data
+                ? t(
+                    "This branch contains {subjects} child subjects and {grades} grades.",
+                    {
+                      subjects: String(impact.data.descendants),
+                      grades: String(impact.data.grades),
+                    }
+                  )
+                : t("Checking what would be removed…")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">{t("Cancel")}</AlertDialogCancel>
+            {(impact.data?.descendants ?? childCount) > 0 ? (
+              <AlertDialogAction
+                type="button"
+                variant="outline"
+                disabled={remove.isPending}
+                onClick={() =>
+                  remove.mutate({
+                    subjectId: initial?.id as string,
+                    promoteChildren: true,
+                  })
+                }
+              >
+                {t("Keep child subjects")}
+              </AlertDialogAction>
+            ) : null}
+            <AlertDialogAction
+              type="button"
+              variant="destructive"
+              disabled={remove.isPending || impact.isLoading}
+              onClick={() =>
+                remove.mutate({
+                  subjectId: initial?.id as string,
+                  promoteChildren: false,
+                })
+              }
+            >
+              {(impact.data?.descendants ?? childCount) > 0
+                ? t("Delete the whole branch")
+                : t("Delete subject")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </FormPage>
   )
 }

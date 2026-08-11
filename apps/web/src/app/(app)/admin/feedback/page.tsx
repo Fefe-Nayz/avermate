@@ -3,19 +3,24 @@ import { requireServerAdmin } from "@/lib/admin-data"
 import { getServerOrpc } from "@/lib/orpc/server"
 import { createServerQueryClient, HydrateClient } from "@/lib/query-server"
 import {
-  adminFeedbackInput,
-  INITIAL_ADMIN_FEEDBACK_STATUS,
-} from "@/lib/route-query-inputs"
+  adminFeedbackQueueInput,
+  INITIAL_ADMIN_FEEDBACK_FILTERS,
+} from "@/lib/admin-feedback-query"
 
 export default async function AdminFeedbackPage() {
   await requireServerAdmin()
   const queryClient = createServerQueryClient()
 
-  await queryClient.fetchQuery(
-    getServerOrpc().admin.feedback.queryOptions({
-      input: adminFeedbackInput(INITIAL_ADMIN_FEEDBACK_STATUS),
-    })
-  )
+  const orpc = getServerOrpc()
+  await Promise.all([
+    queryClient.fetchQuery(
+      orpc.admin.feedbackQueue.queryOptions({
+        input: adminFeedbackQueueInput(INITIAL_ADMIN_FEEDBACK_FILTERS),
+      })
+    ),
+    queryClient.fetchQuery(orpc.admin.feedbackTriageStats.queryOptions()),
+    queryClient.fetchQuery(orpc.admin.feedbackAssignees.queryOptions()),
+  ])
 
   return (
     <HydrateClient queryClient={queryClient}>

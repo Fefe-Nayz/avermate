@@ -12,17 +12,22 @@ import {
 } from "@/lib/appearance"
 import {
   customThemeCss,
+  fontStack,
   isPalette,
   isUnlockablePalette,
   resolveSeason,
   type Season,
 } from "@/lib/theme"
+import { themeStudioPreset } from "@/lib/theme-presets"
 
 export interface Preferences {
   theme: "system" | "light" | "dark"
   language: "system" | "en" | "fr"
   themePreset: string
-  customTheme: Record<string, string>
+  customTheme: {
+    light: Record<string, string>
+    dark: Record<string, string>
+  }
   themeShape: { font: string; headingFont: string; radius: number }
   seasonalThemesEnabled: boolean
   seasonalTheme: string
@@ -34,6 +39,7 @@ export interface Preferences {
     showTrend: boolean
     trendSubdivisions: number
     showPoints: boolean
+    showSubSubjects: boolean
   }
   unlockedThemes: string[]
   seenCelebrations: string[]
@@ -43,7 +49,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: "system",
   language: "system",
   themePreset: "default",
-  customTheme: {},
+  customTheme: { light: {}, dark: {} },
   themeShape: { font: "inter", headingFont: "inherit", radius: 0.625 },
   seasonalThemesEnabled: true,
   seasonalTheme: "auto",
@@ -55,6 +61,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     showTrend: false,
     trendSubdivisions: 1,
     showPoints: true,
+    showSubSubjects: true,
   },
   unlockedThemes: [],
   seenCelebrations: [],
@@ -62,17 +69,20 @@ export const DEFAULT_PREFERENCES: Preferences = {
 
 export function appearanceOf(preferences: Preferences): Appearance {
   const palette = preferences.themePreset
+  const studioPreset = themeStudioPreset(palette)
   return {
     ...DEFAULT_APPEARANCE,
-    palette:
-      palette === "custom" || isUnlockablePalette(palette)
+    palette: studioPreset
+      ? "custom"
+      : palette === "custom" || isUnlockablePalette(palette)
         ? (palette as Appearance["palette"])
         : isPalette(palette)
           ? palette
           : "default",
-    customCss:
-      palette === "custom"
-        ? customThemeCss(preferences.customTheme, preferences.themeShape.radius)
+    customCss: studioPreset
+      ? customThemeCss(studioPreset.palette)
+      : palette === "custom"
+        ? customThemeCss(preferences.customTheme)
         : "",
     font: preferences.themeShape.font,
     headingFont: preferences.themeShape.headingFont,
@@ -146,6 +156,13 @@ export function applyPreferences(preferences: Preferences): void {
   root.dataset.season = appearance.season
   root.dataset.motion = appearance.reduceMotion ? "reduced" : "full"
   root.style.setProperty("--radius", `${appearance.radius}rem`)
+  root.style.setProperty("--app-font-sans", fontStack(appearance.font))
+  root.style.setProperty(
+    "--app-font-heading",
+    appearance.headingFont === "inherit"
+      ? "var(--app-font-sans)"
+      : fontStack(appearance.headingFont)
+  )
 
   let style = document.getElementById("avermate-custom-theme")
   if (!style) {

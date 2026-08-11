@@ -2,8 +2,10 @@
 
 import Link from "next/link"
 import { use, useMemo } from "react"
-import { PencilIcon } from "lucide-react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { CheckCircle2Icon, PencilIcon, RotateCcwIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -15,6 +17,8 @@ import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { GoalPlanView } from "@/components/goals/goal-plan-view"
 import { useYear } from "@/components/year/year-provider"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { haptic } from "@/lib/haptics"
+import { orpc } from "@/lib/orpc"
 
 export default function GoalPage({
   params,
@@ -23,11 +27,30 @@ export default function GoalPage({
 }) {
   const { goalId } = use(params)
   const t = useExtracted()
-  const { goals, isLoading } = useYear()
+  const queryClient = useQueryClient()
+  const { goals, isLoading, yearId } = useYear()
   const { plan: planOf } = useGoalPlans()
 
   const goal = goals.find((item) => item.id === goalId)
   const plan = useMemo(() => (goal ? planOf(goal) : null), [goal, planOf])
+  const markAchieved = useMutation({
+    ...orpc.goals.markAchieved.mutationOptions(),
+    onSuccess: async (_, variables) => {
+      haptic("success")
+      toast.success(
+        variables.achieved ? t("Goal marked as achieved") : t("Goal reopened")
+      )
+      await queryClient.invalidateQueries({
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+    },
+    onError: (error: Error) => {
+      haptic("error")
+      toast.error(error.message || t("The goal could not be updated."))
+    },
+  })
 
   if (!goal || !plan) {
     if (isLoading) return null
@@ -70,6 +93,39 @@ export default function GoalPage({
           >
             <PencilIcon className="size-4" />
             {t("Edit")}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">
+              {goal.achievedAt ? t("Achieved") : t("Progress tracking")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {goal.achievedAt
+                ? t(
+                    "You can reopen this goal if you want to keep working on it."
+                  )
+                : t("Record the achievement when this target is complete.")}
+            </p>
+          </div>
+          <Button
+            variant={goal.achievedAt ? "outline" : "default"}
+            size="sm"
+            disabled={markAchieved.isPending}
+            onClick={() =>
+              markAchieved.mutate({
+                goalId: goal.id,
+                achieved: !goal.achievedAt,
+              })
+            }
+          >
+            {goal.achievedAt ? (
+              <RotateCcwIcon className="size-4" />
+            ) : (
+              <CheckCircle2Icon className="size-4" />
+            )}
+            {goal.achievedAt ? t("Reopen") : t("Mark as achieved")}
           </Button>
         </div>
 

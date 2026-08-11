@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useMemo } from "react"
 import { areaY, barY, defineChart, lineY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
-import { Chart } from "@tanstack/charts/react"
 import { scaleBand } from "@tanstack/charts/scales/band"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { curveMonotoneX } from "d3-shape"
@@ -17,6 +16,7 @@ import {
   type CardSpec,
 } from "@avermate/core"
 import { AverageValue, DeltaValue, ResultBadge } from "@/components/data/value"
+import { ResponsiveChart } from "@/components/charts/responsive-chart"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
@@ -65,8 +65,18 @@ export function useMetricLabels(): Record<CardMetric, string> {
 }
 
 export function useCardResult(spec: CardSpec): CardResult {
-  const { graph, subjects, period, year, passingRatio, goals, resolve, now } =
-    useYear()
+  const {
+    graph,
+    subjects,
+    period,
+    year,
+    passingRatio,
+    goals,
+    headlineAverage,
+    resolve,
+    resolveHeadline,
+    now,
+  } = useYear()
   const { remaining } = useGoalPlans()
 
   return useMemo(() => {
@@ -83,7 +93,12 @@ export function useCardResult(spec: CardSpec): CardResult {
       goals,
       remaining,
       resolveTarget: (target) => {
-        const resolved = resolve(target)
+        const resolved =
+          headlineAverage &&
+          spec.metric === "average" &&
+          target.kind === "general"
+            ? resolveHeadline()
+            : resolve(target)
         if (!resolved) return null
         return { ...resolved, subjects: resolved.graph.subjects }
       },
@@ -96,7 +111,9 @@ export function useCardResult(spec: CardSpec): CardResult {
     year,
     passingRatio,
     goals,
+    headlineAverage,
     resolve,
+    resolveHeadline,
     remaining,
     now,
   ])
@@ -180,7 +197,7 @@ function Sparkline({
 
   return (
     <div aria-hidden="true" className="pointer-events-none -mx-1 h-14">
-      <Chart
+      <ResponsiveChart
         ariaLabel={t("Trend")}
         definition={definition}
         height={56}
@@ -225,7 +242,6 @@ function MiniDistribution({
       grid: false,
       axis: false,
     },
-    margin: { top: 4, right: 0, bottom: 0, left: 0 },
     clip: true,
     focus: false,
     keyboard: false,
@@ -237,7 +253,7 @@ function MiniDistribution({
       aria-hidden="true"
       className="pointer-events-none h-24 text-muted-foreground"
     >
-      <Chart
+      <ResponsiveChart
         ariaLabel={ariaLabel}
         definition={definition}
         height={96}

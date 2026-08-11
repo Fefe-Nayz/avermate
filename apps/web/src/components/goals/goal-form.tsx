@@ -31,7 +31,15 @@ export interface GoalFormValues {
   referenceId: string | null
   targetRatio: number
   periodId: string | null
+  dueAt: Date | string | null
   isPinned: boolean
+}
+
+function toDateInput(value: Date | string | null | undefined): string {
+  if (!value) return ""
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
 /**
@@ -52,7 +60,7 @@ export function GoalForm({
   const t = useExtracted()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { graph, customAverages, yearId, scale, resolve } = useYear()
+  const { graph, customAverages, periods, yearId, scale, resolve } = useYear()
   const { remaining } = useGoalPlans()
 
   const [kind, setKind] = useState<GoalFormValues["kind"]>(
@@ -72,6 +80,8 @@ export function GoalForm({
   const [targetRatio, setTargetRatio] = useState(
     initial?.targetRatio ?? Math.min(0.95, (current ?? 0.5) + 0.05)
   )
+  const [periodId, setPeriodId] = useState(initial?.periodId ?? null)
+  const [dueAt, setDueAt] = useState(() => toDateInput(initial?.dueAt))
   const [isPinned, setIsPinned] = useState(initial?.isPinned ?? true)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -94,6 +104,15 @@ export function GoalForm({
     [customAverages]
   )
 
+  const periodOptions: PickerOption[] = useMemo(
+    () =>
+      periods.map((period) => ({
+        value: period.id,
+        label: period.name,
+      })),
+    [periods]
+  )
+
   const preview = useMemo(() => {
     const resolved = resolve({ kind, referenceId })
     if (!resolved) return null
@@ -104,8 +123,8 @@ export function GoalForm({
         kind,
         referenceId,
         targetRatio,
-        periodId: initial?.periodId ?? null,
-        dueAt: null,
+        periodId,
+        dueAt: dueAt ? new Date(`${dueAt}T23:59:59`) : null,
         createdAt: new Date(),
         achievedAt: null,
       },
@@ -114,7 +133,18 @@ export function GoalForm({
       resolved.scope,
       { remaining }
     )
-  }, [resolve, kind, referenceId, targetRatio, name, initial, t, remaining])
+  }, [
+    resolve,
+    kind,
+    referenceId,
+    targetRatio,
+    name,
+    initial,
+    periodId,
+    dueAt,
+    t,
+    remaining,
+  ])
 
   const onSaved = {
     onSuccess: () => {
@@ -174,8 +204,8 @@ export function GoalForm({
       kind,
       referenceId: kind === "general" ? null : referenceId,
       targetRatio,
-      periodId: initial?.periodId ?? null,
-      dueAt: null,
+      periodId: periodId === "__full_year__" ? null : periodId,
+      dueAt: dueAt ? new Date(`${dueAt}T23:59:59`) : null,
       isPinned,
     }
 
@@ -319,6 +349,28 @@ export function GoalForm({
             }}
           />
         </Field>
+      </FormSection>
+
+      <FormSection
+        title={t("Planning")}
+        description={t(
+          "Tie the target to a period or a deadline when timing matters."
+        )}
+      >
+        <PickerField
+          label={t("Period")}
+          options={periodOptions}
+          value={periodId ?? "__full_year__"}
+          onValueChange={(value) =>
+            setPeriodId(value === "__full_year__" ? null : value)
+          }
+        />
+        <TextField
+          label={t("Deadline (optional)")}
+          type="date"
+          value={dueAt}
+          onChange={(event) => setDueAt(event.target.value)}
+        />
       </FormSection>
 
       {preview ? (

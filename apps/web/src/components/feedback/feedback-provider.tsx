@@ -1,8 +1,10 @@
 "use client"
 
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   createContext,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -13,7 +15,9 @@ import {
   BugIcon,
   LightbulbIcon,
   MessageCircleIcon,
+  ImagePlusIcon,
   SendIcon,
+  XIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
@@ -59,6 +63,15 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [kind, setKind] = useState<FeedbackKind>("idea")
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
+  const [image, setImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+
+  useEffect(
+    () => () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview)
+    },
+    [imagePreview]
+  )
 
   const submit = useMutation({
     ...orpc.feedback.submit.mutationOptions(),
@@ -68,6 +81,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
       setOpen(false)
       setSubject("")
       setMessage("")
+      setImage(null)
+      setImagePreview(null)
     },
     onError: () => {
       haptic("error")
@@ -112,13 +127,14 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                 kind,
                 subject,
                 message,
+                ...(image ? { image } : {}),
                 context: {
                   page: pathname,
                   viewport:
                     typeof window === "undefined"
                       ? ""
                       : `${window.innerWidth}×${window.innerHeight}`,
-                  agent:
+                  userAgent:
                     typeof navigator === "undefined" ? "" : navigator.userAgent,
                 },
               })
@@ -147,6 +163,59 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                     </ToggleGroupItem>
                   ))}
                 </ToggleGroup>
+              </Field>
+
+              <Field>
+                <FieldLabel>{t("Screenshot (optional)")}</FieldLabel>
+                {imagePreview ? (
+                  <div className="relative aspect-video overflow-hidden rounded-xl border bg-muted">
+                    <Image
+                      src={imagePreview}
+                      alt={t("Selected screenshot")}
+                      fill
+                      unoptimized
+                      sizes="(max-width: 640px) 100vw, 28rem"
+                      className="object-contain"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-sm"
+                      aria-label={t("Remove screenshot")}
+                      className="absolute top-2 right-2"
+                      onClick={() => {
+                        setImage(null)
+                        setImagePreview(null)
+                      }}
+                    >
+                      <XIcon className="size-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/30 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/60">
+                    <ImagePlusIcon className="size-4" />
+                    {t("Add a screenshot")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const selected = event.target.files?.[0] ?? null
+                        if (!selected) return
+                        if (selected.size > 2 * 1024 * 1024) {
+                          toast.error(t("The image must be 2 MB or smaller."))
+                          event.target.value = ""
+                          return
+                        }
+                        setImage(selected)
+                        setImagePreview(URL.createObjectURL(selected))
+                      }}
+                    />
+                  </label>
+                )}
+                <FieldDescription>
+                  {t("PNG, JPEG or WebP, up to 2 MB.")}
+                </FieldDescription>
               </Field>
 
               <Field>

@@ -9,6 +9,7 @@ import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { useFeedback } from "@/components/feedback/feedback-provider"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
+import { InstallCard } from "@/components/pwa/install-card"
 import { haptic } from "@/lib/haptics"
 
 export default function AboutPage() {
@@ -58,6 +59,15 @@ export default function AboutPage() {
             <span className="min-w-0 flex-1 truncate">{user.id}</span>
             <CopyIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </button>
+        </SettingsSection>
+
+        <SettingsSection
+          title={t("Install Avermate")}
+          description={t(
+            "The web app can live on your home screen alongside the native app."
+          )}
+        >
+          <InstallCard />
         </SettingsSection>
 
         <SettingsSection title={t("Legal")}>

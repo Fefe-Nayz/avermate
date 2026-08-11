@@ -8,7 +8,12 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { CheckIcon, GraduationCapIcon, PlusIcon } from "lucide-react"
+import {
+  ArchiveRestoreIcon,
+  CheckIcon,
+  GraduationCapIcon,
+  PlusIcon,
+} from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
   Drawer,
@@ -41,6 +46,8 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
   const format = useFormatter()
   const { years, year, selectYear } = useYear()
   const [open, setOpen] = useState(false)
+  const activeYears = years.filter((item) => !item.archivedAt)
+  const hasArchivedYears = activeYears.length !== years.length
 
   const store = useMemo<YearSheetStore>(
     () => ({ open: () => setOpen(true) }),
@@ -60,7 +67,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
           </DrawerHeader>
 
           <div className="grid gap-1 px-3 pb-4">
-            {years.map((item) => {
+            {activeYears.map((item) => {
               const active = item.id === year?.id
               return (
                 <button
@@ -108,6 +115,21 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
                 </button>
               )
             })}
+
+            {hasArchivedYears ? (
+              <Link
+                href="/settings/year"
+                onClick={() => setOpen(false)}
+                className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-accent"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <ArchiveRestoreIcon className="size-5" />
+                </span>
+                <span className="text-sm font-medium">
+                  {t("Manage archived years")}
+                </span>
+              </Link>
+            ) : null}
 
             <Link
               href="/onboarding/new-year"

@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
   ADMIN_OVERVIEW_INPUT,
-  adminFeedbackInput,
   adminUsersInput,
-  INITIAL_ADMIN_FEEDBACK_STATUS,
   reviewStatusInput,
 } from "./route-query-inputs"
+import {
+  adminFeedbackQueueInput,
+  INITIAL_ADMIN_FEEDBACK_FILTERS,
+} from "./admin-feedback-query"
 
 async function source(relativePath: string): Promise<string> {
   return Bun.file(new URL(relativePath, import.meta.url)).text()
@@ -30,7 +32,22 @@ const routes = [
   {
     page: "../app/(app)/admin/feedback/page.tsx",
     client: "../app/(app)/admin/feedback/admin-feedback-client.tsx",
-    query: "admin.feedback.queryOptions",
+    query: "admin.feedbackQueue.queryOptions",
+  },
+  {
+    page: "../app/(app)/admin/social/groups/page.tsx",
+    client: "../app/(app)/admin/social/groups/social-groups-client.tsx",
+    query: "admin.socialGroups.queryOptions",
+  },
+  {
+    page: "../app/(app)/admin/social/reports/page.tsx",
+    client: "../app/(app)/admin/social/reports/social-reports-client.tsx",
+    query: "admin.socialReports.queryOptions",
+  },
+  {
+    page: "../app/(app)/admin/social/audit/page.tsx",
+    client: "../app/(app)/admin/social/audit/social-audit-client.tsx",
+    query: "admin.socialAudit.queryOptions",
   },
   {
     page: "../app/(app)/admin/announcements/page.tsx",
@@ -72,23 +89,42 @@ describe("route-specific SSR prefetch", () => {
       reviewKey: "annual",
     })
     expect(ADMIN_OVERVIEW_INPUT).toEqual({ days: 30 })
-    expect(adminUsersInput("")).toEqual({ query: "", limit: 50, offset: 0 })
-    expect(adminFeedbackInput(INITIAL_ADMIN_FEEDBACK_STATUS)).toEqual({
-      status: "open",
+    expect(adminUsersInput("")).toEqual({ query: "", limit: 20, offset: 0 })
+    expect(adminFeedbackQueueInput(INITIAL_ADMIN_FEEDBACK_FILTERS)).toEqual({
+      statuses: ["open"],
+      priorities: [],
+      kinds: [],
+      source: "all",
+      assignee: "all",
+      label: null,
+      search: "",
       limit: 50,
+      offset: 0,
     })
   })
 
   test("the admin subtree is authorized on the server before route reads", async () => {
-    const [layout, guard, overview, users, feedback, announcements] =
-      await Promise.all([
-        source("../app/(app)/admin/layout.tsx"),
-        source("./admin-data.ts"),
-        source("../app/(app)/admin/page.tsx"),
-        source("../app/(app)/admin/users/page.tsx"),
-        source("../app/(app)/admin/feedback/page.tsx"),
-        source("../app/(app)/admin/announcements/page.tsx"),
-      ])
+    const [
+      layout,
+      guard,
+      overview,
+      users,
+      feedback,
+      announcements,
+      socialGroups,
+      socialReports,
+      socialAudit,
+    ] = await Promise.all([
+      source("../app/(app)/admin/layout.tsx"),
+      source("./admin-data.ts"),
+      source("../app/(app)/admin/page.tsx"),
+      source("../app/(app)/admin/users/page.tsx"),
+      source("../app/(app)/admin/feedback/page.tsx"),
+      source("../app/(app)/admin/announcements/page.tsx"),
+      source("../app/(app)/admin/social/groups/page.tsx"),
+      source("../app/(app)/admin/social/reports/page.tsx"),
+      source("../app/(app)/admin/social/audit/page.tsx"),
+    ])
 
     expect(layout).not.toContain('"use client"')
     expect(layout).not.toContain("useIsAdmin")
@@ -97,7 +133,15 @@ describe("route-specific SSR prefetch", () => {
     expect(guard).toContain("admin.access.queryOptions")
     expect(guard).toContain("notFound")
 
-    for (const page of [overview, users, feedback, announcements]) {
+    for (const page of [
+      overview,
+      users,
+      feedback,
+      announcements,
+      socialGroups,
+      socialReports,
+      socialAudit,
+    ]) {
       expect(page.indexOf("requireServerAdmin()")).toBeLessThan(
         page.indexOf("fetchQuery")
       )

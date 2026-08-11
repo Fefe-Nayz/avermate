@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
-import { TextField } from "@/components/forms/controls"
+import { PasswordField } from "@/components/auth/password-field"
 import { Button } from "@/components/ui/button"
 import { FieldGroup } from "@/components/ui/field"
 import {
@@ -22,6 +22,7 @@ export function ResetPasswordForm({ email }: { email: string }) {
   const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
   const [pending, setPending] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const submit = async (event: React.FormEvent) => {
@@ -57,6 +58,22 @@ export function ResetPasswordForm({ email }: { email: string }) {
     router.replace("/auth/sign-in")
   }
 
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setTimeout(() => setCooldown((value) => value - 1), 1_000)
+    return () => clearTimeout(timer)
+  }, [cooldown])
+
+  const resend = async () => {
+    setCooldown(45)
+    haptic("light")
+    await authClient.emailOtp.sendVerificationOtp({
+      email,
+      type: "forget-password",
+    })
+    toast.success(t("A new code is on its way."))
+  }
+
   return (
     <form onSubmit={submit}>
       <FieldGroup>
@@ -70,20 +87,32 @@ export function ResetPasswordForm({ email }: { email: string }) {
           </InputOTP>
         </div>
 
-        <TextField
+        <PasswordField
           label={t("New password")}
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={setPassword}
           error={error ?? undefined}
         />
 
-        <Button type="submit" size="lg" disabled={pending}>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? <Spinner className="size-4" /> : null}
           {t("Change password")}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={pending || cooldown > 0}
+          onClick={resend}
+          className="text-muted-foreground"
+        >
+          {cooldown > 0
+            ? t("Send again in {seconds}s", { seconds: String(cooldown) })
+            : t("Send the code again")}
         </Button>
       </FieldGroup>
     </form>

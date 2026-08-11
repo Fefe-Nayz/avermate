@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { PlayIcon, SparklesIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
@@ -26,11 +26,24 @@ import { reviewStatusInput } from "@/lib/route-query-inputs"
  * Assembled from the year already in memory, with only the percentile coming
  * from the server — the one number that needs everybody else's data.
  */
-export function ReviewClient() {
+const subscribeToHydration = () => () => undefined
+
+export function ReviewClient({
+  initialTopPercentile,
+}: {
+  initialTopPercentile: number
+}) {
   const t = useExtracted()
   const format = useFormatter()
   const { subjects, year, yearId, yearGraph } = useYear()
   const [playing, setPlaying] = useState(false)
+  // The selected year can come from browser storage after hydration. Keep the
+  // server percentile for the hydration frame, then follow the active query.
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false
+  )
 
   const status = useQuery({
     ...orpc.review.status.queryOptions({
@@ -41,8 +54,18 @@ export function ReviewClient() {
 
   const review = useMemo(() => {
     if (!year) return null
-    return buildYearReview(subjects, year, status.data?.topPercentile ?? 0)
-  }, [subjects, year, status.data?.topPercentile])
+    return buildYearReview(
+      subjects,
+      year,
+      hydrated ? (status.data?.topPercentile ?? 0) : initialTopPercentile
+    )
+  }, [
+    hydrated,
+    initialTopPercentile,
+    status.data?.topPercentile,
+    subjects,
+    year,
+  ])
 
   const gradeCount = yearGraph.allGrades().length
 

@@ -4,10 +4,15 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DownloadIcon,
+  KeyRoundIcon,
   LaptopIcon,
+  LinkIcon,
   LogOutIcon,
+  MailIcon,
+  ShieldCheckIcon,
   SmartphoneIcon,
   TrashIcon,
+  UnlinkIcon,
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import { toast } from "sonner"
@@ -15,9 +20,12 @@ import { UAParser } from "ua-parser-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { TextField } from "@/components/forms/controls"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
+import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { authClient, useSession } from "@/lib/auth-client"
+import { env } from "@/lib/env"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 
@@ -33,7 +41,12 @@ export default function AccountSettingsPage() {
   const format = useFormatter()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
+  const user = useAuthenticatedUser()
 
+  const [email, setEmail] = useState(user.email)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [accountAction, setAccountAction] = useState<string | null>(null)
   const [resetPhrase, setResetPhrase] = useState("")
   const [deletePhrase, setDeletePhrase] = useState("")
 
@@ -50,6 +63,20 @@ export default function AccountSettingsPage() {
     queryFn: async () => {
       const { data } = await authClient.listAccounts()
       return data ?? []
+    },
+  })
+
+  const setPassword = useMutation({
+    ...orpc.profile.setPassword.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      toast.success(t("Password added."))
+      setNewPassword("")
+      await accounts.refetch()
+    },
+    onError: () => {
+      haptic("error")
+      toast.error(t("That password could not be saved."))
     },
   })
 
@@ -91,6 +118,83 @@ export default function AccountSettingsPage() {
     }
   }
 
+  const hasPassword =
+    accounts.data?.some((account) => account.providerId === "credential") ??
+    false
+  const canUnlink = (accounts.data?.length ?? 0) > 1
+
+  const changeEmail = async () => {
+    const nextEmail = email.trim().toLowerCase()
+    if (!nextEmail || nextEmail === user.email) return
+    setAccountAction("email")
+    const { error } = await authClient.changeEmail({
+      newEmail: nextEmail,
+      callbackURL: `${env.appUrl}/settings/account`,
+    })
+    setAccountAction(null)
+    if (error) {
+      haptic("error")
+      toast.error(t("That address could not be used."))
+      return
+    }
+    haptic("success")
+    toast.success(t("Check your inbox to confirm the new address."))
+  }
+
+  const savePassword = async () => {
+    if (newPassword.length < 8) return
+    if (!hasPassword) {
+      setPassword.mutate({ newPassword })
+      return
+    }
+
+    setAccountAction("password")
+    const { error } = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    })
+    setAccountAction(null)
+    if (error) {
+      haptic("error")
+      toast.error(t("That password could not be changed."))
+      return
+    }
+    setCurrentPassword("")
+    setNewPassword("")
+    haptic("success")
+    toast.success(t("Password changed. Other devices have been signed out."))
+    await sessions.refetch()
+  }
+
+  const linkProvider = async (provider: "google" | "microsoft") => {
+    setAccountAction(`link:${provider}`)
+    const { error } = await authClient.linkSocial({
+      provider,
+      callbackURL: `${env.appUrl}/settings/account`,
+    })
+    if (error) {
+      setAccountAction(null)
+      haptic("error")
+      toast.error(t("That sign-in could not be linked."))
+    }
+  }
+
+  const unlinkProvider = async (providerId: string) => {
+    if (!canUnlink) return
+    setAccountAction(`unlink:${providerId}`)
+    const { error } = await authClient.unlinkAccount({ providerId })
+    setAccountAction(null)
+    if (error) {
+      haptic("error")
+      toast.error(t("That sign-in could not be removed."))
+      return
+    }
+    haptic("success")
+    toast.success(t("Sign-in removed."))
+    await accounts.refetch()
+  }
+
   return (
     <>
       <PageMeta title={t("Account")} backHref="/more" />
@@ -99,6 +203,89 @@ export default function AccountSettingsPage() {
         <h1 className="hidden text-2xl font-semibold tracking-tight md:block">
           {t("Account")}
         </h1>
+
+        <SettingsSection
+          title={t("Email address")}
+          description={t(
+            "We confirm the new address before replacing the one on your account."
+          )}
+        >
+          <TextField
+            label={t("Email")}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            disabled={
+              accountAction === "email" ||
+              !email.trim() ||
+              email.trim().toLowerCase() === user.email.toLowerCase()
+            }
+            onClick={changeEmail}
+          >
+            {accountAction === "email" ? (
+              <Spinner className="size-4" />
+            ) : (
+              <MailIcon className="size-4" />
+            )}
+            {t("Change email")}
+          </Button>
+        </SettingsSection>
+
+        <SettingsSection
+          title={hasPassword ? t("Password") : t("Add a password")}
+          description={
+            hasPassword
+              ? t("Changing it signs out your other devices.")
+              : t(
+                  "Add an email-and-password sign-in without removing your linked provider."
+                )
+          }
+        >
+          {hasPassword ? (
+            <TextField
+              label={t("Current password")}
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+            />
+          ) : null}
+          <TextField
+            label={t("New password")}
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            minLength={8}
+            description={t("Use at least 8 characters.")}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            disabled={
+              newPassword.length < 8 ||
+              (hasPassword && !currentPassword) ||
+              accountAction === "password" ||
+              setPassword.isPending
+            }
+            onClick={savePassword}
+          >
+            {accountAction === "password" || setPassword.isPending ? (
+              <Spinner className="size-4" />
+            ) : (
+              <KeyRoundIcon className="size-4" />
+            )}
+            {hasPassword ? t("Change password") : t("Add password")}
+          </Button>
+        </SettingsSection>
 
         <SettingsSection
           title={t("Where you are signed in")}
@@ -152,29 +339,90 @@ export default function AccountSettingsPage() {
               </div>
             )
           })}
+          {(sessions.data?.length ?? 0) > 1 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              disabled={accountAction === "sessions"}
+              onClick={async () => {
+                setAccountAction("sessions")
+                const { error } = await authClient.revokeOtherSessions()
+                setAccountAction(null)
+                if (error) {
+                  toast.error(t("Other sessions could not be signed out."))
+                  return
+                }
+                haptic("success")
+                toast.success(t("Other devices have been signed out."))
+                await sessions.refetch()
+              }}
+            >
+              {accountAction === "sessions" ? (
+                <Spinner className="size-4" />
+              ) : (
+                <LogOutIcon className="size-4" />
+              )}
+              {t("Sign out other devices")}
+            </Button>
+          ) : null}
         </SettingsSection>
 
-        <SettingsSection title={t("Linked sign-ins")}>
-          {accounts.data?.length ? (
-            accounts.data.map((account) => (
-              <div key={account.id} className="flex items-center gap-3">
-                <span className="min-w-0 flex-1 truncate text-sm capitalize">
-                  {account.providerId}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {format.dateTime(new Date(account.createdAt), {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {t("Only email and password.")}
-            </p>
+        <SettingsSection
+          title={t("Linked sign-ins")}
+          description={t(
+            "Keep at least one way to sign in. Linking never changes your grades or preferences."
           )}
+        >
+          {(["google", "microsoft"] as const).map((provider) => {
+            const account = accounts.data?.find(
+              (item) => item.providerId === provider
+            )
+            const pending =
+              accountAction === `link:${provider}` ||
+              accountAction === `unlink:${provider}`
+            return (
+              <div key={provider} className="flex items-center gap-3">
+                <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground">
+                  {account ? (
+                    <ShieldCheckIcon className="size-4" />
+                  ) : (
+                    <LinkIcon className="size-4" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium capitalize">{provider}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {account ? t("Linked to this account") : t("Not linked")}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pending || (Boolean(account) && !canUnlink)}
+                  title={
+                    account && !canUnlink
+                      ? t("Add another sign-in before removing this one.")
+                      : undefined
+                  }
+                  onClick={() =>
+                    account
+                      ? unlinkProvider(account.providerId)
+                      : linkProvider(provider)
+                  }
+                >
+                  {pending ? (
+                    <Spinner className="size-4" />
+                  ) : account ? (
+                    <UnlinkIcon className="size-4" />
+                  ) : (
+                    <LinkIcon className="size-4" />
+                  )}
+                  {account ? t("Unlink") : t("Link")}
+                </Button>
+              </div>
+            )
+          })}
         </SettingsSection>
 
         <SettingsSection

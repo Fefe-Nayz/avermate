@@ -2,9 +2,19 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { ChevronRightIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  ListOrderedIcon,
+  PlusIcon,
+  SearchIcon,
+  StarIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
-import type { Subject } from "@avermate/core"
+import { resolveCustomAverage, type Subject } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
@@ -16,6 +26,8 @@ import {
 } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 /**
  * The subject tree.
@@ -26,10 +38,23 @@ import { cn } from "@/lib/utils"
  */
 export default function SubjectsPage() {
   const t = useExtracted()
-  const { graph, subjects } = useYear()
+  const queryClient = useQueryClient()
+  const { customAverages, graph, subjects, yearId } = useYear()
   const [query, setQuery] = useState("")
+  const [reordering, setReordering] = useState(false)
 
   const general = graph.ratio(null)
+  const averageRows = useMemo(
+    () =>
+      customAverages.map((average) => {
+        const resolved = resolveCustomAverage(graph, average)
+        return {
+          ...average,
+          ratio: resolved.graph.ratio(null, resolved.scope),
+        }
+      }),
+    [customAverages, graph]
+  )
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -47,10 +72,65 @@ export default function SubjectsPage() {
       .map((subject) => ({ subject, depth: graph.depthOf(subject.id) }))
   }, [graph, subjects, query])
 
+  const move = useMutation({
+    ...orpc.subjects.move.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      }),
+  })
+
+  const moveSubject = (subject: Subject, direction: -1 | 1) => {
+    const siblings = graph
+      .flatten()
+      .filter((item) => item.parentId === subject.parentId)
+    const index = siblings.findIndex((item) => item.id === subject.id)
+    const destination = index + direction
+    if (
+      index < 0 ||
+      destination < 0 ||
+      destination >= siblings.length ||
+      move.isPending
+    ) {
+      return
+    }
+    const siblingIds = siblings.map((item) => item.id)
+    ;[siblingIds[index], siblingIds[destination]] = [
+      siblingIds[destination],
+      siblingIds[index],
+    ]
+    haptic("selection")
+    move.mutate({
+      subjectId: subject.id,
+      parentId: subject.parentId,
+      siblingIds,
+    })
+  }
+
   return (
     <>
       <PageMeta title={t("Subjects")} />
       <PageActions>
+        {subjects.length > 1 ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={reordering ? t("Done") : t("Reorder subjects")}
+            onClick={() => {
+              haptic("light")
+              setQuery("")
+              setReordering((current) => !current)
+            }}
+          >
+            {reordering ? (
+              <CheckIcon className="size-5" />
+            ) : (
+              <ListOrderedIcon className="size-5" />
+            )}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -68,6 +148,24 @@ export default function SubjectsPage() {
           </h1>
           <div className="flex items-center gap-2">
             <PeriodSwitcher />
+            {subjects.length > 1 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  haptic("light")
+                  setQuery("")
+                  setReordering((current) => !current)
+                }}
+              >
+                {reordering ? (
+                  <CheckIcon className="size-4" />
+                ) : (
+                  <ListOrderedIcon className="size-4" />
+                )}
+                {reordering ? t("Done") : t("Reorder")}
+              </Button>
+            ) : null}
             <Button size="sm" render={<Link href="/subjects/new" />}>
               <PlusIcon className="size-4" />
               {t("Add subject")}
@@ -79,7 +177,10 @@ export default function SubjectsPage() {
           <PeriodRail />
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <Link
+          href="/averages/general"
+          className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
+        >
           <div>
             <p className="text-xs tracking-wide text-muted-foreground uppercase">
               {t("General average")}
@@ -91,12 +192,65 @@ export default function SubjectsPage() {
               className="text-2xl font-semibold"
             />
           </div>
-          <p className="text-right text-xs text-muted-foreground">
-            {t("{count} subjects", { count: String(subjects.length) })}
-          </p>
-        </div>
+          <div className="flex items-center gap-2">
+            <p className="text-right text-xs text-muted-foreground">
+              {t("{count} subjects", { count: String(subjects.length) })}
+            </p>
+            <ChevronRightIcon className="size-4 text-muted-foreground/60" />
+          </div>
+        </Link>
 
-        {subjects.length > 6 ? (
+        {averageRows.length > 0 ? (
+          <section aria-labelledby="custom-averages-heading">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <h2
+                id="custom-averages-heading"
+                className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+              >
+                {t("Custom averages")}
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                render={<Link href="/settings/averages" />}
+              >
+                {t("Edit")}
+              </Button>
+            </div>
+            <ul className="overflow-hidden rounded-xl border bg-card">
+              {averageRows.map((average, index) => (
+                <li key={average.id} className={cn(index > 0 && "border-t")}>
+                  <Link
+                    href={`/averages/${average.id}`}
+                    className="flex min-h-13 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {average.name}
+                      </span>
+                      {average.isMain ? (
+                        <StarIcon
+                          aria-label={t("Headline average")}
+                          className="size-3.5 shrink-0 fill-primary/20 text-primary"
+                        />
+                      ) : null}
+                    </span>
+                    <AverageValue
+                      ratio={average.ratio}
+                      colored
+                      decimals={2}
+                      className="text-base font-medium"
+                    />
+                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {subjects.length > 6 && !reordering ? (
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -129,19 +283,88 @@ export default function SubjectsPage() {
           </div>
         ) : (
           <ul className="overflow-hidden rounded-xl border bg-card">
-            {rows.map(({ subject, depth }, index) => (
-              <SubjectRow
-                key={subject.id}
-                subject={subject}
-                depth={depth}
-                general={general}
-                first={index === 0}
-              />
-            ))}
+            {rows.map(({ subject, depth }, index) =>
+              reordering ? (
+                <SubjectOrderRow
+                  key={subject.id}
+                  subject={subject}
+                  depth={depth}
+                  first={index === 0}
+                  allSubjects={graph.flatten()}
+                  pending={move.isPending}
+                  onMove={moveSubject}
+                />
+              ) : (
+                <SubjectRow
+                  key={subject.id}
+                  subject={subject}
+                  depth={depth}
+                  general={general}
+                  first={index === 0}
+                />
+              )
+            )}
           </ul>
         )}
       </div>
     </>
+  )
+}
+
+function SubjectOrderRow({
+  subject,
+  depth,
+  first,
+  allSubjects,
+  pending,
+  onMove,
+}: {
+  subject: Subject
+  depth: number
+  first: boolean
+  allSubjects: Subject[]
+  pending: boolean
+  onMove: (subject: Subject, direction: -1 | 1) => void
+}) {
+  const t = useExtracted()
+  const siblings = allSubjects.filter(
+    (item) => item.parentId === subject.parentId
+  )
+  const position = siblings.findIndex((item) => item.id === subject.id)
+
+  return (
+    <li
+      className={cn(
+        "flex min-h-13 items-center gap-3 py-2 pe-3",
+        !first && "border-t"
+      )}
+      style={{ paddingInlineStart: `${0.75 + depth * 1}rem` }}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{subject.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {subject.parentId ? t("Nested subject") : t("Top level")}
+        </p>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("Move up")}
+        disabled={pending || position <= 0}
+        onClick={() => onMove(subject, -1)}
+      >
+        <ArrowUpIcon className="size-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t("Move down")}
+        disabled={pending || position < 0 || position === siblings.length - 1}
+        onClick={() => onMove(subject, 1)}
+      >
+        <ArrowDownIcon className="size-4" />
+      </Button>
+    </li>
   )
 }
 
