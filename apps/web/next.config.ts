@@ -53,17 +53,23 @@ const nextConfig: NextConfig = {
 // No locale routing: the locale comes from a cookie (see src/i18n/request.ts).
 // `useExtracted` pulls the inline English strings into messages/en.json and
 // keeps fr.json in step, so a screen can never ship with a missing key.
-const withNextIntl = createNextIntlPlugin({
-  experimental: {
-    extract: true,
-    messages: {
-      path: "./messages",
-      format: "json",
-      locales: ["en", "fr"],
-      sourceLocale: "en",
-    },
-    srcPath: "./src",
-  },
-});
+// The experimental extractor writes message files while modules compile.
+// Running it during incremental development can leave a partial catalogue
+// when several Turbopack compilations overlap, so extraction is build-only.
+const withNextIntl =
+  process.env.NODE_ENV === "development"
+    ? createNextIntlPlugin()
+    : createNextIntlPlugin({
+        experimental: {
+          extract: true,
+          messages: {
+            path: "./messages",
+            format: "json",
+            locales: ["en", "fr"],
+            sourceLocale: "en",
+          },
+          srcPath: "./src",
+        },
+      });
 
 export default withNextIntl(nextConfig);
