@@ -4,6 +4,7 @@ import type { ComponentType, ReactNode } from "react"
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  CircleDashedIcon,
   Link2OffIcon,
   RefreshCwIcon,
   SparklesIcon,
@@ -50,6 +51,7 @@ export function VersionBadge({
  * about to change.
  */
 export type PresetLinkState =
+  | "none"
   | "current"
   | "update_available"
   | "customized"
@@ -59,6 +61,14 @@ const STATE_STYLE: Record<
   PresetLinkState,
   { shell: string; mark: string; icon: ComponentType<{ className?: string }> }
 > = {
+  // A year that follows nothing is a state too. The page used to render no
+  // panel at all for it, so the one screen that answers "is anything about to
+  // change under me" said nothing whatsoever to the people most likely to ask.
+  none: {
+    shell: "border-border bg-muted/40",
+    mark: "text-muted-foreground",
+    icon: CircleDashedIcon,
+  },
   current: {
     shell: "border-positive/30 bg-positive/8",
     mark: "text-positive",
@@ -186,6 +196,7 @@ export function PresetCard({
   subjectCount,
   averageCount,
   featured,
+  tags,
   selected,
   onSelect,
 }: {
@@ -195,6 +206,7 @@ export function PresetCard({
   subjectCount: number
   averageCount: number
   featured?: boolean
+  tags?: readonly string[]
   selected: boolean
   onSelect: () => void
 }) {
@@ -224,11 +236,18 @@ export function PresetCard({
           {description}
         </span>
       ) : null}
-      <span className="numeric mt-0.5 text-xs text-muted-foreground">
-        {t("{subjects} subjects · {averages} averages", {
-          subjects: String(subjectCount),
-          averages: String(averageCount),
-        })}
+      <span className="mt-1 flex flex-wrap items-center gap-1.5">
+        {tags?.map((tag) => (
+          <Badge key={tag} variant="secondary" className="text-[10px]">
+            {tag}
+          </Badge>
+        ))}
+        <span className="numeric text-xs text-muted-foreground">
+          {t("{subjects} subjects · {averages} averages", {
+            subjects: String(subjectCount),
+            averages: String(averageCount),
+          })}
+        </span>
       </span>
     </button>
   )

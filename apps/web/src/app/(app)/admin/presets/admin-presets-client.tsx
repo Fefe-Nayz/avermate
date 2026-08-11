@@ -462,7 +462,7 @@ export function AdminPresetsClient({
                 <TabsContent value="structure">
                   <SettingsSection
                     icon={LayersIcon}
-                    title={t("Subjects and averages")}
+                    title={t("What this version contains")}
                     description={t(
                       "Names, hierarchy, order and coefficients are versioned together."
                     )}

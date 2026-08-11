@@ -139,10 +139,17 @@ export function PresetMembershipClient() {
 
   const data = status.data
   const linked = data?.state !== "none" && data?.preset ? data.preset : null
-  const state: PresetLinkState | null =
-    data?.state && data.state !== "none" ? data.state : null
+  // "none" is a state, not the absence of one. Rendering nothing for it left
+  // the page silent for exactly the years that have not chosen anything yet.
+  const state: PresetLinkState | null = data ? data.state : null
 
   const stateCopy: Record<PresetLinkState, { title: string; body: string }> = {
+    none: {
+      title: t("This year follows no preset"),
+      body: t(
+        "Its subjects are entirely your own. Linking one brings a ready-made structure and keeps it updated."
+      ),
+    },
     current: {
       title: t("Up to date"),
       body: t("Nothing will change unless you choose to change it."),
@@ -226,7 +233,7 @@ export function PresetMembershipClient() {
                     })}
                   </Button>
                 ) : null}
-                {data?.state !== "customized" ? (
+                {data?.state !== "customized" && data?.state !== "none" ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -345,6 +352,7 @@ export function PresetMembershipClient() {
                   subjectCount={preset.subjectCount}
                   averageCount={preset.averageCount}
                   featured={preset.featured}
+                  tags={preset.tags}
                   selected={selectedPresetId === preset.id}
                   onSelect={() =>
                     setSelectedPresetId((current) =>
