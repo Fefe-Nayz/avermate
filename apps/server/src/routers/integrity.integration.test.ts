@@ -251,6 +251,136 @@ describe("router year invariants", () => {
     ).rejects.toThrow("Card subject must belong to the same year");
   });
 
+  test("requires an exact destination sibling order while preserving re-parenting", async () => {
+    const createSubject = async (name: string, parentId: string | null) => {
+      const created = await api.subjects.create({
+        yearId: "year-a",
+        name,
+        parentId,
+      });
+      if (!created) throw new Error(`Failed to create ${name}`);
+      return created;
+    };
+
+    const sourceParent = await createSubject("Move source", null);
+    const destinationParent = await createSubject("Move destination", null);
+    const sourceFirst = await createSubject(
+      "Move source first",
+      sourceParent.id,
+    );
+    const sourceSecond = await createSubject(
+      "Move source second",
+      sourceParent.id,
+    );
+    const destinationExisting = await createSubject(
+      "Move destination existing",
+      destinationParent.id,
+    );
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: sourceParent.id,
+        siblingIds: [sourceFirst.id, sourceFirst.id, sourceSecond.id],
+      }),
+    ).rejects.toThrow("A subject can only appear once");
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: sourceParent.id,
+        siblingIds: [sourceSecond.id],
+      }),
+    ).rejects.toThrow("The moved subject must appear in its sibling order");
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: sourceParent.id,
+        siblingIds: [sourceFirst.id],
+      }),
+    ).rejects.toThrow(
+      "Sibling order must include every destination sibling exactly once",
+    );
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: sourceParent.id,
+        siblingIds: [sourceFirst.id, sourceSecond.id, destinationExisting.id],
+      }),
+    ).rejects.toThrow("Every reordered subject must share the same parent");
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: sourceParent.id,
+        siblingIds: [sourceFirst.id, sourceSecond.id, "subject-b"],
+      }),
+    ).rejects.toThrow("Sibling subject must belong to the same year");
+
+    await expect(
+      api.subjects.move({
+        subjectId: sourceFirst.id,
+        parentId: "subject-b",
+        siblingIds: [sourceFirst.id],
+      }),
+    ).rejects.toThrow("Parent subject must belong to the same year");
+
+    await api.subjects.move({
+      subjectId: sourceFirst.id,
+      parentId: sourceParent.id,
+      siblingIds: [sourceSecond.id, sourceFirst.id],
+    });
+    const sourceAfterReorder = await database
+      .select({
+        id: schema.subjects.id,
+        parentId: schema.subjects.parentId,
+        sortOrder: schema.subjects.sortOrder,
+      })
+      .from(schema.subjects)
+      .where(eq(schema.subjects.parentId, sourceParent.id));
+    const sourceById = new Map(
+      sourceAfterReorder.map((subject) => [subject.id, subject]),
+    );
+    expect(sourceById.get(sourceSecond.id)).toMatchObject({
+      parentId: sourceParent.id,
+      sortOrder: 0,
+    });
+    expect(sourceById.get(sourceFirst.id)).toMatchObject({
+      parentId: sourceParent.id,
+      sortOrder: 1,
+    });
+
+    await api.subjects.move({
+      subjectId: sourceFirst.id,
+      parentId: destinationParent.id,
+      siblingIds: [destinationExisting.id, sourceFirst.id],
+    });
+    const destinationAfterMove = await database
+      .select({
+        id: schema.subjects.id,
+        parentId: schema.subjects.parentId,
+        sortOrder: schema.subjects.sortOrder,
+      })
+      .from(schema.subjects)
+      .where(eq(schema.subjects.parentId, destinationParent.id));
+    const destinationById = new Map(
+      destinationAfterMove.map((subject) => [subject.id, subject]),
+    );
+    expect(destinationById.get(destinationExisting.id)).toMatchObject({
+      parentId: destinationParent.id,
+      sortOrder: 0,
+    });
+    expect(destinationById.get(sourceFirst.id)).toMatchObject({
+      parentId: destinationParent.id,
+      sortOrder: 1,
+    });
+    expect(
+      new Set(destinationAfterMove.map((subject) => subject.sortOrder)).size,
+    ).toBe(destinationAfterMove.length);
+  });
+
   test("rejects forged mixed-scope ordering and keeps sort positions unique", async () => {
     await expect(
       api.years.reorder({ yearIds: ["year-a", "year-a"] }),

@@ -12,6 +12,7 @@ import {
   StarIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { toast } from "sonner"
 import { resolveCustomAverage, type Subject } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,6 +48,9 @@ export default function SubjectsPage() {
   const { customAverages, graph, subjects, yearId } = useYear()
   const [query, setQuery] = useState("")
   const [reordering, setReordering] = useState(false)
+  const snapshotKey = orpc.snapshot.get.queryKey({
+    input: { yearId: yearId ?? "" },
+  })
 
   const general = graph.ratio(null)
   const averageRows = useMemo(
@@ -79,15 +83,38 @@ export default function SubjectsPage() {
 
   const move = useMutation({
     ...orpc.subjects.move.mutationOptions(),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpc.snapshot.get.queryKey({
-            input: { yearId: yearId ?? "" },
+    onMutate: async ({ parentId, siblingIds }) => {
+      await queryClient.cancelQueries({ queryKey: snapshotKey })
+      const previous = queryClient.getQueryData(snapshotKey)
+
+      if (previous) {
+        const order = new Map(siblingIds.map((id, index) => [id, index]))
+        queryClient.setQueryData(snapshotKey, {
+          ...previous,
+          subjects: previous.subjects.map((subject) => {
+            const sortOrder = order.get(subject.id)
+            return subject.parentId === parentId && sortOrder !== undefined
+              ? { ...subject, sortOrder }
+              : subject
           }),
-        }),
-        invalidateAnnouncementAudience(queryClient),
-      ]),
+        })
+      }
+
+      return { previous }
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(snapshotKey, context.previous)
+      }
+      haptic("error")
+      toast.error(error.message || t("The subject could not be saved."))
+    },
+    onSuccess: () => {
+      void invalidateAnnouncementAudience(queryClient)
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: snapshotKey })
+    },
   })
 
   /**

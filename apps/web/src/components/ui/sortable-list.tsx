@@ -10,19 +10,29 @@ import {
 import {
   DndContext,
   KeyboardSensor,
-  PointerSensor,
+  MeasuringStrategy,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
   type Announcements,
+  type CollisionDetection,
   type DraggableAttributes,
   type DragEndEvent,
+  type DroppableContainer,
+  type KeyboardCoordinateGetter,
+  type UniqueIdentifier,
 } from "@dnd-kit/core"
-import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers"
+import {
+  restrictToParentElement,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers"
 import {
   SortableContext,
   arrayMove,
-  sortableKeyboardCoordinates,
+  hasSortableData,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
@@ -54,6 +64,104 @@ interface HandleValue {
 
 const HandleContext = createContext<HandleValue | null>(null)
 
+function useReorderSensors() {
+  return useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    // A short deliberate hold separates reordering from touch scrolling. The
+    // tolerance still lets a thumb settle naturally before the drag starts.
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 180, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: siblingKeyboardCoordinates,
+    })
+  )
+}
+
+function sortableItems(
+  entry: Parameters<typeof hasSortableData>[0],
+  fallback: UniqueIdentifier[] = []
+): UniqueIdentifier[] {
+  return hasSortableData(entry) ? entry.data.current.sortable.items : fallback
+}
+
+/** Keep tree collision candidates inside the dragged item's sibling group. */
+export function sameSortableGroup(
+  active: Parameters<typeof hasSortableData>[0],
+  containers: DroppableContainer[]
+): DroppableContainer[] {
+  if (!hasSortableData(active)) return containers
+  const { containerId } = active.data.current.sortable
+  return containers.filter(
+    (container) =>
+      hasSortableData(container) &&
+      container.data.current.sortable.containerId === containerId
+  )
+}
+
+const siblingCollisionDetection: CollisionDetection = (args) => {
+  const droppableContainers = sameSortableGroup(
+    args.active,
+    args.droppableContainers
+  )
+  const scopedArgs = { ...args, droppableContainers }
+  const pointerCollisions = pointerWithin(scopedArgs)
+
+  // A subject row owns its visible subtree. Pointer hits therefore feel most
+  // direct on touch, while closest-center remains the keyboard/gap fallback.
+  return pointerCollisions.length > 0
+    ? pointerCollisions
+    : closestCenter(scopedArgs)
+}
+
+export function adjacentSortableItem(
+  items: UniqueIdentifier[],
+  currentId: UniqueIdentifier,
+  direction: -1 | 1
+): UniqueIdentifier | undefined {
+  const currentIndex = items.indexOf(currentId)
+  return currentIndex < 0 ? undefined : items[currentIndex + direction]
+}
+
+/** Arrow keys only visit siblings; left/right never imply reparenting. */
+const siblingKeyboardCoordinates: KeyboardCoordinateGetter = (
+  event,
+  { context }
+) => {
+  if (event.code !== "ArrowUp" && event.code !== "ArrowDown") {
+    return undefined
+  }
+
+  const active = context.active
+  if (!active || !hasSortableData(active)) return undefined
+  event.preventDefault()
+
+  const items = active.data.current.sortable.items
+  const currentId =
+    context.over && items.includes(context.over.id)
+      ? context.over.id
+      : active.id
+  const nextId = adjacentSortableItem(
+    items,
+    currentId,
+    event.code === "ArrowDown" ? 1 : -1
+  )
+  if (nextId === undefined) return undefined
+
+  const next = context.droppableContainers.get(nextId)
+  const rect = next ? context.droppableRects.get(next.id) : undefined
+  return rect ? { x: rect.left, y: rect.top } : undefined
+}
+
+const autoScroll = {
+  acceleration: 8,
+  threshold: { x: 0.1, y: 0.15 },
+} as const
+
+const measuring = {
+  droppable: { strategy: MeasuringStrategy.WhileDragging },
+} as const
+
 /**
  * The drag surface on its own, for trees.
  *
@@ -83,34 +191,33 @@ export function SortableRoot({
 }) {
   const t = useExtracted()
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
+  const sensors = useReorderSensors()
 
   const announcements = useMemo<Announcements>(
     () => ({
-      onDragStart: ({ active }) =>
-        t("Picked up item {position} of {total}.", {
-          position: String(ids.indexOf(String(active.id)) + 1),
-          total: String(ids.length),
-        }),
-      onDragOver: ({ over }) =>
-        over
-          ? t("Now at position {position} of {total}.", {
-              position: String(ids.indexOf(String(over.id)) + 1),
-              total: String(ids.length),
-            })
-          : undefined,
-      onDragEnd: ({ over }) =>
-        over
-          ? t("Dropped at position {position} of {total}.", {
-              position: String(ids.indexOf(String(over.id)) + 1),
-              total: String(ids.length),
-            })
-          : t("Dropped. The order is unchanged."),
+      onDragStart: ({ active }) => {
+        const group = sortableItems(active, ids)
+        return t("Picked up item {position} of {total}.", {
+          position: String(group.indexOf(active.id) + 1),
+          total: String(group.length),
+        })
+      },
+      onDragOver: ({ active, over }) => {
+        if (!over) return undefined
+        const group = sortableItems(active, ids)
+        return t("Now at position {position} of {total}.", {
+          position: String(group.indexOf(over.id) + 1),
+          total: String(group.length),
+        })
+      },
+      onDragEnd: ({ active, over }) => {
+        if (!over) return t("Dropped. The order is unchanged.")
+        const group = sortableItems(active, ids)
+        return t("Dropped at position {position} of {total}.", {
+          position: String(group.indexOf(over.id) + 1),
+          total: String(group.length),
+        })
+      },
       onDragCancel: () => t("Cancelled. The order is unchanged."),
     }),
     [ids, t]
@@ -119,13 +226,16 @@ export function SortableRoot({
   return (
     <DndContext
       accessibility={{ announcements }}
+      autoScroll={autoScroll}
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={siblingCollisionDetection}
+      measuring={measuring}
       modifiers={
         restrictToParent
           ? [restrictToVerticalAxis, restrictToParentElement]
           : [restrictToVerticalAxis]
       }
+      onDragStart={() => haptic("selection")}
       onDragEnd={({ active, over }) => {
         if (disabled || !over || active.id === over.id) return
         haptic("light")
@@ -166,13 +276,7 @@ export function SortableList({
 }) {
   const t = useExtracted()
 
-  const sensors = useSensors(
-    // A few pixels before a drag begins, so a tap on a row is still a tap.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
+  const sensors = useReorderSensors()
 
   const announcements = useMemo<Announcements>(
     () => ({
@@ -219,9 +323,12 @@ export function SortableList({
   return (
     <DndContext
       accessibility={{ announcements }}
+      autoScroll={autoScroll}
       sensors={sensors}
       collisionDetection={closestCenter}
+      measuring={measuring}
       modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragStart={() => haptic("selection")}
       onDragEnd={onDragEnd}
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -258,6 +365,7 @@ export function SortableRow({
     transform,
     transition,
     isDragging,
+    isSorting,
   } = useSortable({ id, disabled })
 
   const handle = useMemo<HandleValue>(
@@ -275,7 +383,9 @@ export function SortableRow({
           transition,
         }}
         className={cn(
-          isDragging && "relative z-10 bg-card opacity-90 shadow-lg",
+          (isSorting || isDragging) && "will-change-transform",
+          isDragging &&
+            "relative z-10 bg-card opacity-95 shadow-lg ring-1 ring-primary/25",
           className
         )}
       >
@@ -297,13 +407,13 @@ export function DragHandle({ className }: { className?: string }) {
       aria-label={t("Reorder")}
       disabled={handle.disabled}
       className={cn(
-        "flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing disabled:opacity-40",
+        "flex size-11 shrink-0 cursor-grab touch-manipulation items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing disabled:opacity-40 md:size-8 md:rounded-md",
         className
       )}
       {...handle.attributes}
       {...handle.listeners}
     >
-      <GripVerticalIcon className="size-4" />
+      <GripVerticalIcon className="size-5 md:size-4" />
     </button>
   )
 }

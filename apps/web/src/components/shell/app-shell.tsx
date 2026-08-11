@@ -6,7 +6,7 @@ import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "./app-sidebar"
 import { SiteHeader } from "./site-header"
-import { MobileHeader } from "./mobile-header"
+import { MobileHeader, MobilePageTitle } from "./mobile-header"
 import { MobileTabBar } from "./mobile-tabbar"
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner"
 import { TimelineBanner } from "./timeline-banner"
@@ -19,8 +19,9 @@ import { TimelineBanner } from "./timeline-banner"
  * window, rotating a tablet or opening the devtools device toolbar must not
  * remount the page or throw away what someone was typing.
  *
- * The page scrolls inside a container rather than the document, which is what
- * lets the phone header collapse and the desktop header stay put.
+ * The page scrolls inside a container rather than the document. On phones the
+ * large title is the first item in that flow while the compact bar stays put,
+ * so revealing the title never changes the scroll pane's own height.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const user = useAuthenticatedUser()
@@ -47,8 +48,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0
-        // A dead band around the threshold: without it, a title that toggles
-        // changes the content height and can oscillate against the scroll.
+        // A dead band around the title threshold avoids flickering when touch
+        // momentum settles on the boundary.
         setScrollState((current) => {
           const wasCondensed =
             current.pathname === pathname && current.condensed
@@ -92,6 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-6"
         >
           <div className="mx-auto w-full max-w-6xl px-4 pt-1 pb-6 md:px-6 md:pt-4">
+            <MobilePageTitle />
             {children}
           </div>
         </div>

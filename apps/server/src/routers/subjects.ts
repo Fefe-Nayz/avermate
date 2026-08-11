@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { grades, subjects } from "../db/schema";
@@ -89,11 +89,11 @@ export const subjectsRouter = {
 
       const id = newId("sub");
       const insertSubject = db.insert(subjects).values({
-          id,
-          ...input,
-          sortOrder: await nextSortOrder(input.yearId, input.parentId),
-          userId,
-        });
+        id,
+        ...input,
+        sortOrder: await nextSortOrder(input.yearId, input.parentId),
+        userId,
+      });
       await db.batch([
         insertSubject,
         detachYearPresetStatement(userId, input.yearId, "subject_created"),
@@ -171,6 +171,9 @@ export const subjectsRouter = {
       if (new Set(input.siblingIds).size !== input.siblingIds.length) {
         badRequest("A subject can only appear once in its sibling order");
       }
+      if (!input.siblingIds.includes(input.subjectId)) {
+        badRequest("The moved subject must appear in its sibling order");
+      }
       const siblings = await Promise.all(
         input.siblingIds.map((id) => requireSubject(userId, id)),
       );
@@ -179,6 +182,34 @@ export const subjectsRouter = {
         if (sibling.id !== subject.id && sibling.parentId !== input.parentId) {
           badRequest("Every reordered subject must share the same parent");
         }
+      }
+
+      // The order is authoritative, so accepting a partial destination list
+      // would leave omitted rows with stale (and potentially duplicate)
+      // positions. The moved subject is the sole exception to the current
+      // parent check above: during a re-parent it is not in the destination
+      // yet, but it must still be present in the complete resulting order.
+      const destinationRows = await db
+        .select({ id: subjects.id })
+        .from(subjects)
+        .where(
+          and(
+            eq(subjects.userId, userId),
+            eq(subjects.yearId, subject.yearId),
+            input.parentId
+              ? eq(subjects.parentId, input.parentId)
+              : isNull(subjects.parentId),
+          ),
+        );
+      const expectedIds = new Set(destinationRows.map((row) => row.id));
+      expectedIds.add(subject.id);
+      if (
+        expectedIds.size !== input.siblingIds.length ||
+        input.siblingIds.some((id) => !expectedIds.has(id))
+      ) {
+        badRequest(
+          "Sibling order must include every destination sibling exactly once",
+        );
       }
 
       const statements = [
@@ -222,7 +253,10 @@ export const subjectsRouter = {
             .update(subjects)
             .set({ parentId: subject.parentId, updatedAt: new Date() })
             .where(
-              and(eq(subjects.parentId, subject.id), eq(subjects.userId, userId)),
+              and(
+                eq(subjects.parentId, subject.id),
+                eq(subjects.userId, userId),
+              ),
             ),
           db.delete(subjects).where(eq(subjects.id, subject.id)),
           detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
@@ -239,9 +273,11 @@ export const subjectsRouter = {
           );
         const subtree = [subject.id, ...collectDescendantIds(rows, subject.id)];
         await db.batch([
-          db.delete(subjects).where(
-            and(inArray(subjects.id, subtree), eq(subjects.userId, userId)),
-          ),
+          db
+            .delete(subjects)
+            .where(
+              and(inArray(subjects.id, subtree), eq(subjects.userId, userId)),
+            ),
           detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
         ]);
         return { ok: true, deleted: subtree.length };

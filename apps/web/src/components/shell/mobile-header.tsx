@@ -87,24 +87,35 @@ export function MobileHeader({
           className="flex min-w-9 items-center justify-end gap-1"
         />
       </div>
-
-      {!chrome.bare ? (
-        <div
-          className={cn(
-            "overflow-hidden px-4 transition-all duration-200",
-            condensed ? "max-h-0 opacity-0" : "max-h-24 pb-2 opacity-100"
-          )}
-        >
-          <h1 className="truncate text-[27px] leading-tight font-semibold tracking-tight">
-            {title}
-          </h1>
-          {chrome.subtitle ? (
-            <p className="mt-0.5 truncate text-sm text-muted-foreground">
-              {chrome.subtitle}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </header>
+  )
+}
+
+/**
+ * The large phone title belongs to the scroll content, not to the fixed bar.
+ *
+ * Keeping it in normal flow means its height is consumed by `scrollTop` as it
+ * leaves or re-enters the viewport. Expanding the fixed header near the top
+ * used to move the whole scroll pane by that height, producing a visible
+ * catch-up jump while the finger was still moving.
+ */
+export function MobilePageTitle() {
+  const crumbs = useBreadcrumbs()
+  const chrome = usePageChrome()
+  const title = chrome.title ?? crumbs.at(-1)?.label ?? "Avermate"
+
+  if (chrome.bare) return null
+
+  return (
+    <div className="pb-2 md:hidden">
+      <h1 className="truncate text-[27px] leading-tight font-semibold tracking-tight">
+        {title}
+      </h1>
+      {chrome.subtitle ? (
+        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+          {chrome.subtitle}
+        </p>
+      ) : null}
+    </div>
   )
 }
