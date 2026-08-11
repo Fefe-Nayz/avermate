@@ -1,22 +1,22 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { ChevronRightIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { gradeRatio } from "@avermate/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ResultBadge, CoefficientBadge } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
+import Link from "next/link"
+import { ChevronRightIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { gradeRatio } from "@avermate/core"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ResultBadge, CoefficientBadge } from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
 
 /** The last few results, newest first — the app's most-checked list. */
 export function RecentGrades({ limit = 6 }: { limit?: number }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { graph } = useYear();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { graph } = useYear()
 
-  const grades = graph.allGrades().slice(-limit).reverse();
-  if (grades.length === 0) return null;
+  const grades = graph.allGrades().slice(-limit).reverse()
+  if (grades.length === 0) return null
 
   return (
     <Card className="gap-2 py-4">
@@ -36,7 +36,7 @@ export function RecentGrades({ limit = 6 }: { limit?: number }) {
       <CardContent className="px-2">
         <ul>
           {grades.map((grade) => {
-            const subject = graph.byId(grade.subjectId);
+            const subject = graph.byId(grade.subjectId)
             return (
               <li key={grade.id}>
                 <Link
@@ -59,10 +59,10 @@ export function RecentGrades({ limit = 6 }: { limit?: number }) {
                   <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
                 </Link>
               </li>
-            );
+            )
           })}
         </ul>
       </CardContent>
     </Card>
-  );
+  )
 }

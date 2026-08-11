@@ -1,4 +1,4 @@
-import type { Palette } from "./theme";
+import type { Palette } from "./theme"
 
 /**
  * Appearance that has to be right on the very first paint.
@@ -9,17 +9,17 @@ import type { Palette } from "./theme";
  * mirrored into a cookie the server layout can read synchronously.
  */
 
-export const APPEARANCE_COOKIE = "avermate-appearance";
+export const APPEARANCE_COOKIE = "avermate-appearance"
 
 export interface Appearance {
-  palette: Palette | "custom" | "mokattam";
+  palette: Palette | "custom" | "mokattam"
   /** Inline CSS for the custom palette, already serialised. */
-  customCss: string;
-  font: string;
-  headingFont: string;
-  radius: number;
-  reduceMotion: boolean;
-  season: string;
+  customCss: string
+  font: string
+  headingFont: string
+  radius: number
+  reduceMotion: boolean
+  season: string
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -30,21 +30,21 @@ export const DEFAULT_APPEARANCE: Appearance = {
   radius: 0.625,
   reduceMotion: false,
   season: "none",
-};
+}
 
 export function parseAppearance(raw: string | undefined): Appearance {
-  if (!raw) return DEFAULT_APPEARANCE;
+  if (!raw) return DEFAULT_APPEARANCE
   try {
-    const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<Appearance>;
-    return { ...DEFAULT_APPEARANCE, ...parsed };
+    const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<Appearance>
+    return { ...DEFAULT_APPEARANCE, ...parsed }
   } catch {
-    return DEFAULT_APPEARANCE;
+    return DEFAULT_APPEARANCE
   }
 }
 
 export function writeAppearanceCookie(appearance: Appearance): void {
-  if (typeof document === "undefined") return;
-  const value = encodeURIComponent(JSON.stringify(appearance));
+  if (typeof document === "undefined") return
+  const value = encodeURIComponent(JSON.stringify(appearance))
   // A year, so a returning visitor still lands in their own theme.
-  document.cookie = `${APPEARANCE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
+  document.cookie = `${APPEARANCE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`
 }

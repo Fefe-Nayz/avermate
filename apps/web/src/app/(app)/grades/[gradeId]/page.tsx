@@ -1,27 +1,27 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use } from "react";
-import { PencilIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { gradeImpact, gradeRatio } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link"
+import { use } from "react"
+import { PencilIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { gradeImpact, gradeRatio } from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
+} from "@/components/ui/empty"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import {
   AverageValue,
   CoefficientBadge,
   DeltaValue,
   PointsValue,
   ResultBadge,
-} from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
 
 /**
  * One result, and what it did.
@@ -33,14 +33,14 @@ import { useYear } from "@/components/year/year-provider";
 export default function GradePage({
   params,
 }: {
-  params: Promise<{ gradeId: string }>;
+  params: Promise<{ gradeId: string }>
 }) {
-  const { gradeId } = use(params);
-  const t = useExtracted();
-  const format = useFormatter();
-  const { graph } = useYear();
+  const { gradeId } = use(params)
+  const t = useExtracted()
+  const format = useFormatter()
+  const { graph } = useYear()
 
-  const grade = graph.allGrades().find((item) => item.id === gradeId);
+  const grade = graph.allGrades().find((item) => item.id === gradeId)
 
   if (!grade) {
     return (
@@ -55,13 +55,13 @@ export default function GradePage({
           {t("Back to grades")}
         </Button>
       </Empty>
-    );
+    )
   }
 
-  const subject = graph.byId(grade.subjectId);
-  const ratio = gradeRatio(grade);
-  const onSubject = gradeImpact(graph, gradeId, grade.subjectId);
-  const onGeneral = gradeImpact(graph, gradeId, null);
+  const subject = graph.byId(grade.subjectId)
+  const ratio = gradeRatio(grade)
+  const onSubject = gradeImpact(graph, gradeId, grade.subjectId)
+  const onGeneral = gradeImpact(graph, gradeId, null)
 
   return (
     <>
@@ -134,12 +134,15 @@ export default function GradePage({
         <div className="grid grid-cols-2 gap-3">
           <Card className="gap-1 py-4">
             <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {t("Effect on the subject")}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4">
-              <DeltaValue delta={onSubject.delta} className="text-2xl font-semibold" />
+              <DeltaValue
+                delta={onSubject.delta}
+                className="text-2xl font-semibold"
+              />
               <p className="mt-1 text-xs text-muted-foreground">
                 <AverageValue
                   ratio={onSubject.withoutValue}
@@ -158,12 +161,15 @@ export default function GradePage({
 
           <Card className="gap-1 py-4">
             <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {t("Effect on the year")}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4">
-              <DeltaValue delta={onGeneral.delta} className="text-2xl font-semibold" />
+              <DeltaValue
+                delta={onGeneral.delta}
+                className="text-2xl font-semibold"
+              />
               <p className="mt-1 text-xs text-muted-foreground">
                 <AverageValue
                   ratio={onGeneral.withoutValue}
@@ -223,7 +229,7 @@ export default function GradePage({
               <CardTitle className="text-sm font-medium">{t("Note")}</CardTitle>
             </CardHeader>
             <CardContent className="px-4">
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+              <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                 {grade.note}
               </p>
             </CardContent>
@@ -231,5 +237,5 @@ export default function GradePage({
         ) : null}
       </div>
     </>
-  );
+  )
 }

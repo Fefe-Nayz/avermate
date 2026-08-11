@@ -1,7 +1,8 @@
-"use client";
+"use client"
 
-import { useQuery } from "@tanstack/react-query";
-import { orpc } from "@/lib/orpc";
+import { useQuery } from "@tanstack/react-query"
+import { orpc } from "@/lib/orpc"
+import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 
 /**
  * Whether the signed-in account administers the site.
@@ -13,12 +14,12 @@ import { orpc } from "@/lib/orpc";
 export function useIsAdmin(): { isAdmin: boolean; isLoading: boolean } {
   const query = useQuery({
     ...orpc.admin.access.queryOptions(),
-    staleTime: 5 * 60_000,
+    staleTime: COMMON_QUERY_STALE_TIME,
     retry: false,
-  });
+  })
 
   return {
     isAdmin: query.data?.isAdmin ?? false,
     isLoading: query.isLoading,
-  };
+  }
 }

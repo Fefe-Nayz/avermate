@@ -1,26 +1,24 @@
-"use client";
+import { SubjectForm } from "@/components/subjects/subject-form"
 
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import { SubjectForm } from "@/components/subjects/subject-form";
-
-function NewSubject() {
-  const params = useSearchParams();
-  const kind = params.get("kind") === "category" ? "category" : "subject";
-  const parentId = params.get("parent");
+export default async function NewSubjectPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    kind?: string | string[]
+    parent?: string | string[]
+  }>
+}) {
+  const params = await searchParams
+  const rawKind = Array.isArray(params.kind) ? params.kind[0] : params.kind
+  const rawParent = Array.isArray(params.parent)
+    ? params.parent[0]
+    : params.parent
+  const kind = rawKind === "category" ? "category" : "subject"
 
   return (
     <SubjectForm
       mode="create"
-      initial={{ kind, parentId: parentId ?? null }}
+      initial={{ kind, parentId: rawParent ?? null }}
     />
-  );
-}
-
-export default function NewSubjectPage() {
-  return (
-    <Suspense>
-      <NewSubject />
-    </Suspense>
-  );
+  )
 }

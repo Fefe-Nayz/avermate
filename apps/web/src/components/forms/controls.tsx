@@ -1,17 +1,17 @@
-"use client";
+"use client"
 
-import { useId, type ReactNode } from "react";
-import { CheckIcon } from "lucide-react";
-import { useLocale } from "next-intl";
+import { useId, type ReactNode } from "react"
+import { CheckIcon } from "lucide-react"
+import { useLocale } from "next-intl"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/haptics";
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+import { haptic } from "@/lib/haptics"
 
 /**
  * Form controls tuned for a thumb.
@@ -29,11 +29,11 @@ export function TextField({
   required,
   ...props
 }: React.ComponentProps<typeof Input> & {
-  label: string;
-  description?: string;
-  error?: string;
+  label: string
+  description?: string
+  error?: string
 }) {
-  const id = useId();
+  const id = useId()
   return (
     <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>
@@ -51,7 +51,7 @@ export function TextField({
       ) : null}
       {error ? <FieldError>{error}</FieldError> : null}
     </Field>
-  );
+  )
 }
 
 export function NumberField({
@@ -67,23 +67,23 @@ export function NumberField({
   step = "any",
   placeholder,
 }: {
-  label: string;
-  description?: string;
-  error?: string;
-  required?: boolean;
-  suffix?: ReactNode;
-  value: string;
-  onValueChange: (value: string) => void;
-  min?: number;
-  max?: number;
-  step?: string | number;
-  placeholder?: string;
+  label: string
+  description?: string
+  error?: string
+  required?: boolean
+  suffix?: ReactNode
+  value: string
+  onValueChange: (value: string) => void
+  min?: number
+  max?: number
+  step?: string | number
+  placeholder?: string
 }) {
-  const id = useId();
-  const locale = useLocale();
+  const id = useId()
+  const locale = useLocale()
   // French keyboards produce a comma; accepting only a dot would silently
   // reject half the numbers people type.
-  const decimalHint = locale.startsWith("fr") ? "[0-9]*[.,]?[0-9]*" : undefined;
+  const decimalHint = locale.startsWith("fr") ? "[0-9]*[.,]?[0-9]*" : undefined
 
   return (
     <Field data-invalid={error ? true : undefined}>
@@ -106,7 +106,7 @@ export function NumberField({
           onChange={(event) =>
             onValueChange(event.target.value.replace(",", "."))
           }
-          className={cn("h-11 numeric md:h-9", suffix && "pr-12")}
+          className={cn("numeric h-11 md:h-9", suffix && "pr-12")}
         />
         {suffix ? (
           <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
@@ -119,14 +119,14 @@ export function NumberField({
       ) : null}
       {error ? <FieldError>{error}</FieldError> : null}
     </Field>
-  );
+  )
 }
 
 export interface Choice<T extends string> {
-  value: T;
-  label: string;
-  description?: string;
-  icon?: ReactNode;
+  value: T
+  label: string
+  description?: string
+  icon?: ReactNode
 }
 
 /** Radio behaviour, card presentation. Works with one hand. */
@@ -138,12 +138,12 @@ export function ChoiceField<T extends string>({
   onValueChange,
   columns = 1,
 }: {
-  label?: string;
-  description?: string;
-  choices: Array<Choice<T>>;
-  value: T;
-  onValueChange: (value: T) => void;
-  columns?: 1 | 2 | 3;
+  label?: string
+  description?: string
+  choices: Array<Choice<T>>
+  value: T
+  onValueChange: (value: T) => void
+  columns?: 1 | 2 | 3
 }) {
   return (
     <Field>
@@ -153,11 +153,11 @@ export function ChoiceField<T extends string>({
         className={cn(
           "grid gap-2",
           columns === 2 && "grid-cols-2",
-          columns === 3 && "grid-cols-3",
+          columns === 3 && "grid-cols-3"
         )}
       >
         {choices.map((choice) => {
-          const selected = choice.value === value;
+          const selected = choice.value === value
           return (
             <button
               key={choice.value}
@@ -165,28 +165,30 @@ export function ChoiceField<T extends string>({
               role="radio"
               aria-checked={selected}
               onClick={() => {
-                haptic("selection");
-                onValueChange(choice.value);
+                haptic("selection")
+                onValueChange(choice.value)
               }}
               className={cn(
                 "flex min-h-11 items-start gap-3 rounded-xl border p-3 text-left transition-colors",
                 selected
                   ? "border-primary bg-primary/6 ring-1 ring-primary/40"
-                  : "border-border bg-card hover:bg-accent/50 active:bg-accent",
+                  : "border-border bg-card hover:bg-accent/50 active:bg-accent"
               )}
             >
               {choice.icon ? (
                 <span
                   className={cn(
                     "mt-0.5 shrink-0",
-                    selected ? "text-primary" : "text-muted-foreground",
+                    selected ? "text-primary" : "text-muted-foreground"
                   )}
                 >
                   {choice.icon}
                 </span>
               ) : null}
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{choice.label}</span>
+                <span className="block text-sm font-medium">
+                  {choice.label}
+                </span>
                 {choice.description ? (
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {choice.description}
@@ -197,12 +199,12 @@ export function ChoiceField<T extends string>({
                 <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
               ) : null}
             </button>
-          );
+          )
         })}
       </div>
       {description ? <FieldDescription>{description}</FieldDescription> : null}
     </Field>
-  );
+  )
 }
 
 /** A labelled section inside a form screen. */
@@ -212,10 +214,10 @@ export function FormSection({
   children,
   className,
 }: {
-  title?: string;
-  description?: string;
-  children: ReactNode;
-  className?: string;
+  title?: string
+  description?: string
+  children: ReactNode
+  className?: string
 }) {
   return (
     <section className={cn("flex flex-col gap-4", className)}>
@@ -223,11 +225,13 @@ export function FormSection({
         <div>
           <h2 className="text-sm font-medium">{title}</h2>
           {description ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {description}
+            </p>
           ) : null}
         </div>
       ) : null}
       {children}
     </section>
-  );
+  )
 }

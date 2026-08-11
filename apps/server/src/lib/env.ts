@@ -15,6 +15,8 @@ export const env = createEnv({
 
     BETTER_AUTH_URL: z.url(),
     BETTER_AUTH_SECRET: z.string().min(32),
+    /** Parent domain shared by the web and API services, for authenticated SSR. */
+    AUTH_COOKIE_DOMAIN: z.string().min(1).optional(),
     ADMIN_USER_IDS: z.string().optional(),
 
     CLIENT_URL: z.url(),

@@ -56,7 +56,9 @@
   }
 
   .pane-inset {
-    padding-bottom: calc(var(--spacing-tabbar) + var(--spacing-safe-bottom) + 1rem);
+    padding-bottom: calc(
+      var(--spacing-tabbar) + var(--spacing-safe-bottom) + 1rem
+    );
   }
 
   /* Horizontal rails: period pickers, subject chips, story cards. */

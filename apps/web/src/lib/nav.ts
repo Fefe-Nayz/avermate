@@ -8,7 +8,7 @@ import {
   SparklesIcon,
   TargetIcon,
   type LucideIcon,
-} from "lucide-react";
+} from "lucide-react"
 
 /**
  * The app's routes, declared once.
@@ -19,15 +19,15 @@ import {
  */
 
 export interface NavEntry {
-  href: string;
+  href: string
   /** Source-language label; screens translate it through `useExtracted`. */
-  label: string;
-  icon: LucideIcon;
+  label: string
+  icon: LucideIcon
   /** Extra path prefixes that should light this entry up. */
-  matches?: string[];
+  matches?: string[]
   /** Shown in the mobile tab bar. */
-  tab?: boolean;
-  adminOnly?: boolean;
+  tab?: boolean
+  adminOnly?: boolean
 }
 
 export const NAV_ENTRIES: NavEntry[] = [
@@ -75,7 +75,7 @@ export const NAV_ENTRIES: NavEntry[] = [
     icon: ShieldIcon,
     adminOnly: true,
   },
-];
+]
 
 export const SETTINGS_SECTIONS = [
   { href: "/settings", label: "Profile", exact: true },
@@ -84,11 +84,11 @@ export const SETTINGS_SECTIONS = [
   { href: "/settings/averages", label: "Custom averages" },
   { href: "/settings/account", label: "Account" },
   { href: "/settings/about", label: "About" },
-] as const;
+] as const
 
 export function isActivePath(pathname: string, entry: NavEntry): boolean {
-  const candidates = [entry.href, ...(entry.matches ?? [])];
+  const candidates = [entry.href, ...(entry.matches ?? [])]
   return candidates.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  )
 }

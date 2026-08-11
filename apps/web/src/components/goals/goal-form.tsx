@@ -1,33 +1,37 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookMarkedIcon, PinIcon, SigmaIcon, TargetIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { planGoal } from "@avermate/core";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { FormPage } from "@/components/forms/form-page";
-import { ChoiceField, FormSection, TextField } from "@/components/forms/controls";
-import { PickerField, type PickerOption } from "@/components/forms/picker";
-import { AverageValue } from "@/components/data/value";
-import { GoalPlanView } from "./goal-plan-view";
-import { useYear } from "@/components/year/year-provider";
-import { useGoalPlans } from "@/hooks/use-goal-plans";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+import { useRouter } from "next/navigation"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { BookMarkedIcon, PinIcon, SigmaIcon, TargetIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { planGoal } from "@avermate/core"
+import { Field, FieldLabel } from "@/components/ui/field"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
+import { FormPage } from "@/components/forms/form-page"
+import {
+  ChoiceField,
+  FormSection,
+  TextField,
+} from "@/components/forms/controls"
+import { PickerField, type PickerOption } from "@/components/forms/picker"
+import { AverageValue } from "@/components/data/value"
+import { GoalPlanView } from "./goal-plan-view"
+import { useYear } from "@/components/year/year-provider"
+import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 export interface GoalFormValues {
-  id?: string;
-  name: string;
-  kind: "general" | "subject" | "custom";
-  referenceId: string | null;
-  targetRatio: number;
-  periodId: string | null;
-  isPinned: boolean;
+  id?: string
+  name: string
+  kind: "general" | "subject" | "custom"
+  referenceId: string | null
+  targetRatio: number
+  periodId: string | null
+  isPinned: boolean
 }
 
 /**
@@ -42,34 +46,34 @@ export function GoalForm({
   initial,
   mode,
 }: {
-  initial?: Partial<GoalFormValues>;
-  mode: "create" | "edit";
+  initial?: Partial<GoalFormValues>
+  mode: "create" | "edit"
 }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { graph, customAverages, yearId, scale, resolve } = useYear();
-  const { remaining } = useGoalPlans();
+  const t = useExtracted()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { graph, customAverages, yearId, scale, resolve } = useYear()
+  const { remaining } = useGoalPlans()
 
   const [kind, setKind] = useState<GoalFormValues["kind"]>(
-    initial?.kind ?? "general",
-  );
+    initial?.kind ?? "general"
+  )
   const [referenceId, setReferenceId] = useState<string | null>(
-    initial?.referenceId ?? null,
-  );
+    initial?.referenceId ?? null
+  )
   const current = useMemo(() => {
-    const resolved = resolve({ kind, referenceId });
+    const resolved = resolve({ kind, referenceId })
     return resolved
       ? resolved.graph.ratio(resolved.subjectId, resolved.scope)
-      : null;
-  }, [resolve, kind, referenceId]);
+      : null
+  }, [resolve, kind, referenceId])
 
-  const [name, setName] = useState(initial?.name ?? "");
+  const [name, setName] = useState(initial?.name ?? "")
   const [targetRatio, setTargetRatio] = useState(
-    initial?.targetRatio ?? Math.min(0.95, (current ?? 0.5) + 0.05),
-  );
-  const [isPinned, setIsPinned] = useState(initial?.isPinned ?? true);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+    initial?.targetRatio ?? Math.min(0.95, (current ?? 0.5) + 0.05)
+  )
+  const [isPinned, setIsPinned] = useState(initial?.isPinned ?? true)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const subjectOptions: PickerOption[] = useMemo(
     () =>
@@ -78,8 +82,8 @@ export function GoalForm({
         label: subject.name,
         depth: graph.depthOf(subject.id),
       })),
-    [graph],
-  );
+    [graph]
+  )
 
   const averageOptions: PickerOption[] = useMemo(
     () =>
@@ -87,12 +91,12 @@ export function GoalForm({
         value: average.id,
         label: average.name,
       })),
-    [customAverages],
-  );
+    [customAverages]
+  )
 
   const preview = useMemo(() => {
-    const resolved = resolve({ kind, referenceId });
-    if (!resolved) return null;
+    const resolved = resolve({ kind, referenceId })
+    if (!resolved) return null
     return planGoal(
       {
         id: initial?.id ?? "__preview__",
@@ -108,51 +112,61 @@ export function GoalForm({
       resolved.graph,
       resolved.subjectId,
       resolved.scope,
-      { remaining },
-    );
-  }, [resolve, kind, referenceId, targetRatio, name, initial, t, remaining]);
+      { remaining }
+    )
+  }, [resolve, kind, referenceId, targetRatio, name, initial, t, remaining])
 
   const onSaved = {
     onSuccess: () => {
-      haptic("success");
-      toast.success(mode === "create" ? t("Goal created") : t("Goal updated"));
+      haptic("success")
+      toast.success(mode === "create" ? t("Goal created") : t("Goal updated"))
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/goals");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/goals")
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The goal could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The goal could not be saved."))
     },
-  };
+  }
 
-  const create = useMutation({ ...orpc.goals.create.mutationOptions(), ...onSaved });
-  const update = useMutation({ ...orpc.goals.update.mutationOptions(), ...onSaved });
-  const saving = create.isPending || update.isPending;
+  const create = useMutation({
+    ...orpc.goals.create.mutationOptions(),
+    ...onSaved,
+  })
+  const update = useMutation({
+    ...orpc.goals.update.mutationOptions(),
+    ...onSaved,
+  })
+  const saving = create.isPending || update.isPending
 
   const remove = useMutation({
     ...orpc.goals.delete.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Goal deleted"));
+      haptic("success")
+      toast.success(t("Goal deleted"))
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/goals");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/goals")
     },
-  });
+  })
 
   const submit = () => {
-    const next: Record<string, string> = {};
-    if (!name.trim()) next.name = t("Give this goal a name.");
+    const next: Record<string, string> = {}
+    if (!name.trim()) next.name = t("Give this goal a name.")
     if (kind !== "general" && !referenceId) {
-      next.referenceId = t("Pick what this goal is about.");
+      next.referenceId = t("Pick what this goal is about.")
     }
-    setErrors(next);
+    setErrors(next)
     if (Object.keys(next).length > 0) {
-      haptic("warning");
-      return;
+      haptic("warning")
+      return
     }
 
     const payload = {
@@ -163,14 +177,14 @@ export function GoalForm({
       periodId: initial?.periodId ?? null,
       dueAt: null,
       isPinned,
-    };
+    }
 
     if (mode === "create") {
-      create.mutate({ yearId: yearId as string, ...payload });
+      create.mutate({ yearId: yearId as string, ...payload })
     } else {
-      update.mutate({ goalId: initial?.id as string, ...payload });
+      update.mutate({ goalId: initial?.id as string, ...payload })
     }
-  };
+  }
 
   return (
     <FormPage
@@ -225,8 +239,8 @@ export function GoalForm({
           ]}
           value={kind}
           onValueChange={(value) => {
-            setKind(value);
-            setReferenceId(null);
+            setKind(value)
+            setReferenceId(null)
           }}
         />
 
@@ -277,8 +291,8 @@ export function GoalForm({
             max={scale}
             step={scale / 200}
             onValueChange={(value) => {
-              const next = Array.isArray(value) ? value[0] : value;
-              if (typeof next === "number") setTargetRatio(next / scale);
+              const next = Array.isArray(value) ? value[0] : value
+              if (typeof next === "number") setTargetRatio(next / scale)
             }}
             onValueCommitted={() => haptic("selection")}
             className="mt-4"
@@ -300,8 +314,8 @@ export function GoalForm({
             id="goal-pinned"
             checked={isPinned}
             onCheckedChange={(checked) => {
-              haptic("selection");
-              setIsPinned(checked);
+              haptic("selection")
+              setIsPinned(checked)
             }}
           />
         </Field>
@@ -316,5 +330,5 @@ export function GoalForm({
         </FormSection>
       ) : null}
     </FormPage>
-  );
+  )
 }

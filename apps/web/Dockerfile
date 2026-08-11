@@ -17,8 +17,8 @@ COPY . .
 WORKDIR /app/apps/web
 ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_API_URL=https://api.avermate.fr
-ENV NEXT_PUBLIC_APP_URL=https://avermate.fr
+ENV NEXT_PUBLIC_API_URL=https://api.avermate.nayz.fr
+ENV NEXT_PUBLIC_APP_URL=https://avermate.nayz.fr
 
 # Next's standalone output needs a real node binary at build time.
 RUN apk add --no-cache nodejs && node ./node_modules/next/dist/bin/next build

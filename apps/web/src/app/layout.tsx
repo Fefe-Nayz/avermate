@@ -1,15 +1,15 @@
-import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
-import { Geist_Mono, Inter } from "next/font/google";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale } from "next-intl/server";
-import { Providers } from "@/components/providers";
-import { APPEARANCE_COOKIE, parseAppearance } from "@/lib/appearance";
-import { cn } from "@/lib/utils";
-import "./globals.css";
+import type { Metadata, Viewport } from "next"
+import { cookies } from "next/headers"
+import { Geist_Mono, Inter } from "next/font/google"
+import { NextIntlClientProvider } from "next-intl"
+import { getLocale } from "next-intl/server"
+import { Providers } from "@/components/providers"
+import { APPEARANCE_COOKIE, parseAppearance } from "@/lib/appearance"
+import { cn } from "@/lib/utils"
+import "./globals.css"
 
-const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
-const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
+const sans = Inter({ subsets: ["latin"], variable: "--font-sans" })
+const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
   title: {
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     title: "Avermate",
   },
   formatDetection: { telephone: false },
-};
+}
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -38,13 +38,13 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
-};
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const [locale, store] = await Promise.all([getLocale(), cookies()]);
-  const appearance = parseAppearance(store.get(APPEARANCE_COOKIE)?.value);
+  const [locale, store] = await Promise.all([getLocale(), cookies()])
+  const appearance = parseAppearance(store.get(APPEARANCE_COOKIE)?.value)
 
   return (
     <html
@@ -70,5 +70,5 @@ export default async function RootLayout({
         </NextIntlClientProvider>
       </body>
     </html>
-  );
+  )
 }

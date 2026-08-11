@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
 import {
   createContext,
   useContext,
@@ -8,9 +8,9 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from "react";
-import { useTheme } from "next-themes";
-import { useExtracted } from "next-intl";
+} from "react"
+import { useTheme } from "next-themes"
+import { useExtracted } from "next-intl"
 import {
   BookMarkedIcon,
   HistoryIcon,
@@ -18,7 +18,7 @@ import {
   PlusIcon,
   SunIcon,
   TargetIcon,
-} from "lucide-react";
+} from "lucide-react"
 import {
   Command,
   CommandDialog,
@@ -28,10 +28,10 @@ import {
   CommandItem,
   CommandList,
   CommandSeparator,
-} from "@/components/ui/command";
-import { NAV_ENTRIES } from "@/lib/nav";
-import { useMaybeYear } from "@/components/year/year-provider";
-import { AverageValue } from "@/components/data/value";
+} from "@/components/ui/command"
+import { NAV_ENTRIES } from "@/lib/nav"
+import { useMaybeYear } from "@/components/year/year-provider"
+import { AverageValue } from "@/components/data/value"
 
 /**
  * Search everything: screens, subjects, grades, goals, and a few commands.
@@ -41,39 +41,39 @@ import { AverageValue } from "@/components/data/value";
  */
 
 interface PaletteStore {
-  open: () => void;
-  close: () => void;
+  open: () => void
+  close: () => void
 }
 
-const PaletteContext = createContext<PaletteStore | null>(null);
+const PaletteContext = createContext<PaletteStore | null>(null)
 
 export function CommandPaletteProvider({ children }: { children: ReactNode }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const year = useMaybeYear();
-  const { setTheme, resolvedTheme } = useTheme();
-  const [open, setOpen] = useState(false);
+  const t = useExtracted()
+  const router = useRouter()
+  const year = useMaybeYear()
+  const { setTheme, resolvedTheme } = useTheme()
+  const [open, setOpen] = useState(false)
 
   const store = useMemo<PaletteStore>(
     () => ({ open: () => setOpen(true), close: () => setOpen(false) }),
-    [],
-  );
+    []
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        setOpen((value) => !value);
+        event.preventDefault()
+        setOpen((value) => !value)
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   const run = (action: () => void) => {
-    setOpen(false);
-    action();
-  };
+    setOpen(false)
+    action()
+  }
 
   const labels: Record<string, string> = {
     Dashboard: t("Dashboard"),
@@ -84,10 +84,10 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
     "Year in review": t("Year in review"),
     Settings: t("Settings"),
     Admin: t("Admin"),
-  };
+  }
 
-  const subjects = year?.subjects ?? [];
-  const grades = year?.graph.allGrades().slice(-60).reverse() ?? [];
+  const subjects = year?.subjects ?? []
+  const grades = year?.graph.allGrades().slice(-60).reverse() ?? []
 
   return (
     <PaletteContext.Provider value={store}>
@@ -101,122 +101,126 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
         <Command>
           <CommandInput placeholder={t("Search subjects, grades, screens…")} />
           <CommandList>
-          <CommandEmpty>{t("Nothing matches.")}</CommandEmpty>
+            <CommandEmpty>{t("Nothing matches.")}</CommandEmpty>
 
-          <CommandGroup heading={t("Create")}>
-            <CommandItem
-              value={`${t("New grade")} add`}
-              onSelect={() => run(() => router.push("/grades/new"))}
-            >
-              <PlusIcon />
-              {t("New grade")}
-            </CommandItem>
-            <CommandItem
-              value={`${t("New subject")} add`}
-              onSelect={() => run(() => router.push("/subjects/new"))}
-            >
-              <BookMarkedIcon />
-              {t("New subject")}
-            </CommandItem>
-            <CommandItem
-              value={`${t("New goal")} add`}
-              onSelect={() => run(() => router.push("/goals/new"))}
-            >
-              <TargetIcon />
-              {t("New goal")}
-            </CommandItem>
-          </CommandGroup>
-
-          <CommandSeparator />
-
-          <CommandGroup heading={t("Go to")}>
-            {NAV_ENTRIES.map((entry) => (
+            <CommandGroup heading={t("Create")}>
               <CommandItem
-                key={entry.href}
-                value={labels[entry.label] ?? entry.label}
-                onSelect={() => run(() => router.push(entry.href))}
+                value={`${t("New grade")} add`}
+                onSelect={() => run(() => router.push("/grades/new"))}
               >
-                <entry.icon />
-                {labels[entry.label] ?? entry.label}
+                <PlusIcon />
+                {t("New grade")}
               </CommandItem>
-            ))}
-          </CommandGroup>
+              <CommandItem
+                value={`${t("New subject")} add`}
+                onSelect={() => run(() => router.push("/subjects/new"))}
+              >
+                <BookMarkedIcon />
+                {t("New subject")}
+              </CommandItem>
+              <CommandItem
+                value={`${t("New goal")} add`}
+                onSelect={() => run(() => router.push("/goals/new"))}
+              >
+                <TargetIcon />
+                {t("New goal")}
+              </CommandItem>
+            </CommandGroup>
 
-          {subjects.length > 0 ? (
-            <CommandGroup heading={t("Subjects")}>
-              {subjects.map((subject) => (
+            <CommandSeparator />
+
+            <CommandGroup heading={t("Go to")}>
+              {NAV_ENTRIES.map((entry) => (
                 <CommandItem
-                  key={subject.id}
-                  value={`${subject.name} ${subject.shortName ?? ""}`}
-                  onSelect={() =>
-                    run(() => router.push(`/subjects/${subject.id}`))
-                  }
+                  key={entry.href}
+                  value={labels[entry.label] ?? entry.label}
+                  onSelect={() => run(() => router.push(entry.href))}
                 >
-                  <BookMarkedIcon />
-                  <span className="truncate">{subject.name}</span>
-                  <AverageValue
-                    ratio={year?.graph.ratio(subject.id) ?? null}
-                    animate={false}
-                    decimals={1}
-                    colored
-                    className="ml-auto text-xs"
-                  />
+                  <entry.icon />
+                  {labels[entry.label] ?? entry.label}
                 </CommandItem>
               ))}
             </CommandGroup>
-          ) : null}
 
-          {grades.length > 0 ? (
-            <CommandGroup heading={t("Recent grades")}>
-              {grades.map((grade) => (
-                <CommandItem
-                  key={grade.id}
-                  value={`${grade.name} ${year?.graph.byId(grade.subjectId)?.name ?? ""}`}
-                  onSelect={() => run(() => router.push(`/grades/${grade.id}`))}
-                >
-                  <span className="truncate">{grade.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {year?.graph.byId(grade.subjectId)?.name}
-                  </span>
-                </CommandItem>
-              ))}
+            {subjects.length > 0 ? (
+              <CommandGroup heading={t("Subjects")}>
+                {subjects.map((subject) => (
+                  <CommandItem
+                    key={subject.id}
+                    value={`${subject.name} ${subject.shortName ?? ""}`}
+                    onSelect={() =>
+                      run(() => router.push(`/subjects/${subject.id}`))
+                    }
+                  >
+                    <BookMarkedIcon />
+                    <span className="truncate">{subject.name}</span>
+                    <AverageValue
+                      ratio={year?.graph.ratio(subject.id) ?? null}
+                      animate={false}
+                      decimals={1}
+                      colored
+                      className="ml-auto text-xs"
+                    />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+
+            {grades.length > 0 ? (
+              <CommandGroup heading={t("Recent grades")}>
+                {grades.map((grade) => (
+                  <CommandItem
+                    key={grade.id}
+                    value={`${grade.name} ${year?.graph.byId(grade.subjectId)?.name ?? ""}`}
+                    onSelect={() =>
+                      run(() => router.push(`/grades/${grade.id}`))
+                    }
+                  >
+                    <span className="truncate">{grade.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {year?.graph.byId(grade.subjectId)?.name}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+
+            <CommandSeparator />
+
+            <CommandGroup heading={t("Commands")}>
+              <CommandItem
+                value={t("Toggle theme")}
+                onSelect={() =>
+                  run(() =>
+                    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+                  )
+                }
+              >
+                {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
+                {t("Toggle theme")}
+              </CommandItem>
+              <CommandItem
+                value={t("Time travel")}
+                onSelect={() =>
+                  run(() => {
+                    if (!year) return
+                    year.setTimelineDate(
+                      year.timelineDate
+                        ? null
+                        : new Date().toISOString().slice(0, 10)
+                    )
+                  })
+                }
+              >
+                <HistoryIcon />
+                {year?.timelineDate ? t("Back to today") : t("Time travel")}
+              </CommandItem>
             </CommandGroup>
-          ) : null}
-
-          <CommandSeparator />
-
-          <CommandGroup heading={t("Commands")}>
-            <CommandItem
-              value={t("Toggle theme")}
-              onSelect={() =>
-                run(() => setTheme(resolvedTheme === "dark" ? "light" : "dark"))
-              }
-            >
-              {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
-              {t("Toggle theme")}
-            </CommandItem>
-            <CommandItem
-              value={t("Time travel")}
-              onSelect={() =>
-                run(() => {
-                  if (!year) return;
-                  year.setTimelineDate(
-                    year.timelineDate
-                      ? null
-                      : new Date().toISOString().slice(0, 10),
-                  );
-                })
-              }
-            >
-              <HistoryIcon />
-              {year?.timelineDate ? t("Back to today") : t("Time travel")}
-            </CommandItem>
-          </CommandGroup>
           </CommandList>
         </Command>
       </CommandDialog>
     </PaletteContext.Provider>
-  );
+  )
 }
 
 export function useCommandPalette(): PaletteStore {
@@ -225,5 +229,5 @@ export function useCommandPalette(): PaletteStore {
       open: () => undefined,
       close: () => undefined,
     }
-  );
+  )
 }

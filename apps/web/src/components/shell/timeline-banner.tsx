@@ -1,10 +1,10 @@
-"use client";
+"use client"
 
-import { HistoryIcon, XIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { Input } from "@/components/ui/input";
-import { useYear } from "@/components/year/year-provider";
-import { haptic } from "@/lib/haptics";
+import { HistoryIcon, XIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { Input } from "@/components/ui/input"
+import { useYear } from "@/components/year/year-provider"
+import { haptic } from "@/lib/haptics"
 
 /**
  * Time travel.
@@ -16,11 +16,11 @@ import { haptic } from "@/lib/haptics";
  * average from a stored snapshot.
  */
 export function TimelineBanner() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { timelineDate, setTimelineDate, year } = useYear();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { timelineDate, setTimelineDate, year } = useYear()
 
-  if (!timelineDate) return null;
+  if (!timelineDate) return null
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-band-fair/40 bg-band-fair/12 px-4 py-2 text-sm md:px-6">
@@ -48,13 +48,13 @@ export function TimelineBanner() {
         type="button"
         aria-label={t("Back to today")}
         onClick={() => {
-          haptic("light");
-          setTimelineDate(null);
+          haptic("light")
+          setTimelineDate(null)
         }}
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
       >
         <XIcon className="size-4" />
       </button>
     </div>
-  );
+  )
 }

@@ -1,8 +1,13 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon, GraduationCapIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
+import Link from "next/link"
+import {
+  CheckIcon,
+  ChevronsUpDownIcon,
+  PlusIcon,
+  GraduationCapIcon,
+} from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,25 +16,25 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { useYear } from "@/components/year/year-provider";
-import { haptic } from "@/lib/haptics";
+} from "@/components/ui/sidebar"
+import { useYear } from "@/components/year/year-provider"
+import { haptic } from "@/lib/haptics"
 
 export function YearSwitcher() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { years, year, selectYear } = useYear();
-  const { state } = useSidebar();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { years, year, selectYear } = useYear()
+  const { state } = useSidebar()
 
   const subtitle = year
     ? `${format.dateTime(new Date(year.startsAt), { month: "short", year: "numeric" })} → ${format.dateTime(new Date(year.endsAt), { month: "short", year: "numeric" })}`
-    : t("No year yet");
+    : t("No year yet")
 
   return (
     <SidebarMenu>
@@ -68,8 +73,8 @@ export function YearSwitcher() {
                 <DropdownMenuItem
                   key={item.id}
                   onClick={() => {
-                    haptic("selection");
-                    selectYear(item.id);
+                    haptic("selection")
+                    selectYear(item.id)
                   }}
                 >
                   <span className="truncate">{item.name}</span>
@@ -88,5 +93,5 @@ export function YearSwitcher() {
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  );
+  )
 }

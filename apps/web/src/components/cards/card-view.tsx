@@ -1,28 +1,25 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo } from "react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { FlameIcon, TrendingUpIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
+import Link from "next/link"
+import { useMemo } from "react"
+import { areaY, barY, defineChart, lineY } from "@tanstack/charts"
+import { d3Curve } from "@tanstack/charts/d3/shape"
+import { Chart } from "@tanstack/charts/react"
+import { scaleBand } from "@tanstack/charts/scales/band"
+import { scaleLinear } from "@tanstack/charts/scales/linear"
+import { curveMonotoneX } from "d3-shape"
+import { FlameIcon, TrendingUpIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
 import {
   evaluateCard,
   type CardMetric,
   type CardResult,
   type CardSpec,
-} from "@avermate/core";
-import { AverageValue, DeltaValue, ResultBadge } from "@/components/data/value";
-import { useGoalPlans } from "@/hooks/use-goal-plans";
-import { useYear } from "@/components/year/year-provider";
-import { cn } from "@/lib/utils";
+} from "@avermate/core"
+import { AverageValue, DeltaValue, ResultBadge } from "@/components/data/value"
+import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { useYear } from "@/components/year/year-provider"
+import { cn } from "@/lib/utils"
 
 /**
  * Rendering one dashboard card.
@@ -40,7 +37,7 @@ import { cn } from "@/lib/utils";
  * as an argument would ship its English source strings untranslated.
  */
 export function useMetricLabels(): Record<CardMetric, string> {
-  const t = useExtracted();
+  const t = useExtracted()
 
   return {
     average: t("Average"),
@@ -64,18 +61,17 @@ export function useMetricLabels(): Record<CardMetric, string> {
     activityStreak: t("Activity streak"),
     distribution: t("Distribution"),
     goalProgress: t("Goal"),
-  };
+  }
 }
 
 export function useCardResult(spec: CardSpec): CardResult {
-  const { graph, subjects, period, year, passingRatio, goals, resolve } = useYear();
-  const { remaining } = useGoalPlans();
+  const { graph, subjects, period, year, passingRatio, goals, resolve, now } =
+    useYear()
+  const { remaining } = useGoalPlans()
 
   return useMemo(() => {
-    const from = period.startAt;
-    const to = new Date(
-      Math.min(Date.now(), new Date(period.endAt).getTime()),
-    );
+    const from = period.startAt
+    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
 
     return evaluateCard(spec, {
       graph,
@@ -87,77 +83,188 @@ export function useCardResult(spec: CardSpec): CardResult {
       goals,
       remaining,
       resolveTarget: (target) => {
-        const resolved = resolve(target);
-        if (!resolved) return null;
-        return { ...resolved, subjects: resolved.graph.subjects };
+        const resolved = resolve(target)
+        if (!resolved) return null
+        return { ...resolved, subjects: resolved.graph.subjects }
       },
-    });
-  }, [spec, graph, subjects, period, year, passingRatio, goals, resolve, remaining]);
+    })
+  }, [
+    spec,
+    graph,
+    subjects,
+    period,
+    year,
+    passingRatio,
+    goals,
+    resolve,
+    remaining,
+    now,
+  ])
 }
 
 function Sparkline({
   points,
   positive,
 }: {
-  points: Array<{ date: Date; ratio: number | null }>;
-  positive: boolean;
+  points: Array<{ date: Date; ratio: number | null }>
+  positive: boolean
 }) {
+  const t = useExtracted()
   const data = points
     .filter((point) => point.ratio !== null)
-    .map((point) => ({ x: point.date.getTime(), y: point.ratio as number }));
-  if (data.length < 2) return null;
+    .map((point) => ({ x: point.date.getTime(), y: point.ratio as number }))
+  if (data.length < 2) return null
+
+  const xValues = data.map(({ x }) => x)
+  const yValues = data.map(({ y }) => y)
+  const xMinimum = Math.min(...xValues)
+  const xMaximum = Math.max(...xValues)
+  const yMinimum = Math.min(...yValues)
+  const yMaximum = Math.max(...yValues)
+  const yPadding = Math.max((yMaximum - yMinimum) * 0.05, 0.01)
+  const color = positive ? "var(--positive)" : "var(--negative)"
+  const definition = defineChart({
+    marks: [
+      areaY(data, {
+        id: "card-spark-area",
+        x: "x",
+        y1: yMinimum - yPadding,
+        y2: "y",
+        key: "x",
+        curve: d3Curve(curveMonotoneX),
+        fill: "url(#card-spark-fill)",
+      }),
+      lineY(data, {
+        id: "card-spark-line",
+        x: "x",
+        y: "y",
+        key: "x",
+        curve: d3Curve(curveMonotoneX),
+        stroke: color,
+        strokeWidth: 2,
+      }),
+    ],
+    x: {
+      scale: scaleLinear().domain(
+        xMinimum === xMaximum
+          ? [xMinimum - 1, xMaximum + 1]
+          : [xMinimum, xMaximum]
+      ),
+      grid: false,
+      axis: false,
+    },
+    y: {
+      scale: scaleLinear().domain([yMinimum - yPadding, yMaximum + yPadding]),
+      grid: false,
+      axis: false,
+    },
+    gradients: [
+      {
+        id: "card-spark-fill",
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 1,
+        stops: [
+          { offset: 0, color, opacity: 0.28 },
+          { offset: 1, color, opacity: 0 },
+        ],
+      },
+    ],
+    margin: { top: 4, right: 0, bottom: 0, left: 0 },
+    clip: true,
+    focus: false,
+    keyboard: false,
+    pointer: false,
+  })
 
   return (
-    <div className="pointer-events-none -mx-1 h-14">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-              <stop
-                offset="0%"
-                stopColor={positive ? "var(--positive)" : "var(--negative)"}
-                stopOpacity={0.28}
-              />
-              <stop
-                offset="100%"
-                stopColor={positive ? "var(--positive)" : "var(--negative)"}
-                stopOpacity={0}
-              />
-            </linearGradient>
-          </defs>
-          <XAxis dataKey="x" hide />
-          <YAxis hide domain={["dataMin", "dataMax"]} />
-          <Area
-            type="monotone"
-            dataKey="y"
-            stroke={positive ? "var(--positive)" : "var(--negative)"}
-            strokeWidth={2}
-            fill="url(#spark)"
-            isAnimationActive={false}
-            dot={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div aria-hidden="true" className="pointer-events-none -mx-1 h-14">
+      <Chart
+        ariaLabel={t("Trend")}
+        definition={definition}
+        height={56}
+        initialWidth={180}
+      />
     </div>
-  );
+  )
+}
+
+function MiniDistribution({
+  ariaLabel,
+  data,
+}: {
+  ariaLabel: string
+  data: readonly { count: number; label: string }[]
+}) {
+  const maximum = Math.max(1, ...data.map(({ count }) => count))
+  const definition = defineChart({
+    marks: [
+      barY(data, {
+        id: "card-distribution",
+        x: "label",
+        y: "count",
+        key: "label",
+        fill: "var(--chart-1)",
+        radius: 4,
+      }),
+    ],
+    x: {
+      scale: scaleBand<string>()
+        .domain(data.map(({ label }) => label))
+        .padding(0.12),
+      grid: false,
+      axis: {
+        line: false,
+        ticks: { size: 0, padding: 6 },
+        tickLabels: { fontSize: 10 },
+      },
+    },
+    y: {
+      scale: scaleLinear().domain([0, maximum]),
+      grid: false,
+      axis: false,
+    },
+    margin: { top: 4, right: 0, bottom: 0, left: 0 },
+    clip: true,
+    focus: false,
+    keyboard: false,
+    pointer: false,
+  })
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none h-24 text-muted-foreground"
+    >
+      <Chart
+        ariaLabel={ariaLabel}
+        definition={definition}
+        height={96}
+        initialWidth={220}
+      />
+    </div>
+  )
 }
 
 export function CardBody({
   spec,
   result,
 }: {
-  spec: CardSpec;
-  result: CardResult;
+  spec: CardSpec
+  result: CardResult
 }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { scale } = useYear();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { scale } = useYear()
 
   switch (result.kind) {
     case "empty":
       return (
-        <p className="text-sm text-muted-foreground">{t("Not enough data yet")}</p>
-      );
+        <p className="text-sm text-muted-foreground">
+          {t("Not enough data yet")}
+        </p>
+      )
 
     case "ratio":
       return (
@@ -179,12 +286,10 @@ export function CardBody({
             />
           ) : null}
         </div>
-      );
+      )
 
     case "count":
-      return (
-        <p className="numeric text-3xl font-semibold">{result.count}</p>
-      );
+      return <p className="numeric text-3xl font-semibold">{result.count}</p>
 
     case "percent":
       return (
@@ -204,19 +309,22 @@ export function CardBody({
             </div>
           ) : null}
         </div>
-      );
+      )
 
     case "scalar":
       return (
         <p className="numeric text-3xl font-semibold">
           {result.value === null
             ? "—"
-            : format.number(result.value * (result.unit === "ratio" ? scale : 1), {
-                maximumFractionDigits: 2,
-                signDisplay: "exceptZero",
-              })}
+            : format.number(
+                result.value * (result.unit === "ratio" ? scale : 1),
+                {
+                  maximumFractionDigits: 2,
+                  signDisplay: "exceptZero",
+                }
+              )}
         </p>
-      );
+      )
 
     case "subject":
       return (
@@ -228,11 +336,16 @@ export function CardBody({
             {result.name}
           </Link>
           <div className="flex items-center gap-2">
-            <AverageValue ratio={result.ratio} showScale colored className="text-sm" />
+            <AverageValue
+              ratio={result.ratio}
+              showScale
+              colored
+              className="text-sm"
+            />
             <DeltaValue delta={result.delta} className="text-xs" />
           </div>
         </div>
-      );
+      )
 
     case "grade":
       return (
@@ -251,7 +364,7 @@ export function CardBody({
             {format.dateTime(result.at, { day: "numeric", month: "long" })}
           </p>
         </div>
-      );
+      )
 
     case "list":
       return (
@@ -278,33 +391,14 @@ export function CardBody({
             </li>
           ))}
         </ul>
-      );
+      )
 
     case "distribution": {
       const data = result.buckets.map((bucket) => ({
         label: `${Math.round(bucket.from * scale)}`,
         count: bucket.count,
-      }));
-      return (
-        <div className="h-24">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-              />
-              <Bar
-                dataKey="count"
-                fill="var(--chart-1)"
-                radius={[4, 4, 0, 0]}
-                isAnimationActive={false}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      );
+      }))
+      return <MiniDistribution ariaLabel={t("Distribution")} data={data} />
     }
 
     case "streak":
@@ -313,7 +407,7 @@ export function CardBody({
           <FlameIcon
             className={cn(
               "size-5 self-center",
-              result.alive ? "text-band-weak" : "text-muted-foreground",
+              result.alive ? "text-band-weak" : "text-muted-foreground"
             )}
           />
           <span className="numeric text-3xl font-semibold">
@@ -323,14 +417,14 @@ export function CardBody({
             {t("best {count}", { count: String(result.longest) })}
           </span>
         </div>
-      );
+      )
 
     case "goal": {
-      const plan = result.plan;
+      const plan = result.plan
       const progress =
         plan.current === null || plan.target === 0
           ? 0
-          : Math.min(1, plan.current / plan.target);
+          : Math.min(1, plan.current / plan.target)
       return (
         <div className="flex flex-col gap-2">
           <div className="flex items-baseline gap-2">
@@ -347,7 +441,7 @@ export function CardBody({
             <div
               className={cn(
                 "h-full rounded-full transition-[width] duration-500",
-                plan.status === "unreachable" ? "bg-negative" : "bg-primary",
+                plan.status === "unreachable" ? "bg-negative" : "bg-primary"
               )}
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
@@ -357,10 +451,10 @@ export function CardBody({
             {plan.goal.name}
           </p>
         </div>
-      );
+      )
     }
 
     default:
-      return null;
+      return null
   }
 }

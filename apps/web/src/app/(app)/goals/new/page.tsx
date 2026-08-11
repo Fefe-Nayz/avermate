@@ -1,7 +1,5 @@
-"use client";
-
-import { GoalForm } from "@/components/goals/goal-form";
+import { GoalForm } from "@/components/goals/goal-form"
 
 export default function NewGoalPage() {
-  return <GoalForm mode="create" />;
+  return <GoalForm mode="create" />
 }

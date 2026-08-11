@@ -1,4 +1,4 @@
-"use client";
+"use client"
 
 /**
  * Haptic feedback.
@@ -10,13 +10,7 @@
  */
 
 export type HapticTone =
-  | "selection"
-  | "light"
-  | "medium"
-  | "heavy"
-  | "success"
-  | "warning"
-  | "error";
+  "selection" | "light" | "medium" | "heavy" | "success" | "warning" | "error"
 
 const PATTERNS: Record<HapticTone, number | number[]> = {
   selection: 8,
@@ -26,42 +20,42 @@ const PATTERNS: Record<HapticTone, number | number[]> = {
   success: [14, 45, 22],
   warning: [24, 60, 24],
   error: [36, 55, 36, 55, 36],
-};
+}
 
-const STORAGE_KEY = "avermate:haptics";
+const STORAGE_KEY = "avermate:haptics"
 
-let enabled = true;
+let enabled = true
 
 export function loadHapticsPreference(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return true
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    enabled = stored === null ? true : stored === "true";
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    enabled = stored === null ? true : stored === "true"
   } catch {
-    enabled = true;
+    enabled = true
   }
-  return enabled;
+  return enabled
 }
 
 export function setHapticsEnabled(value: boolean): void {
-  enabled = value;
-  if (typeof window === "undefined") return;
+  enabled = value
+  if (typeof window === "undefined") return
   try {
-    window.localStorage.setItem(STORAGE_KEY, String(value));
+    window.localStorage.setItem(STORAGE_KEY, String(value))
   } catch {
     // Private browsing can refuse storage; the in-memory flag still holds.
   }
 }
 
 export function hapticsEnabled(): boolean {
-  return enabled;
+  return enabled
 }
 
 export function haptic(tone: HapticTone = "medium"): void {
-  if (!enabled) return;
-  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  if (!enabled) return
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return
   try {
-    navigator.vibrate(PATTERNS[tone]);
+    navigator.vibrate(PATTERNS[tone])
   } catch {
     // Some browsers throw when the page is not visible. Not worth reporting.
   }
@@ -70,10 +64,10 @@ export function haptic(tone: HapticTone = "medium"): void {
 /** Wraps a handler so it buzzes before running. */
 export function withHaptic<T extends unknown[]>(
   tone: HapticTone,
-  handler?: (...args: T) => void,
+  handler?: (...args: T) => void
 ): (...args: T) => void {
   return (...args: T) => {
-    haptic(tone);
-    handler?.(...args);
-  };
+    haptic(tone)
+    handler?.(...args)
+  }
 }

@@ -1,12 +1,17 @@
-"use client";
+"use client"
 
-import { useMemo, useState } from "react";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/haptics";
+import { useMemo, useState } from "react"
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+import { haptic } from "@/lib/haptics"
 
 /**
  * Choosing one item out of many, without a modal.
@@ -18,14 +23,14 @@ import { haptic } from "@/lib/haptics";
  */
 
 export interface PickerOption {
-  value: string;
-  label: string;
+  value: string
+  label: string
   /** Nesting level, drawn as indentation. */
-  depth?: number;
-  hint?: string;
-  disabled?: boolean;
+  depth?: number
+  hint?: string
+  disabled?: boolean
   /** Extra text matched when searching. */
-  keywords?: string;
+  keywords?: string
 }
 
 export function PickerField({
@@ -40,30 +45,30 @@ export function PickerField({
   emptyHint,
   searchable = true,
 }: {
-  label: string;
-  description?: string;
-  error?: string;
-  required?: boolean;
-  options: PickerOption[];
-  value: string | null;
-  onValueChange: (value: string) => void;
-  placeholder?: string;
-  emptyHint?: string;
-  searchable?: boolean;
+  label: string
+  description?: string
+  error?: string
+  required?: boolean
+  options: PickerOption[]
+  value: string | null
+  onValueChange: (value: string) => void
+  placeholder?: string
+  emptyHint?: string
+  searchable?: boolean
 }) {
-  const t = useExtracted();
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const t = useExtracted()
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
 
-  const selected = options.find((option) => option.value === value);
+  const selected = options.find((option) => option.value === value)
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return options;
+    const needle = query.trim().toLowerCase()
+    if (!needle) return options
     return options.filter((option) =>
-      `${option.label} ${option.keywords ?? ""}`.toLowerCase().includes(needle),
-    );
-  }, [options, query]);
+      `${option.label} ${option.keywords ?? ""}`.toLowerCase().includes(needle)
+    )
+  }, [options, query])
 
   return (
     <Field data-invalid={error ? true : undefined}>
@@ -75,14 +80,14 @@ export function PickerField({
       <div
         className={cn(
           "overflow-hidden rounded-xl border bg-card transition-colors",
-          error && "border-destructive",
+          error && "border-destructive"
         )}
       >
         <button
           type="button"
           onClick={() => {
-            haptic("selection");
-            setOpen((current) => !current);
+            haptic("selection")
+            setOpen((current) => !current)
           }}
           aria-expanded={open}
           className="flex min-h-11 w-full items-center gap-2 px-3 py-2.5 text-left"
@@ -90,7 +95,7 @@ export function PickerField({
           <span
             className={cn(
               "min-w-0 flex-1 truncate text-sm",
-              selected ? "" : "text-muted-foreground",
+              selected ? "" : "text-muted-foreground"
             )}
           >
             {selected?.label ?? placeholder ?? t("Choose…")}
@@ -98,7 +103,7 @@ export function PickerField({
           <ChevronDownIcon
             className={cn(
               "size-4 shrink-0 text-muted-foreground transition-transform",
-              open && "rotate-180",
+              open && "rotate-180"
             )}
           />
         </button>
@@ -107,7 +112,7 @@ export function PickerField({
           <div className="border-t">
             {searchable && options.length > 7 ? (
               <div className="relative border-b p-2">
-                <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -125,17 +130,17 @@ export function PickerField({
                 </p>
               ) : (
                 filtered.map((option) => {
-                  const isSelected = option.value === value;
+                  const isSelected = option.value === value
                   return (
                     <button
                       key={option.value}
                       type="button"
                       disabled={option.disabled}
                       onClick={() => {
-                        haptic("selection");
-                        onValueChange(option.value);
-                        setOpen(false);
-                        setQuery("");
+                        haptic("selection")
+                        onValueChange(option.value)
+                        setOpen(false)
+                        setQuery("")
                       }}
                       style={{
                         paddingInlineStart: `${0.75 + (option.depth ?? 0) * 0.85}rem`,
@@ -145,7 +150,7 @@ export function PickerField({
                         option.disabled
                           ? "cursor-not-allowed text-muted-foreground/60"
                           : "hover:bg-accent active:bg-accent",
-                        isSelected && "bg-primary/8 font-medium",
+                        isSelected && "bg-primary/8 font-medium"
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">
@@ -160,7 +165,7 @@ export function PickerField({
                         <CheckIcon className="size-4 shrink-0 text-primary" />
                       ) : null}
                     </button>
-                  );
+                  )
                 })
               )}
             </div>
@@ -173,5 +178,5 @@ export function PickerField({
       ) : null}
       {error ? <FieldError>{error}</FieldError> : null}
     </Field>
-  );
+  )
 }

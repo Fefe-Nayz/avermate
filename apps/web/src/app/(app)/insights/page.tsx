@@ -1,16 +1,8 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo } from "react";
-import {
-  Bar,
-  BarChart,
-  Cell,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { useFormatter, useExtracted } from "next-intl";
+import Link from "next/link"
+import { useMemo } from "react"
+import { useFormatter, useExtracted } from "next-intl"
 import {
   activityStreaks,
   averageOverTime,
@@ -27,13 +19,14 @@ import {
   rankSubjects,
   standardDeviation,
   trend,
-} from "@avermate/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageMeta } from "@/components/shell/page-chrome";
-import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher";
-import { AverageValue, DeltaValue } from "@/components/data/value";
-import { AverageChart } from "@/components/charts/average-chart";
-import { useYear } from "@/components/year/year-provider";
+} from "@avermate/core"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageMeta } from "@/components/shell/page-chrome"
+import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
+import { AverageValue, DeltaValue } from "@/components/data/value"
+import { AverageChart } from "@/components/charts/average-chart"
+import { DistributionHistogram } from "@/components/charts/distribution-histogram"
+import { useYear } from "@/components/year/year-provider"
 
 /**
  * The statistics screen.
@@ -43,38 +36,38 @@ import { useYear } from "@/components/year/year-provider";
  * or a pass rate only means something next to the subjects it came from.
  */
 export default function InsightsPage() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { graph, subjects, period, year, passingRatio, scale } = useYear();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { graph, subjects, period, year, passingRatio, scale, now } = useYear()
 
   const series = useMemo(() => {
-    if (!year) return [];
+    if (!year) return []
     const from = new Date(
       Math.max(
         new Date(period.startAt).getTime(),
-        new Date(year.startsAt).getTime(),
-      ),
-    );
-    const to = new Date(Math.min(Date.now(), new Date(period.endAt).getTime()));
-    if (to <= from) return [];
-    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
+        new Date(year.startsAt).getTime()
+      )
+    )
+    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
+    if (to <= from) return []
+    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
     return averageOverTime(
       subjects,
       dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      null,
-    );
-  }, [subjects, period, year]);
+      null
+    )
+  }, [subjects, period, year, now])
 
-  const ratios = gradeRatios(graph);
-  const ranked = rankSubjects(graph);
-  const improved = rankByImprovement(graph);
-  const steady = rankByConsistency(graph);
-  const buckets = distribution(ratios, 5);
-  const streaks = passStreaks(graph.allGrades(), passingRatio);
-  const activity = activityStreaks(graph.allGrades());
-  const slope = trend(series);
-  const projected = projectedRatio(series, 10);
-  const general = graph.ratio(null);
+  const ratios = gradeRatios(graph)
+  const ranked = rankSubjects(graph)
+  const improved = rankByImprovement(graph)
+  const steady = rankByConsistency(graph)
+  const buckets = distribution(ratios, 5)
+  const streaks = passStreaks(graph.allGrades(), passingRatio)
+  const activity = activityStreaks(graph.allGrades())
+  const slope = trend(series)
+  const projected = projectedRatio(series, 10)
+  const general = graph.ratio(null)
 
   const headline = [
     {
@@ -97,13 +90,13 @@ export default function InsightsPage() {
       value: standardDeviation(ratios),
       kind: "points" as const,
     },
-  ];
+  ]
 
   const bucketData = buckets.map((bucket) => ({
     label: `${Math.round(bucket.from * scale)}–${Math.round(bucket.to * scale)}`,
     count: bucket.count,
     good: bucket.from >= passingRatio,
-  }));
+  }))
 
   if (ratios.length === 0) {
     return (
@@ -113,7 +106,7 @@ export default function InsightsPage() {
           {t("Record a few grades and this screen fills in.")}
         </p>
       </>
-    );
+    )
   }
 
   return (
@@ -135,7 +128,7 @@ export default function InsightsPage() {
           {headline.map((item) => (
             <Card key={item.label} className="gap-1 py-4">
               <CardHeader className="px-4">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                   {item.label}
                 </CardTitle>
               </CardHeader>
@@ -158,7 +151,11 @@ export default function InsightsPage() {
         </div>
 
         {series.length > 1 ? (
-          <AverageChart title={t("Average over time")} series={series} height={240} />
+          <AverageChart
+            title={t("Average over time")}
+            series={series}
+            height={240}
+          />
         ) : null}
 
         <div className="grid gap-3 @lg/main:grid-cols-2">
@@ -169,29 +166,10 @@ export default function InsightsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-2">
-              <div className="h-40">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={bucketData}>
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                    />
-                    <YAxis hide />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                      {bucketData.map((bucket) => (
-                        <Cell
-                          key={bucket.label}
-                          fill={
-                            bucket.good ? "var(--band-good)" : "var(--band-weak)"
-                          }
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <DistributionHistogram
+                ariaLabel={t("Where your results land")}
+                data={bucketData}
+              />
             </CardContent>
           </Card>
 
@@ -218,11 +196,11 @@ export default function InsightsPage() {
                   ? t("Not enough history to read a direction yet.")
                   : slope > 0.0005
                     ? t(
-                        "Your running average has been climbing. Holding this pace lands you here.",
+                        "Your running average has been climbing. Holding this pace lands you here."
                       )
                     : slope < -0.0005
                       ? t(
-                          "Your running average has been slipping. This is where the current pace leads.",
+                          "Your running average has been slipping. This is where the current pace leads."
                         )
                       : t("Your average has been flat. No drift either way.")}
               </p>
@@ -287,24 +265,24 @@ export default function InsightsPage() {
         </div>
       </div>
     </>
-  );
+  )
 }
 
 function RankCard({
   title,
   rows,
 }: {
-  title: string;
+  title: string
   rows: Array<{
-    id: string;
-    label: string;
-    ratio?: number;
-    delta?: number;
-    percent?: number;
-  }>;
+    id: string
+    label: string
+    ratio?: number
+    delta?: number
+    percent?: number
+  }>
 }) {
-  const format = useFormatter();
-  if (rows.length === 0) return null;
+  const format = useFormatter()
+  if (rows.length === 0) return null
 
   return (
     <Card className="gap-2 py-4">
@@ -345,5 +323,5 @@ function RankCard({
         </ul>
       </CardContent>
     </Card>
-  );
+  )
 }

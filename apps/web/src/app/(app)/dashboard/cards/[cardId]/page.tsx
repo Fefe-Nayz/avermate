@@ -1,31 +1,31 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use } from "react";
-import { useExtracted } from "next-intl";
-import type { CardDisplay, CardMetric } from "@avermate/core";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { use } from "react"
+import { useExtracted } from "next-intl"
+import type { CardDisplay, CardMetric } from "@avermate/core"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { CardForm } from "@/components/cards/card-form";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/ui/empty"
+import { CardForm } from "@/components/cards/card-form"
+import { useYear } from "@/components/year/year-provider"
 
 export default function EditCardPage({
   params,
 }: {
-  params: Promise<{ cardId: string }>;
+  params: Promise<{ cardId: string }>
 }) {
-  const { cardId } = use(params);
-  const t = useExtracted();
-  const { cards, isLoading } = useYear();
-  const card = cards.find((item) => item.id === cardId);
+  const { cardId } = use(params)
+  const t = useExtracted()
+  const { cards, isLoading } = useYear()
+  const card = cards.find((item) => item.id === cardId)
 
   if (!card) {
-    if (isLoading) return null;
+    if (isLoading) return null
     return (
       <Empty className="py-16">
         <EmptyHeader>
@@ -36,7 +36,7 @@ export default function EditCardPage({
           {t("Back to the dashboard")}
         </Button>
       </Empty>
-    );
+    )
   }
 
   return (
@@ -53,5 +53,5 @@ export default function EditCardPage({
         title: card.title ?? "",
       }}
     />
-  );
+  )
 }

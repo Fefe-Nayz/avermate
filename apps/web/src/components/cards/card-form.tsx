@@ -1,35 +1,39 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
+import { useRouter } from "next/navigation"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
 import {
   CARD_METRICS,
   allowedDisplays,
   type CardDisplay,
   type CardMetric,
   type CardSpec,
-} from "@avermate/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FormPage } from "@/components/forms/form-page";
-import { ChoiceField, FormSection, TextField } from "@/components/forms/controls";
-import { PickerField, type PickerOption } from "@/components/forms/picker";
-import { CardBody, useCardResult, useMetricLabels } from "./card-view";
-import { useYear } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+} from "@avermate/core"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FormPage } from "@/components/forms/form-page"
+import {
+  ChoiceField,
+  FormSection,
+  TextField,
+} from "@/components/forms/controls"
+import { PickerField, type PickerOption } from "@/components/forms/picker"
+import { CardBody, useCardResult, useMetricLabels } from "./card-view"
+import { useYear } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 export interface CardFormValues {
-  id?: string;
-  metric: CardMetric;
-  targetKind: "general" | "subject" | "custom";
-  targetId: string | null;
-  goalId: string | null;
-  display: CardDisplay;
-  span: 1 | 2 | 3 | 4;
-  title: string;
+  id?: string
+  metric: CardMetric
+  targetKind: "general" | "subject" | "custom"
+  targetId: string | null
+  goalId: string | null
+  display: CardDisplay
+  span: 1 | 2 | 3 | 4
+  title: string
 }
 
 /**
@@ -43,51 +47,55 @@ export function CardForm({
   initial,
   mode,
 }: {
-  initial?: Partial<CardFormValues>;
-  mode: "create" | "edit";
+  initial?: Partial<CardFormValues>
+  mode: "create" | "edit"
 }) {
-  const t = useExtracted();
-  const labels = useMetricLabels();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { graph, customAverages, goals, yearId } = useYear();
+  const t = useExtracted()
+  const labels = useMetricLabels()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { graph, customAverages, goals, yearId } = useYear()
 
-  const [metric, setMetric] = useState<CardMetric>(initial?.metric ?? "average");
+  const [metric, setMetric] = useState<CardMetric>(initial?.metric ?? "average")
   const [targetKind, setTargetKind] = useState<CardFormValues["targetKind"]>(
-    initial?.targetKind ?? "general",
-  );
+    initial?.targetKind ?? "general"
+  )
   const [targetId, setTargetId] = useState<string | null>(
-    initial?.targetId ?? null,
-  );
-  const [goalId, setGoalId] = useState<string | null>(initial?.goalId ?? null);
+    initial?.targetId ?? null
+  )
+  const [goalId, setGoalId] = useState<string | null>(initial?.goalId ?? null)
   const [display, setDisplay] = useState<CardDisplay>(
-    initial?.display ?? "value",
-  );
-  const [span, setSpan] = useState<CardFormValues["span"]>(initial?.span ?? 1);
-  const [title, setTitle] = useState(initial?.title ?? "");
+    initial?.display ?? "value"
+  )
+  const [span, setSpan] = useState<CardFormValues["span"]>(initial?.span ?? 1)
+  const [title, setTitle] = useState(initial?.title ?? "")
 
-  const displays = allowedDisplays(metric);
+  const displays = allowedDisplays(metric)
   const effectiveDisplay = displays.includes(display)
     ? display
-    : ((displays[0] ?? "value") as CardDisplay);
+    : ((displays[0] ?? "value") as CardDisplay)
 
-  const spec: CardSpec = useMemo(
-    () => ({
+  const spec: CardSpec = useMemo(() => {
+    const validDisplays = allowedDisplays(metric)
+    const resolvedDisplay = validDisplays.includes(display)
+      ? display
+      : ((validDisplays[0] ?? "value") as CardDisplay)
+
+    return {
       id: initial?.id ?? "__preview__",
       metric,
       target: { kind: targetKind, referenceId: targetId },
-      display: effectiveDisplay,
+      display: resolvedDisplay,
       span,
       title: title.trim() || null,
       accent: null,
       goalId,
       sortOrder: 0,
       hidden: false,
-    }),
-    [initial?.id, metric, targetKind, targetId, effectiveDisplay, span, title, goalId],
-  );
+    }
+  }, [initial?.id, metric, targetKind, targetId, display, span, title, goalId])
 
-  const preview = useCardResult(spec);
+  const preview = useCardResult(spec)
 
   const subjectOptions: PickerOption[] = useMemo(
     () =>
@@ -96,36 +104,46 @@ export function CardForm({
         label: subject.name,
         depth: graph.depthOf(subject.id),
       })),
-    [graph],
-  );
+    [graph]
+  )
 
   const onSaved = {
     onSuccess: () => {
-      haptic("success");
-      toast.success(mode === "create" ? t("Card added") : t("Card updated"));
+      haptic("success")
+      toast.success(mode === "create" ? t("Card added") : t("Card updated"))
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/dashboard");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/dashboard")
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The card could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The card could not be saved."))
     },
-  };
+  }
 
-  const create = useMutation({ ...orpc.cards.create.mutationOptions(), ...onSaved });
-  const update = useMutation({ ...orpc.cards.update.mutationOptions(), ...onSaved });
+  const create = useMutation({
+    ...orpc.cards.create.mutationOptions(),
+    ...onSaved,
+  })
+  const update = useMutation({
+    ...orpc.cards.update.mutationOptions(),
+    ...onSaved,
+  })
   const remove = useMutation({
     ...orpc.cards.delete.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
+      haptic("success")
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/dashboard");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/dashboard")
     },
-  });
+  })
 
   const submit = () => {
     const payload = {
@@ -139,14 +157,14 @@ export function CardForm({
       title: title.trim() || null,
       accent: null,
       hidden: false,
-    };
+    }
 
     if (mode === "create") {
-      create.mutate({ yearId: yearId as string, ...payload });
+      create.mutate({ yearId: yearId as string, ...payload })
     } else {
-      update.mutate({ cardId: initial?.id as string, ...payload });
+      update.mutate({ cardId: initial?.id as string, ...payload })
     }
-  };
+  }
 
   const displayLabels: Record<CardDisplay, string> = {
     value: t("Just the number"),
@@ -154,14 +172,16 @@ export function CardForm({
     chart: t("Full chart"),
     list: t("List"),
     gauge: t("Progress bar"),
-  };
+  }
 
   return (
     <FormPage
       title={mode === "create" ? t("New card") : t("Edit card")}
       backHref="/dashboard"
       onSubmit={submit}
-      submitLabel={mode === "create" ? t("Add to dashboard") : t("Save changes")}
+      submitLabel={
+        mode === "create" ? t("Add to dashboard") : t("Save changes")
+      }
       submitting={create.isPending || update.isPending}
       destructive={
         mode === "edit" && initial?.id
@@ -175,7 +195,7 @@ export function CardForm({
       <FormSection title={t("Preview")}>
         <Card className="gap-2 py-4">
           <CardHeader className="px-4">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {spec.title ?? labels[metric]}
             </CardTitle>
           </CardHeader>
@@ -207,8 +227,8 @@ export function CardForm({
           ]}
           value={targetKind}
           onValueChange={(value) => {
-            setTargetKind(value);
-            setTargetId(null);
+            setTargetKind(value)
+            setTargetId(null)
           }}
         />
 
@@ -284,5 +304,5 @@ export function CardForm({
         />
       </FormSection>
     </FormPage>
-  );
+  )
 }

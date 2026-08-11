@@ -1,17 +1,21 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ChevronRightIcon, PlusIcon, SearchIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import type { Subject } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
-import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher";
-import { AverageValue, CoefficientBadge, DeltaValue } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
-import { cn } from "@/lib/utils";
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { ChevronRightIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import type { Subject } from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
+import {
+  AverageValue,
+  CoefficientBadge,
+  DeltaValue,
+} from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
+import { cn } from "@/lib/utils"
 
 /**
  * The subject tree.
@@ -21,27 +25,27 @@ import { cn } from "@/lib/utils";
  * before they read a single average.
  */
 export default function SubjectsPage() {
-  const t = useExtracted();
-  const { graph, subjects } = useYear();
-  const [query, setQuery] = useState("");
+  const t = useExtracted()
+  const { graph, subjects } = useYear()
+  const [query, setQuery] = useState("")
 
-  const general = graph.ratio(null);
+  const general = graph.ratio(null)
 
   const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = query.trim().toLowerCase()
     if (needle) {
       return subjects
         .filter((subject) =>
           `${subject.name} ${subject.shortName ?? ""}`
             .toLowerCase()
-            .includes(needle),
+            .includes(needle)
         )
-        .map((subject) => ({ subject, depth: 0 }));
+        .map((subject) => ({ subject, depth: 0 }))
     }
     return graph
       .flatten()
-      .map((subject) => ({ subject, depth: graph.depthOf(subject.id) }));
-  }, [graph, subjects, query]);
+      .map((subject) => ({ subject, depth: graph.depthOf(subject.id) }))
+  }, [graph, subjects, query])
 
   return (
     <>
@@ -77,7 +81,7 @@ export default function SubjectsPage() {
 
         <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs tracking-wide text-muted-foreground uppercase">
               {t("General average")}
             </p>
             <AverageValue
@@ -94,7 +98,7 @@ export default function SubjectsPage() {
 
         {subjects.length > 6 ? (
           <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -138,7 +142,7 @@ export default function SubjectsPage() {
         )}
       </div>
     </>
-  );
+  )
 }
 
 function SubjectRow({
@@ -147,16 +151,16 @@ function SubjectRow({
   general,
   first,
 }: {
-  subject: Subject;
-  depth: number;
-  general: number | null;
-  first: boolean;
+  subject: Subject
+  depth: number
+  general: number | null
+  first: boolean
 }) {
-  const t = useExtracted();
-  const { graph } = useYear();
-  const ratio = graph.ratio(subject.id);
-  const isCategory = subject.kind === "category";
-  const gradeCount = graph.allGrades(subject.id).length;
+  const t = useExtracted()
+  const { graph } = useYear()
+  const ratio = graph.ratio(subject.id)
+  const isCategory = subject.kind === "category"
+  const gradeCount = graph.allGrades(subject.id).length
 
   return (
     <li className={cn(!first && "border-t")}>
@@ -164,8 +168,8 @@ function SubjectRow({
         href={`/subjects/${subject.id}`}
         style={{ paddingInlineStart: `${0.75 + depth * 1}rem` }}
         className={cn(
-          "flex min-h-13 items-center gap-3 pe-3 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent",
-          isCategory && "bg-muted/40",
+          "flex min-h-13 items-center gap-3 py-2.5 pe-3 transition-colors hover:bg-accent/60 active:bg-accent",
+          isCategory && "bg-muted/40"
         )}
       >
         <div className="min-w-0 flex-1">
@@ -173,8 +177,8 @@ function SubjectRow({
             className={cn(
               "truncate",
               isCategory
-                ? "text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                : "text-sm font-medium",
+                ? "text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                : "text-sm font-medium"
             )}
           >
             {subject.name}
@@ -188,7 +192,9 @@ function SubjectRow({
           ) : null}
         </div>
 
-        {!isCategory ? <CoefficientBadge coefficient={subject.coefficient} /> : null}
+        {!isCategory ? (
+          <CoefficientBadge coefficient={subject.coefficient} />
+        ) : null}
 
         <div className="flex flex-col items-end">
           <AverageValue
@@ -205,5 +211,5 @@ function SubjectRow({
         <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
       </Link>
     </li>
-  );
+  )
 }

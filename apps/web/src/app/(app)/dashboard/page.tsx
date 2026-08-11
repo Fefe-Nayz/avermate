@@ -1,20 +1,20 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { CheckIcon, PencilRulerIcon, PlusIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { averageOverTime, dayRange } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
-import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher";
-import { CardGrid } from "@/components/cards/card-grid";
-import { AverageChart } from "@/components/charts/average-chart";
-import { RecentGrades } from "@/components/grades/recent-grades";
-import { GoalStrip } from "@/components/goals/goal-strip";
-import { useYear } from "@/components/year/year-provider";
-import { useGoalPlans } from "@/hooks/use-goal-plans";
-import { haptic } from "@/lib/haptics";
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { CheckIcon, PencilRulerIcon, PlusIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { averageOverTime, dayRange } from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
+import { CardGrid } from "@/components/cards/card-grid"
+import { AverageChart } from "@/components/charts/average-chart"
+import { RecentGrades } from "@/components/grades/recent-grades"
+import { GoalStrip } from "@/components/goals/goal-strip"
+import { useYear } from "@/components/year/year-provider"
+import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { haptic } from "@/lib/haptics"
 
 /**
  * The dashboard.
@@ -24,42 +24,43 @@ import { haptic } from "@/lib/haptics";
  * heading, what did I just get — because that is the order people ask them in.
  */
 export default function DashboardPage() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { year, subjects, graph, period, goals } = useYear();
-  const { plans } = useGoalPlans();
-  const [editing, setEditing] = useState(false);
+  const t = useExtracted()
+  const format = useFormatter()
+  const { year, subjects, graph, period, goals, now } = useYear()
+  const { plans } = useGoalPlans()
+  const [editing, setEditing] = useState(false)
 
   const series = useMemo(() => {
-    if (!year) return [];
+    if (!year) return []
     const from = new Date(
-      Math.max(new Date(period.startAt).getTime(), new Date(year.startsAt).getTime()),
-    );
-    const to = new Date(
-      Math.min(Date.now(), new Date(period.endAt).getTime()),
-    );
-    if (to <= from) return [];
-    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
+      Math.max(
+        new Date(period.startAt).getTime(),
+        new Date(year.startsAt).getTime()
+      )
+    )
+    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
+    if (to <= from) return []
+    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
     return averageOverTime(
       subjects,
       dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      null,
-    );
-  }, [subjects, period, year]);
+      null
+    )
+  }, [subjects, period, year, now])
 
   const pinnedGoals = useMemo(
     () =>
       plans(
-        goals.filter((goal) => goal.isPinned || goals.length <= 2).slice(0, 3),
+        goals.filter((goal) => goal.isPinned || goals.length <= 2).slice(0, 3)
       ),
-    [goals, plans],
-  );
+    [goals, plans]
+  )
 
-  const greeting = format.dateTime(new Date(), {
+  const greeting = format.dateTime(new Date(now), {
     weekday: "long",
     day: "numeric",
     month: "long",
-  });
+  })
 
   return (
     <>
@@ -70,8 +71,8 @@ export default function DashboardPage() {
           size="icon"
           aria-label={editing ? t("Done") : t("Edit dashboard")}
           onClick={() => {
-            haptic("selection");
-            setEditing((current) => !current);
+            haptic("selection")
+            setEditing((current) => !current)
           }}
         >
           {editing ? (
@@ -154,5 +155,5 @@ export default function DashboardPage() {
         ) : null}
       </div>
     </>
-  );
+  )
 }

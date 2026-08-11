@@ -1,15 +1,15 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { ChevronRightIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useState } from "react"
+import { ChevronRightIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/collapsible"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -21,10 +21,10 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { useYear } from "@/components/year/year-provider";
-import { AverageValue } from "@/components/data/value";
-import type { Subject } from "@avermate/core";
+} from "@/components/ui/sidebar"
+import { useYear } from "@/components/year/year-provider"
+import { AverageValue } from "@/components/data/value"
+import type { Subject } from "@avermate/core"
 
 /**
  * The year's headline subjects, in the sidebar, with their current average.
@@ -33,21 +33,23 @@ import type { Subject } from "@avermate/core";
  * matters, not a second copy of the subjects screen.
  */
 export function SidebarSubjectTree() {
-  const t = useExtracted();
-  const pathname = usePathname();
-  const { graph, subjects } = useYear();
-  const { state } = useSidebar();
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const t = useExtracted()
+  const pathname = usePathname()
+  const { graph, subjects } = useYear()
+  const { state } = useSidebar()
+  const [open, setOpen] = useState<Record<string, boolean>>({})
 
-  if (state === "collapsed") return null;
+  if (state === "collapsed") return null
 
-  const featured = subjects.filter((subject) => subject.isMain);
+  const featured = subjects.filter((subject) => subject.isMain)
   const shown: Subject[] =
     featured.length > 0
       ? featured
-      : (graph.roots.filter((subject) => subject.kind !== "category").slice(0, 6) as Subject[]);
+      : (graph.roots
+          .filter((subject) => subject.kind !== "category")
+          .slice(0, 6) as Subject[])
 
-  if (shown.length === 0) return null;
+  if (shown.length === 0) return null
 
   return (
     <SidebarGroup>
@@ -55,9 +57,9 @@ export function SidebarSubjectTree() {
       <SidebarGroupContent>
         <SidebarMenu>
           {shown.map((subject) => {
-            const children = graph.childrenOf(subject.id);
-            const active = pathname === `/subjects/${subject.id}`;
-            const ratio = graph.ratio(subject.id);
+            const children = graph.childrenOf(subject.id)
+            const active = pathname === `/subjects/${subject.id}`
+            const ratio = graph.ratio(subject.id)
 
             if (children.length === 0) {
               return (
@@ -77,7 +79,7 @@ export function SidebarSubjectTree() {
                     />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              );
+              )
             }
 
             return (
@@ -89,7 +91,9 @@ export function SidebarSubjectTree() {
                 }
                 render={<SidebarMenuItem />}
               >
-                <CollapsibleTrigger render={<SidebarMenuButton size="sm" isActive={active} />}>
+                <CollapsibleTrigger
+                  render={<SidebarMenuButton size="sm" isActive={active} />}
+                >
                   <ChevronRightIcon className="size-3.5 shrink-0 transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-90" />
                   <span className="truncate">{subject.name}</span>
                   <AverageValue
@@ -123,10 +127,10 @@ export function SidebarSubjectTree() {
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </Collapsible>
-            );
+            )
           })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  );
+  )
 }

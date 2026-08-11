@@ -1,30 +1,40 @@
-"use client";
+"use client"
 
-import { usePathname } from "next/navigation";
+import { usePathname } from "next/navigation"
 import {
   createContext,
   useContext,
   useMemo,
   useState,
   type ReactNode,
-} from "react";
-import { useMutation } from "@tanstack/react-query";
-import { BugIcon, LightbulbIcon, MessageCircleIcon, SendIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+} from "react"
+import { useMutation } from "@tanstack/react-query"
+import {
+  BugIcon,
+  LightbulbIcon,
+  MessageCircleIcon,
+  SendIcon,
+} from "lucide-react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
 import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 /**
  * Feedback, reachable from anywhere.
@@ -35,51 +45,55 @@ import { haptic } from "@/lib/haptics";
  */
 
 interface FeedbackStore {
-  open: (kind?: FeedbackKind) => void;
+  open: (kind?: FeedbackKind) => void
 }
 
-type FeedbackKind = "bug" | "idea" | "question" | "other";
+type FeedbackKind = "bug" | "idea" | "question" | "other"
 
-const FeedbackContext = createContext<FeedbackStore | null>(null);
+const FeedbackContext = createContext<FeedbackStore | null>(null)
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
-  const t = useExtracted();
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<FeedbackKind>("idea");
-  const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
+  const t = useExtracted()
+  const pathname = usePathname()
+  const [open, setOpen] = useState(false)
+  const [kind, setKind] = useState<FeedbackKind>("idea")
+  const [subject, setSubject] = useState("")
+  const [message, setMessage] = useState("")
 
   const submit = useMutation({
     ...orpc.feedback.submit.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Thanks — your message is on its way."));
-      setOpen(false);
-      setSubject("");
-      setMessage("");
+      haptic("success")
+      toast.success(t("Thanks — your message is on its way."))
+      setOpen(false)
+      setSubject("")
+      setMessage("")
     },
     onError: () => {
-      haptic("error");
-      toast.error(t("The message could not be sent."));
+      haptic("error")
+      toast.error(t("The message could not be sent."))
     },
-  });
+  })
 
   const store = useMemo<FeedbackStore>(
     () => ({
       open: (nextKind) => {
-        if (nextKind) setKind(nextKind);
-        setOpen(true);
+        if (nextKind) setKind(nextKind)
+        setOpen(true)
       },
     }),
-    [],
-  );
+    []
+  )
 
-  const kinds: Array<{ value: FeedbackKind; label: string; icon: typeof BugIcon }> = [
+  const kinds: Array<{
+    value: FeedbackKind
+    label: string
+    icon: typeof BugIcon
+  }> = [
     { value: "bug", label: t("Bug"), icon: BugIcon },
     { value: "idea", label: t("Idea"), icon: LightbulbIcon },
     { value: "question", label: t("Question"), icon: MessageCircleIcon },
-  ];
+  ]
 
   return (
     <FeedbackContext.Provider value={store}>
@@ -93,7 +107,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
           <form
             className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
             onSubmit={(event) => {
-              event.preventDefault();
+              event.preventDefault()
               submit.mutate({
                 kind,
                 subject,
@@ -107,7 +121,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                   agent:
                     typeof navigator === "undefined" ? "" : navigator.userAgent,
                 },
-              });
+              })
             }}
           >
             <FieldGroup>
@@ -116,8 +130,8 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
                 <ToggleGroup
                   value={[kind]}
                   onValueChange={(value) => {
-                    const next = value[0] as FeedbackKind | undefined;
-                    if (next) setKind(next);
+                    const next = value[0] as FeedbackKind | undefined
+                    if (next) setKind(next)
                   }}
                   variant="outline"
                   className="w-full"
@@ -136,7 +150,9 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="feedback-subject">{t("Summary")}</FieldLabel>
+                <FieldLabel htmlFor="feedback-subject">
+                  {t("Summary")}
+                </FieldLabel>
                 <Input
                   id="feedback-subject"
                   value={subject}
@@ -148,7 +164,9 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="feedback-message">{t("Details")}</FieldLabel>
+                <FieldLabel htmlFor="feedback-message">
+                  {t("Details")}
+                </FieldLabel>
                 <Textarea
                   id="feedback-message"
                   value={message}
@@ -176,9 +194,9 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
         </SheetContent>
       </Sheet>
     </FeedbackContext.Provider>
-  );
+  )
 }
 
 export function useFeedback(): FeedbackStore {
-  return useContext(FeedbackContext) ?? { open: () => undefined };
+  return useContext(FeedbackContext) ?? { open: () => undefined }
 }

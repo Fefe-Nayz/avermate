@@ -1,34 +1,48 @@
-"use client";
+"use client"
 
-import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Spinner } from "@/components/ui/spinner";
-import { PageMeta } from "@/components/shell/page-chrome";
+import { useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { PlusIcon, SaveIcon, Trash2Icon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Spinner } from "@/components/ui/spinner"
+import { PageMeta } from "@/components/shell/page-chrome"
 import {
   SettingsRow,
   SettingsSection,
-} from "@/components/settings/settings-section";
-import { NumberField, TextField } from "@/components/forms/controls";
-import { useYear } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+} from "@/components/settings/settings-section"
+import { NumberField, TextField } from "@/components/forms/controls"
+import { useYear } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 function toDateInput(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
 interface PeriodDraft {
-  key: string;
-  name: string;
-  startAt: string;
-  endAt: string;
-  isCumulative: boolean;
+  key: string
+  name: string
+  startAt: string
+  endAt: string
+  isCumulative: boolean
+}
+
+function createPeriodDrafts(
+  periods: ReturnType<typeof useYear>["periods"]
+): PeriodDraft[] {
+  return periods
+    .filter((period) => period.id !== "__full_year__")
+    .map((period) => ({
+      key: period.id,
+      name: period.name,
+      startAt: toDateInput(new Date(period.startAt)),
+      endAt: toDateInput(new Date(period.endAt)),
+      isCumulative: period.isCumulative,
+    }))
 }
 
 /**
@@ -39,76 +53,84 @@ interface PeriodDraft {
  * pick up and show as real.
  */
 export default function YearSettingsPage() {
-  const t = useExtracted();
-  const queryClient = useQueryClient();
-  const { year, yearId, periods } = useYear();
+  const t = useExtracted()
+  const queryClient = useQueryClient()
+  const { year, yearId, periods } = useYear()
 
-  const [name, setName] = useState("");
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
-  const [scale, setScale] = useState("20");
-  const [defaultOutOf, setDefaultOutOf] = useState("20");
-  const [passing, setPassing] = useState("10");
-  const [decimals, setDecimals] = useState("2");
-  const [drafts, setDrafts] = useState<PeriodDraft[]>([]);
+  const [sourceYear, setSourceYear] = useState(year)
+  const [name, setName] = useState(year?.name ?? "")
+  const [startsAt, setStartsAt] = useState(() =>
+    year ? toDateInput(new Date(year.startsAt)) : ""
+  )
+  const [endsAt, setEndsAt] = useState(() =>
+    year ? toDateInput(new Date(year.endsAt)) : ""
+  )
+  const [scale, setScale] = useState(() => String(year?.scale ?? 20))
+  const [defaultOutOf, setDefaultOutOf] = useState(() =>
+    String(year?.defaultOutOf ?? 20)
+  )
+  const [passing, setPassing] = useState(() =>
+    String(year ? year.passingRatio * year.scale : 10)
+  )
+  const [decimals, setDecimals] = useState(() => String(year?.decimals ?? 2))
+  const [sourcePeriods, setSourcePeriods] = useState(periods)
+  const [drafts, setDrafts] = useState<PeriodDraft[]>(() =>
+    createPeriodDrafts(periods)
+  )
 
-  useEffect(() => {
-    if (!year) return;
-    setName(year.name);
-    setStartsAt(toDateInput(new Date(year.startsAt)));
-    setEndsAt(toDateInput(new Date(year.endsAt)));
-    setScale(String(year.scale));
-    setDefaultOutOf(String(year.defaultOutOf));
-    setPassing(String(year.passingRatio * year.scale));
-    setDecimals(String(year.decimals));
-  }, [year]);
+  // A refreshed snapshot replaces the editing baseline. Adjusting guarded
+  // render state avoids an extra effect render while keeping unsaved edits
+  // intact during unrelated renders.
+  if (sourceYear !== year) {
+    setSourceYear(year)
+    if (year) {
+      setName(year.name)
+      setStartsAt(toDateInput(new Date(year.startsAt)))
+      setEndsAt(toDateInput(new Date(year.endsAt)))
+      setScale(String(year.scale))
+      setDefaultOutOf(String(year.defaultOutOf))
+      setPassing(String(year.passingRatio * year.scale))
+      setDecimals(String(year.decimals))
+    }
+  }
 
-  useEffect(() => {
-    setDrafts(
-      periods
-        .filter((period) => period.id !== "__full_year__")
-        .map((period) => ({
-          key: period.id,
-          name: period.name,
-          startAt: toDateInput(new Date(period.startAt)),
-          endAt: toDateInput(new Date(period.endAt)),
-          isCumulative: period.isCumulative,
-        })),
-    );
-  }, [periods]);
+  if (sourcePeriods !== periods) {
+    setSourcePeriods(periods)
+    setDrafts(createPeriodDrafts(periods))
+  }
 
   const invalidate = () =>
     queryClient.invalidateQueries({
       queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-    });
+    })
 
   const saveYear = useMutation({
     ...orpc.years.update.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Year updated."));
-      void invalidate();
+      haptic("success")
+      toast.success(t("Year updated."))
+      void invalidate()
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The year could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The year could not be saved."))
     },
-  });
+  })
 
   const savePeriods = useMutation({
     ...orpc.periods.replaceAll.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Periods updated."));
-      void invalidate();
+      haptic("success")
+      toast.success(t("Periods updated."))
+      void invalidate()
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The periods could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The periods could not be saved."))
     },
-  });
+  })
 
-  const scaleNumber = Number.parseFloat(scale) || 20;
+  const scaleNumber = Number.parseFloat(scale) || 20
 
   return (
     <>
@@ -134,7 +156,8 @@ export default function YearSettingsPage() {
                   scale: scaleNumber,
                   defaultOutOf: Number.parseFloat(defaultOutOf) || scaleNumber,
                   passingRatio:
-                    (Number.parseFloat(passing) || scaleNumber / 2) / scaleNumber,
+                    (Number.parseFloat(passing) || scaleNumber / 2) /
+                    scaleNumber,
                   decimals: Number.parseInt(decimals, 10) || 2,
                 })
               }
@@ -202,7 +225,7 @@ export default function YearSettingsPage() {
         <SettingsSection
           title={t("Periods")}
           description={t(
-            "A grade with no period of its own is filed by its date. Deleting a period never deletes grades.",
+            "A grade with no period of its own is filed by its date. Deleting a period never deletes grades."
           )}
           footer={
             <>
@@ -210,7 +233,7 @@ export default function YearSettingsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  haptic("light");
+                  haptic("light")
                   setDrafts((current) => [
                     ...current,
                     {
@@ -220,7 +243,7 @@ export default function YearSettingsPage() {
                       endAt: endsAt,
                       isCumulative: false,
                     },
-                  ]);
+                  ])
                 }}
               >
                 <PlusIcon className="size-4" />
@@ -268,8 +291,8 @@ export default function YearSettingsPage() {
                       current.map((item, position) =>
                         position === index
                           ? { ...item, name: event.target.value }
-                          : item,
-                      ),
+                          : item
+                      )
                     )
                   }
                   className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
@@ -279,10 +302,10 @@ export default function YearSettingsPage() {
                   size="icon-sm"
                   aria-label={t("Remove")}
                   onClick={() => {
-                    haptic("light");
+                    haptic("light")
                     setDrafts((current) =>
-                      current.filter((_, position) => position !== index),
-                    );
+                      current.filter((_, position) => position !== index)
+                    )
                   }}
                 >
                   <Trash2Icon className="size-4" />
@@ -298,8 +321,8 @@ export default function YearSettingsPage() {
                       current.map((item, position) =>
                         position === index
                           ? { ...item, startAt: event.target.value }
-                          : item,
-                      ),
+                          : item
+                      )
                     )
                   }
                 />
@@ -312,8 +335,8 @@ export default function YearSettingsPage() {
                       current.map((item, position) =>
                         position === index
                           ? { ...item, endAt: event.target.value }
-                          : item,
-                      ),
+                          : item
+                      )
                     )
                   }
                 />
@@ -321,7 +344,9 @@ export default function YearSettingsPage() {
               <div className="pt-3">
                 <SettingsRow
                   label={t("Cumulative")}
-                  description={t("Includes everything since the start of the year.")}
+                  description={t(
+                    "Includes everything since the start of the year."
+                  )}
                 >
                   <Switch
                     checked={draft.isCumulative}
@@ -330,8 +355,8 @@ export default function YearSettingsPage() {
                         current.map((item, position) =>
                           position === index
                             ? { ...item, isCumulative: checked }
-                            : item,
-                        ),
+                            : item
+                        )
                       )
                     }
                   />
@@ -342,5 +367,5 @@ export default function YearSettingsPage() {
         </SettingsSection>
       </div>
     </>
-  );
+  )
 }

@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link"
+import { useMemo } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   DndContext,
   KeyboardSensor,
@@ -11,26 +11,26 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-} from "@dnd-kit/core";
-import { restrictToParentElement } from "@dnd-kit/modifiers";
+} from "@dnd-kit/core"
+import { restrictToParentElement } from "@dnd-kit/modifiers"
 import {
   SortableContext,
   arrayMove,
   rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVerticalIcon, PencilIcon, PlusIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import type { CardSpec } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useYear, type DashboardCardRow } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/haptics";
-import { CardBody, useCardResult, useMetricLabels } from "./card-view";
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { GripVerticalIcon, PencilIcon, PlusIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import type { CardSpec } from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { cn } from "@/lib/utils"
+import { haptic } from "@/lib/haptics"
+import { CardBody, useCardResult, useMetricLabels } from "./card-view"
 
 /**
  * The dashboard grid.
@@ -56,7 +56,7 @@ export function toSpec(row: DashboardCardRow): CardSpec {
     goalId: row.goalId,
     sortOrder: row.sortOrder,
     hidden: row.hidden,
-  };
+  }
 }
 
 const SPAN_CLASS: Record<number, string> = {
@@ -64,19 +64,19 @@ const SPAN_CLASS: Record<number, string> = {
   2: "@md/main:col-span-2",
   3: "@md/main:col-span-3",
   4: "@md/main:col-span-4",
-};
+}
 
 function DashboardCard({
   row,
   editing,
 }: {
-  row: DashboardCardRow;
-  editing: boolean;
+  row: DashboardCardRow
+  editing: boolean
 }) {
-  const t = useExtracted();
-  const labels = useMetricLabels();
-  const spec = useMemo(() => toSpec(row), [row]);
-  const result = useCardResult(spec);
+  const t = useExtracted()
+  const labels = useMetricLabels()
+  const spec = useMemo(() => toSpec(row), [row])
+  const result = useCardResult(spec)
   const {
     attributes,
     listeners,
@@ -84,7 +84,7 @@ function DashboardCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: row.id, disabled: !editing });
+  } = useSortable({ id: row.id, disabled: !editing })
 
   return (
     <Card
@@ -93,11 +93,11 @@ function DashboardCard({
       className={cn(
         "col-span-2 gap-2 py-4",
         SPAN_CLASS[spec.span],
-        isDragging && "z-10 opacity-80 shadow-lg",
+        isDragging && "z-10 opacity-80 shadow-lg"
       )}
     >
       <CardHeader className="flex items-center gap-1 px-4">
-        <CardTitle className="min-w-0 flex-1 truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <CardTitle className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {spec.title ?? labels[spec.metric]}
         </CardTitle>
         {editing ? (
@@ -126,30 +126,32 @@ function DashboardCard({
         <CardBody spec={spec} result={result} />
       </CardContent>
     </Card>
-  );
+  )
 }
 
 export function CardGrid({ editing }: { editing: boolean }) {
-  const t = useExtracted();
-  const queryClient = useQueryClient();
-  const { cards, yearId } = useYear();
+  const t = useExtracted()
+  const queryClient = useQueryClient()
+  const { cards, yearId } = useYear()
 
   const visible = useMemo(
     () =>
       cards
         .filter((card) => card.surface === "overview" && !card.hidden)
         .sort((a, b) => a.sortOrder - b.sortOrder),
-    [cards],
-  );
+    [cards]
+  )
 
   const reorder = useMutation({
     ...orpc.cards.reorder.mutationOptions(),
     onSettled: () => {
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
     },
-  });
+  })
 
   const sensors = useSensors(
     // A small distance before a drag starts, so a tap on a card link is still
@@ -157,21 +159,21 @@ export function CardGrid({ editing }: { editing: boolean }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
+    })
+  )
 
   const onDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    const { active, over } = event
+    if (!over || active.id === over.id) return
 
-    const ids = visible.map((card) => card.id);
-    const from = ids.indexOf(String(active.id));
-    const to = ids.indexOf(String(over.id));
-    if (from < 0 || to < 0) return;
+    const ids = visible.map((card) => card.id)
+    const from = ids.indexOf(String(active.id))
+    const to = ids.indexOf(String(over.id))
+    if (from < 0 || to < 0) return
 
-    haptic("light");
-    reorder.mutate({ cardIds: arrayMove(ids, from, to) });
-  };
+    haptic("light")
+    reorder.mutate({ cardIds: arrayMove(ids, from, to) })
+  }
 
   if (visible.length === 0) {
     return (
@@ -189,7 +191,7 @@ export function CardGrid({ editing }: { editing: boolean }) {
           {t("Add a card")}
         </Button>
       </div>
-    );
+    )
   }
 
   return (
@@ -220,5 +222,5 @@ export function CardGrid({ editing }: { editing: boolean }) {
         </div>
       </SortableContext>
     </DndContext>
-  );
+  )
 }

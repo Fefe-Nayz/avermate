@@ -1,18 +1,23 @@
-"use client";
+"use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { AnimatePresence, motion } from "motion/react";
-import confetti from "canvas-confetti";
-import { XIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { heatmapDays, type AwardKind, type Year, type YearReview } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { useYear } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
-import { usePreferences } from "@/hooks/use-preferences";
-import { cn } from "@/lib/utils";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useMutation } from "@tanstack/react-query"
+import { AnimatePresence, motion } from "motion/react"
+import confetti from "canvas-confetti"
+import { XIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import {
+  heatmapDays,
+  type AwardKind,
+  type Year,
+  type YearReview,
+} from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { useYear } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
+import { usePreferences } from "@/hooks/use-preferences"
+import { cn } from "@/lib/utils"
 
 /**
  * The recap, told as a story.
@@ -23,95 +28,106 @@ import { cn } from "@/lib/utils";
  * the app people screenshot and send to a friend.
  */
 
-const SLIDE_MS = 5200;
+const SLIDE_MS = 5200
 
 export function YearReviewStory({
   review,
   year,
   onClose,
 }: {
-  review: YearReview;
-  year: Year;
-  onClose: () => void;
+  review: YearReview
+  year: Year
+  onClose: () => void
 }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { scale, yearId } = useYear();
-  const { preferences } = usePreferences();
-  const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const celebrated = useRef(false);
+  const t = useExtracted()
+  const format = useFormatter()
+  const { scale, yearId } = useYear()
+  const { preferences } = usePreferences()
+  const [index, setIndex] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const celebrated = useRef(false)
 
-  const markSeen = useMutation(orpc.review.markSeen.mutationOptions());
+  const markSeen = useMutation(orpc.review.markSeen.mutationOptions())
 
-  const mark = (ratio: number | null) =>
-    ratio === null ? "—" : format.number(ratio * scale, { maximumFractionDigits: 2 });
+  const mark = useCallback(
+    (ratio: number | null) =>
+      ratio === null
+        ? "—"
+        : format.number(ratio * scale, { maximumFractionDigits: 2 }),
+    [format, scale]
+  )
 
-  const awardCopy: Record<AwardKind, { title: string; body: string }> = {
-    tourist: {
-      title: t("The Visitor"),
-      body: t("You dropped by. The year is still mostly ahead of you."),
-    },
-    tightrope: {
-      title: t("The Tightrope Walker"),
-      body: t("Right on the line, all year, and you never fell off."),
-    },
-    comeback: {
-      title: t("The Comeback"),
-      body: t("You started slow and finished somewhere else entirely."),
-    },
-    allin: {
-      title: t("All In"),
-      body: t("Brilliant somewhere, quietly ignoring somewhere else."),
-    },
-    masterclass: {
-      title: t("Masterclass"),
-      body: t("Consistently excellent. Not much more to say."),
-    },
-    unpredictable: {
-      title: t("The Wildcard"),
-      body: t("Nobody, including you, could guess the next result."),
-    },
-    precision: {
-      title: t("The Metronome"),
-      body: t("The same mark, over and over. Frighteningly steady."),
-    },
-    legend: {
-      title: t("The Archivist"),
-      body: t("You logged everything. Truly everything."),
-    },
-    avermatien: {
-      title: t("The Regular"),
-      body: t("You kept it up all year without making a thing of it."),
-    },
-  };
+  const awardCopy = useMemo<Record<AwardKind, { title: string; body: string }>>(
+    () => ({
+      tourist: {
+        title: t("The Visitor"),
+        body: t("You dropped by. The year is still mostly ahead of you."),
+      },
+      tightrope: {
+        title: t("The Tightrope Walker"),
+        body: t("Right on the line, all year, and you never fell off."),
+      },
+      comeback: {
+        title: t("The Comeback"),
+        body: t("You started slow and finished somewhere else entirely."),
+      },
+      allin: {
+        title: t("All In"),
+        body: t("Brilliant somewhere, quietly ignoring somewhere else."),
+      },
+      masterclass: {
+        title: t("Masterclass"),
+        body: t("Consistently excellent. Not much more to say."),
+      },
+      unpredictable: {
+        title: t("The Wildcard"),
+        body: t("Nobody, including you, could guess the next result."),
+      },
+      precision: {
+        title: t("The Metronome"),
+        body: t("The same mark, over and over. Frighteningly steady."),
+      },
+      legend: {
+        title: t("The Archivist"),
+        body: t("You logged everything. Truly everything."),
+      },
+      avermatien: {
+        title: t("The Regular"),
+        body: t("You kept it up all year without making a thing of it."),
+      },
+    }),
+    [t]
+  )
 
-  const weekdays = [
-    t("Sunday"),
-    t("Monday"),
-    t("Tuesday"),
-    t("Wednesday"),
-    t("Thursday"),
-    t("Friday"),
-    t("Saturday"),
-  ];
+  const weekdays = useMemo(
+    () => [
+      t("Sunday"),
+      t("Monday"),
+      t("Tuesday"),
+      t("Wednesday"),
+      t("Thursday"),
+      t("Friday"),
+      t("Saturday"),
+    ],
+    [t]
+  )
 
   const heatmap = useMemo(
     () => heatmapDays(review.heatmap, new Date(year.startsAt)),
-    [review.heatmap, year.startsAt],
-  );
+    [review.heatmap, year.startsAt]
+  )
 
   const slides = useMemo(() => {
-    const list: Array<{ key: string; node: React.ReactNode }> = [];
+    const list: Array<{ key: string; node: React.ReactNode }> = []
 
     list.push({
       key: "intro",
       node: (
         <Slide accent>
-          <p className="text-sm uppercase tracking-[0.2em] opacity-70">
+          <p className="text-sm tracking-[0.2em] uppercase opacity-70">
             {year.name}
           </p>
-          <h1 className="mt-3 text-4xl font-semibold leading-tight">
+          <h1 className="mt-3 text-4xl leading-tight font-semibold">
             {t("Your year, in numbers.")}
           </h1>
           <p className="mt-3 max-w-xs opacity-80">
@@ -119,7 +135,7 @@ export function YearReviewStory({
           </p>
         </Slide>
       ),
-    });
+    })
 
     list.push({
       key: "count",
@@ -144,7 +160,7 @@ export function YearReviewStory({
           ) : null}
         </Slide>
       ),
-    });
+    })
 
     if (review.busiestMonth || review.busiestWeekday) {
       list.push({
@@ -164,7 +180,7 @@ export function YearReviewStory({
                         ? "bg-white/40"
                         : day.count === 2
                           ? "bg-white/65"
-                          : "bg-white",
+                          : "bg-white"
                   )}
                 />
               ))}
@@ -187,7 +203,7 @@ export function YearReviewStory({
             </div>
           </Slide>
         ),
-      });
+      })
     }
 
     if (review.primeTime) {
@@ -205,10 +221,12 @@ export function YearReviewStory({
             <p className="numeric mt-4 text-6xl font-semibold">
               {mark(review.primeTime.ratio)}
             </p>
-            <p className="mt-1 opacity-70">{t("your highest average all year")}</p>
+            <p className="mt-1 opacity-70">
+              {t("your highest average all year")}
+            </p>
           </Slide>
         ),
-      });
+      })
     }
 
     if (review.topSubjects.length > 0) {
@@ -234,7 +252,7 @@ export function YearReviewStory({
             </ol>
           </Slide>
         ),
-      });
+      })
     }
 
     if (review.bestProgression) {
@@ -254,7 +272,7 @@ export function YearReviewStory({
             </p>
           </Slide>
         ),
-      });
+      })
     }
 
     if (review.topPercentile > 0) {
@@ -271,17 +289,17 @@ export function YearReviewStory({
             </p>
           </Slide>
         ),
-      });
+      })
     }
 
     list.push({
       key: "award",
       node: (
         <Slide accent>
-          <p className="text-sm uppercase tracking-[0.2em] opacity-70">
+          <p className="text-sm tracking-[0.2em] uppercase opacity-70">
             {t("Your title this year")}
           </p>
-          <h2 className="mt-4 text-4xl font-semibold leading-tight">
+          <h2 className="mt-4 text-4xl leading-tight font-semibold">
             {awardCopy[review.award].title}
           </h2>
           <p className="mt-3 max-w-xs opacity-85">
@@ -293,68 +311,68 @@ export function YearReviewStory({
           <p className="opacity-70">{t("final average")}</p>
         </Slide>
       ),
-    });
+    })
 
-    return list;
-  }, [review, year, t, format, heatmap, scale]);
+    return list
+  }, [review, year, t, format, heatmap, awardCopy, mark, weekdays])
 
-  const total = slides.length;
+  const total = slides.length
 
   const go = useCallback(
     (direction: 1 | -1) => {
-      haptic("selection");
+      haptic("selection")
       setIndex((current) => {
-        const next = current + direction;
-        if (next < 0) return 0;
+        const next = current + direction
+        if (next < 0) return 0
         if (next >= total) {
-          onClose();
-          return current;
+          onClose()
+          return current
         }
-        return next;
-      });
+        return next
+      })
     },
-    [total, onClose],
-  );
+    [total, onClose]
+  )
 
   useEffect(() => {
-    if (paused || preferences.reduceMotion) return;
-    const timer = setTimeout(() => go(1), SLIDE_MS);
-    return () => clearTimeout(timer);
-  }, [index, paused, go, preferences.reduceMotion]);
+    if (paused || preferences.reduceMotion) return
+    const timer = setTimeout(() => go(1), SLIDE_MS)
+    return () => clearTimeout(timer)
+  }, [index, paused, go, preferences.reduceMotion])
 
   useEffect(() => {
-    if (yearId) markSeen.mutate({ yearId, reviewKey: "annual" });
+    if (yearId) markSeen.mutate({ yearId, reviewKey: "annual" })
     // Recording the view once per open is the whole point; re-running when the
     // mutation object changes identity would fire it on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yearId]);
+  }, [yearId])
 
   useEffect(() => {
-    const onAward = slides[index]?.key === "award";
-    if (!onAward || celebrated.current || preferences.reduceMotion) return;
-    celebrated.current = true;
-    haptic("success");
+    const onAward = slides[index]?.key === "award"
+    if (!onAward || celebrated.current || preferences.reduceMotion) return
+    celebrated.current = true
+    haptic("success")
     void confetti({
       particleCount: 90,
       spread: 75,
       origin: { y: 0.6 },
       disableForReducedMotion: true,
-    });
-  }, [index, slides, preferences.reduceMotion]);
+    })
+  }, [index, slides, preferences.reduceMotion])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") go(1);
-      if (event.key === "ArrowLeft") go(-1);
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [go, onClose]);
+      if (event.key === "ArrowRight") go(1)
+      if (event.key === "ArrowLeft") go(-1)
+      if (event.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [go, onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white">
-      <div className="flex gap-1 px-3 pt-safe">
+      <div className="pt-safe flex gap-1 px-3">
         <div className="flex w-full gap-1 pt-3">
           {slides.map((slide, position) => (
             <div
@@ -366,11 +384,13 @@ export function YearReviewStory({
                   "h-full bg-white transition-[width] ease-linear",
                   position < index && "w-full",
                   position === index && "w-full",
-                  position > index && "w-0",
+                  position > index && "w-0"
                 )}
                 style={
                   position === index && !preferences.reduceMotion
-                    ? { animation: `story-progress ${SLIDE_MS}ms linear forwards` }
+                    ? {
+                        animation: `story-progress ${SLIDE_MS}ms linear forwards`,
+                      }
                     : undefined
                 }
               />
@@ -426,25 +446,25 @@ export function YearReviewStory({
 
       <style>{`@keyframes story-progress { from { width: 0 } to { width: 100% } }`}</style>
     </div>
-  );
+  )
 }
 
 function Slide({
   children,
   accent = false,
 }: {
-  children: React.ReactNode;
-  accent?: boolean;
+  children: React.ReactNode
+  accent?: boolean
 }) {
   return (
     <div
       className={cn(
         "flex h-full flex-col items-center justify-center px-8 pb-16 text-center",
         accent &&
-          "bg-[radial-gradient(120%_80%_at_50%_0%,color-mix(in_oklab,var(--primary)_45%,transparent),transparent)]",
+          "bg-[radial-gradient(120%_80%_at_50%_0%,color-mix(in_oklab,var(--primary)_45%,transparent),transparent)]"
       )}
     >
       {children}
     </div>
-  );
+  )
 }

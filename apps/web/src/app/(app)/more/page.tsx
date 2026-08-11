@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ChartNoAxesCombinedIcon,
   ChevronRightIcon,
@@ -17,19 +17,20 @@ import {
   TargetIcon,
   UserIcon,
   type LucideIcon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import { useExtracted } from "next-intl";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
-import { PageMeta } from "@/components/shell/page-chrome";
-import { useFeedback } from "@/components/feedback/feedback-provider";
-import { initialsOf } from "@/components/shell/nav-user";
-import { authClient, useSession } from "@/lib/auth-client";
-import { haptic } from "@/lib/haptics";
-import { useIsAdmin } from "@/hooks/use-admin";
-import { useYear } from "@/components/year/year-provider";
-import { useYearSheet } from "@/components/shell/year-sheet";
+} from "lucide-react"
+import { useTheme } from "next-themes"
+import { useExtracted } from "next-intl"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Switch } from "@/components/ui/switch"
+import { PageMeta } from "@/components/shell/page-chrome"
+import { useFeedback } from "@/components/feedback/feedback-provider"
+import { useAuthenticatedUser } from "@/components/authenticated-user"
+import { initialsOf } from "@/components/shell/nav-user"
+import { signOut } from "@/lib/auth-client"
+import { haptic } from "@/lib/haptics"
+import { useIsAdmin } from "@/hooks/use-admin"
+import { useYear } from "@/components/year/year-provider"
+import { useYearSheet } from "@/components/shell/year-sheet"
 
 /**
  * The phone's fifth tab.
@@ -38,25 +39,25 @@ import { useYearSheet } from "@/components/shell/year-sheet";
  * the pattern every phone user already knows from their settings app.
  */
 export default function MorePage() {
-  const t = useExtracted();
-  const router = useRouter();
-  const { data: session } = useSession();
-  const { resolvedTheme, setTheme } = useTheme();
-  const feedback = useFeedback();
+  const t = useExtracted()
+  const router = useRouter()
+  const user = useAuthenticatedUser()
+  const { resolvedTheme, setTheme } = useTheme()
+  const feedback = useFeedback()
 
-  const { isAdmin } = useIsAdmin();
-  const { year, years } = useYear();
-  const yearSheet = useYearSheet();
+  const { isAdmin } = useIsAdmin()
+  const { year, years } = useYear()
+  const yearSheet = useYearSheet()
 
   const groups: Array<{
-    label?: string;
+    label?: string
     items: Array<{
-      icon: LucideIcon;
-      label: string;
-      href?: string;
-      onClick?: () => void;
-      destructive?: boolean;
-    }>;
+      icon: LucideIcon
+      label: string
+      href?: string
+      onClick?: () => void
+      destructive?: boolean
+    }>
   }> = [
     {
       items: [
@@ -82,7 +83,11 @@ export default function MorePage() {
       label: t("Settings"),
       items: [
         { icon: UserIcon, label: t("Profile"), href: "/settings" },
-        { icon: PaletteIcon, label: t("Appearance"), href: "/settings/appearance" },
+        {
+          icon: PaletteIcon,
+          label: t("Appearance"),
+          href: "/settings/appearance",
+        },
         {
           icon: ChartNoAxesCombinedIcon,
           label: t("Year & periods"),
@@ -110,14 +115,14 @@ export default function MorePage() {
           label: t("Sign out"),
           destructive: true,
           onClick: async () => {
-            haptic("light");
-            await authClient.signOut();
-            router.replace("/auth/sign-in");
+            haptic("light")
+            await signOut()
+            router.replace("/auth/sign-in")
           },
         },
       ],
     },
-  ];
+  ]
 
   return (
     <>
@@ -129,18 +134,13 @@ export default function MorePage() {
           className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors active:bg-accent"
         >
           <Avatar className="size-12">
-            <AvatarImage
-              src={session?.user.image ?? undefined}
-              alt={session?.user.name ?? ""}
-            />
-            <AvatarFallback>
-              {initialsOf(session?.user.name ?? "")}
-            </AvatarFallback>
+            <AvatarImage src={user.image ?? undefined} alt={user.name} />
+            <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{session?.user.name}</p>
+            <p className="truncate font-medium">{user.name}</p>
             <p className="truncate text-sm text-muted-foreground">
-              {session?.user.email}
+              {user.email}
             </p>
           </div>
           <ChevronRightIcon className="size-4 text-muted-foreground/60" />
@@ -157,8 +157,8 @@ export default function MorePage() {
             <Switch
               checked={resolvedTheme === "dark"}
               onCheckedChange={(checked) => {
-                haptic("selection");
-                setTheme(checked ? "dark" : "light");
+                haptic("selection")
+                setTheme(checked ? "dark" : "light")
               }}
             />
           </div>
@@ -167,7 +167,7 @@ export default function MorePage() {
         {groups.map((group, groupIndex) => (
           <section key={groupIndex} className="flex flex-col gap-1.5">
             {group.label ? (
-              <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 {group.label}
               </h2>
             ) : null}
@@ -195,11 +195,11 @@ export default function MorePage() {
                       <ChevronRightIcon className="size-4 text-muted-foreground/60" />
                     ) : null}
                   </>
-                );
+                )
 
                 const className = `flex min-h-13 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-accent ${
                   index > 0 ? "border-t" : ""
-                }`;
+                }`
 
                 return item.href ? (
                   <Link key={item.label} href={item.href} className={className}>
@@ -214,7 +214,7 @@ export default function MorePage() {
                   >
                     {content}
                   </button>
-                );
+                )
               })}
             </div>
           </section>
@@ -225,5 +225,5 @@ export default function MorePage() {
         </p>
       </div>
     </>
-  );
+  )
 }

@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useExtracted } from "next-intl";
+import Link from "next/link"
+import { useExtracted } from "next-intl"
 import {
   ArrowUpRightIcon,
   CheckCircle2Icon,
@@ -9,13 +9,13 @@ import {
   ShieldAlertIcon,
   TrendingUpIcon,
   XCircleIcon,
-} from "lucide-react";
-import type { GoalAdvice, GoalPlan } from "@avermate/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AverageValue, DeltaValue } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
-import { cn } from "@/lib/utils";
-import { useStatusLabel } from "./goal-strip";
+} from "lucide-react"
+import type { GoalAdvice, GoalPlan } from "@avermate/core"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { AverageValue, DeltaValue } from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
+import { cn } from "@/lib/utils"
+import { useStatusLabel } from "./goal-strip"
 
 /**
  * The plan for a goal.
@@ -33,7 +33,7 @@ const STATUS_ICON = {
   "at-risk": ShieldAlertIcon,
   unreachable: XCircleIcon,
   "no-data": ShieldAlertIcon,
-} as const;
+} as const
 
 const STATUS_TONE: Record<GoalPlan["status"], string> = {
   achieved: "text-band-good",
@@ -42,34 +42,34 @@ const STATUS_TONE: Record<GoalPlan["status"], string> = {
   "at-risk": "text-band-fair",
   unreachable: "text-band-poor",
   "no-data": "text-muted-foreground",
-};
+}
 
 function useAdviceText() {
-  const t = useExtracted();
-  const { graph, scale } = useYear();
+  const t = useExtracted()
+  const { graph, scale } = useYear()
 
   return (advice: GoalAdvice): string => {
     const mark = (ratio: number) =>
       (ratio * scale).toLocaleString(undefined, {
         maximumFractionDigits: 1,
-      });
+      })
 
     switch (advice.kind) {
       case "achieved":
-        return t("You are there. From here it is about holding it.");
+        return t("You are there. From here it is about holding it.")
       case "secured":
-        return t("Locked in — nothing left this period can take it away.");
+        return t("Locked in — nothing left this period can take it away.")
       case "unreachable":
         return t(
           "Even perfect results from here top out at {ceiling}. Worth lowering the target rather than chasing it.",
-          { ceiling: mark(advice.ceiling) },
-        );
+          { ceiling: mark(advice.ceiling) }
+        )
       case "no-data":
-        return t("Record a few grades and this will fill in.");
+        return t("Record a few grades and this will fill in.")
       case "close":
-        return t("You are within a rounding error. One decent result does it.");
+        return t("You are within a rounding error. One decent result does it.")
       case "focus": {
-        const subject = graph.byId(advice.subjectId);
+        const subject = graph.byId(advice.subjectId)
         // Leverage is the share of the average a subject controls, so it reads
         // as a percentage — "a third of your average" is actionable in a way
         // that a multiplier against an unnamed baseline is not.
@@ -79,52 +79,55 @@ function useAdviceText() {
             subject: subject?.name ?? "",
             share: Math.round(advice.leverage * 100).toString(),
             target: mark(advice.requiredRatio),
-          },
-        );
+          }
+        )
       }
       case "protect": {
-        const subject = graph.byId(advice.subjectId);
+        const subject = graph.byId(advice.subjectId)
         return t(
           "{subject} carries the most weight — a bad result there is what would cost you this.",
-          { subject: subject?.name ?? "" },
-        );
+          { subject: subject?.name ?? "" }
+        )
       }
       case "steady":
         return advice.count === 1
           ? t("One more result at {mark} gets you there.", {
               mark: mark(advice.requiredRatio),
             })
-          : t("Averaging {mark} over your next {count} results gets you there.", {
-              mark: mark(advice.requiredRatio),
-              count: String(advice.count),
-            });
+          : t(
+              "Averaging {mark} over your next {count} results gets you there.",
+              {
+                mark: mark(advice.requiredRatio),
+                count: String(advice.count),
+              }
+            )
       case "declining": {
-        const subject = graph.byId(advice.subjectId);
+        const subject = graph.byId(advice.subjectId)
         return t("{subject} has been sliding. Worth a look.", {
           subject: subject?.name ?? "",
-        });
+        })
       }
       default:
-        return "";
+        return ""
     }
-  };
+  }
 }
 
 export function GoalPlanView({ plan }: { plan: GoalPlan }) {
-  const t = useExtracted();
-  const { graph, scale } = useYear();
-  const statusLabel = useStatusLabel();
-  const adviceText = useAdviceText();
-  const Icon = STATUS_ICON[plan.status];
+  const t = useExtracted()
+  const { graph, scale } = useYear()
+  const statusLabel = useStatusLabel()
+  const adviceText = useAdviceText()
+  const Icon = STATUS_ICON[plan.status]
 
   const progress =
     plan.current === null || plan.target === 0
       ? 0
-      : Math.min(1, Math.max(0, plan.current / plan.target));
+      : Math.min(1, Math.max(0, plan.current / plan.target))
 
   const reachable = plan.levers.filter(
-    (lever) => lever.achievable && lever.realisticGain > 0,
-  );
+    (lever) => lever.achievable && lever.realisticGain > 0
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -132,7 +135,9 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <Icon className={cn("size-5", STATUS_TONE[plan.status])} />
-            <span className={cn("text-sm font-medium", STATUS_TONE[plan.status])}>
+            <span
+              className={cn("text-sm font-medium", STATUS_TONE[plan.status])}
+            >
               {statusLabel(plan.status)}
             </span>
           </div>
@@ -155,10 +160,13 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
             </div>
             {plan.gap !== null && plan.gap > 0 ? (
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">
                   {t("Still to go")}
                 </p>
-                <DeltaValue delta={plan.gap} className="text-xl font-semibold" />
+                <DeltaValue
+                  delta={plan.gap}
+                  className="text-xl font-semibold"
+                />
               </div>
             ) : null}
           </div>
@@ -171,7 +179,7 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
                   ? "bg-negative"
                   : plan.status === "achieved" || plan.status === "secured"
                     ? "bg-positive"
-                    : "bg-primary",
+                    : "bg-primary"
               )}
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
@@ -184,7 +192,7 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
                 {
                   ceiling: (plan.ceiling * scale).toFixed(1),
                   floor: (plan.floor * scale).toFixed(1),
-                },
+                }
               )}
             </p>
           ) : null}
@@ -265,7 +273,7 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
           </CardHeader>
           <CardContent className="flex flex-col gap-2 px-4">
             {reachable.slice(0, 5).map((lever) => {
-              const share = lever.leverage;
+              const share = lever.leverage
               return (
                 <div key={lever.subject.id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-sm">
@@ -300,7 +308,7 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
                     />
                   </div>
                 </div>
-              );
+              )
             })}
             <p className="pt-1 text-xs text-muted-foreground">
               {t("The bar is how much of the average each subject controls.")}
@@ -354,5 +362,5 @@ export function GoalPlanView({ plan }: { plan: GoalPlan }) {
 
       {graph.subjects.length === 0 ? null : null}
     </div>
-  );
+  )
 }

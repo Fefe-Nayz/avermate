@@ -1,24 +1,24 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { ChevronRightIcon, PlusIcon, SigmaIcon, StarIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { resolveCustomAverage } from "@avermate/core";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { ChevronRightIcon, PlusIcon, SigmaIcon, StarIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { resolveCustomAverage } from "@avermate/core"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { PageMeta } from "@/components/shell/page-chrome";
-import { AverageValue } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/ui/empty"
+import { PageMeta } from "@/components/shell/page-chrome"
+import { AverageValue } from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
 
 export default function AveragesSettingsPage() {
-  const t = useExtracted();
-  const { customAverages, graph } = useYear();
+  const t = useExtracted()
+  const { customAverages, graph } = useYear()
 
   return (
     <>
@@ -48,7 +48,7 @@ export default function AveragesSettingsPage() {
               <EmptyTitle>{t("No custom averages")}</EmptyTitle>
               <EmptyDescription>
                 {t(
-                  "Combine any subjects with weights of your own — written exams only, or the science block, or whatever your school actually grades you on.",
+                  "Combine any subjects with weights of your own — written exams only, or the science block, or whatever your school actually grades you on."
                 )}
               </EmptyDescription>
             </EmptyHeader>
@@ -60,11 +60,14 @@ export default function AveragesSettingsPage() {
         ) : (
           <ul className="overflow-hidden rounded-xl border bg-card">
             {customAverages.map((average, index) => {
-              const resolved = resolveCustomAverage(graph, average);
-              const ratio = resolved.graph.ratio(null, resolved.scope);
+              const resolved = resolveCustomAverage(graph, average)
+              const ratio = resolved.graph.ratio(null, resolved.scope)
 
               return (
-                <li key={average.id} className={index > 0 ? "border-t" : undefined}>
+                <li
+                  key={average.id}
+                  className={index > 0 ? "border-t" : undefined}
+                >
                   <Link
                     href={`/settings/averages/${average.id}`}
                     className="flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
@@ -77,7 +80,9 @@ export default function AveragesSettingsPage() {
                         ) : null}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {t("{count} subjects", { count: String(average.entries.length) })}
+                        {t("{count} subjects", {
+                          count: String(average.entries.length),
+                        })}
                       </p>
                     </div>
                     <AverageValue
@@ -89,11 +94,11 @@ export default function AveragesSettingsPage() {
                     <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
                   </Link>
                 </li>
-              );
+              )
             })}
           </ul>
         )}
       </div>
     </>
-  );
+  )
 }

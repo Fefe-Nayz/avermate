@@ -9,6 +9,8 @@ services:
       # Better Auth
       - BETTER_AUTH_URL=
       - BETTER_AUTH_SECRET=
+      # Required for authenticated SSR when web and API use sibling subdomains.
+      - AUTH_COOKIE_DOMAIN=
       - ADMIN_USER_IDS=
       # Web client
       - CLIENT_URL=
@@ -45,6 +47,8 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=
       - NEXT_PUBLIC_APP_URL=
+      # Private API address for Server Components and server prefetching.
+      - API_INTERNAL_URL=http://api:5000
     expose:
       - 3000
     networks:

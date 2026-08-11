@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
 import {
   createContext,
   useCallback,
@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from "react";
+} from "react"
 import {
   BookMarkedIcon,
   CalendarRangeIcon,
@@ -17,16 +17,16 @@ import {
   SigmaIcon,
   TargetIcon,
   type LucideIcon,
-} from "lucide-react";
-import { useExtracted } from "next-intl";
+} from "lucide-react"
+import { useExtracted } from "next-intl"
 import {
   Drawer,
   DrawerContent,
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
-} from "@/components/ui/drawer";
-import { haptic } from "@/lib/haptics";
+} from "@/components/ui/drawer"
+import { haptic } from "@/lib/haptics"
 
 /**
  * The "+" action.
@@ -37,29 +37,29 @@ import { haptic } from "@/lib/haptics";
  */
 
 interface QuickAddStore {
-  open: () => void;
-  close: () => void;
+  open: () => void
+  close: () => void
 }
 
-const QuickAddContext = createContext<QuickAddStore | null>(null);
+const QuickAddContext = createContext<QuickAddStore | null>(null)
 
 interface Action {
-  href: string;
-  label: string;
-  hint: string;
-  icon: LucideIcon;
-  accent?: boolean;
+  href: string
+  label: string
+  hint: string
+  icon: LucideIcon
+  accent?: boolean
 }
 
 export function QuickAddProvider({ children }: { children: ReactNode }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const t = useExtracted()
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
 
   const store = useMemo<QuickAddStore>(
     () => ({ open: () => setOpen(true), close: () => setOpen(false) }),
-    [],
-  );
+    []
+  )
 
   const actions: Action[] = [
     {
@@ -99,16 +99,16 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
       hint: t("Split the year into trimesters or semesters"),
       icon: CalendarRangeIcon,
     },
-  ];
+  ]
 
   const go = useCallback(
     (href: string) => {
-      haptic("light");
-      setOpen(false);
-      router.push(href);
+      haptic("light")
+      setOpen(false)
+      router.push(href)
     },
-    [router],
-  );
+    [router]
+  )
 
   return (
     <QuickAddContext.Provider value={store}>
@@ -152,11 +152,14 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
         </DrawerContent>
       </Drawer>
     </QuickAddContext.Provider>
-  );
+  )
 }
 
 export function useQuickAdd(): QuickAddStore {
   return (
-    useContext(QuickAddContext) ?? { open: () => undefined, close: () => undefined }
-  );
+    useContext(QuickAddContext) ?? {
+      open: () => undefined,
+      close: () => undefined,
+    }
+  )
 }

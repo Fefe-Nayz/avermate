@@ -1,6 +1,6 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
-import { ArrowLeftIcon } from "lucide-react";
+import Link from "next/link"
+import type { ReactNode } from "react"
+import { ArrowLeftIcon } from "lucide-react"
 
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
@@ -22,5 +22,5 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         </article>
       </main>
     </div>
-  );
+  )
 }

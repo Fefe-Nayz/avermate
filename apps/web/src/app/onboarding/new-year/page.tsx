@@ -1,50 +1,54 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { FormPage } from "@/components/forms/form-page";
-import { FormSection, NumberField, TextField } from "@/components/forms/controls";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+import { useRouter } from "next/navigation"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { FormPage } from "@/components/forms/form-page"
+import {
+  FormSection,
+  NumberField,
+  TextField,
+} from "@/components/forms/controls"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 /** Adding another year later — the same questions as onboarding, one screen. */
 export default function NewYearPage() {
-  const t = useExtracted();
-  const router = useRouter();
-  const queryClient = useQueryClient();
+  const t = useExtracted()
+  const router = useRouter()
+  const queryClient = useQueryClient()
 
   const defaults = useMemo(() => {
-    const now = new Date();
+    const now = new Date()
     const startYear =
-      now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+      now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1
     return {
       name: `${startYear}–${startYear + 1}`,
       start: `${startYear}-09-01`,
       end: `${startYear + 1}-07-15`,
-    };
-  }, []);
+    }
+  }, [])
 
-  const [name, setName] = useState(defaults.name);
-  const [startsAt, setStartsAt] = useState(defaults.start);
-  const [endsAt, setEndsAt] = useState(defaults.end);
-  const [scale, setScale] = useState("20");
+  const [name, setName] = useState(defaults.name)
+  const [startsAt, setStartsAt] = useState(defaults.start)
+  const [endsAt, setEndsAt] = useState(defaults.end)
+  const [scale, setScale] = useState("20")
 
   const create = useMutation({
     ...orpc.years.create.mutationOptions(),
     onSuccess: async () => {
-      haptic("success");
-      toast.success(t("Year created."));
-      await queryClient.invalidateQueries();
-      router.replace("/dashboard");
+      haptic("success")
+      toast.success(t("Year created."))
+      await queryClient.invalidateQueries()
+      router.replace("/dashboard")
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The year could not be created."));
+      haptic("error")
+      toast.error(error.message || t("The year could not be created."))
     },
-  });
+  })
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -97,5 +101,5 @@ export default function NewYearPage() {
         </FormSection>
       </FormPage>
     </div>
-  );
+  )
 }

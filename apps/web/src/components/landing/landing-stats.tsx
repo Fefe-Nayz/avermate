@@ -1,25 +1,17 @@
-"use client";
+import { useFormatter, useExtracted } from "next-intl"
+import { getPublicStats } from "@/lib/public-data"
 
-import { useQuery } from "@tanstack/react-query";
-import { useFormatter, useExtracted } from "next-intl";
-import { orpc } from "@/lib/orpc";
+type PublicStats = Awaited<ReturnType<typeof getPublicStats>>
 
-/** Live counters. Aggregates only — no row ever leaves the server. */
-export function LandingStats() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { data } = useQuery({
-    ...orpc.public.stats.queryOptions(),
-    staleTime: 10 * 60_000,
-  });
-
-  if (!data || data.grades < 50) return null;
+function LandingStatsValues({ data }: { data: PublicStats }) {
+  const t = useExtracted()
+  const format = useFormatter()
 
   const entries = [
     { label: t("students"), value: data.users },
     { label: t("subjects tracked"), value: data.subjects },
     { label: t("grades recorded"), value: data.grades },
-  ];
+  ]
 
   return (
     <dl className="flex flex-wrap justify-center gap-x-8 gap-y-3 pt-4">
@@ -32,5 +24,20 @@ export function LandingStats() {
         </div>
       ))}
     </dl>
-  );
+  )
+}
+
+/** Cached server-rendered counters. Aggregates only — no row reaches the client. */
+export async function LandingStats() {
+  let data: PublicStats
+  try {
+    data = await getPublicStats()
+  } catch (error) {
+    // These counters are supporting evidence, not a reason to fail the page.
+    console.error("Unable to load public landing statistics", error)
+    return null
+  }
+
+  if (data.grades < 50) return null
+  return <LandingStatsValues data={data} />
 }

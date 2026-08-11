@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useExtracted } from "next-intl";
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useExtracted } from "next-intl"
 import {
   Sidebar,
   SidebarContent,
@@ -15,21 +15,21 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-} from "@/components/ui/sidebar";
-import { NAV_ENTRIES, isActivePath } from "@/lib/nav";
-import type { User } from "@/lib/auth-client";
-import { NavUser } from "./nav-user";
-import { YearSwitcher } from "./year-switcher";
-import { SidebarSubjectTree } from "./sidebar-subject-tree";
-import { haptic } from "@/lib/haptics";
-import { useIsAdmin } from "@/hooks/use-admin";
+} from "@/components/ui/sidebar"
+import { NAV_ENTRIES, isActivePath } from "@/lib/nav"
+import type { AuthenticatedUser } from "@/lib/authenticated-user"
+import { NavUser } from "./nav-user"
+import { YearSwitcher } from "./year-switcher"
+import { SidebarSubjectTree } from "./sidebar-subject-tree"
+import { haptic } from "@/lib/haptics"
+import { useIsAdmin } from "@/hooks/use-admin"
 
-export function AppSidebar({ user }: { user: User }) {
-  const t = useExtracted();
-  const pathname = usePathname();
+export function AppSidebar({ user }: { user: AuthenticatedUser }) {
+  const t = useExtracted()
+  const pathname = usePathname()
   // An account can administer the site through ADMIN_USER_IDS without its
   // role column saying so, so the server is the one that answers this.
-  const { isAdmin } = useIsAdmin();
+  const { isAdmin } = useIsAdmin()
 
   // Two groups rather than one long list: the first is the year you are
   // living in, the second is everything you occasionally reach for.
@@ -37,14 +37,14 @@ export function AppSidebar({ user }: { user: User }) {
     (entry) =>
       !entry.adminOnly &&
       ["/dashboard", "/subjects", "/grades", "/goals", "/insights"].includes(
-        entry.href,
-      ),
-  );
+        entry.href
+      )
+  )
   const secondary = NAV_ENTRIES.filter(
     (entry) =>
       (!entry.adminOnly || isAdmin) &&
-      ["/review", "/settings", "/admin"].includes(entry.href),
-  );
+      ["/review", "/settings", "/admin"].includes(entry.href)
+  )
 
   const labels: Record<string, string> = {
     Dashboard: t("Dashboard"),
@@ -55,7 +55,7 @@ export function AppSidebar({ user }: { user: User }) {
     "Year in review": t("Year in review"),
     Settings: t("Settings"),
     Admin: t("Admin"),
-  };
+  }
 
   return (
     <Sidebar collapsible="icon" variant="inset">
@@ -113,5 +113,5 @@ export function AppSidebar({ user }: { user: User }) {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  );
+  )
 }
