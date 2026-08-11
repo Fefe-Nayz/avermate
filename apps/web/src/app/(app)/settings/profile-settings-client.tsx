@@ -10,6 +10,7 @@ import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { ChoiceField, TextField } from "@/components/forms/controls"
 import { AvatarEditor } from "@/components/settings/avatar-editor"
+import { AccountBadges } from "@/components/settings/account-badges"
 import {
   useAuthenticatedUser,
   useUpdateAuthenticatedUser,
@@ -58,6 +59,7 @@ export function ProfileSettingsClient() {
           description={t("Shown only to you.")}
         >
           <AvatarEditor />
+          <AccountBadges createdAt={user.createdAt} />
 
           <TextField
             label={t("Name")}

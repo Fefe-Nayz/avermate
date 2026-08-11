@@ -12,12 +12,15 @@ export default function SignUpPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+      <div className="text-center sm:text-left">
+        <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+          {t("Start with the year you have")}
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           {t("Create your account")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("Free, and your grades stay yours.")}
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {t("Free to use. Set up the first school year in a few minutes.")}
         </p>
       </div>
 

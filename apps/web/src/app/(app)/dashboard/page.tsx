@@ -10,11 +10,13 @@ import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { CardGrid } from "@/components/cards/card-grid"
 import { AverageChart } from "@/components/charts/average-chart"
+import { SubjectRadarChart } from "@/components/charts/subject-radar-chart"
 import { RecentGrades } from "@/components/grades/recent-grades"
 import { GoalStrip } from "@/components/goals/goal-strip"
 import { useYear } from "@/components/year/year-provider"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
 import { haptic } from "@/lib/haptics"
+import { TimelineTrigger } from "@/components/shell/timeline-banner"
 
 /**
  * The dashboard.
@@ -26,7 +28,16 @@ import { haptic } from "@/lib/haptics"
 export default function DashboardPage() {
   const t = useExtracted()
   const format = useFormatter()
-  const { year, subjects, graph, period, goals, now } = useYear()
+  const {
+    year,
+    graph,
+    period,
+    goals,
+    headlineAverage,
+    resolveHeadline,
+    timelineDate,
+    now,
+  } = useYear()
   const { plans } = useGoalPlans()
   const [editing, setEditing] = useState(false)
 
@@ -38,15 +49,20 @@ export default function DashboardPage() {
         new Date(year.startsAt).getTime()
       )
     )
-    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
+    const timelineEnd = timelineDate
+      ? new Date(`${timelineDate}T23:59:59`).getTime()
+      : now
+    const to = new Date(Math.min(timelineEnd, new Date(period.endAt).getTime()))
     if (to <= from) return []
     const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
+    const headline = resolveHeadline()
     return averageOverTime(
-      subjects,
+      headline.graph.subjects,
       dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      null
+      headline.subjectId,
+      headline.scope
     )
-  }, [subjects, period, year, now])
+  }, [period, resolveHeadline, timelineDate, year, now])
 
   const pinnedGoals = useMemo(
     () =>
@@ -66,6 +82,7 @@ export default function DashboardPage() {
     <>
       <PageMeta title={t("Dashboard")} subtitle={greeting} bare={false} />
       <PageActions>
+        <TimelineTrigger />
         <Button
           variant="ghost"
           size="icon"
@@ -127,13 +144,23 @@ export default function DashboardPage() {
 
         {pinnedGoals.length > 0 ? <GoalStrip plans={pinnedGoals} /> : null}
 
-        {series.length > 1 ? (
-          <AverageChart
-            title={t("How the year is going")}
-            series={series}
-            emptyHint={t("Record a few grades and the curve will appear here.")}
-          />
-        ) : null}
+        <div className="grid gap-3 @3xl/main:grid-cols-2">
+          {series.length > 1 ? (
+            <AverageChart
+              title={
+                headlineAverage
+                  ? `${headlineAverage.name} · ${t("Over time")}`
+                  : t("How the year is going")
+              }
+              series={series}
+              emptyHint={t(
+                "Record a few grades and the curve will appear here."
+              )}
+              height={300}
+            />
+          ) : null}
+          <SubjectRadarChart title={t("Main subjects at a glance")} />
+        </div>
 
         <RecentGrades limit={6} />
 

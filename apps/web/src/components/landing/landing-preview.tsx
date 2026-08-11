@@ -3,11 +3,11 @@
 import { useMemo } from "react"
 import { areaY, defineChart, lineY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
-import { Chart } from "@tanstack/charts/react"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { curveMonotoneX } from "d3-shape"
 import { useExtracted } from "next-intl"
 import { SubjectGraph, type Grade, type Subject } from "@avermate/core"
+import { ResponsiveChart } from "@/components/charts/responsive-chart"
 import { cn } from "@/lib/utils"
 
 /**
@@ -129,7 +129,7 @@ function LandingSparkline({
   })
 
   return (
-    <Chart
+    <ResponsiveChart
       ariaLabel={ariaLabel}
       definition={definition}
       height={56}

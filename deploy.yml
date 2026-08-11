@@ -26,8 +26,6 @@ services:
       - EMAIL_FROM=
       # Uploads
       - UPLOADTHING_TOKEN=
-      # Feedback relay
-      - DISCORD_WEBHOOK_URL=
     expose:
       - 5000
     networks:

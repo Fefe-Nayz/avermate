@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { useEffect, useState, type ReactNode } from "react"
 import { AuthenticatedUserProvider } from "@/components/authenticated-user"
 import { AppearanceSync } from "@/components/theme/appearance-sync"
+import { MokattamCelebration } from "@/components/theme/mokattam-celebration"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
 import {
@@ -86,6 +87,7 @@ export function AuthenticatedProviders({
       <AuthenticatedUserProvider user={user}>
         <TooltipProvider delay={200}>
           <AppearanceSync />
+          <MokattamCelebration />
           <SessionWatcher />
           {children}
         </TooltipProvider>

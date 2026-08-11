@@ -1,10 +1,10 @@
 "use client"
 
 import { barY, defineChart } from "@tanstack/charts"
-import { Chart } from "@tanstack/charts/react"
 import { scaleBand } from "@tanstack/charts/scales/band"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { useMemo } from "react"
+import { ResponsiveChart } from "./responsive-chart"
 
 export interface DistributionBucketDatum {
   count: number
@@ -50,7 +50,6 @@ export function DistributionHistogram({
         grid: false,
         axis: false,
       },
-      margin: { top: 4, right: 4, bottom: 0, left: 4 },
       clip: true,
       focus: false,
       keyboard: false,
@@ -67,7 +66,7 @@ export function DistributionHistogram({
   return (
     <>
       <div aria-hidden="true" className="h-40 text-muted-foreground">
-        <Chart
+        <ResponsiveChart
           ariaLabel={ariaLabel}
           definition={definition}
           height={160}

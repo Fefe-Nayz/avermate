@@ -4,7 +4,7 @@ import Link from "next/link"
 import { use } from "react"
 import { PencilIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
-import { gradeImpact, gradeRatio } from "@avermate/core"
+import { gradeImpact, gradeRatio, resolveCustomAverage } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,13 +15,12 @@ import {
 } from "@/components/ui/empty"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import {
-  AverageValue,
   CoefficientBadge,
-  DeltaValue,
   PointsValue,
   ResultBadge,
 } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
+import { ImpactGrid } from "@/components/analytics/impact-grid"
 
 /**
  * One result, and what it did.
@@ -38,7 +37,7 @@ export default function GradePage({
   const { gradeId } = use(params)
   const t = useExtracted()
   const format = useFormatter()
-  const { graph } = useYear()
+  const { customAverages, graph } = useYear()
 
   const grade = graph.allGrades().find((item) => item.id === gradeId)
 
@@ -60,8 +59,38 @@ export default function GradePage({
 
   const subject = graph.byId(grade.subjectId)
   const ratio = gradeRatio(grade)
-  const onSubject = gradeImpact(graph, gradeId, grade.subjectId)
-  const onGeneral = gradeImpact(graph, gradeId, null)
+  const impacts = [
+    {
+      id: `subject:${grade.subjectId}`,
+      label: subject?.name ?? t("Subject"),
+      href: subject ? `/subjects/${subject.id}` : undefined,
+      impact: gradeImpact(graph, gradeId, grade.subjectId),
+    },
+    ...graph.ancestorsOf(grade.subjectId).map((ancestor) => ({
+      id: `subject:${ancestor.id}`,
+      label: ancestor.name,
+      href: `/subjects/${ancestor.id}`,
+      impact: gradeImpact(graph, gradeId, ancestor.id),
+    })),
+    {
+      id: "general",
+      label: t("General average"),
+      href: "/averages/general",
+      impact: gradeImpact(graph, gradeId, null),
+    },
+    ...customAverages.flatMap((average) => {
+      const resolved = resolveCustomAverage(graph, average)
+      if (!resolved.graph.has(grade.subjectId)) return []
+      return [
+        {
+          id: `custom:${average.id}`,
+          label: average.name,
+          href: `/averages/${average.id}`,
+          impact: gradeImpact(resolved.graph, gradeId, null, resolved.scope),
+        },
+      ]
+    }),
+  ]
 
   return (
     <>
@@ -131,61 +160,7 @@ export default function GradePage({
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="gap-1 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {t("Effect on the subject")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-              <DeltaValue
-                delta={onSubject.delta}
-                className="text-2xl font-semibold"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                <AverageValue
-                  ratio={onSubject.withoutValue}
-                  animate={false}
-                  decimals={2}
-                />
-                {" → "}
-                <AverageValue
-                  ratio={onSubject.withValue}
-                  animate={false}
-                  decimals={2}
-                />
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="gap-1 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {t("Effect on the year")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-              <DeltaValue
-                delta={onGeneral.delta}
-                className="text-2xl font-semibold"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                <AverageValue
-                  ratio={onGeneral.withoutValue}
-                  animate={false}
-                  decimals={2}
-                />
-                {" → "}
-                <AverageValue
-                  ratio={onGeneral.withValue}
-                  animate={false}
-                  decimals={2}
-                />
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <ImpactGrid readings={impacts} title={t("Impact on averages")} />
 
         {grade.components.length > 0 ? (
           <Card className="gap-2 py-4">

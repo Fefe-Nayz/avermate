@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ChevronsUpDownIcon,
+  BellIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
   MoonIcon,
@@ -11,6 +12,7 @@ import {
   SparklesIcon,
   SunIcon,
   UserIcon,
+  UsersRoundIcon,
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useExtracted } from "next-intl"
@@ -34,6 +36,8 @@ import { signOut as signOutAndReset } from "@/lib/auth-client"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
 import { haptic } from "@/lib/haptics"
 import { useFeedback } from "@/components/feedback/feedback-provider"
+import { AccountBadges } from "@/components/settings/account-badges"
+import { useSocialAccess } from "@/hooks/use-social-access"
 
 export function initialsOf(name: string): string {
   return name
@@ -50,6 +54,7 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
   const { state } = useSidebar()
   const { setTheme, resolvedTheme } = useTheme()
   const feedback = useFeedback()
+  const { canAccess: canAccessSocial } = useSocialAccess()
 
   const signOut = async () => {
     haptic("light")
@@ -77,6 +82,7 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
+              <AccountBadges createdAt={user.createdAt} />
               <span className="truncate text-xs text-muted-foreground">
                 {user.email}
               </span>
@@ -107,6 +113,16 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
               <DropdownMenuItem render={<Link href="/review" />}>
                 <SparklesIcon className="size-4" />
                 {t("Year in review")}
+              </DropdownMenuItem>
+              {canAccessSocial ? (
+                <DropdownMenuItem render={<Link href="/social" />}>
+                  <UsersRoundIcon className="size-4" />
+                  {t("Social")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem render={<Link href="/announcements" />}>
+                <BellIcon className="size-4" />
+                {t("Announcements")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => feedback.open()}>
                 <MessageSquarePlusIcon className="size-4" />

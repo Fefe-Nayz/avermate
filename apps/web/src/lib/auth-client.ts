@@ -2,13 +2,14 @@
 
 import { createAuthClient } from "better-auth/react"
 import { adminClient, emailOTPClient } from "better-auth/client/plugins"
+import { oauthProviderClient } from "@better-auth/oauth-provider/client"
 import { resetBrowserQueryCache } from "./browser-query-cache"
 import { env } from "./env"
 
 export const authClient = createAuthClient({
   baseURL: env.apiUrl,
   basePath: "/api/auth",
-  plugins: [emailOTPClient(), adminClient()],
+  plugins: [emailOTPClient(), adminClient(), oauthProviderClient()],
   fetchOptions: { credentials: "include" },
 })
 

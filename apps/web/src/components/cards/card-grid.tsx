@@ -75,6 +75,7 @@ function DashboardCard({
 }) {
   const t = useExtracted()
   const labels = useMetricLabels()
+  const { headlineAverage } = useYear()
   const spec = useMemo(() => toSpec(row), [row])
   const result = useCardResult(spec)
   const {
@@ -98,7 +99,12 @@ function DashboardCard({
     >
       <CardHeader className="flex items-center gap-1 px-4">
         <CardTitle className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {spec.title ?? labels[spec.metric]}
+          {spec.title ??
+            (headlineAverage &&
+            spec.metric === "average" &&
+            spec.target.kind === "general"
+              ? headlineAverage.name
+              : labels[spec.metric])}
         </CardTitle>
         {editing ? (
           <>

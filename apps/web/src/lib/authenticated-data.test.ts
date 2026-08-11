@@ -40,6 +40,29 @@ describe("authenticated shell data", () => {
     expect(resolveActiveYearId([], null)).toBeNull()
   })
 
+  test("keeps archived years out of the normal active-year fallback", () => {
+    const archivedCurrent = years.map((year) =>
+      year.id === "current"
+        ? { ...year, archivedAt: new Date("2026-08-01T00:00:00.000Z") }
+        : year
+    )
+
+    expect(
+      resolveActiveYearId(
+        archivedCurrent,
+        "current",
+        new Date("2026-02-01T00:00:00.000Z").getTime()
+      )
+    ).toBe("older")
+    expect(
+      resolveActiveYearId(
+        [archivedCurrent[1]!],
+        "current",
+        new Date("2026-02-01T00:00:00.000Z").getTime()
+      )
+    ).toBe("current")
+  })
+
   test("the app layout is server-owned and hydrates every common query", async () => {
     const [layout, providers, data, profile] = await Promise.all([
       source("../app/(app)/layout.tsx"),
@@ -63,6 +86,7 @@ describe("authenticated shell data", () => {
       "announcements.active",
       "admin.access",
       "snapshot.get",
+      "social.eligibility.get",
     ]) {
       expect(data).toContain(query)
     }

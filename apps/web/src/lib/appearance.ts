@@ -1,4 +1,4 @@
-import type { Palette } from "./theme"
+import { sanitizeCustomThemeCss, type Palette } from "./theme"
 
 /**
  * Appearance that has to be right on the very first paint.
@@ -36,7 +36,14 @@ export function parseAppearance(raw: string | undefined): Appearance {
   if (!raw) return DEFAULT_APPEARANCE
   try {
     const parsed = JSON.parse(decodeURIComponent(raw)) as Partial<Appearance>
-    return { ...DEFAULT_APPEARANCE, ...parsed }
+    const appearance = { ...DEFAULT_APPEARANCE, ...parsed }
+    return {
+      ...appearance,
+      customCss:
+        typeof appearance.customCss === "string"
+          ? sanitizeCustomThemeCss(appearance.customCss)
+          : "",
+    }
   } catch {
     return DEFAULT_APPEARANCE
   }

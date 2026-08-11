@@ -15,18 +15,25 @@ export default function SignInPage({
 }) {
   const t = useExtracted()
   const requestedNext = use(searchParams).next
-  const next = Array.isArray(requestedNext)
+  const candidate = Array.isArray(requestedNext)
     ? (requestedNext[0] ?? "/dashboard")
     : (requestedNext ?? "/dashboard")
+  const next =
+    candidate.startsWith("/") && !candidate.startsWith("//")
+      ? candidate
+      : "/dashboard"
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+      <div className="text-center sm:text-left">
+        <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+          {t("Welcome back")}
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           {t("Sign in")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("Pick up where you left off.")}
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {t("Pick up your year exactly where you left it.")}
         </p>
       </div>
 

@@ -10,12 +10,17 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+      <div className="text-center sm:text-left">
+        <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
+          {t("Account recovery")}
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           {t("Reset your password")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("We will send a code to your address.")}
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {t(
+            "Enter the email on your account. We will send a short-lived six-digit code."
+          )}
         </p>
       </div>
 

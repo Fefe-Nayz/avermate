@@ -9,6 +9,7 @@ import { ResponsiveBreadcrumb } from "@/components/breadcrumb/responsive-breadcr
 import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
 import { PeriodSwitcher } from "./period-switcher"
 import { useCommandPalette } from "@/components/command/command-palette"
+import { TimelineTrigger } from "./timeline-banner"
 
 export function SiteHeader() {
   const t = useExtracted()
@@ -42,6 +43,7 @@ export function SiteHeader() {
         >
           <SearchIcon className="size-4" />
         </Button>
+        <TimelineTrigger />
         <PeriodSwitcher />
       </div>
     </header>

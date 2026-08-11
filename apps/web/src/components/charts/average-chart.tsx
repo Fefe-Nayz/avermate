@@ -1,6 +1,6 @@
 "use client"
 
-import { trendLine, type SeriesPoint } from "@avermate/core"
+import { segmentedTrendLine, type SeriesPoint } from "@avermate/core"
 import { areaY, defineChart, dot, lineY, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
@@ -57,7 +57,9 @@ export function AverageChart({
   const settings = preferences.chartSettings
 
   const prepared = useMemo(() => {
-    const trend = settings.showTrend ? trendLine(series) : []
+    const trend = settings.showTrend
+      ? segmentedTrendLine(series, settings.trendSubdivisions)
+      : []
     const rows = series.flatMap((point, index) => {
       const timestamp = point.date.getTime()
       if (!Number.isFinite(timestamp)) return []
@@ -119,7 +121,14 @@ export function AverageChart({
       trendPoints,
       yDomain,
     }
-  }, [scale, series, settings.autoZoom, settings.showTrend, t])
+  }, [
+    scale,
+    series,
+    settings.autoZoom,
+    settings.showTrend,
+    settings.trendSubdivisions,
+    t,
+  ])
 
   const focus = useMemo(
     () =>

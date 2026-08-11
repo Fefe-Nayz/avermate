@@ -32,6 +32,90 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "graph.microsoft.com" },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/grades/:gradeId/:periodId",
+        destination: "/grades/:gradeId",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/subjects/:subjectId/:periodId",
+        destination: "/subjects/:subjectId",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/grades",
+        destination: "/grades",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/settings/grades",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/settings",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/admin",
+        destination: "/admin",
+        permanent: true,
+      },
+      {
+        source: "/profile/account",
+        destination: "/settings/account",
+        permanent: true,
+      },
+      {
+        source: "/profile/about",
+        destination: "/settings/about",
+        permanent: true,
+      },
+      {
+        source: "/profile/settings/general",
+        destination: "/settings/appearance",
+        permanent: true,
+      },
+      {
+        source: "/profile/settings",
+        destination: "/settings/appearance",
+        permanent: true,
+      },
+      {
+        source: "/profile",
+        destination: "/settings",
+        permanent: true,
+      },
+      {
+        source: "/onboarding/new",
+        destination: "/onboarding/new-year",
+        permanent: true,
+      },
+      {
+        source: "/onboarding/:yearId",
+        destination: "/settings/year",
+        permanent: true,
+      },
+      {
+        source: "/auth/verify-email",
+        destination: "/auth/verify",
+        permanent: true,
+      },
+      {
+        source: "/legal/privacy-policy",
+        destination: "/legal/privacy",
+        permanent: true,
+      },
+      {
+        source: "/legal/terms-of-service",
+        destination: "/legal/terms",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

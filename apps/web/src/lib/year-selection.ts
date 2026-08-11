@@ -6,6 +6,7 @@ interface SelectableYear {
   id: string
   startsAt: Date | string
   endsAt: Date | string
+  archivedAt?: Date | string | null
 }
 
 /**
@@ -21,17 +22,23 @@ export function resolveActiveYearId(
 ): string | null {
   if (years.length === 0) return null
 
-  if (preferredYearId && years.some((year) => year.id === preferredYearId)) {
+  const activeYears = years.filter((year) => !year.archivedAt)
+  const candidates = activeYears.length > 0 ? activeYears : years
+
+  if (
+    preferredYearId &&
+    candidates.some((year) => year.id === preferredYearId)
+  ) {
     return preferredYearId
   }
 
-  const current = years.find(
+  const current = candidates.find(
     (year) =>
       new Date(year.startsAt).getTime() <= now &&
       new Date(year.endsAt).getTime() >= now
   )
 
-  return current?.id ?? years[0]?.id ?? null
+  return current?.id ?? candidates[0]?.id ?? null
 }
 
 /** Keep the next server render aligned with the interactive year switcher. */
