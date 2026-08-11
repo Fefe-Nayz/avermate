@@ -33,10 +33,10 @@ export function AnnouncementsScreen() {
       haptic("success");
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: orpc.announcements.active.queryKey(),
+          queryKey: orpc.announcements.active.key(),
         }),
         queryClient.invalidateQueries({
-          queryKey: orpc.announcements.history.queryKey(),
+          queryKey: orpc.announcements.history.key(),
         }),
       ]);
     },
