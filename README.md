@@ -5,7 +5,7 @@ Model a school year with real coefficients and nested subjects, see what each
 result changed, and work backwards from a target to the marks that can reach it.
 
 The repository contains an SSR-first web application, a native Expo client, a
-typed oRPC API, and one shared calculation engine.
+typed oRPC API with a protected MCP server, and one shared calculation engine.
 
 ## What Avermate does
 
@@ -14,20 +14,34 @@ typed oRPC API, and one shared calculation engine.
 - Models nested subjects and transparent categories without changing the
   weighting rules.
 - Calculates general, subject, and custom averages from the same domain engine.
+- Presents grades as a timeline, hierarchy, or calendar on the web and as a
+  grouped, searchable native history in Expo.
 - Explains grade and subject impact, trends, distributions, consistency,
   streaks, and projected results.
 - Turns goals into concrete required marks and flags targets that are secured,
   at risk, achieved, or unreachable.
-- Provides configurable dashboard cards, year review, themes, and English/
-  French localization.
+- Provides 21 configurable dashboard metrics, an immersive year review,
+  themes, and English/French localization.
+- Lets administrators publish versioned curriculum presets. Linked years can
+  adopt reviewed updates, while the first student customization visibly and
+  safely moves that year out of automatic updates until a preset is explicitly
+  reapplied.
+- Offers an optional private social space for friends, circles, and invite-only
+  study groups or classes. Profile fields and derived comparison metrics are
+  shared only after explicit consent; there is no Internet-public grade
+  profile.
 - Runs as a responsive Next.js web app and a dedicated Expo iOS/Android app.
-- Includes optional email/OAuth authentication, data export, uploads, feedback,
-  announcements, and administration when their services are configured.
+- Includes email/OAuth authentication, data export, announcements, centralized
+  bug/feature-request triage, social moderation, and administration. Email and
+  upload integrations activate when their services are configured.
+- Exposes scoped academic and social operations to compatible AI assistants
+  through an OAuth-protected MCP 2026-07-28 endpoint.
 
-Interactive analytics use TanStack Charts. Time-series views support localized
-tooltips, independently resolved active points, mouse/trackpad/touch zoom and
-pan, keyboard controls, responsive layouts, reduced motion, and light/dark
-themes. Small decorative charts intentionally omit interaction.
+Interactive analytics use TanStack Charts on the web and inside an Expo DOM
+surface on native. Time-series views support localized tooltips, independently
+resolved active points, mouse/trackpad/touch zoom and pan, keyboard controls,
+responsive layouts, reduced motion, and light/dark themes. Small decorative
+charts intentionally omit interaction.
 
 ## Architecture
 
@@ -38,6 +52,7 @@ flowchart LR
   web -->|"HTML + hydrated query state"| browser
   browser -->|"mutations and intentional live reads"| api
   mobile["Expo app"] --> api
+  assistant["MCP client"] -->|"OAuth 2.1 + scoped MCP"| api
   api --> db["libSQL / Turso"]
   core["@avermate/core"] --> web
   core --> api
@@ -48,17 +63,28 @@ The web app treats Server Components as the default. Next authenticates and
 prefetches common read models on the server, then TanStack Query hydrates only
 the small browser islands that need a live cache. The same generated oRPC query
 options are used on both sides, avoiding duplicate keys and immediate refetches.
-Production SSR calls the API over its private service address; the browser does
-not relay data the server already knows.
+When `API_INTERNAL_URL` is configured, production SSR calls the API over its
+private service address; the browser does not relay data the server already
+knows. Interactive charts receive their normalized dataset through this server
+path instead of fetching it again just because the chart surface runs on the
+client.
 
 TanStack Charts `0.11.0` is pinned exactly because the package is pre-alpha.
 Charts are built from native marks, scales, focus strategies and tooltips; the
 application adds a reusable semantic-domain interaction controller instead of
 recreating the old Recharts component API.
 
+The MCP endpoint delegates to the same oRPC procedures as the applications, so
+ownership, authorization, validation, and calculations have one source of
+truth. OAuth scopes separate academic reads/writes/deletes, administration, and
+private social operations; destructive tools use explicit multi-round
+confirmation and idempotent replay protection.
+
 For implementation details and measured request reductions, see
-[SSR and data loading](docs/ssr-data-loading.md) and
-[chart architecture](docs/charts.md).
+[SSR and data loading](docs/ssr-data-loading.md),
+[chart architecture](docs/charts.md), [MCP](docs/mcp.md), and the
+[social privacy contract](docs/social-privacy.md). The current `main` →
+`rewrite` acceptance matrix lives in [feature parity](docs/feature-parity.md).
 
 ## Technology
 
@@ -67,10 +93,10 @@ For implementation details and measured request reductions, see
 | Web            | Next.js 16, React 19, TypeScript, Tailwind CSS 4, next-intl     |
 | Server state   | TanStack Query 5, oRPC 1.14                                     |
 | Charts         | TanStack Charts 0.11, D3 shape primitives                       |
-| API            | Bun, Hono, oRPC, Zod                                            |
+| API            | Bun, Hono, oRPC, MCP TypeScript SDK 2, Zod                      |
 | Authentication | Better Auth with Drizzle, email OTP, OAuth and Expo support     |
 | Database       | Drizzle ORM over libSQL/Turso or a local SQLite-compatible file |
-| Mobile         | Expo SDK 57, Expo Router, React Native 0.86                     |
+| Mobile         | Expo SDK 57, Expo Router, React Native 0.86, Expo Widgets       |
 | Workspace      | Bun 1.3.14 workspaces and Turborepo                             |
 
 ## Repository layout
@@ -79,11 +105,14 @@ For implementation details and measured request reductions, see
 apps/
   server/    Hono/oRPC API, authentication, database schema and scripts
   web/       Next.js application and SSR/query/chart integration
-  mobile/    Expo Router application for iOS and Android
+  mobile/    Expo Router application and opt-in iOS system widget
 packages/
   core/      Pure averages, analytics, goals and review domain engine
 docs/
   charts.md
+  feature-parity.md
+  mcp.md
+  social-privacy.md
   ssr-data-loading.md
 deploy.yml   Reference Traefik/Docker Compose deployment
 ```
@@ -118,7 +147,7 @@ On PowerShell, use `Copy-Item` instead of `cp`. Set a unique
 the local schema and start the workspace:
 
 ```bash
-bun run db:push
+bun run db:migrate
 bun run dev
 ```
 
@@ -152,9 +181,18 @@ Required web values:
 
 Optional server integrations include `DATABASE_AUTH_TOKEN`, Google and
 Microsoft OAuth credentials, `RESEND_API_KEY`, `EMAIL_FROM`,
-`UPLOADTHING_TOKEN`, `DISCORD_WEBHOOK_URL`, `ADMIN_USER_IDS`, and
-`MOBILE_SCHEME`. The `DISABLE_EMAIL`, `DISABLE_FEEDBACK`, and `DISABLE_UPLOADS`
-flags are local-development escape hatches.
+`UPLOADTHING_TOKEN`, and `ADMIN_USER_IDS`. The `DISABLE_EMAIL` and
+`DISABLE_UPLOADS` flags are local-development escape hatches. Bug reports and
+feature requests are stored in Avermate and triaged from the protected admin
+panel; they are not relayed to Discord.
+
+The MCP endpoint is available at `${BETTER_AUTH_URL}/mcp` by default.
+Production deployments should set an independent `MCP_REQUEST_STATE_SECRET`;
+`MCP_RESOURCE_URL`, proxy allow-lists, and the disabled-by-default transitional
+DCR switch are documented in `apps/server/.env.example` and
+[docs/mcp.md](docs/mcp.md). Private social features fail closed and remain
+globally disabled until an administrator enables them; every participant still
+has to complete the applicable consent flow.
 
 When production web and API hosts are trusted sibling subdomains, set
 `AUTH_COOKIE_DOMAIN` to the narrowest parent they share. Leave it unset for
@@ -190,6 +228,10 @@ Run these from the repository root unless noted otherwise.
 
 Native builds are available through `bun run --cwd apps/mobile ios` and
 `bun run --cwd apps/mobile android` once the platform toolchain is installed.
+`bunx expo export --platform all` from `apps/mobile` verifies the iOS, Android,
+and static web bundles. The in-app widget library is cross-platform; the
+privacy-redacted operating-system widget currently targets iOS through the
+official `expo-widgets` integration and is opt-in.
 
 ## Demo data
 
@@ -238,9 +280,9 @@ Before using it:
    `NEXT_PUBLIC_*` values before building. Next inlines public variables into
    the client bundle; runtime Compose values cannot replace them afterward.
 
-The API container applies migrations on startup and falls back to a schema push
-for older databases. Review backups and migration output before a production
-upgrade.
+The API container applies reviewed migrations on startup and fails closed if a
+migration cannot complete. It never falls back to a forced schema push. Review
+backups and migration output before a production upgrade.
 
 ## Migrating an Avermate v1 database
 
@@ -270,11 +312,16 @@ before the write run.
 
 ## Project status
 
-The rewrite architecture is active development. TanStack Charts is pinned to a
-pre-alpha release, so interaction contract tests and manual browser/touch/
-assistive-technology checks are required for chart upgrades. Production email,
-OAuth, uploads, feedback, durable database storage, domains, and reverse proxy
-are operator-configured rather than bundled services.
+The rewrite architecture is active development. The academic, SSR, chart,
+managed-preset, private-social, centralized-feedback, MCP, and Expo surfaces are
+implemented and covered by automated checks; real-device authentication,
+multi-touch, widget, theme, and assistive-technology smoke tests remain release
+gates. TanStack Charts is pinned to a pre-alpha release, so its interaction
+contract tests and manual browser/touch checks are required for upgrades.
+Production email, OAuth, uploads, durable database storage, domains, and reverse
+proxy are operator-configured rather than bundled services. Social rollout also
+requires an explicit administrator decision and jurisdiction-appropriate
+privacy review.
 
 No project license is currently declared in this repository. Do not assume
 permission to redistribute the code until the maintainers add one.

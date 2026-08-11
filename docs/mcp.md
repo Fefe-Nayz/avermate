@@ -91,6 +91,12 @@ A public-client creation body is shaped like this:
 }
 ```
 
+The protected resource always requires `avermate:read`. A client that needs
+private social data adds one or more of `avermate:social.read`,
+`avermate:social.manage`, and `avermate:social.moderate` to that base scope.
+Request only the surfaces the assistant actually needs; the three social scopes
+are independent and do not imply one another.
+
 Loopback redirects are appropriate for installed clients. Browser clients
 should register an HTTPS callback. Redirect URIs must be exact; public clients
 must not persist or display a client secret.
@@ -110,16 +116,23 @@ it becomes available.
 
 ## Scopes
 
-| Scope             | Capability                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `avermate:read`   | Read account, academic structures, grades, averages, goals, preferences, announcements, analytics, feedback, and recaps. Required for MCP access. |
-| `avermate:write`  | Create and update academic data, goals, dashboard cards, preferences, feedback, and read-state.                                                   |
-| `avermate:delete` | Make destructive tools discoverable. Each call still requires a separate multi-round confirmation.                                                |
-| `avermate:admin`  | Discover administrator tools only when the authenticated account also has the backend `admin` role.                                               |
+| Scope                      | Capability                                                                                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `avermate:read`            | Read account, academic structures, grades, averages, goals, preferences, announcements, analytics, feedback, and recaps. Required for MCP access.                                                  |
+| `avermate:write`           | Create and update academic data, goals, dashboard cards, preferences, feedback, and read-state.                                                                                                    |
+| `avermate:delete`          | Make destructive tools discoverable. Each call still requires a separate multi-round confirmation.                                                                                                 |
+| `avermate:admin`           | Discover the administrator surface with `avermate:read` only when the account also has the backend `admin` role. Admin writes/deletes additionally require their ordinary write/delete scope.      |
+| `avermate:social.read`     | Read the connected user's eligibility, private profile/grants, capability-safe relationships, groups and policies, threshold-protected comparisons, notifications, own reports, and social export. |
+| `avermate:social.manage`   | Update the connected user's profile/grants/ranking choices and perform confirmed eligibility, friendship, block, group, policy, report, and social-reset workflows.                                |
+| `avermate:social.moderate` | Read social moderation counts/reports/audit and perform confirmed profile/group freezes, only when the account also has the backend `admin` role.                                                  |
 
 OIDC scopes (`openid`, `profile`, `email`, `offline_access`) have their usual
 authorization-server meaning. A scope never bypasses an oRPC ownership or role
-check.
+check. `avermate:delete` expires after 15 minutes,
+`avermate:social.manage` after 30 minutes, and both `avermate:admin` and
+`avermate:social.moderate` after 10 minutes. The protected-resource metadata
+advertises all seven Avermate scopes from the live authorization-server
+configuration.
 
 ## Server surface
 
@@ -136,8 +149,25 @@ The catalog covers:
 - announcements and dismissal history;
 - analytics snapshots and annual recap eligibility/status;
 - feedback submission and history;
+- opt-in social eligibility and profile grants;
+- capability-safe friends, requests, circles and blocks;
+- private groups/classes, immutable sharing policies, re-consent,
+  threshold-protected aggregate statistics and opt-in rankings;
+- privacy-safe social notifications, reports and account export/reset;
 - administrator overview, users, announcements, feedback, roles, and
-  suspensions, gated by both scope and role.
+  suspensions, gated by both scope and role;
+- social moderation overview, reports, value-free audit history and confirmed
+  profile/group freezes, gated independently by `avermate:social.moderate` and
+  the backend `admin` role.
+
+The social read, manage, and moderation catalogues are deliberately isolated.
+An academic `avermate:read` token does not discover social tools; a social-read
+token does not discover mutations; and a non-admin token with
+`avermate:social.moderate` does not discover moderation tools. Social operations
+still pass through the same feature flag, eligibility/guardian consent,
+field-grant, group-policy, cohort-threshold, ownership, and moderation checks as
+the web and Expo applications. MCP never exposes raw grades, notes, subject
+names, email addresses, or internal account identifiers through social DTOs.
 
 Resources include account, years, preferences, announcements, and eligible
 recaps. Resource templates provide:
@@ -254,9 +284,10 @@ bun test apps/server/src/mcp/protocol.test.ts
 It executes the handler through `handler.fetch` in an isolated process and
 covers modern envelopes, version/header rejection, deterministic catalogs and
 cache hints, resource templates/prompts, scopes and role gates, ownership,
-read-only mutation denial, signed MRTR confirmation, idempotent replay,
-protected-resource discovery, DCR-off behavior, unauthenticated challenges,
-and a real authorization-code + PKCE exchange whose JWT calls `/mcp`.
+read-only mutation denial, isolated social read/manage/moderation catalogues,
+signed MRTR confirmation, idempotent replay, protected-resource discovery,
+DCR-off behavior, unauthenticated challenges, and a real authorization-code +
+PKCE exchange whose JWT calls `/mcp`.
 
 The implementation is based on:
 
