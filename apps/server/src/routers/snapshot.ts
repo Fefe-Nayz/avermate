@@ -61,12 +61,17 @@ export const snapshotRouter = {
           })
           .from(gradeComponents)
           .innerJoin(grades, eq(gradeComponents.gradeId, grades.id))
-          .where(
-            and(eq(grades.yearId, year.id), eq(grades.userId, userId)),
-          )
+          .where(and(eq(grades.yearId, year.id), eq(grades.userId, userId)))
           .orderBy(asc(gradeComponents.sortOrder)),
         db
-          .select()
+          .select({
+            id: periods.id,
+            name: periods.name,
+            startAt: periods.startAt,
+            endAt: periods.endAt,
+            isCumulative: periods.isCumulative,
+            sortOrder: periods.sortOrder,
+          })
           .from(periods)
           .where(eq(periods.yearId, year.id))
           .orderBy(asc(periods.sortOrder), asc(periods.startAt)),
@@ -89,7 +94,20 @@ export const snapshotRouter = {
           .where(eq(goals.yearId, year.id))
           .orderBy(asc(goals.sortOrder)),
         db
-          .select()
+          .select({
+            id: dashboardCards.id,
+            surface: dashboardCards.surface,
+            metric: dashboardCards.metric,
+            targetKind: dashboardCards.targetKind,
+            targetId: dashboardCards.targetId,
+            goalId: dashboardCards.goalId,
+            display: dashboardCards.display,
+            span: dashboardCards.span,
+            title: dashboardCards.title,
+            accent: dashboardCards.accent,
+            sortOrder: dashboardCards.sortOrder,
+            hidden: dashboardCards.hidden,
+          })
           .from(dashboardCards)
           .where(eq(dashboardCards.yearId, year.id))
           .orderBy(asc(dashboardCards.sortOrder)),
@@ -130,7 +148,18 @@ export const snapshotRouter = {
       }
 
       return {
-        year,
+        year: {
+          id: year.id,
+          name: year.name,
+          startsAt: year.startsAt,
+          endsAt: year.endsAt,
+          scale: year.scale,
+          defaultOutOf: year.defaultOutOf,
+          passingRatio: year.passingRatio,
+          decimals: year.decimals,
+          sortOrder: year.sortOrder,
+          archivedAt: year.archivedAt,
+        },
         subjects: subjectRows.map((subject) => ({
           id: subject.id,
           name: subject.name,

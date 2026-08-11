@@ -8,6 +8,7 @@ import {
   oauthProviderOpenIdConfigMetadata,
 } from "@better-auth/oauth-provider";
 import { createContext } from "./lib/context";
+import { compressRpcJson } from "./lib/compression";
 import { env, isProduction } from "./lib/env";
 import { resolveOrigin } from "./lib/origins";
 import { appRouter } from "./routers";
@@ -89,6 +90,8 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 });
 
 const handler = new RPCHandler(appRouter);
+
+app.use("/rpc/*", compressRpcJson());
 
 app.use("/rpc/*", async (c, next) => {
   const { matched, response } = await handler.handle(c.req.raw, {
