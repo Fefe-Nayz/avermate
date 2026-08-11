@@ -5,9 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  CodeIcon,
   FileClockIcon,
+  LayersIcon,
   PlusIcon,
   SaveIcon,
+  ScrollTextIcon,
   UsersIcon,
 } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
@@ -20,6 +23,7 @@ import {
 } from "@/components/admin/preset-visual-editor"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
+import { ChangeSummary, VersionBadge } from "@/components/presets/preset-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,12 +37,13 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 
-const emptyConfiguration = {
+const EMPTY_CONFIGURATION: PresetEditorConfiguration = {
   subjects: [
     {
       key: "first-subject",
@@ -52,12 +57,22 @@ const emptyConfiguration = {
   averages: [],
 }
 
+/**
+ * A draft holds the *parsed* configuration.
+ *
+ * It used to hold a JSON string, re-parsed on every keystroke, with the visual
+ * editor serialising back into it. So the ordinary path — typing a subject
+ * name — ran through `JSON.parse`, and the screen carried a permanent "the
+ * advanced JSON is invalid" branch with a second copy of the editor inside it,
+ * for a state the visual editor cannot produce. The raw text now exists only
+ * inside the advanced tab, and is applied deliberately.
+ */
 interface Draft {
   name: string
   description: string
   tags: string
   featured: boolean
-  configuration: string
+  configuration: PresetEditorConfiguration
   changeNote: string
 }
 
@@ -123,6 +138,14 @@ function configurationDiff(
   }
 }
 
+/**
+ * Managed presets.
+ *
+ * A catalogue on the left and one preset on the right, split across tabs —
+ * identity, structure, history. It was a single column that scrolled through
+ * all three plus a raw JSON textarea, headed "Publish version 2", which named
+ * the button rather than the thing being edited.
+ */
 export function AdminPresetsClient({
   initialPresetId,
 }: {
@@ -141,7 +164,7 @@ export function AdminPresetsClient({
     description: "",
     tags: "",
     featured: false,
-    configuration: pretty(emptyConfiguration),
+    configuration: EMPTY_CONFIGURATION,
     changeNote: "",
   })
 
@@ -163,44 +186,24 @@ export function AdminPresetsClient({
       description: current.description,
       tags: current.tags.join(", "),
       featured: current.featured,
-      configuration: pretty(currentVersion.configuration),
+      configuration:
+        currentVersion.configuration as PresetEditorConfiguration,
       changeNote: "",
     })
     setSourceVersion(currentVersion.version)
   }
 
-  const selectedSummary = useMemo(
-    () => list.data?.find((preset) => preset.id === selectedId),
-    [list.data, selectedId]
-  )
-  const parsedDraft = useMemo(() => {
-    if (!draft) return { value: null, error: null }
-    try {
-      return { value: parseConfiguration(draft.configuration), error: null }
-    } catch (error) {
-      return {
-        value: null,
-        error: error instanceof Error ? error.message : "Invalid configuration",
-      }
-    }
-  }, [draft])
-  const parsedNewDraft = useMemo(() => {
-    try {
-      return { value: parseConfiguration(newDraft.configuration), error: null }
-    } catch (error) {
-      return {
-        value: null,
-        error: error instanceof Error ? error.message : "Invalid configuration",
-      }
-    }
-  }, [newDraft.configuration])
+  const patch = (values: Partial<Draft>) =>
+    setDraft((value) => value && { ...value, ...values })
+
   const diff = useMemo(() => {
-    if (!parsedDraft.value || !currentVersion) return null
+    if (!draft || !currentVersion) return null
     return configurationDiff(
       currentVersion.configuration as PresetEditorConfiguration,
-      parsedDraft.value
+      draft.configuration
     )
-  }, [currentVersion, parsedDraft.value])
+  }, [currentVersion, draft])
+
   const tags = (value: string) =>
     value
       .split(",")
@@ -263,24 +266,23 @@ export function AdminPresetsClient({
 
   const publishDraft = () => {
     if (!selectedId || !draft) return
-    try {
-      publish.mutate({
-        presetId: selectedId,
-        name: draft.name.trim(),
-        description: draft.description.trim(),
-        tags: tags(draft.tags),
-        featured: draft.featured,
-        changeNote: draft.changeNote.trim(),
-        configuration: parseConfiguration(draft.configuration),
-      })
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("Invalid JSON configuration.")
-      )
-    }
+    publish.mutate({
+      presetId: selectedId,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      tags: tags(draft.tags),
+      featured: draft.featured,
+      changeNote: draft.changeNote.trim(),
+      configuration: draft.configuration,
+    })
   }
+
+  const untouched = diff
+    ? diff.added === 0 &&
+      diff.changed === 0 &&
+      diff.removed === 0 &&
+      diff.averagesChanged === 0
+    : true
 
   return (
     <>
@@ -288,7 +290,8 @@ export function AdminPresetsClient({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight">
+              <ScrollTextIcon className="size-5 text-muted-foreground" />
               {t("Managed presets")}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -302,311 +305,293 @@ export function AdminPresetsClient({
           </Button>
         </div>
 
-        <div className="grid gap-4 @3xl/main:grid-cols-[18rem_1fr]">
-          <SettingsSection title={t("Preset catalogue")}>
-            <div className="flex flex-col gap-1">
-              {list.data?.map((preset) => (
+        <div className="grid gap-4 @3xl/main:grid-cols-[17rem_minmax(0,1fr)] @3xl/main:items-start">
+          <nav
+            aria-label={t("Preset catalogue")}
+            className="flex flex-col gap-1"
+          >
+            {list.data?.map((preset) => {
+              const selected = selectedId === preset.id
+              return (
                 <button
                   key={preset.id}
                   type="button"
+                  aria-current={selected ? "true" : undefined}
                   className={cn(
-                    "rounded-lg border px-3 py-2 text-left transition-colors",
-                    selectedId === preset.id
+                    "flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                    selected
                       ? "border-primary bg-primary/6"
-                      : "hover:bg-accent/50"
+                      : "border-transparent hover:bg-accent/50"
                   )}
                   onClick={() => {
                     setSelectedId(preset.id)
                     setSourceVersion(null)
                   }}
                 >
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <span className="min-w-0 flex-1 truncate">
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {preset.name}
                     </span>
-                    <Badge variant={preset.archived ? "outline" : "secondary"}>
-                      v{preset.currentVersion}
-                    </Badge>
+                    <VersionBadge version={preset.currentVersion} />
                   </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {t("{linked} linked · {customized} customized", {
-                      linked: String(preset.adoption.linked),
-                      customized: String(preset.adoption.customized),
-                    })}
-                  </span>
+                  {/* Adoption is only worth a line once somebody has adopted
+                      it; "0 linked · 0 customized" on every row is noise. */}
+                  {preset.adoption.linked > 0 ||
+                  preset.adoption.customized > 0 ? (
+                    <span className="numeric text-xs text-muted-foreground">
+                      {t("{linked} linked · {customized} customized", {
+                        linked: String(preset.adoption.linked),
+                        customized: String(preset.adoption.customized),
+                      })}
+                    </span>
+                  ) : null}
                   {preset.adoption.updateAvailable > 0 ? (
-                    <span className="mt-1 block text-xs font-medium text-amber-700 dark:text-amber-300">
+                    <span className="w-fit rounded-full bg-caution/12 px-2 py-0.5 text-xs font-medium text-caution">
                       {t("{count} updates available", {
                         count: String(preset.adoption.updateAvailable),
                       })}
                     </span>
                   ) : null}
+                  {preset.archived ? (
+                    <Badge variant="outline" className="w-fit">
+                      {t("Archived")}
+                    </Badge>
+                  ) : null}
                 </button>
-              ))}
-            </div>
-          </SettingsSection>
+              )
+            })}
+          </nav>
 
           {draft && current ? (
             <div className="flex min-w-0 flex-col gap-4">
-              <SettingsSection
-                title={t("Publish version {version}", {
-                  version: String(current.currentVersion + 1),
-                })}
-                description={t(
-                  "Keys identify nodes across versions. Keep a key unchanged when renaming or moving the same subject."
-                )}
-                footer={
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={archive.isPending}
-                      onClick={() =>
-                        archive.mutate({
-                          presetId: current.id,
-                          archived: !current.archived,
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold tracking-tight">
+                    {draft.name || current.name}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {untouched
+                      ? t("Version {version}, unchanged", {
+                          version: String(current.currentVersion),
                         })
-                      }
-                    >
-                      {current.archived ? (
-                        <ArchiveRestoreIcon className="size-4" />
-                      ) : (
-                        <ArchiveIcon className="size-4" />
-                      )}
-                      {current.archived ? t("Restore") : t("Archive")}
-                    </Button>
-                    <Button
-                      className="ml-auto"
-                      size="sm"
-                      disabled={
-                        publish.isPending ||
-                        !draft.name.trim() ||
-                        !draft.changeNote.trim()
-                      }
-                      onClick={publishDraft}
-                    >
-                      {publish.isPending ? (
-                        <Spinner className="size-4" />
-                      ) : (
-                        <SaveIcon className="size-4" />
-                      )}
-                      {t("Publish new version")}
-                    </Button>
-                  </>
-                }
-              >
-                <div className="grid gap-3 @xl/main:grid-cols-2">
-                  <TextField
-                    label={t("Name")}
-                    value={draft.name}
-                    onChange={(event) =>
-                      setDraft(
-                        (value) =>
-                          value && { ...value, name: event.target.value }
-                      )
-                    }
-                  />
-                  <TextField
-                    label={t("Tags")}
-                    description={t("Separate tags with commas.")}
-                    value={draft.tags}
-                    onChange={(event) =>
-                      setDraft(
-                        (value) =>
-                          value && { ...value, tags: event.target.value }
-                      )
-                    }
-                  />
+                      : t("Publishing will create version {version}", {
+                          version: String(current.currentVersion + 1),
+                        })}
+                  </p>
                 </div>
-                <Field>
-                  <FieldLabel>{t("Description")}</FieldLabel>
-                  <Textarea
-                    value={draft.description}
-                    onChange={(event) =>
-                      setDraft(
-                        (value) =>
-                          value && { ...value, description: event.target.value }
-                      )
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={archive.isPending}
+                    onClick={() =>
+                      archive.mutate({
+                        presetId: current.id,
+                        archived: !current.archived,
+                      })
                     }
-                  />
-                </Field>
-                <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                  <span>
-                    <span className="block font-medium">{t("Featured")}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {t("Highlight this preset during onboarding.")}
-                    </span>
-                  </span>
-                  <Switch
-                    checked={draft.featured}
-                    onCheckedChange={(featured) =>
-                      setDraft((value) => value && { ...value, featured })
+                  >
+                    {current.archived ? (
+                      <ArchiveRestoreIcon className="size-4" />
+                    ) : (
+                      <ArchiveIcon className="size-4" />
+                    )}
+                    {current.archived ? t("Restore") : t("Archive")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={
+                      publish.isPending ||
+                      !draft.name.trim() ||
+                      !draft.changeNote.trim()
                     }
-                  />
-                </label>
-                {parsedDraft.value ? (
-                  <>
-                    {diff ? (
-                      <div className="grid grid-cols-2 gap-2 @xl/main:grid-cols-4">
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          <span className="numeric block font-semibold">
-                            +{diff.added}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("Subjects added")}
-                          </span>
-                        </div>
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          <span className="numeric block font-semibold">
-                            {diff.changed}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("Subjects changed")}
-                          </span>
-                        </div>
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          <span className="numeric block font-semibold">
-                            −{diff.removed}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("Subjects removed")}
-                          </span>
-                        </div>
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          <span className="numeric block font-semibold">
-                            {diff.averagesChanged}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {t("Averages changed")}
-                          </span>
-                        </div>
-                      </div>
-                    ) : null}
-                    <PresetVisualEditor
-                      value={parsedDraft.value}
-                      onChange={(configuration) =>
-                        setDraft(
-                          (value) =>
-                            value && {
-                              ...value,
-                              configuration: pretty(configuration),
-                            }
-                        )
-                      }
-                    />
-                    <details className="rounded-lg border bg-muted/20 p-3">
-                      <summary className="cursor-pointer text-sm font-medium">
-                        {t("Advanced JSON editor")}
-                      </summary>
-                      <Field className="mt-3">
-                        <FieldLabel>{t("Raw configuration")}</FieldLabel>
-                        <Textarea
-                          className="min-h-80 font-mono text-xs"
-                          spellCheck={false}
-                          value={draft.configuration}
-                          onChange={(event) =>
-                            setDraft(
-                              (value) =>
-                                value && {
-                                  ...value,
-                                  configuration: event.target.value,
-                                }
-                            )
-                          }
-                        />
-                        <FieldDescription>
-                          {t(
-                            "The server validates unique stable keys, hierarchy, coefficients and average references before publishing."
-                          )}
-                        </FieldDescription>
-                      </Field>
-                    </details>
-                  </>
-                ) : (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                    <p className="font-medium">
-                      {t("The advanced JSON is invalid.")}
-                    </p>
-                    <p className="mt-1 text-xs">{parsedDraft.error}</p>
-                    <Textarea
-                      className="mt-3 min-h-80 font-mono text-xs"
-                      value={draft.configuration}
-                      onChange={(event) =>
-                        setDraft(
-                          (value) =>
-                            value && {
-                              ...value,
-                              configuration: event.target.value,
-                            }
-                        )
-                      }
-                    />
-                  </div>
-                )}
-                <TextField
-                  label={t("What changed?")}
-                  description={t(
-                    "Students use this note to understand the update."
-                  )}
-                  value={draft.changeNote}
-                  onChange={(event) =>
-                    setDraft(
-                      (value) =>
-                        value && { ...value, changeNote: event.target.value }
-                    )
-                  }
-                />
-              </SettingsSection>
+                    onClick={publishDraft}
+                  >
+                    {publish.isPending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <SaveIcon className="size-4" />
+                    )}
+                    {t("Publish")}
+                  </Button>
+                </div>
+              </div>
 
-              <SettingsSection title={t("Version history")}>
-                <ul className="divide-y">
-                  {[...current.versions].reverse().map((version) => (
-                    <li
-                      key={version.id}
-                      className="flex items-start gap-3 py-3 first:pt-0"
-                    >
-                      <FileClockIcon className="mt-0.5 size-4 text-muted-foreground" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">
-                          {t("Version {version}", {
-                            version: String(version.version),
-                          })}
+              {diff ? (
+                <ChangeSummary
+                  emptyLabel={t(
+                    "No structural change yet — publishing would only update the details."
+                  )}
+                  counts={[
+                    { label: t("subjects"), value: diff.added, kind: "add" },
+                    {
+                      label: t("subjects changed"),
+                      value: diff.changed,
+                      kind: "edit",
+                    },
+                    {
+                      label: t("subjects"),
+                      value: diff.removed,
+                      kind: "remove",
+                    },
+                    {
+                      label: t("averages changed"),
+                      value: diff.averagesChanged,
+                      kind: "edit",
+                    },
+                  ]}
+                />
+              ) : null}
+
+              <Tabs defaultValue="structure" className="gap-4">
+                <TabsList className="w-full overflow-x-auto @lg/main:w-fit">
+                  <TabsTrigger value="structure">
+                    <LayersIcon /> {t("Structure")}
+                  </TabsTrigger>
+                  <TabsTrigger value="details">
+                    <ScrollTextIcon /> {t("Details")}
+                  </TabsTrigger>
+                  <TabsTrigger value="history">
+                    <FileClockIcon /> {t("History")}
+                  </TabsTrigger>
+                  <TabsTrigger value="raw">
+                    <CodeIcon /> {t("JSON")}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="structure">
+                  <SettingsSection
+                    icon={LayersIcon}
+                    title={t("Subjects and averages")}
+                    description={t(
+                      "Names, hierarchy, order and coefficients are versioned together."
+                    )}
+                    footer={
+                      <TextField
+                        className="w-full"
+                        label={t("What changed?")}
+                        description={t(
+                          "Students read this note before accepting the update."
+                        )}
+                        value={draft.changeNote}
+                        onChange={(event) =>
+                          patch({ changeNote: event.target.value })
+                        }
+                      />
+                    }
+                  >
+                    <PresetVisualEditor
+                      value={draft.configuration}
+                      onChange={(configuration) => patch({ configuration })}
+                    />
+                  </SettingsSection>
+                </TabsContent>
+
+                <TabsContent value="details">
+                  <SettingsSection
+                    icon={ScrollTextIcon}
+                    title={t("How it appears during onboarding")}
+                  >
+                    <div className="grid gap-3 @xl/main:grid-cols-2">
+                      <TextField
+                        label={t("Name")}
+                        value={draft.name}
+                        onChange={(event) =>
+                          patch({ name: event.target.value })
+                        }
+                      />
+                      <TextField
+                        label={t("Tags")}
+                        description={t("Separate tags with commas.")}
+                        value={draft.tags}
+                        onChange={(event) =>
+                          patch({ tags: event.target.value })
+                        }
+                      />
+                    </div>
+                    <Field>
+                      <FieldLabel>{t("Description")}</FieldLabel>
+                      <Textarea
+                        rows={3}
+                        value={draft.description}
+                        onChange={(event) =>
+                          patch({ description: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                      <span>
+                        <span className="block font-medium">
+                          {t("Featured")}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          {version.changeNote}
+                          {t("Highlight this preset during onboarding.")}
                         </span>
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {format.dateTime(new Date(version.createdAt), {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </SettingsSection>
+                      <Switch
+                        checked={draft.featured}
+                        onCheckedChange={(featured) => patch({ featured })}
+                      />
+                    </label>
+                  </SettingsSection>
+                </TabsContent>
+
+                <TabsContent value="history">
+                  <SettingsSection
+                    icon={FileClockIcon}
+                    title={t("Version history")}
+                    description={t(
+                      "Adoption is counted per school year, never per browser session."
+                    )}
+                  >
+                    <ul className="divide-y">
+                      {[...current.versions].reverse().map((version) => (
+                        <li
+                          key={version.id}
+                          className="flex items-start gap-3 py-3"
+                        >
+                          <VersionBadge version={version.version} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm">
+                              {version.changeNote || t("No note")}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {format.dateTime(new Date(version.createdAt), {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </SettingsSection>
+                </TabsContent>
+
+                <TabsContent value="raw">
+                  <RawConfigurationEditor
+                    value={draft.configuration}
+                    onApply={(configuration) => patch({ configuration })}
+                  />
+                </TabsContent>
+              </Tabs>
             </div>
           ) : detail.isLoading ? (
             <div className="flex justify-center py-20">
-              <Spinner className="size-6" />
+              <Spinner className="size-6 text-muted-foreground" />
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {t("Create a preset to publish its first version.")}
+            <div className="rounded-xl border border-dashed p-10 text-center">
+              <UsersIcon className="mx-auto size-5 text-muted-foreground" />
+              <p className="mt-3 text-sm text-muted-foreground">
+                {list.data?.length
+                  ? t("Choose a preset to edit it.")
+                  : t("Create a preset to publish its first version.")}
+              </p>
             </div>
           )}
         </div>
-
-        {selectedSummary ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <UsersIcon className="size-4" />
-            {t(
-              "Adoption is counted per school year, never per browser session."
-            )}
-          </div>
-        ) : null}
       </div>
 
       <Dialog open={creating} onOpenChange={setCreating}>
@@ -645,6 +630,7 @@ export function AdminPresetsClient({
             <Field>
               <FieldLabel>{t("Description")}</FieldLabel>
               <Textarea
+                rows={3}
                 value={newDraft.description}
                 onChange={(event) =>
                   setNewDraft((value) => ({
@@ -654,37 +640,12 @@ export function AdminPresetsClient({
                 }
               />
             </Field>
-            {parsedNewDraft.value ? (
-              <PresetVisualEditor
-                value={parsedNewDraft.value}
-                onChange={(configuration) =>
-                  setNewDraft((value) => ({
-                    ...value,
-                    configuration: pretty(configuration),
-                  }))
-                }
-              />
-            ) : (
-              <div className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">
-                {parsedNewDraft.error}
-              </div>
-            )}
-            <details className="rounded-lg border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
-                {t("Advanced JSON editor")}
-              </summary>
-              <Textarea
-                className="mt-3 min-h-72 font-mono text-xs"
-                spellCheck={false}
-                value={newDraft.configuration}
-                onChange={(event) =>
-                  setNewDraft((value) => ({
-                    ...value,
-                    configuration: event.target.value,
-                  }))
-                }
-              />
-            </details>
+            <PresetVisualEditor
+              value={newDraft.configuration}
+              onChange={(configuration) =>
+                setNewDraft((value) => ({ ...value, configuration }))
+              }
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreating(false)}>
@@ -694,24 +655,16 @@ export function AdminPresetsClient({
               disabled={
                 create.isPending || !newId.trim() || !newDraft.name.trim()
               }
-              onClick={() => {
-                try {
-                  create.mutate({
-                    id: newId.trim(),
-                    name: newDraft.name.trim(),
-                    description: newDraft.description.trim(),
-                    tags: tags(newDraft.tags),
-                    featured: newDraft.featured,
-                    configuration: parseConfiguration(newDraft.configuration),
-                  })
-                } catch (error) {
-                  toast.error(
-                    error instanceof Error
-                      ? error.message
-                      : t("Invalid JSON configuration.")
-                  )
-                }
-              }}
+              onClick={() =>
+                create.mutate({
+                  id: newId.trim(),
+                  name: newDraft.name.trim(),
+                  description: newDraft.description.trim(),
+                  tags: tags(newDraft.tags),
+                  featured: newDraft.featured,
+                  configuration: newDraft.configuration,
+                })
+              }
             >
               {create.isPending ? (
                 <Spinner className="size-4" />
@@ -724,5 +677,80 @@ export function AdminPresetsClient({
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/**
+ * The escape hatch.
+ *
+ * Raw JSON is a real need — pasting a whole curriculum is faster than building
+ * it by hand — but it was wired straight into the draft, so a half-typed brace
+ * put the whole screen into an error state. Here it is a scratch buffer that
+ * has to be applied, and it can only report its own syntax error.
+ */
+function RawConfigurationEditor({
+  value,
+  onApply,
+}: {
+  value: PresetEditorConfiguration
+  onApply: (configuration: PresetEditorConfiguration) => void
+}) {
+  const t = useExtracted()
+  const [text, setText] = useState(() => pretty(value))
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <SettingsSection
+      icon={CodeIcon}
+      title={t("Raw configuration")}
+      description={t(
+        "The server validates unique stable keys, hierarchy, coefficients and average references before publishing."
+      )}
+      footer={
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setText(pretty(value))
+              setError(null)
+            }}
+          >
+            {t("Reset to current")}
+          </Button>
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() => {
+              try {
+                onApply(parseConfiguration(text))
+                setError(null)
+                toast.success(t("Configuration applied to the editor."))
+              } catch (parseError) {
+                setError(
+                  parseError instanceof Error
+                    ? parseError.message
+                    : t("Invalid JSON configuration.")
+                )
+              }
+            }}
+          >
+            {t("Apply to editor")}
+          </Button>
+        </>
+      }
+    >
+      <Textarea
+        className="min-h-80 font-mono text-xs"
+        spellCheck={false}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      {error ? (
+        <FieldDescription className="text-destructive">
+          {error}
+        </FieldDescription>
+      ) : null}
+    </SettingsSection>
   )
 }

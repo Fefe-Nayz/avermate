@@ -4,15 +4,22 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
-  CheckCircle2Icon,
   Link2OffIcon,
   RefreshCwIcon,
+  ScrollTextIcon,
   SparklesIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
+import {
+  ChangeSummary,
+  PresetCard,
+  PresetStatePanel,
+  VersionBadge,
+  type PresetLinkState,
+} from "@/components/presets/preset-ui"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,15 +31,26 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc, rpc } from "@/lib/orpc"
 import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
-import { cn } from "@/lib/utils"
 
+/**
+ * Whether this year still follows an official curriculum.
+ *
+ * The page answers one question — *is anything about to change under me* — and
+ * the previous version buried it. Its status colours were hardcoded emerald
+ * and amber, so the screen whose whole job is reassurance ignored the palette
+ * the reader chose; and it printed a fixed grid of six counters that read all
+ * zeros whenever nothing had changed, which is most of the time.
+ *
+ * Now: the state first, in the theme's own colours, carrying only the counts
+ * that are not zero. Choosing a preset comes second, because it is the rarer
+ * act.
+ */
 export function PresetMembershipClient() {
   const t = useExtracted()
   const { yearId } = useYear()
@@ -120,51 +138,44 @@ export function PresetMembershipClient() {
   })
 
   const data = status.data
-  const linked = data?.state !== "none" && data?.preset
-  const stateCopy = {
+  const linked = data?.state !== "none" && data?.preset ? data.preset : null
+  const state: PresetLinkState | null =
+    data?.state && data.state !== "none" ? data.state : null
+
+  const stateCopy: Record<PresetLinkState, { title: string; body: string }> = {
     current: {
-      title: t("Preset up to date"),
-      description: t("This year follows version {version} of {name}.", {
-        version: String(data?.membership?.appliedVersion ?? ""),
-        name: data?.preset?.name ?? "",
-      }),
-      className: "border-emerald-500/30 bg-emerald-500/8",
-      icon: <CheckCircle2Icon className="size-5 text-emerald-600" />,
+      title: t("Up to date"),
+      body: t("Nothing will change unless you choose to change it."),
     },
     update_available: {
-      title: t("Preset update available"),
-      description: t(
-        "Review the changes below, then update when you are ready."
-      ),
-      className: "border-primary/30 bg-primary/6",
-      icon: <RefreshCwIcon className="size-5 text-primary" />,
+      title: t("An update is ready"),
+      body: t("Read what it does below, then apply it when you want to."),
     },
     customized: {
-      title: t("Customized year"),
-      description: t(
-        "Your subject or average configuration differs from the preset. Official updates will never overwrite it."
+      title: t("This year is yours"),
+      body: t(
+        "Your subjects and averages differ from the preset. Official updates will never overwrite them."
       ),
-      className: "border-amber-500/30 bg-amber-500/8",
-      icon: <Link2OffIcon className="size-5 text-amber-600" />,
     },
     action_required: {
-      title: t("Update needs your decision"),
-      description: t(
-        "The new preset removes subjects that already contain grades, so Avermate has not changed anything."
+      title: t("This update needs a decision"),
+      body: t(
+        "It removes subjects that already hold grades, so nothing has been changed."
       ),
-      className: "border-destructive/30 bg-destructive/6",
-      icon: <AlertTriangleIcon className="size-5 text-destructive" />,
     },
-  } as const
-  const copy =
-    data?.state && data.state !== "none" ? stateCopy[data.state] : null
+  }
+
+  const replacing =
+    (preview.data?.existing.subjects ?? 0) > 0 ||
+    (preview.data?.existing.averages ?? 0) > 0
 
   return (
     <>
       <PageMeta title={t("Year preset")} backHref="/more" />
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="hidden text-2xl font-semibold tracking-tight md:block">
+        <div className="hidden md:block">
+          <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight">
+            <ScrollTextIcon className="size-5 text-muted-foreground" />
             {t("Year preset")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -174,50 +185,100 @@ export function PresetMembershipClient() {
           </p>
         </div>
 
-        {copy ? (
-          <section className={cn("rounded-xl border p-4", copy.className)}>
-            <div className="flex items-start gap-3">
-              {copy.icon}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold">{copy.title}</h2>
-                  {linked ? (
-                    <Badge variant="outline">
-                      {linked.name} · v{data?.membership?.appliedVersion}
-                    </Badge>
-                  ) : null}
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {copy.description}
-                </p>
-              </div>
-            </div>
+        {status.isPending ? (
+          <div className="flex justify-center py-12">
+            <Spinner className="size-5 text-muted-foreground" />
+          </div>
+        ) : null}
 
-            {data?.changes ? (
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm @md/main:grid-cols-3">
-                {[
-                  [t("Subjects added"), data.changes.subjectsAdded],
-                  [t("Subjects changed"), data.changes.subjectsChanged],
-                  [t("Subjects removed"), data.changes.subjectsRemoved],
-                  [t("Averages added"), data.changes.averagesAdded],
-                  [t("Averages changed"), data.changes.averagesChanged],
-                  [t("Averages removed"), data.changes.averagesRemoved],
-                ].map(([label, value]) => (
-                  <div
-                    key={String(label)}
-                    className="rounded-lg bg-background/70 px-3 py-2"
+        {state ? (
+          <PresetStatePanel
+            state={state}
+            title={stateCopy[state].title}
+            description={stateCopy[state].body}
+            badge={
+              linked ? (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  {linked.name}
+                  <VersionBadge
+                    version={data?.membership?.appliedVersion ?? ""}
+                  />
+                </span>
+              ) : null
+            }
+            actions={
+              <>
+                {data?.state === "update_available" ? (
+                  <Button
+                    size="sm"
+                    disabled={synchronize.isPending}
+                    onClick={() =>
+                      synchronize.mutate({ yearId: yearId as string })
+                    }
                   >
-                    <span className="numeric block font-semibold">{value}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {label}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                    {synchronize.isPending ? (
+                      <Spinner className="size-4" />
+                    ) : (
+                      <RefreshCwIcon className="size-4" />
+                    )}
+                    {t("Update to version {version}", {
+                      version: String(data.preset?.currentVersion ?? ""),
+                    })}
+                  </Button>
+                ) : null}
+                {data?.state !== "customized" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirming("detach")}
+                  >
+                    <Link2OffIcon className="size-4" />
+                    {t("Customize this year")}
+                  </Button>
+                ) : null}
+              </>
+            }
+          >
+            {data?.changes ? (
+              <ChangeSummary
+                emptyLabel={t("This update changes nothing in your year.")}
+                counts={[
+                  {
+                    label: t("subjects"),
+                    value: data.changes.subjectsAdded,
+                    kind: "add",
+                  },
+                  {
+                    label: t("subjects changed"),
+                    value: data.changes.subjectsChanged,
+                    kind: "edit",
+                  },
+                  {
+                    label: t("subjects"),
+                    value: data.changes.subjectsRemoved,
+                    kind: "remove",
+                  },
+                  {
+                    label: t("averages"),
+                    value: data.changes.averagesAdded,
+                    kind: "add",
+                  },
+                  {
+                    label: t("averages changed"),
+                    value: data.changes.averagesChanged,
+                    kind: "edit",
+                  },
+                  {
+                    label: t("averages"),
+                    value: data.changes.averagesRemoved,
+                    kind: "remove",
+                  },
+                ]}
+              />
             ) : null}
 
             {data?.blockers.length ? (
-              <ul className="mt-4 rounded-lg border border-destructive/20 bg-background/70 px-3 py-2 text-sm">
+              <ul className="mt-3 flex flex-col gap-1 rounded-lg border border-destructive/25 bg-background/60 px-3 py-2 text-sm">
                 {data.blockers.map((blocker) => (
                   <li key={blocker.subjectId}>
                     {t("{name}: {count} grades would be affected", {
@@ -228,132 +289,81 @@ export function PresetMembershipClient() {
                 ))}
               </ul>
             ) : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {data?.state === "update_available" ? (
-                <Button
-                  size="sm"
-                  disabled={synchronize.isPending}
-                  onClick={() =>
-                    synchronize.mutate({ yearId: yearId as string })
-                  }
-                >
-                  {synchronize.isPending ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <RefreshCwIcon className="size-4" />
-                  )}
-                  {t("Update to version {version}", {
-                    version: String(data.preset?.currentVersion ?? ""),
-                  })}
-                </Button>
-              ) : null}
-              {data?.state === "current" ||
-              data?.state === "update_available" ||
-              data?.state === "action_required" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setConfirming("detach")}
-                >
-                  <Link2OffIcon className="size-4" /> {t("Customize this year")}
-                </Button>
-              ) : null}
-            </div>
-          </section>
+          </PresetStatePanel>
         ) : null}
 
         <SettingsSection
-          title={linked ? t("Choose another preset") : t("Choose a preset")}
-          description={
-            data?.state === "customized"
-              ? t(
-                  "Reapplying replaces the current subject and average configuration only when no grades can be lost."
-                )
-              : t(
-                  "A preset includes subjects, coefficients, hierarchy and useful custom averages."
-                )
+          icon={SparklesIcon}
+          title={linked ? t("Switch to another preset") : t("Choose a preset")}
+          description={t(
+            "A preset brings subjects, coefficients, hierarchy and useful custom averages."
+          )}
+          footer={
+            selectedPresetId && preview.data ? (
+              <div className="flex w-full flex-wrap items-center gap-3">
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                  {replacing
+                    ? t(
+                        "This replaces {subjects} current subjects and {averages} current averages.",
+                        {
+                          subjects: String(preview.data.existing.subjects),
+                          averages: String(preview.data.existing.averages),
+                        }
+                      )
+                    : t("This year is empty, so nothing can be lost.")}
+                </p>
+                <Button
+                  size="sm"
+                  disabled={!preview.data.canReplace || apply.isPending}
+                  onClick={() =>
+                    replacing ? setConfirming("reapply") : apply.mutate()
+                  }
+                >
+                  {apply.isPending ? (
+                    <Spinner className="size-4" />
+                  ) : (
+                    <SparklesIcon className="size-4" />
+                  )}
+                  {linked ? t("Reapply preset") : t("Apply preset")}
+                </Button>
+              </div>
+            ) : undefined
           }
         >
-          <div className="grid gap-2 @xl/main:grid-cols-2">
-            {presets.data?.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={cn(
-                  "rounded-xl border p-3 text-left transition-colors",
-                  selectedPresetId === preset.id
-                    ? "border-primary bg-primary/6 ring-1 ring-primary/30"
-                    : "hover:bg-accent/50"
-                )}
-                onClick={() => setSelectedPresetId(preset.id)}
-              >
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <SparklesIcon className="size-4 text-primary" />
-                  <span className="min-w-0 flex-1 truncate">{preset.name}</span>
-                  <Badge variant="secondary">v{preset.version}</Badge>
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {preset.description}
-                </span>
-                <span className="mt-2 block text-xs text-muted-foreground">
-                  {t("{subjects} subjects · {averages} averages", {
-                    subjects: String(preset.subjectCount),
-                    averages: String(preset.averageCount),
-                  })}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {selectedPresetId ? (
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-              {preview.isLoading ? (
-                <Spinner className="size-4" />
-              ) : preview.data ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="min-w-0 flex-1 text-muted-foreground">
-                    {preview.data.existing.subjects > 0 ||
-                    preview.data.existing.averages > 0
-                      ? t(
-                          "This replaces {subjects} current subjects and {averages} current averages with the selected preset.",
-                          {
-                            subjects: String(preview.data.existing.subjects),
-                            averages: String(preview.data.existing.averages),
-                          }
-                        )
-                      : t(
-                          "This year is empty, so the preset can be linked safely."
-                        )}
-                  </p>
-                  <Button
-                    size="sm"
-                    disabled={!preview.data.canReplace || apply.isPending}
-                    onClick={() =>
-                      preview.data.existing.subjects > 0 ||
-                      preview.data.existing.averages > 0
-                        ? setConfirming("reapply")
-                        : apply.mutate()
-                    }
-                  >
-                    {apply.isPending ? (
-                      <Spinner className="size-4" />
-                    ) : (
-                      <SparklesIcon className="size-4" />
-                    )}
-                    {linked ? t("Reapply preset") : t("Apply preset")}
-                  </Button>
-                  {!preview.data.canReplace ? (
-                    <p className="w-full text-xs font-medium text-destructive">
-                      {t(
-                        "This year contains {count} grades. Avermate will not replace subjects that carry student data.",
-                        { count: String(preview.data.gradeCount) }
-                      )}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+          {presets.isPending ? (
+            <div className="flex justify-center py-8">
+              <Spinner className="size-5 text-muted-foreground" />
             </div>
+          ) : (
+            <div className="grid gap-2 @xl/main:grid-cols-2">
+              {presets.data?.map((preset) => (
+                <PresetCard
+                  key={preset.id}
+                  name={preset.name}
+                  description={preset.description}
+                  version={preset.version}
+                  subjectCount={preset.subjectCount}
+                  averageCount={preset.averageCount}
+                  featured={preset.featured}
+                  selected={selectedPresetId === preset.id}
+                  onSelect={() =>
+                    setSelectedPresetId((current) =>
+                      current === preset.id ? null : preset.id
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          {selectedPresetId && preview.data && !preview.data.canReplace ? (
+            <p className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive">
+              <AlertTriangleIcon className="mt-px size-3.5 shrink-0" />
+              {t(
+                "This year contains {count} grades. Avermate will not replace subjects that carry student data.",
+                { count: String(preview.data.gradeCount) }
+              )}
+            </p>
           ) : null}
         </SettingsSection>
       </div>
