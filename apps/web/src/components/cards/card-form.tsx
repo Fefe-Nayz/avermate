@@ -20,10 +20,12 @@ import {
   TextField,
 } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
+import { CARD_ACCENTS, cardAccent } from "./card-accent"
 import { CardBody, useCardResult, useMetricLabels } from "./card-view"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 export interface CardFormValues {
   id?: string
@@ -34,6 +36,8 @@ export interface CardFormValues {
   display: CardDisplay
   span: 1 | 2 | 3 | 4
   title: string
+  /** A named theme accent, or `null` for the default uncoloured card. */
+  accent: string | null
 }
 
 /**
@@ -69,6 +73,7 @@ export function CardForm({
   )
   const [span, setSpan] = useState<CardFormValues["span"]>(initial?.span ?? 1)
   const [title, setTitle] = useState(initial?.title ?? "")
+  const [accent, setAccent] = useState<string | null>(initial?.accent ?? null)
 
   const displays = allowedDisplays(metric)
   const effectiveDisplay = displays.includes(display)
@@ -88,12 +93,22 @@ export function CardForm({
       display: resolvedDisplay,
       span,
       title: title.trim() || null,
-      accent: null,
+      accent,
       goalId,
       sortOrder: 0,
       hidden: false,
     }
-  }, [initial?.id, metric, targetKind, targetId, display, span, title, goalId])
+  }, [
+    initial?.id,
+    metric,
+    targetKind,
+    targetId,
+    display,
+    span,
+    title,
+    accent,
+    goalId,
+  ])
 
   const preview = useCardResult(spec)
 
@@ -155,7 +170,7 @@ export function CardForm({
       display: effectiveDisplay,
       span,
       title: title.trim() || null,
-      accent: null,
+      accent,
       hidden: false,
     }
 
@@ -294,6 +309,8 @@ export function CardForm({
           columns={3}
         />
 
+        <AccentField value={accent} onValueChange={setAccent} />
+
         <TextField
           label={t("Title")}
           description={t("Leave blank to use the metric's own name.")}
@@ -304,5 +321,79 @@ export function CardForm({
         />
       </FormSection>
     </FormPage>
+  )
+}
+
+/**
+ * Choosing a card's accent.
+ *
+ * Swatches rather than a dropdown: six colours are quicker to compare side by
+ * side than to page through, and the choice is entirely visual. "None" is the
+ * first option and the default, because a dashboard where every card shouts is
+ * a dashboard where nothing does.
+ */
+function AccentField({
+  value,
+  onValueChange,
+}: {
+  value: string | null
+  onValueChange: (value: string | null) => void
+}) {
+  const t = useExtracted()
+
+  const labels: Record<string, string> = {
+    Accent: t("Accent"),
+    Green: t("Green"),
+    Teal: t("Teal"),
+    Blue: t("Blue"),
+    Purple: t("Purple"),
+    Amber: t("Amber"),
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm font-medium">{t("Colour")}</span>
+      <div
+        role="radiogroup"
+        aria-label={t("Colour")}
+        className="flex flex-wrap gap-2"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === null}
+          aria-label={t("No colour")}
+          onClick={() => onValueChange(null)}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-full border-2 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            value === null ? "border-foreground" : "border-transparent"
+          )}
+        >
+          <span className="size-6 rounded-full border border-dashed" />
+        </button>
+
+        {CARD_ACCENTS.map((accent) => (
+          <button
+            key={accent.value}
+            type="button"
+            role="radio"
+            aria-checked={value === accent.value}
+            aria-label={labels[accent.label] ?? accent.label}
+            onClick={() => onValueChange(accent.value)}
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full border-2 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              value === accent.value ? "border-foreground" : "border-transparent"
+            )}
+          >
+            <span className={cn("size-6 rounded-full", accent.swatch)} />
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {cardAccent(value)
+          ? t("A hairline on the card and its title take this colour.")
+          : t("Cards are uncoloured unless you choose one.")}
+      </p>
+    </div>
   )
 }

@@ -263,8 +263,22 @@ export default function SubjectPage({
           <PeriodRail />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="col-span-2 gap-1 py-4 @md/main:col-span-1">
+        {/*
+         * The average and the four figures that qualify it, as one band. The
+         * average used to sit alone in a two-column grid and shrink to half of
+         * it above `@md`, leaving the other half blank, while the figures were
+         * four cramped boxes further down the page — so the number and the
+         * things that explain it never appeared together.
+         */}
+        <div
+          className={cn(
+            "grid gap-3",
+            isCategory
+              ? "grid-cols-1"
+              : "grid-cols-2 @2xl/main:grid-cols-3 @4xl/main:grid-cols-6"
+          )}
+        >
+          <Card className="col-span-2 gap-1 py-4 @2xl/main:col-span-1 @4xl/main:col-span-2">
             <CardHeader className="px-4">
               <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {t("Average")}
@@ -282,6 +296,20 @@ export default function SubjectPage({
               ) : null}
             </CardContent>
           </Card>
+
+          {!isCategory
+            ? stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
+                >
+                  <p className="numeric text-lg font-semibold">{stat.value}</p>
+                  <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                    {stat.label}
+                  </p>
+                </div>
+              ))
+            : null}
         </div>
 
         {children.length > 0 ? (
@@ -321,22 +349,6 @@ export default function SubjectPage({
         />
 
         <ImpactGrid readings={impacts} title={t("Impact on averages")} />
-
-        {!isCategory ? (
-          <div className="grid grid-cols-4 gap-2">
-            {stats.map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-xl border bg-card px-3 py-2.5 text-center"
-              >
-                <p className="numeric text-lg font-semibold">{stat.value}</p>
-                <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                  {stat.label}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : null}
 
         {children.length > 0 ? (
           <Card className="gap-2 py-4">

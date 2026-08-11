@@ -4,8 +4,6 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
   CheckIcon,
   ChevronRightIcon,
   ListOrderedIcon,
@@ -25,6 +23,12 @@ import {
   DeltaValue,
 } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
+import {
+  DragHandle,
+  SortableGroup,
+  SortableRoot,
+  SortableRow,
+} from "@/components/ui/sortable-list"
 import { cn } from "@/lib/utils"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
@@ -86,31 +90,17 @@ export default function SubjectsPage() {
       ]),
   })
 
-  const moveSubject = (subject: Subject, direction: -1 | 1) => {
-    const siblings = graph
-      .flatten()
-      .filter((item) => item.parentId === subject.parentId)
-    const index = siblings.findIndex((item) => item.id === subject.id)
-    const destination = index + direction
-    if (
-      index < 0 ||
-      destination < 0 ||
-      destination >= siblings.length ||
-      move.isPending
-    ) {
-      return
-    }
-    const siblingIds = siblings.map((item) => item.id)
-    ;[siblingIds[index], siblingIds[destination]] = [
-      siblingIds[destination],
-      siblingIds[index],
-    ]
-    haptic("selection")
-    move.mutate({
-      subjectId: subject.id,
-      parentId: subject.parentId,
-      siblingIds,
-    })
+  /**
+   * Subjects are a tree, so an order is only meaningful among siblings —
+   * dropping Maths between two of English's children would be asking to change
+   * the hierarchy, which is what the edit screen is for. Each level of the
+   * tree gets its own sortable group, and a drag can never leave it.
+   */
+  const reorderSiblings = (parentId: string | null, siblingIds: string[]) => {
+    if (move.isPending) return
+    const subjectId = siblingIds[0]
+    if (!subjectId) return
+    move.mutate({ subjectId, parentId, siblingIds })
   }
 
   return (
@@ -181,194 +171,220 @@ export default function SubjectsPage() {
           <PeriodRail />
         </div>
 
-        <Link
-          href="/averages/general"
-          className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
-        >
-          <div>
-            <p className="text-xs tracking-wide text-muted-foreground uppercase">
-              {t("General average")}
-            </p>
-            <AverageValue
-              ratio={general}
-              showScale
-              colored
-              className="text-2xl font-semibold"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-right text-xs text-muted-foreground">
-              {t("{count} subjects", { count: String(subjects.length) })}
-            </p>
-            <ChevronRightIcon className="size-4 text-muted-foreground/60" />
-          </div>
-        </Link>
+        {/*
+         * The tree is the page; the year's figures are its summary. Side by
+         * side above `@4xl`, stacked below it — with the summary first on a
+         * phone, where the general average is the one thing worth seeing
+         * without scrolling.
+         */}
+        <div className="grid gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_19rem] @4xl/main:items-start">
+          <aside className="flex flex-col gap-4 @4xl/main:order-2">
+            <Link
+              href="/averages/general"
+              className="group flex flex-col gap-1 rounded-xl border bg-card p-4 transition-colors hover:bg-accent/50"
+            >
+              <span className="flex items-center gap-2 text-xs tracking-wide text-muted-foreground uppercase">
+                {t("General average")}
+                <ChevronRightIcon className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
+              <AverageValue
+                ratio={general}
+                showScale
+                colored
+                className="text-4xl font-semibold tracking-tight"
+              />
+              <span className="text-xs text-muted-foreground">
+                {t("{count} subjects", { count: String(subjects.length) })}
+              </span>
+            </Link>
 
-        {averageRows.length > 0 ? (
-          <section aria-labelledby="custom-averages-heading">
-            <div className="mb-2 flex items-center justify-between px-1">
-              <h2
-                id="custom-averages-heading"
-                className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-              >
-                {t("Custom averages")}
-              </h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                render={<Link href="/settings/averages" />}
-              >
-                {t("Edit")}
-              </Button>
-            </div>
-            <ul className="overflow-hidden rounded-xl border bg-card">
-              {averageRows.map((average, index) => (
-                <li key={average.id} className={cn(index > 0 && "border-t")}>
-                  <Link
-                    href={`/averages/${average.id}`}
-                    className="flex min-h-13 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
+            {averageRows.length > 0 ? (
+              <section aria-labelledby="custom-averages-heading">
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <h2
+                    id="custom-averages-heading"
+                    className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                   >
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {average.name}
-                      </span>
-                      {average.isMain ? (
-                        <StarIcon
-                          aria-label={t("Headline average")}
-                          className="size-3.5 shrink-0 fill-primary/20 text-primary"
+                    {t("Custom averages")}
+                  </h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    render={<Link href="/settings/averages" />}
+                  >
+                    {t("Edit")}
+                  </Button>
+                </div>
+                <ul className="overflow-hidden rounded-xl border bg-card">
+                  {averageRows.map((average, index) => (
+                    <li
+                      key={average.id}
+                      className={cn(index > 0 && "border-t")}
+                    >
+                      <Link
+                        href={`/averages/${average.id}`}
+                        className="flex min-h-13 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
+                      >
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {average.name}
+                          </span>
+                          {average.isMain ? (
+                            <StarIcon
+                              aria-label={t("Headline average")}
+                              className="size-3.5 shrink-0 fill-primary/20 text-primary"
+                            />
+                          ) : null}
+                        </span>
+                        <AverageValue
+                          ratio={average.ratio}
+                          colored
+                          decimals={2}
+                          className="text-base font-medium"
                         />
-                      ) : null}
-                    </span>
-                    <AverageValue
-                      ratio={average.ratio}
-                      colored
-                      decimals={2}
-                      className="text-base font-medium"
-                    />
-                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        {subjects.length > 6 && !reordering ? (
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("Search subjects…")}
-              className="h-11 pl-9 md:h-9"
-            />
-          </div>
-        ) : null}
-
-        {rows.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              {query
-                ? t("No subject matches.")
-                : t("This year has no subjects yet.")}
-            </p>
-            {!query ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                render={<Link href="/subjects/new" />}
-              >
-                <PlusIcon className="size-4" />
-                {t("Add your first subject")}
-              </Button>
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ) : null}
-          </div>
-        ) : (
-          <ul className="overflow-hidden rounded-xl border bg-card">
-            {rows.map(({ subject, depth }, index) =>
-              reordering ? (
-                <SubjectOrderRow
-                  key={subject.id}
-                  subject={subject}
-                  depth={depth}
-                  first={index === 0}
-                  allSubjects={graph.flatten()}
-                  pending={move.isPending}
-                  onMove={moveSubject}
+          </aside>
+
+          <div className="flex min-w-0 flex-col gap-4 @4xl/main:order-1">
+            {subjects.length > 6 && !reordering ? (
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t("Search subjects…")}
+                  className="h-11 pl-9 md:h-9"
                 />
-              ) : (
-                <SubjectRow
-                  key={subject.id}
-                  subject={subject}
-                  depth={depth}
-                  general={general}
-                  first={index === 0}
-                />
-              )
+              </div>
+            ) : null}
+
+            {rows.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {query
+                    ? t("No subject matches.")
+                    : t("This year has no subjects yet.")}
+                </p>
+                {!query ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    render={<Link href="/subjects/new" />}
+                  >
+                    <PlusIcon className="size-4" />
+                    {t("Add your first subject")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : reordering ? (
+              <SortableRoot
+                ids={graph.flatten().map((subject) => subject.id)}
+                disabled={move.isPending}
+                onDrop={(activeId, overId) => {
+                  const active = graph.byId(activeId)
+                  const over = graph.byId(overId)
+                  // A drop that crosses levels is not a reorder; ignore it
+                  // rather than silently rehoming a subject.
+                  if (!active || !over || active.parentId !== over.parentId) {
+                    return
+                  }
+                  const siblings = graph
+                    .flatten()
+                    .filter((item) => item.parentId === active.parentId)
+                    .map((item) => item.id)
+                  const from = siblings.indexOf(activeId)
+                  const to = siblings.indexOf(overId)
+                  if (from < 0 || to < 0) return
+                  const next = [...siblings]
+                  next.splice(to, 0, ...next.splice(from, 1))
+                  reorderSiblings(active.parentId, next)
+                }}
+              >
+                <ul className="overflow-hidden rounded-xl border bg-card">
+                  <SubjectOrderLevel
+                    parentId={null}
+                    depth={0}
+                    subjects={graph.flatten()}
+                    pending={move.isPending}
+                  />
+                </ul>
+              </SortableRoot>
+            ) : (
+              <ul className="overflow-hidden rounded-xl border bg-card">
+                {rows.map(({ subject, depth }, index) => (
+                  <SubjectRow
+                    key={subject.id}
+                    subject={subject}
+                    depth={depth}
+                    general={general}
+                    first={index === 0}
+                  />
+                ))}
+              </ul>
             )}
-          </ul>
-        )}
+          </div>
+        </div>
       </div>
     </>
   )
 }
 
-function SubjectOrderRow({
-  subject,
+/**
+ * One level of the tree, draggable.
+ *
+ * Rendered recursively so a subject's children stay inside their own sortable
+ * group: dragging within a level reorders it, and there is no way to express
+ * "move this under a different parent" by accident. That change belongs to the
+ * edit screen, where it is a deliberate choice rather than a slip of the wrist.
+ */
+function SubjectOrderLevel({
+  parentId,
   depth,
-  first,
-  allSubjects,
+  subjects,
   pending,
-  onMove,
 }: {
-  subject: Subject
+  parentId: string | null
   depth: number
-  first: boolean
-  allSubjects: Subject[]
+  subjects: Subject[]
   pending: boolean
-  onMove: (subject: Subject, direction: -1 | 1) => void
 }) {
   const t = useExtracted()
-  const siblings = allSubjects.filter(
-    (item) => item.parentId === subject.parentId
-  )
-  const position = siblings.findIndex((item) => item.id === subject.id)
+  const siblings = subjects.filter((item) => item.parentId === parentId)
+  if (siblings.length === 0) return null
 
   return (
-    <li
-      className={cn(
-        "flex min-h-13 items-center gap-3 py-2 pe-3",
-        !first && "border-t"
-      )}
-      style={{ paddingInlineStart: `${0.75 + depth * 1}rem` }}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{subject.name}</p>
-        <p className="text-xs text-muted-foreground">
-          {subject.parentId ? t("Nested subject") : t("Top level")}
-        </p>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t("Move up")}
-        disabled={pending || position <= 0}
-        onClick={() => onMove(subject, -1)}
-      >
-        <ArrowUpIcon className="size-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t("Move down")}
-        disabled={pending || position < 0 || position === siblings.length - 1}
-        onClick={() => onMove(subject, 1)}
-      >
-        <ArrowDownIcon className="size-4" />
-      </Button>
-    </li>
+    <SortableGroup ids={siblings.map((item) => item.id)}>
+      {siblings.map((subject) => (
+        <SortableRow key={subject.id} id={subject.id} disabled={pending}>
+          <div
+            className="flex min-h-13 items-center gap-2 border-t py-2 pe-3 first:border-t-0"
+            style={{ paddingInlineStart: `${0.5 + depth * 1}rem` }}
+          >
+            <DragHandle />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{subject.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {subject.parentId ? t("Nested subject") : t("Top level")}
+              </p>
+            </div>
+          </div>
+          <SubjectOrderLevel
+            parentId={subject.id}
+            depth={depth + 1}
+            subjects={subjects}
+            pending={pending}
+          />
+        </SortableRow>
+      ))}
+    </SortableGroup>
   )
 }
 

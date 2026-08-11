@@ -10,6 +10,11 @@ import {
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
+import {
+  DragHandle,
+  SortableList,
+  SortableRow,
+} from "@/components/ui/sortable-list"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 
@@ -503,172 +508,93 @@ export function PresetVisualEditor({
               {t("No managed averages in this version.")}
             </p>
           ) : null}
-          {value.averages.map((average, averageIndex) => {
-            const used = new Set(
-              average.entries.map((entry) => entry.subjectKey)
-            )
-            return (
-              <article
-                key={average.key}
-                className="rounded-lg border bg-background p-3"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    aria-label={t("Average name")}
-                    className="h-8 min-w-40 flex-1"
-                    value={average.name}
-                    onChange={(event) =>
-                      updateAverages(
-                        value.averages.map((item) =>
-                          item.key === average.key
-                            ? { ...item, name: event.target.value }
-                            : item
-                        )
-                      )
-                    }
-                  />
-                  <label className="flex items-center gap-2 text-xs">
-                    {t("Main average")}
-                    <Switch
-                      checked={average.isMain}
-                      onCheckedChange={(isMain) =>
+          <SortableList
+            ids={value.averages.map((average) => average.key)}
+            onReorder={(keys) => {
+              const byKey = new Map(
+                value.averages.map((average) => [average.key, average])
+              )
+              const next = keys
+                .map((key) => byKey.get(key))
+                .filter((average) => average !== undefined)
+              if (next.length === value.averages.length) updateAverages(next)
+            }}
+          >
+            {value.averages.map((average) => {
+              const used = new Set(
+                average.entries.map((entry) => entry.subjectKey)
+              )
+              return (
+                <SortableRow
+                  key={average.key}
+                  id={average.key}
+                  as="div"
+                  className="rounded-lg border bg-background p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DragHandle className="-ml-1" />
+                    <Input
+                      aria-label={t("Average name")}
+                      className="h-8 min-w-40 flex-1"
+                      value={average.name}
+                      onChange={(event) =>
                         updateAverages(
-                          value.averages.map((item) => ({
-                            ...item,
-                            isMain:
-                              item.key === average.key
-                                ? isMain
-                                : isMain
-                                  ? false
-                                  : item.isMain,
-                          }))
+                          value.averages.map((item) =>
+                            item.key === average.key
+                              ? { ...item, name: event.target.value }
+                              : item
+                          )
                         )
                       }
                     />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("Move up")}
-                    disabled={averageIndex === 0}
-                    onClick={() => {
-                      const next = [...value.averages]
-                      const previous = next[averageIndex - 1]
-                      if (!previous) return
-                      next[averageIndex - 1] = average
-                      next[averageIndex] = previous
-                      updateAverages(next)
-                    }}
-                  >
-                    <ArrowUpIcon className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("Move down")}
-                    disabled={averageIndex === value.averages.length - 1}
-                    onClick={() => {
-                      const next = [...value.averages]
-                      const following = next[averageIndex + 1]
-                      if (!following) return
-                      next[averageIndex + 1] = average
-                      next[averageIndex] = following
-                      updateAverages(next)
-                    }}
-                  >
-                    <ArrowDownIcon className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive"
-                    aria-label={t("Remove")}
-                    onClick={() =>
-                      updateAverages(
-                        value.averages.filter(
-                          (item) => item.key !== average.key
-                        )
-                      )
-                    }
-                  >
-                    <Trash2Icon className="size-4" />
-                  </Button>
-                </div>
-
-                <div className="mt-3 flex flex-col gap-2">
-                  {average.entries.map((entry, entryIndex) => (
-                    <div
-                      key={`${average.key}:${entry.subjectKey}`}
-                      className="grid items-center gap-2 rounded-md bg-muted/40 p-2 @xl/main:grid-cols-[minmax(10rem,1fr)_7rem_auto_auto]"
-                    >
-                      <select
-                        aria-label={t("Average subject")}
-                        className="h-8 rounded-md border bg-background px-2 text-xs"
-                        value={entry.subjectKey}
-                        onChange={(event) =>
+                    <label className="flex items-center gap-2 text-xs">
+                      {t("Main average")}
+                      <Switch
+                        checked={average.isMain}
+                        onCheckedChange={(isMain) =>
                           updateAverages(
-                            value.averages.map((item) =>
-                              item.key === average.key
-                                ? {
-                                    ...item,
-                                    entries: item.entries.map(
-                                      (candidate, index) =>
-                                        index === entryIndex
-                                          ? {
-                                              ...candidate,
-                                              subjectKey: event.target.value,
-                                            }
-                                          : candidate
-                                    ),
-                                  }
-                                : item
-                            )
-                          )
-                        }
-                      >
-                        {flat.map((subject) => (
-                          <option
-                            key={subject.key}
-                            value={subject.key}
-                            disabled={
-                              used.has(subject.key) &&
-                              subject.key !== entry.subjectKey
-                            }
-                          >
-                            {"— ".repeat(subject.depth)}
-                            {subject.name}
-                          </option>
-                        ))}
-                      </select>
-                      <NumberInput
-                        nullable
-                        value={entry.coefficient}
-                        onChange={(coefficient) =>
-                          updateAverages(
-                            value.averages.map((item) =>
-                              item.key === average.key
-                                ? {
-                                    ...item,
-                                    entries: item.entries.map(
-                                      (candidate, index) =>
-                                        index === entryIndex
-                                          ? { ...candidate, coefficient }
-                                          : candidate
-                                    ),
-                                  }
-                                : item
-                            )
+                            value.averages.map((item) => ({
+                              ...item,
+                              isMain:
+                                item.key === average.key
+                                  ? isMain
+                                  : isMain
+                                    ? false
+                                    : item.isMain,
+                            }))
                           )
                         }
                       />
-                      <label className="flex items-center gap-2 text-xs">
-                        {t("Include children")}
-                        <Switch
-                          checked={entry.includeChildren}
-                          onCheckedChange={(includeChildren) =>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive"
+                      aria-label={t("Remove")}
+                      onClick={() =>
+                        updateAverages(
+                          value.averages.filter(
+                            (item) => item.key !== average.key
+                          )
+                        )
+                      }
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 flex flex-col gap-2">
+                    {average.entries.map((entry, entryIndex) => (
+                      <div
+                        key={`${average.key}:${entry.subjectKey}`}
+                        className="grid items-center gap-2 rounded-md bg-muted/40 p-2 @xl/main:grid-cols-[minmax(10rem,1fr)_7rem_auto_auto]"
+                      >
+                        <select
+                          aria-label={t("Average subject")}
+                          className="h-8 rounded-md border bg-background px-2 text-xs"
+                          value={entry.subjectKey}
+                          onChange={(event) =>
                             updateAverages(
                               value.averages.map((item) =>
                                 item.key === average.key
@@ -677,7 +603,45 @@ export function PresetVisualEditor({
                                       entries: item.entries.map(
                                         (candidate, index) =>
                                           index === entryIndex
-                                            ? { ...candidate, includeChildren }
+                                            ? {
+                                                ...candidate,
+                                                subjectKey: event.target.value,
+                                              }
+                                            : candidate
+                                      ),
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                        >
+                          {flat.map((subject) => (
+                            <option
+                              key={subject.key}
+                              value={subject.key}
+                              disabled={
+                                used.has(subject.key) &&
+                                subject.key !== entry.subjectKey
+                              }
+                            >
+                              {"— ".repeat(subject.depth)}
+                              {subject.name}
+                            </option>
+                          ))}
+                        </select>
+                        <NumberInput
+                          nullable
+                          value={entry.coefficient}
+                          onChange={(coefficient) =>
+                            updateAverages(
+                              value.averages.map((item) =>
+                                item.key === average.key
+                                  ? {
+                                      ...item,
+                                      entries: item.entries.map(
+                                        (candidate, index) =>
+                                          index === entryIndex
+                                            ? { ...candidate, coefficient }
                                             : candidate
                                       ),
                                     }
@@ -686,69 +650,95 @@ export function PresetVisualEditor({
                             )
                           }
                         />
-                      </label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive"
-                        aria-label={t("Remove")}
-                        disabled={average.entries.length === 1}
-                        onClick={() =>
-                          updateAverages(
-                            value.averages.map((item) =>
-                              item.key === average.key
-                                ? {
-                                    ...item,
-                                    entries: item.entries.filter(
-                                      (_, index) => index !== entryIndex
-                                    ),
-                                  }
-                                : item
+                        <label className="flex items-center gap-2 text-xs">
+                          {t("Include children")}
+                          <Switch
+                            checked={entry.includeChildren}
+                            onCheckedChange={(includeChildren) =>
+                              updateAverages(
+                                value.averages.map((item) =>
+                                  item.key === average.key
+                                    ? {
+                                        ...item,
+                                        entries: item.entries.map(
+                                          (candidate, index) =>
+                                            index === entryIndex
+                                              ? {
+                                                  ...candidate,
+                                                  includeChildren,
+                                                }
+                                              : candidate
+                                        ),
+                                      }
+                                    : item
+                                )
+                              )
+                            }
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive"
+                          aria-label={t("Remove")}
+                          disabled={average.entries.length === 1}
+                          onClick={() =>
+                            updateAverages(
+                              value.averages.map((item) =>
+                                item.key === average.key
+                                  ? {
+                                      ...item,
+                                      entries: item.entries.filter(
+                                        (_, index) => index !== entryIndex
+                                      ),
+                                    }
+                                  : item
+                              )
                             )
-                          )
-                        }
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="self-start"
-                    disabled={used.size >= flat.length}
-                    onClick={() => {
-                      const available = flat.find(
-                        (subject) => !used.has(subject.key)
-                      )
-                      if (!available) return
-                      updateAverages(
-                        value.averages.map((item) =>
-                          item.key === average.key
-                            ? {
-                                ...item,
-                                entries: [
-                                  ...item.entries,
-                                  {
-                                    subjectKey: available.key,
-                                    coefficient: null,
-                                    includeChildren: false,
-                                  },
-                                ],
-                              }
-                            : item
+                          }
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="self-start"
+                      disabled={used.size >= flat.length}
+                      onClick={() => {
+                        const available = flat.find(
+                          (subject) => !used.has(subject.key)
                         )
-                      )
-                    }}
-                  >
-                    <PlusIcon className="size-4" /> {t("Add entry")}
-                  </Button>
-                </div>
-              </article>
-            )
-          })}
+                        if (!available) return
+                        updateAverages(
+                          value.averages.map((item) =>
+                            item.key === average.key
+                              ? {
+                                  ...item,
+                                  entries: [
+                                    ...item.entries,
+                                    {
+                                      subjectKey: available.key,
+                                      coefficient: null,
+                                      includeChildren: false,
+                                    },
+                                  ],
+                                }
+                              : item
+                          )
+                        )
+                      }}
+                    >
+                      <PlusIcon className="size-4" /> {t("Add entry")}
+                    </Button>
+                  </div>
+                </SortableRow>
+              )
+            })}
+          </SortableList>
         </div>
       </section>
     </div>

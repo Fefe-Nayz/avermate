@@ -17,6 +17,7 @@ import { useYear } from "@/components/year/year-provider"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
 import { haptic } from "@/lib/haptics"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
+import { cn } from "@/lib/utils"
 
 /**
  * The dashboard.
@@ -71,6 +72,8 @@ export default function DashboardPage() {
       ),
     [goals, plans]
   )
+
+  const hasCurve = series.length > 1
 
   const greeting = format.dateTime(new Date(now), {
     weekday: "long",
@@ -144,8 +147,19 @@ export default function DashboardPage() {
 
         {pinnedGoals.length > 0 ? <GoalStrip plans={pinnedGoals} /> : null}
 
-        <div className="grid gap-3 @3xl/main:grid-cols-2">
-          {series.length > 1 ? (
+        {/*
+         * Two columns only when there are two things to put in them. The grid
+         * was unconditionally `grid-cols-2`, so a year without enough history
+         * for a curve left the radar in the first column and half the row
+         * empty — a gap that reads as something failing to load.
+         */}
+        <div
+          className={cn(
+            "grid gap-3",
+            hasCurve && "@3xl/main:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+          )}
+        >
+          {hasCurve ? (
             <AverageChart
               title={
                 headlineAverage

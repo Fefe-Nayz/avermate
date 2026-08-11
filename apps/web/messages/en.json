@@ -2185,5 +2185,18 @@
   "8mRNBD": "Previous month",
   "PqmLVn": "Next month",
   "_zFGgP": "+{count} more",
-  "SvKbth": "Select a day to see its results."
+  "SvKbth": "Select a day to see its results.",
+  "6nU_oC": "Accent",
+  "1W4okO": "Green",
+  "c_BsMm": "Teal",
+  "k2tJ9k": "Blue",
+  "tihmF3": "Purple",
+  "NLKEY9": "No colour",
+  "R8wSUe": "A hairline on the card and its title take this colour.",
+  "xc2XiT": "Cards are uncoloured unless you choose one.",
+  "MOY50R": "Picked up item {position} of {total}.",
+  "ID0MaD": "Now at position {position} of {total}.",
+  "aajysI": "Dropped at position {position} of {total}.",
+  "UXXpUM": "Dropped. The order is unchanged.",
+  "dyhBbi": "Cancelled. The order is unchanged."
 }

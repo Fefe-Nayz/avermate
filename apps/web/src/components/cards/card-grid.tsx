@@ -30,6 +30,7 @@ import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
+import { cardAccent } from "./card-accent"
 import { CardBody, useCardResult, useMetricLabels } from "./card-view"
 
 /**
@@ -78,6 +79,7 @@ function DashboardCard({
   const { headlineAverage } = useYear()
   const spec = useMemo(() => toSpec(row), [row])
   const result = useCardResult(spec)
+  const accent = cardAccent(spec.accent)
   const {
     attributes,
     listeners,
@@ -92,13 +94,24 @@ function DashboardCard({
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
-        "col-span-2 gap-2 py-4",
+        "relative col-span-2 gap-2 overflow-hidden py-4",
         SPAN_CLASS[spec.span],
         isDragging && "z-10 opacity-80 shadow-lg"
       )}
     >
+      {accent ? (
+        <span
+          aria-hidden
+          className={cn("absolute inset-x-0 top-0 h-0.5", accent.bar)}
+        />
+      ) : null}
       <CardHeader className="flex items-center gap-1 px-4">
-        <CardTitle className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <CardTitle
+          className={cn(
+            "min-w-0 flex-1 truncate text-xs font-medium tracking-wide uppercase",
+            accent ? accent.text : "text-muted-foreground"
+          )}
+        >
           {spec.title ??
             (headlineAverage &&
             spec.metric === "average" &&

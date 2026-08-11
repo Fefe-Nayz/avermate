@@ -2,18 +2,16 @@
 
 import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  ChevronRightIcon,
-  PlusIcon,
-  SigmaIcon,
-  StarIcon,
-} from "lucide-react"
+import { ChevronRightIcon, PlusIcon, SigmaIcon, StarIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { resolveCustomAverage } from "@avermate/core"
 import { Button } from "@/components/ui/button"
+import {
+  DragHandle,
+  SortableList,
+  SortableRow,
+} from "@/components/ui/sortable-list"
 import {
   Empty,
   EmptyDescription,
@@ -52,16 +50,9 @@ export default function AveragesSettingsPage() {
     },
   })
 
-  const moveAverage = (index: number, offset: -1 | 1) => {
-    const target = index + offset
-    if (target < 0 || target >= customAverages.length) return
-    const ids = customAverages.map((average) => average.id)
-    const current = ids[index]
-    const sibling = ids[target]
-    if (!current || !sibling) return
-    ids[index] = sibling
-    ids[target] = current
-    reorder.mutate({ averageIds: ids })
+  const reorderAverages = (averageIds: string[]) => {
+    if (reorder.isPending) return
+    reorder.mutate({ averageIds })
   }
 
   return (
@@ -102,79 +93,57 @@ export default function AveragesSettingsPage() {
             </Button>
           </Empty>
         ) : (
-          <ul className="overflow-hidden rounded-xl border bg-card">
-            {customAverages.map((average, index) => {
-              const resolved = resolveCustomAverage(graph, average)
-              const ratio = resolved.graph.ratio(null, resolved.scope)
+          <SortableList
+            ids={customAverages.map((average) => average.id)}
+            onReorder={reorderAverages}
+          >
+            <ul className="overflow-hidden rounded-xl border bg-card">
+              {customAverages.map((average, index) => {
+                const resolved = resolveCustomAverage(graph, average)
+                const ratio = resolved.graph.ratio(null, resolved.scope)
 
-              return (
-                <li
-                  key={average.id}
-                  className={
-                    index > 0
-                      ? "flex items-center border-t"
-                      : "flex items-center"
-                  }
-                >
-                  <Link
-                    href={`/settings/averages/${average.id}`}
-                    className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
+                return (
+                  <SortableRow
+                    key={average.id}
+                    id={average.id}
+                    disabled={reorder.isPending}
+                    className={
+                      index > 0
+                        ? "flex items-center border-t"
+                        : "flex items-center"
+                    }
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                        {average.name}
-                        {average.isMain ? (
-                          <StarIcon className="size-3.5 shrink-0 text-primary" />
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("{count} subjects", {
-                          count: String(average.entries.length),
-                        })}
-                      </p>
-                    </div>
-                    <AverageValue
-                      ratio={ratio}
-                      showScale
-                      colored
-                      className="font-medium"
-                    />
-                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
-                  </Link>
-                  <div className="flex shrink-0 items-center pr-2">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={index === 0 || reorder.isPending}
-                      aria-label={t("Move {name} up", { name: average.name })}
-                      onClick={() => {
-                        haptic("selection")
-                        moveAverage(index, -1)
-                      }}
+                    <DragHandle className="ml-1.5" />
+                    <Link
+                      href={`/settings/averages/${average.id}`}
+                      className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
                     >
-                      <ArrowUpIcon className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={
-                        index === customAverages.length - 1 || reorder.isPending
-                      }
-                      aria-label={t("Move {name} down", {
-                        name: average.name,
-                      })}
-                      onClick={() => {
-                        haptic("selection")
-                        moveAverage(index, 1)
-                      }}
-                    >
-                      <ArrowDownIcon className="size-4" />
-                    </Button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                          {average.name}
+                          {average.isMain ? (
+                            <StarIcon className="size-3.5 shrink-0 text-primary" />
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("{count} subjects", {
+                            count: String(average.entries.length),
+                          })}
+                        </p>
+                      </div>
+                      <AverageValue
+                        ratio={ratio}
+                        showScale
+                        colored
+                        className="font-medium"
+                      />
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                    </Link>
+                  </SortableRow>
+                )
+              })}
+            </ul>
+          </SortableList>
         )}
       </div>
     </>

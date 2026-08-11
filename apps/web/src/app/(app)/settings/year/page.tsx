@@ -5,8 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   PlusIcon,
   SaveIcon,
   Trash2Icon,
@@ -14,6 +12,11 @@ import {
 import { useExtracted, useFormatter } from "next-intl"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+  DragHandle,
+  SortableList,
+  SortableRow,
+} from "@/components/ui/sortable-list"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -231,30 +234,19 @@ export default function YearSettingsPage() {
 
   const scaleNumber = Number.parseFloat(scale) || 20
 
-  const movePeriod = (index: number, offset: -1 | 1) => {
+  const reorderPeriods = (keys: string[]) => {
     setDrafts((current) => {
-      const target = index + offset
-      if (target < 0 || target >= current.length) return current
-      const next = [...current]
-      const item = next[index]
-      const sibling = next[target]
-      if (!item || !sibling) return current
-      next[index] = sibling
-      next[target] = item
-      return next
+      const byKey = new Map(current.map((draft) => [draft.key, draft]))
+      const next = keys
+        .map((key) => byKey.get(key))
+        .filter((draft): draft is PeriodDraft => draft !== undefined)
+      return next.length === current.length ? next : current
     })
   }
 
-  const moveYear = (index: number, offset: -1 | 1) => {
-    const target = index + offset
-    if (target < 0 || target >= years.length) return
-    const ids = years.map((item) => item.id)
-    const current = ids[index]
-    const sibling = ids[target]
-    if (!current || !sibling) return
-    ids[index] = sibling
-    ids[target] = current
-    reorderYears.mutate({ yearIds: ids })
+  const reorderYearList = (yearIds: string[]) => {
+    if (reorderYears.isPending) return
+    reorderYears.mutate({ yearIds })
   }
 
   const deletingYear = years.find((item) => item.id === deletingYearId)
@@ -409,111 +401,96 @@ export default function YearSettingsPage() {
             </p>
           ) : null}
 
-          {drafts.map((draft, index) => (
-            <div key={draft.key} className="rounded-xl border p-3">
-              <div className="flex items-center gap-2 pb-3">
-                <input
-                  value={draft.name}
-                  onChange={(event) =>
-                    setDrafts((current) =>
-                      current.map((item, position) =>
-                        position === index
-                          ? { ...item, name: event.target.value }
-                          : item
-                      )
-                    )
-                  }
-                  className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === 0}
-                  aria-label={t("Move up")}
-                  onClick={() => {
-                    haptic("selection")
-                    movePeriod(index, -1)
-                  }}
-                >
-                  <ArrowUpIcon className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === drafts.length - 1}
-                  aria-label={t("Move down")}
-                  onClick={() => {
-                    haptic("selection")
-                    movePeriod(index, 1)
-                  }}
-                >
-                  <ArrowDownIcon className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("Remove")}
-                  onClick={() => {
-                    haptic("light")
-                    setDrafts((current) =>
-                      current.filter((_, position) => position !== index)
-                    )
-                  }}
-                >
-                  <Trash2Icon className="size-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <DateField
-                  label={t("Starts")}
-                  value={draft.startAt}
-                  onValueChange={(value) =>
-                    setDrafts((current) =>
-                      current.map((item, position) =>
-                        position === index
-                          ? { ...item, startAt: value }
-                          : item
-                      )
-                    )
-                  }
-                />
-                <DateField
-                  label={t("Ends")}
-                  value={draft.endAt}
-                  onValueChange={(value) =>
-                    setDrafts((current) =>
-                      current.map((item, position) =>
-                        position === index
-                          ? { ...item, endAt: value }
-                          : item
-                      )
-                    )
-                  }
-                />
-              </div>
-              <div className="pt-3">
-                <SettingsRow
-                  label={t("Cumulative")}
-                  description={t(
-                    "Includes everything since the start of the year."
-                  )}
-                >
-                  <Switch
-                    checked={draft.isCumulative}
-                    onCheckedChange={(checked) =>
+          <SortableList
+            ids={drafts.map((draft) => draft.key)}
+            onReorder={reorderPeriods}
+          >
+            {drafts.map((draft, index) => (
+              <SortableRow
+                key={draft.key}
+                id={draft.key}
+                as="div"
+                className="rounded-xl border p-3"
+              >
+                <div className="flex items-center gap-2 pb-3">
+                  <DragHandle className="-ml-1" />
+                  <input
+                    value={draft.name}
+                    onChange={(event) =>
                       setDrafts((current) =>
                         current.map((item, position) =>
                           position === index
-                            ? { ...item, isCumulative: checked }
+                            ? { ...item, name: event.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("Remove")}
+                    onClick={() => {
+                      haptic("light")
+                      setDrafts((current) =>
+                        current.filter((_, position) => position !== index)
+                      )
+                    }}
+                  >
+                    <Trash2Icon className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <DateField
+                    label={t("Starts")}
+                    value={draft.startAt}
+                    onValueChange={(value) =>
+                      setDrafts((current) =>
+                        current.map((item, position) =>
+                          position === index
+                            ? { ...item, startAt: value }
                             : item
                         )
                       )
                     }
                   />
-                </SettingsRow>
-              </div>
-            </div>
-          ))}
+                  <DateField
+                    label={t("Ends")}
+                    value={draft.endAt}
+                    onValueChange={(value) =>
+                      setDrafts((current) =>
+                        current.map((item, position) =>
+                          position === index ? { ...item, endAt: value } : item
+                        )
+                      )
+                    }
+                  />
+                </div>
+                <div className="pt-3">
+                  <SettingsRow
+                    label={t("Cumulative")}
+                    description={t(
+                      "Includes everything since the start of the year."
+                    )}
+                  >
+                    <Switch
+                      checked={draft.isCumulative}
+                      onCheckedChange={(checked) =>
+                        setDrafts((current) =>
+                          current.map((item, position) =>
+                            position === index
+                              ? { ...item, isCumulative: checked }
+                              : item
+                          )
+                        )
+                      }
+                    />
+                  </SettingsRow>
+                </div>
+              </SortableRow>
+            ))}
+          </SortableList>
         </SettingsSection>
 
         <SettingsSection
@@ -522,103 +499,92 @@ export default function YearSettingsPage() {
             "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents."
           )}
         >
-          {years.map((item, index) => {
-            const isCurrent = item.id === yearId
-            const isArchived = Boolean(item.archivedAt)
-            const canArchive = isArchived || activeYearCount > 1
+          <SortableList
+            ids={years.map((item) => item.id)}
+            onReorder={reorderYearList}
+          >
+            {years.map((item) => {
+              const isCurrent = item.id === yearId
+              const isArchived = Boolean(item.archivedAt)
+              const canArchive = isArchived || activeYearCount > 1
 
-            return (
-              <div
-                key={item.id}
-                className="flex min-h-16 items-center gap-2 border-b px-1 py-3 last:border-b-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {item.name}
-                    {isCurrent ? (
-                      <span className="ml-2 text-xs font-normal text-primary">
-                        {t("Current")}
-                      </span>
-                    ) : null}
-                    {isArchived ? (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {t("Archived")}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {format.dateTime(new Date(item.startsAt), {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                    {" → "}
-                    {format.dateTime(new Date(item.endsAt), {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={index === 0 || reorderYears.isPending}
-                  aria-label={t("Move {name} up", { name: item.name })}
-                  onClick={() => moveYear(index, -1)}
+              return (
+                <SortableRow
+                  key={item.id}
+                  id={item.id}
+                  as="div"
+                  disabled={reorderYears.isPending}
+                  className="flex min-h-16 items-center gap-2 border-b px-1 py-3 last:border-b-0"
                 >
-                  <ArrowUpIcon className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={
-                    index === years.length - 1 || reorderYears.isPending
-                  }
-                  aria-label={t("Move {name} down", { name: item.name })}
-                  onClick={() => moveYear(index, 1)}
-                >
-                  <ArrowDownIcon className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={!canArchive || archiveYear.isPending}
-                  aria-label={
-                    isArchived
-                      ? t("Restore {name}", { name: item.name })
-                      : t("Archive {name}", { name: item.name })
-                  }
-                  onClick={() =>
-                    archiveYear.mutate({
-                      yearId: item.id,
-                      archived: !isArchived,
-                    })
-                  }
-                >
-                  {isArchived ? (
-                    <ArchiveRestoreIcon className="size-4" />
-                  ) : (
-                    <ArchiveIcon className="size-4" />
-                  )}
-                </Button>
-                {years.length > 1 ? (
+                  <DragHandle />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {item.name}
+                      {isCurrent ? (
+                        <span className="ml-2 text-xs font-normal text-primary">
+                          {t("Current")}
+                        </span>
+                      ) : null}
+                      {isArchived ? (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {t("Archived")}
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {format.dateTime(new Date(item.startsAt), {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                      {" → "}
+                      {format.dateTime(new Date(item.endsAt), {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    className="text-destructive hover:text-destructive"
-                    aria-label={t("Delete {name}", { name: item.name })}
-                    onClick={() => {
-                      haptic("warning")
-                      setDeletingYearId(item.id)
-                    }}
+                    disabled={!canArchive || archiveYear.isPending}
+                    aria-label={
+                      isArchived
+                        ? t("Restore {name}", { name: item.name })
+                        : t("Archive {name}", { name: item.name })
+                    }
+                    onClick={() =>
+                      archiveYear.mutate({
+                        yearId: item.id,
+                        archived: !isArchived,
+                      })
+                    }
                   >
-                    <Trash2Icon className="size-4" />
+                    {isArchived ? (
+                      <ArchiveRestoreIcon className="size-4" />
+                    ) : (
+                      <ArchiveIcon className="size-4" />
+                    )}
                   </Button>
-                ) : null}
-              </div>
-            )
-          })}
+                  {years.length > 1 ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive hover:text-destructive"
+                      aria-label={t("Delete {name}", { name: item.name })}
+                      onClick={() => {
+                        haptic("warning")
+                        setDeletingYearId(item.id)
+                      }}
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  ) : null}
+                </SortableRow>
+              )
+            })}
+          </SortableList>
         </SettingsSection>
       </div>
 
