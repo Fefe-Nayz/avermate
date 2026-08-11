@@ -1466,6 +1466,24 @@ describe("managed preset lifecycle", () => {
       })),
     });
     await expectDetached("periods_replaced");
+
+    await relink();
+    await api.presets.applyPeriods({
+      yearId: year.id,
+      templateId: "semesters",
+      names: ["Semester 1", "Semester 2"],
+    });
+    await expectDetached("period_template_applied");
+
+    await relink();
+    expect(
+      await api.presets.applyPeriods({
+        yearId: year.id,
+        templateId: "none",
+        names: [],
+      }),
+    ).toEqual([]);
+    await expectDetached("period_template_applied");
   });
 
   test("requires action instead of deleting a subject that carries grades", async () => {

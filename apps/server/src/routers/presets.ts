@@ -565,7 +565,12 @@ export const presetsRouter = {
       return requireYear(userId, yearId);
     }),
 
-  /** Lay periods over an existing year; grades survive through SET NULL. */
+  /**
+   * Lay an independently chosen period template over an existing year. This
+   * is user customization rather than application of a managed preset
+   * version, so linked memberships detach in the same atomic batch. Grades
+   * survive through SET NULL.
+   */
   applyPeriods: protectedProcedure
     .input(
       z.object({
@@ -581,11 +586,16 @@ export const presetsRouter = {
       const removeExisting = db
         .delete(periods)
         .where(eq(periods.yearId, year.id));
+      const detach = detachYearPresetStatement(
+        userId,
+        year.id,
+        "period_template_applied",
+      );
       if (rows.length === 0) {
-        await removeExisting;
+        await db.batch([removeExisting, detach]);
         return [];
       }
-      await db.batch([removeExisting, db.insert(periods).values(rows)]);
+      await db.batch([removeExisting, db.insert(periods).values(rows), detach]);
       return db
         .select()
         .from(periods)

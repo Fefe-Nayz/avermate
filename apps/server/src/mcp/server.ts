@@ -1967,13 +1967,22 @@ function registerAdminSurface(
   );
 
   if (can(principal, "avermate:write", "avermate:admin")) {
-    const announcementFields = {
+    const announcementPatchFields = {
       title: z.string().trim().min(1).max(120),
       message: z.string().trim().min(1).max(2000),
-      tone: z.enum(["info", "success", "warning", "danger"]).default("info"),
-      audience: z.enum(["global", "preset"]).default("global"),
-      presetIds: z.array(id).max(50).default([]),
-      active: z.boolean().default(true),
+      tone: z.enum(["info", "success", "warning", "danger"]),
+      audience: z.enum(["global", "preset"]),
+      presetIds: z.array(id).max(50),
+      active: z.boolean(),
+      startsAt: optionalDate,
+      endsAt: optionalDate,
+    };
+    const announcementCreateFields = {
+      ...announcementPatchFields,
+      tone: announcementPatchFields.tone.default("info"),
+      audience: announcementPatchFields.audience.default("global"),
+      presetIds: announcementPatchFields.presetIds.default([]),
+      active: announcementPatchFields.active.default(true),
       startsAt: optionalDate.default(null),
       endsAt: optionalDate.default(null),
     };
@@ -1982,7 +1991,7 @@ function registerAdminSurface(
       {
         description:
           "Create a global announcement or target one or more stable preset identities.",
-        inputSchema: z.object(announcementFields),
+        inputSchema: z.object(announcementCreateFields),
         _meta: adminWrite,
       },
       ({ startsAt, endsAt, ...input }) =>
@@ -2000,7 +2009,7 @@ function registerAdminSurface(
         description:
           "Update an announcement and atomically replace its preset audience when supplied.",
         inputSchema: z
-          .object(announcementFields)
+          .object(announcementPatchFields)
           .partial()
           .extend({ announcementId: id }),
         _meta: adminWrite,

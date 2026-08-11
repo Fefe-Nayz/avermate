@@ -46,10 +46,15 @@ export function AnnouncementBanner() {
 
   const dismiss = useMutation({
     ...orpc.announcements.dismiss.mutationOptions(),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: orpc.announcements.active.key(),
-      })
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpc.announcements.active.key(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: orpc.announcements.history.key(),
+        }),
+      ])
     },
   })
 

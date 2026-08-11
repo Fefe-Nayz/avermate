@@ -455,6 +455,72 @@ describe("MCP authorization, scopes and ownership", () => {
     );
   });
 
+  test("keeps preset targeting when MCP applies an unrelated partial patch", async () => {
+    await database.insert(schema.presetDefinitions).values({
+      id: "mcp-announcement-preset",
+      name: "MCP announcement preset",
+      createdByUserId: "admin-a",
+    });
+    const handler = createAvermateMcpHandler(
+      principal(
+        "admin-a",
+        ["avermate:read", "avermate:write", "avermate:admin"],
+        "admin",
+      ),
+    );
+    const createdResponse = await callMcp(handler, "tools/call", {
+      name: "admin.announcements.create",
+      arguments: {
+        title: "MCP targeted original",
+        message: "Targeted through MCP",
+        audience: "preset",
+        presetIds: ["mcp-announcement-preset"],
+      },
+    });
+    expect(createdResponse.json.result?.isError).not.toBe(true);
+
+    const [created] = await database
+      .select()
+      .from(schema.announcements)
+      .where(eq(schema.announcements.title, "MCP targeted original"))
+      .limit(1);
+    expect(created).toMatchObject({ audience: "preset", active: true });
+
+    const updatedResponse = await callMcp(handler, "tools/call", {
+      name: "admin.announcements.update",
+      arguments: {
+        announcementId: created?.id,
+        title: "MCP targeted renamed",
+      },
+    });
+    expect(updatedResponse.json.result?.isError).not.toBe(true);
+
+    const [updated] = await database
+      .select()
+      .from(schema.announcements)
+      .where(eq(schema.announcements.id, created?.id ?? ""))
+      .limit(1);
+    const targets = await database
+      .select({ presetId: schema.announcementPresetTargets.presetId })
+      .from(schema.announcementPresetTargets)
+      .where(
+        eq(schema.announcementPresetTargets.announcementId, created?.id ?? ""),
+      );
+    expect(updated).toMatchObject({
+      title: "MCP targeted renamed",
+      audience: "preset",
+      active: true,
+    });
+    expect(targets).toEqual([{ presetId: "mcp-announcement-preset" }]);
+
+    await database
+      .delete(schema.announcements)
+      .where(eq(schema.announcements.id, created?.id ?? ""));
+    await database
+      .delete(schema.presetDefinitions)
+      .where(eq(schema.presetDefinitions.id, "mcp-announcement-preset"));
+  });
+
   test("keeps social read, manage and moderation scopes isolated", async () => {
     const legacy = await callMcp(
       createAvermateMcpHandler(principal("mcp-user", ["avermate:read"])),
