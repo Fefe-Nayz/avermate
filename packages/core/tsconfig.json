@@ -10,7 +10,8 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["bun"]
   },
   "include": ["src/**/*.ts"]
 }
