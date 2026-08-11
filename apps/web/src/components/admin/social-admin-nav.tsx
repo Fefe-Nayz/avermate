@@ -39,7 +39,12 @@ export function SocialAdminNav() {
   ]
 
   return (
-    <nav aria-label={t("Social administration")} className="overflow-x-auto">
+    // Mobile only. The admin rail carries these four on a wide screen, and
+    // two navigations for the same four pages is one too many.
+    <nav
+      aria-label={t("Social administration")}
+      className="overflow-x-auto md:hidden"
+    >
       <ul className="flex min-w-max gap-1 rounded-xl border bg-card p-1">
         {items.map((item) => {
           const active = item.exact

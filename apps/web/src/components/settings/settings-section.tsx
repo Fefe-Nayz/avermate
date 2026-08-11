@@ -1,18 +1,26 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
-/** A titled block of settings. One visual grammar across every settings page. */
+/**
+ * A titled block of settings. One visual grammar across every settings page.
+ *
+ * `icon` is optional and worth passing: a page of five identical grey headings
+ * is read line by line, where a glyph is recognised, and it lets a section
+ * echo the shape the navigation rail uses for the same thing.
+ */
 export function SettingsSection({
   title,
   description,
+  icon: Icon,
   children,
   className,
   footer,
 }: {
   title: string
   description?: string
+  icon?: ComponentType<{ className?: string }>
   children: ReactNode
   className?: string
   footer?: ReactNode
@@ -20,7 +28,12 @@ export function SettingsSection({
   return (
     <section className={cn("rounded-xl border bg-card", className)}>
       <header className="px-4 pt-4">
-        <h2 className="text-sm font-medium">{title}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-medium">
+          {Icon ? (
+            <Icon className="size-4 shrink-0 text-muted-foreground" />
+          ) : null}
+          {title}
+        </h2>
         {description ? (
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             {description}
