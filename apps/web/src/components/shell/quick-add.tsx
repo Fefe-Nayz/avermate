@@ -19,13 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer"
+import { ResponsiveSheet } from "@/components/ui/responsive-sheet"
 import { haptic } from "@/lib/haptics"
 
 /**
@@ -113,21 +107,19 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
   return (
     <QuickAddContext.Provider value={store}>
       {children}
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent className="pb-safe">
-          <DrawerHeader className="pb-2 text-left">
-            <DrawerTitle>{t("What are you adding?")}</DrawerTitle>
-            <DrawerDescription>
-              {t("Everything here opens as its own screen.")}
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="grid gap-1 px-3 pb-4">
+      <ResponsiveSheet
+        open={open}
+        onOpenChange={setOpen}
+        title={t("What are you adding?")}
+        description={t("Everything here opens as its own screen.")}
+      >
+        <div className="grid gap-1">
             {actions.map((action) => (
               <button
                 key={action.href}
                 type="button"
                 onClick={() => go(action.href)}
-                className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors active:bg-accent"
+                className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-accent/60 active:bg-accent"
               >
                 <span
                   className={
@@ -148,9 +140,8 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
                 </span>
               </button>
             ))}
-          </div>
-        </DrawerContent>
-      </Drawer>
+        </div>
+      </ResponsiveSheet>
     </QuickAddContext.Provider>
   )
 }

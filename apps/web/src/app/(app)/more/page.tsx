@@ -36,10 +36,13 @@ import { useYearSheet } from "@/components/shell/year-sheet"
 import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
- * The phone's fifth tab.
+ * The account hub.
  *
- * Everything the tab bar has no room for, as one scrollable list of rows —
- * the pattern every phone user already knows from their settings app.
+ * On a phone this is the fifth tab: everything the tab bar has no room for,
+ * as one scrollable list of rows, the pattern every phone user already knows
+ * from their settings app. It used to be *only* that, so a desktop visitor got
+ * a column of full-width rows stretched across a monitor. The same rows now
+ * settle into a bounded two-column hub above `md`.
  */
 export default function MorePage() {
   const t = useExtracted()
@@ -136,10 +139,19 @@ export default function MorePage() {
     <>
       <PageMeta title={t("More")} />
 
-      <div className="flex flex-col gap-5">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
+        <div className="hidden md:block">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("Account")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("Everything about you and this app, in one place.")}
+          </p>
+        </div>
+
         <Link
           href="/settings"
-          className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors active:bg-accent"
+          className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-accent/60 active:bg-accent"
         >
           <Avatar className="size-12">
             <AvatarImage src={user.image ?? undefined} alt={user.name} />
@@ -172,61 +184,67 @@ export default function MorePage() {
           </div>
         </div>
 
-        {groups.map((group, groupIndex) => (
-          <section key={groupIndex} className="flex flex-col gap-1.5">
-            {group.label ? (
-              <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                {group.label}
-              </h2>
-            ) : null}
-            <div className="overflow-hidden rounded-xl border bg-card">
-              {group.items.map((item, index) => {
-                const content = (
-                  <>
-                    <item.icon
-                      className={
-                        item.destructive
-                          ? "size-4.5 text-destructive"
-                          : "size-4.5 text-muted-foreground"
-                      }
-                    />
-                    <span
-                      className={
-                        item.destructive
-                          ? "flex-1 text-sm text-destructive"
-                          : "flex-1 text-sm"
-                      }
+        <div className="grid gap-5 md:grid-cols-2 md:items-start">
+          {groups.map((group, groupIndex) => (
+            <section key={groupIndex} className="flex flex-col gap-1.5">
+              {group.label ? (
+                <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {group.label}
+                </h2>
+              ) : null}
+              <div className="overflow-hidden rounded-xl border bg-card">
+                {group.items.map((item, index) => {
+                  const content = (
+                    <>
+                      <item.icon
+                        className={
+                          item.destructive
+                            ? "size-4.5 text-destructive"
+                            : "size-4.5 text-muted-foreground"
+                        }
+                      />
+                      <span
+                        className={
+                          item.destructive
+                            ? "flex-1 text-sm text-destructive"
+                            : "flex-1 text-sm"
+                        }
+                      >
+                        {item.label}
+                      </span>
+                      {item.href ? (
+                        <ChevronRightIcon className="size-4 text-muted-foreground/60" />
+                      ) : null}
+                    </>
+                  )
+
+                  const className = `flex min-h-13 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent ${
+                    index > 0 ? "border-t" : ""
+                  }`
+
+                  return item.href ? (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className={className}
                     >
-                      {item.label}
-                    </span>
-                    {item.href ? (
-                      <ChevronRightIcon className="size-4 text-muted-foreground/60" />
-                    ) : null}
-                  </>
-                )
-
-                const className = `flex min-h-13 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-accent ${
-                  index > 0 ? "border-t" : ""
-                }`
-
-                return item.href ? (
-                  <Link key={item.label} href={item.href} className={className}>
-                    {content}
-                  </Link>
-                ) : (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={item.onClick}
-                    className={className}
-                  >
-                    {content}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-        ))}
+                      {content}
+                    </Link>
+                  ) : (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={item.onClick}
+                      className={className}
+                    >
+                      {content}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
 
         <p className="pb-4 text-center text-xs text-muted-foreground">
           Avermate · {t("Made for students")}

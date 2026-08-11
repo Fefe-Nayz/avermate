@@ -15,24 +15,22 @@ import {
   PlusIcon,
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer"
+import { ResponsiveSheet } from "@/components/ui/responsive-sheet"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 
 /**
- * Changing school year, on a phone.
+ * Changing school year.
  *
  * The desktop switcher lives in the sidebar header, which does not exist under
  * `md` — so on a phone the year needs an affordance of its own. A sheet of
  * choices rather than a form: picking a year is one tap, and every screen in
  * the app re-reads its data from it.
+ *
+ * It used to be a bottom drawer at every width, which meant the `/more` page
+ * on a desktop opened a panel sliding up from the bottom of a monitor. The
+ * presentation now follows the device.
  */
 
 interface YearSheetStore {
@@ -57,16 +55,13 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
   return (
     <YearSheetContext.Provider value={store}>
       {children}
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent className="pb-safe">
-          <DrawerHeader className="pb-2 text-left">
-            <DrawerTitle>{t("School years")}</DrawerTitle>
-            <DrawerDescription>
-              {t("Everything you see follows the year you pick.")}
-            </DrawerDescription>
-          </DrawerHeader>
-
-          <div className="grid gap-1 px-3 pb-4">
+      <ResponsiveSheet
+        open={open}
+        onOpenChange={setOpen}
+        title={t("School years")}
+        description={t("Everything you see follows the year you pick.")}
+      >
+        <div className="grid gap-1">
             {activeYears.map((item) => {
               const active = item.id === year?.id
               return (
@@ -79,7 +74,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
                     setOpen(false)
                   }}
                   className={cn(
-                    "flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-accent",
+                    "flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent",
                     active && "bg-primary/8"
                   )}
                 >
@@ -120,7 +115,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
               <Link
                 href="/settings/year"
                 onClick={() => setOpen(false)}
-                className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-accent"
+                className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
               >
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
                   <ArchiveRestoreIcon className="size-5" />
@@ -134,16 +129,15 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
             <Link
               href="/onboarding/new-year"
               onClick={() => setOpen(false)}
-              className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-accent"
+              className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
             >
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
                 <PlusIcon className="size-5" />
               </span>
               <span className="text-sm font-medium">{t("Add a year")}</span>
             </Link>
-          </div>
-        </DrawerContent>
-      </Drawer>
+        </div>
+      </ResponsiveSheet>
     </YearSheetContext.Provider>
   )
 }

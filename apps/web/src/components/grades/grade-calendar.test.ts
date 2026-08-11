@@ -1,45 +1,55 @@
 import { describe, expect, test } from "bun:test"
 import type { Grade } from "@avermate/core"
-import { buildGradeCalendarEvents } from "./grade-calendar"
+import { dayKey, groupGradesByDay, monthGrid } from "./grade-calendar"
 
-const grade: Grade = {
-  id: "grade-1",
-  name: "Oral exam",
-  value: 15,
-  outOf: 20,
-  coefficient: 2,
-  passedAt: new Date("2026-08-11T14:45:00.000Z"),
-  createdAt: new Date("2026-08-11T15:00:00.000Z"),
-  subjectId: "subject-1",
-  periodId: "period-1",
-  components: [],
+function grade(id: string, passedAt: Date): Grade {
+  return {
+    id,
+    name: "Oral exam",
+    value: 15,
+    outOf: 20,
+    coefficient: 2,
+    passedAt,
+    createdAt: passedAt,
+    subjectId: "subject-1",
+    periodId: "period-1",
+    components: [],
+  }
 }
 
-describe("grade calendar events", () => {
-  test("maps grades to read-only, UTC-safe all-day events", () => {
-    const [event] = buildGradeCalendarEvents([grade], () => "English")
+describe("grade calendar", () => {
+  test("buckets a grade into the local day it was sat", () => {
+    // Late evening local time. Bucketing this in UTC — as the previous
+    // scheduling calendar did — pushed it onto the following day, so the
+    // calendar and the month-grouped list disagreed about which month a
+    // grade belonged to.
+    const late = new Date(2026, 7, 31, 23, 30)
+    const byDay = groupGradesByDay([grade("grade-1", late)])
 
-    expect(event).toMatchObject({
-      id: "grade-1",
-      title: "Oral exam",
-      allDay: true,
-      readOnly: true,
-      data: {
-        gradeId: "grade-1",
-        subjectName: "English",
-        coefficient: 2,
-        ratio: 0.75,
-      },
-    })
-    expect(event?.start.toISOString()).toBe("2026-08-11T00:00:00.000Z")
-    expect(event?.end.toISOString()).toBe("2026-08-12T00:00:00.000Z")
-    expect(event?.color).toMatch(/^var\(--chart-[1-5]\)$/)
+    expect([...byDay.keys()]).toEqual(["2026-08-31"])
   })
 
-  test("keeps subject colors stable without coupling them to display names", () => {
-    const second = { ...grade, id: "grade-2", name: "Written exam" }
-    const events = buildGradeCalendarEvents([grade, second], () => "English")
+  test("keeps every grade on a day rather than the last one", () => {
+    const day = new Date(2026, 2, 14, 9, 0)
+    const byDay = groupGradesByDay([
+      grade("grade-1", day),
+      grade("grade-2", new Date(2026, 2, 14, 15, 0)),
+    ])
 
-    expect(events[0]?.color).toBe(events[1]?.color)
+    expect(byDay.get("2026-03-14")).toHaveLength(2)
+  })
+
+  test("pads the month to whole weeks so the columns line up", () => {
+    const days = monthGrid(new Date(2026, 7, 1), 1)
+
+    expect(days.length % 7).toBe(0)
+    expect(days[0]?.getDay()).toBe(1)
+    expect(dayKey(days[0] as Date)).toBe("2026-07-27")
+  })
+
+  test("respects a Sunday week start", () => {
+    const days = monthGrid(new Date(2026, 7, 1), 0)
+
+    expect(days[0]?.getDay()).toBe(0)
   })
 })
