@@ -95,11 +95,6 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/onboarding/:yearId",
-        destination: "/settings/year",
-        permanent: true,
-      },
-      {
         source: "/auth/verify-email",
         destination: "/auth/verify",
         permanent: true,
