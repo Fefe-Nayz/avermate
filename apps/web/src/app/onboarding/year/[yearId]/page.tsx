@@ -27,13 +27,14 @@ export default async function ConfigureYearPage({
     input: { yearId },
   })
 
-  let status: Awaited<ReturnType<typeof queryClient.fetchQuery<typeof statusOptions>>>
-  try {
-    status = await queryClient.fetchQuery(statusOptions)
-  } catch (error) {
-    if (isMissing(error)) notFound()
-    throw error
-  }
+  const status = await (async () => {
+    try {
+      return await queryClient.fetchQuery(statusOptions)
+    } catch (error) {
+      if (isMissing(error)) notFound()
+      throw error
+    }
+  })()
 
   await Promise.all([
     queryClient.prefetchQuery(

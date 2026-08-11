@@ -138,12 +138,17 @@ export function YearConfigurationWizard({
           <GraduationCapIcon className="size-4" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{status.data.year.name}</p>
+          <p className="truncate text-sm font-semibold">
+            {status.data.year.name}
+          </p>
           <p className="text-xs text-muted-foreground">
             {t("Configure school year")}
           </p>
         </div>
-        <div className="flex items-center gap-1" aria-label={t("Setup progress")}>
+        <div
+          className="flex items-center gap-1"
+          aria-label={t("Setup progress")}
+        >
           {(["subjects", "periods"] as const).map((item, index) => (
             <button
               key={item}
@@ -242,7 +247,7 @@ function SubjectsConfigurationStep({
   returnTo: string
 }) {
   const t = useExtracted()
-  const [showPresets, setShowPresets] = useState(graph.size === 0)
+  const [showPresets, setShowPresets] = useState(graph.flatten().length === 0)
   const [query, setQuery] = useState("")
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
   const [confirmReplace, setConfirmReplace] = useState(false)
@@ -299,8 +304,8 @@ function SubjectsConfigurationStep({
   const selectedPreview = preview.data
   const replacing = Boolean(
     selectedPreview &&
-      (selectedPreview.existing.subjects > 0 ||
-        selectedPreview.existing.averages > 0)
+    (selectedPreview.existing.subjects > 0 ||
+      selectedPreview.existing.averages > 0)
   )
   const rows = graph.flatten()
 
@@ -395,7 +400,9 @@ function SubjectsConfigurationStep({
                         averages: String(selectedPreview.existing.averages),
                       }
                     )
-                  : t("This year is empty, so the preset can be linked safely.")}
+                  : t(
+                      "This year is empty, so the preset can be linked safely."
+                    )}
               </p>
               <Button
                 type="button"
@@ -528,9 +535,7 @@ function SubjectsConfigurationStep({
             variant="outline"
             disabled={rows.length === 0}
             render={
-              <Link
-                href={formHref("/settings/averages/new", returnTo)}
-              />
+              <Link href={formHref("/settings/averages/new", returnTo)} />
             }
           >
             <PlusIcon className="size-4" />
@@ -586,7 +591,9 @@ function SubjectsConfigurationStep({
             <AlertDialogMedia className="bg-caution/10 text-caution">
               <SparklesIcon />
             </AlertDialogMedia>
-            <AlertDialogTitle>{t("Replace this configuration?")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("Replace this configuration?")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {selectedPreview
                 ? t(
@@ -714,7 +721,11 @@ function PeriodsConfigurationStep({
             })
           }
         >
-          {save.isPending ? <Spinner className="size-4" /> : <CheckIcon className="size-4" />}
+          {save.isPending ? (
+            <Spinner className="size-4" />
+          ) : (
+            <CheckIcon className="size-4" />
+          )}
           {t("Save and finish")}
         </Button>
       </div>

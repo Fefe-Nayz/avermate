@@ -33,6 +33,7 @@ const draft: YearSetupDraft = {
   scale: "20",
   presetId: "lycee",
   periodTemplate: "trimesters",
+  step: "preset",
 }
 
 describe("year setup draft", () => {

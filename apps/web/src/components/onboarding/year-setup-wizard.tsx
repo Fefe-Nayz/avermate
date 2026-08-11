@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -31,11 +31,41 @@ import {
   writeActiveYearCookie,
 } from "@/lib/year-selection"
 import { cn } from "@/lib/utils"
+import {
+  clearYearSetupDraft,
+  parseYearSetupDraft,
+  writeYearSetupDraft,
+  yearSetupDraftKey,
+  type YearSetupDraft,
+} from "@/lib/year-setup-draft"
 
 type Step = "year" | "preset" | "periods"
 type SetupMode = "first" | "additional"
 type PeriodTemplate =
   "trimesters" | "semesters" | "semesters-cumulative" | "quarters" | "none"
+
+function subscribeToDraftChanges(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange)
+  return () => window.removeEventListener("storage", onStoreChange)
+}
+
+function useStoredDraft(mode: SetupMode): YearSetupDraft | null | undefined {
+  const serialized = useSyncExternalStore(
+    subscribeToDraftChanges,
+    () => sessionStorage.getItem(yearSetupDraftKey(mode)),
+    () => undefined
+  )
+
+  return useMemo(() => {
+    if (serialized === undefined || serialized === null) return serialized
+
+    try {
+      return parseYearSetupDraft(JSON.parse(serialized))
+    } catch {
+      return null
+    }
+  }, [serialized])
+}
 
 /** Shared first-run and additional-year setup, without duplicating product rules. */
 export function YearSetupWizard({
@@ -43,6 +73,52 @@ export function YearSetupWizard({
   mode,
 }: {
   initialNow: string
+  mode: SetupMode
+}) {
+  const existing = useQuery(orpc.years.list.queryOptions())
+  const storedDraft = useStoredDraft(mode)
+  const [newIdempotencyKey] = useState(() => crypto.randomUUID())
+  const defaults = suggestSchoolYear(initialNow, existing.data ?? [])
+
+  // Keep the server and hydration render identical. useSyncExternalStore then
+  // reveals the browser-only draft without a mount effect full of setState calls.
+  if (storedDraft === undefined || existing.isPending) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Spinner className="size-5 text-muted-foreground" />
+      </div>
+    )
+  }
+
+  const initialDraft: YearSetupDraft = storedDraft ?? {
+    version: 1,
+    idempotencyKey: newIdempotencyKey,
+    name: defaults.name,
+    startsAt: defaults.startDay,
+    endsAt: defaults.endDay,
+    scale: String(defaults.scale),
+    presetId: null,
+    periodTemplate: "trimesters",
+    step: "year",
+  }
+
+  return (
+    <YearSetupForm
+      key={`${mode}:${initialDraft.idempotencyKey}`}
+      initialDraft={initialDraft}
+      hadPersistedDraft={storedDraft !== null}
+      mode={mode}
+    />
+  )
+}
+
+function YearSetupForm({
+  initialDraft,
+  hadPersistedDraft,
+  mode,
+}: {
+  initialDraft: YearSetupDraft
+  hadPersistedDraft: boolean
   mode: SetupMode
 }) {
   const t = useExtracted()
@@ -55,25 +131,84 @@ export function YearSetupWizard({
   // without a second browser request or a separate creation flow.
   const yearsOptions = orpc.years.list.queryOptions()
   const existing = useQuery(yearsOptions)
-  const defaults = suggestSchoolYear(initialNow, existing.data ?? [])
 
-  const [step, setStep] = useState<Step>("year")
-  const [name, setName] = useState(defaults.name)
-  const [startsAt, setStartsAt] = useState(defaults.startDay)
-  const [endsAt, setEndsAt] = useState(defaults.endDay)
-  const [scale, setScale] = useState(String(defaults.scale))
-  const [presetId, setPresetId] = useState<string | null>(null)
-  const [template, setTemplate] = useState<PeriodTemplate>("trimesters")
-  const setupKey = useRef(crypto.randomUUID())
+  const [step, setStep] = useState<Step>(initialDraft.step)
+  const [name, setName] = useState(initialDraft.name)
+  const [startsAt, setStartsAt] = useState(initialDraft.startsAt)
+  const [endsAt, setEndsAt] = useState(initialDraft.endsAt)
+  const [scale, setScale] = useState(initialDraft.scale)
+  const [presetId, setPresetId] = useState<string | null>(initialDraft.presetId)
+  const [template, setTemplate] = useState<PeriodTemplate>(
+    initialDraft.periodTemplate
+  )
+  const shouldLeaveFirstSetup =
+    mode === "first" && !hadPersistedDraft && (existing.data?.length ?? 0) > 0
 
   const presets = useQuery(orpc.presets.list.queryOptions())
   const setupYear = useMutation(orpc.presets.setupYear.mutationOptions())
+  const setupStatus = useQuery({
+    ...orpc.presets.setupYearStatus.queryOptions({
+      input: { idempotencyKey: initialDraft.idempotencyKey },
+    }),
+    enabled: hadPersistedDraft,
+    staleTime: 0,
+    refetchOnMount: "always",
+  })
 
   useEffect(() => {
-    if (mode === "first" && (existing.data?.length ?? 0) > 0) {
-      router.replace("/dashboard")
+    if (shouldLeaveFirstSetup) return
+
+    const draft: YearSetupDraft = {
+      version: 1,
+      idempotencyKey: initialDraft.idempotencyKey,
+      name,
+      startsAt,
+      endsAt,
+      scale,
+      presetId,
+      periodTemplate: template,
+      step,
     }
-  }, [existing.data, mode, router])
+    writeYearSetupDraft(sessionStorage, mode, draft)
+  }, [
+    endsAt,
+    initialDraft.idempotencyKey,
+    mode,
+    name,
+    presetId,
+    scale,
+    startsAt,
+    step,
+    template,
+    shouldLeaveFirstSetup,
+  ])
+
+  useEffect(() => {
+    const recovered = setupStatus.data?.year
+    if (!recovered) return
+
+    queryClient.setQueryData(yearsOptions.queryKey, [
+      recovered,
+      ...(existing.data ?? []).filter((year) => year.id !== recovered.id),
+    ])
+    clearYearSetupDraft(sessionStorage, mode)
+    writeActiveYearCookie(recovered.id)
+    localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(recovered.id))
+    router.replace(
+      `/onboarding/year/${encodeURIComponent(recovered.id)}?step=subjects`
+    )
+  }, [
+    existing.data,
+    mode,
+    queryClient,
+    router,
+    setupStatus.data,
+    yearsOptions.queryKey,
+  ])
+
+  useEffect(() => {
+    if (shouldLeaveFirstSetup) router.replace("/dashboard")
+  }, [router, shouldLeaveFirstSetup])
 
   const periodNames: Record<PeriodTemplate, string[]> = {
     trimesters: [t("Term 1"), t("Term 2"), t("Term 3")],
@@ -87,7 +222,7 @@ export function YearSetupWizard({
     try {
       haptic("light")
       const created = await setupYear.mutateAsync({
-        idempotencyKey: setupKey.current,
+        idempotencyKey: initialDraft.idempotencyKey,
         year: {
           name: name.trim(),
           startsAt: new Date(`${startsAt}T00:00:00`),
@@ -108,9 +243,16 @@ export function YearSetupWizard({
         created,
         ...(existing.data ?? []).filter((year) => year.id !== created.id),
       ])
+      clearYearSetupDraft(sessionStorage, mode)
       haptic("success")
-      toast.success(mode === "first" ? t("You are ready.") : t("Year created."))
-      router.replace("/dashboard")
+      toast.success(
+        mode === "first"
+          ? t("Year created. Check the details before finishing.")
+          : t("Year created. Check its subjects and periods.")
+      )
+      router.replace(
+        `/onboarding/year/${encodeURIComponent(created.id)}?step=subjects`
+      )
     } catch (error) {
       haptic("error")
       toast.error(
@@ -123,7 +265,7 @@ export function YearSetupWizard({
 
   const steps: Step[] = ["year", "preset", "periods"]
   const index = steps.indexOf(step)
-  const busy = setupYear.isPending
+  const busy = setupYear.isPending || setupStatus.isFetching
   const numericScale = Number(scale)
   const scaleValid =
     Number.isFinite(numericScale) && numericScale > 0 && numericScale <= 1000

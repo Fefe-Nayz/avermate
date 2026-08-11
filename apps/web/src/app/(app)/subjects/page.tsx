@@ -9,6 +9,7 @@ import {
   ListOrderedIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
   StarIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
@@ -307,15 +308,29 @@ export default function SubjectsPage() {
                     : t("This year has no subjects yet.")}
                 </p>
                 {!query ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    render={<Link href="/subjects/new" />}
-                  >
-                    <PlusIcon className="size-4" />
-                    {t("Add your first subject")}
-                  </Button>
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    {yearId ? (
+                      <Button
+                        size="sm"
+                        render={
+                          <Link
+                            href={`/onboarding/year/${encodeURIComponent(yearId)}?step=subjects`}
+                          />
+                        }
+                      >
+                        <SparklesIcon className="size-4" />
+                        {t("Set up subjects")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href="/subjects/new" />}
+                    >
+                      <PlusIcon className="size-4" />
+                      {t("Add manually")}
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             ) : reordering ? (

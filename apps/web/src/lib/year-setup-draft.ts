@@ -1,12 +1,9 @@
 export const YEAR_SETUP_DRAFT_VERSION = 1 as const
 
 export type YearSetupMode = "first" | "additional"
+export type YearSetupStep = "year" | "preset" | "periods"
 export type YearSetupPeriodTemplate =
-  | "trimesters"
-  | "semesters"
-  | "semesters-cumulative"
-  | "quarters"
-  | "none"
+  "trimesters" | "semesters" | "semesters-cumulative" | "quarters" | "none"
 
 export interface YearSetupDraft {
   version: typeof YEAR_SETUP_DRAFT_VERSION
@@ -17,6 +14,7 @@ export interface YearSetupDraft {
   scale: string
   presetId: string | null
   periodTemplate: YearSetupPeriodTemplate
+  step: YearSetupStep
 }
 
 export interface DraftStorage {
@@ -43,6 +41,10 @@ function isTemplate(value: unknown): value is YearSetupPeriodTemplate {
   )
 }
 
+function isStep(value: unknown): value is YearSetupStep {
+  return value === "year" || value === "preset" || value === "periods"
+}
+
 export function parseYearSetupDraft(value: unknown): YearSetupDraft | null {
   if (!value || typeof value !== "object") return null
   const draft = value as Partial<YearSetupDraft>
@@ -56,7 +58,8 @@ export function parseYearSetupDraft(value: unknown): YearSetupDraft | null {
     !isIsoDay(draft.endsAt) ||
     typeof draft.scale !== "string" ||
     (draft.presetId !== null && typeof draft.presetId !== "string") ||
-    !isTemplate(draft.periodTemplate)
+    !isTemplate(draft.periodTemplate) ||
+    !isStep(draft.step)
   ) {
     return null
   }
