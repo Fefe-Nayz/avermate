@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  useCallback,
   createContext,
   useContext,
   useMemo,
@@ -63,6 +64,9 @@ interface HandleValue {
 }
 
 const HandleContext = createContext<HandleValue | null>(null)
+const DropTargetContext = createContext<
+  ((element: HTMLElement | null) => void) | null
+>(null)
 
 function useReorderSensors() {
   return useSensors(
@@ -123,6 +127,24 @@ export function adjacentSortableItem(
   return currentIndex < 0 ? undefined : items[currentIndex + direction]
 }
 
+interface RectGeometry {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/** Align the dragged subtree's centre with the destination row's centre. */
+export function keyboardTargetCoordinates(
+  activeRect: RectGeometry,
+  targetRect: RectGeometry
+) {
+  return {
+    x: targetRect.left + (targetRect.width - activeRect.width) / 2,
+    y: targetRect.top + (targetRect.height - activeRect.height) / 2,
+  }
+}
+
 /** Arrow keys only visit siblings; left/right never imply reparenting. */
 const siblingKeyboardCoordinates: KeyboardCoordinateGetter = (
   event,
@@ -150,7 +172,9 @@ const siblingKeyboardCoordinates: KeyboardCoordinateGetter = (
 
   const next = context.droppableContainers.get(nextId)
   const rect = next ? context.droppableRects.get(next.id) : undefined
-  return rect ? { x: rect.left, y: rect.top } : undefined
+  return rect && context.collisionRect
+    ? keyboardTargetCoordinates(context.collisionRect, rect)
+    : undefined
 }
 
 const autoScroll = {
@@ -345,6 +369,7 @@ export function SortableList({
 export function SortableRow({
   id,
   disabled = false,
+  separateDropTarget = false,
   className,
   style,
   as: Element = "li",
@@ -352,6 +377,8 @@ export function SortableRow({
 }: {
   id: string
   disabled?: boolean
+  /** Measure an explicit immediate child instead of the whole nested subtree. */
+  separateDropTarget?: boolean
   className?: string
   /** Merged under the drag transform — indentation, mostly. */
   style?: CSSProperties
@@ -361,12 +388,21 @@ export function SortableRow({
   const {
     attributes,
     listeners,
-    setNodeRef,
+    setDraggableNodeRef,
+    setDroppableNodeRef,
     transform,
     transition,
     isDragging,
     isSorting,
   } = useSortable({ id, disabled })
+
+  const setOuterNodeRef = useCallback(
+    (node: HTMLElement | null) => {
+      setDraggableNodeRef(node)
+      if (!separateDropTarget) setDroppableNodeRef(node)
+    },
+    [separateDropTarget, setDraggableNodeRef, setDroppableNodeRef]
+  )
 
   const handle = useMemo<HandleValue>(
     () => ({ attributes, listeners, disabled }),
@@ -375,23 +411,46 @@ export function SortableRow({
 
   return (
     <HandleContext.Provider value={handle}>
-      <Element
-        ref={setNodeRef as never}
-        style={{
-          ...style,
-          transform: CSS.Translate.toString(transform),
-          transition,
-        }}
-        className={cn(
-          (isSorting || isDragging) && "will-change-transform",
-          isDragging &&
-            "relative z-10 bg-card opacity-95 shadow-lg ring-1 ring-primary/25",
-          className
-        )}
+      <DropTargetContext.Provider
+        value={separateDropTarget ? setDroppableNodeRef : null}
       >
-        {children}
-      </Element>
+        <Element
+          ref={setOuterNodeRef as never}
+          style={{
+            ...style,
+            transform: CSS.Translate.toString(transform),
+            transition,
+          }}
+          className={cn(
+            (isSorting || isDragging) && "will-change-transform",
+            isDragging &&
+              "relative z-10 bg-card opacity-95 shadow-lg ring-1 ring-primary/25",
+            className
+          )}
+        >
+          {children}
+        </Element>
+      </DropTargetContext.Provider>
     </HandleContext.Provider>
+  )
+}
+
+/** The visible row used for collision measurement inside a nested subtree. */
+export function SortableDropTarget({
+  className,
+  style,
+  children,
+}: {
+  className?: string
+  style?: CSSProperties
+  children: ReactNode
+}) {
+  const setNodeRef = useContext(DropTargetContext)
+
+  return (
+    <div ref={setNodeRef} className={className} style={style}>
+      {children}
+    </div>
   )
 }
 

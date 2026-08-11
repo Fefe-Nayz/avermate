@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { adjacentSortableItem, sameSortableGroup } from "./sortable-list"
+import {
+  adjacentSortableItem,
+  keyboardTargetCoordinates,
+  sameSortableGroup,
+} from "./sortable-list"
 import type { Active, DroppableContainer } from "@dnd-kit/core"
 
 function carrier(id?: string) {
@@ -36,6 +40,15 @@ describe("sortable tree collision scope", () => {
     expect(adjacentSortableItem(siblings, "one", -1)).toBeUndefined()
     expect(adjacentSortableItem(siblings, "three", 1)).toBeUndefined()
     expect(adjacentSortableItem(siblings, "nested", 1)).toBeUndefined()
+  })
+
+  test("centres a tall dragged subtree on the immediate sibling row", () => {
+    expect(
+      keyboardTargetCoordinates(
+        { left: 20, top: 40, width: 300, height: 200 },
+        { left: 20, top: 260, width: 300, height: 50 }
+      )
+    ).toEqual({ x: 20, y: 185 })
   })
 
   test("does not hide candidates when sortable metadata is unavailable", () => {

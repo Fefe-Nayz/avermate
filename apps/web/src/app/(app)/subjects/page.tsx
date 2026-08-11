@@ -26,6 +26,7 @@ import {
 import { useYear } from "@/components/year/year-provider"
 import {
   DragHandle,
+  SortableDropTarget,
   SortableGroup,
   SortableRoot,
   SortableRow,
@@ -402,8 +403,9 @@ function SubjectOrderLevel({
           id={subject.id}
           as="div"
           disabled={pending}
+          separateDropTarget
         >
-          <div
+          <SortableDropTarget
             className="flex min-h-13 items-center gap-2 border-b py-2 pe-3"
             style={{ paddingInlineStart: `${0.5 + depth * 1}rem` }}
           >
@@ -414,7 +416,7 @@ function SubjectOrderLevel({
                 {subject.parentId ? t("Nested subject") : t("Top level")}
               </p>
             </div>
-          </div>
+          </SortableDropTarget>
           <SubjectOrderLevel
             parentId={subject.id}
             depth={depth + 1}
