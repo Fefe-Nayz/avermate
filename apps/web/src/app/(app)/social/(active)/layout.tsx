@@ -28,10 +28,13 @@ export default async function ActiveSocialLayout({
   if (!socialFeatureIsKnown(eligibility)) notFound()
   if (!socialGroupIsAccessible(eligibility)) redirect("/settings/social")
 
+  // The rail sits beside the content on a wide screen; the pill row it also
+  // renders stacks above it on a phone. Both come out of one component, so the
+  // two layouts cannot drift apart.
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 md:flex-row md:gap-8">
       <SocialNavigation />
-      {children}
+      <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>
     </div>
   )
 }
