@@ -165,8 +165,7 @@ export default async function RootLayout({
         playfair.variable,
         jetbrains.variable,
         firaCode.variable,
-        sourceCode.variable,
-        "font-sans"
+        sourceCode.variable
       )}
       style={
         {

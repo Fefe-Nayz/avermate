@@ -35,7 +35,7 @@ function chartDefinition() {
 }
 
 describe("responsive TanStack chart layout", () => {
-  it("server-renders the chart at a reserved height behind a pending layout", () => {
+  it("server-renders a height-stable placeholder without hydrating SVG bytes", () => {
     const html = renderToStaticMarkup(
       <ResponsiveChart
         ariaLabel="Average history"
@@ -50,8 +50,9 @@ describe("responsive TanStack chart layout", () => {
     assert.match(html, /data-chart-placeholder="true"/)
     assert.match(html, /data-chart-surface="true"/)
     assert.match(html, /pointer-events-none opacity-0/)
-    assert.match(html, /viewBox="0 0 640 240"/)
-    assert.match(html, /aria-label="Average history"/)
+    assert.match(html, /style="height:240px"/)
+    assert.doesNotMatch(html, /<svg/)
+    assert.doesNotMatch(html, /dangerouslySetInnerHTML/)
   })
 
   it("leaves guide margins automatic instead of locking axes into tiny insets", () => {

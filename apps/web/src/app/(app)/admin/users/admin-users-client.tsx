@@ -20,7 +20,7 @@ import {
 } from "@/components/admin/admin-user-actions"
 import { ChoiceField, TextField } from "@/components/forms/controls"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { initialsOf } from "@/components/shell/nav-user"
+import { initialsOf } from "@/lib/name"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
