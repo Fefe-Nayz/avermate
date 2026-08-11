@@ -1,13 +1,20 @@
 /**
  * Palettes.
  *
+ * `data-palette` on <html> switches the app. `data-palette-preview` on any
+ * element gives that element the same tokens, which is what lets a swatch show
+ * the colour it is offering — the previous swatches read `var(--primary)`
+ * while carrying an attribute nothing matched, so all seven drew whichever
+ * palette happened to be active.
+ *
  * Each one only restates the tokens that carry personality — the surface,
  * text and border scales come from the base theme so contrast stays correct
  * whichever palette is on. A palette is set with `data-palette` on <html>, so
  * it composes with the light/dark class rather than fighting it.
  */
 
-:root[data-palette="ocean"] {
+:root[data-palette="ocean"],
+[data-palette-preview="ocean"] {
   --primary: oklch(0.55 0.13 235);
   --primary-foreground: oklch(0.99 0.005 235);
   --accent: oklch(0.95 0.02 235);
@@ -23,6 +30,7 @@
 }
 
 .dark:root[data-palette="ocean"],
+.dark [data-palette-preview="ocean"],
 :root[data-palette="ocean"] .dark {
   --primary: oklch(0.72 0.12 235);
   --primary-foreground: oklch(0.2 0.04 235);
@@ -30,7 +38,8 @@
   --accent-foreground: oklch(0.95 0.02 235);
 }
 
-:root[data-palette="forest"] {
+:root[data-palette="forest"],
+[data-palette-preview="forest"] {
   --primary: oklch(0.52 0.12 155);
   --primary-foreground: oklch(0.99 0.005 155);
   --accent: oklch(0.95 0.03 155);
@@ -52,7 +61,8 @@
   --accent-foreground: oklch(0.94 0.03 155);
 }
 
-:root[data-palette="sunset"] {
+:root[data-palette="sunset"],
+[data-palette-preview="sunset"] {
   --primary: oklch(0.62 0.17 35);
   --primary-foreground: oklch(0.99 0.01 35);
   --accent: oklch(0.95 0.03 45);
@@ -74,7 +84,8 @@
   --accent-foreground: oklch(0.94 0.03 45);
 }
 
-:root[data-palette="grape"] {
+:root[data-palette="grape"],
+[data-palette-preview="grape"] {
   --primary: oklch(0.55 0.19 300);
   --primary-foreground: oklch(0.99 0.01 300);
   --accent: oklch(0.95 0.03 300);
@@ -96,7 +107,8 @@
   --accent-foreground: oklch(0.94 0.03 300);
 }
 
-:root[data-palette="rose"] {
+:root[data-palette="rose"],
+[data-palette-preview="rose"] {
   --primary: oklch(0.58 0.19 12);
   --primary-foreground: oklch(0.99 0.01 12);
   --accent: oklch(0.95 0.03 12);
@@ -118,7 +130,8 @@
   --accent-foreground: oklch(0.94 0.03 12);
 }
 
-:root[data-palette="amber"] {
+:root[data-palette="amber"],
+[data-palette-preview="amber"] {
   --primary: oklch(0.72 0.15 78);
   --primary-foreground: oklch(0.22 0.05 78);
   --accent: oklch(0.96 0.04 85);
@@ -309,7 +322,8 @@
  * Mokattam — an unlockable theme, kept in the codebase rather than behind a
  * flag so the people who earn it get it on every device they sign in on.
  */
-:root[data-palette="mokattam"] {
+:root[data-palette="mokattam"],
+[data-palette-preview="mokattam"] {
   --primary: oklch(0.64 0.19 45);
   --primary-foreground: oklch(0.99 0.01 45);
   --accent: oklch(0.95 0.04 45);
@@ -329,4 +343,19 @@
   --primary-foreground: oklch(0.22 0.06 45);
   --accent: oklch(0.32 0.06 45);
   --accent-foreground: oklch(0.94 0.04 45);
+}
+
+/*
+ * Neutral has no block of its own — it *is* the base theme — so its swatch
+ * would otherwise inherit whichever palette, or season, is currently applied.
+ * Restating the two base accents here keeps every swatch honest about what
+ * picking it would give you, and puts the value beside the palettes it sits
+ * next to on screen.
+ */
+[data-palette-preview="default"] {
+  --primary: oklch(0.205 0 0);
+}
+
+.dark [data-palette-preview="default"] {
+  --primary: oklch(0.922 0 0);
 }

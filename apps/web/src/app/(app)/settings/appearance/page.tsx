@@ -21,6 +21,7 @@ import {
   SettingsSection,
 } from "@/components/settings/settings-section"
 import { ChoiceField, SelectField } from "@/components/forms/controls"
+import { ColorPicker } from "@/components/ui/color-picker"
 import { usePreferences } from "@/hooks/use-preferences"
 import {
   PALETTES,
@@ -141,47 +142,81 @@ export default function AppearanceSettingsPage() {
           />
         </SettingsSection>
 
+        {/*
+         * One section, because both halves wrote the same setting. "Colour"
+         * offered seven accents and "Theme studio" twelve full designs, and
+         * picking from either replaced whatever the other had selected — so
+         * the screen looked like two competing pickers with no stated
+         * relationship. They are now one choice with two kinds of answer, and
+         * the difference is said out loud rather than implied by placement.
+         */}
         <SettingsSection
-          title={t("Colour")}
-          description={t("Sets the accent, the charts and the sidebar.")}
+          title={t("Colour and theme")}
+          description={t(
+            "One choice. An accent recolours the app; a full design also changes its typography and shape."
+          )}
         >
-          <div className="grid grid-cols-4 gap-2 @sm/main:grid-cols-7">
-            {[...PALETTES, ...unlocked].map((palette) => {
-              const active = preferences.themePreset === palette && !showCustom
-              return (
-                <button
-                  key={palette}
-                  type="button"
-                  onClick={() => {
-                    haptic("selection")
-                    setShowCustom(false)
-                    update({ themePreset: palette })
-                  }}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
-                    active
-                      ? "border-primary ring-1 ring-primary/40"
-                      : "border-border hover:bg-accent/50"
-                  )}
-                >
-                  <span
-                    data-palette={palette}
-                    className="size-7 rounded-full border"
-                    style={{ background: "var(--primary)" }}
-                  />
-                  <span className="text-[11px] leading-tight text-muted-foreground">
-                    {paletteLabels[palette]}
-                  </span>
-                </button>
-              )
-            })}
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              {t("Accents")}
+            </p>
+            {/*
+             * A seasonal theme overrides the accent every palette sets, so a
+             * palette can look like it did nothing. Saying so beats letting
+             * someone click all seven and conclude the picker is broken.
+             */}
+            {preferences.seasonalThemesEnabled ? (
+              <p className="mb-2 text-xs text-muted-foreground">
+                {t(
+                  "A seasonal theme is on and is currently tinting the accent. Turn it off below to see a palette exactly as it is."
+                )}
+              </p>
+            ) : null}
+            <div className="grid grid-cols-4 gap-2 @sm/main:grid-cols-7">
+              {[...PALETTES, ...unlocked].map((palette) => {
+                const active =
+                  preferences.themePreset === palette && !showCustom
+                return (
+                  <button
+                    key={palette}
+                    type="button"
+                    onClick={() => {
+                      haptic("selection")
+                      setShowCustom(false)
+                      update({ themePreset: palette })
+                    }}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
+                      active
+                        ? "border-primary ring-1 ring-primary/40"
+                        : "border-border hover:bg-accent/50"
+                    )}
+                  >
+                    {/*
+                     * `data-palette-preview`, not `data-palette`: the palette
+                     * variables are scoped to `:root`, so the old attribute
+                     * matched nothing here and every swatch drew the palette
+                     * that was already active — seven identical circles.
+                     */}
+                    <span
+                      data-palette-preview={palette}
+                      className="size-7 rounded-full border shadow-xs"
+                      style={{ background: "var(--primary)" }}
+                    />
+                    <span className="text-[11px] leading-tight text-muted-foreground">
+                      {paletteLabels[palette]}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <div className="space-y-2 border-t pt-4">
             <div>
               <p className="flex items-center gap-2 text-sm font-medium">
                 <SparklesIcon className="size-4 text-primary" />
-                {t("Theme studio")}
+                {t("Full designs")}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {t(
@@ -330,12 +365,10 @@ export default function AppearanceSettingsPage() {
                       key={token}
                       className="flex items-center gap-3 px-3 py-1.5"
                     >
-                      <input
-                        type="color"
-                        aria-label={token}
-                        value={hexOf(value)}
-                        onChange={(event) => patchToken(event.target.value)}
-                        className="size-6 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0"
+                      <ColorPicker
+                        label={token}
+                        value={value}
+                        onValueChange={patchToken}
                       />
                       <span className="flex-1 truncate font-mono text-xs text-muted-foreground">
                         {token}
@@ -344,7 +377,7 @@ export default function AppearanceSettingsPage() {
                         key={`${customMode}:${token}:${value}`}
                         defaultValue={value}
                         aria-label={`${token} CSS`}
-                        placeholder="#rrggbb, oklch(…)"
+                        placeholder={t("Unset")}
                         className="h-7 w-40 shrink-0 border-transparent bg-transparent font-mono text-[11px] shadow-none focus-visible:border-input focus-visible:bg-background"
                         onBlur={(event) => {
                           const nextValue = event.target.value.trim()
@@ -609,7 +642,3 @@ export default function AppearanceSettingsPage() {
 }
 
 /** Colour inputs need `#rrggbb`; the stored value may be any CSS colour. */
-function hexOf(value: string | undefined): string {
-  if (!value) return "#888888"
-  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#888888"
-}
