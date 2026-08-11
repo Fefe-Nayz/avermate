@@ -1,15 +1,30 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  isNull,
+  inArray,
+  ne,
+  notExists,
+  or,
+} from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
+  customAverages,
   dashboardCards,
   grades,
+  goals,
   periods,
   subjects,
+  yearReviewViews,
   years,
 } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireYear } from "../lib/ownership";
+import { newId } from "../lib/id";
 import { defaultCards } from "@avermate/core";
 
 const yearInput = z.object({
@@ -29,10 +44,8 @@ function assertRange(startsAt: Date, endsAt: Date) {
 }
 
 /** Every year seeds the dashboard it starts with — an empty grid reads as broken. */
-async function seedCards(userId: string, yearId: string) {
-  const cards = defaultCards();
-  await db.insert(dashboardCards).values(
-    cards.map((card) => ({
+function seedCardValues(userId: string, yearId: string) {
+  return defaultCards().map((card) => ({
       surface: "overview",
       metric: card.metric,
       targetKind: card.target.kind,
@@ -46,8 +59,7 @@ async function seedCards(userId: string, yearId: string) {
       hidden: card.hidden,
       yearId,
       userId,
-    })),
-  );
+    }));
 }
 
 export const yearsRouter = {
@@ -70,14 +82,19 @@ export const yearsRouter = {
     .handler(async ({ context, input }) => {
       assertRange(input.startsAt, input.endsAt);
       const userId = context.session.user.id;
+      const yearId = newId("y");
+      const insertYear = db.insert(years).values({ id: yearId, ...input, userId });
+      const insertCards = db
+        .insert(dashboardCards)
+        .values(seedCardValues(userId, yearId));
+      await db.batch([insertYear, insertCards]);
 
       const [created] = await db
-        .insert(years)
-        .values({ ...input, userId })
-        .returning();
+        .select()
+        .from(years)
+        .where(eq(years.id, yearId))
+        .limit(1);
       if (!created) badRequest("The year could not be created");
-
-      await seedCards(userId, created.id);
       return created;
     }),
 
@@ -103,13 +120,39 @@ export const yearsRouter = {
     .input(z.object({ yearIds: z.array(z.string()).min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await Promise.all(
-        input.yearIds.map((yearId, index) =>
+      if (new Set(input.yearIds).size !== input.yearIds.length) {
+        badRequest("A year can only appear once in its order");
+      }
+      const selected = await db
+        .select({ id: years.id })
+        .from(years)
+        .where(
+          and(eq(years.userId, userId), inArray(years.id, input.yearIds)),
+        );
+      if (selected.length !== input.yearIds.length) {
+        badRequest("Every reordered year must belong to this account");
+      }
+      const current = await db
+        .select({ id: years.id })
+        .from(years)
+        .where(eq(years.userId, userId))
+        .orderBy(asc(years.sortOrder), desc(years.startsAt));
+      const requested = new Set(input.yearIds);
+      const orderedIds = [
+        ...input.yearIds,
+        ...current.map((year) => year.id).filter((id) => !requested.has(id)),
+      ];
+      const statements = orderedIds.map((yearId, index) =>
           db
             .update(years)
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(and(eq(years.id, yearId), eq(years.userId, userId))),
-        ),
+      );
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
       return { ok: true };
     }),
@@ -117,23 +160,77 @@ export const yearsRouter = {
   archive: protectedProcedure
     .input(z.object({ yearId: z.string(), archived: z.boolean() }))
     .handler(async ({ context, input }) => {
-      await requireYear(context.session.user.id, input.yearId);
+      const userId = context.session.user.id;
+      const existing = await requireYear(userId, input.yearId);
+      if (Boolean(existing.archivedAt) === input.archived) return existing;
+
+      const anotherActiveYear = db
+        .select({ id: years.id })
+        .from(years)
+        .where(
+          and(
+            eq(years.userId, userId),
+            isNull(years.archivedAt),
+            ne(years.id, input.yearId),
+          ),
+        );
       const [updated] = await db
         .update(years)
         .set({
           archivedAt: input.archived ? new Date() : null,
           updatedAt: new Date(),
         })
-        .where(eq(years.id, input.yearId))
+        .where(
+          and(
+            eq(years.id, input.yearId),
+            eq(years.userId, userId),
+            input.archived ? exists(anotherActiveYear) : undefined,
+          ),
+        )
         .returning();
+      if (!updated) {
+        badRequest("The last active year cannot be archived");
+      }
       return updated;
     }),
 
   delete: protectedProcedure
     .input(z.object({ yearId: z.string() }))
     .handler(async ({ context, input }) => {
-      await requireYear(context.session.user.id, input.yearId);
-      await db.delete(years).where(eq(years.id, input.yearId));
+      const userId = context.session.user.id;
+      const existing = await requireYear(userId, input.yearId);
+      const anotherYear = db
+        .select({ id: years.id })
+        .from(years)
+        .where(and(eq(years.userId, userId), ne(years.id, input.yearId)));
+      const anotherActiveYear = db
+        .select({ id: years.id })
+        .from(years)
+        .where(
+          and(
+            eq(years.userId, userId),
+            isNull(years.archivedAt),
+            ne(years.id, input.yearId),
+          ),
+        );
+
+      const [deleted] = await db
+        .delete(years)
+        .where(
+          and(
+            eq(years.id, input.yearId),
+            eq(years.userId, userId),
+            existing.archivedAt
+              ? undefined
+              : or(notExists(anotherYear), exists(anotherActiveYear)),
+          ),
+        )
+        .returning({ id: years.id });
+      if (!deleted) {
+        badRequest(
+          "The last active year cannot be deleted while archived years remain",
+        );
+      }
       return { ok: true };
     }),
 
@@ -142,15 +239,40 @@ export const yearsRouter = {
     .input(z.object({ yearId: z.string() }))
     .handler(async ({ context, input }) => {
       await requireYear(context.session.user.id, input.yearId);
-      const [subjectRows, gradeRows, periodRows] = await Promise.all([
+      const [
+        subjectRows,
+        gradeRows,
+        periodRows,
+        averageRows,
+        goalRows,
+        cardRows,
+        reviewRows,
+      ] = await Promise.all([
         db.select({ id: subjects.id }).from(subjects).where(eq(subjects.yearId, input.yearId)),
         db.select({ id: grades.id }).from(grades).where(eq(grades.yearId, input.yearId)),
         db.select({ id: periods.id }).from(periods).where(eq(periods.yearId, input.yearId)),
+        db
+          .select({ id: customAverages.id })
+          .from(customAverages)
+          .where(eq(customAverages.yearId, input.yearId)),
+        db.select({ id: goals.id }).from(goals).where(eq(goals.yearId, input.yearId)),
+        db
+          .select({ id: dashboardCards.id })
+          .from(dashboardCards)
+          .where(eq(dashboardCards.yearId, input.yearId)),
+        db
+          .select({ id: yearReviewViews.id })
+          .from(yearReviewViews)
+          .where(eq(yearReviewViews.yearId, input.yearId)),
       ]);
       return {
         subjects: subjectRows.length,
         grades: gradeRows.length,
         periods: periodRows.length,
+        averages: averageRows.length,
+        goals: goalRows.length,
+        cards: cardRows.length,
+        recaps: reviewRows.length,
       };
     }),
 };

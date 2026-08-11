@@ -12,6 +12,7 @@ import { profileRouter } from "./profile";
 import { publicRouter } from "./public";
 import { reviewRouter } from "./review";
 import { snapshotRouter } from "./snapshot";
+import { socialRouter } from "./social";
 import { subjectsRouter } from "./subjects";
 import { yearsRouter } from "./years";
 
@@ -31,6 +32,7 @@ export const appRouter = {
   review: reviewRouter,
   announcements: announcementsRouter,
   feedback: feedbackRouter,
+  social: socialRouter,
   admin: adminRouter,
 };
 

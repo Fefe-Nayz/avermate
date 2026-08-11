@@ -2,8 +2,11 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { grades, subjects } from "../db/schema";
+import { assertSameYear, collectDescendantIds } from "../lib/domain-integrity";
+import { newId } from "../lib/id";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireSubject, requireYear } from "../lib/ownership";
+import { detachYearPresetStatement } from "../lib/preset-membership";
 
 const subjectInput = z.object({
   name: z.string().trim().min(1).max(96),
@@ -36,7 +39,8 @@ async function assertNoCycle(
   let cursor: string | null | undefined = parentId;
   const seen = new Set<string>();
   while (cursor) {
-    if (cursor === subjectId) badRequest("That would nest a subject inside itself");
+    if (cursor === subjectId)
+      badRequest("That would nest a subject inside itself");
     if (seen.has(cursor)) break;
     seen.add(cursor);
     cursor = parents.get(cursor) ?? null;
@@ -78,16 +82,27 @@ export const subjectsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
-      if (input.parentId) await requireSubject(userId, input.parentId);
+      if (input.parentId) {
+        const parent = await requireSubject(userId, input.parentId);
+        assertSameYear("Parent subject", input.yearId, parent.yearId);
+      }
 
-      const [created] = await db
-        .insert(subjects)
-        .values({
+      const id = newId("sub");
+      const insertSubject = db.insert(subjects).values({
+          id,
           ...input,
           sortOrder: await nextSortOrder(input.yearId, input.parentId),
           userId,
-        })
-        .returning();
+        });
+      await db.batch([
+        insertSubject,
+        detachYearPresetStatement(userId, input.yearId, "subject_created"),
+      ]);
+      const [created] = await db
+        .select()
+        .from(subjects)
+        .where(eq(subjects.id, id))
+        .limit(1);
       return created;
     }),
 
@@ -96,18 +111,42 @@ export const subjectsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const { subjectId, ...patch } = input;
-      await requireSubject(userId, subjectId);
+      const existing = await requireSubject(userId, subjectId);
 
       if (patch.parentId !== undefined) {
-        if (patch.parentId) await requireSubject(userId, patch.parentId);
+        if (patch.parentId) {
+          const parent = await requireSubject(userId, patch.parentId);
+          assertSameYear("Parent subject", existing.yearId, parent.yearId);
+        }
         await assertNoCycle(userId, subjectId, patch.parentId);
       }
 
-      const [updated] = await db
+      if (patch.kind === "category" && existing.kind !== "category") {
+        const [grade] = await db
+          .select({ id: grades.id })
+          .from(grades)
+          .where(
+            and(eq(grades.subjectId, subjectId), eq(grades.userId, userId)),
+          )
+          .limit(1);
+        if (grade) {
+          badRequest("A subject with grades cannot become a category");
+        }
+      }
+
+      const updateSubject = db
         .update(subjects)
         .set({ ...patch, updatedAt: new Date() })
+        .where(eq(subjects.id, subjectId));
+      await db.batch([
+        updateSubject,
+        detachYearPresetStatement(userId, existing.yearId, "subject_updated"),
+      ]);
+      const [updated] = await db
+        .select()
+        .from(subjects)
         .where(eq(subjects.id, subjectId))
-        .returning();
+        .limit(1);
       return updated;
     }),
 
@@ -122,22 +161,44 @@ export const subjectsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireSubject(userId, input.subjectId);
-      if (input.parentId) await requireSubject(userId, input.parentId);
+      const subject = await requireSubject(userId, input.subjectId);
+      if (input.parentId) {
+        const parent = await requireSubject(userId, input.parentId);
+        assertSameYear("Parent subject", subject.yearId, parent.yearId);
+      }
       await assertNoCycle(userId, input.subjectId, input.parentId);
 
-      await db
-        .update(subjects)
-        .set({ parentId: input.parentId, updatedAt: new Date() })
-        .where(eq(subjects.id, input.subjectId));
+      if (new Set(input.siblingIds).size !== input.siblingIds.length) {
+        badRequest("A subject can only appear once in its sibling order");
+      }
+      const siblings = await Promise.all(
+        input.siblingIds.map((id) => requireSubject(userId, id)),
+      );
+      for (const sibling of siblings) {
+        assertSameYear("Sibling subject", subject.yearId, sibling.yearId);
+        if (sibling.id !== subject.id && sibling.parentId !== input.parentId) {
+          badRequest("Every reordered subject must share the same parent");
+        }
+      }
 
-      await Promise.all(
-        input.siblingIds.map((id, index) =>
+      const statements = [
+        db
+          .update(subjects)
+          .set({ parentId: input.parentId, updatedAt: new Date() })
+          .where(eq(subjects.id, input.subjectId)),
+        ...input.siblingIds.map((id, index) =>
           db
             .update(subjects)
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(and(eq(subjects.id, id), eq(subjects.userId, userId))),
         ),
+        detachYearPresetStatement(userId, subject.yearId, "subject_moved"),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
 
       return { ok: true };
@@ -156,19 +217,36 @@ export const subjectsRouter = {
       const subject = await requireSubject(userId, input.subjectId);
 
       if (input.promoteChildren) {
-        await db
-          .update(subjects)
-          .set({ parentId: subject.parentId, updatedAt: new Date() })
+        await db.batch([
+          db
+            .update(subjects)
+            .set({ parentId: subject.parentId, updatedAt: new Date() })
+            .where(
+              and(eq(subjects.parentId, subject.id), eq(subjects.userId, userId)),
+            ),
+          db.delete(subjects).where(eq(subjects.id, subject.id)),
+          detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
+        ]);
+      } else {
+        const rows = await db
+          .select({ id: subjects.id, parentId: subjects.parentId })
+          .from(subjects)
           .where(
             and(
-              eq(subjects.parentId, subject.id),
+              eq(subjects.yearId, subject.yearId),
               eq(subjects.userId, userId),
             ),
           );
+        const subtree = [subject.id, ...collectDescendantIds(rows, subject.id)];
+        await db.batch([
+          db.delete(subjects).where(
+            and(inArray(subjects.id, subtree), eq(subjects.userId, userId)),
+          ),
+          detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
+        ]);
+        return { ok: true, deleted: subtree.length };
       }
-
-      await db.delete(subjects).where(eq(subjects.id, subject.id));
-      return { ok: true };
+      return { ok: true, deleted: 1 };
     }),
 
   /** What a delete would take with it, so the confirmation can be specific. */
@@ -183,26 +261,17 @@ export const subjectsRouter = {
         .from(subjects)
         .where(eq(subjects.yearId, subject.yearId));
 
-      const childrenOf = new Map<string, string[]>();
-      for (const row of rows) {
-        if (!row.parentId) continue;
-        const list = childrenOf.get(row.parentId);
-        if (list) list.push(row.id);
-        else childrenOf.set(row.parentId, [row.id]);
-      }
-
-      const descendants: string[] = [];
-      const stack = [...(childrenOf.get(subject.id) ?? [])];
-      while (stack.length > 0) {
-        const id = stack.pop() as string;
-        descendants.push(id);
-        stack.push(...(childrenOf.get(id) ?? []));
-      }
+      const descendants = collectDescendantIds(rows, subject.id);
 
       const affected = await db
         .select({ id: grades.id })
         .from(grades)
-        .where(inArray(grades.subjectId, [subject.id, ...descendants]));
+        .where(
+          and(
+            inArray(grades.subjectId, [subject.id, ...descendants]),
+            eq(grades.userId, userId),
+          ),
+        );
 
       return { descendants: descendants.length, grades: affected.length };
     }),

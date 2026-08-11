@@ -2,7 +2,9 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin as adminPlugin } from "better-auth/plugins/admin";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { jwt } from "better-auth/plugins/jwt";
 import { expo } from "@better-auth/expo";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { env, isProduction } from "./env";
@@ -18,6 +20,20 @@ const adminUserIds =
   env.ADMIN_USER_IDS?.split(",")
     .map((id) => id.trim())
     .filter(Boolean) ?? [];
+
+export const MCP_SCOPES = [
+  "avermate:read",
+  "avermate:write",
+  "avermate:delete",
+  "avermate:admin",
+  "avermate:social.read",
+  "avermate:social.manage",
+  "avermate:social.moderate",
+] as const;
+
+export const mcpResourceUrl =
+  env.MCP_RESOURCE_URL ?? `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/mcp`;
+export const oauthIssuer = `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/api/auth`;
 
 const socialProviders: Record<string, unknown> = {};
 if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -51,6 +67,8 @@ function localeOf(source: unknown): Locale {
 export const auth = betterAuth({
   appName: "Avermate",
   telemetry: { enabled: false },
+  baseURL: env.BETTER_AUTH_URL,
+  basePath: "/api/auth",
 
   database: drizzleAdapter(db, {
     provider: "sqlite",
@@ -116,6 +134,11 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
+    // Email/password accounts do not receive an application session until
+    // the OTP flow has proved ownership. OAuth providers keep their own
+    // verified-email semantics, while the oRPC guard also protects any old
+    // unverified session carried across a migration.
+    requireEmailVerification: true,
     autoSignIn: true,
     minPasswordLength: 8,
     maxPasswordLength: 128,
@@ -150,6 +173,47 @@ export const auth = betterAuth({
       defaultRole: "user",
       adminRoles: ["admin"],
       adminUserIds,
+    }),
+    // OAuth access tokens are asymmetric JWTs. Session responses must not be
+    // converted to JWTs: the plugin is present solely for OAuth signing/JWKS.
+    jwt({
+      disableSettingJwtHeader: true,
+      jwt: { issuer: oauthIssuer, audience: mcpResourceUrl },
+      jwks: { rotationInterval: 30 * 24 * 60 * 60 },
+    }),
+    oauthProvider({
+      loginPage: `${env.CLIENT_URL}/auth/sign-in`,
+      consentPage: `${env.CLIENT_URL}/auth/consent`,
+      // Both discovery documents are mounted explicitly in src/index.ts.
+      silenceWarnings: { oauthAuthServerConfig: true, openidConfig: true },
+      allowPublicClientPrelogin: true,
+      scopes: ["openid", "profile", "email", "offline_access", ...MCP_SCOPES],
+      validAudiences: [mcpResourceUrl],
+      grantTypes: ["authorization_code", "refresh_token"],
+      clientRegistrationDefaultScopes: [
+        "openid",
+        "profile",
+        "offline_access",
+        "avermate:read",
+      ],
+      clientRegistrationAllowedScopes: [
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+        ...MCP_SCOPES,
+      ],
+      // DCR was deprecated by MCP 2026-07-28 in favour of Client ID
+      // Metadata Documents. Better Auth 1.6.26 has no stable CIMD endpoint,
+      // so the transition is explicit and closed by default.
+      allowDynamicClientRegistration: env.MCP_ENABLE_DCR,
+      allowUnauthenticatedClientRegistration: env.MCP_ENABLE_DCR,
+      scopeExpirations: {
+        "avermate:delete": "15 minutes",
+        "avermate:admin": "10 minutes",
+        "avermate:social.manage": "30 minutes",
+        "avermate:social.moderate": "10 minutes",
+      },
     }),
   ],
 

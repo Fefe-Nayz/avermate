@@ -72,6 +72,60 @@ export const preferences = sqliteTable("preferences", {
   ...timestamps,
 });
 
+// ------------------------------------------------------------ managed presets
+
+/**
+ * The stable, public identity of a curriculum preset. Configuration itself is
+ * immutable and lives in `presetVersions`, so publishing an edit never changes
+ * the meaning of a version already attached to a school year.
+ */
+export const presetDefinitions = sqliteTable("preset_definitions", {
+  id: text().notNull().primaryKey(),
+  name: text().notNull(),
+  description: text().notNull().default(""),
+  /** JSON string array; tags are presentation metadata, not relational data. */
+  tags: text().notNull().default("[]"),
+  featured: integer({ mode: "boolean" }).notNull().default(false),
+  archived: integer({ mode: "boolean" }).notNull().default(false),
+  currentVersion: integer().notNull().default(1),
+  createdByUserId: text().references(() => users.id, {
+    onDelete: "set null",
+    onUpdate: "cascade",
+  }),
+  ...timestamps,
+});
+
+/** An immutable, validated JSON configuration published by an administrator. */
+export const presetVersions = sqliteTable(
+  "preset_versions",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("prev")),
+    presetId: text()
+      .notNull()
+      .references(() => presetDefinitions.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    version: integer().notNull(),
+    configuration: text().notNull(),
+    changeNote: text().notNull().default(""),
+    createdByUserId: text().references(() => users.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("preset_versions_number_unique").on(t.presetId, t.version),
+    index("preset_versions_preset_idx").on(t.presetId),
+  ],
+);
+
 // ----------------------------------------------------------------------- years
 
 export const years = sqliteTable(
@@ -103,6 +157,72 @@ export const years = sqliteTable(
     ...timestamps,
   },
   (t) => [index("years_user_id_idx").on(t.userId)],
+);
+
+/**
+ * One request record makes the multi-table onboarding write retry-safe. The
+ * same key always resolves to the same year and cannot be reused with another
+ * payload.
+ */
+export const yearSetupRequests = sqliteTable(
+  "year_setup_requests",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("ysetup")),
+    idempotencyKey: text().notNull(),
+    inputHash: text().notNull(),
+    yearId: text()
+      .notNull()
+      .references(() => years.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    userId: owner(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("year_setup_requests_user_key_unique").on(
+      t.userId,
+      t.idempotencyKey,
+    ),
+    index("year_setup_requests_year_idx").on(t.yearId),
+  ],
+);
+
+/**
+ * Tracks whether a year still follows a published preset version. `linked`
+ * years may be safely synchronized; `customized` years never receive a preset
+ * update until their owner explicitly reapplies one.
+ */
+export const yearPresetMemberships = sqliteTable(
+  "year_preset_memberships",
+  {
+    yearId: text()
+      .notNull()
+      .primaryKey()
+      .references(() => years.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    presetId: text()
+      .notNull()
+      .references(() => presetDefinitions.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+    appliedVersion: integer().notNull(),
+    /** "linked" | "customized" */
+    mode: text().notNull().default("linked"),
+    detachedReason: text(),
+    detachedAt: integer({ mode: "timestamp" }),
+    lastSyncedAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    userId: owner(),
+    ...timestamps,
+  },
+  (t) => [
+    index("year_preset_memberships_preset_idx").on(t.presetId),
+    index("year_preset_memberships_user_idx").on(t.userId),
+  ],
 );
 
 // --------------------------------------------------------------------- periods
@@ -157,6 +277,8 @@ export const subjects = sqliteTable(
     kind: text().notNull().default("subject"),
     isMain: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
+    /** Stable preset node identity; names and positions may change by version. */
+    presetNodeKey: text(),
 
     yearId: text()
       .notNull()
@@ -168,6 +290,10 @@ export const subjects = sqliteTable(
     index("subjects_year_id_idx").on(t.yearId),
     index("subjects_user_id_idx").on(t.userId),
     index("subjects_parent_id_idx").on(t.parentId),
+    uniqueIndex("subjects_year_preset_node_unique").on(
+      t.yearId,
+      t.presetNodeKey,
+    ),
   ],
 );
 
@@ -254,6 +380,8 @@ export const customAverages = sqliteTable(
     /** Shown in place of the general average on the dashboard. */
     isMain: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
+    /** Stable preset average identity across published versions. */
+    presetNodeKey: text(),
 
     yearId: text()
       .notNull()
@@ -261,7 +389,13 @@ export const customAverages = sqliteTable(
     userId: owner(),
     ...timestamps,
   },
-  (t) => [index("custom_averages_year_id_idx").on(t.yearId)],
+  (t) => [
+    index("custom_averages_year_id_idx").on(t.yearId),
+    uniqueIndex("custom_averages_year_preset_node_unique").on(
+      t.yearId,
+      t.presetNodeKey,
+    ),
+  ],
 );
 
 /**
@@ -461,13 +595,42 @@ export const feedback = sqliteTable(
     kind: text().notNull().default("other"),
     subject: text().notNull(),
     message: text().notNull(),
+    /** Automatic error details; never rendered outside the admin triage view. */
+    stack: text(),
+    errorDigest: text(),
+    route: text(),
+    /** Optional user-provided screenshot stored outside the database. */
+    attachmentUrl: text(),
     /** JSON: browser, viewport, route — whatever helps reproduce a bug. */
     context: text().notNull().default("{}"),
+    /** Automatic reports with the same server-computed fingerprint are grouped. */
+    fingerprint: text(),
+    /** Cross-user admin grouping key; never exposed outside admin triage. */
+    duplicateGroupKey: text(),
+    source: text().notNull().default("form"),
+    duplicateCount: integer().notNull().default(1),
     status: text().notNull().default("open"),
+    priority: text().notNull().default("normal"),
+    assignedToUserId: text().references(() => users.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    lastSeenAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    resolvedAt: integer({ mode: "timestamp" }),
+    /** Optimistic concurrency token for admin workflow mutations. */
+    revision: integer().notNull().default(1),
     userId: owner(),
     ...timestamps,
   },
-  (t) => [index("feedback_user_id_idx").on(t.userId)],
+  (t) => [
+    index("feedback_user_id_idx").on(t.userId),
+    uniqueIndex("feedback_fingerprint_unique").on(t.fingerprint),
+    index("feedback_duplicate_group_idx").on(t.duplicateGroupKey, t.lastSeenAt),
+    index("feedback_triage_idx").on(t.status, t.priority, t.lastSeenAt),
+    index("feedback_assignee_idx").on(t.assignedToUserId, t.status),
+  ],
 );
 
 // ------------------------------------------------------------------- relations

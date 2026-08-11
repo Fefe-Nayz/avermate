@@ -48,6 +48,7 @@ describe("presets", () => {
       for (const average of preset.averages) {
         const unknown = average.entries
           .map((entry) => entry.name)
+          .filter((name): name is string => Boolean(name))
           .filter((name) => !known.has(name));
         expect({ preset: preset.id, average: average.name, unknown }).toEqual({
           preset: preset.id,

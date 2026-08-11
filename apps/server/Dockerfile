@@ -21,5 +21,7 @@ WORKDIR /app/apps/server
 USER bun
 EXPOSE 5000/tcp
 
-# `push` is the fallback for a database that predates the migrations folder.
-ENTRYPOINT [ "sh", "-c", "bun run db:migrate || bun run db:push --force; exec bun run start" ]
+# A failed migration must stop the release. Falling back to a forced schema
+# push can hide a broken migration and mutate production outside the reviewed
+# migration history.
+ENTRYPOINT [ "sh", "-c", "bun run db:migrate && exec bun run start" ]

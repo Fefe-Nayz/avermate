@@ -1,9 +1,20 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { dashboardCards } from "../db/schema";
-import { protectedProcedure } from "../lib/orpc";
-import { requireYear } from "../lib/ownership";
+import { badRequest, protectedProcedure } from "../lib/orpc";
+import {
+  assertSameYear,
+  normalizeTargetReference,
+  type TargetKind,
+} from "../lib/domain-integrity";
+import {
+  requireCustomAverage,
+  requireDashboardCard,
+  requireGoal,
+  requireSubject,
+  requireYear,
+} from "../lib/ownership";
 import { CARD_METRICS, defaultCards } from "@avermate/core";
 
 const cardInput = z.object({
@@ -20,6 +31,33 @@ const cardInput = z.object({
   accent: z.string().trim().max(24).nullable().default(null),
   hidden: z.boolean().default(false),
 });
+
+async function validateCardScope(
+  userId: string,
+  yearId: string,
+  targetKind: TargetKind,
+  targetId: string | null | undefined,
+  goalId: string | null,
+): Promise<{ targetId: string | null; goalId: string | null }> {
+  const normalizedTarget = normalizeTargetReference(
+    targetKind,
+    targetId,
+    "Card target",
+  );
+  if (targetKind === "subject" && normalizedTarget) {
+    const subject = await requireSubject(userId, normalizedTarget);
+    assertSameYear("Card subject", yearId, subject.yearId);
+  }
+  if (targetKind === "custom" && normalizedTarget) {
+    const average = await requireCustomAverage(userId, normalizedTarget);
+    assertSameYear("Card average", yearId, average.yearId);
+  }
+  if (goalId) {
+    const goal = await requireGoal(userId, goalId);
+    assertSameYear("Card goal", yearId, goal.yearId);
+  }
+  return { targetId: normalizedTarget, goalId };
+}
 
 export const cardsRouter = {
   list: protectedProcedure
@@ -48,6 +86,13 @@ export const cardsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
+      const scope = await validateCardScope(
+        userId,
+        input.yearId,
+        input.targetKind,
+        input.targetId,
+        input.goalId,
+      );
 
       const existing = await db
         .select({ sortOrder: dashboardCards.sortOrder })
@@ -63,6 +108,7 @@ export const cardsRouter = {
         .insert(dashboardCards)
         .values({
           ...input,
+          ...scope,
           sortOrder: existing.reduce(
             (max, row) => Math.max(max, row.sortOrder + 1),
             0,
@@ -78,9 +124,31 @@ export const cardsRouter = {
     .handler(async ({ context, input }) => {
       const { cardId, ...patch } = input;
       const userId = context.session.user.id;
+      const existing = await requireDashboardCard(userId, cardId);
+      const targetKind = z
+        .enum(["general", "subject", "custom"])
+        .parse(patch.targetKind ?? existing.targetKind);
+      const changedKind =
+        patch.targetKind !== undefined &&
+        patch.targetKind !== existing.targetKind;
+      const targetId =
+        patch.targetId !== undefined
+          ? patch.targetId
+          : changedKind
+            ? null
+            : existing.targetId;
+      const goalId =
+        patch.goalId !== undefined ? patch.goalId : existing.goalId;
+      const scope = await validateCardScope(
+        userId,
+        existing.yearId,
+        targetKind,
+        targetId,
+        goalId,
+      );
       const [updated] = await db
         .update(dashboardCards)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({ ...patch, targetKind, ...scope, updatedAt: new Date() })
         .where(
           and(eq(dashboardCards.id, cardId), eq(dashboardCards.userId, userId)),
         )
@@ -89,21 +157,63 @@ export const cardsRouter = {
     }),
 
   reorder: protectedProcedure
-    .input(z.object({ cardIds: z.array(z.string()) }))
+    .input(z.object({ cardIds: z.array(z.string()).min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await Promise.all(
-        input.cardIds.map((id, index) =>
+      if (new Set(input.cardIds).size !== input.cardIds.length) {
+        badRequest("A card can only appear once in its order");
+      }
+      const selected = await db
+        .select()
+        .from(dashboardCards)
+        .where(
+          and(
+            eq(dashboardCards.userId, userId),
+            inArray(dashboardCards.id, input.cardIds),
+          ),
+        );
+      if (selected.length !== input.cardIds.length) {
+        badRequest("Every reordered card must belong to this account");
+      }
+      const first = selected[0];
+      if (!first) badRequest("At least one card is required");
+      if (
+        selected.some(
+          (card) =>
+            card.yearId !== first.yearId || card.surface !== first.surface,
+        )
+      ) {
+        badRequest("Every reordered card must share a year and surface");
+      }
+      const current = await db
+        .select({ id: dashboardCards.id })
+        .from(dashboardCards)
+        .where(
+          and(
+            eq(dashboardCards.userId, userId),
+            eq(dashboardCards.yearId, first.yearId),
+            eq(dashboardCards.surface, first.surface),
+          ),
+        )
+        .orderBy(asc(dashboardCards.sortOrder));
+      const requested = new Set(input.cardIds);
+      const orderedIds = [
+        ...input.cardIds,
+        ...current.map((card) => card.id).filter((id) => !requested.has(id)),
+      ];
+      const statements = orderedIds.map((id, index) =>
           db
             .update(dashboardCards)
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(
-              and(
-                eq(dashboardCards.id, id),
-                eq(dashboardCards.userId, userId),
-              ),
+              and(eq(dashboardCards.id, id), eq(dashboardCards.userId, userId)),
             ),
-        ),
+      );
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
       return { ok: true };
     }),
@@ -135,7 +245,7 @@ export const cardsRouter = {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
 
-      await db
+      const removeExisting = db
         .delete(dashboardCards)
         .where(
           and(
@@ -144,9 +254,12 @@ export const cardsRouter = {
           ),
         );
 
-      if (input.surface !== "overview") return [];
+      if (input.surface !== "overview") {
+        await removeExisting;
+        return [];
+      }
 
-      return db
+      const insertDefaults = db
         .insert(dashboardCards)
         .values(
           defaultCards().map((card) => ({
@@ -164,7 +277,17 @@ export const cardsRouter = {
             yearId: input.yearId,
             userId,
           })),
+        );
+      await db.batch([removeExisting, insertDefaults]);
+      return db
+        .select()
+        .from(dashboardCards)
+        .where(
+          and(
+            eq(dashboardCards.yearId, input.yearId),
+            eq(dashboardCards.surface, input.surface),
+          ),
         )
-        .returning();
+        .orderBy(asc(dashboardCards.sortOrder));
     }),
 };

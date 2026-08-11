@@ -93,6 +93,10 @@ export interface Year {
   passingRatio: number;
   /** Decimal places used when displaying averages. */
   decimals: number;
+  /** Explicit user order. Optional for imported/plain calculation fixtures. */
+  sortOrder?: number;
+  /** Archived years stay recoverable but leave the everyday year picker. */
+  archivedAt?: Date | null;
 }
 
 export interface CustomAverageEntry {

@@ -1,9 +1,20 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { goals } from "../db/schema";
-import { protectedProcedure } from "../lib/orpc";
-import { requireGoal, requireYear } from "../lib/ownership";
+import { badRequest, protectedProcedure } from "../lib/orpc";
+import {
+  assertSameYear,
+  normalizeTargetReference,
+  type TargetKind,
+} from "../lib/domain-integrity";
+import {
+  requireCustomAverage,
+  requireGoal,
+  requirePeriod,
+  requireSubject,
+  requireYear,
+} from "../lib/ownership";
 
 const goalInput = z.object({
   name: z.string().trim().min(1).max(96),
@@ -18,6 +29,33 @@ const goalInput = z.object({
   dueAt: z.coerce.date().nullable().default(null),
   isPinned: z.boolean().default(false),
 });
+
+async function validateGoalScope(
+  userId: string,
+  yearId: string,
+  kind: TargetKind,
+  referenceId: string | null | undefined,
+  periodId: string | null,
+): Promise<{ referenceId: string | null; periodId: string | null }> {
+  const normalizedReference = normalizeTargetReference(
+    kind,
+    referenceId,
+    "Goal",
+  );
+  if (kind === "subject" && normalizedReference) {
+    const subject = await requireSubject(userId, normalizedReference);
+    assertSameYear("Goal subject", yearId, subject.yearId);
+  }
+  if (kind === "custom" && normalizedReference) {
+    const average = await requireCustomAverage(userId, normalizedReference);
+    assertSameYear("Goal average", yearId, average.yearId);
+  }
+  if (periodId) {
+    const period = await requirePeriod(userId, periodId);
+    assertSameYear("Goal period", yearId, period.yearId);
+  }
+  return { referenceId: normalizedReference, periodId };
+}
 
 export const goalsRouter = {
   list: protectedProcedure
@@ -36,6 +74,13 @@ export const goalsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
+      const scope = await validateGoalScope(
+        userId,
+        input.yearId,
+        input.kind,
+        input.referenceId,
+        input.periodId,
+      );
 
       const existing = await db
         .select({ sortOrder: goals.sortOrder })
@@ -46,6 +91,7 @@ export const goalsRouter = {
         .insert(goals)
         .values({
           ...input,
+          ...scope,
           sortOrder: existing.reduce(
             (max, row) => Math.max(max, row.sortOrder + 1),
             0,
@@ -60,10 +106,31 @@ export const goalsRouter = {
     .input(goalInput.partial().extend({ goalId: z.string() }))
     .handler(async ({ context, input }) => {
       const { goalId, ...patch } = input;
-      await requireGoal(context.session.user.id, goalId);
+      const userId = context.session.user.id;
+      const existing = await requireGoal(userId, goalId);
+      const kind = z
+        .enum(["general", "subject", "custom"])
+        .parse(patch.kind ?? existing.kind);
+      const changedKind =
+        patch.kind !== undefined && patch.kind !== existing.kind;
+      const referenceId =
+        patch.referenceId !== undefined
+          ? patch.referenceId
+          : changedKind
+            ? null
+            : existing.referenceId;
+      const periodId =
+        patch.periodId !== undefined ? patch.periodId : existing.periodId;
+      const scope = await validateGoalScope(
+        userId,
+        existing.yearId,
+        kind,
+        referenceId,
+        periodId,
+      );
       const [updated] = await db
         .update(goals)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({ ...patch, kind, ...scope, updatedAt: new Date() })
         .where(eq(goals.id, goalId))
         .returning();
       return updated;
@@ -95,13 +162,44 @@ export const goalsRouter = {
     .input(z.object({ goalIds: z.array(z.string()).min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await Promise.all(
-        input.goalIds.map((id, index) =>
+      if (new Set(input.goalIds).size !== input.goalIds.length) {
+        badRequest("A goal can only appear once in its order");
+      }
+      const selected = await db
+        .select()
+        .from(goals)
+        .where(
+          and(eq(goals.userId, userId), inArray(goals.id, input.goalIds)),
+        );
+      if (selected.length !== input.goalIds.length) {
+        badRequest("Every reordered goal must belong to this account");
+      }
+      const first = selected[0];
+      if (!first) badRequest("At least one goal is required");
+      if (selected.some((goal) => goal.yearId !== first.yearId)) {
+        badRequest("Every reordered goal must belong to the same year");
+      }
+      const current = await db
+        .select({ id: goals.id })
+        .from(goals)
+        .where(and(eq(goals.userId, userId), eq(goals.yearId, first.yearId)))
+        .orderBy(asc(goals.sortOrder), asc(goals.createdAt));
+      const requested = new Set(input.goalIds);
+      const orderedIds = [
+        ...input.goalIds,
+        ...current.map((goal) => goal.id).filter((id) => !requested.has(id)),
+      ];
+      const statements = orderedIds.map((id, index) =>
           db
             .update(goals)
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(and(eq(goals.id, id), eq(goals.userId, userId))),
-        ),
+      );
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
       return { ok: true };
     }),

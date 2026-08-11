@@ -2,14 +2,25 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
+  accounts,
+  announcementViews,
+  announcements,
+  customAverageEntries,
   customAverages,
+  dashboardCards,
+  feedback,
+  gradeComponents,
   goals,
   grades,
+  periods,
   preferences,
   subjects,
+  users,
+  yearReviewViews,
   years,
 } from "../db/schema";
 import { protectedProcedure } from "../lib/orpc";
+import { exportSocialData } from "./social/account";
 
 /**
  * Account preferences.
@@ -24,19 +35,46 @@ const chartSettings = z.object({
   showTrend: z.boolean().default(false),
   trendSubdivisions: z.number().int().min(1).max(12).default(1),
   showPoints: z.boolean().default(true),
+  showSubSubjects: z.boolean().default(true),
 });
 
 const themeShape = z.object({
-  font: z.string().max(48).default("inter"),
-  headingFont: z.string().max(48).default("inherit"),
+  // Named choices stay short, but a migrated v1 theme can carry a complete,
+  // user-authored CSS font stack. The web renderer validates how it is used.
+  font: z.string().max(160).default("inter"),
+  headingFont: z.string().max(160).default("inherit"),
   radius: z.number().min(0).max(2).default(0.625),
 });
+
+const themePalette = z.record(z.string(), z.string());
+const modeAwareCustomTheme = z
+  .object({
+    light: themePalette.default({}),
+    dark: themePalette.default({}),
+  })
+  .strict();
+
+/**
+ * Older rewrite clients sent one flat palette. Accept it during the rollout
+ * and apply it to both modes; every response uses the lossless mode-aware
+ * shape so migrated v1 light/dark palettes remain distinct.
+ */
+const customThemeInput = z
+  .union([modeAwareCustomTheme, themePalette])
+  .transform((theme) =>
+    "light" in theme &&
+    "dark" in theme &&
+    typeof theme.light === "object" &&
+    typeof theme.dark === "object"
+      ? theme
+      : { light: theme, dark: theme },
+  );
 
 const preferencesInput = z.object({
   theme: z.enum(["system", "light", "dark"]),
   language: z.enum(["system", "en", "fr"]),
   themePreset: z.string().max(32),
-  customTheme: z.record(z.string(), z.string()),
+  customTheme: customThemeInput,
   themeShape,
   seasonalThemesEnabled: z.boolean(),
   seasonalTheme: z.string().max(32),
@@ -49,12 +87,13 @@ const preferencesInput = z.object({
 });
 
 export type Preferences = z.infer<typeof preferencesInput>;
+export type ModeAwareCustomTheme = Preferences["customTheme"];
 
 const DEFAULTS: Preferences = {
   theme: "system",
   language: "system",
   themePreset: "default",
-  customTheme: {},
+  customTheme: { light: {}, dark: {} },
   themeShape: { font: "inter", headingFont: "inherit", radius: 0.625 },
   seasonalThemesEnabled: true,
   seasonalTheme: "auto",
@@ -66,6 +105,7 @@ const DEFAULTS: Preferences = {
     showTrend: false,
     trendSubdivisions: 1,
     showPoints: true,
+    showSubSubjects: true,
   },
   unlockedThemes: [],
   seenCelebrations: [],
@@ -81,11 +121,14 @@ function parse<T>(raw: string, fallback: T): T {
 }
 
 function hydrate(row: typeof preferences.$inferSelect): Preferences {
+  const storedTheme = customThemeInput.safeParse(
+    parse<unknown>(row.customTheme, {}),
+  );
   return {
     theme: row.theme as Preferences["theme"],
     language: row.language as Preferences["language"],
     themePreset: row.themePreset,
-    customTheme: parse(row.customTheme, DEFAULTS.customTheme),
+    customTheme: storedTheme.success ? storedTheme.data : DEFAULTS.customTheme,
     themeShape: { ...DEFAULTS.themeShape, ...parse(row.themeShape, {}) },
     seasonalThemesEnabled: row.seasonalThemesEnabled,
     seasonalTheme: row.seasonalTheme,
@@ -223,26 +266,112 @@ export const preferencesRouter = {
       return { ok: true };
     }),
 
-  /** Everything the account holds, as one JSON document. */
+  /**
+   * A relationship-complete application export. Password hashes, OAuth
+   * tokens, sessions and verification secrets are intentionally never read.
+   */
   exportData: protectedProcedure.handler(async ({ context }) => {
     const userId = context.session.user.id;
-    const [yearRows, subjectRows, gradeRows, averageRows, goalRows] =
-      await Promise.all([
-        db.select().from(years).where(eq(years.userId, userId)),
-        db.select().from(subjects).where(eq(subjects.userId, userId)),
-        db.select().from(grades).where(eq(grades.userId, userId)),
-        db.select().from(customAverages).where(eq(customAverages.userId, userId)),
-        db.select().from(goals).where(eq(goals.userId, userId)),
-      ]);
+    const [
+      account,
+      providerRows,
+      preferenceRows,
+      yearRows,
+      periodRows,
+      subjectRows,
+      gradeRows,
+      componentRows,
+      averageRows,
+      averageEntryRows,
+      goalRows,
+      cardRows,
+      reviewViewRows,
+      announcementViewRows,
+      createdAnnouncementRows,
+      feedbackRows,
+      socialData,
+    ] = await Promise.all([
+      db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          avatarUrl: users.avatarUrl,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1),
+      db
+        .select({ providerId: accounts.providerId })
+        .from(accounts)
+        .where(eq(accounts.userId, userId)),
+      db.select().from(preferences).where(eq(preferences.userId, userId)),
+      db.select().from(years).where(eq(years.userId, userId)),
+      db.select().from(periods).where(eq(periods.userId, userId)),
+      db.select().from(subjects).where(eq(subjects.userId, userId)),
+      db.select().from(grades).where(eq(grades.userId, userId)),
+      db
+        .select()
+        .from(gradeComponents)
+        .where(eq(gradeComponents.userId, userId)),
+      db.select().from(customAverages).where(eq(customAverages.userId, userId)),
+      db
+        .select({ entry: customAverageEntries })
+        .from(customAverageEntries)
+        .innerJoin(
+          customAverages,
+          eq(customAverageEntries.averageId, customAverages.id),
+        )
+        .where(eq(customAverages.userId, userId)),
+      db.select().from(goals).where(eq(goals.userId, userId)),
+      db.select().from(dashboardCards).where(eq(dashboardCards.userId, userId)),
+      db
+        .select()
+        .from(yearReviewViews)
+        .where(eq(yearReviewViews.userId, userId)),
+      db
+        .select()
+        .from(announcementViews)
+        .where(eq(announcementViews.userId, userId)),
+      db
+        .select()
+        .from(announcements)
+        .where(eq(announcements.createdByUserId, userId)),
+      db.select().from(feedback).where(eq(feedback.userId, userId)),
+      exportSocialData(userId),
+    ]);
 
     return {
       exportedAt: new Date().toISOString(),
-      version: 2,
+      version: 4,
+      account: account[0] ?? null,
+      authentication: {
+        providers: [...new Set(providerRows.map((row) => row.providerId))],
+        excludedForSecurity: [
+          "passwordHashes",
+          "oauthTokens",
+          "sessions",
+          "verificationSecrets",
+        ],
+      },
+      preferences: preferenceRows[0] ? hydrate(preferenceRows[0]) : DEFAULTS,
       years: yearRows,
+      periods: periodRows,
       subjects: subjectRows,
       grades: gradeRows,
+      gradeComponents: componentRows,
       customAverages: averageRows,
+      customAverageEntries: averageEntryRows.map((row) => row.entry),
       goals: goalRows,
+      dashboardCards: cardRows,
+      yearReviewViews: reviewViewRows,
+      announcementViews: announcementViewRows,
+      createdAnnouncements: createdAnnouncementRows,
+      feedback: feedbackRows,
+      social: socialData,
     };
   }),
 };

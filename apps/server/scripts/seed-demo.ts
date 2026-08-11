@@ -28,12 +28,30 @@ import {
   gradeComponents,
   grades,
   periods,
+  friendships,
+  groupMemberConsentFields,
+  groupMemberConsents,
+  groupMemberships,
+  groupPolicyFields,
+  groupPolicyVersions,
+  socialEligibility,
+  socialFeatureConsents,
+  socialFeatureFlags,
+  socialGroups,
+  socialProfileGrants,
+  socialProfiles,
   subjects,
   users,
   years,
 } from "../src/db/schema";
 import { auth } from "../src/lib/auth";
 import { newId } from "../src/lib/id";
+import {
+  SOCIAL_FEATURE_KEY,
+  SOCIAL_POLICY_VERSION,
+  canonicalPair,
+  groupPolicyDigest,
+} from "../src/lib/social-policy";
 import { defaultCards } from "@avermate/core";
 
 function argument(flag: string): string | undefined {
@@ -44,6 +62,9 @@ function argument(flag: string): string | undefined {
 const ONLY_BLANK = process.argv.includes("--blank");
 const ONLY_FULL = process.argv.includes("--full");
 const PASSWORD = argument("--password") ?? "demo-account-2026";
+const SOCIAL_DEMO_ENABLED =
+  process.env.SOCIAL_DEMO_SEED_ENABLED === "true" &&
+  process.env.NODE_ENV !== "production";
 
 /** Wipe and recreate, so re-running always lands on the same starting point. */
 async function account(email: string, name: string) {
@@ -147,17 +168,57 @@ async function seedFull(email: string, name: string) {
   const periodRows = await db
     .insert(periods)
     .values([
-      { name: "Trimestre 1", startAt: at(0), endAt: at(1 / 3), isCumulative: false, sortOrder: 0, yearId: year.id, userId: user.id },
-      { name: "Trimestre 2", startAt: at(1 / 3), endAt: at(2 / 3), isCumulative: false, sortOrder: 1, yearId: year.id, userId: user.id },
-      { name: "Trimestre 3", startAt: at(2 / 3), endAt: at(1), isCumulative: false, sortOrder: 2, yearId: year.id, userId: user.id },
+      {
+        name: "Trimestre 1",
+        startAt: at(0),
+        endAt: at(1 / 3),
+        isCumulative: false,
+        sortOrder: 0,
+        yearId: year.id,
+        userId: user.id,
+      },
+      {
+        name: "Trimestre 2",
+        startAt: at(1 / 3),
+        endAt: at(2 / 3),
+        isCumulative: false,
+        sortOrder: 1,
+        yearId: year.id,
+        userId: user.id,
+      },
+      {
+        name: "Trimestre 3",
+        startAt: at(2 / 3),
+        endAt: at(1),
+        isCumulative: false,
+        sortOrder: 2,
+        yearId: year.id,
+        userId: user.id,
+      },
     ])
     .returning();
 
   // The previous year uses cumulative semesters, so both period behaviours
   // exist inside one account.
   await db.insert(periods).values([
-    { name: "Semestre 1", startAt: atPast(0), endAt: atPast(0.5), isCumulative: false, sortOrder: 0, yearId: past.id, userId: user.id },
-    { name: "Semestre 2", startAt: atPast(0.5), endAt: atPast(1), isCumulative: true, sortOrder: 1, yearId: past.id, userId: user.id },
+    {
+      name: "Semestre 1",
+      startAt: atPast(0),
+      endAt: atPast(0.5),
+      isCumulative: false,
+      sortOrder: 0,
+      yearId: past.id,
+      userId: user.id,
+    },
+    {
+      name: "Semestre 2",
+      startAt: atPast(0.5),
+      endAt: atPast(1),
+      isCumulative: true,
+      sortOrder: 1,
+      yearId: past.id,
+      userId: user.id,
+    },
   ]);
 
   const science = newId("sub");
@@ -175,23 +236,127 @@ async function seedFull(email: string, name: string) {
   const music = newId("sub");
 
   const tree: Node[] = [
-    { id: science, name: "Sciences", shortName: "Sci.", parentId: null, coefficient: 1, kind: "category", isMain: false },
-    { id: maths, name: "Mathématiques", shortName: "Maths", parentId: science, coefficient: 7, kind: "subject", isMain: true },
-    { id: physics, name: "Physique-Chimie", shortName: "PC", parentId: science, coefficient: 5, kind: "subject", isMain: true },
-    { id: biology, name: "SVT", shortName: null, parentId: science, coefficient: 3, kind: "subject", isMain: false },
+    {
+      id: science,
+      name: "Sciences",
+      shortName: "Sci.",
+      parentId: null,
+      coefficient: 1,
+      kind: "category",
+      isMain: false,
+    },
+    {
+      id: maths,
+      name: "Mathématiques",
+      shortName: "Maths",
+      parentId: science,
+      coefficient: 7,
+      kind: "subject",
+      isMain: true,
+    },
+    {
+      id: physics,
+      name: "Physique-Chimie",
+      shortName: "PC",
+      parentId: science,
+      coefficient: 5,
+      kind: "subject",
+      isMain: true,
+    },
+    {
+      id: biology,
+      name: "SVT",
+      shortName: null,
+      parentId: science,
+      coefficient: 3,
+      kind: "subject",
+      isMain: false,
+    },
 
-    { id: humanities, name: "Humanités", shortName: "Hum.", parentId: null, coefficient: 1, kind: "category", isMain: false },
+    {
+      id: humanities,
+      name: "Humanités",
+      shortName: "Hum.",
+      parentId: null,
+      coefficient: 1,
+      kind: "category",
+      isMain: false,
+    },
     // Three levels deep: a subject whose own children are weighed inside it.
-    { id: french, name: "Français", shortName: "Fr.", parentId: humanities, coefficient: 4, kind: "subject", isMain: true },
-    { id: frenchWritten, name: "Français — Écrit", shortName: "Fr. écrit", parentId: french, coefficient: 3, kind: "subject", isMain: false },
-    { id: frenchOral, name: "Français — Oral", shortName: "Fr. oral", parentId: french, coefficient: 1, kind: "subject", isMain: false },
-    { id: history, name: "Histoire-Géographie", shortName: "HG", parentId: humanities, coefficient: 3, kind: "subject", isMain: false },
+    {
+      id: french,
+      name: "Français",
+      shortName: "Fr.",
+      parentId: humanities,
+      coefficient: 4,
+      kind: "subject",
+      isMain: true,
+    },
+    {
+      id: frenchWritten,
+      name: "Français — Écrit",
+      shortName: "Fr. écrit",
+      parentId: french,
+      coefficient: 3,
+      kind: "subject",
+      isMain: false,
+    },
+    {
+      id: frenchOral,
+      name: "Français — Oral",
+      shortName: "Fr. oral",
+      parentId: french,
+      coefficient: 1,
+      kind: "subject",
+      isMain: false,
+    },
+    {
+      id: history,
+      name: "Histoire-Géographie",
+      shortName: "HG",
+      parentId: humanities,
+      coefficient: 3,
+      kind: "subject",
+      isMain: false,
+    },
 
-    { id: english, name: "Anglais", shortName: "Ang.", parentId: null, coefficient: 3, kind: "subject", isMain: true },
-    { id: spanish, name: "Espagnol", shortName: "Esp.", parentId: null, coefficient: 2, kind: "subject", isMain: false },
-    { id: sport, name: "Sport", shortName: "EPS", parentId: null, coefficient: 1, kind: "subject", isMain: false },
+    {
+      id: english,
+      name: "Anglais",
+      shortName: "Ang.",
+      parentId: null,
+      coefficient: 3,
+      kind: "subject",
+      isMain: true,
+    },
+    {
+      id: spanish,
+      name: "Espagnol",
+      shortName: "Esp.",
+      parentId: null,
+      coefficient: 2,
+      kind: "subject",
+      isMain: false,
+    },
+    {
+      id: sport,
+      name: "Sport",
+      shortName: "EPS",
+      parentId: null,
+      coefficient: 1,
+      kind: "subject",
+      isMain: false,
+    },
     // Deliberately empty: the "no grade yet" states have to be reachable.
-    { id: music, name: "Musique", shortName: null, parentId: null, coefficient: 1, kind: "subject", isMain: false },
+    {
+      id: music,
+      name: "Musique",
+      shortName: null,
+      parentId: null,
+      coefficient: 1,
+      kind: "subject",
+      isMain: false,
+    },
   ];
 
   await db.insert(subjects).values(
@@ -210,9 +375,42 @@ async function seedFull(email: string, name: string) {
   const pastEnglish = newId("sub");
 
   await db.insert(subjects).values([
-    { id: pastMaths, name: "Mathématiques", shortName: "Maths", parentId: null, coefficient: 5, kind: "subject" as const, isMain: true, sortOrder: 0, yearId: past.id, userId: user.id },
-    { id: pastFrench, name: "Français", shortName: "Fr.", parentId: null, coefficient: 4, kind: "subject" as const, isMain: true, sortOrder: 1, yearId: past.id, userId: user.id },
-    { id: pastEnglish, name: "Anglais", shortName: "Ang.", parentId: null, coefficient: 3, kind: "subject" as const, isMain: false, sortOrder: 2, yearId: past.id, userId: user.id },
+    {
+      id: pastMaths,
+      name: "Mathématiques",
+      shortName: "Maths",
+      parentId: null,
+      coefficient: 5,
+      kind: "subject" as const,
+      isMain: true,
+      sortOrder: 0,
+      yearId: past.id,
+      userId: user.id,
+    },
+    {
+      id: pastFrench,
+      name: "Français",
+      shortName: "Fr.",
+      parentId: null,
+      coefficient: 4,
+      kind: "subject" as const,
+      isMain: true,
+      sortOrder: 1,
+      yearId: past.id,
+      userId: user.id,
+    },
+    {
+      id: pastEnglish,
+      name: "Anglais",
+      shortName: "Ang.",
+      parentId: null,
+      coefficient: 3,
+      kind: "subject" as const,
+      isMain: false,
+      sortOrder: 2,
+      yearId: past.id,
+      userId: user.id,
+    },
   ]);
 
   const plan: Entry[] = [
@@ -270,22 +468,24 @@ async function seedFull(email: string, name: string) {
   const gradeRows = await db
     .insert(grades)
     .values(
-      plan.map(([subjectId, gradeName, value, outOf, fraction, coefficient]) => {
-        const passedAt = at(fraction);
-        return {
-          name: gradeName,
-          value,
-          outOf,
-          coefficient: coefficient ?? 1,
-          note: notes[gradeName] ?? null,
-          isComposite: false,
-          passedAt,
-          subjectId,
-          periodId: periodFor(passedAt),
-          yearId: year.id,
-          userId: user.id,
-        };
-      }),
+      plan.map(
+        ([subjectId, gradeName, value, outOf, fraction, coefficient]) => {
+          const passedAt = at(fraction);
+          return {
+            name: gradeName,
+            value,
+            outOf,
+            coefficient: coefficient ?? 1,
+            note: notes[gradeName] ?? null,
+            isComposite: false,
+            passedAt,
+            subjectId,
+            periodId: periodFor(passedAt),
+            yearId: year.id,
+            userId: user.id,
+          };
+        },
+      ),
     )
     .returning();
 
@@ -318,7 +518,10 @@ async function seedFull(email: string, name: string) {
   ];
 
   for (const composite of composites) {
-    const total = composite.parts.reduce((sum, [, , , weight]) => sum + weight, 0);
+    const total = composite.parts.reduce(
+      (sum, [, , , weight]) => sum + weight,
+      0,
+    );
     const weighted = composite.parts.reduce(
       (sum, [, value, outOf, weight]) => sum + (value / outOf) * weight,
       0,
@@ -407,18 +610,48 @@ async function seedFull(email: string, name: string) {
 
   if (written) {
     await db.insert(customAverageEntries).values([
-      { averageId: written.id, subjectId: maths, coefficient: 1, includeChildren: false },
-      { averageId: written.id, subjectId: physics, coefficient: 1, includeChildren: false },
-      { averageId: written.id, subjectId: frenchWritten, coefficient: 1, includeChildren: false },
+      {
+        averageId: written.id,
+        subjectId: maths,
+        coefficient: 1,
+        includeChildren: false,
+      },
+      {
+        averageId: written.id,
+        subjectId: physics,
+        coefficient: 1,
+        includeChildren: false,
+      },
+      {
+        averageId: written.id,
+        subjectId: frenchWritten,
+        coefficient: 1,
+        includeChildren: false,
+      },
     ]);
   }
 
   if (scientific) {
     await db.insert(customAverageEntries).values([
       // Weighted differently from the real tree, which is the point of these.
-      { averageId: scientific.id, subjectId: maths, coefficient: 4, includeChildren: false },
-      { averageId: scientific.id, subjectId: physics, coefficient: 3, includeChildren: false },
-      { averageId: scientific.id, subjectId: biology, coefficient: 2, includeChildren: false },
+      {
+        averageId: scientific.id,
+        subjectId: maths,
+        coefficient: 4,
+        includeChildren: false,
+      },
+      {
+        averageId: scientific.id,
+        subjectId: physics,
+        coefficient: 3,
+        includeChildren: false,
+      },
+      {
+        averageId: scientific.id,
+        subjectId: biology,
+        coefficient: 2,
+        includeChildren: false,
+      },
     ]);
   }
 
@@ -699,6 +932,171 @@ async function seedFull(email: string, name: string) {
   console.info(
     `  2 years · ${tree.length} subjects · ${gradeRows.length + composites.length} grades · ${goalRows.length} goals`,
   );
+  return { user, year };
+}
+
+async function seedSocialDemo(primary: Awaited<ReturnType<typeof seedFull>>) {
+  const peer = await account("social-peer@avermate.fr", "Alex Demo");
+  const now = new Date();
+  const peerStartsAt = new Date(primary.year.startsAt);
+  const peerEndsAt = new Date(primary.year.endsAt);
+  const [peerYear] = await db
+    .insert(years)
+    .values({
+      name: primary.year.name,
+      startsAt: peerStartsAt,
+      endsAt: peerEndsAt,
+      scale: 20,
+      defaultOutOf: 20,
+      passingRatio: 0.5,
+      decimals: 2,
+      userId: peer.id,
+    })
+    .returning();
+  if (!peerYear) throw new Error("The social demo peer year was not created");
+  const [peerSubject] = await db
+    .insert(subjects)
+    .values({
+      name: "Matière de démonstration",
+      yearId: peerYear.id,
+      userId: peer.id,
+    })
+    .returning();
+  if (!peerSubject)
+    throw new Error("The social demo peer subject was not created");
+  await db.insert(grades).values({
+    name: "Résultat de démonstration",
+    value: 14,
+    outOf: 20,
+    coefficient: 1,
+    passedAt: new Date(
+      peerStartsAt.getTime() +
+        (peerEndsAt.getTime() - peerStartsAt.getTime()) / 2,
+    ),
+    subjectId: peerSubject.id,
+    yearId: peerYear.id,
+    userId: peer.id,
+  });
+
+  await db
+    .insert(socialFeatureFlags)
+    .values({ key: SOCIAL_FEATURE_KEY, enabled: true })
+    .onConflictDoUpdate({
+      target: socialFeatureFlags.key,
+      set: { enabled: true, updatedAt: now },
+    });
+  for (const [user, handle] of [
+    [primary.user, "camille-demo"],
+    [peer, "alex-demo"],
+  ] as const) {
+    await db.insert(socialEligibility).values({
+      userId: user.id,
+      ageBand: "15to17",
+      assuranceLevel: "self_declared",
+      verifiedAt: now,
+    });
+    await db.insert(socialFeatureConsents).values({
+      userId: user.id,
+      policyVersion: SOCIAL_POLICY_VERSION,
+      actorType: "user",
+      event: "granted",
+      channel: "web",
+    });
+    await db.insert(socialProfiles).values({
+      userId: user.id,
+      status: "active",
+      discovery: "exact_handle",
+      handle,
+      displayName: user.name,
+      educationBand: "high_school",
+    });
+    await db.insert(socialProfileGrants).values({
+      userId: user.id,
+      fieldKey: "displayName",
+      audience: "friends",
+      audienceId: "",
+    });
+  }
+  const [low, high] = canonicalPair(primary.user.id, peer.id);
+  await db.insert(friendships).values({ userLowId: low, userHighId: high });
+
+  const policyInput = {
+    purpose: "Comparer des tendances dérivées dans la démonstration",
+    audienceDescription: "Deux comptes de démonstration auto-déclarés",
+    window: "current_academic_year" as const,
+    rankingsEnabled: false,
+    fields: [
+      {
+        fieldKey: "normalizedAverage" as const,
+        required: false,
+        exposure: "aggregate_only" as const,
+      },
+    ],
+  };
+  const digest = groupPolicyDigest(policyInput);
+  const [group] = await db
+    .insert(socialGroups)
+    .values({
+      ownerUserId: primary.user.id,
+      type: "study_group",
+      name: "Groupe de démonstration",
+      description: "Les métriques restent masquées sous le seuil k=5.",
+      currentPolicyVersion: 1,
+    })
+    .returning();
+  if (!group) throw new Error("The social demo group was not created");
+  const [policy] = await db
+    .insert(groupPolicyVersions)
+    .values({
+      groupId: group.id,
+      version: 1,
+      purpose: policyInput.purpose,
+      audienceDescription: policyInput.audienceDescription,
+      window: policyInput.window,
+      digest,
+      rankingsEnabled: false,
+      createdByUserId: primary.user.id,
+    })
+    .returning();
+  if (!policy) throw new Error("The social demo policy was not created");
+  await db.insert(groupPolicyFields).values({
+    policyVersionId: policy.id,
+    ...policyInput.fields[0],
+  });
+  for (const [user, sharedYear, role] of [
+    [primary.user, primary.year, "owner"],
+    [peer, peerYear, "member"],
+  ] as const) {
+    await db.insert(groupMemberships).values({
+      groupId: group.id,
+      userId: user.id,
+      role,
+      state: "active",
+      alias: user.name,
+      sharedYearId: sharedYear.id,
+      joinedAt: now,
+    });
+    const [consent] = await db
+      .insert(groupMemberConsents)
+      .values({
+        groupId: group.id,
+        userId: user.id,
+        policyVersion: 1,
+        status: "accepted",
+        policyDigest: digest,
+        acceptedAt: now,
+        channel: "web",
+      })
+      .returning();
+    if (!consent) throw new Error("The social demo consent was not created");
+    await db.insert(groupMemberConsentFields).values({
+      consentId: consent.id,
+      fieldKey: "normalizedAverage",
+    });
+  }
+  console.info(
+    "Social demo: 2 eligible profiles · friendship · private group · k-threshold suppression",
+  );
 }
 
 // ---------------------------------------------------------------- the blank
@@ -713,10 +1111,11 @@ async function main() {
   const both = !ONLY_BLANK && !ONLY_FULL;
 
   if (both || ONLY_FULL) {
-    await seedFull(
+    const full = await seedFull(
       argument("--email") ?? "demo@avermate.fr",
       argument("--name") ?? "Camille Demo",
     );
+    if (SOCIAL_DEMO_ENABLED) await seedSocialDemo(full);
   }
 
   if (both || ONLY_BLANK) {

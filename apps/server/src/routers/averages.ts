@@ -1,9 +1,16 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { customAverageEntries, customAverages } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
-import { requireCustomAverage, requireYear } from "../lib/ownership";
+import { assertSameYear } from "../lib/domain-integrity";
+import { newId } from "../lib/id";
+import { detachYearPresetStatement } from "../lib/preset-membership";
+import {
+  requireCustomAverage,
+  requireSubject,
+  requireYear,
+} from "../lib/ownership";
 
 const entryInput = z.object({
   subjectId: z.string(),
@@ -16,6 +23,24 @@ const averageInput = z.object({
   isMain: z.boolean().default(false),
   entries: z.array(entryInput).min(1).max(200),
 });
+
+async function assertEntriesBelongToYear(
+  userId: string,
+  yearId: string,
+  entries: readonly z.infer<typeof entryInput>[],
+): Promise<void> {
+  const uniqueIds = new Set(entries.map((entry) => entry.subjectId));
+  if (uniqueIds.size !== entries.length) {
+    badRequest("A subject can only appear once in a custom average");
+  }
+
+  const referencedSubjects = await Promise.all(
+    entries.map((entry) => requireSubject(userId, entry.subjectId)),
+  );
+  for (const subject of referencedSubjects) {
+    assertSameYear("Average subject", yearId, subject.yearId);
+  }
+}
 
 async function withEntries(averageId: string) {
   const [average] = await db
@@ -31,8 +56,8 @@ async function withEntries(averageId: string) {
 }
 
 /** Only one average can stand in for the general one on the dashboard. */
-async function demoteOthers(yearId: string, keepId: string) {
-  await db
+function demoteOthers(yearId: string, keepId: string) {
+  return db
     .update(customAverages)
     .set({ isMain: false, updatedAt: new Date() })
     .where(
@@ -80,15 +105,16 @@ export const averagesRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
+      await assertEntriesBelongToYear(userId, input.yearId, input.entries);
 
       const existing = await db
         .select({ sortOrder: customAverages.sortOrder })
         .from(customAverages)
         .where(eq(customAverages.yearId, input.yearId));
 
-      const [created] = await db
-        .insert(customAverages)
-        .values({
+      const averageId = newId("avg");
+      const insertAverage = db.insert(customAverages).values({
+          id: averageId,
           name: input.name,
           isMain: input.isMain,
           sortOrder: existing.reduce(
@@ -97,16 +123,29 @@ export const averagesRouter = {
           ),
           yearId: input.yearId,
           userId,
-        })
-        .returning();
-      if (!created) badRequest("The average could not be created");
-
-      await db.insert(customAverageEntries).values(
-        input.entries.map((entry) => ({ ...entry, averageId: created.id })),
+        });
+      const insertEntries = db.insert(customAverageEntries).values(
+        input.entries.map((entry) => ({ ...entry, averageId })),
       );
-      if (input.isMain) await demoteOthers(input.yearId, created.id);
+      const demote = input.isMain
+        ? [demoteOthers(input.yearId, averageId)]
+        : [];
+      const statements = [
+        insertAverage,
+        insertEntries,
+        ...demote,
+        detachYearPresetStatement(userId, input.yearId, "average_created"),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
 
-      return withEntries(created.id);
+      const created = await withEntries(averageId);
+      if (!created) badRequest("The average could not be created");
+      return created;
     }),
 
   update: protectedProcedure
@@ -116,23 +155,41 @@ export const averagesRouter = {
       const { averageId, entries, ...patch } = input;
       const existing = await requireCustomAverage(userId, averageId);
 
-      await db
+      if (entries) {
+        await assertEntriesBelongToYear(userId, existing.yearId, entries);
+      }
+
+      const updateAverage = db
         .update(customAverages)
         .set({ ...patch, updatedAt: new Date() })
         .where(eq(customAverages.id, averageId));
 
-      if (entries) {
-        await db
-          .delete(customAverageEntries)
-          .where(eq(customAverageEntries.averageId, averageId));
-        if (entries.length > 0) {
-          await db
-            .insert(customAverageEntries)
-            .values(entries.map((entry) => ({ ...entry, averageId })));
-        }
-      }
+      const replaceEntries = entries
+        ? [
+            db
+              .delete(customAverageEntries)
+              .where(eq(customAverageEntries.averageId, averageId)),
+            db
+              .insert(customAverageEntries)
+              .values(entries.map((entry) => ({ ...entry, averageId }))),
+          ]
+        : [];
+      const demote = patch.isMain
+        ? [demoteOthers(existing.yearId, averageId)]
+        : [];
+      const statements = [
+        updateAverage,
+        ...replaceEntries,
+        ...demote,
+        detachYearPresetStatement(userId, existing.yearId, "average_updated"),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
 
-      if (patch.isMain) await demoteOthers(existing.yearId, averageId);
       return withEntries(averageId);
     }),
 
@@ -140,8 +197,22 @@ export const averagesRouter = {
     .input(z.object({ averageIds: z.array(z.string()).min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await Promise.all(
-        input.averageIds.map((id, index) =>
+      if (new Set(input.averageIds).size !== input.averageIds.length) {
+        badRequest("An average can only appear once in its order");
+      }
+      const owned = await db
+        .select({ id: customAverages.id, yearId: customAverages.yearId })
+        .from(customAverages)
+        .where(and(eq(customAverages.userId, userId), inArray(customAverages.id, input.averageIds)));
+      if (owned.length !== input.averageIds.length) {
+        badRequest("Every reordered average must belong to this account");
+      }
+      const yearId = owned[0]?.yearId;
+      if (!yearId || owned.some((average) => average.yearId !== yearId)) {
+        badRequest("Every reordered average must belong to the same year");
+      }
+      const statements = [
+        ...input.averageIds.map((id, index) =>
           db
             .update(customAverages)
             .set({ sortOrder: index, updatedAt: new Date() })
@@ -149,6 +220,13 @@ export const averagesRouter = {
               and(eq(customAverages.id, id), eq(customAverages.userId, userId)),
             ),
         ),
+        detachYearPresetStatement(userId, yearId, "average_reordered"),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
       return { ok: true };
     }),
@@ -156,10 +234,12 @@ export const averagesRouter = {
   delete: protectedProcedure
     .input(z.object({ averageId: z.string() }))
     .handler(async ({ context, input }) => {
-      await requireCustomAverage(context.session.user.id, input.averageId);
-      await db
-        .delete(customAverages)
-        .where(eq(customAverages.id, input.averageId));
+      const userId = context.session.user.id;
+      const existing = await requireCustomAverage(userId, input.averageId);
+      await db.batch([
+        db.delete(customAverages).where(eq(customAverages.id, input.averageId)),
+        detachYearPresetStatement(userId, existing.yearId, "average_deleted"),
+      ]);
       return { ok: true };
     }),
 };

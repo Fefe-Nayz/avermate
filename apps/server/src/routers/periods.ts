@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { periods } from "../db/schema";
@@ -76,13 +76,46 @@ export const periodsRouter = {
     .input(z.object({ periodIds: z.array(z.string()).min(1) }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await Promise.all(
-        input.periodIds.map((id, index) =>
+      if (new Set(input.periodIds).size !== input.periodIds.length) {
+        badRequest("A period can only appear once in its order");
+      }
+      const selected = await db
+        .select()
+        .from(periods)
+        .where(
+          and(eq(periods.userId, userId), inArray(periods.id, input.periodIds)),
+        );
+      if (selected.length !== input.periodIds.length) {
+        badRequest("Every reordered period must belong to this account");
+      }
+      const first = selected[0];
+      if (!first) badRequest("At least one period is required");
+      if (selected.some((period) => period.yearId !== first.yearId)) {
+        badRequest("Every reordered period must belong to the same year");
+      }
+      const current = await db
+        .select({ id: periods.id })
+        .from(periods)
+        .where(
+          and(eq(periods.userId, userId), eq(periods.yearId, first.yearId)),
+        )
+        .orderBy(asc(periods.sortOrder), asc(periods.startAt));
+      const requested = new Set(input.periodIds);
+      const orderedIds = [
+        ...input.periodIds,
+        ...current.map((period) => period.id).filter((id) => !requested.has(id)),
+      ];
+      const statements = orderedIds.map((id, index) =>
           db
             .update(periods)
             .set({ sortOrder: index, updatedAt: new Date() })
             .where(and(eq(periods.id, id), eq(periods.userId, userId))),
-        ),
+      );
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
       return { ok: true };
     }),
@@ -106,7 +139,9 @@ export const periodsRouter = {
     .input(
       z.object({
         yearId: z.string(),
-        periods: z.array(periodInput).max(12),
+        periods: z
+          .array(periodInput.extend({ periodId: z.string().optional() }))
+          .max(12),
       }),
     )
     .handler(async ({ context, input }) => {
@@ -119,19 +154,86 @@ export const periodsRouter = {
         }
       }
 
-      await db.delete(periods).where(eq(periods.yearId, input.yearId));
-      if (input.periods.length === 0) return [];
+      const requestedIds = input.periods.flatMap((period) =>
+        period.periodId ? [period.periodId] : [],
+      );
+      if (new Set(requestedIds).size !== requestedIds.length) {
+        badRequest("A period cannot appear more than once");
+      }
+
+      if (requestedIds.length > 0) {
+        const owned = await db
+          .select({ id: periods.id })
+          .from(periods)
+          .where(
+            and(
+              eq(periods.userId, userId),
+              eq(periods.yearId, input.yearId),
+              inArray(periods.id, requestedIds),
+            ),
+          );
+        if (owned.length !== requestedIds.length) {
+          badRequest("Every retained period must belong to this year");
+        }
+      }
+
+      const deleteRemoved = db.delete(periods).where(
+        requestedIds.length === 0
+          ? eq(periods.yearId, input.yearId)
+          : and(
+              eq(periods.yearId, input.yearId),
+              notInArray(periods.id, requestedIds),
+            ),
+      );
+      const updates = input.periods.flatMap(
+        ({ periodId, ...period }, index) =>
+          periodId
+            ? [
+                db
+                  .update(periods)
+                  .set({ ...period, sortOrder: index, updatedAt: new Date() })
+                  .where(
+                    and(
+                      eq(periods.id, periodId),
+                      eq(periods.userId, userId),
+                      eq(periods.yearId, input.yearId),
+                    ),
+                  ),
+              ]
+            : [],
+      );
+      const additions = input.periods.flatMap(
+        ({ periodId, ...period }, index) =>
+          periodId
+            ? []
+            : [
+                {
+                  ...period,
+                  sortOrder: index,
+                  yearId: input.yearId,
+                  userId,
+                },
+              ],
+      );
+      const insertAdditions =
+        additions.length > 0 ? [db.insert(periods).values(additions)] : [];
+      const statements = [deleteRemoved, ...updates, ...insertAdditions];
+
+      // libSQL batches are atomic and, unlike opening a transaction on a
+      // `file::memory:` test database, stay on the client's existing
+      // connection. That makes the production and integration-test behavior
+      // identical while preserving grade foreign keys for retained rows.
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
 
       return db
-        .insert(periods)
-        .values(
-          input.periods.map((period, index) => ({
-            ...period,
-            sortOrder: index,
-            yearId: input.yearId,
-            userId,
-          })),
-        )
-        .returning();
+        .select()
+        .from(periods)
+        .where(eq(periods.yearId, input.yearId))
+        .orderBy(asc(periods.sortOrder), asc(periods.startAt));
     }),
 };

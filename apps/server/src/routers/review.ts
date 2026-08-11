@@ -1,10 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { grades, subjects, yearReviewViews, years } from "../db/schema";
+import { grades, yearReviewViews, years } from "../db/schema";
 import { protectedProcedure } from "../lib/orpc";
 import { requireYear } from "../lib/ownership";
-import { SubjectGraph } from "@avermate/core";
 
 /**
  * Year in review.
@@ -18,52 +17,12 @@ import { SubjectGraph } from "@avermate/core";
 /** Enough of a year to be worth telling a story about. */
 const MINIMUM_GRADES = 5;
 
-async function generalRatioFor(yearId: string): Promise<number | null> {
-  const [subjectRows, gradeRows] = await Promise.all([
-    db.select().from(subjects).where(eq(subjects.yearId, yearId)),
-    db.select().from(grades).where(eq(grades.yearId, yearId)),
-  ]);
-
-  const gradesBySubject = new Map<string, typeof gradeRows>();
-  for (const grade of gradeRows) {
-    const list = gradesBySubject.get(grade.subjectId);
-    if (list) list.push(grade);
-    else gradesBySubject.set(grade.subjectId, [grade]);
-  }
-
-  const graph = new SubjectGraph(
-    subjectRows.map((subject) => ({
-      id: subject.id,
-      name: subject.name,
-      shortName: subject.shortName,
-      parentId: subject.parentId,
-      coefficient: subject.coefficient,
-      kind: subject.kind as "subject" | "category",
-      isMain: subject.isMain,
-      sortOrder: subject.sortOrder,
-      grades: (gradesBySubject.get(subject.id) ?? []).map((grade) => ({
-        id: grade.id,
-        name: grade.name,
-        value: grade.value,
-        outOf: grade.outOf,
-        coefficient: grade.coefficient,
-        passedAt: grade.passedAt,
-        createdAt: grade.createdAt,
-        subjectId: grade.subjectId,
-        periodId: grade.periodId,
-        components: [],
-      })),
-    })),
-  );
-
-  return graph.ratio(null);
-}
-
 export const reviewRouter = {
   /**
-   * Availability and the percentile. Comparing across users means reading
-   * other people's years, so nothing identifying ever leaves this handler —
-   * only the rank of one ratio among many.
+   * Availability and the activity percentile. The original recap ranked the
+   * habit of recording results, never the result itself; that is both more
+   * encouraging and avoids turning classmates' academic performance into a
+   * leaderboard. Only the anonymous rank leaves this handler.
    */
   status: protectedProcedure
     .input(z.object({ yearId: z.string(), reviewKey: z.string().default("annual") }))
@@ -92,32 +51,34 @@ export const reviewRouter = {
         )
         .limit(1);
 
-      const mine = await generalRatioFor(input.yearId);
-      let topPercentile = 0;
+      const windowEnd = new Date();
+      const windowStart = new Date(windowEnd);
+      windowStart.setDate(windowStart.getDate() - 365);
+      const activity = await db
+        .select({
+          userId: grades.userId,
+          total: sql<number>`count(*)`,
+        })
+        .from(grades)
+        .where(
+          and(
+            gte(grades.passedAt, windowStart),
+            lte(grades.passedAt, windowEnd),
+          ),
+        )
+        .groupBy(grades.userId);
 
-      if (mine !== null) {
-        // Only years that are actually being used are worth comparing against;
-        // a dormant account would otherwise flatter everybody.
-        const activeYears = await db
-          .select({ yearId: grades.yearId, total: sql<number>`count(*)` })
-          .from(grades)
-          .groupBy(grades.yearId)
-          .having(sql`count(*) >= ${MINIMUM_GRADES}`);
-
-        const ratios: number[] = [];
-        for (const row of activeYears) {
-          const ratio = await generalRatioFor(row.yearId);
-          if (ratio !== null) ratios.push(ratio);
-        }
-
-        if (ratios.length > 1) {
-          const below = ratios.filter((ratio) => ratio < mine).length;
-          topPercentile = Math.max(
-            1,
-            Math.round(100 - (below / ratios.length) * 100),
-          );
-        }
-      }
+      const ranked = activity
+        .map((row) => ({ userId: row.userId, total: Number(row.total) }))
+        .filter((row) => row.total >= MINIMUM_GRADES)
+        .sort((left, right) => right.total - left.total);
+      const rank = ranked.findIndex((row) => row.userId === userId);
+      const topPercentile =
+        rank < 0 || ranked.length === 0
+          ? 0
+          : ranked.length === 1
+            ? 1
+            : Math.max(1, Math.ceil(((rank + 1) / ranked.length) * 100));
 
       return {
         available: true,
