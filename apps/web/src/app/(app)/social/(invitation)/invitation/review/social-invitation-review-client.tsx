@@ -12,8 +12,8 @@ import {
   SOCIAL_INVITATION_RETURN_KEY,
 } from "@/components/social/invitation-setup-gate"
 import { PageMeta } from "@/components/shell/page-chrome"
+import { SocialFlow, SocialOutcome } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { orpc } from "@/lib/orpc"
 import {
@@ -26,7 +26,6 @@ import {
 } from "@/lib/social-invitation"
 
 export function SocialInvitationReviewClient() {
-  const t = useExtracted()
   const [invitation, setInvitation] = useState<
     SocialInvitationSecret | null | undefined
   >(undefined)
@@ -58,14 +57,7 @@ export function SocialInvitationReviewClient() {
   })
 
   if (invitation === undefined || !eligibility.data) {
-    return (
-      <div
-        className="grid min-h-64 place-items-center"
-        aria-label={t("Loading invitation")}
-      >
-        <Spinner />
-      </div>
-    )
+    return <InvitationSpinner />
   }
 
   if (!invitation) {
@@ -115,7 +107,7 @@ function InvitationSpinner() {
       className="grid min-h-64 place-items-center"
       aria-label={t("Loading invitation")}
     >
-      <Spinner />
+      <Spinner className="text-muted-foreground" />
     </div>
   )
 }
@@ -125,24 +117,21 @@ function UnavailableInvitation() {
   return (
     <>
       <PageMeta title={t("Private social invitation")} backHref="/social" />
-      <Card className="mx-auto max-w-xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldXIcon aria-hidden />
-            {t("Invitation unavailable")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>
-            {t(
-              "This invitation is invalid, expired, already used or not intended for this account. No membership or sharing permission was created."
-            )}
-          </p>
-          <Button variant="outline" render={<Link href="/social" />}>
-            {t("Return to social")}
-          </Button>
-        </CardContent>
-      </Card>
+      <SocialFlow>
+        <SocialOutcome
+          icon={ShieldXIcon}
+          title={t("This invitation cannot be opened")}
+          action={
+            <Button variant="outline" render={<Link href="/social" />}>
+              {t("Return to social")}
+            </Button>
+          }
+        >
+          {t(
+            "It is invalid, expired, already used, or meant for another account. No membership and no sharing permission were created."
+          )}
+        </SocialOutcome>
+      </SocialFlow>
     </>
   )
 }

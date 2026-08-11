@@ -4,20 +4,23 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { ShieldCheckIcon, UsersRoundIcon } from "lucide-react"
+import { UsersRoundIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import {
   GroupPolicySummary,
   type GroupPolicyView,
 } from "@/components/social/group-policy-summary"
 import {
-  PrivacyBoundaryNotice,
-  SocialPageHeading,
+  GroupTypeBadge,
+  PrivacyNote,
+  SocialCallout,
+  SocialFlow,
+  SocialHeading,
+  SocialOutcome,
+  SocialSection,
 } from "@/components/social/social-ui"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
@@ -36,6 +39,14 @@ type InvitationPreview = {
   ownerAlias?: string
 }
 
+/**
+ * Deciding on a group invitation.
+ *
+ * Joining is deliberately two steps — a pending membership first, the field
+ * choices second — and the old screen buried that in a paragraph while the
+ * button said "Continue". The button now says what it does, so nobody accepts
+ * a policy they thought they were only previewing.
+ */
 export function GroupInvitationClient({
   token,
   preview,
@@ -69,86 +80,71 @@ export function GroupInvitationClient({
 
   if (declined) {
     return (
-      <Card className="mx-auto max-w-xl">
-        <CardHeader>
-          <CardTitle>{t("Invitation declined")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            {t(
-              "No membership or sharing permission was created. Avermate's school features remain unchanged."
-            )}
-          </p>
-          <Button render={<Link href="/social/groups" />}>
-            {t("Back to groups")}
-          </Button>
-        </CardContent>
-      </Card>
+      <SocialFlow>
+        <SocialOutcome
+          title={t("Invitation declined")}
+          action={
+            <Button render={<Link href="/social/groups" />}>
+              {t("Back to groups")}
+            </Button>
+          }
+        >
+          {t(
+            "No membership and no sharing permission were created. Nothing about your account changed."
+          )}
+        </SocialOutcome>
+      </SocialFlow>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      <SocialPageHeading
-        title={t("Private group invitation")}
+    <SocialFlow className="max-w-3xl">
+      <SocialHeading
+        icon={UsersRoundIcon}
+        title={t("A private group invitation")}
         description={t(
-          "Review the purpose, audience, requested fields, exposure and withdrawal terms before making any choice."
+          "Read the purpose, the audience, the requested figures and how far each one travels before deciding."
         )}
       />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <UsersRoundIcon className="size-5" />
-            <CardTitle>{preview.group.name}</CardTitle>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {preview.group.description}
-          </p>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Badge variant="outline">
-            {preview.group.type === "class"
-              ? t("Self-declared class group")
-              : preview.group.type === "study_group"
-                ? t("Study group")
-                : t("Friends group")}
-          </Badge>
+      <SocialSection
+        icon={UsersRoundIcon}
+        title={preview.group.name}
+        description={preview.group.description || undefined}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          <GroupTypeBadge type={preview.group.type} />
           <Badge variant="outline">
             {t("Responsible alias")}: {preview.ownerAlias || t("Group owner")}
           </Badge>
-        </CardContent>
-      </Card>
+        </div>
+      </SocialSection>
 
       <GroupPolicySummary policy={preview.policy} reconsentRequired />
 
-      <Alert>
-        <ShieldCheckIcon aria-hidden />
-        <AlertTitle>{t("Two-step consent")}</AlertTitle>
-        <AlertDescription>
-          {t(
-            "Continuing creates a pending membership only. On the next screen you choose required and optional fields and your own academic year. Member details and statistics remain hidden until that exact policy is accepted."
-          )}
-        </AlertDescription>
-      </Alert>
+      <SocialCallout tone="caution" title={t("This is step one of two")}>
+        {t(
+          "Continuing creates a pending membership only. On the next screen you choose the optional figures and your academic year — nothing is derived from your account before that."
+        )}
+      </SocialCallout>
 
-      <div className="space-y-2">
-        <Label htmlFor="invitation-alias">
-          {t("Your alias in this group")}
-        </Label>
-        <Input
-          id="invitation-alias"
-          value={alias}
-          onChange={(event) => setAlias(event.target.value)}
-          maxLength={60}
-          placeholder={t("Visible to participating group members")}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t(
-            "Your account email and profile handle are not shown to the group."
-          )}
-        </p>
-      </div>
+      <SocialSection
+        title={t("Your alias in this group")}
+        description={t("Your account email and profile handle are never shown.")}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="invitation-alias" className="sr-only">
+            {t("Your alias in this group")}
+          </Label>
+          <Input
+            id="invitation-alias"
+            value={alias}
+            onChange={(event) => setAlias(event.target.value)}
+            maxLength={60}
+            placeholder={t("Visible to participating group members")}
+          />
+        </div>
+      </SocialSection>
 
       {accept.error || decline.error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -176,7 +172,7 @@ export function GroupInvitationClient({
         </Button>
       </div>
 
-      <PrivacyBoundaryNotice />
-    </div>
+      <PrivacyNote />
+    </SocialFlow>
   )
 }

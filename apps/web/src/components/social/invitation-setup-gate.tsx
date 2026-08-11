@@ -1,11 +1,15 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { ShieldCheckIcon } from "lucide-react"
+import { ArrowRightIcon, LockKeyholeIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  SocialActions,
+  SocialCallout,
+  SocialFlow,
+  SocialSection,
+} from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   serializeSocialInvitationHandoff,
   socialInvitationFromLegacyPath,
@@ -18,6 +22,14 @@ export function safeSocialInvitationPath(value: string | null): string | null {
   return socialInvitationFromLegacyPath(value) ? value : null
 }
 
+/**
+ * The invitation is valid; the account is not ready for it yet.
+ *
+ * The link is held on the device rather than carried through a settings URL,
+ * which is the safe choice and also an invisible one — so it is said out loud,
+ * next to a button that discards it. Someone who does not want social access
+ * should be able to refuse without hunting for how.
+ */
 export function InvitationSetupGate({
   invitation,
   returnTo,
@@ -32,53 +44,53 @@ export function InvitationSetupGate({
   const router = useRouter()
 
   return (
-    <Card className="mx-auto max-w-xl">
-      <CardHeader>
-        <CardTitle>{t("Set up social consent first")}</CardTitle>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {friendProfileRequired
+    <SocialFlow>
+      <SocialSection
+        icon={LockKeyholeIcon}
+        title={t("Set up social consent first")}
+        description={
+          friendProfileRequired
             ? t(
-                "This private friend invitation is preserved on this device while you review eligibility, consent and an invite-only profile."
+                "This friend invitation is held on this device while you review eligibility, consent and an invite-only profile."
               )
             : t(
-                "This private group invitation is preserved on this device while you review eligibility and consent. Friend discovery does not need to be enabled."
-              )}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Alert>
-          <ShieldCheckIcon aria-hidden />
-          <AlertTitle>{t("The invitation stays private")}</AlertTitle>
-          <AlertDescription>
-            {t(
-              "The secret remains in device session storage instead of being copied into a settings URL or referrer. You can refuse social consent without affecting school features."
-            )}
-          </AlertDescription>
-        </Alert>
-        <Button
-          onClick={() => {
-            const safe =
-              invitation ?? socialInvitationFromLegacyPath(returnTo ?? null)
-            if (!safe) return
-            sessionStorage.setItem(
-              SOCIAL_INVITATION_RETURN_KEY,
-              serializeSocialInvitationHandoff(safe)
-            )
-            router.replace("/settings/social")
-          }}
-        >
-          {t("Review social setup")}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            sessionStorage.removeItem(SOCIAL_INVITATION_RETURN_KEY)
-            router.replace("/settings/social")
-          }}
-        >
-          {t("Discard invitation")}
-        </Button>
-      </CardContent>
-    </Card>
+                "This group invitation is held on this device while you review eligibility and consent. Friend discovery does not need to be on."
+              )
+        }
+        footer={
+          <SocialActions>
+            <Button
+              onClick={() => {
+                const safe =
+                  invitation ?? socialInvitationFromLegacyPath(returnTo ?? null)
+                if (!safe) return
+                sessionStorage.setItem(
+                  SOCIAL_INVITATION_RETURN_KEY,
+                  serializeSocialInvitationHandoff(safe)
+                )
+                router.replace("/settings/social")
+              }}
+            >
+              {t("Review social setup")} <ArrowRightIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                sessionStorage.removeItem(SOCIAL_INVITATION_RETURN_KEY)
+                router.replace("/settings/social")
+              }}
+            >
+              {t("Discard invitation")}
+            </Button>
+          </SocialActions>
+        }
+      >
+        <SocialCallout tone="positive" title={t("The secret stays private")}>
+          {t(
+            "It is kept in this device's session storage instead of being copied into a settings URL or a referrer. Refusing social consent affects no school feature."
+          )}
+        </SocialCallout>
+      </SocialSection>
+    </SocialFlow>
   )
 }

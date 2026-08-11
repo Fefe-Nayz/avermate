@@ -7,6 +7,11 @@ import { ShieldAlertIcon, UserRoundXIcon } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import { toast } from "sonner"
 import {
+  ReportPriorityMark,
+  ReportStatusMark,
+} from "@/components/admin/social-moderation-ui"
+import { useSocialLabels } from "@/components/social/social-ui"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -41,6 +46,7 @@ type SafetyAction =
 export function SocialReportDetail({ reportId }: { reportId: string | null }) {
   const t = useExtracted()
   const format = useFormatter()
+  const labels = useSocialLabels()
   const queryClient = useQueryClient()
   const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null)
   const [reason, setReason] = useState("")
@@ -149,16 +155,12 @@ export function SocialReportDetail({ reportId }: { reportId: string | null }) {
         <ScrollArea className="max-h-[calc(100svh-11rem)]">
           <div className="space-y-5 p-4">
             <header className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge>{item.category}</Badge>
-                <Badge variant="outline">{item.status}</Badge>
-                <Badge
-                  variant={
-                    item.priority === "urgent" ? "destructive" : "secondary"
-                  }
-                >
-                  {item.priority}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="secondary">
+                  {labels.reportCategory(item.category)}
                 </Badge>
+                <ReportStatusMark status={item.status} />
+                <ReportPriorityMark priority={item.priority} />
               </div>
               <h2 className="text-lg font-semibold">
                 {t("Safety report detail")}

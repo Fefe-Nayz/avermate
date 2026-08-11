@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ShieldCheckIcon } from "lucide-react"
+import { GraduationCapIcon, ScrollTextIcon, UsersRoundIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import {
@@ -12,13 +12,13 @@ import {
   type PolicyDraft,
 } from "@/components/social/group-policy-editor"
 import {
-  PrivacyBoundaryNotice,
-  SocialPageHeading,
+  ConsentCheck,
+  PrivacyNote,
+  SocialCallout,
+  SocialHeading,
+  SocialSection,
 } from "@/components/social/social-ui"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SelectControl } from "@/components/forms/controls"
@@ -29,6 +29,13 @@ import { orpc } from "@/lib/orpc"
 
 type GroupType = "friends" | "study_group" | "class"
 
+/**
+ * Creating a group is writing its policy.
+ *
+ * The owner is a member too, so the same consent step everyone else will face
+ * is part of creation rather than an afterthought — an owner who has not read
+ * their own policy is the likeliest source of an over-broad one.
+ */
 export function NewGroupClient() {
   const t = useExtracted()
   const router = useRouter()
@@ -84,20 +91,22 @@ export function NewGroupClient() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SocialPageHeading
+      <SocialHeading
+        icon={UsersRoundIcon}
         title={t("Create a private group")}
         description={t(
-          "Define the purpose and exact sharing rules before inviting anyone. Changing the policy later requires every member to consent again."
+          "Write the purpose and the exact sharing rules before inviting anyone. Changing the policy later makes every member consent again."
         )}
       />
 
-      <form className="space-y-4" onSubmit={submit}>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("Group identity")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <SocialSection
+          icon={UsersRoundIcon}
+          title={t("Identity")}
+          description={t("What invitees see before they decide.")}
+        >
+          <div className="grid gap-4 @lg/main:grid-cols-2">
+            <div className="space-y-2 @lg/main:col-span-2">
               <Label htmlFor="new-group-name">{t("Group name")}</Label>
               <Input
                 id="new-group-name"
@@ -107,7 +116,7 @@ export function NewGroupClient() {
                 required
               />
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 @lg/main:col-span-2">
               <Label htmlFor="new-group-description">{t("Description")}</Label>
               <Textarea
                 id="new-group-description"
@@ -124,8 +133,7 @@ export function NewGroupClient() {
                 value={type}
                 onValueChange={(value) => {
                   setType(value as GroupType)
-                  if (value !== "class")
-                    setClassSelfDeclared(false)
+                  if (value !== "class") setClassSelfDeclared(false)
                 }}
                 options={[
                   { value: "friends", label: t("Friends group") },
@@ -135,7 +143,7 @@ export function NewGroupClient() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-group-alias">{t("Your group alias")}</Label>
+              <Label htmlFor="new-group-alias">{t("Your alias")}</Label>
               <Input
                 id="new-group-alias"
                 value={alias}
@@ -144,83 +152,67 @@ export function NewGroupClient() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                {t(
-                  "Members see this alias, not your account email or profile handle."
-                )}
+                {t("Members see this, never your email or profile handle.")}
               </p>
             </div>
-            <div className="space-y-2 sm:col-span-2">
+            <div className="space-y-2 @lg/main:col-span-2">
               <Label htmlFor="new-group-year">
-                {t("Academic year used for your metrics")}
+                {t("Academic year used for your figures")}
               </Label>
               <SelectControl
                 id="new-group-year"
                 value={yearId}
                 onValueChange={setYearId}
                 placeholder={t("Choose an academic year…")}
-                options={(availableYears).map((year) => ({
+                options={availableYears.map((year) => ({
                   value: year.id,
                   label: year.name,
                 }))}
               />
             </div>
-            {type === "class" ? (
-              <label className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:col-span-2">
-                <Checkbox
-                  checked={classSelfDeclared}
-                  onCheckedChange={(checked) =>
-                    setClassSelfDeclared(checked === true)
-                  }
-                />
-                <span>
-                  <span className="block text-sm font-medium">
-                    {t("I understand this is a self-declared class group.")}
-                  </span>
-                  <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                    {t(
-                      "Avermate does not verify or endorse it as an official school, institution or class."
-                    )}
-                  </span>
-                </span>
-              </label>
-            ) : null}
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("Version 1 sharing policy")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <GroupPolicyEditor
-              value={policy}
-              onChange={setPolicy}
-              disabled={create.isPending}
-            />
-          </CardContent>
-        </Card>
+          {type === "class" ? (
+            <ConsentCheck
+              checked={classSelfDeclared}
+              onCheckedChange={setClassSelfDeclared}
+            >
+              <span className="flex items-center gap-2 font-medium">
+                <GraduationCapIcon className="size-4 shrink-0" aria-hidden />
+                {t("I understand this is a self-declared class group.")}
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                {t(
+                  "Avermate does not verify or endorse it as an official school, institution or class."
+                )}
+              </span>
+            </ConsentCheck>
+          ) : null}
+        </SocialSection>
 
-        <Alert>
-          <ShieldCheckIcon aria-hidden />
-          <AlertTitle>{t("Owner consent")}</AlertTitle>
-          <AlertDescription>
-            {t(
-              "Owners have no special access to unshared academic data. The same policy, required fields, thresholds and withdrawal controls apply to you."
-            )}
-          </AlertDescription>
-        </Alert>
-
-        <label className="flex items-start gap-3 rounded-xl border p-4">
-          <Checkbox
-            checked={accepted}
-            onCheckedChange={(checked) => setAccepted(checked === true)}
+        <SocialSection
+          icon={ScrollTextIcon}
+          title={t("Version 1 of the sharing policy")}
+          description={t("Everyone who joins answers exactly this document.")}
+        >
+          <GroupPolicyEditor
+            value={policy}
+            onChange={setPolicy}
+            disabled={create.isPending}
           />
-          <span className="text-sm leading-relaxed">
-            {t(
-              "I accept this exact policy for my own membership and understand that optional ranking participation remains off."
-            )}
-          </span>
-        </label>
+        </SocialSection>
+
+        <SocialCallout tone="positive" title={t("Being owner grants nothing")}>
+          {t(
+            "The same policy, required figures, thresholds and withdrawal controls apply to you. Owners have no access to unshared academic data."
+          )}
+        </SocialCallout>
+
+        <ConsentCheck checked={accepted} onCheckedChange={setAccepted}>
+          {t(
+            "I accept this policy for my own membership, and understand that optional ranking participation stays off until I choose it."
+          )}
+        </ConsentCheck>
 
         {create.error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -238,7 +230,7 @@ export function NewGroupClient() {
         </div>
       </form>
 
-      <PrivacyBoundaryNotice />
+      <PrivacyNote />
     </div>
   )
 }

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowRightIcon } from "lucide-react"
+import { ArrowRightIcon, MailOpenIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { SOCIAL_INVITATION_RETURN_KEY } from "@/components/social/invitation-setup-gate"
+import { SocialCallout } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import {
   parseSocialInvitationHandoff,
   serializeSocialInvitationHandoff,
@@ -14,6 +14,12 @@ import {
   type SocialInvitationKind,
 } from "@/lib/social-invitation"
 
+/**
+ * The invitation you set aside is now openable.
+ *
+ * It appears only once the account can actually act on it, so it is an
+ * offer rather than a nag — and discarding it is one click away.
+ */
 export function ResumeSocialInvitation({
   groupReady,
   friendReady,
@@ -51,35 +57,36 @@ export function ResumeSocialInvitation({
   if ((isFriend && !friendReady) || (!isFriend && !groupReady)) return null
 
   return (
-    <Card className="border-primary/30 bg-primary/5 py-3">
-      <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium">
-            {t("Your private invitation is ready")}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "Return to the preserved invitation to review it before accepting."
-            )}
-          </p>
+    <SocialCallout
+      tone="positive"
+      icon={MailOpenIcon}
+      title={
+        isFriend
+          ? t("Your friend invitation is ready")
+          : t("Your group invitation is ready")
+      }
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => router.push("/social/invitation/review")}
+          >
+            {t("Open it")} <ArrowRightIcon />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              sessionStorage.removeItem(SOCIAL_INVITATION_RETURN_KEY)
+              setKind(null)
+            }}
+          >
+            {t("Discard")}
+          </Button>
         </div>
-        <Button
-          onClick={() => {
-            router.push("/social/invitation/review")
-          }}
-        >
-          {t("Return to invitation")} <ArrowRightIcon />
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            sessionStorage.removeItem(SOCIAL_INVITATION_RETURN_KEY)
-            setKind(null)
-          }}
-        >
-          {t("Discard")}
-        </Button>
-      </CardContent>
-    </Card>
+      }
+    >
+      {t("It was held on this device while you set up social access.")}
+    </SocialCallout>
   )
 }

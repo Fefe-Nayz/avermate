@@ -2,19 +2,31 @@
 
 import { useState, type FormEvent } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ShieldCheckIcon } from "lucide-react"
+import { UserRoundCheckIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  SocialCallout,
+  SocialEmpty,
+  SocialList,
+  SocialRow,
+  SocialSection,
+} from "@/components/social/social-ui"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
+/**
+ * Asking a guardian.
+ *
+ * The request code is the one thing on this screen the two people compare out
+ * loud, so it is typeset to be read aloud rather than buried as a line of body
+ * text. The guardian's address is deliberately never echoed back.
+ */
 export function GuardianRequestManager() {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -66,82 +78,55 @@ export function GuardianRequestManager() {
     if (email) initiate.mutate({ guardianEmail: email })
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("Guardian verification")}</CardTitle>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {t(
-            "The child choice is recorded, but social access remains locked until a verified guardian also chooses. No school feature is blocked while waiting."
-          )}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {requests.data?.some((request) => request.status === "pending") ? (
-          <Badge variant="secondary">{t("Request pending")}</Badge>
-        ) : (
-          <Badge variant="outline">{t("No active request")}</Badge>
-        )}
+  function statusOf(status: string) {
+    if (status === "pending") return t("Waiting for the guardian")
+    if (status === "accepted") return t("Approved")
+    if (status === "declined") return t("Declined")
+    return t("Inactive")
+  }
 
+  return (
+    <SocialSection
+      icon={UserRoundCheckIcon}
+      title={t("Guardian verification")}
+      description={t(
+        "Two independent choices. Nothing about grades, goals or analytics is blocked while you wait."
+      )}
+    >
+      <form className="space-y-2" onSubmit={submit}>
+        <Label htmlFor="guardian-email">{t("Guardian email")}</Label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            id="guardian-email"
+            type="email"
+            autoComplete="email"
+            value={guardianEmail}
+            onChange={(event) => setGuardianEmail(event.target.value)}
+            placeholder="guardian@example.com"
+            required
+          />
+          <Button
+            type="submit"
+            disabled={busy || guardianEmail.trim().length === 0}
+          >
+            {initiate.isPending ? <Spinner /> : null}
+            {t("Send request")}
+          </Button>
+        </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t(
-            "Enter the email of a parent or guardian who has parental authority. The private link only works for a signed-in Avermate account with that verified email. The address is never displayed here afterward."
+            "Use the address of a parent or guardian with parental authority. The link only works for a signed-in account with that verified email, and the address is never displayed here afterwards."
           )}
         </p>
+      </form>
 
-        <form className="space-y-2" onSubmit={submit}>
-          <Label htmlFor="guardian-email">{t("Guardian email")}</Label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              id="guardian-email"
-              type="email"
-              autoComplete="email"
-              value={guardianEmail}
-              onChange={(event) => setGuardianEmail(event.target.value)}
-              placeholder="guardian@example.com"
-              required
-            />
-            <Button
-              type="submit"
-              disabled={busy || guardianEmail.trim().length === 0}
-            >
-              {initiate.isPending ? <Spinner /> : null}
-              {t("Send private request")}
-            </Button>
-          </div>
-        </form>
-
-        {requests.data?.length ? (
-          <ul className="divide-y rounded-lg border">
-            {requests.data.map((request) => (
-              <li
-                key={request.id}
-                className="flex flex-wrap items-center justify-between gap-2 p-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {request.status === "pending"
-                      ? t("Guardian request pending")
-                      : request.status === "accepted"
-                        ? t("Guardian approval active")
-                        : request.status === "declined"
-                          ? t("Guardian request declined")
-                          : t("Guardian request inactive")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("Policy version")}: {request.policyVersion}
-                  </p>
-                  <p className="mt-1 font-mono text-sm font-semibold tracking-wider">
-                    {t("Request code")}: {request.requestCode}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t(
-                      "Compare this non-secret code with the guardian review screen before discussing the request."
-                    )}
-                  </p>
-                </div>
-                {request.status === "pending" ||
-                request.status === "accepted" ? (
+      {requests.data?.length ? (
+        <SocialList>
+          {requests.data.map((request) => (
+            <SocialRow
+              key={request.id}
+              trailing={
+                request.status === "pending" || request.status === "accepted" ? (
                   <Button
                     type="button"
                     size="sm"
@@ -151,22 +136,51 @@ export function GuardianRequestManager() {
                   >
                     {t("Withdraw")}
                   </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+                ) : null
+              }
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">
+                  {statusOf(request.status)}
+                </span>
+                <Badge variant="outline" className="text-muted-foreground">
+                  {t("Policy {version}", {
+                    version: String(request.policyVersion),
+                  })}
+                </Badge>
+              </div>
+              <div className="mt-2 rounded-lg bg-muted/60 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">
+                  {t("Request code")}
+                </p>
+                <p className="font-mono text-base font-semibold tracking-[0.2em]">
+                  {request.requestCode}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {t(
+                    "Not a secret. Read it out to check you are both looking at the same request."
+                  )}
+                </p>
+              </div>
+            </SocialRow>
+          ))}
+        </SocialList>
+      ) : (
+        <SocialEmpty
+          compact
+          icon={UserRoundCheckIcon}
+          title={t("No request yet")}
+          description={t(
+            "Social access opens only after both the young person and a verified guardian agree."
+          )}
+        />
+      )}
 
-        <Alert>
-          <ShieldCheckIcon aria-hidden />
-          <AlertTitle>{t("Two independent choices")}</AlertTitle>
-          <AlertDescription>
-            {t(
-              "Social access only becomes available after both the child and a verified guardian agree. A refusal or withdrawal leaves grades, goals and school analytics available."
-            )}
-          </AlertDescription>
-        </Alert>
-      </CardContent>
-    </Card>
+      <SocialCallout tone="positive" title={t("Either side can stop it")}>
+        {t(
+          "Withdrawing an approval turns social access off again, and leaves grades, goals and school analytics untouched."
+        )}
+      </SocialCallout>
+    </SocialSection>
   )
 }

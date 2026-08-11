@@ -4,8 +4,10 @@ import { useMemo, useState, type FormEvent } from "react"
 import {
   BotIcon,
   CheckIcon,
+  ChevronDownIcon,
   CopyIcon,
   KeyRoundIcon,
+  PlugIcon,
   PlusIcon,
   ShieldCheckIcon,
   Trash2Icon,
@@ -31,6 +33,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { env } from "@/lib/env"
+import { cn } from "@/lib/utils"
 import type {
   OAuthClientSummary,
   OAuthConsentSummary,
@@ -65,11 +68,71 @@ async function copy(value: string, successMessage: string): Promise<void> {
   toast.success(successMessage)
 }
 
+/**
+ * A value whose only purpose is to be copied.
+ *
+ * The address is the whole product of this page — it is what someone pastes
+ * into their assistant — and it used to be a grey monospace line with a small
+ * icon, indistinguishable from the caption underneath it. Something meant to
+ * be copied should look pressable.
+ */
+function CopyField({
+  value,
+  label,
+  muted = false,
+}: {
+  value: string
+  label: string
+  muted?: boolean
+}) {
+  const t = useExtracted()
+  const [copied, setCopied] = useState(false)
+
+  return (
+    <div>
+      <p className="mb-1 text-xs text-muted-foreground">{label}</p>
+      <button
+        type="button"
+        onClick={() => {
+          void copy(value, t("Copied."))
+          setCopied(true)
+        }}
+        className={cn(
+          "flex w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-left transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+          muted && "text-muted-foreground"
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">
+          {value}
+        </span>
+        {copied ? (
+          <CheckIcon className="size-4 shrink-0 text-positive" />
+        ) : (
+          <CopyIcon className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="sr-only">{t("Copy")}</span>
+      </button>
+    </div>
+  )
+}
+
 export function IntegrationsPageMeta() {
   const t = useExtracted()
   return <PageMeta title={t("Integrations")} backHref="/more" />
 }
 
+/**
+ * Integrations.
+ *
+ * The page had been written for someone implementing OAuth rather than for
+ * someone connecting an assistant: it led with a protocol version, labelled
+ * things `client auth: none`, showed granted permissions as raw scope strings
+ * and identified a connected assistant by an opaque client id — so the one
+ * question a reader actually has, *what does this thing have access to and how
+ * do I stop it*, was the hardest to answer. Names, plain permissions and the
+ * address to paste come first; the registration form is folded away because
+ * most assistants never need it.
+ */
 export function IntegrationsClient({
   initial,
 }: {
@@ -88,6 +151,8 @@ export function IntegrationsClient({
   )
   const [busy, setBusy] = useState<string | null>(null)
   const [clientToRevoke, setClientToRevoke] = useState<string | null>(null)
+  const [registerOpen, setRegisterOpen] = useState(initial.clients.length === 0)
+
   const scopeCopy = {
     "avermate:read": {
       label: t("Read"),
@@ -111,11 +176,31 @@ export function IntegrationsClient({
     (typeof SCOPE_OPTIONS)[number]["scope"],
     { label: string; description: string }
   >
+
+  /** `avermate:write` means nothing to a reader; "Write" does. */
+  function scopeLabel(scope: string) {
+    if (scope in scopeCopy) {
+      return scopeCopy[scope as keyof typeof scopeCopy].label
+    }
+    if (scope === "openid" || scope === "profile") return t("Identity")
+    if (scope === "offline_access") return t("Stay signed in")
+    return scope
+  }
+
   const mcpUrl = useMemo(() => `${env.apiUrl.replace(/\/$/, "")}/mcp`, [])
   const metadataUrl = useMemo(
     () =>
       `${env.apiUrl.replace(/\/$/, "")}/.well-known/oauth-protected-resource/mcp`,
     []
+  )
+
+  /** A grant is about an assistant, so show the assistant, not its id. */
+  const clientNames = useMemo(
+    () =>
+      new Map(
+        clients.map((client) => [client.client_id, client.client_name ?? ""])
+      ),
+    [clients]
   )
 
   async function createClient(event: FormEvent<HTMLFormElement>) {
@@ -155,6 +240,7 @@ export function IntegrationsClient({
       )
       setName("")
       setRedirectUri("")
+      setRegisterOpen(false)
       toast.success(t("Integration client created."))
     } catch (error) {
       toast.error(
@@ -212,240 +298,263 @@ export function IntegrationsClient({
   return (
     <div className="flex flex-col gap-4">
       <div className="hidden md:block">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight">
+          <PlugIcon className="size-5 text-muted-foreground" />
           {t("Integrations")}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {t("Connect AI assistants without sharing your password.")}
+          {t(
+            "Let an AI assistant read or update your Avermate data, without ever giving it your password."
+          )}
         </p>
       </div>
 
       <SettingsSection
-        title={t("Avermate MCP")}
+        icon={BotIcon}
+        title={t("Connect an assistant")}
         description={t(
-          "Assistants authenticate with OAuth 2.1 and only receive the permissions you approve."
+          "Paste this address into an assistant that speaks MCP. It will ask you to sign in, then to approve exactly what it may do."
         )}
       >
-        <div className="grid gap-2 rounded-lg border bg-muted/30 p-3 text-xs">
-          <div className="flex items-center gap-2">
-            <BotIcon className="size-4 text-primary" />
-            <span className="font-medium">
-              MCP 2026-07-28 · Streamable HTTP
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void copy(mcpUrl, t("Copied."))}
-            className="flex min-w-0 items-center gap-2 rounded-md bg-background px-2.5 py-2 text-left font-mono"
-          >
-            <span className="min-w-0 flex-1 truncate">{mcpUrl}</span>
-            <CopyIcon className="size-3.5 shrink-0" />
-          </button>
-          <button
-            type="button"
-            onClick={() => void copy(metadataUrl, t("Copied."))}
-            className="flex min-w-0 items-center gap-2 rounded-md bg-background px-2.5 py-2 text-left font-mono text-muted-foreground"
-          >
-            <span className="min-w-0 flex-1 truncate">{metadataUrl}</span>
-            <CopyIcon className="size-3.5 shrink-0" />
-          </button>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection
-        title={t("Register a public client")}
-        description={t(
-          "Use this when an assistant cannot publish a Client ID Metadata Document yet."
-        )}
-      >
-        <form className="flex flex-col gap-4" onSubmit={createClient}>
-          <div className="grid gap-1.5">
-            <Label htmlFor="oauth-client-name">{t("Client name")}</Label>
-            <Input
-              id="oauth-client-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Claude Desktop"
-              maxLength={120}
-              required
+        <CopyField value={mcpUrl} label={t("Avermate MCP server")} />
+        <details className="group">
+          <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+            <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
+            {t("My assistant asks for a discovery URL")}
+          </summary>
+          <div className="mt-2">
+            <CopyField
+              muted
+              value={metadataUrl}
+              label={t("Protected-resource metadata")}
             />
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="oauth-redirect-uri">{t("Redirect URI")}</Label>
-            <Input
-              id="oauth-redirect-uri"
-              type="url"
-              value={redirectUri}
-              onChange={(event) => setRedirectUri(event.target.value)}
-              placeholder="https://assistant.example/oauth/callback"
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label>{t("Maximum permissions")}</Label>
-            {SCOPE_OPTIONS.map((option) => {
-              const copy = scopeCopy[option.scope]
-              return (
-                <label
-                  key={option.scope}
-                  className="flex items-start gap-3 rounded-lg border p-3"
-                >
-                  <Checkbox
-                    checked={scopes.has(option.scope)}
-                    disabled={"required" in option && option.required}
-                    onCheckedChange={(checked) => {
-                      setScopes((current) => {
-                        const next = new Set(current)
-                        if (checked) next.add(option.scope)
-                        else next.delete(option.scope)
-                        return next
-                      })
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">
-                      {copy.label}
-                    </span>
-                    <span className="block text-xs leading-relaxed text-muted-foreground">
-                      {copy.description}
-                    </span>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">
-              <ShieldCheckIcon /> PKCE S256
-            </Badge>
-            <Badge variant="outline">
-              <KeyRoundIcon /> client auth: none
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              {t("No client secret is created.")}
-            </span>
-          </div>
-
-          <Button type="submit" disabled={busy !== null} className="self-start">
-            <PlusIcon /> {t("Create client")}
-          </Button>
-        </form>
+        </details>
       </SettingsSection>
 
       <SettingsSection
-        title={t("Registered clients")}
+        icon={ShieldCheckIcon}
+        title={t("What has access")}
         description={t(
-          "Client IDs are public identifiers and can be copied safely."
-        )}
-      >
-        {clients.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t("No integration client has been registered yet.")}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {clients.map((client) => (
-              <article key={client.client_id} className="rounded-lg border p-3">
-                <div className="flex items-start gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      {client.client_name || t("Unnamed client")}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void copy(client.client_id, t("Copied."))}
-                      className="mt-1 flex max-w-full items-center gap-1.5 font-mono text-xs text-muted-foreground"
-                    >
-                      <span className="truncate">{client.client_id}</span>
-                      <CopyIcon className="size-3 shrink-0" />
-                    </button>
-                  </div>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="destructive"
-                    aria-label={t("Revoke client")}
-                    disabled={busy !== null}
-                    onClick={() => setClientToRevoke(client.client_id)}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge variant="outline">
-                    <CheckIcon /> PKCE S256
-                  </Badge>
-                  <Badge variant="outline">none</Badge>
-                  {displayDate(client.client_id_issued_at) ? (
-                    <Badge variant="secondary">
-                      {displayDate(client.client_id_issued_at)}
-                    </Badge>
-                  ) : null}
-                </div>
-                {client.redirect_uris?.map((uri) => (
-                  <p
-                    key={uri}
-                    className="mt-2 truncate font-mono text-xs text-muted-foreground"
-                  >
-                    {uri}
-                  </p>
-                ))}
-              </article>
-            ))}
-          </div>
-        )}
-      </SettingsSection>
-
-      <SettingsSection
-        title={t("Authorized connections")}
-        description={t(
-          "Revoking a grant blocks refresh and future authorization. Already issued JWTs expire shortly on their own."
+          "Revoking blocks any further use straight away. A token already handed out stops working within minutes."
         )}
       >
         {consents.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {t("No assistant currently has an active grant.")}
+            {t("Nothing has access to your account right now.")}
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {consents.map((consent) => (
+          <div className="divide-y">
+            {consents.map((consent) => {
+              const label =
+                clientNames.get(consent.clientId) || t("Unnamed assistant")
+              return (
+                <div
+                  key={consent.id}
+                  className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <BotIcon className="size-4.5" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{label}</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {consent.scopes.map((scope) => (
+                        <Badge key={scope} variant="secondary">
+                          {scopeLabel(scope)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={busy !== null}
+                    onClick={() => void revokeConsent(consent.id)}
+                  >
+                    {t("Revoke access")}
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
+        icon={KeyRoundIcon}
+        title={t("Registered clients")}
+        description={t(
+          "Only needed for assistants that cannot register themselves. A client ID is a public identifier — there is no secret to protect."
+        )}
+        footer={
+          registerOpen ? undefined : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setRegisterOpen(true)}
+            >
+              <PlusIcon /> {t("Register a client")}
+            </Button>
+          )
+        }
+      >
+        {clients.length === 0 && !registerOpen ? (
+          <p className="text-sm text-muted-foreground">
+            {t("No client registered. Most assistants do not need one.")}
+          </p>
+        ) : null}
+
+        {clients.length ? (
+          <div className="divide-y">
+            {clients.map((client) => (
               <article
-                key={consent.id}
-                className="flex items-start gap-3 rounded-lg border p-3"
+                key={client.client_id}
+                className="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-xs">
-                    {consent.clientId}
+                  <p className="font-medium">
+                    {client.client_name || t("Unnamed client")}
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {consent.scopes.map((scope) => (
-                      <Badge key={scope} variant="secondary">
-                        {scope}
-                      </Badge>
-                    ))}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copy(client.client_id, t("Copied."))}
+                    className="mt-0.5 flex max-w-full items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <span className="truncate">{client.client_id}</span>
+                    <CopyIcon className="size-3 shrink-0" />
+                  </button>
+                  {client.redirect_uris?.map((uri) => (
+                    <p
+                      key={uri}
+                      className="mt-1 truncate text-xs text-muted-foreground"
+                    >
+                      {t("Returns to")} {uri}
+                    </p>
+                  ))}
+                  {displayDate(client.client_id_issued_at) ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t("Registered {date}", {
+                        date: displayDate(client.client_id_issued_at) ?? "",
+                      })}
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   type="button"
-                  size="icon-sm"
-                  variant="destructive"
-                  aria-label={t("Revoke access grant")}
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
                   disabled={busy !== null}
-                  onClick={() => void revokeConsent(consent.id)}
+                  onClick={() => setClientToRevoke(client.client_id)}
                 >
-                  <Trash2Icon />
+                  <Trash2Icon /> {t("Remove")}
                 </Button>
               </article>
             ))}
           </div>
-        )}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t(
-            "Better Auth does not expose a stable token-list API. Access tokens are therefore never serialized into this page."
-          )}
-        </p>
+        ) : null}
+
+        {registerOpen ? (
+          <form
+            className="flex flex-col gap-4 rounded-xl border p-4"
+            onSubmit={createClient}
+          >
+            <div className="grid gap-4 @lg/main:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="oauth-client-name">{t("Client name")}</Label>
+                <Input
+                  id="oauth-client-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Claude Desktop"
+                  maxLength={120}
+                  required
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="oauth-redirect-uri">{t("Redirect URI")}</Label>
+                <Input
+                  id="oauth-redirect-uri"
+                  type="url"
+                  value={redirectUri}
+                  onChange={(event) => setRedirectUri(event.target.value)}
+                  placeholder="https://assistant.example/oauth/callback"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>{t("The most this client may ever ask for")}</Label>
+              <div className="divide-y overflow-hidden rounded-lg border">
+                {SCOPE_OPTIONS.map((option) => {
+                  const info = scopeCopy[option.scope]
+                  const locked = "required" in option && option.required
+                  return (
+                    <label
+                      key={option.scope}
+                      className={cn(
+                        "flex items-start gap-3 p-3 transition-colors",
+                        locked ? "cursor-default" : "cursor-pointer hover:bg-accent/40"
+                      )}
+                    >
+                      <Checkbox
+                        checked={scopes.has(option.scope)}
+                        disabled={locked}
+                        onCheckedChange={(checked) => {
+                          setScopes((current) => {
+                            const next = new Set(current)
+                            if (checked) next.add(option.scope)
+                            else next.delete(option.scope)
+                            return next
+                          })
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          {info.label}
+                          {locked ? (
+                            <Badge variant="outline">{t("Always")}</Badge>
+                          ) : null}
+                        </span>
+                        <span className="block text-xs leading-relaxed text-muted-foreground">
+                          {info.description}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t(
+                  "This is a ceiling, not a grant. You still approve each connection, and can approve less than this."
+                )}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" disabled={busy !== null}>
+                <PlusIcon /> {t("Create client")}
+              </Button>
+              {clients.length ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setRegisterOpen(false)}
+                >
+                  {t("Cancel")}
+                </Button>
+              ) : null}
+              <span className="text-xs text-muted-foreground">
+                {t("No password or secret is created.")}
+              </span>
+            </div>
+          </form>
+        ) : null}
       </SettingsSection>
 
       <AlertDialog
@@ -456,7 +565,7 @@ export function IntegrationsClient({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("Revoke this client?")}</AlertDialogTitle>
+            <AlertDialogTitle>{t("Remove this client?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t(
                 "Its saved grants and refresh access will be removed. Short-lived access tokens already issued expire on their own."
@@ -474,7 +583,7 @@ export function IntegrationsClient({
                 if (clientToRevoke) void revokeClient(clientToRevoke)
               }}
             >
-              {t("Revoke client")}
+              {t("Remove client")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

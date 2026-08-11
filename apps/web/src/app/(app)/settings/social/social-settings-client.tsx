@@ -5,7 +5,8 @@ import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   GraduationCapIcon,
-  ShieldCheckIcon,
+  PowerIcon,
+  SlidersHorizontalIcon,
   UserRoundIcon,
   UsersRoundIcon,
 } from "lucide-react"
@@ -16,9 +17,13 @@ import { PageMeta } from "@/components/shell/page-chrome"
 import { EligibilityState } from "@/components/social/eligibility-state"
 import { GuardianRequestManager } from "@/components/social/guardian-request-manager"
 import { SOCIAL_INVITATION_RETURN_KEY } from "@/components/social/invitation-setup-gate"
-import { PrivacyBoundaryNotice } from "@/components/social/social-ui"
+import {
+  PrivacyNote,
+  SocialActions,
+  SocialCallout,
+  SocialSection,
+} from "@/components/social/social-ui"
 import { ResumeSocialInvitation } from "@/components/social/resume-social-invitation"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +36,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
@@ -93,12 +97,13 @@ export function SocialSettingsClient() {
       <PageMeta title={t("Social & sharing")} backHref="/settings" />
       <div className="flex flex-col gap-4">
         <div className="hidden md:block">
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight">
+            <UsersRoundIcon className="size-5 text-muted-foreground" />
             {t("Social & sharing")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
-              "Choose whether social features are available for this account."
+              "Whether the optional social features are available for this account at all."
             )}
           </p>
         </div>
@@ -131,70 +136,24 @@ export function SocialSettingsClient() {
             {view.enabled &&
             (view.status === "age_unknown" ||
               view.status === "consent_required") ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    {view.status === "consent_required"
-                      ? t("Turn social sharing back on")
-                      : t("Choose an age range")}
-                  </CardTitle>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {view.status === "consent_required"
-                      ? t(
-                          "Consent was withdrawn, so nothing is shared right now. Granting it again restores access; it does not re-share anything on its own."
-                        )
-                      : t(
-                          "A birth date is not requested or stored. This choice only selects the correct consent path."
-                        )}
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {view.status === "age_unknown" ? (
-                  <ChoiceField
-                    label={t("Age range")}
-                    value={ageBand}
-                    onValueChange={setAgeBand}
-                    choices={[
-                      {
-                        value: "under15",
-                        label: t("Under 15"),
-                        description: t(
-                          "Requires a child choice and verified guardian approval."
-                        ),
-                        icon: <UsersRoundIcon className="size-4" />,
-                      },
-                      {
-                        value: "15to17",
-                        label: t("15 to 17"),
-                        description: t(
-                          "You review and choose social sharing yourself."
-                        ),
-                        icon: <GraduationCapIcon className="size-4" />,
-                      },
-                      {
-                        value: "adult",
-                        label: t("18 or older"),
-                        description: t(
-                          "You review and choose social sharing yourself."
-                        ),
-                        icon: <UserRoundIcon className="size-4" />,
-                      },
-                    ]}
-                  />
-                  ) : null}
-                  <Alert>
-                    <ShieldCheckIcon aria-hidden />
-                    <AlertTitle>{t("A choice, not a requirement")}</AlertTitle>
-                    <AlertDescription>
-                      {t(
-                        "Continuing records consent to the current social policy. Leaving this screen keeps social sharing off and does not affect grades, goals or analytics."
-                      )}{" "}
-                      <Link href="/legal/social-sharing">
-                        {t("Read the social sharing summary")}
-                      </Link>
-                    </AlertDescription>
-                  </Alert>
-                  <div className="flex flex-wrap gap-2">
+              <SocialSection
+                icon={PowerIcon}
+                title={
+                  view.status === "consent_required"
+                    ? t("Turn social sharing back on")
+                    : t("Choose an age range")
+                }
+                description={
+                  view.status === "consent_required"
+                    ? t(
+                        "Consent was withdrawn, so nothing is shared right now. Granting it again restores access — it re-shares nothing on its own."
+                      )
+                    : t(
+                        "A birth date is never requested or stored. This only picks the right consent path."
+                      )
+                }
+                footer={
+                  <SocialActions>
                     <Button
                       disabled={busy}
                       onClick={() =>
@@ -213,17 +172,62 @@ export function SocialSettingsClient() {
                       {t("I choose to continue")}
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       render={<Link href="/settings" />}
                       onClick={() =>
                         sessionStorage.removeItem(SOCIAL_INVITATION_RETURN_KEY)
                       }
                     >
-                      {t("Keep social sharing off")}
+                      {t("Keep it off")}
                     </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </SocialActions>
+                }
+              >
+                {view.status === "age_unknown" ? (
+                  <ChoiceField
+                    label={t("Age range")}
+                    value={ageBand}
+                    onValueChange={setAgeBand}
+                    choices={[
+                      {
+                        value: "under15",
+                        label: t("Under 15"),
+                        description: t(
+                          "Needs both a choice from you and verified guardian approval."
+                        ),
+                        icon: <UsersRoundIcon className="size-4" />,
+                      },
+                      {
+                        value: "15to17",
+                        label: t("15 to 17"),
+                        description: t("You choose for yourself."),
+                        icon: <GraduationCapIcon className="size-4" />,
+                      },
+                      {
+                        value: "adult",
+                        label: t("18 or older"),
+                        description: t("You choose for yourself."),
+                        icon: <UserRoundIcon className="size-4" />,
+                      },
+                    ]}
+                  />
+                ) : null}
+
+                <SocialCallout
+                  tone="positive"
+                  title={t("A choice, not a requirement")}
+                >
+                  {t(
+                    "Continuing records consent to the current policy. Walking away keeps social sharing off and changes nothing about grades, goals or analytics."
+                  )}{" "}
+                  <Link
+                    href="/legal/social-sharing"
+                    className="underline underline-offset-4"
+                  >
+                    {t("Read the social sharing summary")}
+                  </Link>
+                </SocialCallout>
+              </SocialSection>
             ) : null}
 
             {view.status === "guardian_required" ||
@@ -232,16 +236,13 @@ export function SocialSettingsClient() {
             ) : null}
 
             {view.status === "active" && ownProfile?.status === "off" ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("Create an invite-only profile")}</CardTitle>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {t(
-                      "The safest default is invite-only. Your profile is never published on the open web, and no profile field is shared until you grant it."
-                    )}
-                  </p>
-                </CardHeader>
-                <CardContent>
+              <SocialSection
+                icon={UserRoundIcon}
+                title={t("Create an invite-only profile")}
+                description={t(
+                  "The safest starting point. Your profile is never published on the open web, and no field is shared until you grant it."
+                )}
+                footer={
                   <Button
                     disabled={busy}
                     onClick={() =>
@@ -255,29 +256,39 @@ export function SocialSettingsClient() {
                     {activate.isPending ? <Spinner /> : null}
                     {t("Activate invite-only profile")}
                   </Button>
-                </CardContent>
-              </Card>
+                }
+              >
+                <SocialCallout title={t("What a profile is for")}>
+                  {t(
+                    "It is the thing permissions point at. Without one, nobody can be granted anything — with one, they still receive nothing until you say so."
+                  )}
+                </SocialCallout>
+              </SocialSection>
             ) : null}
 
             {view.status === "active" && ownProfile?.status === "active" ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("Social profile")}</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {t(
-                      "Manage profile fields, audiences and exact previews in the social area."
-                    )}
-                  </p>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
+              <SocialSection
+                icon={SlidersHorizontalIcon}
+                title={t("Your social profile is on")}
+                description={t(
+                  "Fields, audiences and exact previews live in the social area."
+                )}
+              >
+                <SocialActions>
                   <Button render={<Link href="/social/profile" />}>
                     {t("Manage sharing")}
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={<Button variant="destructive" disabled={busy} />}
+                      render={
+                        <Button
+                          variant="ghost"
+                          className="text-destructive"
+                          disabled={busy}
+                        />
+                      }
                     >
-                      {t("Turn social sharing off")}
+                      <PowerIcon /> {t("Turn social sharing off")}
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -301,11 +312,11 @@ export function SocialSettingsClient() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                </CardContent>
-              </Card>
+                </SocialActions>
+              </SocialSection>
             ) : null}
 
-            <PrivacyBoundaryNotice />
+            <PrivacyNote />
           </>
         )}
       </div>

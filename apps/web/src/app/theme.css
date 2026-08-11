@@ -170,6 +170,7 @@
 
   --positive: oklch(0.6 0.15 150);
   --negative: oklch(0.61 0.2 25);
+  --caution: oklch(0.62 0.14 75);
 }
 
 .dark {
@@ -186,6 +187,7 @@
 
   --positive: oklch(0.72 0.15 150);
   --negative: oklch(0.7 0.19 25);
+  --caution: oklch(0.78 0.13 75);
 }
 
 @theme inline {
@@ -201,6 +203,7 @@
   --color-band-poor-foreground: var(--band-poor-foreground);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-caution: var(--caution);
 }
 
 /**

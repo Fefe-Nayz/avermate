@@ -2,16 +2,15 @@
 
 import { useState, type FormEvent } from "react"
 import { useQuery } from "@tanstack/react-query"
-import {
-  AlertTriangleIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  SearchIcon,
-} from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import { SocialReportDetail } from "@/components/admin/social-report-detail"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { Badge } from "@/components/ui/badge"
+import {
+  ReportPriorityMark,
+  ReportStatusMark,
+} from "@/components/admin/social-moderation-ui"
+import { useSocialLabels } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,26 +29,10 @@ type ReportFilters = {
   offset: number
 }
 
-function statusLabel(status: ReportStatus, t: ReturnType<typeof useExtracted>) {
-  if (status === "open") return t("Open")
-  if (status === "investigating") return t("Investigating")
-  if (status === "resolved") return t("Resolved")
-  return t("Dismissed")
-}
-
-function priorityLabel(
-  priority: ReportPriority,
-  t: ReturnType<typeof useExtracted>
-) {
-  if (priority === "urgent") return t("Urgent")
-  if (priority === "high") return t("High")
-  if (priority === "low") return t("Low")
-  return t("Normal")
-}
-
 export function AdminSocialReportsClient() {
   const t = useExtracted()
   const format = useFormatter()
+  const labels = useSocialLabels()
   const [filters, setFilters] = useState<ReportFilters>({
     status: "all",
     priority: "all",
@@ -181,20 +164,9 @@ export function AdminSocialReportsClient() {
                       : "hover:bg-muted/50"
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant={
-                        report.priority === "urgent" ? "destructive" : "outline"
-                      }
-                    >
-                      {report.priority === "urgent" ? (
-                        <AlertTriangleIcon aria-hidden />
-                      ) : null}
-                      {priorityLabel(report.priority, t)}
-                    </Badge>
-                    <Badge variant="secondary">
-                      {statusLabel(report.status, t)}
-                    </Badge>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ReportPriorityMark priority={report.priority} />
+                    <ReportStatusMark status={report.status} />
                     <span className="ml-auto text-xs text-muted-foreground">
                       {format.dateTime(report.updatedAt, {
                         dateStyle: "medium",
@@ -204,7 +176,9 @@ export function AdminSocialReportsClient() {
                   </div>
                   <p className="line-clamp-2 text-sm">{report.message}</p>
                   <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                    <span>{report.category}</span>
+                    <span className="font-medium">
+                      {labels.reportCategory(report.category)}
+                    </span>
                     <span>{report.reporter.name}</span>
                     {report.groupId ? <span>{t("Group-related")}</span> : null}
                     {report.hasTargetUser ? (

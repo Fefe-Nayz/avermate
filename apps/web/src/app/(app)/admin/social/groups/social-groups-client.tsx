@@ -3,11 +3,12 @@
 import Link from "next/link"
 import { useState, type FormEvent } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { SearchIcon, ShieldAlertIcon, SnowflakeIcon } from "lucide-react"
+import { SearchIcon, SnowflakeIcon } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import { toast } from "sonner"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { GroupStateMark } from "@/components/admin/social-moderation-ui"
+import { SocialCallout } from "@/components/social/social-ui"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -51,15 +51,6 @@ type PendingModeration = {
   name: string
   revision: number
   frozen: boolean
-}
-
-function stateLabel(
-  state: Exclude<GroupState, "all">,
-  t: ReturnType<typeof useExtracted>
-) {
-  if (state === "active") return t("Active")
-  if (state === "frozen") return t("Frozen")
-  return t("Archived")
 }
 
 export function AdminSocialGroupsClient() {
@@ -137,15 +128,11 @@ export function AdminSocialGroupsClient() {
           </p>
         </div>
 
-        <Alert>
-          <ShieldAlertIcon aria-hidden />
-          <AlertTitle>{t("Consent remains authoritative")}</AlertTitle>
-          <AlertDescription>
-            {t(
-              "Freezing a group withdraws current sharing consent, disables rankings, revokes pending invitations and clears aggregates. Unfreezing never restores consent automatically."
-            )}
-          </AlertDescription>
-        </Alert>
+        <SocialCallout tone="caution" title={t("Consent remains authoritative")}>
+          {t(
+            "Freezing a group withdraws current sharing consent, disables rankings, revokes pending invitations and clears aggregates. Unfreezing never restores consent automatically."
+          )}
+        </SocialCallout>
 
         <Card className="py-4">
           <CardContent className="space-y-3 px-4">
@@ -195,7 +182,74 @@ export function AdminSocialGroupsClient() {
           </CardContent>
         </Card>
 
-        <Card className="py-0">
+        {/*
+         * Six columns do not fit a phone, and squeezing them produced a table
+         * nobody could read at either width. The narrow layout is a list of
+         * group cards; the table appears only where there is room for it.
+         */}
+        <Card className="py-0 @3xl/main:hidden">
+          <ul className="divide-y">
+            {groups.data?.items.map((group) => (
+              <li key={group.id} className="flex flex-col gap-2 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium">{group.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {group.type === "class"
+                        ? t("Self-declared class — not an official institution")
+                        : group.type === "study_group"
+                          ? t("Study group")
+                          : t("Friend group")}
+                    </p>
+                  </div>
+                  <GroupStateMark state={group.state} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("{count} members", {
+                    count: String(group.memberCount),
+                  })}
+                  {" · "}
+                  <Link
+                    href={`/admin/users/${group.owner.id}`}
+                    className="underline-offset-3 hover:underline"
+                  >
+                    {group.owner.name}
+                  </Link>
+                </p>
+                {group.state === "archived" ? null : (
+                  <Button
+                    size="sm"
+                    className="w-fit"
+                    variant={
+                      group.state === "frozen" ? "outline" : "destructive"
+                    }
+                    onClick={() => {
+                      setReason("")
+                      setPending({
+                        id: group.id,
+                        name: group.name,
+                        revision: group.revision,
+                        frozen: group.state !== "frozen",
+                      })
+                    }}
+                  >
+                    {group.state === "frozen" ? null : (
+                      <SnowflakeIcon aria-hidden />
+                    )}
+                    {group.state === "frozen" ? t("Unfreeze") : t("Freeze")}
+                  </Button>
+                )}
+              </li>
+            ))}
+            {groups.data?.items.length === 0 ? (
+              <li className="py-10 text-center text-sm text-muted-foreground">
+                {t("No social group matches these filters.")}
+              </li>
+            ) : null}
+          </ul>
+        </Card>
+
+        <Card className="hidden py-0 @3xl/main:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -223,15 +277,11 @@ export function AdminSocialGroupsClient() {
                     </p>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        group.state === "frozen" ? "destructive" : "outline"
-                      }
-                    >
-                      {stateLabel(group.state, t)}
-                    </Badge>
+                    <GroupStateMark state={group.state} />
                   </TableCell>
-                  <TableCell>{group.memberCount}</TableCell>
+                  <TableCell className="numeric">
+                    {group.memberCount}
+                  </TableCell>
                   <TableCell>
                     <Link
                       href={`/admin/users/${group.owner.id}`}
@@ -243,7 +293,7 @@ export function AdminSocialGroupsClient() {
                       {group.owner.email}
                     </p>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
                     {format.dateTime(group.updatedAt, {
                       dateStyle: "medium",
                       timeStyle: "short",

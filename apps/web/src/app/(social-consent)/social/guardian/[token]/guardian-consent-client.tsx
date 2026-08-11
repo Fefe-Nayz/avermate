@@ -3,14 +3,19 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useMutation } from "@tanstack/react-query"
-import { CheckCircle2Icon, ShieldCheckIcon, XCircleIcon } from "lucide-react"
+import { UserRoundCheckIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { PrivacyBoundaryNotice } from "@/components/social/social-ui"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  ConsentCheck,
+  PrivacyNote,
+  SocialCallout,
+  SocialFlow,
+  SocialHeading,
+  SocialOutcome,
+  SocialSection,
+} from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Spinner } from "@/components/ui/spinner"
 import { orpc } from "@/lib/orpc"
 
@@ -28,6 +33,14 @@ type GuardianPreview = {
   }
 }
 
+/**
+ * A guardian deciding.
+ *
+ * The reader is often not an Avermate user and has one question: what am I
+ * agreeing to. So the page states what approval permits before it asks for
+ * anything, and says plainly what it does not reveal — this screen shows no
+ * marks, no subjects, no dates and not even the young person's email.
+ */
 export function GuardianConsentClient({
   token,
   preview,
@@ -56,155 +69,121 @@ export function GuardianConsentClient({
 
   if (outcome) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 py-6">
+      <SocialFlow className="py-6">
         <PageMeta title={t("Guardian consent")} />
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {outcome === "accepted" ? (
-                <CheckCircle2Icon className="text-success" />
-              ) : (
-                <XCircleIcon className="text-muted-foreground" />
+        <SocialOutcome
+          tone={outcome === "accepted" ? "positive" : "neutral"}
+          title={
+            outcome === "accepted"
+              ? t("Your approval is recorded")
+              : t("Request declined")
+          }
+          action={
+            <Button render={<Link href="/" />}>{t("Return to Avermate")}</Button>
+          }
+        >
+          {outcome === "accepted"
+            ? t(
+                "The young person still controls their own choice and can turn social sharing off at any time."
+              )
+            : t(
+                "Social access stays off. Grades, goals and school analytics are unaffected."
               )}
-              {outcome === "accepted"
-                ? t("Guardian choice recorded")
-                : t("Request declined")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>
-              {outcome === "accepted"
-                ? t(
-                    "Your approval is recorded. The child still controls their own choice and can withdraw social sharing at any time."
-                  )
-                : t(
-                    "Social access remains off. This does not block grades, goals or school analytics."
-                  )}
-            </p>
-            <Button render={<Link href="/" />}>
-              {t("Return to Avermate")}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+        </SocialOutcome>
+      </SocialFlow>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 py-6">
+    <SocialFlow className="py-6">
       <PageMeta title={t("Guardian consent")} />
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Review a guardian consent request")}</CardTitle>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {t(
-              "A young person chose to request Avermate's optional friends and groups features. This page does not reveal their notes, subjects, comments, dates or account email."
-            )}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <Alert>
-            <ShieldCheckIcon aria-hidden />
-            <AlertTitle>{t("What approval allows")}</AlertTitle>
-            <AlertDescription>
-              {t(
-                "An authenticated-only, invite-based social profile. Each profile field still requires an explicit audience grant. Group academic comparisons are aggregate-only by default, and named rankings require a separate opt-in."
-              )}
-            </AlertDescription>
-          </Alert>
 
-          <div className="rounded-lg border bg-muted/40 p-4">
-            <p className="text-xs font-medium text-muted-foreground">
-              {t("Request code")}
-            </p>
-            <p className="font-mono text-xl font-semibold tracking-widest">
-              {preview.requestCode}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t(
-                "This code is not a secret. Compare it with the code shown to the young person to recognize the same request without exposing their identity."
-              )}
-            </p>
-          </div>
+      <SocialHeading
+        icon={UserRoundCheckIcon}
+        title={t("A guardian approval request")}
+        description={t(
+          "A young person asked to use Avermate's optional friends and groups features. This page shows you none of their marks, subjects, comments, dates or account email."
+        )}
+      />
 
-          <div className="space-y-3 rounded-lg border p-4">
-            <label className="flex cursor-pointer items-start gap-3">
-              <Checkbox
-                checked={isAdult}
-                onCheckedChange={(checked) => setIsAdult(checked === true)}
-              />
-              <span className="space-y-1">
-                <span className="block text-sm font-medium">
-                  {t("I attest that I am an adult.")}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {t(
-                    "A verified account email is also required by the server."
-                  )}
-                </span>
-              </span>
-            </label>
-            <label className="flex cursor-pointer items-start gap-3">
-              <Checkbox
-                checked={hasAuthority}
-                onCheckedChange={(checked) => setHasAuthority(checked === true)}
-              />
-              <span className="space-y-1">
-                <span className="block text-sm font-medium">
-                  {t(
-                    "I attest that I have parental authority for the young person concerned."
-                  )}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("Do not approve if this statement is not true.")}
-                </span>
-              </span>
-            </label>
-          </div>
+      <SocialCallout tone="positive" title={t("What approval permits")}>
+        {t(
+          "A sign-in-only, invite-based social profile. Every profile field still needs an explicit permission, group comparisons are aggregate-only by default, and named rankings need a further opt-in."
+        )}
+      </SocialCallout>
 
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("Social sharing policy version")}: {preview.policyVersion}.{" "}
-            <Link href="/legal/social-sharing">
-              {t("Read the plain-language summary")}
-            </Link>
-          </p>
+      <SocialSection
+        title={t("Request code")}
+        description={t(
+          "Not a secret. Compare it with the code shown to the young person to be sure you are looking at the same request."
+        )}
+      >
+        <p className="font-mono text-2xl font-semibold tracking-[0.3em]">
+          {preview.requestCode}
+        </p>
+      </SocialSection>
 
-          {accept.error || decline.error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {t(
-                "This request could not be completed. It may be expired, already used, or linked to another verified account."
-              )}
-            </p>
-          ) : null}
+      <div className="flex flex-col gap-2">
+        <ConsentCheck checked={isAdult} onCheckedChange={setIsAdult}>
+          <span className="font-medium">{t("I am an adult.")}</span>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {t("The server also requires a verified account email.")}
+          </span>
+        </ConsentCheck>
+        <ConsentCheck checked={hasAuthority} onCheckedChange={setHasAuthority}>
+          <span className="font-medium">
+            {t("I have parental authority for this young person.")}
+          </span>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {t("Do not approve if this is not true.")}
+          </span>
+        </ConsentCheck>
+      </div>
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => decline.mutate({ token })}
-            >
-              {decline.isPending ? <Spinner /> : null}
-              {t("Decline")}
-            </Button>
-            <Button
-              disabled={busy || !isAdult || !hasAuthority}
-              onClick={() =>
-                accept.mutate({
-                  token,
-                  acceptedPolicyVersion: preview.policyVersion,
-                  isAdult: true,
-                  hasParentalAuthority: true,
-                })
-              }
-            >
-              {accept.isPending ? <Spinner /> : null}
-              {t("Approve social access")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {t("Sharing policy version")} {preview.policyVersion}.{" "}
+        <Link
+          href="/legal/social-sharing"
+          className="underline underline-offset-4"
+        >
+          {t("Read the plain-language summary")}
+        </Link>
+      </p>
 
-      <PrivacyBoundaryNotice />
-    </div>
+      {accept.error || decline.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {t(
+            "This request could not be completed. It may be expired, already used, or linked to another verified account."
+          )}
+        </p>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => decline.mutate({ token })}
+        >
+          {decline.isPending ? <Spinner /> : null}
+          {t("Decline")}
+        </Button>
+        <Button
+          disabled={busy || !isAdult || !hasAuthority}
+          onClick={() =>
+            accept.mutate({
+              token,
+              acceptedPolicyVersion: preview.policyVersion,
+              isAdult: true,
+              hasParentalAuthority: true,
+            })
+          }
+        >
+          {accept.isPending ? <Spinner /> : null}
+          {t("Approve social access")}
+        </Button>
+      </div>
+
+      <PrivacyNote />
+    </SocialFlow>
   )
 }

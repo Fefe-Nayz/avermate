@@ -3,10 +3,21 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ShieldAlertIcon, ShieldCheckIcon } from "lucide-react"
+import {
+  FlagIcon,
+  PowerIcon,
+  ScrollTextIcon,
+  ShieldCheckIcon,
+  UserRoundIcon,
+  UsersRoundIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  SocialCallout,
+  SocialSection,
+  SocialStat,
+} from "@/components/social/social-ui"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,9 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { orpc } from "@/lib/orpc"
@@ -29,6 +38,15 @@ function total(values: Record<string, number>) {
   return Object.values(values).reduce((sum, value) => sum + value, 0)
 }
 
+/**
+ * The social kill switch, and what it currently governs.
+ *
+ * The state of the flag is the first thing an administrator needs and the
+ * hardest to misread wrongly, so it is stated as a sentence with a matching
+ * tone rather than as a badge whose two variants looked nearly identical. The
+ * counts underneath are operational only — no figure here is derived from
+ * anybody's marks.
+ */
 export function AdminSocialOverviewClient() {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -50,77 +68,36 @@ export function AdminSocialOverviewClient() {
     },
   })
 
+  const enabled = feature.data?.enabled ?? false
+
   return (
     <>
       <PageMeta title={t("Social moderation")} backHref="/admin" />
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+        <div className="hidden md:block">
+          <h1 className="flex items-center gap-2.5 text-2xl font-semibold tracking-tight">
+            <ShieldCheckIcon className="size-5 text-muted-foreground" />
             {t("Social privacy & moderation")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
-              "Operational counts and safety controls only. This panel never exposes grades or bypasses member consent."
+              "Operational counts and safety controls. Nothing on these pages exposes a grade or overrides a member's consent."
             )}
           </p>
         </div>
 
-        <Card
-          className={feature.data?.enabled ? "border-amber-500/30" : undefined}
-        >
-          <CardHeader className="flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle>{t("Social rollout flag")}</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t(
-                  "The feature remains off by default until an administrator deliberately enables it."
-                )}
-              </p>
-            </div>
-            <Badge variant={feature.data?.enabled ? "secondary" : "outline"}>
-              {feature.data?.enabled ? t("Enabled") : t("Disabled")}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert>
-              {feature.data?.enabled ? (
-                <ShieldAlertIcon aria-hidden />
-              ) : (
-                <ShieldCheckIcon aria-hidden />
-              )}
-              <AlertTitle>
-                {feature.data?.enabled
-                  ? t("Live social access")
-                  : t("Fail-closed rollout")}
-              </AlertTitle>
-              <AlertDescription>
-                {feature.data?.enabled
-                  ? t(
-                      "Disabling hides social access immediately and clears aggregate caches. Existing safety and audit records remain for their configured retention period."
-                    )
-                  : t(
-                      "When disabled or unknown, navigation and social routes stay inaccessible. School tracking remains available."
-                    )}
-              </AlertDescription>
-            </Alert>
-            <div className="space-y-2">
-              <Label htmlFor="social-flag-reason">
-                {t("Operational reason")}
-              </Label>
-              <Textarea
-                id="social-flag-reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                minLength={10}
-                maxLength={500}
-                placeholder={t("Required for the audit trail")}
-              />
-            </div>
+        <SocialSection
+          icon={PowerIcon}
+          title={t("Social rollout")}
+          description={t(
+            "Off by default until an administrator deliberately turns it on."
+          )}
+          footer={
             <AlertDialog>
               <AlertDialogTrigger
                 render={
                   <Button
-                    variant={feature.data?.enabled ? "destructive" : "default"}
+                    variant={enabled ? "destructive" : "default"}
                     disabled={
                       !feature.data ||
                       reason.trim().length < 10 ||
@@ -129,31 +106,31 @@ export function AdminSocialOverviewClient() {
                   />
                 }
               >
-                {feature.data?.enabled
+                {enabled
                   ? t("Disable social access")
                   : t("Enable social access")}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {feature.data?.enabled
+                    {enabled
                       ? t("Disable social access now?")
                       : t("Enable social access now?")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    {feature.data?.enabled
+                    {enabled
                       ? t(
                           "Users lose social access immediately; aggregate caches are cleared."
                         )
                       : t(
-                          "Eligible users can begin optional friends and group consent flows. This does not enable any sharing by default."
+                          "Eligible users can begin the optional friend and group consent flows. It enables no sharing by itself."
                         )}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
                   <AlertDialogAction
-                    variant={feature.data?.enabled ? "destructive" : "default"}
+                    variant={enabled ? "destructive" : "default"}
                     onClick={() =>
                       feature.data &&
                       toggle.mutate({
@@ -168,25 +145,65 @@ export function AdminSocialOverviewClient() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </CardContent>
-        </Card>
+          }
+        >
+          <SocialCallout
+            tone={enabled ? "caution" : "positive"}
+            title={enabled ? t("Social access is live") : t("Failing closed")}
+          >
+            {enabled
+              ? t(
+                  "Disabling hides social access immediately and clears aggregate caches. Safety and audit records survive for their retention period."
+                )
+              : t(
+                  "While the flag is off or unknown, social navigation and routes are inaccessible. School tracking is unaffected."
+                )}
+          </SocialCallout>
+
+          <div className="space-y-2">
+            <Label htmlFor="social-flag-reason">{t("Operational reason")}</Label>
+            <Textarea
+              id="social-flag-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              minLength={10}
+              maxLength={500}
+              rows={3}
+              placeholder={t("Required for the audit trail")}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("At least 10 characters. It is written to the audit trail.")}
+            </p>
+          </div>
+        </SocialSection>
 
         {overview.data ? (
-          <div className="grid grid-cols-2 gap-3 @xl/main:grid-cols-5">
-            {[
-              [t("Social profiles"), total(overview.data.profiles)],
-              [t("Groups"), total(overview.data.groups)],
-              [t("Memberships"), total(overview.data.memberships)],
-              [t("Safety reports"), total(overview.data.reports)],
-              [t("Consent records"), total(overview.data.ageBands)],
-            ].map(([label, value]) => (
-              <Card key={String(label)} className="py-3">
-                <CardContent className="px-4">
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="text-2xl font-semibold">{value}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-3 @4xl/main:grid-cols-5">
+            <SocialStat
+              icon={UserRoundIcon}
+              label={t("Social profiles")}
+              value={total(overview.data.profiles)}
+            />
+            <SocialStat
+              icon={UsersRoundIcon}
+              label={t("Groups")}
+              value={total(overview.data.groups)}
+            />
+            <SocialStat
+              icon={UsersRoundIcon}
+              label={t("Memberships")}
+              value={total(overview.data.memberships)}
+            />
+            <SocialStat
+              icon={FlagIcon}
+              label={t("Safety reports")}
+              value={total(overview.data.reports)}
+            />
+            <SocialStat
+              icon={ScrollTextIcon}
+              label={t("Consent records")}
+              value={total(overview.data.ageBands)}
+            />
           </div>
         ) : null}
 

@@ -170,15 +170,18 @@ describe("social server and privacy boundaries", () => {
     expect(files[2]).toContain("profile.previewMineAs")
   })
 
-  test("keeps avatar formatting callable from Server Components", async () => {
-    const [preview, nameHelper, navUser] = await Promise.all([
+  test("keeps avatar formatting in a shared pure helper", async () => {
+    const [preview, socialUi, nameHelper, navUser] = await Promise.all([
       source("../components/social/profile-preview.tsx"),
+      source("../components/social/social-ui.tsx"),
       source("./name.ts"),
       source("../components/shell/nav-user.tsx"),
     ])
 
     expect(preview).not.toContain('from "@/components/shell/nav-user"')
-    expect(preview).toContain('from "@/lib/name"')
+    expect(preview).toContain("SocialIdentity")
+    expect(socialUi).not.toContain('from "@/components/shell/nav-user"')
+    expect(socialUi).toContain('from "@/lib/name"')
     expect(nameHelper).not.toContain('"use client"')
     expect(nameHelper).toContain("export function initialsOf")
     expect(navUser).not.toContain("export function initialsOf")

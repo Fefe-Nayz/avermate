@@ -5,12 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CheckIcon,
   Clock3Icon,
+  InboxIcon,
   SearchIcon,
   ShieldBanIcon,
-  ShieldCheckIcon,
   UserMinusIcon,
   UserPlusIcon,
-  UserRoundXIcon,
+  UserRoundIcon,
+  UsersRoundIcon,
   XIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
@@ -22,9 +23,14 @@ import { FriendInvitationsManager } from "@/components/social/friend-invitations
 import { ProfilePreview } from "@/components/social/profile-preview"
 import { ReportDialog } from "@/components/social/report-dialog"
 import {
-  PrivacyBoundaryNotice,
+  PrivacyNote,
+  SocialActions,
+  SocialEmpty,
+  SocialHeading,
   SocialIdentity,
-  SocialPageHeading,
+  SocialList,
+  SocialRow,
+  SocialSection,
 } from "@/components/social/social-ui"
 import {
   AlertDialog,
@@ -37,21 +43,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
+/**
+ * Friends.
+ *
+ * The old screen gave every friend four buttons — view, remove, report, block
+ * — so a list of ten people carried forty controls, three of them destructive,
+ * all at the same weight. A friend now has one action, and choosing them opens
+ * the panel that holds what they can see and everything you can do about it.
+ */
 export function FriendsClient() {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -146,6 +151,8 @@ export function FriendsClient() {
   const selected = friends.data?.friends.find(
     (friend) => friend.friendshipId === selectedFriendId
   )
+  const incoming = requests.data?.incoming ?? []
+  const outgoing = requests.data?.outgoing ?? []
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -158,341 +165,351 @@ export function FriendsClient() {
     <>
       <PageMeta title={t("Friends")} backHref="/social" />
       <div className="flex flex-col gap-4">
-        <SocialPageHeading
+        <SocialHeading
+          icon={UsersRoundIcon}
           title={t("Friends")}
           description={t(
-            "Connections require acceptance from both people. Searching never reveals whether an account is absent, blocked or ineligible."
+            "A connection needs both people to accept. Searching never reveals whether an account is absent, blocked or ineligible."
           )}
         />
 
-        <Card className="py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm">
-              {t("Add by exact handle")}
-            </CardTitle>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {t(
-                "A handle only works when its owner deliberately enabled exact-handle discovery."
-              )}
-            </p>
-          </CardHeader>
-          <CardContent className="px-4">
-            <form className="flex gap-2" onSubmit={submit}>
-              <div className="relative min-w-0 flex-1">
-                <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={handle}
-                  onChange={(event) => setHandle(event.target.value)}
-                  placeholder="@handle"
-                  aria-label={t("Exact handle")}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  maxLength={33}
-                  className="pl-9"
-                />
-              </div>
-              <Button type="submit" disabled={busy || handle.trim().length < 3}>
-                {send.isPending ? <Spinner /> : <UserPlusIcon />}
-                <span className="hidden sm:inline">{t("Send request")}</span>
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {requests.data?.incoming.length || requests.data?.outgoing.length ? (
-          <div className="grid gap-3 @lg/main:grid-cols-2">
-            <Card className="py-4">
-              <CardHeader className="px-4">
-                <CardTitle className="text-sm">
-                  {t("Received requests")} · {requests.data.incoming.length}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4">
-                {requests.data.incoming.length ? (
-                  <ul className="divide-y rounded-lg border">
-                    {requests.data.incoming.map((request) => (
-                      <li
-                        key={request.id}
-                        className="flex items-center gap-3 p-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <SocialIdentity
-                            displayName={
-                              request.profile?.displayName ||
-                              t("Private account")
-                            }
-                            avatarUrl={request.profile?.avatar}
-                            handle={request.profile?.handle}
-                          />
-                        </div>
-                        <Button
-                          size="icon-sm"
-                          aria-label={t("Accept request")}
-                          disabled={busy}
-                          onClick={() =>
-                            accept.mutate({ requestId: request.id })
-                          }
-                        >
-                          <CheckIcon />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t("Decline request")}
-                          disabled={busy}
-                          onClick={() =>
-                            decline.mutate({ requestId: request.id })
-                          }
-                        >
-                          <XIcon />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={t("Block requester")}
-                                disabled={busy}
-                              />
+        <div className="grid gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_20rem] @4xl/main:items-start">
+          <div className="flex flex-col gap-4">
+            {incoming.length ? (
+              <SocialSection
+                icon={InboxIcon}
+                title={t("Waiting for your answer")}
+                description={t(
+                  "Accepting creates the connection. It shares nothing on its own."
+                )}
+              >
+                <SocialList>
+                  {incoming.map((request) => (
+                    <SocialRow
+                      key={request.id}
+                      trailing={
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              accept.mutate({ requestId: request.id })
                             }
                           >
-                            <ShieldBanIcon />
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                {t("Block this requester?")}
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {t(
-                                  "The request disappears immediately and future connections or sharing between both accounts are prevented until you unblock."
-                                )}
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>
-                                {t("Cancel")}
-                              </AlertDialogCancel>
-                              <AlertDialogAction
-                                variant="destructive"
-                                onClick={() =>
-                                  block.mutate({
-                                    source: "friend_request",
-                                    sourceId: request.id,
-                                  })
-                                }
-                              >
-                                {t("Block account")}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {t("No received requests.")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="py-4">
-              <CardHeader className="px-4">
-                <CardTitle className="text-sm">
-                  {t("Sent requests")} · {requests.data.outgoing.length}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4">
-                {requests.data.outgoing.length ? (
-                  <ul className="divide-y rounded-lg border">
-                    {requests.data.outgoing.map((request) => (
-                      <li
-                        key={request.id}
-                        className="flex items-center gap-3 p-3"
-                      >
-                        <Clock3Icon className="size-4 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <SocialIdentity
-                            displayName={
-                              request.profile?.displayName ||
-                              t("Private account")
+                            <CheckIcon /> {t("Accept")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t("Decline request")}
+                            disabled={busy}
+                            onClick={() =>
+                              decline.mutate({ requestId: request.id })
                             }
-                            avatarUrl={request.profile?.avatar}
-                            handle={request.profile?.handle}
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() =>
-                            cancel.mutate({ requestId: request.id })
-                          }
-                        >
-                          {t("Cancel")}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {t("No sent requests.")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        ) : null}
-
-        <Card className="py-4">
-          <CardHeader className="flex-row items-center justify-between px-4">
-            <CardTitle className="text-sm">
-              {t("Your friends")} · {friends.data?.friends.length ?? 0}
-            </CardTitle>
-            <Badge variant="outline">
-              <ShieldCheckIcon /> {t("Grant-filtered")}
-            </Badge>
-          </CardHeader>
-          <CardContent className="px-4">
-            {friends.data?.friends.length ? (
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {friends.data.friends.map((friend) => (
-                  <li
-                    key={friend.friendshipId}
-                    className="space-y-3 rounded-xl border p-3"
-                  >
-                    <SocialIdentity
-                      displayName={
-                        friend.profile?.displayName || t("Private friend")
+                          >
+                            <XIcon />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={t("Block requester")}
+                                  disabled={busy}
+                                />
+                              }
+                            >
+                              <ShieldBanIcon />
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  {t("Block this requester?")}
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {t(
+                                    "The request disappears immediately and future connections or sharing between both accounts are prevented until you unblock."
+                                  )}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>
+                                  {t("Cancel")}
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  variant="destructive"
+                                  onClick={() =>
+                                    block.mutate({
+                                      source: "friend_request",
+                                      sourceId: request.id,
+                                    })
+                                  }
+                                >
+                                  {t("Block account")}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
                       }
-                      avatarUrl={friend.profile?.avatar}
-                      secondary={t("Exact view for your account")}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedFriendId(friend.friendshipId)}
-                      >
-                        {t("View shared profile")}
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger
-                          render={
-                            <Button size="sm" variant="ghost" disabled={busy} />
-                          }
-                        >
-                          <UserMinusIcon /> {t("Remove")}
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {t("Remove this friend?")}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t(
-                                "The friendship and its circle memberships end immediately. Specific grants are no longer usable."
-                              )}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-                            <AlertDialogAction
-                              variant="destructive"
-                              onClick={() =>
-                                remove.mutate({
-                                  friendshipId: friend.friendshipId,
-                                })
-                              }
-                            >
-                              {t("Remove friend")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                      <ReportDialog
-                        source="friendship"
-                        sourceId={friend.friendshipId}
+                    >
+                      <SocialIdentity
+                        displayName={
+                          request.profile?.displayName || t("Private account")
+                        }
+                        avatarUrl={request.profile?.avatar}
+                        handle={request.profile?.handle}
                       />
-                      <AlertDialog>
-                        <AlertDialogTrigger
-                          render={
-                            <Button size="sm" variant="ghost" disabled={busy} />
+                    </SocialRow>
+                  ))}
+                </SocialList>
+              </SocialSection>
+            ) : null}
+
+            <SocialSection
+              icon={UsersRoundIcon}
+              title={
+                friends.data
+                  ? t("Your friends · {count}", {
+                      count: String(friends.data.friends.length),
+                    })
+                  : t("Your friends")
+              }
+              description={t(
+                "Each name already reflects what that person chose to share with you."
+              )}
+            >
+              {friends.isPending ? (
+                <div className="grid min-h-32 place-items-center">
+                  <Spinner className="text-muted-foreground" />
+                </div>
+              ) : friends.data?.friends.length ? (
+                <SocialList>
+                  {friends.data.friends.map((friend) => {
+                    const open = friend.friendshipId === selectedFriendId
+                    return (
+                      <SocialRow
+                        key={friend.friendshipId}
+                        trailing={
+                          <Button
+                            size="sm"
+                            variant={open ? "secondary" : "ghost"}
+                            onClick={() =>
+                              setSelectedFriendId(
+                                open ? null : friend.friendshipId
+                              )
+                            }
+                          >
+                            {open ? t("Close") : t("Open")}
+                          </Button>
+                        }
+                      >
+                        <SocialIdentity
+                          displayName={
+                            friend.profile?.displayName || t("Private friend")
                           }
-                        >
-                          <ShieldBanIcon /> {t("Block")}
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {t("Block this account?")}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t(
-                                "The friendship, pending requests, circle memberships and usable grants end immediately. They will not return if you unblock later."
-                              )}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-                            <AlertDialogAction
-                              variant="destructive"
-                              onClick={() =>
-                                block.mutate({
-                                  source: "friendship",
-                                  sourceId: friend.friendshipId,
-                                })
-                              }
-                            >
-                              {t("Block account")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty className="min-h-52 border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <UserRoundXIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("No friends yet")}</EmptyTitle>
-                  <EmptyDescription>
-                    {t(
-                      "Use an exact handle above. Both people remain in control."
-                    )}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-          </CardContent>
-        </Card>
+                          avatarUrl={friend.profile?.avatar}
+                          secondary={t("Only granted fields are shown")}
+                        />
+                      </SocialRow>
+                    )
+                  })}
+                </SocialList>
+              ) : (
+                <SocialEmpty
+                  title={t("No friends yet")}
+                  description={t(
+                    "Send a request to an exact handle, or share a one-time invitation link."
+                  )}
+                />
+              )}
+            </SocialSection>
 
-        {selected ? (
-          <div role="region" aria-label={t("Shared profile preview")}>
-            <ProfilePreview
-              exact
-              profile={selected.profile ?? {}}
-              audienceLabel={t("Exactly what this friend shares with you")}
-            />
+            {selected ? (
+              <SocialSection
+                icon={UserRoundIcon}
+                title={selected.profile?.displayName || t("Private friend")}
+                description={t("Everything this connection involves.")}
+                action={
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSelectedFriendId(null)}
+                  >
+                    <XIcon /> {t("Close")}
+                  </Button>
+                }
+                footer={
+                  <SocialActions>
+                    <ReportDialog
+                      source="friendship"
+                      sourceId={selected.friendshipId}
+                    />
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button size="sm" variant="ghost" disabled={busy} />
+                        }
+                      >
+                        <UserMinusIcon /> {t("Remove friend")}
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {t("Remove this friend?")}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t(
+                              "The friendship and its circle memberships end immediately. Specific grants are no longer usable."
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+                          <AlertDialogAction
+                            variant="destructive"
+                            onClick={() =>
+                              remove.mutate({
+                                friendshipId: selected.friendshipId,
+                              })
+                            }
+                          >
+                            {t("Remove friend")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <AlertDialog>
+                      <AlertDialogTrigger
+                        render={
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            disabled={busy}
+                          />
+                        }
+                      >
+                        <ShieldBanIcon /> {t("Block")}
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {t("Block this account?")}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t(
+                              "The friendship, pending requests, circle memberships and usable grants end immediately. They will not return if you unblock later."
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+                          <AlertDialogAction
+                            variant="destructive"
+                            onClick={() =>
+                              block.mutate({
+                                source: "friendship",
+                                sourceId: selected.friendshipId,
+                              })
+                            }
+                          >
+                            {t("Block account")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </SocialActions>
+                }
+              >
+                <ProfilePreview
+                  exact
+                  profile={selected.profile ?? {}}
+                  audienceLabel={t("Exactly what they share with you")}
+                />
+              </SocialSection>
+            ) : null}
           </div>
-        ) : null}
 
-        <div className="grid gap-4 @xl/main:grid-cols-2">
-          <FriendInvitationsManager />
-          <BlocksManager />
+          <div className="flex flex-col gap-4">
+            <SocialSection
+              icon={UserPlusIcon}
+              title={t("Add by exact handle")}
+              description={t(
+                "A handle only works when its owner deliberately turned on exact-handle discovery."
+              )}
+            >
+              <form className="flex gap-2" onSubmit={submit}>
+                <div className="relative min-w-0 flex-1">
+                  <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={handle}
+                    onChange={(event) => setHandle(event.target.value)}
+                    placeholder="@handle"
+                    aria-label={t("Exact handle")}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={33}
+                    className="pl-9"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  size="icon"
+                  aria-label={t("Send request")}
+                  disabled={busy || handle.trim().length < 3}
+                >
+                  {send.isPending ? <Spinner /> : <UserPlusIcon />}
+                </Button>
+              </form>
+
+              {outgoing.length ? (
+                <div>
+                  <p className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock3Icon className="size-3.5" aria-hidden />
+                    {t("Sent and waiting")}
+                  </p>
+                  <SocialList>
+                    {outgoing.map((request) => (
+                      <SocialRow
+                        key={request.id}
+                        trailing={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              cancel.mutate({ requestId: request.id })
+                            }
+                          >
+                            {t("Cancel")}
+                          </Button>
+                        }
+                      >
+                        <SocialIdentity
+                          displayName={
+                            request.profile?.displayName || t("Private account")
+                          }
+                          avatarUrl={request.profile?.avatar}
+                          handle={request.profile?.handle}
+                        />
+                      </SocialRow>
+                    ))}
+                  </SocialList>
+                </div>
+              ) : null}
+            </SocialSection>
+
+            <FriendInvitationsManager />
+            <BlocksManager />
+          </div>
         </div>
 
         <CirclesManager />
 
-        <PrivacyBoundaryNotice compact />
+        <PrivacyNote />
       </div>
     </>
   )

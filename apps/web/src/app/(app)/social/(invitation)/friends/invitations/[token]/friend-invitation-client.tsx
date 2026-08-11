@@ -3,14 +3,18 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2Icon, ShieldCheckIcon } from "lucide-react"
+import { UserRoundCheckIcon, UserRoundPlusIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { ProfilePreview } from "@/components/social/profile-preview"
-import { PrivacyBoundaryNotice } from "@/components/social/social-ui"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  PrivacyNote,
+  SocialCallout,
+  SocialFlow,
+  SocialHeading,
+  SocialOutcome,
+} from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
@@ -53,18 +57,23 @@ export function FriendInvitationClient({
 
   if (accepted) {
     return (
-      <Card className="mx-auto max-w-xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle2Icon className="text-success" /> {t("Friend added")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button render={<Link href="/social/friends" />}>
-            {t("Go to friends")}
-          </Button>
-        </CardContent>
-      </Card>
+      <SocialFlow>
+        <PageMeta title={t("Private friend invitation")} />
+        <SocialOutcome
+          tone="positive"
+          icon={UserRoundCheckIcon}
+          title={t("You are now connected")}
+          action={
+            <Button render={<Link href="/social/friends" />}>
+              {t("Go to friends")}
+            </Button>
+          }
+        >
+          {t(
+            "Nothing is shared yet. Each of you still decides, field by field, what the other receives."
+          )}
+        </SocialOutcome>
+      </SocialFlow>
     )
   }
 
@@ -74,25 +83,32 @@ export function FriendInvitationClient({
         title={t("Private friend invitation")}
         backHref="/social/friends"
       />
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+      <SocialFlow>
+        <SocialHeading
+          icon={UserRoundPlusIcon}
+          title={t("A private friend invitation")}
+          description={t(
+            "Someone sent you a one-time link. Here is everything they currently share."
+          )}
+        />
+
         <ProfilePreview
           profile={preview.profile}
-          audienceLabel={t("Invitation sender")}
+          audienceLabel={t("The person who invited you")}
         />
-        <Alert>
-          <ShieldCheckIcon aria-hidden />
-          <AlertTitle>{t("Your choice")}</AlertTitle>
-          <AlertDescription>
-            {t(
-              "Accepting creates a mutual friend connection. It does not reveal any profile field by itself: each person still chooses explicit audiences, and either person can remove or block the other immediately."
-            )}
-          </AlertDescription>
-        </Alert>
+
+        <SocialCallout tone="positive" title={t("What accepting does")}>
+          {t(
+            "It creates a mutual connection and nothing else. No profile field becomes visible by itself, and either of you can remove or block the other immediately."
+          )}
+        </SocialCallout>
+
         {accept.error ? (
           <p role="alert" className="text-sm text-destructive">
             {t("This invitation is unavailable or was already used.")}
           </p>
         ) : null}
+
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" render={<Link href="/social/friends" />}>
             {t("Not now")}
@@ -105,8 +121,9 @@ export function FriendInvitationClient({
             {t("Accept friendship")}
           </Button>
         </div>
-        <PrivacyBoundaryNotice compact />
-      </div>
+
+        <PrivacyNote />
+      </SocialFlow>
     </>
   )
 }

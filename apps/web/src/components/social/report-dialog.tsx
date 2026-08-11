@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { FlagIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { SocialCallout } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,18 +24,31 @@ import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
 type ReportSource =
-  "friendship" | "friend_request" | "group" | "group_membership"
+  | "friendship"
+  | "friend_request"
+  | "group"
+  | "group_membership"
 type ReportCategory =
-  "harassment" | "privacy" | "impersonation" | "unsafe_content" | "other"
+  | "harassment"
+  | "privacy"
+  | "impersonation"
+  | "unsafe_content"
+  | "other"
 
+/**
+ * Reporting something.
+ *
+ * The one instruction that matters — do not paste grades into a moderation
+ * queue — used to sit in the dialog's subtitle where it is read once and then
+ * scrolled past. It sits beside the text box instead, where the mistake would
+ * actually be made.
+ */
 export function ReportDialog({
   source,
   sourceId,
-  compact = false,
 }: {
   source: ReportSource
   sourceId: string
-  compact?: boolean
 }) {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -57,27 +71,20 @@ export function ReportDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={
-          <Button
-            type="button"
-            size={compact ? "icon-sm" : "sm"}
-            variant="ghost"
-            aria-label={compact ? t("Report") : undefined}
-          />
-        }
+        render={<Button type="button" size="sm" variant="ghost" />}
       >
-        <FlagIcon /> {compact ? null : t("Report")}
+        <FlagIcon /> {t("Report")}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("Report a social safety issue")}</DialogTitle>
+          <DialogTitle>{t("Report a safety issue")}</DialogTitle>
           <DialogDescription>
             {t(
-              "Reports go to Avermate's private moderation queue, not Discord. Describe only what moderators need; do not include grades or other sensitive school details."
+              "This goes to Avermate's private moderation queue. The person you are reporting is not told."
             )}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <div className="space-y-2">
             <Label htmlFor={`report-category-${sourceId}`}>
               {t("Category")}
@@ -107,7 +114,15 @@ export function ReportDialog({
               maxLength={2000}
               rows={5}
             />
+            <p className="numeric text-right text-xs text-muted-foreground">
+              {message.trim().length}/2000
+            </p>
           </div>
+          <SocialCallout tone="caution" title={t("Keep school data out of it")}>
+            {t(
+              "Write only what a moderator needs. Do not paste grades, subject names or anyone's academic results."
+            )}
+          </SocialCallout>
           {create.error ? (
             <p role="alert" className="text-sm text-destructive">
               {t("The report could not be sent. Try again later.")}

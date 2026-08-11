@@ -7,8 +7,8 @@ import { ShieldXIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { GuardianConsentClient } from "../[token]/guardian-consent-client"
 import { PageMeta } from "@/components/shell/page-chrome"
+import { SocialFlow, SocialOutcome } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { orpc } from "@/lib/orpc"
 import {
@@ -40,34 +40,29 @@ export function GuardianConsentReviewClient() {
         className="grid min-h-64 place-items-center"
         aria-label={t("Loading request")}
       >
-        <Spinner />
+        <Spinner className="text-muted-foreground" />
       </div>
     )
   }
 
   if (!token || !preview.data || preview.isError) {
     return (
-      <>
+      <SocialFlow className="py-6">
         <PageMeta title={t("Guardian consent")} />
-        <Card className="mx-auto max-w-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldXIcon aria-hidden />
-              {t("Guardian request unavailable")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            <p>
-              {t(
-                "This request is invalid, expired, already handled or linked to another verified account. No social permission was changed."
-              )}
-            </p>
+        <SocialOutcome
+          icon={ShieldXIcon}
+          title={t("This request cannot be opened")}
+          action={
             <Button variant="outline" render={<Link href="/" />}>
               {t("Return to Avermate")}
             </Button>
-          </CardContent>
-        </Card>
-      </>
+          }
+        >
+          {t(
+            "It is invalid, expired, already handled, or linked to another verified account. No social permission was changed."
+          )}
+        </SocialOutcome>
+      </SocialFlow>
     )
   }
 

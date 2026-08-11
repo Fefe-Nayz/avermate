@@ -2,21 +2,33 @@
 
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ShieldCheckIcon } from "lucide-react"
+import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import {
   GroupPolicySummary,
   type GroupPolicyView,
 } from "@/components/social/group-policy-summary"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  MetricChoice,
+  SocialCallout,
+  SocialSection,
+  useSocialLabels,
+} from "@/components/social/social-ui"
+import { ConsentCheck } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { orpc } from "@/lib/orpc"
-import type { SocialMetric } from "@/components/social/group-policy-editor"
+import type { SocialMetric } from "@/lib/social-presentation"
 
+/**
+ * Agreeing to a policy.
+ *
+ * The reader has to answer three things — which optional figures they are
+ * willing to contribute, from which year, and whether they accept — so those
+ * are the three blocks, in that order, under the policy they are answering.
+ */
 export function GroupConsentPanel({
   groupId,
   policy,
@@ -25,6 +37,7 @@ export function GroupConsentPanel({
   policy: GroupPolicyView & { digest: string }
 }) {
   const t = useExtracted()
+  const labels = useSocialLabels()
   const queryClient = useQueryClient()
   const years = useQuery(orpc.years.list.queryOptions())
   const [selected, setSelected] = useState<SocialMetric[]>(
@@ -68,131 +81,116 @@ export function GroupConsentPanel({
       .filter((field) => field.required)
       .map((field) => field.fieldKey)
   )
+  const optionalCount = policy.fields.length - required.size
+  const chosenOptional = selected.filter(
+    (metric) => !required.has(metric)
+  ).length
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <GroupPolicySummary policy={policy} reconsentRequired />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Your field choices")}</CardTitle>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {t(
-              "Required fields are necessary for this group's stated purpose. Optional fields stay off unless you select them. You can refuse by leaving the group or withdraw later."
-            )}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ul className="divide-y rounded-xl border">
-            {policy.fields.map((field) => {
-              const metric = field.fieldKey as SocialMetric
-              const isRequired = required.has(field.fieldKey)
-              return (
-                <li key={field.fieldKey} className="p-3">
-                  <label className="flex items-start gap-3">
-                    <Checkbox
-                      checked={isRequired || selected.includes(metric)}
-                      disabled={isRequired || reconsent.isPending}
-                      onCheckedChange={(checked) =>
-                        toggle(metric, checked === true)
-                      }
-                    />
-                    <span>
-                      <span className="block text-sm font-medium">
-                        {metric === "normalizedAverage"
-                          ? t("Normalized average")
-                          : metric === "median"
-                            ? t("Median result")
-                            : metric === "trendBand"
-                              ? t("Trend range")
-                              : metric === "passRateBand"
-                                ? t("Success-rate range")
-                                : metric === "gradeCountBand"
-                                  ? t("Activity range")
-                                  : t("Goal progress range")}
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground">
-                        {isRequired ? t("Required to join") : t("Optional")}
-                        {" · "}
-                        {field.exposure === "aggregate_only"
-                          ? t("Group aggregate only")
-                          : field.exposure === "member_visible"
-                            ? t("Visible to participating members")
-                            : t("Eligible for separate ranking opt-in")}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-
-          <div className="space-y-2">
-            <label htmlFor="consent-year" className="text-sm font-medium">
-              {t("Academic year used to derive these summaries")}
-            </label>
-            <SelectControl
-              id="consent-year"
-              value={yearId}
-              disabled={reconsent.isPending}
-              onValueChange={setYearId}
-              placeholder={t("Choose an academic year…")}
-              options={activeYears.map((year) => ({
-                value: year.id,
-                label: year.name,
-              }))}
-            />
-          </div>
-
-          <Alert>
-            <ShieldCheckIcon aria-hidden />
-            <AlertTitle>{t("No academic snapshot is copied")}</AlertTitle>
-            <AlertDescription>
-              {t(
-                "The server derives only the selected summaries for this policy and window. Group owners and moderators cannot bypass your choices."
-              )}
-            </AlertDescription>
-          </Alert>
-
-          <label className="flex items-start gap-3 rounded-xl border p-4">
-            <Checkbox
-              checked={accepted}
-              disabled={reconsent.isPending}
-              onCheckedChange={(checked) => setAccepted(checked === true)}
-            />
-            <span className="text-sm leading-relaxed">
-              {t(
-                "I accept this exact policy version and the selected fields. I understand how to withdraw, and that ranking participation stays off until a separate choice."
-              )}
-            </span>
-          </label>
-
-          {reconsent.error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {t(
-                "The policy changed or consent could not be saved. Review it again."
-              )}
-            </p>
-          ) : null}
-
-          <Button
-            disabled={!accepted || !yearId || reconsent.isPending}
-            onClick={() =>
-              reconsent.mutate({
-                groupId,
-                policyDigest: policy.digest,
-                selectedFields: selected,
-                sharedYearId: yearId,
-                accepted: true,
-                channel: "web",
+      <SocialSection
+        icon={SlidersHorizontalIcon}
+        title={t("What you contribute")}
+        description={
+          optionalCount
+            ? t("{chosen} of {total} optional figures selected.", {
+                chosen: String(chosenOptional),
+                total: String(optionalCount),
               })
-            }
-          >
-            {reconsent.isPending ? <Spinner /> : null}
-            {t("Accept selected sharing")}
-          </Button>
-        </CardContent>
-      </Card>
+            : t("This policy asks only for required figures.")
+        }
+        bodyClassName="p-0"
+      >
+        <ul className="divide-y">
+          {policy.fields.map((field) => {
+            const metric = field.fieldKey as SocialMetric
+            const isRequired = required.has(field.fieldKey)
+            return (
+              <li key={field.fieldKey}>
+                <MetricChoice
+                  label={labels.metric(field.fieldKey)}
+                  description={labels.exposureDescription(field.exposure)}
+                  exposure={field.exposure}
+                  required={isRequired}
+                  checked={isRequired || selected.includes(metric)}
+                  disabled={isRequired || reconsent.isPending}
+                  onCheckedChange={(checked) => toggle(metric, checked)}
+                />
+              </li>
+            )
+          })}
+        </ul>
+      </SocialSection>
+
+      <SocialSection
+        icon={CalendarRangeIcon}
+        title={t("Which year these figures come from")}
+        description={t(
+          "Only this year is read, and only through the policy's window."
+        )}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="consent-year" className="sr-only">
+            {t("Academic year")}
+          </Label>
+          <SelectControl
+            id="consent-year"
+            value={yearId}
+            disabled={reconsent.isPending}
+            onValueChange={setYearId}
+            placeholder={t("Choose an academic year…")}
+            options={activeYears.map((year) => ({
+              value: year.id,
+              label: year.name,
+            }))}
+          />
+        </div>
+
+        <SocialCallout tone="positive" title={t("No snapshot is copied")}>
+          {t(
+            "The server derives the selected summaries on demand. Owners and moderators cannot bypass your choices, and withdrawing stops the derivation."
+          )}
+        </SocialCallout>
+      </SocialSection>
+
+      <ConsentCheck
+        checked={accepted}
+        disabled={reconsent.isPending}
+        onCheckedChange={setAccepted}
+      >
+        {t(
+          "I accept this exact policy version and the figures selected above. I understand how to withdraw, and that ranking participation stays off until a separate choice."
+        )}
+      </ConsentCheck>
+
+      {reconsent.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {t(
+            "The policy changed or consent could not be saved. Review it again."
+          )}
+        </p>
+      ) : null}
+
+      <div className="flex justify-end">
+        <Button
+          disabled={!accepted || !yearId || reconsent.isPending}
+          onClick={() =>
+            reconsent.mutate({
+              groupId,
+              policyDigest: policy.digest,
+              selectedFields: selected,
+              sharedYearId: yearId,
+              accepted: true,
+              channel: "web",
+            })
+          }
+        >
+          {reconsent.isPending ? <Spinner /> : null}
+          {t("Accept and start sharing")}
+        </Button>
+      </div>
     </div>
   )
 }

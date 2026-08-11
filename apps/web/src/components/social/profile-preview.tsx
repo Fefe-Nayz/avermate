@@ -1,9 +1,10 @@
-import { EyeOffIcon, ShieldCheckIcon } from "lucide-react"
+"use client"
+
+import { EyeIcon, LockKeyholeIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { SocialIdentity, useSocialLabels } from "@/components/social/social-ui"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { initialsOf } from "@/lib/name"
+import { cn } from "@/lib/utils"
 
 export interface SocialProfileProjection {
   displayName?: string | null
@@ -12,15 +13,15 @@ export interface SocialProfileProjection {
   educationBand?: string | null
 }
 
-function EducationBand({ value }: { value: string }) {
-  const t = useExtracted()
-  if (value === "middle_school") return t("Middle school")
-  if (value === "high_school") return t("High school")
-  if (value === "higher_education") return t("Higher education")
-  if (value === "other") return t("Other education")
-  return t("Education level")
-}
-
+/**
+ * What one audience actually receives.
+ *
+ * The projection the server returns *is* the answer — a field it left out is a
+ * field that person cannot see — so the withheld ones are drawn as locked
+ * lines rather than omitted. A preview that silently drops what is not shared
+ * looks identical to a preview of a sparse profile, and the difference between
+ * those two is the entire point of the screen.
+ */
 export function ProfilePreview({
   profile,
   audienceLabel,
@@ -31,44 +32,77 @@ export function ProfilePreview({
   exact?: boolean
 }) {
   const t = useExtracted()
-  const name = profile.displayName?.trim() || t("Private profile")
+  const labels = useSocialLabels()
+  const name = profile.displayName?.trim()
+
+  const rows = [
+    {
+      key: "bio",
+      label: t("Bio"),
+      value: profile.bio?.trim() || null,
+    },
+    {
+      key: "educationBand",
+      label: t("Education level"),
+      value: profile.educationBand
+        ? labels.educationBand(profile.educationBand)
+        : null,
+    },
+  ]
 
   return (
-    <Card className="overflow-hidden py-0">
-      <div className="h-16 bg-linear-to-br from-primary/25 via-primary/8 to-transparent" />
-      <CardHeader className="-mt-7 flex-row items-end gap-3 px-4">
-        <Avatar className="size-14 ring-4 ring-card">
-          <AvatarImage src={profile.avatar ?? undefined} alt="" />
-          <AvatarFallback>{initialsOf(name)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1 pb-0.5">
-          <CardTitle className="truncate text-base">{name}</CardTitle>
-          <p className="text-xs text-muted-foreground">{audienceLabel}</p>
-        </div>
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2">
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          {audienceLabel}
+        </p>
         {exact ? (
-          <Badge variant="secondary">
-            <ShieldCheckIcon aria-hidden /> {t("Exact preview")}
+          <Badge variant="outline" className="shrink-0">
+            <EyeIcon aria-hidden /> {t("Exact view")}
           </Badge>
         ) : null}
-      </CardHeader>
-      <CardContent className="space-y-3 px-4 pb-4">
-        {profile.bio ? (
-          <p className="text-sm leading-relaxed">{profile.bio}</p>
+      </div>
+
+      <div className="flex flex-col gap-3 p-4">
+        {name ? (
+          <SocialIdentity
+            size="large"
+            displayName={name}
+            avatarUrl={profile.avatar}
+            secondary={
+              profile.avatar ? undefined : t("Avatar is not shared with them")
+            }
+          />
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <EyeOffIcon className="size-4" aria-hidden /> {t("Bio not shared")}
+            <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
+            {t("Even your display name is withheld from this audience.")}
           </p>
         )}
-        {profile.educationBand ? (
-          <Badge variant="outline">
-            <EducationBand value={profile.educationBand} />
-          </Badge>
-        ) : (
-          <Badge variant="outline">
-            <EyeOffIcon aria-hidden /> {t("Education level not shared")}
-          </Badge>
-        )}
-      </CardContent>
-    </Card>
+
+        <dl className="divide-y rounded-lg border">
+          {rows.map((row) => (
+            <div key={row.key} className="flex gap-3 px-3 py-2.5 text-sm">
+              <dt className="w-28 shrink-0 text-xs text-muted-foreground">
+                {row.label}
+              </dt>
+              <dd
+                className={cn(
+                  "min-w-0 flex-1",
+                  row.value ? "leading-relaxed" : "text-muted-foreground"
+                )}
+              >
+                {row.value ?? (
+                  <span className="flex items-center gap-1.5">
+                    <LockKeyholeIcon className="size-3.5 shrink-0" aria-hidden />
+                    {t("Not shared")}
+                  </span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
   )
 }

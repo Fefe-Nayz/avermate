@@ -3,7 +3,12 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckIcon, CopyIcon, LinkIcon } from "lucide-react"
+import {
+  LinkIcon,
+  PencilIcon,
+  ScrollTextIcon,
+  TriangleAlertIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import {
@@ -12,6 +17,16 @@ import {
   type SocialMetric,
 } from "@/components/social/group-policy-editor"
 import { ReportDialog } from "@/components/social/report-dialog"
+import {
+  LinkState,
+  SecretLink,
+  SocialActions,
+  SocialCallout,
+  SocialEmpty,
+  SocialList,
+  SocialRow,
+  SocialSection,
+} from "@/components/social/social-ui"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +40,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
@@ -45,6 +59,14 @@ interface PolicyManagementView extends PolicyDraft {
   version: number
 }
 
+/**
+ * Running the group.
+ *
+ * Publishing a policy version silently invalidates every member's consent, so
+ * it is stated as a consequence next to the button rather than discovered in a
+ * confirmation dialog. Leaving and deleting are grouped at the end, apart from
+ * the everyday controls.
+ */
 export function GroupManagementPanel({
   group,
   policy,
@@ -66,7 +88,6 @@ export function GroupManagementPanel({
   const [description, setDescription] = useState(group.description)
   const [targetEmail, setTargetEmail] = useState("")
   const [freshLink, setFreshLink] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [draft, setDraft] = useState<PolicyDraft>({
     purpose: policy.purpose,
     audienceDescription: policy.audienceDescription,
@@ -94,7 +115,10 @@ export function GroupManagementPanel({
   }
   const update = useMutation({
     ...orpc.social.groups.update.mutationOptions(),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      toast.success(t("Group saved."))
+      await refresh()
+    },
   })
   const newPolicy = useMutation({
     ...orpc.social.groups.policy.createVersion.mutationOptions(),
@@ -107,7 +131,6 @@ export function GroupManagementPanel({
     ...orpc.social.groups.invitations.create.mutationOptions(),
     onSuccess: async (result) => {
       setFreshLink(new URL(result.sharePath, window.location.origin).toString())
-      setCopied(false)
       setTargetEmail("")
       await refresh()
     },
@@ -150,150 +173,115 @@ export function GroupManagementPanel({
     deleteGroup.isPending ||
     leave.isPending
 
-  async function copyLink() {
-    if (!freshLink) return
-    await navigator.clipboard.writeText(freshLink)
-    setCopied(true)
-  }
+  const policyReady =
+    draft.purpose.trim().length >= 10 &&
+    draft.audienceDescription.trim().length >= 3 &&
+    draft.fields.length > 0
 
   return (
-    <section className="space-y-4" aria-labelledby="group-management-heading">
-      <h2 id="group-management-heading" className="text-lg font-semibold">
-        {t("Group controls")}
-      </h2>
-
+    <div className="flex flex-col gap-4">
       {manager ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("Private invitations")}</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {t(
-                "Invitations are one-time, expire, and are locked to this policy version. An optional target email is hashed and never shown in the list."
-              )}
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <Input
-                type="email"
-                value={targetEmail}
-                onChange={(event) => setTargetEmail(event.target.value)}
-                placeholder={t("Optional recipient email")}
-                aria-label={t("Optional recipient email")}
-              />
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  createInvitation.mutate({
-                    groupId: group.id,
-                    targetEmail: targetEmail.trim().toLowerCase() || null,
-                    expiresInDays: 7,
-                  })
-                }
-              >
-                {createInvitation.isPending ? <Spinner /> : <LinkIcon />}
-                {t("Create 7-day link")}
-              </Button>
-            </div>
-            {freshLink ? (
-              <div className="space-y-2 rounded-xl border p-3">
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "Copy this secret now; the full token is not stored for later display."
-                  )}
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    value={freshLink}
-                    readOnly
-                    className="font-mono text-xs"
-                  />
-                  <Button variant="outline" size="icon" onClick={copyLink}>
-                    {copied ? <CheckIcon /> : <CopyIcon />}
-                    <span className="sr-only">{t("Copy link")}</span>
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            {invitations.data?.length ? (
-              <ul className="divide-y rounded-xl border">
-                {invitations.data.map((invitation) => {
-                  const active = !invitation.consumedAt && !invitation.revokedAt
-                  return (
-                    <li
-                      key={invitation.id}
-                      className="flex items-center justify-between gap-2 p-3"
-                    >
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant={active ? "secondary" : "outline"}>
-                          {invitation.consumedAt
-                            ? t("Used")
-                            : invitation.revokedAt
-                              ? t("Revoked")
-                              : t("Active")}
-                        </Badge>
-                        {invitation.targeted ? (
-                          <Badge variant="outline">
-                            {t("Account-targeted")}
-                          </Badge>
+        <SocialSection
+          icon={LinkIcon}
+          title={t("Invitations")}
+          description={t(
+            "One-time, expiring, and locked to the current policy version. An optional recipient address is hashed and never shown again."
+          )}
+        >
+          <div className="grid gap-2 @lg/main:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              type="email"
+              value={targetEmail}
+              onChange={(event) => setTargetEmail(event.target.value)}
+              placeholder={t("Optional recipient email")}
+              aria-label={t("Optional recipient email")}
+            />
+            <Button
+              disabled={busy}
+              onClick={() =>
+                createInvitation.mutate({
+                  groupId: group.id,
+                  targetEmail: targetEmail.trim().toLowerCase() || null,
+                  expiresInDays: 7,
+                })
+              }
+            >
+              {createInvitation.isPending ? <Spinner /> : <LinkIcon />}
+              {t("Create 7-day link")}
+            </Button>
+          </div>
+
+          {freshLink ? (
+            <SecretLink url={freshLink} label={t("Your new invitation link")} />
+          ) : null}
+
+          {invitations.data?.length ? (
+            <SocialList>
+              {invitations.data.map((invitation) => {
+                const active = !invitation.consumedAt && !invitation.revokedAt
+                return (
+                  <SocialRow
+                    key={invitation.id}
+                    trailing={
+                      <>
+                        <LinkState
+                          consumed={invitation.consumedAt}
+                          revoked={invitation.revokedAt}
+                        />
+                        {active ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() =>
+                              revokeInvitation.mutate({
+                                groupId: group.id,
+                                invitationId: invitation.id,
+                              })
+                            }
+                          >
+                            {t("Revoke")}
+                          </Button>
                         ) : null}
+                      </>
+                    }
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-sm">
+                        {t("Policy version {version}", {
+                          version: String(invitation.policyVersion),
+                        })}
+                      </span>
+                      {invitation.targeted ? (
                         <Badge variant="outline">
-                          {t("Policy version {version}", {
-                            version: String(invitation.policyVersion),
-                          })}
+                          {t("Account-targeted")}
                         </Badge>
-                      </div>
-                      {active ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() =>
-                            revokeInvitation.mutate({
-                              groupId: group.id,
-                              invitationId: invitation.id,
-                            })
-                          }
-                        >
-                          {t("Revoke")}
-                        </Button>
                       ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-          </CardContent>
-        </Card>
+                    </div>
+                  </SocialRow>
+                )
+              })}
+            </SocialList>
+          ) : (
+            <SocialEmpty
+              compact
+              icon={LinkIcon}
+              title={t("No invitations yet")}
+              description={t(
+                "A link is the only way in — this group is never discoverable."
+              )}
+            />
+          )}
+        </SocialSection>
       ) : null}
 
       {group.role === "owner" ? (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("Group identity")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="manage-group-name">{t("Name")}</Label>
-                <Input
-                  id="manage-group-name"
-                  value={name}
-                  maxLength={100}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manage-group-description">
-                  {t("Description")}
-                </Label>
-                <Textarea
-                  id="manage-group-description"
-                  value={description}
-                  maxLength={500}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-              </div>
+          <SocialSection
+            icon={PencilIcon}
+            title={t("Group identity")}
+            description={t("Visible to members and to anyone you invite.")}
+            footer={
               <Button
                 variant="outline"
                 disabled={busy || name.trim().length < 2}
@@ -309,36 +297,41 @@ export function GroupManagementPanel({
                 {update.isPending ? <Spinner /> : null}
                 {t("Save group")}
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("Publish a new policy version")}</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                {t(
-                  "Publishing immediately hides member details, aggregates and rankings until each person reviews and accepts the new version."
-                )}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <GroupPolicyEditor
-                value={draft}
-                onChange={setDraft}
-                disabled={busy}
+            }
+          >
+            <div className="space-y-2">
+              <Label htmlFor="manage-group-name">{t("Name")}</Label>
+              <Input
+                id="manage-group-name"
+                value={name}
+                maxLength={100}
+                onChange={(event) => setName(event.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manage-group-description">
+                {t("Description")}
+              </Label>
+              <Textarea
+                id="manage-group-description"
+                value={description}
+                maxLength={500}
+                rows={3}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+          </SocialSection>
+
+          <SocialSection
+            icon={ScrollTextIcon}
+            title={t("Publish a new policy version")}
+            description={t("Currently on version {version}.", {
+              version: String(policy.version),
+            })}
+            footer={
               <AlertDialog>
                 <AlertDialogTrigger
-                  render={
-                    <Button
-                      disabled={
-                        busy ||
-                        draft.purpose.trim().length < 10 ||
-                        draft.audienceDescription.trim().length < 3 ||
-                        draft.fields.length === 0
-                      }
-                    />
-                  }
+                  render={<Button disabled={busy || !policyReady} />}
                 >
                   {newPolicy.isPending ? <Spinner /> : null}
                   {t("Publish and require reconsent")}
@@ -370,16 +363,31 @@ export function GroupManagementPanel({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </CardContent>
-          </Card>
+            }
+          >
+            <SocialCallout
+              tone="caution"
+              title={t("Publishing pauses the whole group")}
+            >
+              {t(
+                "Member details, statistics and rankings disappear for everyone until each person reviews and accepts the new version."
+              )}
+            </SocialCallout>
+            <GroupPolicyEditor
+              value={draft}
+              onChange={setDraft}
+              disabled={busy}
+            />
+          </SocialSection>
         </>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Safety & membership")}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
+      <SocialSection
+        icon={TriangleAlertIcon}
+        title={t("Safety and membership")}
+        description={t("Reports reach Avermate moderators, not the group.")}
+      >
+        <SocialActions>
           <ReportDialog source="group" sourceId={group.id} />
           {group.role === "owner" ? (
             <>
@@ -395,9 +403,7 @@ export function GroupManagementPanel({
                       {t("Archive this group?")}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      {t(
-                        "It leaves active lists and stops normal participation."
-                      )}
+                      {t("It leaves active lists and stops normal participation.")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -418,7 +424,13 @@ export function GroupManagementPanel({
               </AlertDialog>
               <AlertDialog>
                 <AlertDialogTrigger
-                  render={<Button variant="destructive" disabled={busy} />}
+                  render={
+                    <Button
+                      variant="ghost"
+                      className="text-destructive"
+                      disabled={busy}
+                    />
+                  }
                 >
                   {t("Delete group")}
                 </AlertDialogTrigger>
@@ -453,7 +465,13 @@ export function GroupManagementPanel({
           ) : (
             <AlertDialog>
               <AlertDialogTrigger
-                render={<Button variant="destructive" disabled={busy} />}
+                render={
+                  <Button
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={busy}
+                  />
+                }
               >
                 {t("Leave group")}
               </AlertDialogTrigger>
@@ -478,8 +496,8 @@ export function GroupManagementPanel({
               </AlertDialogContent>
             </AlertDialog>
           )}
-        </CardContent>
-      </Card>
-    </section>
+        </SocialActions>
+      </SocialSection>
+    </div>
   )
 }

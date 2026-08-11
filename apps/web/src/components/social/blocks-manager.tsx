@@ -4,8 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ShieldBanIcon, Undo2Icon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import {
+  SocialEmpty,
+  SocialList,
+  SocialRow,
+  SocialSection,
+} from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { orpc } from "@/lib/orpc"
 
 export function BlocksManager() {
@@ -27,28 +32,18 @@ export function BlocksManager() {
   })
 
   return (
-    <Card className="py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <ShieldBanIcon className="size-4" /> {t("Blocked accounts")}
-        </CardTitle>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t(
-            "Blocking ends the friendship, pending requests and usable sharing immediately. Unblocking never recreates them."
-          )}
-        </p>
-      </CardHeader>
-      <CardContent className="px-4">
-        {blocks.data?.length ? (
-          <ul className="divide-y rounded-lg border">
-            {blocks.data.map((block) => (
-              <li
-                key={block.id}
-                className="flex items-center justify-between gap-3 p-3"
-              >
-                <span className="truncate text-sm font-medium">
-                  {block.displayName || t("Blocked account")}
-                </span>
+    <SocialSection
+      icon={ShieldBanIcon}
+      title={t("Blocked accounts")}
+      description={t("Unblocking never recreates what blocking ended.")}
+      bodyClassName={blocks.data?.length ? "p-0 px-4 py-1" : undefined}
+    >
+      {blocks.data?.length ? (
+        <SocialList>
+          {blocks.data.map((block) => (
+            <SocialRow
+              key={block.id}
+              trailing={
                 <Button
                   size="sm"
                   variant="outline"
@@ -57,15 +52,24 @@ export function BlocksManager() {
                 >
                   <Undo2Icon /> {t("Unblock")}
                 </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {t("No blocked accounts.")}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+              }
+            >
+              <p className="truncate text-sm font-medium">
+                {block.displayName || t("Blocked account")}
+              </p>
+            </SocialRow>
+          ))}
+        </SocialList>
+      ) : (
+        <SocialEmpty
+          compact
+          icon={ShieldBanIcon}
+          title={t("Nobody is blocked")}
+          description={t(
+            "Blocking ends a friendship, its pending requests and every usable permission at once."
+          )}
+        />
+      )}
+    </SocialSection>
   )
 }
