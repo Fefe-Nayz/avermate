@@ -1,6 +1,6 @@
-import path from "node:path";
-import type { NextConfig } from "next";
-import createNextIntlPlugin from "next-intl/plugin";
+import path from "node:path"
+import type { NextConfig } from "next"
+import createNextIntlPlugin from "next-intl/plugin"
 
 const nextConfig: NextConfig = {
   // Next blocks cross-origin dev requests unless the origin is listed. Without
@@ -46,9 +46,9 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-    ];
+    ]
   },
-};
+}
 
 // No locale routing: the locale comes from a cookie (see src/i18n/request.ts).
 // `useExtracted` pulls the inline English strings into messages/en.json and
@@ -70,6 +70,6 @@ const withNextIntl =
           },
           srcPath: "./src",
         },
-      });
+      })
 
-export default withNextIntl(nextConfig);
+export default withNextIntl(nextConfig)

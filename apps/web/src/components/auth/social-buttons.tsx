@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { authClient } from "@/lib/auth-client";
-import { env } from "@/lib/env";
-import { haptic } from "@/lib/haptics";
+import { useState } from "react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import { authClient } from "@/lib/auth-client"
+import { env } from "@/lib/env"
+import { haptic } from "@/lib/haptics"
 
 function GoogleMark() {
   return (
@@ -29,7 +29,7 @@ function GoogleMark() {
         d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z"
       />
     </svg>
-  );
+  )
 }
 
 function MicrosoftMark() {
@@ -40,27 +40,27 @@ function MicrosoftMark() {
       <path fill="#00A4EF" d="M2 12.5h9.5V22H2z" />
       <path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z" />
     </svg>
-  );
+  )
 }
 
 /** OAuth entry points. Rendered above the form: most people use one of these. */
 export function SocialButtons({ next }: { next?: string }) {
-  const t = useExtracted();
-  const [pending, setPending] = useState<string | null>(null);
+  const t = useExtracted()
+  const [pending, setPending] = useState<string | null>(null)
 
   const start = async (provider: "google" | "microsoft") => {
-    haptic("light");
-    setPending(provider);
+    haptic("light")
+    setPending(provider)
     try {
       await authClient.signIn.social({
         provider,
         callbackURL: `${env.appUrl}${next ?? "/dashboard"}`,
-      });
+      })
     } catch {
-      setPending(null);
-      toast.error(t("That sign-in could not be started."));
+      setPending(null)
+      toast.error(t("That sign-in could not be started."))
     }
-  };
+  }
 
   return (
     <div className="grid gap-2">
@@ -89,5 +89,5 @@ export function SocialButtons({ next }: { next?: string }) {
         {t("Continue with Microsoft")}
       </Button>
     </div>
-  );
+  )
 }

@@ -1,35 +1,35 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { StarIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { SubjectGraph, resolveCustomAverage } from "@avermate/core";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { FormPage } from "@/components/forms/form-page";
-import { FormSection, TextField } from "@/components/forms/controls";
-import { AverageValue } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { StarIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { resolveCustomAverage } from "@avermate/core"
+import { Field, FieldLabel } from "@/components/ui/field"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { FormPage } from "@/components/forms/form-page"
+import { FormSection, TextField } from "@/components/forms/controls"
+import { AverageValue } from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 interface Entry {
-  subjectId: string;
-  coefficient: string;
-  includeChildren: boolean;
+  subjectId: string
+  coefficient: string
+  includeChildren: boolean
 }
 
 export interface AverageFormValues {
-  id?: string;
-  name: string;
-  isMain: boolean;
-  entries: Entry[];
+  id?: string
+  name: string
+  isMain: boolean
+  entries: Entry[]
 }
 
 /**
@@ -43,26 +43,26 @@ export function AverageForm({
   initial,
   mode,
 }: {
-  initial?: Partial<AverageFormValues>;
-  mode: "create" | "edit";
+  initial?: Partial<AverageFormValues>
+  mode: "create" | "edit"
 }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { graph, yearId } = useYear();
+  const t = useExtracted()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { graph, yearId } = useYear()
 
-  const [name, setName] = useState(initial?.name ?? "");
-  const [isMain, setIsMain] = useState(initial?.isMain ?? false);
-  const [entries, setEntries] = useState<Entry[]>(initial?.entries ?? []);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [name, setName] = useState(initial?.name ?? "")
+  const [isMain, setIsMain] = useState(initial?.isMain ?? false)
+  const [entries, setEntries] = useState<Entry[]>(initial?.entries ?? [])
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const selected = useMemo(
     () => new Map(entries.map((entry) => [entry.subjectId, entry])),
-    [entries],
-  );
+    [entries]
+  )
 
   const preview = useMemo(() => {
-    if (entries.length === 0) return null;
+    if (entries.length === 0) return null
     const resolved = resolveCustomAverage(graph, {
       id: "__preview__",
       name,
@@ -76,64 +76,68 @@ export function AverageForm({
             : Number.parseFloat(entry.coefficient.replace(",", ".")),
         includeChildren: entry.includeChildren,
       })),
-    });
-    return resolved.graph.ratio(null, resolved.scope);
-  }, [graph, entries, name, isMain]);
+    })
+    return resolved.graph.ratio(null, resolved.scope)
+  }, [graph, entries, name, isMain])
 
   const toggle = (subjectId: string) => {
-    haptic("selection");
+    haptic("selection")
     setEntries((current) =>
       current.some((entry) => entry.subjectId === subjectId)
         ? current.filter((entry) => entry.subjectId !== subjectId)
-        : [...current, { subjectId, coefficient: "", includeChildren: false }],
-    );
-  };
+        : [...current, { subjectId, coefficient: "", includeChildren: false }]
+    )
+  }
 
   const onSaved = {
     onSuccess: () => {
-      haptic("success");
+      haptic("success")
       toast.success(
-        mode === "create" ? t("Average created") : t("Average updated"),
-      );
+        mode === "create" ? t("Average created") : t("Average updated")
+      )
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/settings/averages");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/settings/averages")
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The average could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The average could not be saved."))
     },
-  };
+  }
 
   const create = useMutation({
     ...orpc.averages.create.mutationOptions(),
     ...onSaved,
-  });
+  })
   const update = useMutation({
     ...orpc.averages.update.mutationOptions(),
     ...onSaved,
-  });
+  })
   const remove = useMutation({
     ...orpc.averages.delete.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Average deleted"));
+      haptic("success")
+      toast.success(t("Average deleted"))
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/settings/averages");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/settings/averages")
     },
-  });
+  })
 
   const submit = () => {
-    const next: Record<string, string> = {};
-    if (!name.trim()) next.name = t("Give this average a name.");
-    if (entries.length === 0) next.entries = t("Pick at least one subject.");
-    setErrors(next);
+    const next: Record<string, string> = {}
+    if (!name.trim()) next.name = t("Give this average a name.")
+    if (entries.length === 0) next.entries = t("Pick at least one subject.")
+    setErrors(next)
     if (Object.keys(next).length > 0) {
-      haptic("warning");
-      return;
+      haptic("warning")
+      return
     }
 
     const payload = {
@@ -147,18 +151,20 @@ export function AverageForm({
             : Number.parseFloat(entry.coefficient.replace(",", ".")),
         includeChildren: entry.includeChildren,
       })),
-    };
+    }
 
     if (mode === "create") {
-      create.mutate({ yearId: yearId as string, ...payload });
+      create.mutate({ yearId: yearId as string, ...payload })
     } else {
-      update.mutate({ averageId: initial?.id as string, ...payload });
+      update.mutate({ averageId: initial?.id as string, ...payload })
     }
-  };
+  }
 
   return (
     <FormPage
-      title={mode === "create" ? t("New custom average") : t("Edit custom average")}
+      title={
+        mode === "create" ? t("New custom average") : t("Edit custom average")
+      }
       description={t("Combine any subjects, with weights of your own.")}
       backHref="/settings/averages"
       onSubmit={submit}
@@ -168,8 +174,7 @@ export function AverageForm({
         mode === "edit" && initial?.id
           ? {
               label: t("Delete"),
-              onClick: () =>
-                remove.mutate({ averageId: initial.id as string }),
+              onClick: () => remove.mutate({ averageId: initial.id as string }),
             }
           : undefined
       }
@@ -199,8 +204,8 @@ export function AverageForm({
             id="is-main-average"
             checked={isMain}
             onCheckedChange={(checked) => {
-              haptic("selection");
-              setIsMain(checked);
+              haptic("selection")
+              setIsMain(checked)
             }}
           />
         </Field>
@@ -208,7 +213,7 @@ export function AverageForm({
 
       {preview !== null ? (
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs tracking-wide text-muted-foreground uppercase">
             {t("This average right now")}
           </p>
           <AverageValue
@@ -229,8 +234,8 @@ export function AverageForm({
       >
         <div className="overflow-hidden rounded-xl border">
           {graph.flatten().map((subject, index) => {
-            const entry = selected.get(subject.id);
-            const isCategory = subject.kind === "category";
+            const entry = selected.get(subject.id)
+            const isCategory = subject.kind === "category"
 
             return (
               <div
@@ -238,7 +243,7 @@ export function AverageForm({
                 className={cn(
                   "flex items-center gap-3 px-3 py-2",
                   index > 0 && "border-t",
-                  isCategory && "bg-muted/40",
+                  isCategory && "bg-muted/40"
                 )}
                 style={{
                   paddingInlineStart: `${0.75 + graph.depthOf(subject.id) * 0.85}rem`,
@@ -252,7 +257,8 @@ export function AverageForm({
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate text-sm",
-                    isCategory && "text-xs uppercase tracking-wide text-muted-foreground",
+                    isCategory &&
+                      "text-xs tracking-wide text-muted-foreground uppercase"
                   )}
                 >
                   {subject.name}
@@ -268,8 +274,8 @@ export function AverageForm({
                             current.map((item) =>
                               item.subjectId === subject.id
                                 ? { ...item, includeChildren: checked === true }
-                                : item,
-                            ),
+                                : item
+                            )
                           )
                         }
                       />
@@ -282,8 +288,8 @@ export function AverageForm({
                           current.map((item) =>
                             item.subjectId === subject.id
                               ? { ...item, coefficient: event.target.value }
-                              : item,
-                          ),
+                              : item
+                          )
                         )
                       }
                       inputMode="decimal"
@@ -293,10 +299,10 @@ export function AverageForm({
                   </>
                 ) : null}
               </div>
-            );
+            )
           })}
         </div>
       </FormSection>
     </FormPage>
-  );
+  )
 }

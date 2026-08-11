@@ -24,15 +24,15 @@ const buttonVariants = cva(
       // is never below what a thumb can reliably hit.
       size: {
         default:
-          "h-10 gap-1.5 px-3 md:h-8 md:px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-7 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs md:h-6 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1 rounded-[min(var(--radius-md),12px)] px-3 text-[0.8rem] md:h-7 md:px-2.5 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-12 gap-1.5 px-4 text-[0.95rem] md:h-9 md:px-2.5 md:text-sm has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-10 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 md:h-8 md:px-2.5",
+        xs: "h-7 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 md:h-6 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-9 gap-1 rounded-[min(var(--radius-md),12px)] px-3 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 md:h-7 md:px-2.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-12 gap-1.5 px-4 text-[0.95rem] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 md:h-9 md:px-2.5 md:text-sm",
         icon: "size-10 md:size-8",
         "icon-xs":
-          "size-7 rounded-[min(var(--radius-md),10px)] md:size-6 in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
+          "size-7 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg md:size-6 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
-          "size-9 rounded-[min(var(--radius-md),12px)] md:size-7 in-data-[slot=button-group]:rounded-lg",
+          "size-9 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg md:size-7",
         "icon-lg": "size-11 md:size-9",
       },
     },

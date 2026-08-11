@@ -1,75 +1,328 @@
-"use client";
+"use client"
 
-import { useMemo } from "react";
+import { trendLine, type SeriesPoint } from "@avermate/core"
+import { areaY, defineChart, dot, lineY, ruleY } from "@tanstack/charts"
+import { d3Curve } from "@tanstack/charts/d3/shape"
+import { scaleLinear } from "@tanstack/charts/scales/linear"
+import { tooltip } from "@tanstack/charts/tooltip"
+import { curveMonotoneX } from "d3-shape"
+import { useExtracted, useFormatter } from "next-intl"
+import { useCallback, useMemo } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useYear } from "@/components/year/year-provider"
+import { usePreferences } from "@/hooks/use-preferences"
+import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { useFormatter, useExtracted } from "next-intl";
-import { trendLine, type SeriesPoint } from "@avermate/core";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { useYear } from "@/components/year/year-provider";
-import { usePreferences } from "@/hooks/use-preferences";
+  createIndependentSeriesFocus,
+  type NumericDomain,
+} from "./time-series-interaction"
 
-/**
- * The average over time.
- *
- * The y-axis zooms to the data by default rather than spanning 0–20: a year
- * spent between 12 and 14 is a flat line on a full-scale axis, which hides
- * exactly the movement the chart exists to show. The full scale stays one
- * setting away for anyone who wants the honest-looking version.
- */
+const DAY_IN_MS = 86_400_000
+const AVERAGE_LINE_MARK_ID = "average-series"
+
+interface AveragePoint {
+  id: string
+  label: string
+  seriesId: "average"
+  timestamp: number
+  trend: number | null
+  value: number
+}
+
+function safeDomain(values: readonly number[]): NumericDomain {
+  if (values.length === 0) return [0, DAY_IN_MS]
+  const start = Math.min(...values)
+  const end = Math.max(...values)
+  return start === end
+    ? [start - DAY_IN_MS / 2, end + DAY_IN_MS / 2]
+    : [start, end]
+}
+
+/** The average over time, with a semantic time viewport and native marks. */
 export function AverageChart({
   title,
   series,
   emptyHint,
   height = 220,
 }: {
-  title: string;
-  series: SeriesPoint[];
-  emptyHint?: string;
-  height?: number;
+  title: string
+  series: SeriesPoint[]
+  emptyHint?: string
+  height?: number
 }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { scale, passingRatio } = useYear();
-  const { preferences } = usePreferences();
-  const settings = preferences.chartSettings;
+  const t = useExtracted()
+  const format = useFormatter()
+  const { scale, passingRatio } = useYear()
+  const { preferences } = usePreferences()
+  const settings = preferences.chartSettings
 
-  const data = useMemo(() => {
-    const trend = settings.showTrend ? trendLine(series) : [];
-    return series.map((point, index) => ({
-      date: point.date.getTime(),
-      value: point.ratio === null ? null : point.ratio * scale,
-      trend:
-        trend[index]?.ratio === null || trend[index] === undefined
-          ? null
-          : (trend[index]?.ratio as number) * scale,
-    }));
-  }, [series, scale, settings.showTrend]);
+  const prepared = useMemo(() => {
+    const trend = settings.showTrend ? trendLine(series) : []
+    const rows = series.flatMap((point, index) => {
+      const timestamp = point.date.getTime()
+      if (!Number.isFinite(timestamp)) return []
+      const value =
+        point.ratio !== null && Number.isFinite(point.ratio)
+          ? point.ratio * scale
+          : null
+      const trendRatio = trend[index]?.ratio
+      const trendValue =
+        typeof trendRatio === "number" && Number.isFinite(trendRatio)
+          ? trendRatio * scale
+          : null
+      return [{ timestamp, value, trend: trendValue }]
+    })
+    const averagePoints = rows.flatMap((row): AveragePoint[] =>
+      row.value === null
+        ? []
+        : [
+            {
+              id: `average:${row.timestamp}`,
+              label: t("Average"),
+              seriesId: "average",
+              timestamp: row.timestamp,
+              trend: row.trend,
+              value: row.value,
+            },
+          ]
+    )
+    const trendPoints = rows.flatMap((row): AveragePoint[] =>
+      row.trend === null
+        ? []
+        : [
+            {
+              id: `trend:${row.timestamp}`,
+              label: t("Trend"),
+              seriesId: "average",
+              timestamp: row.timestamp,
+              trend: null,
+              value: row.trend,
+            },
+          ]
+    )
+    const yDomain: NumericDomain = (() => {
+      if (!settings.autoZoom) return [0, scale]
+      const values = averagePoints.map(({ value }) => value)
+      if (values.length === 0) return [0, scale]
+      const minimum = Math.min(...values)
+      const maximum = Math.max(...values)
+      const padding = Math.max((maximum - minimum) * 0.2, scale * 0.02)
+      return [
+        Math.max(0, Number((minimum - padding).toFixed(2))),
+        Math.min(scale, Number((maximum + padding).toFixed(2))),
+      ]
+    })()
 
-  const domain = useMemo<[number, number]>(() => {
-    if (!settings.autoZoom) return [0, scale];
-    const values = data
-      .map((point) => point.value)
-      .filter((value): value is number => value !== null);
-    if (values.length === 0) return [0, scale];
+    return {
+      averagePoints,
+      domain: safeDomain(rows.map(({ timestamp }) => timestamp)),
+      trendPoints,
+      yDomain,
+    }
+  }, [scale, series, settings.autoZoom, settings.showTrend, t])
 
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const padding = Math.max((max - min) * 0.2, scale * 0.02);
-    return [
-      Math.max(0, Number((min - padding).toFixed(2))),
-      Math.min(scale, Number((max + padding).toFixed(2))),
-    ];
-  }, [data, scale, settings.autoZoom]);
+  const focus = useMemo(
+    () =>
+      createIndependentSeriesFocus<AveragePoint>({
+        getSeriesId: (datum) => datum.seriesId,
+        getTimestamp: (datum) => datum.timestamp,
+        isEnabled: (point) => point.markId === AVERAGE_LINE_MARK_ID,
+      }),
+    []
+  )
+  const buildDefinition = useCallback(
+    (viewport: NumericDomain) => {
+      const thresholdPoints: readonly AveragePoint[] = [
+        {
+          id: "passing-threshold",
+          label: "",
+          seriesId: "average",
+          timestamp: prepared.domain[0],
+          trend: null,
+          value: passingRatio * scale,
+        },
+      ]
+
+      return defineChart({
+        marks: [
+          areaY(prepared.averagePoints, {
+            id: "average-area",
+            x: "timestamp",
+            y1: prepared.yDomain[0],
+            y2: "value",
+            key: "id",
+            curve: d3Curve(curveMonotoneX),
+            fill: "url(#average-fill)",
+          }),
+          ruleY(thresholdPoints, {
+            id: "passing-threshold",
+            y: "value",
+            stroke: "var(--muted-foreground)",
+            strokeDasharray: "4 4",
+            strokeOpacity: 0.5,
+          }),
+          lineY(prepared.averagePoints, {
+            id: AVERAGE_LINE_MARK_ID,
+            x: "timestamp",
+            y: "value",
+            z: "seriesId",
+            key: "id",
+            curve: d3Curve(curveMonotoneX),
+            stroke: "var(--chart-1)",
+            strokeWidth: 2,
+          }),
+          ...(settings.showTrend
+            ? [
+                lineY(prepared.trendPoints, {
+                  id: "average-trend",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  stroke: "var(--muted-foreground)",
+                  strokeDasharray: "5 4",
+                  strokeWidth: 1.5,
+                }),
+              ]
+            : []),
+          ...(settings.showPoints && series.length < 40
+            ? [
+                dot(prepared.averagePoints, {
+                  id: "average-points",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  r: 3,
+                  fill: "var(--chart-1)",
+                  stroke: "var(--background)",
+                  strokeWidth: 1.5,
+                }),
+              ]
+            : []),
+          dot(prepared.averagePoints, {
+            id: "average-active-points",
+            x: "timestamp",
+            y: "value",
+            z: "seriesId",
+            key: "id",
+            r: 0,
+            fill: "var(--chart-1)",
+            fillOpacity: 0,
+            stroke: "var(--background)",
+            strokeWidth: 2,
+            states: [
+              {
+                when: { focus: "key" },
+                style: { r: 5, fillOpacity: 1 },
+                transition: {
+                  type: "tween",
+                  duration: 90,
+                  easing: "ease-out",
+                  respectReducedMotion: true,
+                },
+              },
+            ],
+          }),
+        ],
+        x: {
+          scale: scaleLinear().domain(prepared.domain),
+          viewport: { domain: viewport },
+          grid: false,
+          axis: {
+            line: false,
+            ticks: {
+              padding: 8,
+              format: (value) =>
+                format.dateTime(new Date(value), {
+                  day: "numeric",
+                  month: "short",
+                }),
+            },
+            tickLabels: { thin: { minGap: 40, priority: "ends" } },
+          },
+        },
+        y: {
+          scale: scaleLinear().domain(prepared.yDomain),
+          grid: true,
+          axis: {
+            line: false,
+            ticks: {
+              count: 5,
+              padding: 8,
+              format: (value) =>
+                format.number(value, { maximumFractionDigits: 1 }),
+            },
+          },
+        },
+        gradients: [
+          {
+            id: "average-fill",
+            x1: 0,
+            y1: 0,
+            x2: 0,
+            y2: 1,
+            stops: [
+              { offset: 0, color: "var(--chart-1)", opacity: 0.25 },
+              { offset: 1, color: "var(--chart-1)", opacity: 0 },
+            ],
+          },
+        ],
+        margin: { top: 8, right: 8, bottom: 0, left: 8 },
+        clip: true,
+        focus,
+        maxFocusDistance: Number.POSITIVE_INFINITY,
+        pointer: false,
+        tooltip: {
+          use: tooltip,
+          anchor: "pointer",
+          placement: ["top", "right", "left", "bottom"],
+          content: (points) => {
+            const point = points[0]?.datum
+            return {
+              title: point
+                ? format.dateTime(new Date(point.timestamp), {
+                    day: "numeric",
+                    month: "long",
+                  })
+                : undefined,
+              rows: point
+                ? [
+                    {
+                      color: "var(--chart-1)",
+                      label: point.label,
+                      value: format.number(point.value, {
+                        maximumFractionDigits: 2,
+                      }),
+                    },
+                    ...(settings.showTrend && point.trend !== null
+                      ? [
+                          {
+                            color: "var(--muted-foreground)",
+                            label: t("Trend"),
+                            value: format.number(point.trend, {
+                              maximumFractionDigits: 2,
+                            }),
+                          },
+                        ]
+                      : []),
+                  ]
+                : [],
+            }
+          },
+        },
+      })
+    },
+    [
+      focus,
+      format,
+      passingRatio,
+      prepared,
+      scale,
+      series.length,
+      settings.showPoints,
+      settings.showTrend,
+      t,
+    ]
+  )
 
   if (series.length < 2) {
     return (
@@ -83,107 +336,45 @@ export function AverageChart({
           </p>
         </CardContent>
       </Card>
-    );
+    )
   }
+
+  const periodDays = Math.max(
+    1,
+    (prepared.domain[1] - prepared.domain[0]) / DAY_IN_MS
+  )
+  const interactionHint = t(
+    "Use a wheel, trackpad, drag, or pinch to zoom and pan. Use plus, minus, or Alt with the arrow keys from the keyboard; press 0 to reset."
+  )
 
   return (
     <Card className="gap-3 py-4">
       <CardHeader className="px-4">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="px-2">
-        <ChartContainer
-          config={{
-            value: { label: t("Average"), color: "var(--chart-1)" },
-            trend: { label: t("Trend"), color: "var(--muted-foreground)" },
-          }}
-          style={{ height }}
-          className="w-full"
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="average-fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.25} />
-                  <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.4} />
-              <XAxis
-                dataKey="date"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                tickLine={false}
-                axisLine={false}
-                minTickGap={40}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickFormatter={(value: number) =>
-                  format.dateTime(new Date(value), {
-                    day: "numeric",
-                    month: "short",
-                  })
-                }
-              />
-              <YAxis
-                domain={domain}
-                width={34}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickFormatter={(value: number) =>
-                  format.number(value, { maximumFractionDigits: 1 })
-                }
-              />
-              <ReferenceLine
-                y={passingRatio * scale}
-                stroke="var(--muted-foreground)"
-                strokeDasharray="4 4"
-                opacity={0.5}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(_, payload) => {
-                      const point = payload?.[0]?.payload as
-                        | { date: number }
-                        | undefined;
-                      return point
-                        ? format.dateTime(new Date(point.date), {
-                            day: "numeric",
-                            month: "long",
-                          })
-                        : "";
-                    }}
-                  />
-                }
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="var(--chart-1)"
-                strokeWidth={2}
-                fill="url(#average-fill)"
-                connectNulls
-                dot={settings.showPoints && data.length < 40}
-                isAnimationActive={false}
-              />
-              {settings.showTrend ? (
-                <Line
-                  type="linear"
-                  dataKey="trend"
-                  stroke="var(--muted-foreground)"
-                  strokeDasharray="5 4"
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ) : null}
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartContainer>
+      <CardContent className="px-2 text-muted-foreground">
+        <InteractiveTimeSeriesChart
+          ariaLabel={title}
+          buildDefinition={buildDefinition}
+          domain={prepared.domain}
+          formatDomain={(domain) =>
+            t("Visible from {start} to {end}", {
+              start: format.dateTime(new Date(domain[0]), {
+                day: "numeric",
+                month: "short",
+              }),
+              end: format.dateTime(new Date(domain[1]), {
+                day: "numeric",
+                month: "short",
+              }),
+            })
+          }
+          height={height}
+          interactionHint={interactionHint}
+          maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
+          resetLabel={t("Reset chart view")}
+        />
       </CardContent>
     </Card>
-  );
+  )
 }

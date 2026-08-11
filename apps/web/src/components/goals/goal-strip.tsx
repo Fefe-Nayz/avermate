@@ -1,11 +1,11 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { ArrowRightIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import type { GoalPlan } from "@avermate/core";
-import { AverageValue } from "@/components/data/value";
-import { cn } from "@/lib/utils";
+import Link from "next/link"
+import { ArrowRightIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import type { GoalPlan } from "@avermate/core"
+import { AverageValue } from "@/components/data/value"
+import { cn } from "@/lib/utils"
 
 const STATUS_STYLE: Record<GoalPlan["status"], string> = {
   achieved: "border-band-good/50 bg-band-good/8",
@@ -14,10 +14,10 @@ const STATUS_STYLE: Record<GoalPlan["status"], string> = {
   "at-risk": "border-band-fair/50 bg-band-fair/8",
   unreachable: "border-band-poor/50 bg-band-poor/8",
   "no-data": "border-border bg-card",
-};
+}
 
 export function useStatusLabel() {
-  const t = useExtracted();
+  const t = useExtracted()
   return (status: GoalPlan["status"]): string =>
     ({
       achieved: t("Reached"),
@@ -26,13 +26,13 @@ export function useStatusLabel() {
       "at-risk": t("Needs work"),
       unreachable: t("Out of reach"),
       "no-data": t("No data yet"),
-    })[status];
+    })[status]
 }
 
 /** Pinned goals, at a glance, on the dashboard. */
 export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
-  const t = useExtracted();
-  const statusLabel = useStatusLabel();
+  const t = useExtracted()
+  const statusLabel = useStatusLabel()
 
   return (
     <section className="flex flex-col gap-2">
@@ -52,7 +52,7 @@ export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
           const progress =
             plan.current === null || plan.target === 0
               ? 0
-              : Math.min(1, Math.max(0, plan.current / plan.target));
+              : Math.min(1, Math.max(0, plan.current / plan.target))
 
           return (
             <Link
@@ -60,7 +60,7 @@ export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
               href={`/goals/${plan.goal.id}`}
               className={cn(
                 "flex w-64 flex-col gap-2 rounded-xl border p-3.5 transition-colors md:w-auto",
-                STATUS_STYLE[plan.status],
+                STATUS_STYLE[plan.status]
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -77,9 +77,7 @@ export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
                   ratio={plan.current}
                   className="text-xl font-semibold"
                 />
-                <span className="text-xs text-muted-foreground">
-                  {t("of")}
-                </span>
+                <span className="text-xs text-muted-foreground">{t("of")}</span>
                 <AverageValue
                   ratio={plan.target}
                   animate={false}
@@ -96,15 +94,15 @@ export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
                       ? "bg-negative"
                       : plan.status === "achieved" || plan.status === "secured"
                         ? "bg-positive"
-                        : "bg-primary",
+                        : "bg-primary"
                   )}
                   style={{ width: `${Math.round(progress * 100)}%` }}
                 />
               </div>
             </Link>
-          );
+          )
         })}
       </div>
     </section>
-  );
+  )
 }

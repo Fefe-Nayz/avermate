@@ -1,19 +1,19 @@
-"use client";
+"use client"
 
-import { SearchIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ResponsiveBreadcrumb } from "@/components/breadcrumb/responsive-breadcrumb";
-import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs";
-import { PeriodSwitcher } from "./period-switcher";
-import { useCommandPalette } from "@/components/command/command-palette";
+import { SearchIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { ResponsiveBreadcrumb } from "@/components/breadcrumb/responsive-breadcrumb"
+import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
+import { PeriodSwitcher } from "./period-switcher"
+import { useCommandPalette } from "@/components/command/command-palette"
 
 export function SiteHeader() {
-  const t = useExtracted();
-  const crumbs = useBreadcrumbs();
-  const palette = useCommandPalette();
+  const t = useExtracted()
+  const crumbs = useBreadcrumbs()
+  const palette = useCommandPalette()
 
   return (
     <header className="sticky top-0 z-30 hidden h-12 shrink-0 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur-sm md:flex">
@@ -45,5 +45,5 @@ export function SiteHeader() {
         <PeriodSwitcher />
       </div>
     </header>
-  );
+  )
 }

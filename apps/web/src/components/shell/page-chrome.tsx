@@ -1,13 +1,14 @@
-"use client";
+"use client"
 
 import {
   createContext,
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
   type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+} from "react"
+import { createPortal } from "react-dom"
 
 /**
  * What the shell should put in its header for the screen currently rendered.
@@ -18,26 +19,30 @@ import { createPortal } from "react-dom";
  */
 
 export interface PageChrome {
-  title?: string;
-  subtitle?: string;
+  title?: string
+  subtitle?: string
   /** Where the back arrow goes. Omitted means "no back arrow". */
-  backHref?: string;
+  backHref?: string
   /** Hides the large title, for screens that own their whole viewport. */
-  bare?: boolean;
+  bare?: boolean
 }
 
 // The value and the setter are separate contexts on purpose: a page declaring
 // its title must not re-render because the title changed, which is exactly what
 // a single combined context would cause.
-const ChromeValueContext = createContext<PageChrome>({});
+const ChromeValueContext = createContext<PageChrome>({})
 const ChromeSetContext = createContext<((value: PageChrome) => void) | null>(
-  null,
-);
+  null
+)
 
-export const PAGE_ACTIONS_SLOT = "avermate-page-actions";
+export const PAGE_ACTIONS_SLOT = "avermate-page-actions"
+
+const subscribeToClient = () => () => {}
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
 
 export function PageChromeProvider({ children }: { children: ReactNode }) {
-  const [chrome, setChrome] = useState<PageChrome>({});
+  const [chrome, setChrome] = useState<PageChrome>({})
 
   return (
     <ChromeSetContext.Provider value={setChrome}>
@@ -45,23 +50,23 @@ export function PageChromeProvider({ children }: { children: ReactNode }) {
         {children}
       </ChromeValueContext.Provider>
     </ChromeSetContext.Provider>
-  );
+  )
 }
 
 export function usePageChrome(): PageChrome {
-  return useContext(ChromeValueContext);
+  return useContext(ChromeValueContext)
 }
 
 /** Declares the header text for a screen. */
 export function PageMeta({ title, subtitle, backHref, bare }: PageChrome) {
-  const set = useContext(ChromeSetContext);
+  const set = useContext(ChromeSetContext)
 
   useEffect(() => {
-    set?.({ title, subtitle, backHref, bare });
-    return () => set?.({});
-  }, [set, title, subtitle, backHref, bare]);
+    set?.({ title, subtitle, backHref, bare })
+    return () => set?.({})
+  }, [set, title, subtitle, backHref, bare])
 
-  return null;
+  return null
 }
 
 /**
@@ -70,12 +75,13 @@ export function PageMeta({ title, subtitle, backHref, bare }: PageChrome) {
  * the page, not with the layout.
  */
 export function PageActions({ children }: { children: ReactNode }) {
-  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const isClient = useSyncExternalStore(
+    subscribeToClient,
+    getClientSnapshot,
+    getServerSnapshot
+  )
+  const target = isClient ? document.getElementById(PAGE_ACTIONS_SLOT) : null
 
-  useEffect(() => {
-    setTarget(document.getElementById(PAGE_ACTIONS_SLOT));
-  }, []);
-
-  if (!target) return null;
-  return createPortal(children, target);
+  if (!target) return null
+  return createPortal(children, target)
 }

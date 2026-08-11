@@ -1,20 +1,14 @@
-"use client";
+import { GradeForm } from "@/components/grades/grade-form"
 
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import { GradeForm } from "@/components/grades/grade-form";
+export default async function NewGradePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ subject?: string | string[] }>
+}) {
+  const params = await searchParams
+  const subjectId = Array.isArray(params.subject)
+    ? params.subject[0]
+    : params.subject
 
-function NewGrade() {
-  const params = useSearchParams();
-  return (
-    <GradeForm mode="create" initial={{ subjectId: params.get("subject") }} />
-  );
-}
-
-export default function NewGradePage() {
-  return (
-    <Suspense>
-      <NewGrade />
-    </Suspense>
-  );
+  return <GradeForm mode="create" initial={{ subjectId: subjectId ?? null }} />
 }

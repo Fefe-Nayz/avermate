@@ -1,9 +1,9 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use, useMemo } from "react";
-import { ChevronRightIcon, PencilIcon, PlusIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
+import Link from "next/link"
+import { use, useMemo } from "react"
+import { ChevronRightIcon, PencilIcon, PlusIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
 import {
   averageOverTime,
   consistency,
@@ -13,21 +13,26 @@ import {
   passRate,
   standardDeviation,
   subjectImpact,
-} from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
-import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher";
+} from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import {
   AverageValue,
   CoefficientBadge,
   DeltaValue,
   ResultBadge,
-} from "@/components/data/value";
-import { AverageChart } from "@/components/charts/average-chart";
-import { useYear } from "@/components/year/year-provider";
-import { cn } from "@/lib/utils";
+} from "@/components/data/value"
+import { AverageChart } from "@/components/charts/average-chart"
+import { useYear } from "@/components/year/year-provider"
+import { cn } from "@/lib/utils"
 
 /**
  * One subject.
@@ -39,32 +44,32 @@ import { cn } from "@/lib/utils";
 export default function SubjectPage({
   params,
 }: {
-  params: Promise<{ subjectId: string }>;
+  params: Promise<{ subjectId: string }>
 }) {
-  const { subjectId } = use(params);
-  const t = useExtracted();
-  const format = useFormatter();
-  const { graph, subjects, period, year, passingRatio, scale } = useYear();
+  const { subjectId } = use(params)
+  const t = useExtracted()
+  const format = useFormatter()
+  const { graph, subjects, period, year, passingRatio, scale, now } = useYear()
 
-  const subject = graph.byId(subjectId);
+  const subject = graph.byId(subjectId)
 
   const series = useMemo(() => {
-    if (!year || !subject) return [];
+    if (!year || !subject) return []
     const from = new Date(
       Math.max(
         new Date(period.startAt).getTime(),
-        new Date(year.startsAt).getTime(),
-      ),
-    );
-    const to = new Date(Math.min(Date.now(), new Date(period.endAt).getTime()));
-    if (to <= from) return [];
-    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000);
+        new Date(year.startsAt).getTime()
+      )
+    )
+    const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
+    if (to <= from) return []
+    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
     return averageOverTime(
       subjects,
       dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      subjectId,
-    );
-  }, [subjects, subjectId, period, year, subject]);
+      subjectId
+    )
+  }, [subjects, subjectId, period, year, subject, now])
 
   if (!subject) {
     return (
@@ -79,16 +84,16 @@ export default function SubjectPage({
           {t("Back to subjects")}
         </Button>
       </Empty>
-    );
+    )
   }
 
-  const ratio = graph.ratio(subjectId);
-  const general = graph.ratio(null);
-  const impact = subjectImpact(graph, subjectId, null);
-  const children = graph.childrenOf(subjectId);
-  const ratios = gradeRatios(graph, subjectId);
-  const grades = [...graph.allGrades(subjectId)].reverse();
-  const isCategory = subject.kind === "category";
+  const ratio = graph.ratio(subjectId)
+  const general = graph.ratio(null)
+  const impact = subjectImpact(graph, subjectId, null)
+  const children = graph.childrenOf(subjectId)
+  const ratios = gradeRatios(graph, subjectId)
+  const grades = [...graph.allGrades(subjectId)].reverse()
+  const isCategory = subject.kind === "category"
 
   const stats = [
     {
@@ -121,7 +126,7 @@ export default function SubjectPage({
             }),
     },
     { label: t("Grades"), value: String(ratios.length) },
-  ];
+  ]
 
   return (
     <>
@@ -177,7 +182,7 @@ export default function SubjectPage({
         <div className="grid grid-cols-2 gap-3">
           <Card className="col-span-2 gap-1 py-4 @md/main:col-span-1">
             <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {t("Average")}
               </CardTitle>
             </CardHeader>
@@ -189,22 +194,22 @@ export default function SubjectPage({
                 className="text-3xl font-semibold"
               />
               {ratio !== null && general !== null ? (
-                <DeltaValue
-                  delta={ratio - general}
-                  className="text-sm"
-                />
+                <DeltaValue delta={ratio - general} className="text-sm" />
               ) : null}
             </CardContent>
           </Card>
 
           <Card className="col-span-2 gap-1 py-4 @md/main:col-span-1">
             <CardHeader className="px-4">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {t("Effect on the general average")}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4">
-              <DeltaValue delta={impact.delta} className="text-3xl font-semibold" />
+              <DeltaValue
+                delta={impact.delta}
+                className="text-3xl font-semibold"
+              />
               <p className="mt-1 text-xs text-muted-foreground">
                 {impact.delta === null
                   ? t("Not enough data yet")
@@ -309,10 +314,7 @@ export default function SubjectPage({
                           })}
                           {grade.subjectId !== subjectId ? (
                             <span
-                              className={cn(
-                                "ms-1",
-                                "text-muted-foreground/80",
-                              )}
+                              className={cn("ms-1", "text-muted-foreground/80")}
                             >
                               · {graph.byId(grade.subjectId)?.name}
                             </span>
@@ -330,5 +332,5 @@ export default function SubjectPage({
         </Card>
       </div>
     </>
-  );
+  )
 }

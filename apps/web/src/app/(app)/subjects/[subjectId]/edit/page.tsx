@@ -1,30 +1,30 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use } from "react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { use } from "react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { SubjectForm } from "@/components/subjects/subject-form";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/ui/empty"
+import { SubjectForm } from "@/components/subjects/subject-form"
+import { useYear } from "@/components/year/year-provider"
 
 export default function EditSubjectPage({
   params,
 }: {
-  params: Promise<{ subjectId: string }>;
+  params: Promise<{ subjectId: string }>
 }) {
-  const { subjectId } = use(params);
-  const t = useExtracted();
-  const { graph, isLoading } = useYear();
-  const subject = graph.byId(subjectId);
+  const { subjectId } = use(params)
+  const t = useExtracted()
+  const { graph, isLoading } = useYear()
+  const subject = graph.byId(subjectId)
 
   if (!subject) {
-    if (isLoading) return null;
+    if (isLoading) return null
     return (
       <Empty className="py-16">
         <EmptyHeader>
@@ -37,7 +37,7 @@ export default function EditSubjectPage({
           {t("Back to subjects")}
         </Button>
       </Empty>
-    );
+    )
   }
 
   return (
@@ -53,5 +53,5 @@ export default function EditSubjectPage({
         isMain: subject.isMain,
       }}
     />
-  );
+  )
 }

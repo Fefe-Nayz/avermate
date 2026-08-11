@@ -1,12 +1,12 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowDownUpIcon, PlusIcon, SearchIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { gradeRatio } from "@avermate/core";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { ArrowDownUpIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { gradeRatio } from "@avermate/core"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,14 +14,14 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
-import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher";
-import { CoefficientBadge, ResultBadge } from "@/components/data/value";
-import { useYear } from "@/components/year/year-provider";
-import { haptic } from "@/lib/haptics";
+} from "@/components/ui/dropdown-menu"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
+import { CoefficientBadge, ResultBadge } from "@/components/data/value"
+import { useYear } from "@/components/year/year-provider"
+import { haptic } from "@/lib/haptics"
 
-type SortKey = "date" | "result" | "subject";
+type SortKey = "date" | "result" | "subject"
 
 /**
  * Every result in the period, grouped by month.
@@ -31,48 +31,48 @@ type SortKey = "date" | "result" | "subject";
  * results than a page number ever would.
  */
 export default function GradesPage() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { graph } = useYear();
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("date");
+  const t = useExtracted()
+  const format = useFormatter()
+  const { graph } = useYear()
+  const [query, setQuery] = useState("")
+  const [sort, setSort] = useState<SortKey>("date")
 
   const groups = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    let grades = graph.allGrades();
+    const needle = query.trim().toLowerCase()
+    let grades = graph.allGrades()
 
     if (needle) {
       grades = grades.filter((grade) =>
         `${grade.name} ${graph.byId(grade.subjectId)?.name ?? ""}`
           .toLowerCase()
-          .includes(needle),
-      );
+          .includes(needle)
+      )
     }
 
     if (sort === "result") {
       grades = [...grades].sort(
-        (a, b) => (gradeRatio(b) ?? -1) - (gradeRatio(a) ?? -1),
-      );
+        (a, b) => (gradeRatio(b) ?? -1) - (gradeRatio(a) ?? -1)
+      )
     } else if (sort === "subject") {
       grades = [...grades].sort((a, b) =>
         (graph.byId(a.subjectId)?.name ?? "").localeCompare(
-          graph.byId(b.subjectId)?.name ?? "",
-        ),
-      );
+          graph.byId(b.subjectId)?.name ?? ""
+        )
+      )
     } else {
-      grades = [...grades].reverse();
+      grades = [...grades].reverse()
     }
 
     if (sort !== "date") {
-      return [{ key: "all", label: null, grades }];
+      return [{ key: "all", label: null, grades }]
     }
 
-    const byMonth = new Map<string, typeof grades>();
+    const byMonth = new Map<string, typeof grades>()
     for (const grade of grades) {
-      const key = `${grade.passedAt.getFullYear()}-${grade.passedAt.getMonth()}`;
-      const list = byMonth.get(key);
-      if (list) list.push(grade);
-      else byMonth.set(key, [grade]);
+      const key = `${grade.passedAt.getFullYear()}-${grade.passedAt.getMonth()}`
+      const list = byMonth.get(key)
+      if (list) list.push(grade)
+      else byMonth.set(key, [grade])
     }
 
     return [...byMonth.entries()].map(([key, list]) => ({
@@ -82,10 +82,10 @@ export default function GradesPage() {
         year: "numeric",
       }),
       grades: list,
-    }));
-  }, [graph, query, sort, format]);
+    }))
+  }, [graph, query, sort, format])
 
-  const total = groups.reduce((sum, group) => sum + group.grades.length, 0);
+  const total = groups.reduce((sum, group) => sum + group.grades.length, 0)
 
   return (
     <>
@@ -129,7 +129,7 @@ export default function GradesPage() {
 
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -140,7 +140,12 @@ export default function GradesPage() {
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="outline" size="icon" aria-label={t("Sort")} className="h-11 md:h-9 md:w-9" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label={t("Sort")}
+                  className="h-11 md:h-9 md:w-9"
+                />
               }
             >
               <ArrowDownUpIcon className="size-4" />
@@ -149,8 +154,8 @@ export default function GradesPage() {
               <DropdownMenuRadioGroup
                 value={sort}
                 onValueChange={(value) => {
-                  haptic("selection");
-                  setSort(value as SortKey);
+                  haptic("selection")
+                  setSort(value as SortKey)
                 }}
               >
                 {/* Inside the radio group, so it labels it rather than
@@ -193,13 +198,16 @@ export default function GradesPage() {
           groups.map((group) => (
             <section key={group.key} className="flex flex-col gap-1.5">
               {group.label ? (
-                <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {group.label}
                 </h2>
               ) : null}
               <ul className="overflow-hidden rounded-xl border bg-card">
                 {group.grades.map((grade, index) => (
-                  <li key={grade.id} className={index > 0 ? "border-t" : undefined}>
+                  <li
+                    key={grade.id}
+                    className={index > 0 ? "border-t" : undefined}
+                  >
                     <Link
                       href={`/grades/${grade.id}`}
                       className="flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
@@ -228,5 +236,5 @@ export default function GradesPage() {
         )}
       </div>
     </>
-  );
+  )
 }

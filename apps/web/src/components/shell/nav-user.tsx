@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ChevronsUpDownIcon,
   LogOutIcon,
@@ -11,10 +11,10 @@ import {
   SparklesIcon,
   SunIcon,
   UserIcon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
-import { useExtracted } from "next-intl";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+} from "lucide-react"
+import { useTheme } from "next-themes"
+import { useExtracted } from "next-intl"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,16 +23,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { authClient, type User } from "@/lib/auth-client";
-import { haptic } from "@/lib/haptics";
-import { useFeedback } from "@/components/feedback/feedback-provider";
+} from "@/components/ui/sidebar"
+import { signOut as signOutAndReset } from "@/lib/auth-client"
+import type { AuthenticatedUser } from "@/lib/authenticated-user"
+import { haptic } from "@/lib/haptics"
+import { useFeedback } from "@/components/feedback/feedback-provider"
 
 export function initialsOf(name: string): string {
   return name
@@ -40,21 +41,21 @@ export function initialsOf(name: string): string {
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+    .join("")
 }
 
-export function NavUser({ user }: { user: User }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const { state } = useSidebar();
-  const { setTheme, resolvedTheme } = useTheme();
-  const feedback = useFeedback();
+export function NavUser({ user }: { user: AuthenticatedUser }) {
+  const t = useExtracted()
+  const router = useRouter()
+  const { state } = useSidebar()
+  const { setTheme, resolvedTheme } = useTheme()
+  const feedback = useFeedback()
 
   const signOut = async () => {
-    haptic("light");
-    await authClient.signOut();
-    router.replace("/auth/sign-in");
-  };
+    haptic("light")
+    await signOutAndReset()
+    router.replace("/auth/sign-in")
+  }
 
   return (
     <SidebarMenu>
@@ -115,8 +116,8 @@ export function NavUser({ user }: { user: User }) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {
-                haptic("selection");
-                setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                haptic("selection")
+                setTheme(resolvedTheme === "dark" ? "light" : "dark")
               }}
             >
               {resolvedTheme === "dark" ? (
@@ -135,5 +136,5 @@ export function NavUser({ user }: { user: User }) {
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  );
+  )
 }

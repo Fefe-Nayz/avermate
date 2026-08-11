@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import type { ReactNode } from "react"
+import { cn } from "@/lib/utils"
 
 /** A titled block of settings. One visual grammar across every settings page. */
 export function SettingsSection({
@@ -11,11 +11,11 @@ export function SettingsSection({
   className,
   footer,
 }: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-  className?: string;
-  footer?: ReactNode;
+  title: string
+  description?: string
+  children: ReactNode
+  className?: string
+  footer?: ReactNode
 }) {
   return (
     <section className={cn("rounded-xl border bg-card", className)}>
@@ -34,7 +34,7 @@ export function SettingsSection({
         </footer>
       ) : null}
     </section>
-  );
+  )
 }
 
 /** A single labelled row with a control on the trailing edge. */
@@ -44,10 +44,10 @@ export function SettingsRow({
   children,
   htmlFor,
 }: {
-  label: string;
-  description?: string;
-  children: ReactNode;
-  htmlFor?: string;
+  label: string
+  description?: string
+  children: ReactNode
+  htmlFor?: string
 }) {
   return (
     <div className="flex min-h-11 items-center gap-4">
@@ -61,5 +61,5 @@ export function SettingsRow({
       </label>
       <div className="shrink-0">{children}</div>
     </div>
-  );
+  )
 }

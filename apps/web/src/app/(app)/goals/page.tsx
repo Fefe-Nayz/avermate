@@ -1,23 +1,23 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useMemo } from "react";
-import { PlusIcon, TargetIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { useMemo } from "react"
+import { PlusIcon, TargetIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { PageActions, PageMeta } from "@/components/shell/page-chrome";
-import { AverageValue, DeltaValue } from "@/components/data/value";
-import { useStatusLabel } from "@/components/goals/goal-strip";
-import { useYear } from "@/components/year/year-provider";
-import { useGoalPlans } from "@/hooks/use-goal-plans";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/empty"
+import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { AverageValue, DeltaValue } from "@/components/data/value"
+import { useStatusLabel } from "@/components/goals/goal-strip"
+import { useYear } from "@/components/year/year-provider"
+import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { cn } from "@/lib/utils"
 
 const STATUS_STYLE = {
   achieved: "border-band-good/50",
@@ -26,15 +26,15 @@ const STATUS_STYLE = {
   "at-risk": "border-band-fair/50",
   unreachable: "border-band-poor/50",
   "no-data": "border-border",
-} as const;
+} as const
 
 export default function GoalsPage() {
-  const t = useExtracted();
-  const { goals } = useYear();
-  const { plans } = useGoalPlans();
-  const statusLabel = useStatusLabel();
+  const t = useExtracted()
+  const { goals } = useYear()
+  const { plans } = useGoalPlans()
+  const statusLabel = useStatusLabel()
 
-  const goalPlans = useMemo(() => plans(goals), [goals, plans]);
+  const goalPlans = useMemo(() => plans(goals), [goals, plans])
 
   return (
     <>
@@ -78,7 +78,7 @@ export default function GoalsPage() {
               <EmptyTitle>{t("No goals yet")}</EmptyTitle>
               <EmptyDescription>
                 {t(
-                  "Set a target and Avermate works out the mark each subject needs — and tells you when it stops being reachable.",
+                  "Set a target and Avermate works out the mark each subject needs — and tells you when it stops being reachable."
                 )}
               </EmptyDescription>
             </EmptyHeader>
@@ -93,8 +93,8 @@ export default function GoalsPage() {
               const progress =
                 plan.current === null || plan.target === 0
                   ? 0
-                  : Math.min(1, Math.max(0, plan.current / plan.target));
-              const next = plan.nextResults[0];
+                  : Math.min(1, Math.max(0, plan.current / plan.target))
+              const next = plan.nextResults[0]
 
               return (
                 <li key={plan.goal.id}>
@@ -102,7 +102,7 @@ export default function GoalsPage() {
                     href={`/goals/${plan.goal.id}`}
                     className={cn(
                       "flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-accent/40 active:bg-accent",
-                      STATUS_STYLE[plan.status],
+                      STATUS_STYLE[plan.status]
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -137,7 +137,7 @@ export default function GoalsPage() {
                             : plan.status === "achieved" ||
                                 plan.status === "secured"
                               ? "bg-positive"
-                              : "bg-primary",
+                              : "bg-primary"
                         )}
                         style={{ width: `${Math.round(progress * 100)}%` }}
                       />
@@ -145,9 +145,13 @@ export default function GoalsPage() {
 
                     {plan.status === "unreachable" ? (
                       <p className="text-xs text-muted-foreground">
-                        {t("Not reachable any more, even with perfect results.")}
+                        {t(
+                          "Not reachable any more, even with perfect results."
+                        )}
                       </p>
-                    ) : plan.gap !== null && plan.gap > 0 && next?.achievable ? (
+                    ) : plan.gap !== null &&
+                      plan.gap > 0 &&
+                      next?.achievable ? (
                       <p className="text-xs text-muted-foreground">
                         {t("Next result in {subject} needs to be", {
                           subject: next.subject.name,
@@ -168,11 +172,11 @@ export default function GoalsPage() {
                     ) : null}
                   </Link>
                 </li>
-              );
+              )
             })}
           </ul>
         )}
       </div>
     </>
-  );
+  )
 }

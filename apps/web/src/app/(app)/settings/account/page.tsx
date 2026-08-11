@@ -1,25 +1,25 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   DownloadIcon,
   LaptopIcon,
   LogOutIcon,
   SmartphoneIcon,
   TrashIcon,
-} from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { UAParser } from "ua-parser-js";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { PageMeta } from "@/components/shell/page-chrome";
-import { SettingsSection } from "@/components/settings/settings-section";
-import { authClient, useSession } from "@/lib/auth-client";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+} from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { UAParser } from "ua-parser-js"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { PageMeta } from "@/components/shell/page-chrome"
+import { SettingsSection } from "@/components/settings/settings-section"
+import { authClient, useSession } from "@/lib/auth-client"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 /**
  * The account.
@@ -29,66 +29,67 @@ import { haptic } from "@/lib/haptics";
  * the app that cannot be undone.
  */
 export default function AccountSettingsPage() {
-  const t = useExtracted();
-  const format = useFormatter();
-  const queryClient = useQueryClient();
-  const { data: session } = useSession();
+  const t = useExtracted()
+  const format = useFormatter()
+  const queryClient = useQueryClient()
+  const { data: session } = useSession()
 
-  const [resetPhrase, setResetPhrase] = useState("");
-  const [deletePhrase, setDeletePhrase] = useState("");
+  const [resetPhrase, setResetPhrase] = useState("")
+  const [deletePhrase, setDeletePhrase] = useState("")
 
   const sessions = useQuery({
     queryKey: ["auth", "sessions"],
     queryFn: async () => {
-      const { data } = await authClient.listSessions();
-      return data ?? [];
+      const { data } = await authClient.listSessions()
+      return data ?? []
     },
-  });
+  })
 
   const accounts = useQuery({
     queryKey: ["auth", "accounts"],
     queryFn: async () => {
-      const { data } = await authClient.listAccounts();
-      return data ?? [];
+      const { data } = await authClient.listAccounts()
+      return data ?? []
     },
-  });
+  })
 
   const resetData = useMutation({
     ...orpc.preferences.resetData.mutationOptions(),
     onSuccess: async () => {
-      haptic("success");
-      toast.success(t("Everything has been cleared."));
-      await queryClient.invalidateQueries();
-      window.location.href = "/onboarding";
+      haptic("success")
+      toast.success(t("Everything has been cleared."))
+      await queryClient.invalidateQueries()
+      window.location.href = "/onboarding"
     },
-  });
+  })
 
   const exportData = useMutation({
     ...orpc.preferences.exportData.mutationOptions(),
     onSuccess: (data) => {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `avermate-${new Date().toISOString().slice(0, 10)}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      haptic("success");
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `avermate-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      haptic("success")
     },
-  });
+  })
 
   const deviceOf = (userAgent: string | null | undefined) => {
-    if (!userAgent) return { label: t("Unknown device"), mobile: false };
-    const parsed = UAParser(userAgent);
-    const mobile = parsed.device.type === "mobile" || parsed.device.type === "tablet";
-    const parts = [parsed.browser.name, parsed.os.name].filter(Boolean);
+    if (!userAgent) return { label: t("Unknown device"), mobile: false }
+    const parsed = UAParser(userAgent)
+    const mobile =
+      parsed.device.type === "mobile" || parsed.device.type === "tablet"
+    const parts = [parsed.browser.name, parsed.os.name].filter(Boolean)
     return {
       label: parts.length > 0 ? parts.join(" · ") : t("Unknown device"),
       mobile,
-    };
-  };
+    }
+  }
 
   return (
     <>
@@ -107,8 +108,8 @@ export default function AccountSettingsPage() {
             <Spinner className="size-5 text-muted-foreground" />
           ) : null}
           {sessions.data?.map((item) => {
-            const device = deviceOf(item.userAgent);
-            const current = item.token === session?.session.token;
+            const device = deviceOf(item.userAgent)
+            const current = item.token === session?.session.token
             return (
               <div key={item.id} className="flex items-center gap-3">
                 {device.mobile ? (
@@ -140,16 +141,16 @@ export default function AccountSettingsPage() {
                     size="icon-sm"
                     aria-label={t("Sign out")}
                     onClick={async () => {
-                      haptic("light");
-                      await authClient.revokeSession({ token: item.token });
-                      void sessions.refetch();
+                      haptic("light")
+                      await authClient.revokeSession({ token: item.token })
+                      void sessions.refetch()
                     }}
                   >
                     <LogOutIcon className="size-4" />
                   </Button>
                 ) : null}
               </div>
-            );
+            )
           })}
         </SettingsSection>
 
@@ -199,7 +200,7 @@ export default function AccountSettingsPage() {
         <SettingsSection
           title={t("Start over")}
           description={t(
-            "Deletes every year, subject, grade and goal. Your account and preferences stay.",
+            "Deletes every year, subject, grade and goal. Your account and preferences stay."
           )}
         >
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -224,7 +225,7 @@ export default function AccountSettingsPage() {
         <SettingsSection
           title={t("Delete this account")}
           description={t(
-            "Permanent. We email you a link to confirm before anything is removed.",
+            "Permanent. We email you a link to confirm before anything is removed."
           )}
           className="border-destructive/40"
         >
@@ -239,13 +240,13 @@ export default function AccountSettingsPage() {
               variant="destructive"
               disabled={deletePhrase !== "DELETE"}
               onClick={async () => {
-                haptic("warning");
-                const { error } = await authClient.deleteUser({});
+                haptic("warning")
+                const { error } = await authClient.deleteUser({})
                 if (error) {
-                  toast.error(t("That could not be started."));
-                  return;
+                  toast.error(t("That could not be started."))
+                  return
                 }
-                toast.success(t("Check your email to confirm."));
+                toast.success(t("Check your email to confirm."))
               }}
             >
               <TrashIcon className="size-4" />
@@ -255,5 +256,5 @@ export default function AccountSettingsPage() {
         </SettingsSection>
       </div>
     </>
-  );
+  )
 }

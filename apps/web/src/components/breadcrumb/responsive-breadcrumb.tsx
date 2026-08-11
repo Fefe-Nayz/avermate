@@ -1,6 +1,6 @@
-"use client";
+"use client"
 
-import Link from "next/link";
+import Link from "next/link"
 import {
   useCallback,
   useEffect,
@@ -9,16 +9,16 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
+} from "react"
+import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 /**
  * A breadcrumb that measures itself.
@@ -35,115 +35,116 @@ import { cn } from "@/lib/utils";
  */
 
 export interface Crumb {
-  key: string;
-  label: string;
-  href?: string;
-  icon?: ReactNode;
+  key: string
+  label: string
+  href?: string
+  icon?: ReactNode
   /** Siblings reachable from the separator that precedes this crumb. */
-  siblings?: Array<{ key: string; label: string; href: string }>;
+  siblings?: Array<{ key: string; label: string; href: string }>
 }
 
 interface Props {
-  items: Crumb[];
-  className?: string;
+  items: Crumb[]
+  className?: string
 }
 
 /** Never collapse the first crumb or the last one: they carry the context. */
 function collapsible(index: number, count: number): boolean {
-  return index > 0 && index < count - 1;
+  return index > 0 && index < count - 1
 }
 
 const useIsomorphicLayoutEffect =
-  typeof window === "undefined" ? useEffect : useLayoutEffect;
+  typeof window === "undefined" ? useEffect : useLayoutEffect
 
 export function ResponsiveBreadcrumb({ items, className }: Props) {
-  const t = useExtracted();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
+  const t = useExtracted()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLDivElement>(null)
 
-  const [available, setAvailable] = useState(0);
-  const [widths, setWidths] = useState<number[]>([]);
-  const [separatorWidth, setSeparatorWidth] = useState(0);
-  const [ellipsisWidth, setEllipsisWidth] = useState(0);
+  const [available, setAvailable] = useState(0)
+  const [widths, setWidths] = useState<number[]>([])
+  const [separatorWidth, setSeparatorWidth] = useState(0)
+  const [ellipsisWidth, setEllipsisWidth] = useState(0)
 
   const measure = useCallback(() => {
-    const container = containerRef.current;
-    const measurer = measureRef.current;
-    if (!container || !measurer) return;
+    const container = containerRef.current
+    const measurer = measureRef.current
+    if (!container || !measurer) return
 
-    setAvailable(container.getBoundingClientRect().width);
+    setAvailable(container.getBoundingClientRect().width)
     setWidths(
       Array.from(measurer.querySelectorAll("[data-measure-item]")).map(
-        (node) => node.getBoundingClientRect().width,
-      ),
-    );
+        (node) => node.getBoundingClientRect().width
+      )
+    )
     setSeparatorWidth(
       measurer
         .querySelector("[data-measure-separator]")
-        ?.getBoundingClientRect().width ?? 20,
-    );
+        ?.getBoundingClientRect().width ?? 20
+    )
     setEllipsisWidth(
-      measurer
-        .querySelector("[data-measure-ellipsis]")
-        ?.getBoundingClientRect().width ?? 32,
-    );
-  }, []);
+      measurer.querySelector("[data-measure-ellipsis]")?.getBoundingClientRect()
+        .width ?? 32
+    )
+  }, [])
 
   useIsomorphicLayoutEffect(() => {
-    measure();
-  }, [measure, items]);
+    measure()
+  }, [measure, items])
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [measure]);
+    const container = containerRef.current
+    if (!container || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [measure])
 
   /**
    * Keep the outer crumbs and drop from the middle outwards, because the ends
    * are what orient you: where you are, and what you are inside of.
    */
   const visible = useMemo(() => {
-    const count = items.length;
-    if (count === 0) return { indices: [] as number[], hidden: [] as number[] };
+    const count = items.length
+    if (count === 0) return { indices: [] as number[], hidden: [] as number[] }
     if (widths.length !== count || available === 0) {
-      return { indices: items.map((_, index) => index), hidden: [] };
+      return { indices: items.map((_, index) => index), hidden: [] }
     }
 
     const total = (indices: number[]) =>
       indices.reduce((sum, index) => sum + (widths[index] ?? 0), 0) +
-      Math.max(0, indices.length - 1) * separatorWidth;
+      Math.max(0, indices.length - 1) * separatorWidth
 
-    const all = items.map((_, index) => index);
-    if (total(all) <= available) return { indices: all, hidden: [] };
+    const all = items.map((_, index) => index)
+    if (total(all) <= available) return { indices: all, hidden: [] }
 
-    const kept = new Set(all);
-    const hidden: number[] = [];
+    const kept = new Set(all)
+    const hidden: number[] = []
 
     // Give up the crumb closest to the middle first, then widen outwards.
     const order = all
       .filter((index) => collapsible(index, count))
       .sort(
-        (a, b) =>
-          Math.abs(a - (count - 1) / 2) - Math.abs(b - (count - 1) / 2),
-      );
+        (a, b) => Math.abs(a - (count - 1) / 2) - Math.abs(b - (count - 1) / 2)
+      )
 
     for (const index of order) {
-      const indices = all.filter((candidate) => kept.has(candidate));
-      if (total(indices) + (hidden.length > 0 ? ellipsisWidth : 0) <= available) {
-        break;
+      const indices = all.filter((candidate) => kept.has(candidate))
+      if (
+        total(indices) + (hidden.length > 0 ? ellipsisWidth : 0) <=
+        available
+      ) {
+        break
       }
-      kept.delete(index);
-      hidden.push(index);
+      kept.delete(index)
+      hidden.push(index)
     }
 
     return {
       indices: all.filter((index) => kept.has(index)),
       hidden: hidden.sort((a, b) => a - b),
-    };
-  }, [items, widths, available, separatorWidth, ellipsisWidth]);
+    }
+  }, [items, widths, available, separatorWidth, ellipsisWidth])
 
   const renderCrumb = (item: Crumb, index: number, isLast: boolean) => {
     const content = (
@@ -151,7 +152,7 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
         {item.icon}
         <span className="truncate">{item.label}</span>
       </span>
-    );
+    )
 
     if (isLast || !item.href) {
       return (
@@ -159,28 +160,28 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
           key={item.key}
           aria-current={isLast ? "page" : undefined}
           className={cn(
-            "min-w-0 max-w-[16rem] truncate text-sm",
-            isLast ? "font-medium text-foreground" : "text-muted-foreground",
+            "max-w-[16rem] min-w-0 truncate text-sm",
+            isLast ? "font-medium text-foreground" : "text-muted-foreground"
           )}
         >
           {content}
         </span>
-      );
+      )
     }
 
     return (
       <Link
         key={item.key}
         href={item.href}
-        className="min-w-0 max-w-[12rem] truncate rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="max-w-[12rem] min-w-0 truncate rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {content}
       </Link>
-    );
-  };
+    )
+  }
 
   const separator = (nextItem: Crumb | undefined, key: string) => {
-    const siblings = nextItem?.siblings ?? [];
+    const siblings = nextItem?.siblings ?? []
     if (siblings.length === 0) {
       return (
         <ChevronRightIcon
@@ -188,7 +189,7 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
           aria-hidden
           className="size-3.5 shrink-0 text-muted-foreground/50"
         />
-      );
+      )
     }
 
     return (
@@ -215,21 +216,21 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-    );
-  };
+    )
+  }
 
-  const nodes: ReactNode[] = [];
+  const nodes: ReactNode[] = []
   visible.indices.forEach((index, position) => {
-    const item = items[index] as Crumb;
-    const isLast = index === items.length - 1;
+    const item = items[index] as Crumb
+    const isLast = index === items.length - 1
 
     if (position > 0) {
-      const previous = visible.indices[position - 1] as number;
+      const previous = visible.indices[position - 1] as number
       const skipped = visible.hidden.filter(
-        (hiddenIndex) => hiddenIndex > previous && hiddenIndex < index,
-      );
+        (hiddenIndex) => hiddenIndex > previous && hiddenIndex < index
+      )
 
-      nodes.push(separator(item, `sep-${index}`));
+      nodes.push(separator(item, `sep-${index}`))
 
       if (skipped.length > 0) {
         nodes.push(
@@ -247,29 +248,37 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               {skipped.map((hiddenIndex) => {
-                const hidden = items[hiddenIndex] as Crumb;
+                const hidden = items[hiddenIndex] as Crumb
                 return (
                   <DropdownMenuItem
                     key={hidden.key}
-                    render={hidden.href ? <Link href={hidden.href} /> : <span />}
+                    render={
+                      hidden.href ? <Link href={hidden.href} /> : <span />
+                    }
                   >
                     {hidden.label}
                   </DropdownMenuItem>
-                );
+                )
               })}
             </DropdownMenuContent>
           </DropdownMenu>,
-          separator(item, `sep-after-ellipsis-${index}`),
-        );
+          separator(item, `sep-after-ellipsis-${index}`)
+        )
       }
     }
 
-    nodes.push(renderCrumb(item, index, isLast));
-  });
+    nodes.push(renderCrumb(item, index, isLast))
+  })
 
   return (
-    <div ref={containerRef} className={cn("relative min-w-0 flex-1", className)}>
-      <nav aria-label={t("Breadcrumb")} className="flex min-w-0 items-center gap-1.5">
+    <div
+      ref={containerRef}
+      className={cn("relative min-w-0 flex-1", className)}
+    >
+      <nav
+        aria-label={t("Breadcrumb")}
+        className="flex min-w-0 items-center gap-1.5"
+      >
         {nodes}
       </nav>
 
@@ -277,14 +286,14 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 -z-10 flex h-0 items-center gap-1.5 overflow-hidden opacity-0"
+        className="pointer-events-none absolute top-0 left-0 -z-10 flex h-0 items-center gap-1.5 overflow-hidden opacity-0"
         style={{ visibility: "hidden", contain: "layout style" }}
       >
         {items.map((item) => (
           <span
             key={item.key}
             data-measure-item
-            className="flex items-center gap-1.5 whitespace-nowrap text-sm"
+            className="flex items-center gap-1.5 text-sm whitespace-nowrap"
           >
             {item.icon}
             {item.label}
@@ -294,5 +303,5 @@ export function ResponsiveBreadcrumb({ items, className }: Props) {
         <MoreHorizontalIcon data-measure-ellipsis className="size-4" />
       </div>
     </div>
-  );
+  )
 }

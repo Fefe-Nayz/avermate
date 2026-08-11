@@ -1,28 +1,27 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { MonitorIcon, MoonIcon, RotateCcwIcon, SunIcon } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { PageMeta } from "@/components/shell/page-chrome";
+import { useState } from "react"
+import { MonitorIcon, MoonIcon, RotateCcwIcon, SunIcon } from "lucide-react"
+import { useTheme } from "next-themes"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
+import { PageMeta } from "@/components/shell/page-chrome"
 import {
   SettingsRow,
   SettingsSection,
-} from "@/components/settings/settings-section";
-import { ChoiceField } from "@/components/forms/controls";
-import { usePreferences } from "@/hooks/use-preferences";
+} from "@/components/settings/settings-section"
+import { ChoiceField } from "@/components/forms/controls"
+import { usePreferences } from "@/hooks/use-preferences"
 import {
   PALETTES,
   SEASONS,
   THEME_TOKENS,
   UNLOCKABLE_PALETTES,
-  type Palette,
-} from "@/lib/theme";
-import { haptic } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+} from "@/lib/theme"
+import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 /**
  * Appearance.
@@ -32,18 +31,18 @@ import { cn } from "@/lib/utils";
  * step further in, for the people who want it.
  */
 export default function AppearanceSettingsPage() {
-  const t = useExtracted();
-  const { preferences, update } = usePreferences();
-  const { setTheme } = useTheme();
+  const t = useExtracted()
+  const { preferences, update } = usePreferences()
+  const { setTheme } = useTheme()
   const [showCustom, setShowCustom] = useState(
-    preferences.themePreset === "custom",
-  );
+    preferences.themePreset === "custom"
+  )
 
   // Earned themes sit alongside the standard ones rather than in a section of
   // their own: once unlocked, it is just another colour you can pick.
   const unlocked = UNLOCKABLE_PALETTES.filter((palette) =>
-    preferences.unlockedThemes.includes(palette),
-  );
+    preferences.unlockedThemes.includes(palette)
+  )
 
   const paletteLabels: Record<string, string> = {
     mokattam: t("Mokattam"),
@@ -54,7 +53,7 @@ export default function AppearanceSettingsPage() {
     grape: t("Grape"),
     rose: t("Rose"),
     amber: t("Amber"),
-  };
+  }
 
   const seasonLabels: Record<string, string> = {
     auto: t("Follow the calendar"),
@@ -66,7 +65,7 @@ export default function AppearanceSettingsPage() {
     autumn: t("Autumn"),
     halloween: t("Halloween"),
     winter: t("Winter"),
-  };
+  }
 
   return (
     <>
@@ -98,8 +97,8 @@ export default function AppearanceSettingsPage() {
             ]}
             value={preferences.theme}
             onValueChange={(value) => {
-              update({ theme: value as typeof preferences.theme });
-              setTheme(value);
+              update({ theme: value as typeof preferences.theme })
+              setTheme(value)
             }}
             columns={3}
           />
@@ -111,22 +110,21 @@ export default function AppearanceSettingsPage() {
         >
           <div className="grid grid-cols-4 gap-2 @sm/main:grid-cols-7">
             {[...PALETTES, ...unlocked].map((palette) => {
-              const active =
-                preferences.themePreset === palette && !showCustom;
+              const active = preferences.themePreset === palette && !showCustom
               return (
                 <button
                   key={palette}
                   type="button"
                   onClick={() => {
-                    haptic("selection");
-                    setShowCustom(false);
-                    update({ themePreset: palette });
+                    haptic("selection")
+                    setShowCustom(false)
+                    update({ themePreset: palette })
                   }}
                   className={cn(
                     "flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
                     active
                       ? "border-primary ring-1 ring-primary/40"
-                      : "border-border hover:bg-accent/50",
+                      : "border-border hover:bg-accent/50"
                   )}
                 >
                   <span
@@ -138,7 +136,7 @@ export default function AppearanceSettingsPage() {
                     {paletteLabels[palette]}
                   </span>
                 </button>
-              );
+              )
             })}
           </div>
 
@@ -149,9 +147,9 @@ export default function AppearanceSettingsPage() {
             <Switch
               checked={showCustom}
               onCheckedChange={(checked) => {
-                haptic("selection");
-                setShowCustom(checked);
-                update({ themePreset: checked ? "custom" : "default" });
+                haptic("selection")
+                setShowCustom(checked)
+                update({ themePreset: checked ? "custom" : "default" })
               }}
             />
           </SettingsRow>
@@ -210,11 +208,11 @@ export default function AppearanceSettingsPage() {
               max={1.5}
               step={0.05}
               onValueChange={(value) => {
-                const next = Array.isArray(value) ? value[0] : value;
+                const next = Array.isArray(value) ? value[0] : value
                 if (typeof next === "number") {
                   update({
                     themeShape: { ...preferences.themeShape, radius: next },
-                  });
+                  })
                 }
               }}
               className="mt-3"
@@ -224,14 +222,16 @@ export default function AppearanceSettingsPage() {
 
         <SettingsSection
           title={t("Seasonal touches")}
-          description={t("A quiet accent around the holidays. Nothing that moves.")}
+          description={t(
+            "A quiet accent around the holidays. Nothing that moves."
+          )}
         >
           <SettingsRow label={t("Enable seasonal themes")}>
             <Switch
               checked={preferences.seasonalThemesEnabled}
               onCheckedChange={(checked) => {
-                haptic("selection");
-                update({ seasonalThemesEnabled: checked });
+                haptic("selection")
+                update({ seasonalThemesEnabled: checked })
               }}
             />
           </SettingsRow>
@@ -253,7 +253,7 @@ export default function AppearanceSettingsPage() {
           <SettingsRow
             label={t("Zoom to the data")}
             description={t(
-              "Fits the axis to your range. Off shows the full scale, which flattens everything.",
+              "Fits the axis to your range. Off shows the full scale, which flattens everything."
             )}
           >
             <Switch
@@ -304,8 +304,8 @@ export default function AppearanceSettingsPage() {
             <Switch
               checked={preferences.hapticsEnabled}
               onCheckedChange={(checked) => {
-                update({ hapticsEnabled: checked });
-                if (checked) haptic("success");
+                update({ hapticsEnabled: checked })
+                if (checked) haptic("success")
               }}
             />
           </SettingsRow>
@@ -321,11 +321,11 @@ export default function AppearanceSettingsPage() {
         </SettingsSection>
       </div>
     </>
-  );
+  )
 }
 
 /** Colour inputs need `#rrggbb`; the stored value may be any CSS colour. */
 function hexOf(value: string | undefined): string {
-  if (!value) return "#888888";
-  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#888888";
+  if (!value) return "#888888"
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "#888888"
 }

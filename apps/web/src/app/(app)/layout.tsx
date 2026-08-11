@@ -1,52 +1,44 @@
-"use client";
+import type { ReactNode } from "react"
+import { AuthenticatedProviders } from "@/components/authenticated-providers"
+import { CommandPaletteProvider } from "@/components/command/command-palette"
+import { FeedbackProvider } from "@/components/feedback/feedback-provider"
+import { AppShell } from "@/components/shell/app-shell"
+import { PageChromeProvider } from "@/components/shell/page-chrome"
+import { QuickAddProvider } from "@/components/shell/quick-add"
+import { YearSheetProvider } from "@/components/shell/year-sheet"
+import { YearGate } from "@/components/year/year-gate"
+import { YearProvider } from "@/components/year/year-provider"
+import { prepareAuthenticatedShell } from "@/lib/authenticated-data"
+import { HydrateClient } from "@/lib/query-server"
 
-import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
-import { Spinner } from "@/components/ui/spinner";
-import { useSession } from "@/lib/auth-client";
-import { YearProvider } from "@/components/year/year-provider";
-import { YearGate } from "@/components/year/year-gate";
-import { AppShell } from "@/components/shell/app-shell";
-import { PageChromeProvider } from "@/components/shell/page-chrome";
-import { QuickAddProvider } from "@/components/shell/quick-add";
-import { YearSheetProvider } from "@/components/shell/year-sheet";
-import { CommandPaletteProvider } from "@/components/command/command-palette";
-import { FeedbackProvider } from "@/components/feedback/feedback-provider";
-
-/** The signed-in area: auth gate, year context, and the shell around it. */
-export default function AppLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const { data: session, isPending } = useSession();
-
-  useEffect(() => {
-    if (isPending || session) return;
-    const target = `${window.location.pathname}${window.location.search}`;
-    router.replace(`/auth/sign-in?next=${encodeURIComponent(target)}`);
-  }, [isPending, session, router]);
-
-  if (isPending || !session) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    );
-  }
+/**
+ * The authenticated route shell is a Server Component. It authenticates once,
+ * prepares common read models in parallel, and hands only interactive chrome
+ * to the browser with its query cache already populated.
+ */
+export default async function AppLayout({ children }: { children: ReactNode }) {
+  const { activeYearId, queryClient, renderedAt, user } =
+    await prepareAuthenticatedShell()
 
   return (
-    <YearProvider>
-      <PageChromeProvider>
-        <CommandPaletteProvider>
-          <FeedbackProvider>
-            <QuickAddProvider>
-              <YearSheetProvider>
-                <AppShell user={session.user}>
-                  <YearGate>{children}</YearGate>
-                </AppShell>
-              </YearSheetProvider>
-            </QuickAddProvider>
-          </FeedbackProvider>
-        </CommandPaletteProvider>
-      </PageChromeProvider>
-    </YearProvider>
-  );
+    <AuthenticatedProviders user={user}>
+      <HydrateClient queryClient={queryClient}>
+        <YearProvider initialNow={renderedAt} initialYearId={activeYearId}>
+          <PageChromeProvider>
+            <CommandPaletteProvider>
+              <FeedbackProvider>
+                <QuickAddProvider>
+                  <YearSheetProvider>
+                    <AppShell>
+                      <YearGate>{children}</YearGate>
+                    </AppShell>
+                  </YearSheetProvider>
+                </QuickAddProvider>
+              </FeedbackProvider>
+            </CommandPaletteProvider>
+          </PageChromeProvider>
+        </YearProvider>
+      </HydrateClient>
+    </AuthenticatedProviders>
+  )
 }

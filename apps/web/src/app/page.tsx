@@ -1,4 +1,5 @@
-import Link from "next/link";
+import Link from "next/link"
+import { Suspense } from "react"
 import {
   ArrowRightIcon,
   ChartNoAxesCombinedIcon,
@@ -7,45 +8,45 @@ import {
   SmartphoneIcon,
   SparklesIcon,
   TargetIcon,
-} from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { LandingStats } from "@/components/landing/landing-stats";
-import { LandingPreview } from "@/components/landing/landing-preview";
+} from "lucide-react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
+import { LandingStats } from "@/components/landing/landing-stats"
+import { LandingPreview } from "@/components/landing/landing-preview"
 
 export default function LandingPage() {
-  const t = useExtracted();
+  const t = useExtracted()
 
   const features = [
     {
       icon: LayersIcon,
       title: t("Weighting that matches your school"),
       body: t(
-        "Nest subjects as deeply as you need, group them into categories that add no level of averaging, and give anything its own coefficient.",
+        "Nest subjects as deeply as you need, group them into categories that add no level of averaging, and give anything its own coefficient."
       ),
     },
     {
       icon: TargetIcon,
       title: t("Goals that tell you what to do"),
       body: t(
-        "Set a target and Avermate works out the mark your next assessment needs, which subject is worth the effort, and when a target has stopped being reachable.",
+        "Set a target and Avermate works out the mark your next assessment needs, which subject is worth the effort, and when a target has stopped being reachable."
       ),
     },
     {
       icon: ChartNoAxesCombinedIcon,
       title: t("Every number explained"),
       body: t(
-        "See what a single grade did to your year, which subject carries the most weight, and where your average is heading.",
+        "See what a single grade did to your year, which subject carries the most weight, and where your average is heading."
       ),
     },
     {
       icon: SmartphoneIcon,
       title: t("Built for a phone, not shrunk onto one"),
       body: t(
-        "A real mobile app in the browser: thumb-reachable navigation, full-screen forms, and haptics.",
+        "A real mobile app in the browser: thumb-reachable navigation, full-screen forms, and haptics."
       ),
     },
-  ];
+  ]
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -58,7 +59,11 @@ export default function LandingPage() {
             Avermate
           </Link>
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="sm" render={<Link href="/auth/sign-in" />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href="/auth/sign-in" />}
+            >
               {t("Sign in")}
             </Button>
             <Button size="sm" render={<Link href="/auth/sign-up" />}>
@@ -78,7 +83,7 @@ export default function LandingPage() {
           </h1>
           <p className="max-w-xl text-balance text-muted-foreground md:text-lg">
             {t(
-              "Track your grades, understand what moves your average, and get a plan for the result you are aiming at.",
+              "Track your grades, understand what moves your average, and get a plan for the result you are aiming at."
             )}
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -86,11 +91,18 @@ export default function LandingPage() {
               {t("Start for free")}
               <ArrowRightIcon className="size-4" />
             </Button>
-            <Button variant="outline" size="lg" render={<Link href="/auth/sign-in" />}>
+            <Button
+              variant="outline"
+              size="lg"
+              render={<Link href="/auth/sign-in" />}
+            >
               {t("I already have an account")}
             </Button>
           </div>
-          <LandingStats />
+          {/* Secondary social proof should not hold back the useful hero HTML. */}
+          <Suspense fallback={null}>
+            <LandingStats />
+          </Suspense>
         </section>
 
         <LandingPreview />
@@ -133,5 +145,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
-  );
+  )
 }

@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { UTApi } from "uploadthing/server";
@@ -30,6 +31,28 @@ function keyOf(url: string | null): string | null {
 }
 
 export const profileRouter = {
+  /** Minimal authenticated identity needed by the server-rendered web shell. */
+  viewer: protectedProcedure.handler(async ({ context }) => {
+    // Read mutable profile fields from the source of truth. Better Auth's
+    // signed cookie cache can legitimately contain the previous name/avatar
+    // for a few minutes after an update.
+    const [user] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        image: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, context.session.user.id))
+      .limit(1);
+
+    if (!user) {
+      throw new ORPCError("UNAUTHORIZED", { message: "Session user missing" });
+    }
+    return user;
+  }),
+
   uploadAvatar: protectedProcedure
     .input(z.object({ image: z.instanceof(File) }))
     .handler(async ({ context, input }) => {

@@ -1,48 +1,41 @@
 {
-    "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-    "ui": "tui",
-    "tasks": {
-        "build": {
-            "dependsOn": [
-                "^build"
-            ],
-            "inputs": [
-                "$TURBO_DEFAULT$",
-                ".env*"
-            ],
-            "outputs": [
-                ".next/**",
-                "!.next/cache/**",
-                "dist/**"
-            ]
-        },
-        "check-types": {
-            "dependsOn": [
-                "^check-types"
-            ]
-        },
-        "test": {
-            "outputs": []
-        },
-        "dev": {
-            "cache": false,
-            "persistent": true
-        },
-        "db:push": {
-            "cache": false,
-            "persistent": true
-        },
-        "db:studio": {
-            "cache": false,
-            "persistent": true
-        },
-        "db:migrate": {
-            "cache": false,
-            "persistent": true
-        },
-        "db:generate": {
-            "cache": false,
-            "persistent": true
-        }
+  "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"],
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:push": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:studio": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:migrate": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:generate": {
+      "cache": false,
+      "persistent": true
     }
+  }
 }

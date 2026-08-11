@@ -1,30 +1,30 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use } from "react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { use } from "react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { AverageForm } from "@/components/averages/average-form";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/ui/empty"
+import { AverageForm } from "@/components/averages/average-form"
+import { useYear } from "@/components/year/year-provider"
 
 export default function EditAveragePage({
   params,
 }: {
-  params: Promise<{ averageId: string }>;
+  params: Promise<{ averageId: string }>
 }) {
-  const { averageId } = use(params);
-  const t = useExtracted();
-  const { customAverages, isLoading } = useYear();
-  const average = customAverages.find((item) => item.id === averageId);
+  const { averageId } = use(params)
+  const t = useExtracted()
+  const { customAverages, isLoading } = useYear()
+  const average = customAverages.find((item) => item.id === averageId)
 
   if (!average) {
-    if (isLoading) return null;
+    if (isLoading) return null
     return (
       <Empty className="py-16">
         <EmptyHeader>
@@ -37,7 +37,7 @@ export default function EditAveragePage({
           {t("Back to custom averages")}
         </Button>
       </Empty>
-    );
+    )
   }
 
   return (
@@ -55,5 +55,5 @@ export default function EditAveragePage({
         })),
       }}
     />
-  );
+  )
 }

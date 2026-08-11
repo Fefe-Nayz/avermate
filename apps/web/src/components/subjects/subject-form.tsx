@@ -1,28 +1,33 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookMarkedIcon, FolderIcon, StarIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { toast } from "sonner";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
-import { FormPage } from "@/components/forms/form-page";
-import { ChoiceField, FormSection, NumberField, TextField } from "@/components/forms/controls";
-import { PickerField, type PickerOption } from "@/components/forms/picker";
-import { useYear } from "@/components/year/year-provider";
-import { orpc } from "@/lib/orpc";
-import { haptic } from "@/lib/haptics";
+import { useRouter } from "next/navigation"
+import { useMemo, useState } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { BookMarkedIcon, FolderIcon, StarIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Switch } from "@/components/ui/switch"
+import { FormPage } from "@/components/forms/form-page"
+import {
+  ChoiceField,
+  FormSection,
+  NumberField,
+  TextField,
+} from "@/components/forms/controls"
+import { PickerField, type PickerOption } from "@/components/forms/picker"
+import { useYear } from "@/components/year/year-provider"
+import { orpc } from "@/lib/orpc"
+import { haptic } from "@/lib/haptics"
 
 export interface SubjectFormValues {
-  id?: string;
-  name: string;
-  shortName: string;
-  parentId: string | null;
-  coefficient: string;
-  kind: "subject" | "category";
-  isMain: boolean;
+  id?: string
+  name: string
+  shortName: string
+  parentId: string | null
+  coefficient: string
+  kind: "subject" | "category"
+  isMain: boolean
 }
 
 /**
@@ -37,35 +42,36 @@ export function SubjectForm({
   initial,
   mode,
 }: {
-  initial?: Partial<SubjectFormValues>;
-  mode: "create" | "edit";
+  initial?: Partial<SubjectFormValues>
+  mode: "create" | "edit"
 }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { graph, yearId } = useYear();
+  const t = useExtracted()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { graph, yearId } = useYear()
 
-  const [name, setName] = useState(initial?.name ?? "");
-  const [shortName, setShortName] = useState(initial?.shortName ?? "");
+  const [name, setName] = useState(initial?.name ?? "")
+  const [shortName, setShortName] = useState(initial?.shortName ?? "")
   const [parentId, setParentId] = useState<string | null>(
-    initial?.parentId ?? null,
-  );
-  const [coefficient, setCoefficient] = useState(initial?.coefficient ?? "1");
+    initial?.parentId ?? null
+  )
+  const [coefficient, setCoefficient] = useState(initial?.coefficient ?? "1")
   const [kind, setKind] = useState<"subject" | "category">(
-    initial?.kind ?? "subject",
-  );
-  const [isMain, setIsMain] = useState(initial?.isMain ?? false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+    initial?.kind ?? "subject"
+  )
+  const [isMain, setIsMain] = useState(initial?.isMain ?? false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const initialId = initial?.id
 
   // A subject cannot sit inside itself, and neither can it sit inside one of
   // its own descendants — that branch would detach from the year.
   const forbidden = useMemo(() => {
-    if (!initial?.id) return new Set<string>();
+    if (!initialId) return new Set<string>()
     return new Set([
-      initial.id,
-      ...graph.descendantsOf(initial.id).map((subject) => subject.id),
-    ]);
-  }, [graph, initial?.id]);
+      initialId,
+      ...graph.descendantsOf(initialId).map((subject) => subject.id),
+    ])
+  }, [graph, initialId])
 
   const parentOptions: PickerOption[] = useMemo(
     () => [
@@ -80,53 +86,59 @@ export function SubjectForm({
           hint: subject.kind === "category" ? t("group") : undefined,
         })),
     ],
-    [graph, forbidden, t],
-  );
+    [graph, forbidden, t]
+  )
 
   const onSaved = {
     onSuccess: () => {
-      haptic("success");
-      toast.success(mode === "create" ? t("Subject added") : t("Subject updated"));
+      haptic("success")
+      toast.success(
+        mode === "create" ? t("Subject added") : t("Subject updated")
+      )
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.back();
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.back()
     },
     onError: (error: Error) => {
-      haptic("error");
-      toast.error(error.message || t("The subject could not be saved."));
+      haptic("error")
+      toast.error(error.message || t("The subject could not be saved."))
     },
-  };
+  }
 
   const create = useMutation({
     ...orpc.subjects.create.mutationOptions(),
     ...onSaved,
-  });
+  })
   const update = useMutation({
     ...orpc.subjects.update.mutationOptions(),
     ...onSaved,
-  });
-  const saving = create.isPending || update.isPending;
+  })
+  const saving = create.isPending || update.isPending
 
   const remove = useMutation({
     ...orpc.subjects.delete.mutationOptions(),
     onSuccess: () => {
-      haptic("success");
-      toast.success(t("Subject deleted"));
+      haptic("success")
+      toast.success(t("Subject deleted"))
       void queryClient.invalidateQueries({
-        queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
-      });
-      router.push("/subjects");
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+      router.push("/subjects")
     },
-  });
+  })
 
   const submit = () => {
-    const next: Record<string, string> = {};
-    if (!name.trim()) next.name = t("Give this subject a name.");
-    setErrors(next);
+    const next: Record<string, string> = {}
+    if (!name.trim()) next.name = t("Give this subject a name.")
+    setErrors(next)
     if (Object.keys(next).length > 0) {
-      haptic("warning");
-      return;
+      haptic("warning")
+      return
     }
 
     const payload = {
@@ -136,16 +148,16 @@ export function SubjectForm({
       coefficient: Number.parseFloat(coefficient.replace(",", ".")) || 1,
       kind,
       isMain,
-    };
+    }
 
     if (mode === "create") {
-      create.mutate({ yearId: yearId as string, ...payload });
+      create.mutate({ yearId: yearId as string, ...payload })
     } else {
-      update.mutate({ subjectId: initial?.id as string, ...payload });
+      update.mutate({ subjectId: initial?.id as string, ...payload })
     }
-  };
+  }
 
-  const childCount = initial?.id ? graph.childrenOf(initial.id).length : 0;
+  const childCount = initial?.id ? graph.childrenOf(initial.id).length : 0
 
   return (
     <FormPage
@@ -202,7 +214,7 @@ export function SubjectForm({
               value: "subject",
               label: t("Subject"),
               description: t(
-                "Counted once, with its own weight, using its own average.",
+                "Counted once, with its own weight, using its own average."
               ),
               icon: <BookMarkedIcon className="size-4" />,
             },
@@ -210,7 +222,7 @@ export function SubjectForm({
               value: "category",
               label: t("Category"),
               description: t(
-                "A heading. What it contains is weighed one by one at the level above.",
+                "A heading. What it contains is weighed one by one at the level above."
               ),
               icon: <FolderIcon className="size-4" />,
             },
@@ -230,7 +242,9 @@ export function SubjectForm({
         {kind === "subject" ? (
           <NumberField
             label={t("Weight")}
-            description={t("How much this subject counts against its siblings.")}
+            description={t(
+              "How much this subject counts against its siblings."
+            )}
             value={coefficient}
             onValueChange={setCoefficient}
             min={0}
@@ -255,12 +269,12 @@ export function SubjectForm({
             id="is-main"
             checked={isMain}
             onCheckedChange={(checked) => {
-              haptic("selection");
-              setIsMain(checked);
+              haptic("selection")
+              setIsMain(checked)
             }}
           />
         </Field>
       </FormSection>
     </FormPage>
-  );
+  )
 }

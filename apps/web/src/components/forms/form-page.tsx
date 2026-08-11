@@ -1,14 +1,14 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
-import type { FormEvent, ReactNode } from "react";
-import { XIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { PageMeta } from "@/components/shell/page-chrome";
-import { haptic } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation"
+import type { FormEvent, ReactNode } from "react"
+import { XIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import { PageMeta } from "@/components/shell/page-chrome"
+import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 /**
  * The shell every form screen uses.
@@ -33,27 +33,27 @@ export function FormPage({
   children,
   footerNote,
 }: {
-  title: string;
-  description?: string;
-  backHref?: string;
-  onSubmit: () => void;
-  submitLabel: string;
-  submitting?: boolean;
-  disabled?: boolean;
+  title: string
+  description?: string
+  backHref?: string
+  onSubmit: () => void
+  submitLabel: string
+  submitting?: boolean
+  disabled?: boolean
   /** An extra destructive action, e.g. "Delete". */
-  destructive?: { label: string; onClick: () => void };
-  children: ReactNode;
-  footerNote?: ReactNode;
+  destructive?: { label: string; onClick: () => void }
+  children: ReactNode
+  footerNote?: ReactNode
 }) {
-  const t = useExtracted();
-  const router = useRouter();
+  const t = useExtracted()
+  const router = useRouter()
 
   const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (submitting || disabled) return;
-    haptic("light");
-    onSubmit();
-  };
+    event.preventDefault()
+    if (submitting || disabled) return
+    haptic("light")
+    onSubmit()
+  }
 
   return (
     <>
@@ -64,7 +64,9 @@ export function FormPage({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             {description ? (
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
             ) : null}
           </div>
           <Button
@@ -81,15 +83,15 @@ export function FormPage({
         <div className="flex flex-col gap-5 pb-28 md:pb-0">{children}</div>
 
         {footerNote ? (
-          <p className="pb-24 pt-4 text-xs text-muted-foreground md:pb-0">
+          <p className="pt-4 pb-24 text-xs text-muted-foreground md:pb-0">
             {footerNote}
           </p>
         ) : null}
 
         <div
           className={cn(
-            "fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 px-4 pb-safe pt-3 backdrop-blur-xl",
-            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:backdrop-blur-none",
+            "pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 px-4 pt-3 backdrop-blur-xl",
+            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:backdrop-blur-none"
           )}
         >
           <div className="mx-auto flex max-w-2xl items-center gap-2 pb-3 md:pb-0">
@@ -99,8 +101,8 @@ export function FormPage({
                 variant="ghost"
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => {
-                  haptic("warning");
-                  destructive.onClick();
+                  haptic("warning")
+                  destructive.onClick()
                 }}
               >
                 {destructive.label}
@@ -127,5 +129,5 @@ export function FormPage({
         </div>
       </form>
     </>
-  );
+  )
 }

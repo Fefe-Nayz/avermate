@@ -1,16 +1,16 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ChevronLeftIcon } from "lucide-react";
-import { useExtracted } from "next-intl";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { User } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/haptics";
-import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs";
-import { PAGE_ACTIONS_SLOT, usePageChrome } from "./page-chrome";
-import { initialsOf } from "./nav-user";
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { ChevronLeftIcon } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import type { AuthenticatedUser } from "@/lib/authenticated-user"
+import { cn } from "@/lib/utils"
+import { haptic } from "@/lib/haptics"
+import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
+import { PAGE_ACTIONS_SLOT, usePageChrome } from "./page-chrome"
+import { initialsOf } from "./nav-user"
 
 /**
  * The phone header.
@@ -24,24 +24,24 @@ export function MobileHeader({
   user,
   condensed,
 }: {
-  user: User;
-  condensed: boolean;
+  user: AuthenticatedUser
+  condensed: boolean
 }) {
-  const t = useExtracted();
-  const router = useRouter();
-  const crumbs = useBreadcrumbs();
-  const chrome = usePageChrome();
+  const t = useExtracted()
+  const router = useRouter()
+  const crumbs = useBreadcrumbs()
+  const chrome = usePageChrome()
 
-  const title = chrome.title ?? crumbs.at(-1)?.label ?? "Avermate";
-  const parent = crumbs.length > 1 ? crumbs.at(-2) : undefined;
-  const backHref = chrome.backHref ?? parent?.href;
+  const title = chrome.title ?? crumbs.at(-1)?.label ?? "Avermate"
+  const parent = crumbs.length > 1 ? crumbs.at(-2) : undefined
+  const backHref = chrome.backHref ?? parent?.href
 
   return (
     <header
       className={cn(
-        "z-30 shrink-0 pt-safe transition-colors md:hidden",
+        "pt-safe z-30 shrink-0 transition-colors md:hidden",
         condensed &&
-          "border-b border-border/70 bg-background/85 backdrop-blur-xl",
+          "border-b border-border/70 bg-background/85 backdrop-blur-xl"
       )}
     >
       <div className="flex h-mobile-header items-center gap-1 px-2">
@@ -50,9 +50,9 @@ export function MobileHeader({
             type="button"
             aria-label={t("Back")}
             onClick={() => {
-              haptic("light");
-              if (window.history.length > 1) router.back();
-              else router.push(backHref);
+              haptic("light")
+              if (window.history.length > 1) router.back()
+              else router.push(backHref)
             }}
             className="-ml-1 flex size-9 items-center justify-center rounded-full text-foreground transition-colors active:bg-accent"
           >
@@ -76,7 +76,7 @@ export function MobileHeader({
         <span
           className={cn(
             "min-w-0 flex-1 truncate px-1 text-center text-[15px] font-semibold transition-opacity duration-200",
-            condensed ? "opacity-100" : "opacity-0",
+            condensed ? "opacity-100" : "opacity-0"
           )}
         >
           {title}
@@ -92,10 +92,10 @@ export function MobileHeader({
         <div
           className={cn(
             "overflow-hidden px-4 transition-all duration-200",
-            condensed ? "max-h-0 opacity-0" : "max-h-24 pb-2 opacity-100",
+            condensed ? "max-h-0 opacity-0" : "max-h-24 pb-2 opacity-100"
           )}
         >
-          <h1 className="truncate text-[27px] font-semibold leading-tight tracking-tight">
+          <h1 className="truncate text-[27px] leading-tight font-semibold tracking-tight">
             {title}
           </h1>
           {chrome.subtitle ? (
@@ -106,5 +106,5 @@ export function MobileHeader({
         </div>
       ) : null}
     </header>
-  );
+  )
 }

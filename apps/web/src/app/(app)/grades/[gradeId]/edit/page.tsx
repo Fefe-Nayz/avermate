@@ -1,36 +1,36 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { use } from "react";
-import { useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
+import Link from "next/link"
+import { use } from "react"
+import { useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { GradeForm } from "@/components/grades/grade-form";
-import { useYear } from "@/components/year/year-provider";
+} from "@/components/ui/empty"
+import { GradeForm } from "@/components/grades/grade-form"
+import { useYear } from "@/components/year/year-provider"
 
 function toDateInput(date: Date): string {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
 export default function EditGradePage({
   params,
 }: {
-  params: Promise<{ gradeId: string }>;
+  params: Promise<{ gradeId: string }>
 }) {
-  const { gradeId } = use(params);
-  const t = useExtracted();
-  const { yearGraph, isLoading } = useYear();
+  const { gradeId } = use(params)
+  const t = useExtracted()
+  const { yearGraph, isLoading } = useYear()
 
-  const grade = yearGraph.allGrades().find((item) => item.id === gradeId);
+  const grade = yearGraph.allGrades().find((item) => item.id === gradeId)
 
   if (!grade) {
-    if (isLoading) return null;
+    if (isLoading) return null
     return (
       <Empty className="py-16">
         <EmptyHeader>
@@ -43,7 +43,7 @@ export default function EditGradePage({
           {t("Back to grades")}
         </Button>
       </Empty>
-    );
+    )
   }
 
   return (
@@ -67,5 +67,5 @@ export default function EditGradePage({
         })),
       }}
     />
-  );
+  )
 }

@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "bun run --cwd apps/web format",
+    "format:check": "bun run --cwd apps/web format:check",
     "check-types": "turbo check-types",
     "test": "turbo test",
     "dev:web": "turbo -F web dev",

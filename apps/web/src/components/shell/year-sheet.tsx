@@ -1,20 +1,25 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { CheckIcon, GraduationCapIcon, PlusIcon } from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
+import Link from "next/link"
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react"
+import { CheckIcon, GraduationCapIcon, PlusIcon } from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
 import {
   Drawer,
   DrawerContent,
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
-} from "@/components/ui/drawer";
-import { useYear } from "@/components/year/year-provider";
-import { haptic } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/drawer"
+import { useYear } from "@/components/year/year-provider"
+import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 /**
  * Changing school year, on a phone.
@@ -26,22 +31,21 @@ import { cn } from "@/lib/utils";
  */
 
 interface YearSheetStore {
-  open: () => void;
+  open: () => void
 }
 
-const YearSheetContext = createContext<YearSheetStore | null>(null);
+const YearSheetContext = createContext<YearSheetStore | null>(null)
 
 export function YearSheetProvider({ children }: { children: ReactNode }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const router = useRouter();
-  const { years, year, selectYear } = useYear();
-  const [open, setOpen] = useState(false);
+  const t = useExtracted()
+  const format = useFormatter()
+  const { years, year, selectYear } = useYear()
+  const [open, setOpen] = useState(false)
 
   const store = useMemo<YearSheetStore>(
     () => ({ open: () => setOpen(true) }),
-    [],
-  );
+    []
+  )
 
   return (
     <YearSheetContext.Provider value={store}>
@@ -57,19 +61,19 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
 
           <div className="grid gap-1 px-3 pb-4">
             {years.map((item) => {
-              const active = item.id === year?.id;
+              const active = item.id === year?.id
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    haptic("selection");
-                    selectYear(item.id);
-                    setOpen(false);
+                    haptic("selection")
+                    selectYear(item.id)
+                    setOpen(false)
                   }}
                   className={cn(
                     "flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-accent",
-                    active && "bg-primary/8",
+                    active && "bg-primary/8"
                   )}
                 >
                   <span
@@ -77,7 +81,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
                       "flex size-10 shrink-0 items-center justify-center rounded-xl",
                       active
                         ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground",
+                        : "bg-muted text-muted-foreground"
                     )}
                   >
                     <GraduationCapIcon className="size-5" />
@@ -102,7 +106,7 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
                     <CheckIcon className="size-5 shrink-0 text-primary" />
                   ) : null}
                 </button>
-              );
+              )
             })}
 
             <Link
@@ -119,9 +123,9 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
         </DrawerContent>
       </Drawer>
     </YearSheetContext.Provider>
-  );
+  )
 }
 
 export function useYearSheet(): YearSheetStore {
-  return useContext(YearSheetContext) ?? { open: () => undefined };
+  return useContext(YearSheetContext) ?? { open: () => undefined }
 }

@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
 import {
   CalendarRangeIcon,
   CheckIcon,
   ChevronDownIcon,
   GraduationCapIcon,
-} from "lucide-react";
-import { useFormatter, useExtracted } from "next-intl";
-import { Button } from "@/components/ui/button";
+} from "lucide-react"
+import { useFormatter, useExtracted } from "next-intl"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,11 +15,11 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useYear } from "@/components/year/year-provider";
-import { useYearSheet } from "./year-sheet";
-import { haptic } from "@/lib/haptics";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/dropdown-menu"
+import { useYear } from "@/components/year/year-provider"
+import { useYearSheet } from "./year-sheet"
+import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 
 /**
  * Which stretch of the year the numbers cover.
@@ -31,14 +31,14 @@ export function PeriodSwitcher({
   className,
   variant = "outline",
 }: {
-  className?: string;
-  variant?: "outline" | "ghost";
+  className?: string
+  variant?: "outline" | "ghost"
 }) {
-  const t = useExtracted();
-  const format = useFormatter();
-  const { periods, period, selectPeriod } = useYear();
+  const t = useExtracted()
+  const format = useFormatter()
+  const { periods, period, selectPeriod } = useYear()
 
-  if (periods.length <= 1) return null;
+  if (periods.length <= 1) return null
 
   return (
     <DropdownMenu>
@@ -64,8 +64,8 @@ export function PeriodSwitcher({
             <DropdownMenuItem
               key={item.id}
               onClick={() => {
-                haptic("selection");
-                selectPeriod(item.id);
+                haptic("selection")
+                selectPeriod(item.id)
               }}
             >
               <div className="flex flex-col">
@@ -90,7 +90,7 @@ export function PeriodSwitcher({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
+  )
 }
 
 /**
@@ -102,12 +102,12 @@ export function PeriodSwitcher({
  * question ("what am I looking at") in one place.
  */
 export function PeriodRail({ className }: { className?: string }) {
-  const t = useExtracted();
-  const { periods, period, selectPeriod, year, years } = useYear();
-  const yearSheet = useYearSheet();
+  const t = useExtracted()
+  const { periods, period, selectPeriod, year, years } = useYear()
+  const yearSheet = useYearSheet()
 
-  const showYear = years.length > 1;
-  if (periods.length <= 1 && !showYear) return null;
+  const showYear = years.length > 1
+  if (periods.length <= 1 && !showYear) return null
 
   return (
     <div className={cn("snap-rail px-4", className)}>
@@ -117,8 +117,8 @@ export function PeriodRail({ className }: { className?: string }) {
             type="button"
             aria-label={t("Change school year")}
             onClick={() => {
-              haptic("selection");
-              yearSheet.open();
+              haptic("selection")
+              yearSheet.open()
             }}
             className="flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-sm font-medium transition-colors active:bg-accent"
           >
@@ -134,26 +134,26 @@ export function PeriodRail({ className }: { className?: string }) {
       ) : null}
 
       {periods.map((item) => {
-        const active = item.id === period.id;
+        const active = item.id === period.id
         return (
           <button
             key={item.id}
             type="button"
             onClick={() => {
-              haptic("selection");
-              selectPeriod(item.id);
+              haptic("selection")
+              selectPeriod(item.id)
             }}
             className={cn(
               "flex min-h-10 items-center rounded-full border px-3.5 text-sm transition-colors",
               active
                 ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground active:bg-accent",
+                : "border-border bg-card text-muted-foreground active:bg-accent"
             )}
           >
             {item.name}
           </button>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

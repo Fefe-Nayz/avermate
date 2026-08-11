@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin as adminPlugin, emailOTP } from "better-auth/plugins";
+import { admin as adminPlugin } from "better-auth/plugins/admin";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import { expo } from "@better-auth/expo";
 import { db } from "../db";
 import * as schema from "../db/schema";
@@ -157,6 +158,17 @@ export const auth = betterAuth({
     // Expo plugin stores only the cookies whose name starts with the prefix it
     // was given, so a mismatch signs you in and then loses the session.
     cookiePrefix: "avermate",
+    // In the two-service deployment the browser authenticates against the API
+    // subdomain while SSR runs on the web subdomain. Opt in explicitly so the
+    // same signed cookie reaches both; local development stays host-only.
+    ...(env.AUTH_COOKIE_DOMAIN
+      ? {
+          crossSubDomainCookies: {
+            enabled: true,
+            domain: env.AUTH_COOKIE_DOMAIN,
+          },
+        }
+      : {}),
     database: { generateId: false },
   },
 });
