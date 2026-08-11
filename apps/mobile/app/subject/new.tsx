@@ -7,14 +7,18 @@ import {
   type SubjectDraft,
 } from "@/components/subject-form";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 
 export default function NewSubject() {
   const router = useRouter();
-  const { yearId } = useYear();
-  const { parentId } = useLocalSearchParams<{ parentId?: string }>();
+  const { yearId: activeYearId } = useYear();
+  const { parentId, yearId: requestedYearId } = useLocalSearchParams<{
+    parentId?: string;
+    yearId?: string;
+  }>();
+  const yearId = requestedYearId ?? activeYearId;
 
   const [draft, setDraft] = useState<SubjectDraft>(() =>
     emptySubjectDraft(parentId),
@@ -24,9 +28,23 @@ export default function NewSubject() {
   const create = useMutation({
     mutationFn: (input: Parameters<typeof client.subjects.create>[0]) =>
       client.subjects.create(input),
-    onSuccess: () => {
+    onSuccess: async () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      if (yearId) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: orpc.snapshot.get.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.presets.status.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.years.configurationStatus.queryKey({
+              input: { yearId },
+            }),
+          }),
+        ]);
+      }
       router.back();
     },
     onError: () => {

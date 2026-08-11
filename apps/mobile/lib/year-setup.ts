@@ -1,4 +1,5 @@
 import { suggestSchoolYear, type SchoolYearSeed } from "@avermate/core";
+import type { Href } from "expo-router";
 import { t } from "./i18n";
 
 export type PeriodTemplateChoice =
@@ -49,4 +50,81 @@ export function isValidYearSetup(
     numericScale > 0 &&
     numericScale <= 1000
   );
+}
+
+export interface NativePeriodDraft {
+  localId: string;
+  periodId?: string;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  isCumulative: boolean;
+}
+
+const PERIOD_FRACTIONS: Record<
+  PeriodTemplateChoice,
+  Array<{ from: number; to: number; isCumulative?: boolean }>
+> = {
+  trimesters: [
+    { from: 0, to: 1 / 3 },
+    { from: 1 / 3, to: 2 / 3 },
+    { from: 2 / 3, to: 1 },
+  ],
+  semesters: [
+    { from: 0, to: 0.5 },
+    { from: 0.5, to: 1 },
+  ],
+  "semesters-cumulative": [
+    { from: 0, to: 0.5 },
+    { from: 0.5, to: 1, isCumulative: true },
+  ],
+  quarters: [
+    { from: 0, to: 0.25 },
+    { from: 0.25, to: 0.5 },
+    { from: 0.5, to: 0.75 },
+    { from: 0.75, to: 1 },
+  ],
+  none: [],
+};
+
+/** Mirrors the server template fractions while keeping every date editable. */
+export function periodDraftsForTemplate(
+  template: PeriodTemplateChoice,
+  startsAt: Date,
+  endsAt: Date,
+): NativePeriodDraft[] {
+  const duration = endsAt.getTime() - startsAt.getTime();
+  const names = periodNamesForTemplate(template);
+  return PERIOD_FRACTIONS[template].map((period, index) => ({
+    localId: `template-${template}-${index}`,
+    name: names[index] ?? t("Period {number}", { number: index + 1 }),
+    startsAt: new Date(
+      startsAt.getTime() + duration * period.from,
+    ).toISOString(),
+    endsAt: new Date(startsAt.getTime() + duration * period.to).toISOString(),
+    isCumulative: period.isCumulative ?? false,
+  }));
+}
+
+export function validPeriodDrafts(
+  periods: readonly Pick<NativePeriodDraft, "name" | "startsAt" | "endsAt">[],
+): boolean {
+  let previousEnd = Number.NEGATIVE_INFINITY;
+  return periods.every((period) => {
+    const startsAt = new Date(period.startsAt).getTime();
+    const endsAt = new Date(period.endsAt).getTime();
+    const valid =
+      period.name.trim().length > 0 &&
+      Number.isFinite(startsAt) &&
+      Number.isFinite(endsAt) &&
+      endsAt > startsAt &&
+      startsAt >= previousEnd;
+    previousEnd = endsAt;
+    return valid;
+  });
+}
+
+/** One canonical typed destination for new, resumed and manually reopened setup. */
+export function yearSetupHref(yearId: string): Href {
+  return `/year/${encodeURIComponent(yearId)}/setup` as Href;
 }

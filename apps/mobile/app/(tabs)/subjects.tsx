@@ -17,6 +17,7 @@ import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { radius, space, type, usePalette } from "@/lib/theme";
+import { yearSetupHref } from "@/lib/year-setup";
 
 /**
  * The subject tree, flattened for a phone.
@@ -181,13 +182,23 @@ export default function Subjects() {
         <Empty
           icon="albums-outline"
           title={t("This year has no subjects yet.")}
-          body={t("Add them one by one, or start from a template on the web.")}
+          body={t(
+            "Continue the year setup to use a preset or add subjects yourself.",
+          )}
           action={
-            <Button
-              label={t("Add a subject")}
-              onPress={() => router.push("/subject/new")}
-              variant="secondary"
-            />
+            <View style={{ width: "100%", gap: space.sm }}>
+              {yearId ? (
+                <Button
+                  label={t("Continue setup")}
+                  onPress={() => router.push(yearSetupHref(yearId))}
+                />
+              ) : null}
+              <Button
+                label={t("Add a subject")}
+                onPress={() => router.push("/subject/new")}
+                variant="secondary"
+              />
+            </View>
           }
         />
       ) : (

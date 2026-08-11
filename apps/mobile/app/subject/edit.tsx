@@ -9,14 +9,17 @@ import {
   type SubjectDraft,
 } from "@/components/subject-form";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 
 export default function EditSubject() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { isLoading, yearGraph } = useYear();
+  const { id, setup } = useLocalSearchParams<{
+    id: string;
+    setup?: string;
+  }>();
+  const { isLoading, yearGraph, yearId } = useYear();
 
   const subject = yearGraph.byId(id);
   const [draft, setDraft] = useState<SubjectDraft | null>(null);
@@ -25,9 +28,23 @@ export default function EditSubject() {
   const update = useMutation({
     mutationFn: (input: Parameters<typeof client.subjects.update>[0]) =>
       client.subjects.update(input),
-    onSuccess: () => {
+    onSuccess: async () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      if (yearId) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: orpc.snapshot.get.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.presets.status.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.years.configurationStatus.queryKey({
+              input: { yearId },
+            }),
+          }),
+        ]);
+      }
       router.back();
     },
     onError: () => {
@@ -39,11 +56,26 @@ export default function EditSubject() {
   const remove = useMutation({
     mutationFn: (input: Parameters<typeof client.subjects.delete>[0]) =>
       client.subjects.delete(input),
-    onSuccess: () => {
+    onSuccess: async () => {
       haptic("success");
-      void queryClient.invalidateQueries();
-      // Back twice: the subject's own screen is no longer a place to return to.
-      router.dismissTo("/(tabs)/subjects");
+      if (yearId) {
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: orpc.snapshot.get.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.presets.status.queryKey({ input: { yearId } }),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.years.configurationStatus.queryKey({
+              input: { yearId },
+            }),
+          }),
+        ]);
+      }
+      // Setup opens the editor directly, so its back target is the wizard.
+      if (setup === "1") router.back();
+      else router.dismissTo("/(tabs)/subjects");
     },
   });
 
@@ -72,7 +104,10 @@ export default function EditSubject() {
                 text: t("Keep what is inside"),
                 onPress: () => {
                   haptic("warning");
-                  remove.mutate({ subjectId: subject.id, promoteChildren: true });
+                  remove.mutate({
+                    subjectId: subject.id,
+                    promoteChildren: true,
+                  });
                 },
               },
             ]

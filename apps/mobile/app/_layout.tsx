@@ -285,6 +285,7 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   options={{ title: t("New goal") }}
                 />
                 <Stack.Screen name="year/new" options={{ title: "" }} />
+                <Stack.Screen name="year/[id]/setup" options={{ title: "" }} />
                 <Stack.Screen
                   name="announcements"
                   options={{ title: t("Announcements") }}

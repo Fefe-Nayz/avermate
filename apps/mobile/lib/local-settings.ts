@@ -25,6 +25,7 @@ export const LOCAL_USER_SETTING_NAMES = [
   "haptics",
   "year",
   "period",
+  "year-setup",
   "system-widget",
 ] as const;
 

@@ -330,8 +330,6 @@ const fr: Record<string, string> = {
   "Delete subject": "Supprimer la matière",
   "Subject not found.": "Matière introuvable.",
   "This year has no subjects yet.": "Cette année n'a encore aucune matière.",
-  "Add them one by one, or start from a template on the web.":
-    "Ajoutez-les une par une, ou partez d'un modèle depuis le web.",
   "This subject is not in the current period.":
     "Cette matière n'existe pas sur la période affichée.",
   "Inside this one": "Ce qu'elle contient",
@@ -499,9 +497,19 @@ const fr: Record<string, string> = {
   Percentage: "Pourcentage",
   Germany: "Allemagne",
   GPA: "GPA",
-  "Create year": "Créer l'année",
-  "New school year": "Nouvelle année scolaire",
-  "The year could not be created.": "Impossible de créer l'année.",
+  "Set up school year": "Configurer l'année scolaire",
+  "Finish setup": "Terminer la configuration",
+  "Create and continue": "Créer et continuer",
+  "Continue setup": "Continuer la configuration",
+  "Configure {name}": "Configurer {name}",
+  Year: "Année",
+  "Step {current} of {total}: {name}": "Étape {current} sur {total} : {name}",
+  "Review the dates and grading scale before continuing.":
+    "Vérifiez les dates et l'échelle de notation avant de continuer.",
+  "The year is created now, so the rest of setup can be resumed.":
+    "L'année est créée maintenant afin que la suite puisse être reprise plus tard.",
+  "The year could not be saved. Your progress is kept on this device.":
+    "Impossible d'enregistrer l'année. Votre progression reste sauvegardée sur cet appareil.",
 
   "How is your year split?": "Comment votre année est-elle découpée ?",
   "Grades will fall into the right one on their own.":
@@ -520,6 +528,53 @@ const fr: Record<string, string> = {
     "Prenez le plus proche — tout se renomme et se repondère ensuite.",
   "Start from scratch": "Partir de zéro",
   "Add your own subjects": "Ajoutez vos propres matières",
+  "Your subjects": "Vos matières",
+  "Use a preset, then adapt it, or build your own list.":
+    "Utilisez un modèle puis adaptez-le, ou créez votre propre liste.",
+  "This year follows a managed preset. Editing a subject makes it a protected custom configuration.":
+    "Cette année suit un modèle administré. Modifier une matière la transforme en configuration personnalisée protégée.",
+  "The preset could not be applied because existing data still depends on this configuration.":
+    "Impossible d'appliquer le modèle, car des données existantes dépendent encore de cette configuration.",
+  "This replaces the current subjects and averages. Avermate blocks the operation if any grade could be deleted.":
+    "Cela remplace les matières et moyennes actuelles. Avermate bloque l'opération si une note risque d'être supprimée.",
+  "Add at least one subject before continuing.":
+    "Ajoutez au moins une matière avant de continuer.",
+  "No subjects yet": "Aucune matière pour l'instant",
+  "Apply a preset above or add the first subject yourself.":
+    "Appliquez un modèle ci-dessus ou ajoutez vous-même la première matière.",
+  "Weight {value}": "Coefficient {value}",
+  "Continue the year setup to use a preset or add subjects yourself.":
+    "Poursuivez la configuration de l'année pour utiliser un modèle ou ajouter vos matières.",
+
+  "Your periods": "Vos périodes",
+  "Start with a layout, then adjust every exact date.":
+    "Partez d'un découpage, puis ajustez précisément chaque date.",
+  "One average will cover the whole school year.":
+    "Une seule moyenne couvrira toute l'année scolaire.",
+  "Periods must be named, ordered and must not overlap.":
+    "Les périodes doivent être nommées, ordonnées et ne pas se chevaucher.",
+  "The periods could not be saved. Your progress is kept on this device.":
+    "Impossible d'enregistrer les périodes. Votre progression reste sauvegardée sur cet appareil.",
+  "Remove {name}": "Supprimer {name}",
+  "Add another period": "Ajouter une autre période",
+  "This year could not be loaded": "Impossible de charger cette année",
+  "Your saved progress has not been removed.":
+    "Votre progression enregistrée n'a pas été supprimée.",
+  "Discard saved setup?": "Abandonner la configuration enregistrée ?",
+  "The year stays in your account, but this device will stop offering to resume its setup.":
+    "L'année reste dans votre compte, mais cet appareil ne proposera plus de reprendre sa configuration.",
+  "Discard saved setup": "Abandonner la configuration enregistrée",
+  Discard: "Abandonner",
+  "Another setup is in progress": "Une autre configuration est en cours",
+  "Choose which setup to continue. Nothing is discarded automatically.":
+    "Choisissez la configuration à poursuivre. Rien n'est abandonné automatiquement.",
+  "Saved at step {step}": "Enregistrée à l'étape {step}",
+  "Resume {name}": "Reprendre {name}",
+  "Configure this year instead": "Configurer plutôt cette année",
+  "Replace the saved setup?": "Remplacer la configuration enregistrée ?",
+  "The other year stays in your account. Only its unfinished setup progress on this device is discarded.":
+    "L'autre année reste dans votre compte. Seule sa progression de configuration inachevée sur cet appareil est abandonnée.",
+  Replace: "Remplacer",
 
   "Term 1": "1er trimestre",
   "Term 2": "2e trimestre",

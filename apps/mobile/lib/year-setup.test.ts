@@ -4,8 +4,14 @@ mock.module("expo-localization", () => ({
   getLocales: () => [{ languageCode: "en" }],
 }));
 
-const { isValidYearSetup, nativeSchoolYearSuggestion, periodNamesForTemplate } =
-  await import("./year-setup");
+const {
+  isValidYearSetup,
+  nativeSchoolYearSuggestion,
+  periodDraftsForTemplate,
+  periodNamesForTemplate,
+  validPeriodDrafts,
+  yearSetupHref,
+} = await import("./year-setup");
 
 describe("native year setup", () => {
   test("uses the same cumulative period meaning as the web wizard", () => {
@@ -46,5 +52,48 @@ describe("native year setup", () => {
     });
     expect(result.startsAt.getHours()).toBe(12);
     expect(result.endsAt.getHours()).toBe(12);
+  });
+
+  test("builds exact, contiguous and editable period boundaries", () => {
+    const periods = periodDraftsForTemplate(
+      "trimesters",
+      new Date("2026-09-01T12:00:00.000Z"),
+      new Date("2027-07-01T12:00:00.000Z"),
+    );
+
+    expect(periods).toHaveLength(3);
+    expect(periods[0]?.startsAt).toBe("2026-09-01T12:00:00.000Z");
+    expect(periods[0]?.endsAt).toBe(periods[1]?.startsAt);
+    expect(periods[1]?.endsAt).toBe(periods[2]?.startsAt);
+    expect(periods[2]?.endsAt).toBe("2027-07-01T12:00:00.000Z");
+    expect(validPeriodDrafts(periods)).toBe(true);
+  });
+
+  test("marks only the cumulative semester and validates manual edits", () => {
+    const periods = periodDraftsForTemplate(
+      "semesters-cumulative",
+      new Date("2026-09-01T12:00:00.000Z"),
+      new Date("2027-07-01T12:00:00.000Z"),
+    );
+
+    expect(periods.map((period) => period.isCumulative)).toEqual([false, true]);
+    expect(validPeriodDrafts([{ ...periods[0]!, name: "" }, periods[1]!])).toBe(
+      false,
+    );
+    expect(validPeriodDrafts([periods[1]!, periods[0]!])).toBe(false);
+    expect(
+      validPeriodDrafts([
+        {
+          ...periods[0]!,
+          endsAt: periods[0]!.startsAt,
+        },
+      ]),
+    ).toBe(false);
+  });
+
+  test("builds the same targeted resume route for every setup entry point", () => {
+    expect(String(yearSetupHref("y_2026/test"))).toBe(
+      "/year/y_2026%2Ftest/setup",
+    );
   });
 });

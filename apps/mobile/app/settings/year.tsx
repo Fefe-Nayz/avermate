@@ -20,6 +20,7 @@ import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { space, type, usePalette } from "@/lib/theme";
+import { yearSetupHref } from "@/lib/year-setup";
 
 function YearIconButton({
   icon,
@@ -332,6 +333,14 @@ export default function YearSettings() {
                           : `${new Date(item.startsAt).toLocaleDateString()} → ${new Date(item.endsAt).toLocaleDateString()}`}
                     </Text>
                   </View>
+                  <YearIconButton
+                    icon="options-outline"
+                    label={t("Configure {name}", { name: item.name })}
+                    onPress={() => {
+                      selectYear(item.id);
+                      router.push(yearSetupHref(item.id));
+                    }}
+                  />
                   <YearIconButton
                     icon="arrow-up-outline"
                     label={t("Move {name} up", { name: item.name })}
