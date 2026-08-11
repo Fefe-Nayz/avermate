@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useThemeControl } from "@/hooks/use-preferences"
 import { useRouter } from "next/navigation"
 import {
   ChevronsUpDownIcon,
@@ -14,7 +15,6 @@ import {
   UserIcon,
   UsersRoundIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { useExtracted } from "next-intl"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -44,7 +44,7 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
   const t = useExtracted()
   const router = useRouter()
   const { state } = useSidebar()
-  const { setTheme, resolvedTheme } = useTheme()
+  const { resolvedTheme, toggleTheme } = useThemeControl()
   const feedback = useFeedback()
   const { canAccess: canAccessSocial } = useSocialAccess()
 
@@ -125,7 +125,7 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
             <DropdownMenuItem
               onClick={() => {
                 haptic("selection")
-                setTheme(resolvedTheme === "dark" ? "light" : "dark")
+                toggleTheme()
               }}
             >
               {resolvedTheme === "dark" ? (

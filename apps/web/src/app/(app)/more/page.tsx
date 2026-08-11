@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useThemeControl } from "@/hooks/use-preferences"
 import { useRouter } from "next/navigation"
 import {
   ChartNoAxesCombinedIcon,
@@ -20,7 +21,6 @@ import {
   UsersRoundIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { useExtracted } from "next-intl"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Switch } from "@/components/ui/switch"
@@ -45,7 +45,7 @@ export default function MorePage() {
   const t = useExtracted()
   const router = useRouter()
   const user = useAuthenticatedUser()
-  const { resolvedTheme, setTheme } = useTheme()
+  const { resolvedTheme, setPreferredTheme } = useThemeControl()
   const feedback = useFeedback()
 
   const { isAdmin } = useIsAdmin()
@@ -166,7 +166,7 @@ export default function MorePage() {
               checked={resolvedTheme === "dark"}
               onCheckedChange={(checked) => {
                 haptic("selection")
-                setTheme(checked ? "dark" : "light")
+                setPreferredTheme(checked ? "dark" : "light")
               }}
             />
           </div>

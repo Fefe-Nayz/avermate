@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useThemeControl } from "@/hooks/use-preferences"
 import {
   createContext,
   useContext,
@@ -9,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { useTheme } from "next-themes"
 import { useExtracted } from "next-intl"
 import {
   BookMarkedIcon,
@@ -56,7 +56,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const year = useMaybeYear()
   const { isAdmin } = useIsAdmin()
   const { canAccess: canAccessSocial } = useSocialAccess()
-  const { setTheme, resolvedTheme } = useTheme()
+  const { resolvedTheme, toggleTheme } = useThemeControl()
   const [open, setOpen] = useState(false)
 
   const store = useMemo<PaletteStore>(
@@ -227,7 +227,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
                 value={t("Toggle theme")}
                 onSelect={() =>
                   run(() =>
-                    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+                    toggleTheme()
                   )
                 }
               >

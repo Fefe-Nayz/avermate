@@ -1,6 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useTheme } from "next-themes"
 import { useCallback } from "react"
 import { orpc } from "@/lib/orpc"
 import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
@@ -142,6 +143,43 @@ export function usePreferences() {
     isLoading: query.isLoading,
     update,
     isSaving: mutation.isPending,
+  }
+}
+
+/**
+ * The one way to change the theme.
+ *
+ * There are four places to flip it — the appearance screen, the user menu, the
+ * mobile hub and the command palette — and only the first one used to store
+ * the choice. The rest called `setTheme` alone, which `AppearanceSync`
+ * immediately undid: it compares the stored preference against the live theme
+ * and puts the stored one back. So every quick toggle either did nothing or
+ * flickered, and the app looked like it had two selectors disagreeing.
+ *
+ * Writing the preference *and* setting the theme keeps that reconciliation a
+ * no-op, which is what makes the shortcuts and the screen agree.
+ */
+export function useThemeControl() {
+  const { preferences, update } = usePreferences()
+  const { setTheme, resolvedTheme } = useTheme()
+
+  const setPreferredTheme = useCallback(
+    (next: Preferences["theme"]) => {
+      update({ theme: next })
+      setTheme(next)
+    },
+    [setTheme, update]
+  )
+
+  const toggleTheme = useCallback(() => {
+    setPreferredTheme(resolvedTheme === "dark" ? "light" : "dark")
+  }, [resolvedTheme, setPreferredTheme])
+
+  return {
+    theme: preferences.theme,
+    resolvedTheme,
+    setPreferredTheme,
+    toggleTheme,
   }
 }
 

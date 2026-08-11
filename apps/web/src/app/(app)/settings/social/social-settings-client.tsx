@@ -120,17 +120,36 @@ export function SocialSettingsClient() {
               }
             />
 
-            {view.enabled && view.status === "age_unknown" ? (
+            {/*
+             * Both the first run and every return after a withdrawal. The
+             * server reports `age_unknown` only until an age band is on file;
+             * once it is, withdrawing consent reports `consent_required`
+             * instead — and that had no branch at all, so anyone who turned
+             * social off could never turn it back on. The age question is
+             * skipped when the answer is already known.
+             */}
+            {view.enabled &&
+            (view.status === "age_unknown" ||
+              view.status === "consent_required") ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>{t("Choose an age range")}</CardTitle>
+                  <CardTitle>
+                    {view.status === "consent_required"
+                      ? t("Turn social sharing back on")
+                      : t("Choose an age range")}
+                  </CardTitle>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    {t(
-                      "A birth date is not requested or stored. This choice only selects the correct consent path."
-                    )}
+                    {view.status === "consent_required"
+                      ? t(
+                          "Consent was withdrawn, so nothing is shared right now. Granting it again restores access; it does not re-share anything on its own."
+                        )
+                      : t(
+                          "A birth date is not requested or stored. This choice only selects the correct consent path."
+                        )}
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {view.status === "age_unknown" ? (
                   <ChoiceField
                     label={t("Age range")}
                     value={ageBand}
@@ -162,6 +181,7 @@ export function SocialSettingsClient() {
                       },
                     ]}
                   />
+                  ) : null}
                   <Alert>
                     <ShieldCheckIcon aria-hidden />
                     <AlertTitle>{t("A choice, not a requirement")}</AlertTitle>
@@ -179,7 +199,11 @@ export function SocialSettingsClient() {
                       disabled={busy}
                       onClick={() =>
                         begin.mutate({
-                          ageBand,
+                          ageBand:
+                            view.status === "consent_required" &&
+                            view.ageBand !== "unknown"
+                              ? view.ageBand
+                              : ageBand,
                           channel: "web",
                           acceptedPolicyVersion: view.policyVersion,
                         })

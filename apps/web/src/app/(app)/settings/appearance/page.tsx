@@ -20,7 +20,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/settings-section"
-import { ChoiceField } from "@/components/forms/controls"
+import { ChoiceField, SelectField } from "@/components/forms/controls"
 import { usePreferences } from "@/hooks/use-preferences"
 import {
   PALETTES,
@@ -306,7 +306,13 @@ export default function AppearanceSettingsPage() {
                 onValueChange={setCustomMode}
                 columns={2}
               />
-              <div className="grid grid-cols-2 gap-2 @sm/main:grid-cols-3">
+              {/*
+               * Thirty-one tokens, each previously a bordered card in a grid:
+               * a wall of boxes the height of several screens. One divided
+               * list instead, a row per token — the swatch reads as a column
+               * you can scan down, which is how anyone checks a palette.
+               */}
+              <div className="divide-y overflow-hidden rounded-xl border">
                 {THEME_TOKENS.map((token) => {
                   const value = preferences.customTheme[customMode][token] ?? ""
                   const patchToken = (nextValue: string) =>
@@ -322,55 +328,52 @@ export default function AppearanceSettingsPage() {
                   return (
                     <div
                       key={token}
-                      className="space-y-1.5 rounded-lg border p-2"
+                      className="flex items-center gap-3 px-3 py-1.5"
                     >
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <input
+                        type="color"
+                        aria-label={token}
+                        value={hexOf(value)}
+                        onChange={(event) => patchToken(event.target.value)}
+                        className="size-6 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0"
+                      />
+                      <span className="flex-1 truncate font-mono text-xs text-muted-foreground">
                         {token}
                       </span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          aria-label={token}
-                          value={hexOf(value)}
-                          onChange={(event) => patchToken(event.target.value)}
-                          className="size-7 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
-                        />
-                        <Input
-                          key={`${customMode}:${token}:${value}`}
-                          defaultValue={value}
-                          aria-label={`${token} CSS`}
-                          placeholder="#rrggbb, oklch(…)"
-                          className="h-8 min-w-0 font-mono text-[11px]"
-                          onBlur={(event) => {
-                            const nextValue = event.target.value.trim()
-                            if (nextValue !== value) patchToken(nextValue)
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter")
-                              event.currentTarget.blur()
-                          }}
-                        />
-                      </div>
+                      <Input
+                        key={`${customMode}:${token}:${value}`}
+                        defaultValue={value}
+                        aria-label={`${token} CSS`}
+                        placeholder="#rrggbb, oklch(…)"
+                        className="h-7 w-40 shrink-0 border-transparent bg-transparent font-mono text-[11px] shadow-none focus-visible:border-input focus-visible:bg-background"
+                        onBlur={(event) => {
+                          const nextValue = event.target.value.trim()
+                          if (nextValue !== value) patchToken(nextValue)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur()
+                        }}
+                      />
                     </div>
                   )
                 })}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="col-span-2 @sm/main:col-span-3"
-                  onClick={() =>
-                    update({
-                      customTheme: {
-                        ...preferences.customTheme,
-                        [customMode]: {},
-                      },
-                    })
-                  }
-                >
-                  <RotateCcwIcon className="size-4" />
-                  {t("Clear this palette")}
-                </Button>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="self-start"
+                onClick={() =>
+                  update({
+                    customTheme: {
+                      ...preferences.customTheme,
+                      [customMode]: {},
+                    },
+                  })
+                }
+              >
+                <RotateCcwIcon className="size-4" />
+                {t("Clear this palette")}
+              </Button>
             </div>
           ) : null}
         </SettingsSection>
@@ -379,41 +382,48 @@ export default function AppearanceSettingsPage() {
           title={t("Typography and shape")}
           description={t("Choose body and heading styles independently.")}
         >
-          <ChoiceField
-            label={t("Body font")}
-            choices={FONT_CHOICES.map((font) => ({
-              value: font.id,
-              label: font.label,
-            }))}
-            value={fontChoiceOf(preferences.themeShape.font)}
-            onValueChange={(font) =>
-              update({
-                themeShape: { ...preferences.themeShape, font },
-              })
-            }
-            columns={2}
-          />
-          <ChoiceField
-            label={t("Heading font")}
-            choices={[
-              { value: "inherit", label: t("Same as body") },
-              ...FONT_CHOICES.map((font) => ({
+          {/*
+           * Dropdowns rather than card grids. Nineteen fonts laid out as
+           * tappable cards is a wall; rendered twice — once for the body and
+           * once for headings — it reads as the same picker duplicated and
+           * pushes everything below it off the screen. A font is a name you
+           * recognise, so a list you open is the right shape for it.
+           */}
+          <div className="grid gap-4 @sm/main:grid-cols-2">
+            <SelectField
+              label={t("Body font")}
+              options={FONT_CHOICES.map((font) => ({
                 value: font.id,
                 label: font.label,
-              })),
-            ]}
-            value={
-              preferences.themeShape.headingFont === "inherit"
-                ? "inherit"
-                : fontChoiceOf(preferences.themeShape.headingFont)
-            }
-            onValueChange={(headingFont) =>
-              update({
-                themeShape: { ...preferences.themeShape, headingFont },
-              })
-            }
-            columns={2}
-          />
+              }))}
+              value={fontChoiceOf(preferences.themeShape.font)}
+              onValueChange={(font) =>
+                update({
+                  themeShape: { ...preferences.themeShape, font },
+                })
+              }
+            />
+            <SelectField
+              label={t("Heading font")}
+              options={[
+                { value: "inherit", label: t("Same as body") },
+                ...FONT_CHOICES.map((font) => ({
+                  value: font.id,
+                  label: font.label,
+                })),
+              ]}
+              value={
+                preferences.themeShape.headingFont === "inherit"
+                  ? "inherit"
+                  : fontChoiceOf(preferences.themeShape.headingFont)
+              }
+              onValueChange={(headingFont) =>
+                update({
+                  themeShape: { ...preferences.themeShape, headingFont },
+                })
+              }
+            />
+          </div>
           <div>
             <SettingsRow
               label={t("Corner rounding")}
