@@ -2,24 +2,34 @@
 
 import type { ChartRenderContext, ChartValue } from "@tanstack/charts"
 import { Chart, type ChartProps } from "@tanstack/charts/react/tooltip"
-import { useCallback, useState } from "react"
+import { useCallback, useState, useSyncExternalStore } from "react"
 
 const MEASUREMENT_TOLERANCE = 0.5
+const subscribeToClient = () => () => undefined
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
 
 /**
- * Keeps TanStack Charts' deterministic server-rendered SVG without exposing
- * its provisional `initialWidth` geometry at a different browser aspect ratio.
+ * Reserves the final chart height during SSR, then mounts TanStack Charts once
+ * React owns the browser tree.
  *
- * TanStack's DOM adapter can only discover a fluid container's width after it
- * mounts. Until the adapter confirms that the scene matches the real DOM
- * width, a fixed-height placeholder is shown over the pre-rendered SVG. This
- * avoids a distorted first paint while preserving SSR markup and layout.
+ * The 0.11 renderer serialises its scene into `dangerouslySetInnerHTML`; some
+ * responsive definitions produce different SVG bytes on the server and during
+ * hydration even with the same `initialWidth`. Rendering the interactive
+ * surface only after hydration avoids that mismatch. The surrounding route and
+ * its chart data remain server-rendered, and the fixed-height placeholder keeps
+ * the layout stable while the real container width is measured.
  */
 export function ResponsiveChart<
   TDatum,
   TXValue extends ChartValue = ChartValue,
   TYValue extends ChartValue = ChartValue,
 >({ onRender, ...props }: ChartProps<TDatum, TXValue, TYValue>) {
+  const isClient = useSyncExternalStore(
+    subscribeToClient,
+    getClientSnapshot,
+    getServerSnapshot
+  )
   const [hasMeasuredLayout, setHasMeasuredLayout] = useState(false)
 
   const handleRender = useCallback(
@@ -42,6 +52,7 @@ export function ResponsiveChart<
       aria-busy={hasMeasuredLayout ? undefined : true}
       className="relative"
       data-chart-layout={hasMeasuredLayout ? "measured" : "pending"}
+      style={{ height: props.height }}
     >
       <div
         aria-hidden="true"
@@ -63,7 +74,7 @@ export function ResponsiveChart<
         }
         data-chart-surface
       >
-        <Chart {...props} onRender={handleRender} />
+        {isClient ? <Chart {...props} onRender={handleRender} /> : null}
       </div>
     </div>
   )
