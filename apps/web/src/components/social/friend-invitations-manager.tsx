@@ -5,9 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { LinkIcon, XIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { SecretLink } from "@/components/social/secret-link"
 import {
   LinkState,
-  SecretLink,
   SocialEmpty,
   SocialList,
   SocialRow,

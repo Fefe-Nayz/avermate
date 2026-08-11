@@ -1,13 +1,9 @@
-"use client"
-
 import type { ComponentType, ReactNode } from "react"
-import { useState } from "react"
 import Link from "next/link"
 import {
   ArrowRightIcon,
   CheckIcon,
   ChartNoAxesColumnIcon,
-  CopyIcon,
   EyeIcon,
   EyeOffIcon,
   GraduationCapIcon,
@@ -23,9 +19,7 @@ import {
 import { useExtracted } from "next-intl"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { initialsOf } from "@/lib/name"
 import type { SocialExposure, SocialMetric } from "@/lib/social-presentation"
@@ -1027,59 +1021,7 @@ export function SocialActions({
   )
 }
 
-// -------------------------------------------------------------------- consent
-
-/**
- * A secret shown exactly once.
- *
- * Both invitation screens wrote their own version of this, and one of them put
- * the link in a plain bordered box with no warning that it would not be shown
- * again. A one-time secret is a specific thing; it gets one component.
- */
-export function SecretLink({
-  url,
-  label,
-  note,
-}: {
-  url: string
-  label: string
-  note?: string
-}) {
-  const t = useExtracted()
-  const [copied, setCopied] = useState(false)
-
-  return (
-    <SocialCallout tone="caution" title={label}>
-      <p>
-        {note ??
-          t(
-            "Copy it now — for safety the full secret is never shown again. Do not post it publicly."
-          )}
-      </p>
-      <div className="mt-2.5 flex gap-2">
-        <Input
-          value={url}
-          readOnly
-          aria-label={label}
-          className="bg-background font-mono text-xs"
-          onFocus={(event) => event.currentTarget.select()}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={async () => {
-            await navigator.clipboard.writeText(url)
-            setCopied(true)
-          }}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-          <span className="sr-only">{t("Copy link")}</span>
-        </Button>
-      </div>
-    </SocialCallout>
-  )
-}
+// ------------------------------------------------------------------ consent
 
 /**
  * The box someone ticks to agree.

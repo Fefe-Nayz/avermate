@@ -17,9 +17,9 @@ import {
   type SocialMetric,
 } from "@/components/social/group-policy-editor"
 import { ReportDialog } from "@/components/social/report-dialog"
+import { SecretLink } from "@/components/social/secret-link"
 import {
   LinkState,
-  SecretLink,
   SocialActions,
   SocialCallout,
   SocialEmpty,
