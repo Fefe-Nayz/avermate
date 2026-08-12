@@ -5,6 +5,7 @@ import { Icon } from "@/components/icon";
 import { ChoiceField, TextField } from "@/components/field";
 import { groupKindLabel } from "@/components/social/social-ui";
 import {
+  Badge,
   Button,
   Card,
   Empty,
@@ -125,9 +126,22 @@ export default function Groups() {
                     " · " +
                     (group.memberCount === 1
                       ? t("1 member")
-                      : t("{count} members", { count: group.memberCount })) +
-                    (group.state === "frozen" ? ` · ${t("On hold")}` : "") +
-                    (group.role === "owner" ? ` · ${t("Owner")}` : "")
+                      : t("{count} members", { count: group.memberCount }))
+                  }
+                  trailing={
+                    group.state === "frozen" ? (
+                      <Badge
+                        label={t("On hold")}
+                        icon="snow-outline"
+                        toneColor="negative"
+                      />
+                    ) : group.role === "owner" ? (
+                      <Badge
+                        label={t("Owner")}
+                        icon="crown"
+                        toneColor="accent"
+                      />
+                    ) : undefined
                   }
                   leading={
                     <Icon

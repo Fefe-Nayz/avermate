@@ -22,6 +22,7 @@ import {
   ProgressBar,
   Row,
   Section,
+  StatTile,
 } from "@/components/ui";
 import { AverageValue, DeltaValue, ResultBadge } from "@/components/value";
 import { Sparkline } from "@/components/sparkline";
@@ -334,46 +335,42 @@ export default function Dashboard() {
 
       {ratios.length > 0 ? (
         <Section title={t("How the year is going")}>
-          <Card padded={false}>
-            <Row
-              first
-              title={t("Grades recorded")}
-              trailing={
-                <Text style={[type.body, { color: palette.text }]}>
-                  {String(ratios.length)}
-                </Text>
-              }
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <StatTile
+              label={t("Grades recorded")}
+              value={String(ratios.length)}
             />
             {pass !== null ? (
-              <Row
-                title={t("Pass rate")}
-                trailing={
-                  <Text style={[type.body, { color: palette.text }]}>
-                    {`${Math.round(pass * 100)}%`}
-                  </Text>
-                }
+              <StatTile
+                label={t("Pass rate")}
+                value={`${Math.round(pass * 100)} %`}
               />
             ) : null}
+          </View>
+          <Card padded={false}>
             {best ? (
               <Row
+                first
                 title={t("Strongest subject")}
                 subtitle={best.subject.name}
                 onPress={() => router.push(`/subject/${best.subject.id}`)}
                 trailing={<AverageValue ratio={best.ratio} size="callout" colored />}
               />
             ) : null}
-            <Row
-              title={t("All the statistics")}
-              onPress={() => router.push("/insights")}
-            />
             {worst && worst.subject.id !== best?.subject.id ? (
               <Row
+                first={!best}
                 title={t("Weakest subject")}
                 subtitle={worst.subject.name}
                 onPress={() => router.push(`/subject/${worst.subject.id}`)}
                 trailing={<AverageValue ratio={worst.ratio} size="callout" colored />}
               />
             ) : null}
+            <Row
+              first={!best && !worst}
+              title={t("All the statistics")}
+              onPress={() => router.push("/insights")}
+            />
           </Card>
         </Section>
       ) : null}

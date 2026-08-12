@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import {
+  Badge,
   Card,
   Empty,
   Loading,
@@ -68,8 +69,16 @@ export function AdminSocialGroupsScreen() {
                       group.memberCount === 1
                         ? t("1 member")
                         : t("{count} members", { count: group.memberCount })
-                    }` +
-                    (group.state === "frozen" ? ` · ${t("On hold")}` : "")
+                    }`
+                  }
+                  trailing={
+                    group.state === "frozen" ? (
+                      <Badge
+                        label={t("On hold")}
+                        icon="snow-outline"
+                        toneColor="negative"
+                      />
+                    ) : undefined
                   }
                   leading={
                     <Icon

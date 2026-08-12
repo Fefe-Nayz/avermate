@@ -6,6 +6,7 @@ import { Icon } from "@/components/icon";
 import { SocialIdentity } from "@/components/social/social-ui";
 import { TextField } from "@/components/field";
 import {
+  Badge,
   Button,
   Card,
   Empty,
@@ -181,24 +182,19 @@ export default function Social() {
                   key={friend.friendshipId}
                   first={index === 0}
                   title={friend.name}
-                  subtitle={
-                    friend.sharesSomething
-                      ? t("Shares their figures")
-                      : t("Shares nothing")
-                  }
-                  leading={
-                    <Icon
-                      name={
+                  trailing={
+                    <Badge
+                      label={
+                        friend.sharesSomething
+                          ? t("Shares their figures")
+                          : t("Shares nothing")
+                      }
+                      icon={
                         friend.sharesSomething
                           ? "eye-outline"
                           : "eye-off-outline"
                       }
-                      size={18}
-                      color={
-                        friend.sharesSomething
-                          ? palette.positive
-                          : palette.textFaint
-                      }
+                      toneColor={friend.sharesSomething ? "positive" : "neutral"}
                     />
                   }
                   onPress={() =>
