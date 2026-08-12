@@ -831,8 +831,8 @@ function flattenSubjects(subjects: readonly Subject[]): SubjectRow[] {
     children.set(subject.parentId, list);
   }
   const walk = (parentId: string | null, depth: number): SubjectRow[] =>
-    (children.get(parentId) ?? [])
-      .toSorted(
+    [...(children.get(parentId) ?? [])]
+      .sort(
         (left, right) =>
           left.sortOrder - right.sortOrder ||
           left.name.localeCompare(right.name),

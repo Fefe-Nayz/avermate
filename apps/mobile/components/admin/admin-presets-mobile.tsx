@@ -461,7 +461,7 @@ export function AdminPresetDetailScreen() {
 
           <Section title={t("Version history")}>
             <Card padded={false}>
-              {detail.data.versions.toReversed().map((version, index) => (
+              {[...detail.data.versions].reverse().map((version, index) => (
                 <Row
                   key={version.id}
                   first={index === 0}

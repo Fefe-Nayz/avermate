@@ -60,7 +60,7 @@ export function averageAnalytics(
     : { graph, scope: {} satisfies Scope };
   const contributors = resolved.graph.contributorsOf(null);
   const ratios = gradeRatios(resolved.graph);
-  const grades = resolved.graph.allGrades().toReversed();
+  const grades = [...resolved.graph.allGrades()].reverse();
 
   const composition = custom
     ? custom.entries.flatMap((entry): AverageCompositionItem[] => {

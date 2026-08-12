@@ -12,7 +12,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAudioPlayer } from "expo-audio";
-import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -27,6 +26,30 @@ import { useInteractionPreferences } from "@/lib/interaction-preferences";
 import { space, type } from "@/lib/theme";
 import { awardBlurb, awardEmoji, awardTitle } from "./review-copy";
 import { reviewStorySlides, type ReviewSlideKey } from "./review-story-model";
+
+/**
+ * Saving to the photo library, only if the binary can.
+ *
+ * `expo-media-library` was imported at module scope, and its native module was
+ * not in the build — so requiring this file threw, which took down the whole
+ * `review` route: expo-router reported it as "missing the required default
+ * export" because the module never finished evaluating. One optional feature
+ * cost the entire screen.
+ *
+ * The plugin is declared now, but a native module that is absent — an older
+ * build, Expo Go, a platform that does not have it — must degrade to sharing
+ * rather than crash. So it is required on demand and its absence is a `null`.
+ */
+type MediaLibraryModule = typeof import("expo-media-library")
+
+function loadMediaLibrary(): MediaLibraryModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("expo-media-library") as MediaLibraryModule
+  } catch {
+    return null
+  }
+}
 
 const recapMusic = require("../../assets/recap-music.mp3");
 
@@ -273,7 +296,22 @@ export function YearReviewStory({
           }
           return;
         }
-        const permission = await MediaLibrary.requestPermissionsAsync(true, [
+        const mediaLibrary = loadMediaLibrary();
+        if (!mediaLibrary) {
+          // No gallery access in this build: offer the thing that does work
+          // rather than an error about a module nobody asked about.
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(uri, {
+              dialogTitle: t("Share my Avermate recap"),
+              mimeType: "image/png",
+              UTI: "public.png",
+            });
+          } else {
+            await Share.share({ message: summary });
+          }
+          return;
+        }
+        const permission = await mediaLibrary.requestPermissionsAsync(true, [
           "photo",
         ]);
         if (!permission.granted) {
@@ -283,7 +321,7 @@ export function YearReviewStory({
           );
           return;
         }
-        await MediaLibrary.Asset.create(uri);
+        await mediaLibrary.Asset.create(uri);
         haptic("success");
         Alert.alert(
           t("Saved"),

@@ -51,6 +51,14 @@
         }
       ],
       "expo-audio",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Avermate to save your year recap image.",
+          "savePhotosPermission": "Allow Avermate to save your year recap image.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
       "expo-sharing",
       "expo-asset",
       [

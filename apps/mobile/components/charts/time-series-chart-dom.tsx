@@ -142,7 +142,7 @@ function independentSeriesFocus(
             point.markId === SERIES_MARK_ID &&
             !hidden.has(point.datum.seriesId),
         )
-        .toSorted(
+        .sort(
           (left, right) =>
             left.datum.timestamp - right.datum.timestamp ||
             left.datum.seriesId.localeCompare(right.datum.seriesId) ||

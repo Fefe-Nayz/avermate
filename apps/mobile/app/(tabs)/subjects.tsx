@@ -36,8 +36,8 @@ export default function Subjects() {
   const rows = useMemo(() => flatten(graph.roots, graph, 0), [graph]);
   const averageRows = useMemo(
     () =>
-      customAverages
-        .toSorted(
+      [...customAverages]
+        .sort(
           (left, right) =>
             left.sortOrder - right.sortOrder ||
             left.name.localeCompare(right.name),
