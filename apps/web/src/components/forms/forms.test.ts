@@ -101,6 +101,19 @@ describe("form flows", () => {
     expect(controls).toContain("[--cell-size:--spacing(10)]")
   })
 
+  test("advancing a step cannot save the form", async () => {
+    const flow = await source("./form-flow.tsx")
+
+    // "Continue" and the save button must not share a DOM node. They did, so
+    // tapping Continue advanced the step, React retyped that node to submit,
+    // and the browser ran the in-flight click's default action against it.
+    expect(flow).toContain('key="continue"')
+    expect(flow).toContain('key="save"')
+    // And the phone saves by calling submit, never by submitting the form.
+    expect(flow).toContain("onClick={submit}")
+    expect(flow).toContain("if (!wide && !onReview) return")
+  })
+
   test("nothing saves before the last screen says so", async () => {
     const calendar = await source("../ui/calendar.tsx")
 

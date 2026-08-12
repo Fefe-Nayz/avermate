@@ -321,18 +321,27 @@ export function FormFlow({
                 <ArrowLeftIcon className="size-4" />
               </Button>
             ) : null}
+            {/* Both are `type="button"`, and they carry different keys.
+                Sharing a node meant that tapping "Continue" advanced the step,
+                React turned that very node into a submit button, and the
+                browser then ran the in-flight click's default action against
+                it — saving the form from the step before the review. Nothing
+                here submits: the phone saves by calling `submit` directly. */}
             {onReview ? (
               <Button
-                type="submit"
+                key="save"
+                type="button"
                 size="lg"
                 disabled={submitting || disabled}
                 className="flex-1"
+                onClick={submit}
               >
                 {submitting ? <Spinner className="size-4" /> : null}
                 {submitLabel}
               </Button>
             ) : (
               <Button
+                key="continue"
                 type="button"
                 size="lg"
                 className="flex-1"
