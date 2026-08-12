@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import {
   friendships,
+  goals,
   grades,
   groupMemberships,
   socialGroups,
@@ -369,25 +370,37 @@ export async function exportSocialData(userId: string) {
 const TREND_THRESHOLD = 0.01;
 const TREND_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
 
+export interface GroupFigureScope {
+  id: string;
+  kind: "general" | "subject" | "median" | "passRate" | "goalProgress";
+  /** Only for subject scopes; matches the member's subjects by name. */
+  subjectName: string | null;
+}
+
 export interface GroupFigureOptions {
-  /** Null compares general averages; a name matches the member's subjects. */
-  comparedSubjectName: string | null;
+  scopes: readonly GroupFigureScope[];
   includeTrend: boolean;
   includeGradeCount: boolean;
 }
 
-export interface GroupFigures {
+export interface GroupFigure {
+  scopeId: string;
   average: number | null;
-  scale: number;
-  decimals: number;
   gradeCount: number | null;
   trend: "up" | "down" | "flat" | null;
 }
 
+export interface GroupFigures {
+  scale: number;
+  decimals: number;
+  figures: GroupFigure[];
+}
+
 /**
- * One member's figures for a group leaderboard, computed to the group's own
- * configuration. Indifferent to the friend-facing subject locks — inside a
- * group the only lock is the membership's `shareAverage` switch.
+ * One member's figures for a group board — one per configured comparison,
+ * all computed from a single load of their shared year. Indifferent to the
+ * friend-facing subject locks — inside a group the only lock is the
+ * membership's `shareAverage` switch.
  */
 export async function groupFigures(
   ownerUserId: string,
@@ -455,11 +468,11 @@ export async function groupFigures(
     );
   };
 
-  // The compared scope: everything, or the sub-trees whose name matches.
+  // A compared scope: everything, or the sub-trees whose name matches.
   // Matching by name is what lets a class group compare "Maths" even though
   // every member spells and nests their own tree differently.
-  const scope = (graph: SubjectGraph): SubjectGraph => {
-    const needle = options.comparedSubjectName?.trim().toLowerCase();
+  const scope = (graph: SubjectGraph, subjectName: string | null) => {
+    const needle = subjectName?.trim().toLowerCase();
     if (!needle) return graph;
     const include = new Set<string>();
     for (const subject of graph.subjects) {
@@ -472,33 +485,94 @@ export async function groupFigures(
     return graph.subset(include);
   };
 
-  const current = scope(toGraph(gradeRows));
-  const average = current.ratio(null);
+  const current = toGraph(gradeRows);
+  const cutoff = new Date(Date.now() - TREND_WINDOW_MS);
+  const earlierRows = gradeRows.filter((grade) => grade.passedAt <= cutoff);
+  const earlier = options.includeTrend ? toGraph(earlierRows) : null;
 
-  let trend: GroupFigures["trend"] = null;
-  if (options.includeTrend && average !== null) {
-    const cutoff = new Date(Date.now() - TREND_WINDOW_MS);
-    const earlier = scope(
-      toGraph(gradeRows.filter((grade) => grade.passedAt <= cutoff)),
-    ).ratio(null);
-    if (earlier !== null) {
-      const delta = average - earlier;
-      trend =
-        delta > TREND_THRESHOLD
-          ? "up"
-          : delta < -TREND_THRESHOLD
-            ? "down"
-            : "flat";
-    }
-  }
-
-  return {
-    average,
-    scale: year.scale,
-    decimals: year.decimals,
-    gradeCount: options.includeGradeCount
-      ? current.allGrades().length
-      : null,
-    trend,
+  const validRatios = (rows: typeof gradeRows) =>
+    rows.flatMap((grade) =>
+      grade.outOf > 0 && Number.isFinite(grade.value)
+        ? [Math.max(0, Math.min(1, grade.value / grade.outOf))]
+        : [],
+    );
+  const median = (values: number[]) => {
+    if (values.length === 0) return null;
+    const ordered = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(ordered.length / 2);
+    return ordered.length % 2 === 1
+      ? (ordered[middle] ?? null)
+      : ((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2;
   };
+  const passRate = (values: number[]) =>
+    values.length === 0
+      ? null
+      : values.filter((ratio) => ratio >= year.passingRatio).length /
+        values.length;
+
+  const goalRows =
+    options.scopes.some((entry) => entry.kind === "goalProgress")
+      ? await db
+          .select({ achievedAt: goals.achievedAt })
+          .from(goals)
+          .where(
+            and(eq(goals.userId, ownerUserId), eq(goals.yearId, year.id)),
+          )
+      : [];
+
+  const valueOf = (
+    entry: GroupFigureScope,
+    rows: typeof gradeRows,
+    graph: SubjectGraph,
+  ): number | null => {
+    switch (entry.kind) {
+      case "general":
+        return graph.ratio(null);
+      case "subject":
+        return scope(graph, entry.subjectName).ratio(null);
+      case "median":
+        return median(validRatios(rows));
+      case "passRate":
+        return passRate(validRatios(rows));
+      case "goalProgress": {
+        if (goalRows.length === 0) return null;
+        const reference = rows === gradeRows ? null : cutoff;
+        const achieved = goalRows.filter((goal) =>
+          reference
+            ? goal.achievedAt !== null && goal.achievedAt <= reference
+            : goal.achievedAt !== null,
+        ).length;
+        return achieved / goalRows.length;
+      }
+    }
+  };
+
+  const figures = options.scopes.map((entry): GroupFigure => {
+    const average = valueOf(entry, gradeRows, current);
+    let trend: GroupFigure["trend"] = null;
+    if (earlier && average !== null) {
+      const before = valueOf(entry, earlierRows, earlier);
+      if (before !== null) {
+        const delta = average - before;
+        trend =
+          delta > TREND_THRESHOLD
+            ? "up"
+            : delta < -TREND_THRESHOLD
+              ? "down"
+              : "flat";
+      }
+    }
+    return {
+      scopeId: entry.id,
+      average,
+      gradeCount: options.includeGradeCount
+        ? entry.kind === "subject"
+          ? scope(current, entry.subjectName).allGrades().length
+          : gradeRows.length
+        : null,
+      trend,
+    };
+  });
+
+  return { scale: year.scale, decimals: year.decimals, figures };
 }

@@ -66,15 +66,14 @@ export default function GroupInvitation() {
               {data.group.description ? (
                 <Note>{data.group.description}</Note>
               ) : null}
-              <Note>
-                {groupKindLabel(data.group.kind) +
-                  " · " +
-                  (data.group.comparedSubjectName
-                    ? t("Compares {name}", {
-                        name: data.group.comparedSubjectName,
-                      })
-                    : t("Compares general averages"))}
-              </Note>
+              <Note>{groupKindLabel(data.group.kind)}</Note>
+              {data.group.hasSharedSetup ? (
+                <Note>
+                  {t(
+                    "This group offers a common year configuration you can adopt after joining.",
+                  )}
+                </Note>
+              ) : null}
               <Note>
                 {data.inviter
                   ? t("{name} invites you. {count} people are in.", {

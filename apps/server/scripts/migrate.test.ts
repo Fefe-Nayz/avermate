@@ -7,7 +7,7 @@ import {
   prepareMigrationBaseline,
 } from "./migrate";
 
-const expectedMigrationCount = 14;
+const expectedMigrationCount = 16;
 
 async function migrationRows(client: Client) {
   const result = await client.execute(

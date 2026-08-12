@@ -5,6 +5,7 @@ import { db } from "../../db";
 import {
   customAverageEntries,
   customAverages,
+  groupComparisons,
   groupInvitations,
   groupMemberships,
   periods,
@@ -12,14 +13,77 @@ import {
   subjects,
   years,
 } from "../../db/schema";
+import {
+  managedPresetConfigurationSchema,
+  parsePresetConfiguration,
+  serializePresetConfiguration,
+} from "../../data/managed-presets";
+import type {
+  ManagedPresetConfiguration,
+  ManagedPresetSubject,
+} from "../../data/preset-types";
 import { newId } from "../../lib/id";
+import { materializePresetConfiguration } from "../../lib/preset-membership";
+import {
+  findPresetDefinition,
+  findPresetVersion,
+} from "../../lib/preset-catalog";
 import { badRequest, notFound, protectedProcedure } from "../../lib/orpc";
 import {
   GROUP_INVITATION_TTL_MS,
   hashOpaque,
   issueOpaqueToken,
 } from "../../lib/social-policy";
-import { blocked, groupFigures, identities, identity, notify } from "./shared";
+import {
+  blocked,
+  groupFigures,
+  identities,
+  identity,
+  notify,
+  resolveSharedYear,
+  ensureProfile,
+} from "./shared";
+
+const comparisonKindSchema = z.enum([
+  "general",
+  "subject",
+  "median",
+  "passRate",
+  "goalProgress",
+]);
+
+/**
+ * The subject names an owner can point a comparison at: the template year's
+ * if the group has one, otherwise the owner's own shared year. Names, never
+ * ids — comparisons match every member's tree by name.
+ */
+async function comparableSubjectNames(
+  group: typeof socialGroups.$inferSelect,
+): Promise<string[]> {
+  const config = parseSharedSetupConfig(group);
+  if (config) {
+    return [...new Set(configSubjectNames(config.subjects))].sort((a, b) =>
+      a.localeCompare(b),
+    );
+  }
+  let yearId = group.sharedSetupYearId;
+  if (!yearId) {
+    const profile = await ensureProfile(group.ownerUserId);
+    const year = await resolveSharedYear(
+      group.ownerUserId,
+      profile.sharedYearId,
+    );
+    yearId = year?.id ?? null;
+  }
+  if (!yearId) return [];
+  const rows = await db
+    .select({ name: subjects.name, kind: subjects.kind })
+    .from(subjects)
+    .where(eq(subjects.yearId, yearId));
+  return [...new Set(rows.map((row) => row.name))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
 
 /**
  * A group is a named room whose members compare general averages. Joining
@@ -57,13 +121,51 @@ function assertOwner(access: Awaited<ReturnType<typeof groupAccess>>) {
   }
 }
 
+function flattenedSubjectCount(
+  nodes: readonly ManagedPresetSubject[],
+): number {
+  return nodes.reduce(
+    (total, node) => total + 1 + flattenedSubjectCount(node.children),
+    0,
+  );
+}
+
+function configSubjectNames(nodes: readonly ManagedPresetSubject[]): string[] {
+  return nodes.flatMap((node) => [
+    node.name,
+    ...configSubjectNames(node.children),
+  ]);
+}
+
+function parseSharedSetupConfig(
+  group: typeof socialGroups.$inferSelect,
+): ManagedPresetConfiguration | null {
+  if (!group.sharedSetupConfig) return null;
+  try {
+    return parsePresetConfiguration(group.sharedSetupConfig);
+  } catch {
+    return null;
+  }
+}
+
 /** What the common configuration contains, for the join/adopt cards. */
-async function sharedSetupSummary(sharedSetupYearId: string | null) {
-  if (!sharedSetupYearId) return null;
+async function sharedSetupSummary(group: typeof socialGroups.$inferSelect) {
+  const config = parseSharedSetupConfig(group);
+  if (config) {
+    return {
+      source: "builder" as const,
+      yearName: null,
+      scale: null,
+      subjectCount: flattenedSubjectCount(config.subjects),
+      averageCount: config.averages.length,
+      periodCount: 0,
+    };
+  }
+  if (!group.sharedSetupYearId) return null;
   const [year] = await db
     .select()
     .from(years)
-    .where(eq(years.id, sharedSetupYearId))
+    .where(eq(years.id, group.sharedSetupYearId))
     .limit(1);
   if (!year) return null;
   const [subjectRows, averageRows, periodRows] = await Promise.all([
@@ -81,6 +183,7 @@ async function sharedSetupSummary(sharedSetupYearId: string | null) {
       .where(eq(periods.yearId, year.id)),
   ]);
   return {
+    source: "year" as const,
     yearName: year.name,
     scale: year.scale,
     subjectCount: subjectRows[0]?.value ?? 0,
@@ -123,6 +226,9 @@ export const socialGroupsRouter = {
         userId,
         role: "owner",
       });
+      await db
+        .insert(groupComparisons)
+        .values({ groupId: group.id, kind: "general", sortOrder: 0 });
       return { id: group.id };
     }),
 
@@ -162,11 +268,23 @@ export const socialGroupsRouter = {
       const named = await identities(memberships.map((row) => row.userId));
 
       const frozen = access.group.state !== "active";
-      const sharedSetup = await sharedSetupSummary(
-        access.group.sharedSetupYearId,
-      );
+      const [sharedSetup, comparisonRows, availableSubjects] =
+        await Promise.all([
+          sharedSetupSummary(access.group),
+          db
+            .select()
+            .from(groupComparisons)
+            .where(eq(groupComparisons.groupId, input.groupId))
+            .orderBy(groupComparisons.sortOrder, groupComparisons.createdAt),
+          comparableSubjectNames(access.group),
+        ]);
+      const scopes = comparisonRows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        subjectName: row.subjectName,
+      }));
       const figureOptions = {
-        comparedSubjectName: access.group.comparedSubjectName,
+        scopes,
         includeTrend: access.group.showTrend,
         includeGradeCount: access.group.showGradeCount,
       };
@@ -174,9 +292,10 @@ export const socialGroupsRouter = {
         memberships.map(async (row) => {
           const who = named.get(row.userId);
           const shares = !frozen && row.shareAverage;
-          const academic = shares
-            ? await groupFigures(row.userId, figureOptions)
-            : null;
+          const academic =
+            shares && scopes.length > 0
+              ? await groupFigures(row.userId, figureOptions)
+              : null;
           return {
             membershipId: row.id,
             userId: row.userId,
@@ -186,32 +305,37 @@ export const socialGroupsRouter = {
             role: row.role,
             shareAverage: row.shareAverage,
             joinedAt: row.createdAt,
-            average: academic?.average ?? null,
             scale: academic?.scale ?? null,
             decimals: academic?.decimals ?? null,
-            trend: academic?.trend ?? null,
-            gradeCount: academic?.gradeCount ?? null,
+            figures: academic?.figures ?? [],
           };
         }),
       );
 
-      const shared = members.filter((member) => member.average !== null);
-      const groupAverage =
-        shared.length === 0
-          ? null
-          : shared.reduce((total, member) => total + (member.average ?? 0), 0) /
-            shared.length;
+      const sharingCount = members.filter(
+        (member) => member.figures.length > 0,
+      ).length;
 
       return {
         id: access.group.id,
         name: access.group.name,
         description: access.group.description,
         kind: access.group.kind,
-        comparedSubjectName: access.group.comparedSubjectName,
         showTrend: access.group.showTrend,
         showGradeCount: access.group.showGradeCount,
         sharedSetupYearId: access.group.sharedSetupYearId,
         sharedSetup,
+        /** The builder's editable draft; only the owner's screen loads it. */
+        sharedSetupDraft:
+          access.membership.role === "owner"
+            ? parseSharedSetupConfig(access.group)
+            : null,
+        comparisons: comparisonRows.map((row) => ({
+          id: row.id,
+          kind: row.kind,
+          subjectName: row.subjectName,
+        })),
+        availableSubjects,
         state: access.group.state,
         ownerUserId: access.group.ownerUserId,
         createdAt: access.group.createdAt,
@@ -221,11 +345,85 @@ export const socialGroupsRouter = {
           shareAverage: access.membership.shareAverage,
         },
         members,
-        /** Mean of the shared ratios; every member weighs the same. */
-        groupAverage,
-        sharingCount: shared.length,
+        sharingCount,
       };
     }),
+
+  comparisons: {
+    /** Owner adds a board: a metric, or a subject matched by name. */
+    add: protectedProcedure
+      .input(
+        z.object({
+          groupId: z.string().min(1),
+          kind: comparisonKindSchema,
+          subjectName: z.string().trim().min(1).max(100).optional(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const access = await groupAccess(
+          input.groupId,
+          context.session.user.id,
+        );
+        assertActive(access.group);
+        assertOwner(access);
+        if (input.kind === "subject" && !input.subjectName) {
+          badRequest("A subject comparison needs a subject name");
+        }
+        const existing = await db
+          .select()
+          .from(groupComparisons)
+          .where(eq(groupComparisons.groupId, input.groupId));
+        if (existing.length >= 8) {
+          badRequest("Eight comparisons is the ceiling");
+        }
+        const duplicate = existing.some(
+          (row) =>
+            row.kind === input.kind &&
+            (input.kind !== "subject" ||
+              (row.subjectName ?? "").toLowerCase() ===
+                (input.subjectName ?? "").toLowerCase()),
+        );
+        if (duplicate) badRequest("That comparison already exists");
+        const [created] = await db
+          .insert(groupComparisons)
+          .values({
+            groupId: input.groupId,
+            kind: input.kind,
+            subjectName:
+              input.kind === "subject" ? (input.subjectName ?? null) : null,
+            sortOrder: existing.length,
+          })
+          .returning({ id: groupComparisons.id });
+        return { id: created?.id ?? null };
+      }),
+
+    remove: protectedProcedure
+      .input(
+        z.object({
+          groupId: z.string().min(1),
+          comparisonId: z.string().min(1),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const access = await groupAccess(
+          input.groupId,
+          context.session.user.id,
+        );
+        assertActive(access.group);
+        assertOwner(access);
+        const [deleted] = await db
+          .delete(groupComparisons)
+          .where(
+            and(
+              eq(groupComparisons.id, input.comparisonId),
+              eq(groupComparisons.groupId, input.groupId),
+            ),
+          )
+          .returning({ id: groupComparisons.id });
+        if (!deleted) notFound("Comparison");
+        return { removed: true };
+      }),
+  },
 
   update: protectedProcedure
     .input(
@@ -234,22 +432,35 @@ export const socialGroupsRouter = {
         name: nameSchema.optional(),
         description: descriptionSchema.optional(),
         kind: z.enum(["friends", "study", "class"]).optional(),
-        comparedSubjectName: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .nullable()
-          .optional(),
         showTrend: z.boolean().optional(),
         showGradeCount: z.boolean().optional(),
         sharedSetupYearId: z.string().min(1).nullable().optional(),
+        sharedSetupConfig: managedPresetConfigurationSchema
+          .nullable()
+          .optional(),
+        /** Copies the curated preset's current version into the group. */
+        sharedSetupFromPresetId: z.string().min(1).optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
       assertActive(access.group);
       assertOwner(access);
+      let presetConfig: string | undefined;
+      if (input.sharedSetupFromPresetId) {
+        const definition = await findPresetDefinition(
+          input.sharedSetupFromPresetId,
+        );
+        if (!definition || definition.archived) notFound("Preset");
+        const version = await findPresetVersion(
+          definition.id,
+          definition.currentVersion,
+        );
+        if (!version) notFound("Preset");
+        // Stored as a snapshot the builder can edit afterwards — one
+        // materialisation path, no version subscriptions.
+        presetConfig = version.configuration;
+      }
       if (input.sharedSetupYearId) {
         const [owned] = await db
           .select({ id: years.id })
@@ -271,17 +482,32 @@ export const socialGroupsRouter = {
             ? { description: input.description }
             : {}),
           ...(input.kind !== undefined ? { kind: input.kind } : {}),
-          ...(input.comparedSubjectName !== undefined
-            ? { comparedSubjectName: input.comparedSubjectName }
-            : {}),
           ...(input.showTrend !== undefined
             ? { showTrend: input.showTrend }
             : {}),
           ...(input.showGradeCount !== undefined
             ? { showGradeCount: input.showGradeCount }
             : {}),
+          // The three template sources are exclusive: choosing one clears
+          // the others.
           ...(input.sharedSetupYearId !== undefined
-            ? { sharedSetupYearId: input.sharedSetupYearId }
+            ? {
+                sharedSetupYearId: input.sharedSetupYearId,
+                ...(input.sharedSetupYearId ? { sharedSetupConfig: null } : {}),
+              }
+            : {}),
+          ...(input.sharedSetupConfig !== undefined
+            ? {
+                sharedSetupConfig: input.sharedSetupConfig
+                  ? serializePresetConfiguration(input.sharedSetupConfig)
+                  : null,
+                ...(input.sharedSetupConfig
+                  ? { sharedSetupYearId: null }
+                  : {}),
+              }
+            : {}),
+          ...(presetConfig !== undefined
+            ? { sharedSetupConfig: presetConfig, sharedSetupYearId: null }
             : {}),
           updatedAt: new Date(),
         })
@@ -347,9 +573,57 @@ export const socialGroupsRouter = {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
       assertActive(access.group);
-      if (!access.group.sharedSetupYearId) {
+      const builderConfig = parseSharedSetupConfig(access.group);
+      if (!access.group.sharedSetupYearId && !builderConfig) {
         badRequest("This group has no common configuration");
       }
+
+      if (builderConfig) {
+        // A built configuration has no dates or scale of its own, so those
+        // come from the adopter's current year when there is one.
+        const profile = await ensureProfile(userId);
+        const own = await resolveSharedYear(userId, profile.sharedYearId);
+        const now = new Date();
+        const septemberFirst = new Date(
+          now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1,
+          8,
+          1,
+        );
+        const [created] = await db
+          .insert(years)
+          .values({
+            name: input.name?.trim() || access.group.name,
+            startsAt: own?.startsAt ?? septemberFirst,
+            endsAt:
+              own?.endsAt ??
+              new Date(septemberFirst.getFullYear() + 1, 6, 1),
+            scale: own?.scale ?? 20,
+            defaultOutOf: own?.defaultOutOf ?? 20,
+            passingRatio: own?.passingRatio ?? 0.5,
+            decimals: own?.decimals ?? 2,
+            userId,
+          })
+          .returning();
+        if (!created) badRequest("The year could not be created");
+        const materialized = materializePresetConfiguration(
+          builderConfig,
+          created.id,
+          userId,
+        );
+        if (materialized.subjectRows.length > 0) {
+          await db.insert(subjects).values(materialized.subjectRows);
+        }
+        if (materialized.averageRows.length > 0) {
+          await db.insert(customAverages).values(materialized.averageRows);
+        }
+        if (materialized.entryRows.length > 0) {
+          await db
+            .insert(customAverageEntries)
+            .values(materialized.entryRows);
+        }
+        return { yearId: created.id };
+      }
+
       const [reference] = await db
         .select()
         .from(years)
@@ -604,8 +878,9 @@ export const socialGroupInvitationsRouter = {
           name: group.name,
           description: group.description,
           kind: group.kind,
-          comparedSubjectName: group.comparedSubjectName,
-          hasSharedSetup: Boolean(group.sharedSetupYearId),
+          hasSharedSetup: Boolean(
+            group.sharedSetupYearId || group.sharedSetupConfig,
+          ),
           memberCount,
         },
         inviter: inviter

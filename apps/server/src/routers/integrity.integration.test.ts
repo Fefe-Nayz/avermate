@@ -1331,55 +1331,99 @@ describe("the simplified social model", () => {
     });
     expect(joined.joined).toBe(true);
 
+    // A fresh group carries one board: the general average.
     const detailForMember = await managedApi.social.groups.get({
       groupId: group.id,
     });
     expect(detailForMember.members).toHaveLength(2);
+    expect(detailForMember.comparisons).toHaveLength(1);
+    expect(detailForMember.comparisons[0]?.kind).toBe("general");
+    const generalId = detailForMember.comparisons[0]!.id;
     const owner = detailForMember.members.find(
       (member) => member.role === "owner",
     );
-    expect(owner?.average).toBeCloseTo(expectedAverage, 9);
-    // The joiner has no academic year, so they appear without a figure.
+    const ownerGeneral = owner?.figures.find(
+      (figure) => figure.scopeId === generalId,
+    );
+    expect(ownerGeneral?.average).toBeCloseTo(expectedAverage, 9);
+    // Every fixture grade predates the 30-day window, so the trend is a
+    // computed "flat", not a missing value.
+    expect(ownerGeneral?.trend).toBe("flat");
+    expect(ownerGeneral?.gradeCount).toBeGreaterThan(0);
+    // The joiner has no academic year, so they appear without figures.
     const joiner = detailForMember.members.find(
       (member) => member.role === "member",
     );
-    expect(joiner?.average).toBeNull();
-    expect(detailForMember.groupAverage).toBeCloseTo(expectedAverage, 9);
+    expect(joiner?.figures).toHaveLength(0);
+    expect(detailForMember.sharingCount).toBe(1);
+    // The owner's own subjects feed the comparison picker.
+    expect(detailForMember.availableSubjects).toContain("Subject A");
 
-    // The owner configures what the room compares and what it displays.
-    await api.social.groups.update({
+    // The owner adds boards from the old metric palette, plus a subject
+    // matched by name — several figures side by side, not one.
+    await api.social.groups.update({ groupId: group.id, kind: "class" });
+    await api.social.groups.comparisons.add({
       groupId: group.id,
-      kind: "class",
-      comparedSubjectName: "Subject A",
+      kind: "subject",
+      subjectName: "Subject A",
     });
+    await api.social.groups.comparisons.add({
+      groupId: group.id,
+      kind: "median",
+    });
+    await api.social.groups.comparisons.add({
+      groupId: group.id,
+      kind: "passRate",
+    });
+    // Duplicates are refused rather than silently stacked.
+    await expect(
+      api.social.groups.comparisons.add({
+        groupId: group.id,
+        kind: "subject",
+        subjectName: "subject a",
+      }),
+    ).rejects.toThrow();
     const configured = await managedApi.social.groups.get({
       groupId: group.id,
     });
     expect(configured.kind).toBe("class");
-    expect(configured.comparedSubjectName).toBe("Subject A");
+    expect(configured.comparisons.map((entry) => entry.kind)).toEqual([
+      "general",
+      "subject",
+      "median",
+      "passRate",
+    ]);
     const configuredOwner = configured.members.find(
       (member) => member.role === "owner",
     );
-    // Every grade in the fixture year sits under Subject A, so the scoped
-    // figure exists; and every grade predates the 30-day window, so the
-    // trend is a computed "flat", not a missing value.
-    expect(configuredOwner?.average).not.toBeNull();
-    expect(configuredOwner?.trend).toBe("flat");
-    expect(configuredOwner?.gradeCount).toBeGreaterThan(0);
+    expect(configuredOwner?.figures).toHaveLength(4);
+    for (const comparison of configured.comparisons) {
+      const figure = configuredOwner?.figures.find(
+        (entry) => entry.scopeId === comparison.id,
+      );
+      // Every fixture grade sits under Subject A, so all four boards have a
+      // real value for the owner.
+      expect(figure?.average).not.toBeNull();
+    }
     // A scope nobody's subjects match yields no figure rather than an error.
-    await api.social.groups.update({
+    const ghost = await api.social.groups.comparisons.add({
       groupId: group.id,
-      comparedSubjectName: "Astrophysics",
+      kind: "subject",
+      subjectName: "Astrophysics",
     });
     const unmatched = await managedApi.social.groups.get({
       groupId: group.id,
     });
     expect(
-      unmatched.members.every((member) => member.average === null),
+      unmatched.members.every(
+        (member) =>
+          member.figures.find((figure) => figure.scopeId === ghost.id)
+            ?.average == null,
+      ),
     ).toBe(true);
-    await api.social.groups.update({
+    await api.social.groups.comparisons.remove({
       groupId: group.id,
-      comparedSubjectName: null,
+      comparisonId: ghost.id ?? "",
     });
 
     // The optional common configuration: the owner offers year-a, the other
@@ -1421,9 +1465,85 @@ describe("the simplified social model", () => {
     await database
       .delete(schema.years)
       .where(eq(schema.years.id, adopted.yearId));
+
+    // The template can also be built by hand: the owner saves a
+    // configuration (or imports a curated preset into one), members adopt
+    // it, and the picker follows its subject names.
     await api.social.groups.update({
       groupId: group.id,
-      sharedSetupYearId: null,
+      sharedSetupConfig: {
+        subjects: [
+          {
+            key: "maths",
+            name: "Mathématiques",
+            kind: "subject",
+            isMain: true,
+            coefficient: 4,
+            children: [],
+          },
+          {
+            key: "physique",
+            name: "Physique",
+            kind: "subject",
+            isMain: false,
+            coefficient: 2,
+            children: [],
+          },
+        ],
+        averages: [
+          {
+            key: "sciences",
+            name: "Sciences",
+            isMain: false,
+            entries: [
+              { subjectKey: "maths", coefficient: null, includeChildren: false },
+              {
+                subjectKey: "physique",
+                coefficient: null,
+                includeChildren: false,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const withBuilder = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(withBuilder.sharedSetup).toMatchObject({
+      source: "builder",
+      subjectCount: 2,
+      averageCount: 1,
+    });
+    expect(withBuilder.sharedSetupYearId).toBeNull();
+    expect(withBuilder.availableSubjects).toEqual([
+      "Mathématiques",
+      "Physique",
+    ]);
+    const built = await managedApi.social.groups.adoptSetup({
+      groupId: group.id,
+      name: "Built year",
+    });
+    const builtSubjects = await database
+      .select()
+      .from(schema.subjects)
+      .where(eq(schema.subjects.yearId, built.yearId));
+    expect(builtSubjects.map((subject) => subject.name).sort()).toEqual([
+      "Mathématiques",
+      "Physique",
+    ]);
+    expect(
+      await database
+        .select()
+        .from(schema.customAverages)
+        .where(eq(schema.customAverages.yearId, built.yearId)),
+    ).toHaveLength(1);
+    await database
+      .delete(schema.years)
+      .where(eq(schema.years.id, built.yearId));
+    await api.social.groups.update({
+      groupId: group.id,
+      sharedSetupConfig: null,
     });
 
     // The one lock a member has: their own switch.
@@ -1435,9 +1555,9 @@ describe("the simplified social model", () => {
       groupId: group.id,
     });
     expect(
-      afterLock.members.find((member) => member.role === "owner")?.average,
-    ).toBeNull();
-    expect(afterLock.groupAverage).toBeNull();
+      afterLock.members.find((member) => member.role === "owner")?.figures,
+    ).toHaveLength(0);
+    expect(afterLock.sharingCount).toBe(0);
 
     // Administrative hold hides every figure without deleting anything.
     await api.social.groups.setSharing({
@@ -1450,9 +1570,9 @@ describe("the simplified social model", () => {
     });
     const frozen = await managedApi.social.groups.get({ groupId: group.id });
     expect(frozen.state).toBe("frozen");
-    expect(frozen.members.every((member) => member.average === null)).toBe(
-      true,
-    );
+    expect(
+      frozen.members.every((member) => member.figures.length === 0),
+    ).toBe(true);
     await adminApi.admin.setSocialGroupState({
       groupId: group.id,
       state: "active",

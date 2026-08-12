@@ -207,29 +207,67 @@ export const socialGroups = sqliteTable(
     name: text().notNull(),
     description: text().notNull().default(""),
     kind: text().$type<SocialGroupKind>().notNull().default("friends"),
-    /**
-     * Null compares general averages. A name compares each member's average
-     * across their own subjects whose name matches it, so "Maths" works even
-     * though every member spells their tree differently.
-     */
-    comparedSubjectName: text(),
     showTrend: integer({ mode: "boolean" }).notNull().default(true),
     showGradeCount: integer({ mode: "boolean" }).notNull().default(true),
     /**
-     * Optional common configuration: one of the owner's years, offered as a
-     * template. Adopting copies its structure — settings, periods, subjects,
-     * custom averages — into a fresh year of the member's own; grades never
-     * travel. A copy, not a subscription: re-adopt to pick up changes.
+     * Optional common configuration, from one of two exclusive sources: one
+     * of the owner's years offered as a template, or a configuration built
+     * by hand in the preset editor (stored as JSON in the managed-preset
+     * shape). Adopting copies the structure — subjects, custom averages,
+     * and for year templates the periods and settings too — into a fresh
+     * year of the member's own; grades never travel. A copy, not a
+     * subscription: re-adopt to pick up changes.
      */
     sharedSetupYearId: text().references(() => years.id, {
       onDelete: "set null",
       onUpdate: "cascade",
     }),
+    sharedSetupConfig: text(),
     /** `frozen` is an administrative hold after a report. */
     state: text().$type<"active" | "frozen">().notNull().default("active"),
     ...timestamps,
   },
   (t) => [index("social_groups_owner_idx").on(t.ownerUserId)],
+);
+
+export type GroupComparisonKind =
+  | "general"
+  | "subject"
+  | "median"
+  | "passRate"
+  | "goalProgress";
+
+/**
+ * What a group's board compares — several figures side by side, not one.
+ * The kinds are the old metric palette without its anonymity bands:
+ * "general" is the general average; "subject" matches each member's own
+ * subjects by name, so "Maths" works even though every member spells and
+ * nests their tree differently; "median" is the middle grade; "passRate"
+ * the share of grades at or above the passing mark; "goalProgress" the
+ * share of goals achieved.
+ */
+export const groupComparisons = sqliteTable(
+  "group_comparisons",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("sgcmp")),
+    groupId: text()
+      .notNull()
+      .references(() => socialGroups.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    kind: text().$type<GroupComparisonKind>().notNull().default("general"),
+    /** Only for subject comparisons. */
+    subjectName: text(),
+    sortOrder: integer().notNull().default(0),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => [index("group_comparisons_group_idx").on(t.groupId)],
 );
 
 export const groupMemberships = sqliteTable(

@@ -14,6 +14,29 @@ export function groupKindLabel(value: string): string {
   }
 }
 
+export function comparisonLabel(
+  kind: string,
+  subjectName?: string | null,
+): string {
+  switch (kind) {
+    case "subject":
+      return subjectName ?? t("Subject");
+    case "median":
+      return t("Median grade");
+    case "passRate":
+      return t("Pass rate");
+    case "goalProgress":
+      return t("Goals achieved");
+    default:
+      return t("General average");
+  }
+}
+
+/** Percent metrics carry no denominator; everything else sits on a scale. */
+export function comparisonUnit(kind: string): "scale" | "percent" {
+  return kind === "passRate" || kind === "goalProgress" ? "percent" : "scale";
+}
+
 /**
  * The small social vocabulary on native: a person, and a shared figure.
  * Everything else is built from the ordinary layout pieces.
@@ -92,9 +115,17 @@ export function formatSharedAverage(
   ratio: number,
   scale: number,
   decimals: number,
+  unit: "scale" | "percent" = "scale",
 ): string {
+  const language = locale() === "fr" ? "fr-FR" : "en-GB";
+  if (unit === "percent") {
+    const value = new Intl.NumberFormat(language, {
+      maximumFractionDigits: 0,
+    }).format(ratio * 100);
+    return `${value} %`;
+  }
   const digits = Math.min(decimals, 2);
-  const value = new Intl.NumberFormat(locale() === "fr" ? "fr-FR" : "en-GB", {
+  const value = new Intl.NumberFormat(language, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(ratio * scale);
@@ -105,11 +136,13 @@ export function SharedAverageText({
   ratio,
   scale,
   decimals,
+  unit = "scale",
   size = "callout",
 }: {
   ratio: number | null;
   scale: number | null;
   decimals: number | null;
+  unit?: "scale" | "percent";
   size?: "callout" | "heading" | "title";
 }) {
   const palette = usePalette();
@@ -126,7 +159,7 @@ export function SharedAverageText({
         { color: palette.text, fontWeight: "600" },
       ]}
     >
-      {formatSharedAverage(ratio, scale, decimals ?? 2)}
+      {formatSharedAverage(ratio, scale, decimals ?? 2, unit)}
     </Text>
   );
 }

@@ -245,23 +245,39 @@ export function SharingState({
   )
 }
 
-/** "14,52 / 20" in the owner's scale — the figure this feature exists for. */
+/**
+ * "14,52 / 20" in the owner's scale — the figure this feature exists for.
+ * Percent figures (pass rates, goal progress) trade the denominator for "%".
+ */
 export function SharedAverage({
   ratio,
   scale,
   decimals,
   locale,
+  unit = "scale",
   className,
 }: {
   ratio: number | null
   scale: number
   decimals: number
   locale: string
+  unit?: "scale" | "percent"
   className?: string
 }) {
   if (ratio === null) {
     return (
       <span className={cn("text-sm text-muted-foreground", className)}>—</span>
+    )
+  }
+  if (unit === "percent") {
+    const value = new Intl.NumberFormat(locale, {
+      maximumFractionDigits: 0,
+    }).format(ratio * 100)
+    return (
+      <span className={cn("text-sm font-semibold tabular-nums", className)}>
+        {value}
+        <span className="font-normal text-muted-foreground"> %</span>
+      </span>
     )
   }
   const digits = Math.min(decimals, 2)

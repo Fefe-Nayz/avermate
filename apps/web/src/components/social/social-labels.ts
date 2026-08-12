@@ -62,5 +62,19 @@ export function useSocialLabels() {
           return t("Friends group")
       }
     },
+    comparison(kind: string, subjectName?: string | null) {
+      switch (kind) {
+        case "subject":
+          return subjectName ?? t("Subject")
+        case "median":
+          return t("Median grade")
+        case "passRate":
+          return t("Pass rate")
+        case "goalProgress":
+          return t("Goals achieved")
+        default:
+          return t("General average")
+      }
+    },
   }
 }
