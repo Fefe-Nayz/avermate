@@ -271,7 +271,8 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   name="grade/new"
                   options={{ title: t("New grade") }}
                 />
-                <Stack.Screen name="grade/[id]" options={{ title: "" }} />
+                <Stack.Screen name="grade/[id]/index" options={{ title: "" }} />
+                <Stack.Screen name="grade/[id]/edit" options={{ title: "" }} />
                 <Stack.Screen name="average/[id]" options={{ title: "" }} />
                 <Stack.Screen name="subject/[id]" options={{ title: "" }} />
                 <Stack.Screen name="subject/new" options={{ title: "" }} />

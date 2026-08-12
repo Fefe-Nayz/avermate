@@ -44,7 +44,9 @@ export default function EditGrade() {
     onSuccess: () => {
       haptic("success");
       void queryClient.invalidateQueries();
-      router.back();
+      // Going back would land on the detail of a grade that no longer
+      // exists, so the whole grade stack is dismissed instead.
+      router.dismissTo("/(tabs)/grades");
     },
   });
 

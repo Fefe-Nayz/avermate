@@ -1265,7 +1265,23 @@ const fr: Record<string, string> = {
   Dismissed: "Classé sans suite",
   Copy: "Copie",
 
+  // ------------------------------------------------------- grade detail
+  Grade: "Note",
+  "Grade not found": "Note introuvable",
+  "Impact on averages": "Impact sur les moyennes",
+  "What it is made of": "Sa composition",
+
   // ---------------------------------------------------- social, rebuilt
+  "Group type": "Type de groupe",
+  "Friends group": "Groupe d'amis",
+  "Study group": "Groupe d'étude",
+  "Class": "Classe",
+  "Compares {name}": "Compare {name}",
+  "Compares general averages": "Compare les moyennes générales",
+  "What the leaderboard compares": "Ce que le classement compare",
+  "Empty = general average": "Vide = moyenne générale",
+  "Show each member's 30-day trend": "Afficher la tendance sur 30 jours de chaque membre",
+  "Show grade counts": "Afficher le nombre de notes",
   "Blocking removes the friendship and pending requests in both directions. Unblocking never recreates them.": "Bloquer supprime l'amitié et les demandes en attente dans les deux sens. Débloquer ne les recrée jamais.",
   "You can block someone from their friend screen.": "Vous pouvez bloquer quelqu'un depuis sa fiche d'ami.",
   "No friendship will be restored automatically — either of you can send a new request.": "Aucune amitié ne sera restaurée automatiquement — chacun peut renvoyer une demande.",
