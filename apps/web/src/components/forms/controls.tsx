@@ -24,8 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
+import { FullScreenLayer } from "./full-screen-layer"
 
 /**
  * Form controls tuned for a thumb.
@@ -375,12 +377,127 @@ export function DatePicker({
   className?: string
   format?: "long" | "short"
 }) {
+  const t = useExtracted()
   const locale = useLocale()
   const [open, setOpen] = useState(false)
+  const wide = useMediaQuery("(min-width: 768px)")
 
   const selected = parseIsoDate(value)
   const lower = parseIsoDate(min)
   const upper = parseIsoDate(max)
+
+  const allowed = (date: Date) =>
+    (!lower || date >= lower) && (!upper || date <= upper)
+
+  const pick = (next: Date) => {
+    haptic("light")
+    onValueChange(toIsoDate(next))
+    setOpen(false)
+  }
+
+  const calendar = (
+    <Calendar
+      mode="single"
+      selected={selected}
+      defaultMonth={selected ?? lower ?? undefined}
+      captionLayout="dropdown"
+      startMonth={lower}
+      endMonth={upper}
+      // Two one-sided matchers rather than one range: a bound that is
+      // absent has to disable nothing, not everything.
+      disabled={[
+        ...(lower ? [{ before: lower }] : []),
+        ...(upper ? [{ after: upper }] : []),
+      ]}
+      onSelect={(next) => {
+        if (!next) return
+        pick(next)
+      }}
+    />
+  )
+
+  const label = selected
+    ? selected.toLocaleDateString(locale, {
+        day: "numeric",
+        month: style === "long" ? "long" : "short",
+        year: "numeric",
+      })
+    : (placeholder ?? "—")
+
+  // A phone gets the calendar at the size it was drawn for, with the dates
+  // people actually reach for as one tap rather than a month of hunting.
+  if (!wide) {
+    return (
+      <>
+        <button
+          type="button"
+          id={id}
+          disabled={disabled}
+          aria-invalid={invalid ? true : undefined}
+          onClick={() => {
+            haptic("selection")
+            setOpen(true)
+          }}
+          className={cn(
+            "flex min-h-12 w-full items-center gap-2 rounded-md border bg-transparent px-3 text-left text-sm shadow-xs disabled:opacity-50 aria-invalid:border-destructive",
+            !selected && "text-muted-foreground",
+            className
+          )}
+        >
+          <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{label}</span>
+        </button>
+
+        <FullScreenLayer
+          open={open}
+          onClose={() => setOpen(false)}
+          title={t("Pick a date")}
+          description={selected ? label : undefined}
+        >
+          <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-wrap gap-2">
+              {relativeDays().map((option) => {
+                const date = option.date
+                if (!allowed(date)) return null
+                const isSelected =
+                  selected !== undefined &&
+                  toIsoDate(date) === toIsoDate(selected)
+                return (
+                  <button
+                    key={option.offset}
+                    type="button"
+                    onClick={() => pick(date)}
+                    className={cn(
+                      "min-h-11 rounded-full border px-4 text-sm transition-colors active:bg-accent",
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card"
+                    )}
+                  >
+                    {option.offset === 0
+                      ? t("Today")
+                      : option.offset === -1
+                        ? t("Yesterday")
+                        : option.offset === 1
+                          ? t("Tomorrow")
+                          : date.toLocaleDateString(locale, {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                            })}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="rounded-xl border bg-card p-2 [&_table]:w-full [&_button]:size-11">
+              {calendar}
+            </div>
+          </div>
+        </FullScreenLayer>
+      </>
+    )
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -400,41 +517,25 @@ export function DatePicker({
         }
       >
         <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate">
-          {selected
-            ? selected.toLocaleDateString(locale, {
-                day: "numeric",
-                month: style === "long" ? "long" : "short",
-                year: "numeric",
-              })
-            : (placeholder ?? "—")}
-        </span>
+        <span className="truncate">{label}</span>
       </PopoverTrigger>
 
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          defaultMonth={selected ?? lower ?? undefined}
-          captionLayout="dropdown"
-          startMonth={lower}
-          endMonth={upper}
-          // Two one-sided matchers rather than one range: a bound that is
-          // absent has to disable nothing, not everything.
-          disabled={[
-            ...(lower ? [{ before: lower }] : []),
-            ...(upper ? [{ after: upper }] : []),
-          ]}
-          onSelect={(next) => {
-            if (!next) return
-            haptic("light")
-            onValueChange(toIsoDate(next))
-            setOpen(false)
-          }}
-        />
+        {calendar}
       </PopoverContent>
     </Popover>
   )
+}
+
+/** Yesterday through the next few days, for the taps that cover most grades. */
+function relativeDays(): Array<{ offset: number; date: Date }> {
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  return [-1, 0, 1].map((offset) => {
+    const date = new Date(today)
+    date.setDate(date.getDate() + offset)
+    return { offset, date }
+  })
 }
 
 export function DateField({

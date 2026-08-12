@@ -11,8 +11,8 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { FormPage } from "@/components/forms/form-page"
-import { FormSection, TextField } from "@/components/forms/controls"
+import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
+import { TextField } from "@/components/forms/controls"
 import { AverageValue } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
@@ -185,13 +185,185 @@ export function AverageForm({
     }
   }
 
+  const previewCard =
+    preview !== null ? (
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs tracking-wide text-muted-foreground uppercase">
+          {t("This average right now")}
+        </p>
+        <AverageValue
+          ratio={preview}
+          showScale
+          colored
+          className="mt-1 text-3xl font-semibold"
+        />
+      </div>
+    ) : null
+
+  const steps: FlowStep[] = [
+    {
+      id: "subjects",
+      title: t("Which subjects go in?"),
+      description: t(
+        "Leave a weight blank to keep the subject's own coefficient."
+      ),
+      summary:
+        entries.length === 0
+          ? null
+          : t("{count} subjects", { count: String(entries.length) }),
+      validate: () => {
+        const problem: Record<string, string> = entries.length
+          ? {}
+          : { entries: t("Pick at least one subject.") }
+        setErrors(problem)
+        return Object.keys(problem).length === 0
+      },
+      content: (
+        <div className="flex flex-col gap-3">
+          {errors.entries ? (
+            <p className="text-sm text-destructive">{errors.entries}</p>
+          ) : null}
+
+          <div className="overflow-hidden rounded-xl border">
+            {graph.flatten().map((subject, index) => {
+              const entry = selected.get(subject.id)
+              const isCategory = subject.kind === "category"
+              const impliedParent = impliedBy.get(subject.id)
+
+              return (
+                <div
+                  key={subject.id}
+                  className={cn(
+                    "flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5",
+                    index > 0 && "border-t",
+                    isCategory && "bg-muted/40"
+                  )}
+                  style={{
+                    paddingInlineStart: `${0.75 + graph.depthOf(subject.id) * 0.85}rem`,
+                  }}
+                >
+                  <Checkbox
+                    checked={Boolean(entry) || Boolean(impliedParent)}
+                    disabled={Boolean(impliedParent) && !entry}
+                    onCheckedChange={() => toggle(subject.id)}
+                    aria-label={subject.name}
+                  />
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-sm",
+                      isCategory &&
+                        "text-xs tracking-wide text-muted-foreground uppercase"
+                    )}
+                  >
+                    {subject.name}
+                  </span>
+
+                  {!entry && impliedParent ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t("included with {name}", { name: impliedParent })}
+                    </span>
+                  ) : null}
+                  {entry ? (
+                    <>
+                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={entry.includeChildren}
+                          onCheckedChange={(checked) =>
+                            setEntries((current) =>
+                              current.map((item) =>
+                                item.subjectId === subject.id
+                                  ? {
+                                      ...item,
+                                      includeChildren: checked === true,
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                        {t("with children")}
+                      </label>
+                      <Input
+                        value={entry.coefficient}
+                        onChange={(event) =>
+                          setEntries((current) =>
+                            current.map((item) =>
+                              item.subjectId === subject.id
+                                ? { ...item, coefficient: event.target.value }
+                                : item
+                            )
+                          )
+                        }
+                        inputMode="decimal"
+                        placeholder={String(subject.coefficient)}
+                        className="numeric h-10 w-16 text-center md:h-9"
+                      />
+                    </>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+
+          {previewCard}
+        </div>
+      ),
+    },
+    {
+      id: "name",
+      title: t("Name it"),
+      description: t("And decide whether it replaces the headline figure."),
+      summary: name.trim() || null,
+      validate: () => {
+        const problem: Record<string, string> = name.trim()
+          ? {}
+          : { name: t("Give this average a name.") }
+        setErrors(problem)
+        return Object.keys(problem).length === 0
+      },
+      content: (
+        <div className="flex flex-col gap-4">
+          <TextField
+            label={t("Name")}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t("Written exams, science block, mock results…")}
+            error={errors.name}
+          />
+
+          <Field orientation="horizontal">
+            <FieldLabel htmlFor="is-main-average" className="flex-1">
+              <span className="flex items-center gap-1.5">
+                <StarIcon className="size-4" />
+                {t("Use this instead of the general average")}
+              </span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                {t("Shown wherever the headline average appears")}
+              </span>
+            </FieldLabel>
+            <Switch
+              id="is-main-average"
+              checked={isMain}
+              onCheckedChange={(checked) => {
+                haptic("selection")
+                setIsMain(checked)
+              }}
+            />
+          </Field>
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <FormPage
+    <FormFlow
       title={
         mode === "create" ? t("New custom average") : t("Edit custom average")
       }
       description={t("Combine any subjects, with weights of your own.")}
       backHref={returnTo ?? "/settings/averages"}
+      steps={steps}
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Create") : t("Save changes")}
       submitting={create.isPending || update.isPending}
@@ -203,138 +375,6 @@ export function AverageForm({
             }
           : undefined
       }
-    >
-      <FormSection>
-        <TextField
-          label={t("Name")}
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t("Written exams, science block, mock results…")}
-          error={errors.name}
-          autoFocus={mode === "create"}
-        />
-
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="is-main-average" className="flex-1">
-            <span className="flex items-center gap-1.5">
-              <StarIcon className="size-4" />
-              {t("Use this instead of the general average")}
-            </span>
-            <span className="block text-xs font-normal text-muted-foreground">
-              {t("Shown wherever the headline average appears")}
-            </span>
-          </FieldLabel>
-          <Switch
-            id="is-main-average"
-            checked={isMain}
-            onCheckedChange={(checked) => {
-              haptic("selection")
-              setIsMain(checked)
-            }}
-          />
-        </Field>
-      </FormSection>
-
-      {preview !== null ? (
-        <div className="rounded-xl border bg-card p-4">
-          <p className="text-xs tracking-wide text-muted-foreground uppercase">
-            {t("This average right now")}
-          </p>
-          <AverageValue
-            ratio={preview}
-            showScale
-            colored
-            className="mt-1 text-3xl font-semibold"
-          />
-        </div>
-      ) : null}
-
-      <FormSection
-        title={t("Subjects")}
-        description={
-          errors.entries ??
-          t("Leave a weight blank to keep the subject's own coefficient.")
-        }
-      >
-        <div className="overflow-hidden rounded-xl border">
-          {graph.flatten().map((subject, index) => {
-            const entry = selected.get(subject.id)
-            const isCategory = subject.kind === "category"
-            const impliedParent = impliedBy.get(subject.id)
-
-            return (
-              <div
-                key={subject.id}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2",
-                  index > 0 && "border-t",
-                  isCategory && "bg-muted/40"
-                )}
-                style={{
-                  paddingInlineStart: `${0.75 + graph.depthOf(subject.id) * 0.85}rem`,
-                }}
-              >
-                <Checkbox
-                  checked={Boolean(entry) || Boolean(impliedParent)}
-                  disabled={Boolean(impliedParent) && !entry}
-                  onCheckedChange={() => toggle(subject.id)}
-                  aria-label={subject.name}
-                />
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-sm",
-                    isCategory &&
-                      "text-xs tracking-wide text-muted-foreground uppercase"
-                  )}
-                >
-                  {subject.name}
-                </span>
-
-                {!entry && impliedParent ? (
-                  <span className="text-xs text-muted-foreground">
-                    {t("included with {name}", { name: impliedParent })}
-                  </span>
-                ) : null}
-                {entry ? (
-                  <>
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Checkbox
-                        checked={entry.includeChildren}
-                        onCheckedChange={(checked) =>
-                          setEntries((current) =>
-                            current.map((item) =>
-                              item.subjectId === subject.id
-                                ? { ...item, includeChildren: checked === true }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                      {t("with children")}
-                    </label>
-                    <Input
-                      value={entry.coefficient}
-                      onChange={(event) =>
-                        setEntries((current) =>
-                          current.map((item) =>
-                            item.subjectId === subject.id
-                              ? { ...item, coefficient: event.target.value }
-                              : item
-                          )
-                        )
-                      }
-                      inputMode="decimal"
-                      placeholder={String(subject.coefficient)}
-                      className="numeric h-9 w-16 text-center"
-                    />
-                  </>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-      </FormSection>
-    </FormPage>
+    />
   )
 }

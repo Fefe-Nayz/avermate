@@ -16,12 +16,8 @@ import {
   type CardSpec,
 } from "@avermate/core"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { FormPage } from "@/components/forms/form-page"
-import {
-  ChoiceField,
-  FormSection,
-  TextField,
-} from "@/components/forms/controls"
+import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
+import { ChoiceField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { CARD_ACCENTS, cardAccent } from "./card-accent"
 import { CardBody, useCardResult, useMetricLabels } from "./card-view"
@@ -228,77 +224,71 @@ export function CardForm({
     "4/4": t("Full"),
   }
 
-  return (
-    <FormPage
-      title={mode === "create" ? t("New card") : t("Edit card")}
-      backHref="/dashboard"
-      onSubmit={submit}
-      submitLabel={
-        mode === "create" ? t("Add to dashboard") : t("Save changes")
-      }
-      submitting={create.isPending || update.isPending}
-      destructive={
-        mode === "edit" && initial?.id
-          ? {
-              label: t("Remove"),
-              onClick: () => remove.mutate({ cardId: initial.id as string }),
-            }
-          : undefined
-      }
+  /* Drawn inside this device's own grid, at the share of the row it will
+     really take, so the preview is the dashboard in miniature rather than a
+     card floating on its own. It stays on screen through every step, because
+     every step changes what it looks like. */
+  const previewGrid = (
+    <div
+      className={cn(
+        "grid gap-3",
+        columns === 4
+          ? "grid-cols-4"
+          : columns === 3
+            ? "grid-cols-3"
+            : "grid-cols-2"
+      )}
     >
-      <FormSection title={t("Preview")}>
-        {/* Drawn inside this device's own grid, at the share of the row it
-            will really take, so the preview is the dashboard in miniature
-            rather than a card floating on its own. */}
-        <div
-          className={cn(
-            "grid gap-3",
-            columns === 4
-              ? "grid-cols-4"
-              : columns === 3
-                ? "grid-cols-3"
-                : "grid-cols-2"
-          )}
-        >
-          <Card
+      <Card
+        className={cn("relative gap-2 overflow-hidden py-4", PREVIEW_SPAN[drawn])}
+      >
+        {accentBar ? (
+          <span
+            aria-hidden
+            className={cn("absolute inset-x-0 top-0 h-0.5", accentBar.bar)}
+          />
+        ) : null}
+        <CardHeader className="px-4">
+          <CardTitle
             className={cn(
-              "relative gap-2 overflow-hidden py-4",
-              PREVIEW_SPAN[drawn]
+              "line-clamp-2 text-xs leading-tight font-medium tracking-wide uppercase",
+              accentBar ? accentBar.text : "text-muted-foreground"
             )}
           >
-            {accentBar ? (
-              <span
-                aria-hidden
-                className={cn("absolute inset-x-0 top-0 h-0.5", accentBar.bar)}
-              />
-            ) : null}
-            <CardHeader className="px-4">
-              <CardTitle
-                className={cn(
-                  "line-clamp-2 text-xs leading-tight font-medium tracking-wide uppercase",
-                  accentBar ? accentBar.text : "text-muted-foreground"
-                )}
-              >
-                {spec.title ?? labels[metric]}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-              <CardBody spec={spec} result={preview} />
-            </CardContent>
-          </Card>
-          {rowRemainder > 0 ? (
-            <div
-              aria-hidden
-              className={cn(
-                "rounded-xl border border-dashed",
-                PREVIEW_SPAN[rowRemainder]
-              )}
-            />
-          ) : null}
-        </div>
-      </FormSection>
+            {spec.title ?? labels[metric]}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4">
+          <CardBody spec={spec} result={preview} />
+        </CardContent>
+      </Card>
+      {rowRemainder > 0 ? (
+        <div
+          aria-hidden
+          className={cn(
+            "rounded-xl border border-dashed",
+            PREVIEW_SPAN[rowRemainder]
+          )}
+        />
+      ) : null}
+    </div>
+  )
 
-      <FormSection title={t("What it shows")}>
+  const targetSummary =
+    targetKind === "general"
+      ? t("The whole year")
+      : targetKind === "subject"
+        ? (subjectOptions.find((option) => option.value === targetId)?.label ??
+          null)
+        : (customAverages.find((average) => average.id === targetId)?.name ??
+          null)
+
+  const steps: FlowStep[] = [
+    {
+      id: "metric",
+      title: t("What should it show?"),
+      summary: labels[metric],
+      content: (
         <PickerField
           label={t("Metric")}
           options={CARD_METRICS.map((item) => ({
@@ -308,95 +298,124 @@ export function CardForm({
           value={metric}
           onValueChange={(value) => setMetric(value as CardMetric)}
         />
-
-        <ChoiceField
-          label={t("Measured over")}
-          choices={[
-            { value: "general", label: t("The whole year") },
-            { value: "subject", label: t("One subject") },
-            ...(customAverages.length > 0
-              ? [{ value: "custom" as const, label: t("A custom average") }]
-              : []),
-          ]}
-          value={targetKind}
-          onValueChange={(value) => {
-            setTargetKind(value)
-            setTargetId(null)
-          }}
-        />
-
-        {targetKind === "subject" ? (
-          <PickerField
-            label={t("Subject")}
-            options={subjectOptions}
-            value={targetId}
-            onValueChange={setTargetId}
-          />
-        ) : null}
-
-        {targetKind === "custom" ? (
-          <PickerField
-            label={t("Custom average")}
-            options={customAverages.map((average) => ({
-              value: average.id,
-              label: average.name,
-            }))}
-            value={targetId}
-            onValueChange={setTargetId}
-          />
-        ) : null}
-
-        {metric === "goalProgress" ? (
-          <PickerField
-            label={t("Goal")}
-            options={goals.map((goal) => ({
-              value: goal.id,
-              label: goal.name,
-            }))}
-            value={goalId}
-            onValueChange={setGoalId}
-            emptyHint={t("Create a goal first.")}
-          />
-        ) : null}
-      </FormSection>
-
-      <FormSection title={t("How it looks")}>
-        {displays.length > 1 ? (
+      ),
+    },
+    {
+      id: "target",
+      title: t("Measured over what?"),
+      summary: targetSummary,
+      content: (
+        <div className="flex flex-col gap-4">
           <ChoiceField
-            label={t("Style")}
-            choices={displays.map((item) => ({
-              value: item,
-              label: displayLabels[item],
-            }))}
-            value={effectiveDisplay}
-            onValueChange={setDisplay}
+            choices={[
+              { value: "general", label: t("The whole year") },
+              { value: "subject", label: t("One subject") },
+              ...(customAverages.length > 0
+                ? [{ value: "custom" as const, label: t("A custom average") }]
+                : []),
+            ]}
+            value={targetKind}
+            onValueChange={(value) => {
+              setTargetKind(value)
+              setTargetId(null)
+            }}
           />
-        ) : null}
 
-        {widths.length > 1 ? (
-          <ChoiceField
-            label={t("Width")}
-            description={
-              columns > 2
-                ? t("On a narrower screen this becomes the nearest width that fits.")
-                : t("On a wider screen this becomes the nearest width that fits.")
-            }
-            choices={widths.map((width) => ({
-              value: String(width.columns),
-              label: widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
-            }))}
-            value={String(drawn)}
-            onValueChange={(value) =>
-              setSpan(
-                spanForColumns(span, Number.parseInt(value, 10), shape, columns)
-              )
-            }
-            columns={widths.length > 2 ? 4 : 2}
-          />
-        ) : null}
+          {targetKind === "subject" ? (
+            <PickerField
+              label={t("Subject")}
+              options={subjectOptions}
+              value={targetId}
+              onValueChange={setTargetId}
+            />
+          ) : null}
 
-        <AccentField value={accent} onValueChange={setAccent} />
+          {targetKind === "custom" ? (
+            <PickerField
+              label={t("Custom average")}
+              options={customAverages.map((average) => ({
+                value: average.id,
+                label: average.name,
+              }))}
+              value={targetId}
+              onValueChange={setTargetId}
+            />
+          ) : null}
 
+          {metric === "goalProgress" ? (
+            <PickerField
+              label={t("Goal")}
+              options={goals.map((goal) => ({
+                value: goal.id,
+                label: goal.name,
+              }))}
+              value={goalId}
+              onValueChange={setGoalId}
+              emptyHint={t("Create a goal first.")}
+            />
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "look",
+      title: t("How should it look?"),
+      summary: [
+        displays.length > 1 ? displayLabels[effectiveDisplay] : null,
+        widthLabels[`${drawn}/${columns}`],
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      content: (
+        <div className="flex flex-col gap-4">
+          {displays.length > 1 ? (
+            <ChoiceField
+              label={t("Style")}
+              choices={displays.map((item) => ({
+                value: item,
+                label: displayLabels[item],
+              }))}
+              value={effectiveDisplay}
+              onValueChange={setDisplay}
+            />
+          ) : null}
+
+          {widths.length > 1 ? (
+            <ChoiceField
+              label={t("Width")}
+              description={
+                columns > 2
+                  ? t(
+                      "On a narrower screen this becomes the nearest width that fits."
+                    )
+                  : t(
+                      "On a wider screen this becomes the nearest width that fits."
+                    )
+              }
+              choices={widths.map((width) => ({
+                value: String(width.columns),
+                label: widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
+              }))}
+              value={String(drawn)}
+              onValueChange={(value) =>
+                setSpan(
+                  spanForColumns(span, Number.parseInt(value, 10), shape, columns)
+                )
+              }
+              columns={widths.length > 2 ? 4 : 2}
+            />
+          ) : null}
+
+          <AccentField value={accent} onValueChange={setAccent} />
+        </div>
+      ),
+    },
+    {
+      id: "title",
+      title: t("Anything to call it?"),
+      description: t("Optional. The metric's own name is used otherwise."),
+      summary: title.trim() || labels[metric],
+      content: (
         <TextField
           label={t("Title")}
           description={t("Leave blank to use the metric's own name.")}
@@ -405,8 +424,28 @@ export function CardForm({
           maxLength={48}
           placeholder={labels[metric]}
         />
-      </FormSection>
-    </FormPage>
+      ),
+    },
+  ]
+
+  return (
+    <FormFlow
+      title={mode === "create" ? t("New card") : t("Edit card")}
+      backHref="/dashboard"
+      steps={steps}
+      aside={previewGrid}
+      onSubmit={submit}
+      submitLabel={mode === "create" ? t("Add to dashboard") : t("Save changes")}
+      submitting={create.isPending || update.isPending}
+      destructive={
+        mode === "edit" && initial?.id
+          ? {
+              label: t("Remove"),
+              onClick: () => remove.mutate({ cardId: initial.id as string }),
+            }
+          : undefined
+      }
+    />
   )
 }
 

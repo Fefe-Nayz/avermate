@@ -10,8 +10,12 @@ import { planGoal } from "@avermate/core"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { FormPage } from "@/components/forms/form-page"
-import { ChoiceField, DateField, FormSection, TextField } from "@/components/forms/controls"
+import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
+import {
+  ChoiceField,
+  DateField,
+  TextField,
+} from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { AverageValue } from "@/components/data/value"
 import { GoalPlanView } from "./goal-plan-view"
@@ -212,11 +216,211 @@ export function GoalForm({
     }
   }
 
+  const aboutSummary =
+    kind === "general"
+      ? t("The general average")
+      : kind === "subject"
+        ? (graph.byId(referenceId ?? "")?.name ?? null)
+        : (customAverages.find((average) => average.id === referenceId)?.name ??
+          null)
+
+  const steps: FlowStep[] = [
+    {
+      id: "about",
+      title: t("What is the goal about?"),
+      description: t("The number it is measured against."),
+      summary: aboutSummary,
+      validate: () => {
+        const problem: Record<string, string> = {}
+        if (kind !== "general" && !referenceId) {
+          problem.referenceId = t("Pick what this goal is about.")
+        }
+        setErrors(problem)
+        return Object.keys(problem).length === 0
+      },
+      content: (
+        <div className="flex flex-col gap-4">
+          <ChoiceField
+            choices={[
+              {
+                value: "general",
+                label: t("The general average"),
+                icon: <TargetIcon className="size-4" />,
+              },
+              {
+                value: "subject",
+                label: t("One subject"),
+                icon: <BookMarkedIcon className="size-4" />,
+              },
+              ...(averageOptions.length > 0
+                ? [
+                    {
+                      value: "custom" as const,
+                      label: t("A custom average"),
+                      icon: <SigmaIcon className="size-4" />,
+                    },
+                  ]
+                : []),
+            ]}
+            value={kind}
+            onValueChange={(value) => {
+              setKind(value)
+              setReferenceId(null)
+            }}
+          />
+
+          {kind === "subject" ? (
+            <PickerField
+              label={t("Subject")}
+              required
+              options={subjectOptions}
+              value={referenceId}
+              onValueChange={setReferenceId}
+              error={errors.referenceId}
+            />
+          ) : null}
+
+          {kind === "custom" ? (
+            <PickerField
+              label={t("Custom average")}
+              required
+              options={averageOptions}
+              value={referenceId}
+              onValueChange={setReferenceId}
+              error={errors.referenceId}
+            />
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "target",
+      title: t("Where do you want to get to?"),
+      description: t("Move it and the plan underneath updates."),
+      summary: `${(targetRatio * scale).toFixed(2).replace(/\.00$/, "")} / ${scale}`,
+      content: (
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-baseline justify-between">
+              <AverageValue
+                ratio={targetRatio}
+                showScale
+                className="text-3xl font-semibold"
+                animate={false}
+              />
+              <span className="text-sm text-muted-foreground">
+                {t("now")}{" "}
+                <AverageValue
+                  ratio={current}
+                  animate={false}
+                  className="font-medium text-foreground"
+                />
+              </span>
+            </div>
+            <Slider
+              value={[targetRatio * scale]}
+              min={0}
+              max={scale}
+              step={scale / 200}
+              onValueChange={(value) => {
+                const next = Array.isArray(value) ? value[0] : value
+                if (typeof next === "number") setTargetRatio(next / scale)
+              }}
+              onValueCommitted={() => haptic("selection")}
+              className="mt-4"
+            />
+            <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+              <span>0</span>
+              <span className="numeric">{scale}</span>
+            </div>
+          </div>
+
+          {preview ? <GoalPlanView plan={preview} /> : null}
+        </div>
+      ),
+    },
+    {
+      id: "when",
+      title: t("By when?"),
+      description: t(
+        "Tie the target to a period or a deadline when timing matters."
+      ),
+      summary: [
+        periodOptions.find(
+          (option) => option.value === (periodId ?? "__full_year__")
+        )?.label,
+        dueAt || null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      content: (
+        <div className="flex flex-col gap-4">
+          <PickerField
+            label={t("Period")}
+            options={periodOptions}
+            value={periodId ?? "__full_year__"}
+            onValueChange={(value) =>
+              setPeriodId(value === "__full_year__" ? null : value)
+            }
+          />
+          <DateField
+            label={t("Deadline (optional)")}
+            value={dueAt}
+            onValueChange={setDueAt}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "name",
+      title: t("Give it a name"),
+      description: t("Something you will recognise on the dashboard."),
+      summary: name.trim() || null,
+      validate: () => {
+        const problem: Record<string, string> = name.trim()
+          ? {}
+          : { name: t("Give this goal a name.") }
+        setErrors(problem)
+        return Object.keys(problem).length === 0
+      },
+      content: (
+        <div className="flex flex-col gap-4">
+          <TextField
+            label={t("Name")}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t("Pass the year, get honours, 14 in maths…")}
+            error={errors.name}
+          />
+
+          <Field orientation="horizontal">
+            <FieldLabel htmlFor="goal-pinned" className="flex-1">
+              <span className="flex items-center gap-1.5">
+                <PinIcon className="size-4" />
+                {t("Show on the dashboard")}
+              </span>
+            </FieldLabel>
+            <Switch
+              id="goal-pinned"
+              checked={isPinned}
+              onCheckedChange={(checked) => {
+                haptic("selection")
+                setIsPinned(checked)
+              }}
+            />
+          </Field>
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <FormPage
+    <FormFlow
       title={mode === "create" ? t("New goal") : t("Edit goal")}
       description={t("Set a target and the app works out how to get there.")}
       backHref="/goals"
+      steps={steps}
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Create goal") : t("Save changes")}
       submitting={saving}
@@ -228,154 +432,6 @@ export function GoalForm({
             }
           : undefined
       }
-    >
-      <FormSection>
-        <TextField
-          label={t("Name")}
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t("Pass the year, get honours, 14 in maths…")}
-          error={errors.name}
-          autoFocus={mode === "create"}
-        />
-
-        <ChoiceField
-          label={t("What is it about?")}
-          choices={[
-            {
-              value: "general",
-              label: t("The general average"),
-              icon: <TargetIcon className="size-4" />,
-            },
-            {
-              value: "subject",
-              label: t("One subject"),
-              icon: <BookMarkedIcon className="size-4" />,
-            },
-            ...(averageOptions.length > 0
-              ? [
-                  {
-                    value: "custom" as const,
-                    label: t("A custom average"),
-                    icon: <SigmaIcon className="size-4" />,
-                  },
-                ]
-              : []),
-          ]}
-          value={kind}
-          onValueChange={(value) => {
-            setKind(value)
-            setReferenceId(null)
-          }}
-        />
-
-        {kind === "subject" ? (
-          <PickerField
-            label={t("Subject")}
-            required
-            options={subjectOptions}
-            value={referenceId}
-            onValueChange={setReferenceId}
-            error={errors.referenceId}
-          />
-        ) : null}
-
-        {kind === "custom" ? (
-          <PickerField
-            label={t("Custom average")}
-            required
-            options={averageOptions}
-            value={referenceId}
-            onValueChange={setReferenceId}
-            error={errors.referenceId}
-          />
-        ) : null}
-      </FormSection>
-
-      <FormSection title={t("Target")}>
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-baseline justify-between">
-            <AverageValue
-              ratio={targetRatio}
-              showScale
-              className="text-3xl font-semibold"
-              animate={false}
-            />
-            <span className="text-sm text-muted-foreground">
-              {t("now")}{" "}
-              <AverageValue
-                ratio={current}
-                animate={false}
-                className="font-medium text-foreground"
-              />
-            </span>
-          </div>
-          <Slider
-            value={[targetRatio * scale]}
-            min={0}
-            max={scale}
-            step={scale / 200}
-            onValueChange={(value) => {
-              const next = Array.isArray(value) ? value[0] : value
-              if (typeof next === "number") setTargetRatio(next / scale)
-            }}
-            onValueCommitted={() => haptic("selection")}
-            className="mt-4"
-          />
-          <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-            <span>0</span>
-            <span className="numeric">{scale}</span>
-          </div>
-        </div>
-
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="goal-pinned" className="flex-1">
-            <span className="flex items-center gap-1.5">
-              <PinIcon className="size-4" />
-              {t("Show on the dashboard")}
-            </span>
-          </FieldLabel>
-          <Switch
-            id="goal-pinned"
-            checked={isPinned}
-            onCheckedChange={(checked) => {
-              haptic("selection")
-              setIsPinned(checked)
-            }}
-          />
-        </Field>
-      </FormSection>
-
-      <FormSection
-        title={t("Planning")}
-        description={t(
-          "Tie the target to a period or a deadline when timing matters."
-        )}
-      >
-        <PickerField
-          label={t("Period")}
-          options={periodOptions}
-          value={periodId ?? "__full_year__"}
-          onValueChange={(value) =>
-            setPeriodId(value === "__full_year__" ? null : value)
-          }
-        />
-        <DateField
-          label={t("Deadline (optional)")}
-          value={dueAt}
-          onValueChange={setDueAt}
-        />
-      </FormSection>
-
-      {preview ? (
-        <FormSection
-          title={t("What this would take")}
-          description={t("Updated live as you move the target.")}
-        >
-          <GoalPlanView plan={preview} />
-        </FormSection>
-      ) : null}
-    </FormPage>
+    />
   )
 }

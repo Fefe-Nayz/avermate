@@ -20,10 +20,9 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FormPage } from "@/components/forms/form-page"
+import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
 import {
   ChoiceField,
-  FormSection,
   NumberField,
   TextField,
 } from "@/components/forms/controls"
@@ -187,52 +186,52 @@ export function SubjectForm({
   }
 
   const childCount = initial?.id ? graph.descendantsOf(initial.id).length : 0
+  const parentName = parentId ? graph.byId(parentId)?.name : null
 
-  return (
-    <FormPage
-      title={mode === "create" ? t("New subject") : t("Edit subject")}
-      backHref={returnTo ?? "/subjects"}
-      onSubmit={submit}
-      submitLabel={mode === "create" ? t("Add subject") : t("Save changes")}
-      submitting={saving}
-      destructive={
-        mode === "edit" && initial?.id
-          ? {
-              label: t("Delete"),
-              onClick: () => setDeleteOpen(true),
-            }
-          : undefined
-      }
-      footerNote={
-        childCount > 0
-          ? t("Deleting this also removes {count} subjects underneath it.", {
-              count: String(childCount),
-            })
-          : undefined
-      }
-    >
-      <FormSection>
-        <TextField
-          label={t("Name")}
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder={t("Mathematics, Physics, Written exam…")}
-          error={errors.name}
-          autoFocus={mode === "create"}
-        />
-
-        <TextField
-          label={t("Short name")}
-          description={t("Used on charts and narrow screens. Optional.")}
-          value={shortName}
-          onChange={(event) => setShortName(event.target.value)}
-          maxLength={24}
-          placeholder={t("Maths")}
-        />
-      </FormSection>
-
-      <FormSection title={t("How it counts")}>
+  const steps: FlowStep[] = [
+    {
+      id: "name",
+      title: t("What is it called?"),
+      description: t("A short name is used wherever space is tight."),
+      summary: name.trim()
+        ? shortName.trim()
+          ? `${name.trim()} (${shortName.trim()})`
+          : name.trim()
+        : null,
+      validate: () => {
+        const problem: Record<string, string> = name.trim()
+          ? {}
+          : { name: t("Give this subject a name.") }
+        setErrors(problem)
+        return Object.keys(problem).length === 0
+      },
+      content: (
+        <div className="flex flex-col gap-4">
+          <TextField
+            label={t("Name")}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={t("Mathematics, Physics, Written exam…")}
+            error={errors.name}
+          />
+          <TextField
+            label={t("Short name")}
+            description={t("Used on charts and narrow screens. Optional.")}
+            value={shortName}
+            onChange={(event) => setShortName(event.target.value)}
+            maxLength={24}
+            placeholder={t("Maths")}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "kind",
+      title: t("Subject or category?"),
+      description: t("This is what decides how its average is worked out."),
+      summary: kind === "subject" ? t("Subject") : t("Category"),
+      content: (
         <ChoiceField
           choices={[
             {
@@ -255,7 +254,14 @@ export function SubjectForm({
           value={kind}
           onValueChange={setKind}
         />
-
+      ),
+    },
+    {
+      id: "place",
+      title: t("Where does it sit?"),
+      description: t("Leave it at the top level if it belongs to nothing else."),
+      summary: parentName ?? t("Top level"),
+      content: (
         <PickerField
           label={t("Sits inside")}
           options={parentOptions}
@@ -263,98 +269,139 @@ export function SubjectForm({
           onValueChange={(value) => setParentId(value || null)}
           placeholder={t("Top level")}
         />
+      ),
+    },
+    {
+      id: "weight",
+      title: t("How much does it count?"),
+      summary: [
+        kind === "subject"
+          ? t("Weight {weight}", { weight: coefficient || "1" })
+          : t("No weight of its own"),
+        isMain ? t("On the dashboard") : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      content: (
+        <div className="flex flex-col gap-4">
+          {kind === "subject" ? (
+            <NumberField
+              label={t("Weight")}
+              description={t(
+                "How much this subject counts against its siblings."
+              )}
+              value={coefficient}
+              onValueChange={setCoefficient}
+              min={0}
+            />
+          ) : (
+            <FieldDescription>
+              {t("A category carries no weight of its own — its contents do.")}
+            </FieldDescription>
+          )}
 
-        {kind === "subject" ? (
-          <NumberField
-            label={t("Weight")}
-            description={t(
-              "How much this subject counts against its siblings."
-            )}
-            value={coefficient}
-            onValueChange={setCoefficient}
-            min={0}
-          />
-        ) : (
-          <FieldDescription>
-            {t("A category carries no weight of its own — its contents do.")}
-          </FieldDescription>
-        )}
+          <Field orientation="horizontal">
+            <FieldLabel htmlFor="is-main" className="flex-1">
+              <span className="flex items-center gap-1.5">
+                <StarIcon className="size-4" />
+                {t("Show on the dashboard")}
+              </span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                {t("Pinned to the sidebar and the home screen")}
+              </span>
+            </FieldLabel>
+            <Switch
+              id="is-main"
+              checked={isMain}
+              onCheckedChange={(checked) => {
+                haptic("selection")
+                setIsMain(checked)
+              }}
+            />
+          </Field>
+        </div>
+      ),
+    },
+  ]
 
-        <Field orientation="horizontal">
-          <FieldLabel htmlFor="is-main" className="flex-1">
-            <span className="flex items-center gap-1.5">
-              <StarIcon className="size-4" />
-              {t("Show on the dashboard")}
-            </span>
-            <span className="block text-xs font-normal text-muted-foreground">
-              {t("Pinned to the sidebar and the home screen")}
-            </span>
-          </FieldLabel>
-          <Switch
-            id="is-main"
-            checked={isMain}
-            onCheckedChange={(checked) => {
-              haptic("selection")
-              setIsMain(checked)
-            }}
-          />
-        </Field>
-      </FormSection>
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogMedia className="bg-destructive/10 text-destructive">
-              <Trash2Icon />
-            </AlertDialogMedia>
-            <AlertDialogTitle>{t("Delete {name}?", { name })}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {impact.data
-                ? t(
-                    "This branch contains {subjects} child subjects and {grades} grades.",
-                    {
-                      subjects: String(impact.data.descendants),
-                      grades: String(impact.data.grades),
-                    }
-                  )
-                : t("Checking what would be removed…")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel type="button">{t("Cancel")}</AlertDialogCancel>
-            {(impact.data?.descendants ?? childCount) > 0 ? (
+  return (
+    <FormFlow
+      title={mode === "create" ? t("New subject") : t("Edit subject")}
+      backHref={returnTo ?? "/subjects"}
+      steps={steps}
+      onSubmit={submit}
+      submitLabel={mode === "create" ? t("Add subject") : t("Save changes")}
+      submitting={saving}
+      destructive={
+        mode === "edit" && initial?.id
+          ? { label: t("Delete"), onClick: () => setDeleteOpen(true) }
+          : undefined
+      }
+      footerNote={
+        childCount > 0
+          ? t("Deleting this also removes {count} subjects underneath it.", {
+              count: String(childCount),
+            })
+          : undefined
+      }
+      overlays={
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogMedia className="bg-destructive/10 text-destructive">
+                <Trash2Icon />
+              </AlertDialogMedia>
+              <AlertDialogTitle>
+                {t("Delete {name}?", { name })}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {impact.data
+                  ? t(
+                      "This branch contains {subjects} child subjects and {grades} grades.",
+                      {
+                        subjects: String(impact.data.descendants),
+                        grades: String(impact.data.grades),
+                      }
+                    )
+                  : t("Checking what would be removed…")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button">{t("Cancel")}</AlertDialogCancel>
+              {(impact.data?.descendants ?? childCount) > 0 ? (
+                <AlertDialogAction
+                  type="button"
+                  variant="outline"
+                  disabled={remove.isPending}
+                  onClick={() =>
+                    remove.mutate({
+                      subjectId: initial?.id as string,
+                      promoteChildren: true,
+                    })
+                  }
+                >
+                  {t("Keep child subjects")}
+                </AlertDialogAction>
+              ) : null}
               <AlertDialogAction
                 type="button"
-                variant="outline"
-                disabled={remove.isPending}
+                variant="destructive"
+                disabled={remove.isPending || impact.isLoading}
                 onClick={() =>
                   remove.mutate({
                     subjectId: initial?.id as string,
-                    promoteChildren: true,
+                    promoteChildren: false,
                   })
                 }
               >
-                {t("Keep child subjects")}
+                {(impact.data?.descendants ?? childCount) > 0
+                  ? t("Delete the whole branch")
+                  : t("Delete subject")}
               </AlertDialogAction>
-            ) : null}
-            <AlertDialogAction
-              type="button"
-              variant="destructive"
-              disabled={remove.isPending || impact.isLoading}
-              onClick={() =>
-                remove.mutate({
-                  subjectId: initial?.id as string,
-                  promoteChildren: false,
-                })
-              }
-            >
-              {(impact.data?.descendants ?? childCount) > 0
-                ? t("Delete the whole branch")
-                : t("Delete subject")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </FormPage>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      }
+    />
   )
 }
