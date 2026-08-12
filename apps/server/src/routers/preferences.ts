@@ -21,7 +21,7 @@ import {
   years,
 } from "../db/schema";
 import { protectedProcedure } from "../lib/orpc";
-import { exportSocialData } from "./social/account";
+import { exportSocialData } from "./social/shared";
 
 /**
  * Account preferences.

@@ -549,13 +549,13 @@ describe("MCP authorization, scopes and ownership", () => {
       "tools/list",
     );
 
-    expect(toolNames(legacy.json.result)).not.toContain("social.eligibility");
-    expect(toolNames(socialRead.json.result)).toContain("social.eligibility");
+    expect(toolNames(legacy.json.result)).not.toContain("social.sharing");
+    expect(toolNames(socialRead.json.result)).toContain("social.sharing");
     expect(toolNames(socialRead.json.result)).not.toContain(
-      "social.profile.update",
+      "social.sharing.update",
     );
     expect(toolNames(socialManage.json.result)).toContain(
-      "social.profile.update",
+      "social.sharing.update",
     );
     expect(toolNames(socialManage.json.result)).not.toContain(
       "social.moderation.overview",
@@ -567,7 +567,7 @@ describe("MCP authorization, scopes and ownership", () => {
       "social.moderation.overview",
     );
     expect(toolNames(adminModerate.json.result)).not.toContain(
-      "social.profile.update",
+      "social.sharing.update",
     );
   });
 

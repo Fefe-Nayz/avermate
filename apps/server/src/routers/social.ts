@@ -1,38 +1,26 @@
-import { socialEligibilityRouter } from "./social/eligibility";
-import { socialGrantsRouter, socialProfileRouter } from "./social/profile";
-import { socialGuardianRouter } from "./social/guardian";
-import { socialFriendsRouter } from "./social/friends";
-import { socialFriendInvitationsRouter } from "./social/friend-invitations";
-import { socialBlocksRouter, socialCirclesRouter } from "./social/circles-blocks";
-import { socialGroupMembersRouter, socialGroupsCoreRouter } from "./social/groups-core";
-import { socialGroupInvitationsRouter } from "./social/group-invitations";
-import { socialGroupPolicyRouter } from "./social/group-policy";
-import { socialGroupStatsRouter } from "./social/group-stats";
+import { socialNotificationsRouter, socialReportsRouter } from "./social/activity";
 import {
-  socialAccountRouter,
-  socialNotificationsRouter,
-  socialReportsRouter,
-} from "./social/account";
+  socialBlocksRouter,
+  socialFriendInvitationsRouter,
+  socialFriendsRouter,
+} from "./social/friends";
+import {
+  socialGroupInvitationsRouter,
+  socialGroupsRouter,
+} from "./social/groups";
+import { socialSharingRouter } from "./social/sharing";
 
 export const socialRouter = {
-  eligibility: socialEligibilityRouter,
-  guardian: socialGuardianRouter,
-  profile: socialProfileRouter,
-  grants: socialGrantsRouter,
+  sharing: socialSharingRouter,
   friends: {
     ...socialFriendsRouter,
     invitations: socialFriendInvitationsRouter,
   },
-  circles: socialCirclesRouter,
   blocks: socialBlocksRouter,
   groups: {
-    ...socialGroupsCoreRouter,
-    members: socialGroupMembersRouter,
+    ...socialGroupsRouter,
     invitations: socialGroupInvitationsRouter,
-    policy: socialGroupPolicyRouter,
-    ...socialGroupStatsRouter,
   },
   notifications: socialNotificationsRouter,
   reports: socialReportsRouter,
-  account: socialAccountRouter,
 };

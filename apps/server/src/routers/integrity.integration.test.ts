@@ -1239,71 +1239,160 @@ describe("account-safe reads", () => {
   });
 });
 
-describe("social migration and academic invalidation", () => {
-  test("seeds the feature flag off and invalidates group projections atomically", async () => {
-    const [flag] = await database
-      .select()
-      .from(schema.socialFeatureFlags)
-      .where(eq(schema.socialFeatureFlags.key, "social-v1"));
-    expect(flag).toMatchObject({ enabled: false, revision: 1 });
-
-    await database.insert(schema.socialGroups).values({
-      id: "group-invalidation",
-      ownerUserId: "user-a",
-      type: "study_group",
-      name: "Invalidation fixture",
-      currentPolicyVersion: 1,
-      revision: 1,
-    });
-    await database.insert(schema.groupMemberships).values({
-      id: "membership-invalidation",
-      groupId: "group-invalidation",
-      userId: "user-a",
-      role: "owner",
-      state: "active",
-      alias: "Fixture",
+describe("the simplified social model", () => {
+  test("friends see real averages under the owner's locks", async () => {
+    // user-a shares year-a explicitly: today falls between the two fixture
+    // years, so the automatic fallback would pick the more recent empty one.
+    await api.social.sharing.update({
+      handle: "test-user",
       sharedYearId: "year-a",
-      joinedAt: new Date(),
+      shareGeneralAverage: true,
+      shareSubjectsMode: "all",
     });
-    await database.insert(schema.socialAggregateCache).values({
-      id: "cache-invalidation",
-      groupId: "group-invalidation",
-      groupRevision: 1,
-      policyVersion: 1,
-      metric: "normalizedAverage",
-      payload: "{}",
-      memberCount: 5,
-      computedAt: new Date(),
-      expiresAt: new Date(Date.now() + 60_000),
-    });
-
     const grade = await api.grades.create({
-      name: "Invalidates social projection",
+      name: "Shared with friends",
       value: 15,
       outOf: 20,
       passedAt: new Date("2026-04-01T00:00:00.000Z"),
       subjectId: "subject-a",
       periodId: "period-a",
     });
-    const [afterInsert] = await database
-      .select({ revision: schema.socialGroups.revision })
-      .from(schema.socialGroups)
-      .where(eq(schema.socialGroups.id, "group-invalidation"));
-    expect(afterInsert?.revision).toBe(2);
-    expect(
-      await database
-        .select()
-        .from(schema.socialAggregateCache)
-        .where(eq(schema.socialAggregateCache.groupId, "group-invalidation")),
-    ).toHaveLength(0);
 
-    await api.grades.update({ gradeId: grade.id, value: 16 });
+    // Two intents make a friendship: the request meets an acceptance.
+    const sent = await managedApi.social.friends.request({
+      handle: "test-user",
+    });
+    expect(sent.status).toBe("pending");
+    const requests = await api.social.friends.requests();
+    expect(requests.incoming).toHaveLength(1);
+    await api.social.friends.respond({
+      requestId: requests.incoming[0]!.id,
+      accept: true,
+    });
+
+    const friends = await managedApi.social.friends.list();
+    expect(friends.friends).toHaveLength(1);
+    expect(friends.friends[0]).toMatchObject({
+      name: "Test User",
+      handle: "test-user",
+      sharesSomething: true,
+    });
+
+    // The friend reads the exact figure the owner's own preview announces —
+    // earlier tests may have left other grades in the year, so the value is
+    // asserted against the engine rather than against a constant.
+    const mine = await api.social.sharing.get();
+    expect(mine.preview?.generalAverage).not.toBeNull();
+    const expectedAverage = mine.preview!.generalAverage as number;
+    const detail = await managedApi.social.friends.detail({
+      friendshipId: friends.friends[0]!.friendshipId,
+    });
+    expect(detail.sharing).not.toBeNull();
+    expect(detail.sharing!.generalAverage).toBeCloseTo(expectedAverage, 9);
+    expect(detail.sharing!.year.scale).toBe(20);
+    expect(
+      detail.sharing!.subjects.map((subject) => subject.name),
+    ).toContain("Subject A");
+
+    // Locking the general average keeps subjects; locking everything hides all.
+    await api.social.sharing.update({ shareGeneralAverage: false });
+    const partial = await managedApi.social.friends.detail({
+      friendshipId: friends.friends[0]!.friendshipId,
+    });
+    expect(partial.sharing!.generalAverage).toBeNull();
+    expect(partial.sharing!.subjects.length).toBeGreaterThan(0);
+
+    await api.social.sharing.update({ shareSubjectsMode: "none" });
+    const closed = await managedApi.social.friends.detail({
+      friendshipId: friends.friends[0]!.friendshipId,
+    });
+    expect(closed.sharing).toBeNull();
+
+    // Restore for the group half of the scenario.
+    await api.social.sharing.update({
+      shareGeneralAverage: true,
+      shareSubjectsMode: "all",
+    });
+
+    // Groups: one link, one switch, real values, no minimum head-count.
+    const group = await api.social.groups.create({
+      name: "Integration group",
+      description: "",
+    });
+    const invitation = await api.social.groups.invitations.create({
+      groupId: group.id,
+    });
+    const preview = await managedApi.social.groups.invitations.preview({
+      token: invitation.token,
+    });
+    expect(preview.group.name).toBe("Integration group");
+    const joined = await managedApi.social.groups.invitations.accept({
+      token: invitation.token,
+    });
+    expect(joined.joined).toBe(true);
+
+    const detailForMember = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(detailForMember.members).toHaveLength(2);
+    const owner = detailForMember.members.find(
+      (member) => member.role === "owner",
+    );
+    expect(owner?.average).toBeCloseTo(expectedAverage, 9);
+    // The joiner has no academic year, so they appear without a figure.
+    const joiner = detailForMember.members.find(
+      (member) => member.role === "member",
+    );
+    expect(joiner?.average).toBeNull();
+    expect(detailForMember.groupAverage).toBeCloseTo(expectedAverage, 9);
+
+    // The one lock a member has: their own switch.
+    await api.social.groups.setSharing({
+      groupId: group.id,
+      shareAverage: false,
+    });
+    const afterLock = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(
+      afterLock.members.find((member) => member.role === "owner")?.average,
+    ).toBeNull();
+    expect(afterLock.groupAverage).toBeNull();
+
+    // Administrative hold hides every figure without deleting anything.
+    await api.social.groups.setSharing({
+      groupId: group.id,
+      shareAverage: true,
+    });
+    await adminApi.admin.setSocialGroupState({
+      groupId: group.id,
+      state: "frozen",
+    });
+    const frozen = await managedApi.social.groups.get({ groupId: group.id });
+    expect(frozen.state).toBe("frozen");
+    expect(frozen.members.every((member) => member.average === null)).toBe(
+      true,
+    );
+    await adminApi.admin.setSocialGroupState({
+      groupId: group.id,
+      state: "active",
+    });
+
+    const overview = await adminApi.admin.socialOverview();
+    expect(overview.friendships).toBeGreaterThanOrEqual(1);
+    expect(overview.groups).toBeGreaterThanOrEqual(1);
+
+    // Blocking severs the friendship in both directions.
+    await managedApi.social.blocks.create({ userId: "user-a" });
+    const afterBlock = await managedApi.social.friends.list();
+    expect(afterBlock.friends).toHaveLength(0);
+    const blocks = await managedApi.social.blocks.list();
+    expect(blocks).toHaveLength(1);
+    await managedApi.social.blocks.remove({ blockId: blocks[0]!.id });
+
+    // Leave the world as this test found it.
+    await api.social.groups.delete({ groupId: group.id });
     await api.grades.delete({ gradeId: grade.id });
-    const [afterDelete] = await database
-      .select({ revision: schema.socialGroups.revision })
-      .from(schema.socialGroups)
-      .where(eq(schema.socialGroups.id, "group-invalidation"));
-    expect(afterDelete?.revision).toBe(4);
   });
 });
 

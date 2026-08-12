@@ -1,185 +1,92 @@
-import { ORPCError } from "@orpc/server";
-import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
+import { SubjectGraph, type Subject } from "@avermate/core";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
-  friendCircleMembers,
-  friendCircles,
   friendships,
-  socialAuditEvents,
-  socialEligibility,
-  socialFeatureConsents,
-  socialFeatureFlags,
+  grades,
+  groupMemberships,
+  socialGroups,
   socialNotifications,
-  socialProfileGrants,
   socialProfiles,
+  socialReports,
+  socialSharedSubjects,
+  subjects,
   userBlocks,
   users,
-  type SocialProfileField,
+  years,
 } from "../../db/schema";
-import { notFound } from "../../lib/orpc";
-import {
-  SOCIAL_FEATURE_KEY,
-  SOCIAL_POLICY_VERSION,
-  SOCIAL_PROFILE_FIELDS,
-  normalizeHandle,
-  resolveEligibility,
-} from "../../lib/social-policy";
+import { normalizeHandle } from "../../lib/social-policy";
 
-export const channelSchema = z.enum(["web", "mobile", "mcp"]);
-export const profileFieldSchema = z.enum(SOCIAL_PROFILE_FIELDS);
 export const handleSchema = z
   .string()
   .trim()
   .min(3)
   .max(32)
-  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid profile handle")
+  .regex(/^@?[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Invalid profile handle")
   .transform(normalizeHandle);
 
-type SocialQueryExecutor = Pick<typeof db, "select">;
-
-export async function audit(input: {
-  actorUserId: string | null;
-  subjectUserId?: string | null;
-  action: string;
-  entityType: string;
-  entityId?: string | null;
-  changedKeys?: readonly string[];
-}) {
-  await db.insert(socialAuditEvents).values({
-    actorUserId: input.actorUserId,
-    subjectUserId: input.subjectUserId ?? input.actorUserId,
-    action: input.action,
-    entityType: input.entityType,
-    entityId: input.entityId ?? null,
-    changedKeys: JSON.stringify([...new Set(input.changedKeys ?? [])].sort()),
-  });
+/**
+ * Who someone is, socially: their account name and avatar, plus the handle
+ * they can be found by. There is no separate social persona any more — a
+ * friend is a person you know, and they look like themselves.
+ */
+export async function identity(userId: string) {
+  const [row] = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      avatar: users.avatarUrl,
+      handle: socialProfiles.handle,
+    })
+    .from(users)
+    .leftJoin(socialProfiles, eq(socialProfiles.userId, users.id))
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? null;
 }
 
-export async function notify(input: {
-  userId: string;
-  actorUserId?: string | null;
-  kind: string;
-  entityType: "friend_request" | "group" | "report" | "system";
-  entityId?: string | null;
-  safeParams?: Record<string, string>;
-}) {
-  await db.insert(socialNotifications).values({
-    userId: input.userId,
-    actorUserId: input.actorUserId ?? null,
-    kind: input.kind,
-    entityType: input.entityType,
-    entityId: input.entityId ?? null,
-    safeParams: JSON.stringify(input.safeParams ?? {}),
-  });
+export async function identities(userIds: readonly string[]) {
+  const unique = [...new Set(userIds)];
+  const out = new Map<
+    string,
+    { userId: string; name: string; avatar: string | null; handle: string | null }
+  >();
+  if (unique.length === 0) return out;
+  const rows = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      avatar: users.avatarUrl,
+      handle: socialProfiles.handle,
+    })
+    .from(users)
+    .leftJoin(socialProfiles, eq(socialProfiles.userId, users.id))
+    .where(or(...unique.map((id) => eq(users.id, id))));
+  for (const row of rows) out.set(row.userId, row);
+  return out;
 }
 
-export async function eligibilityViewFrom(
-  executor: SocialQueryExecutor,
-  userId: string,
-) {
-  const [flagRows, eligibilityRows, profileRows, consents] = await Promise.all([
-    executor
-      .select({ enabled: socialFeatureFlags.enabled })
-      .from(socialFeatureFlags)
-      .where(eq(socialFeatureFlags.key, SOCIAL_FEATURE_KEY))
-      .limit(1),
-    executor
-      .select()
-      .from(socialEligibility)
-      .where(eq(socialEligibility.userId, userId))
-      .limit(1),
-    executor
-      .select({
-        status: socialProfiles.status,
-        revision: socialProfiles.revision,
-      })
-      .from(socialProfiles)
-      .where(eq(socialProfiles.userId, userId))
-      .limit(1),
-    executor
-      .select({
-        actorType: socialFeatureConsents.actorType,
-        event: socialFeatureConsents.event,
-        occurredAt: socialFeatureConsents.occurredAt,
-        guardianProviderRef: socialFeatureConsents.guardianProviderRef,
-      })
-      .from(socialFeatureConsents)
-      .where(
-        and(
-          eq(socialFeatureConsents.userId, userId),
-          eq(socialFeatureConsents.policyVersion, SOCIAL_POLICY_VERSION),
-        ),
-      )
-      .orderBy(desc(socialFeatureConsents.occurredAt)),
-  ]);
-  const eligibility = eligibilityRows[0];
-  const profile = profileRows[0];
-  return resolveEligibility({
-    enabled: flagRows[0]?.enabled ?? false,
-    ageBand: eligibility?.ageBand ?? "unknown",
-    assuranceLevel: eligibility?.assuranceLevel ?? "none",
-    providerRef: eligibility?.providerRef ?? null,
-    expiresAt: eligibility?.expiresAt ?? null,
-    profileStatus: profile?.status ?? "off",
-    revision: profile?.revision ?? 0,
-    consents,
-  });
-}
-
-export function eligibilityView(userId: string) {
-  return eligibilityViewFrom(db, userId);
-}
-
-export async function assertSocialAccess(userId: string) {
-  const view = await eligibilityView(userId);
-  if (!view.canUseSocial) {
-    throw new ORPCError("FORBIDDEN", {
-      message: `Social access unavailable: ${view.reason}`,
-      data: { reason: view.reason },
-    });
-  }
-  return view;
-}
-
-export async function assertActiveProfile(userId: string) {
-  await assertSocialAccess(userId);
-  const [profile] = await db
+/** The sharing row, created with its defaults the first time it is needed. */
+export async function ensureProfile(userId: string) {
+  const [existing] = await db
     .select()
     .from(socialProfiles)
-    .where(
-      and(
-        eq(socialProfiles.userId, userId),
-        eq(socialProfiles.status, "active"),
-      ),
-    )
+    .where(eq(socialProfiles.userId, userId))
     .limit(1);
-  if (!profile) {
-    throw new ORPCError("PRECONDITION_FAILED", {
-      message: "Enable your social profile before using this feature",
-    });
-  }
-  return profile;
-}
-
-export async function assertActiveProfileFrom(
-  executor: SocialQueryExecutor,
-  userId: string,
-) {
-  const view = await eligibilityViewFrom(executor, userId);
-  if (!view.canUseSocial) notFound("Profile");
-  const [profile] = await executor
+  if (existing) return existing;
+  const [created] = await db
+    .insert(socialProfiles)
+    .values({ userId })
+    .onConflictDoNothing({ target: socialProfiles.userId })
+    .returning();
+  if (created) return created;
+  const [raced] = await db
     .select()
     .from(socialProfiles)
-    .where(
-      and(
-        eq(socialProfiles.userId, userId),
-        eq(socialProfiles.status, "active"),
-      ),
-    )
+    .where(eq(socialProfiles.userId, userId))
     .limit(1);
-  if (!profile) notFound("Profile");
-  return profile;
+  return raced as typeof socialProfiles.$inferSelect;
 }
 
 export async function blocked(left: string, right: string) {
@@ -219,232 +126,311 @@ export async function areFriends(left: string, right: string) {
   return Boolean(await friendshipBetween(left, right));
 }
 
-export type ProjectedProfile = {
-  displayName?: string;
-  avatar?: string | null;
-  bio?: string;
-  educationBand?: string;
-};
-
-export async function projectFriendProfile(
-  viewerUserId: string,
-  targetUserId: string,
+export function friendOf(
+  friendship: typeof friendships.$inferSelect,
+  userId: string,
 ) {
-  if (await blocked(viewerUserId, targetUserId)) return null;
-  const friendship = await friendshipBetween(viewerUserId, targetUserId);
-  if (!friendship || !(await eligibilityView(targetUserId)).canUseSocial)
-    return null;
-  const [target] = await db
-    .select({
-      displayName: socialProfiles.displayName,
-      avatar: users.avatarUrl,
-      bio: socialProfiles.bio,
-      educationBand: socialProfiles.educationBand,
-      status: socialProfiles.status,
-    })
-    .from(socialProfiles)
-    .innerJoin(users, eq(users.id, socialProfiles.userId))
-    .where(eq(socialProfiles.userId, targetUserId))
-    .limit(1);
-  if (!target || target.status !== "active") return null;
-  const [circleRows, grants] = await Promise.all([
-    db
-      .select({ id: friendCircles.id })
-      .from(friendCircles)
-      .innerJoin(
-        friendCircleMembers,
-        eq(friendCircleMembers.circleId, friendCircles.id),
-      )
-      .where(
-        and(
-          eq(friendCircles.ownerUserId, targetUserId),
-          eq(friendCircleMembers.friendUserId, viewerUserId),
-        ),
-      ),
-    db
-      .select()
-      .from(socialProfileGrants)
-      .where(
-        and(
-          eq(socialProfileGrants.userId, targetUserId),
-          isNull(socialProfileGrants.withdrawnAt),
-        ),
-      ),
-  ]);
-  const circleIds = new Set(circleRows.map((row) => row.id));
-  const allowed = new Set<SocialProfileField>();
-  for (const grant of grants) {
-    if (
-      grant.audience === "friends" ||
-      (grant.audience === "specific_user" &&
-        grant.audienceId === friendship.id) ||
-      (grant.audience === "circle" &&
-        grant.audienceId &&
-        circleIds.has(grant.audienceId))
-    ) {
-      allowed.add(grant.fieldKey);
-    }
-  }
-  return {
-    ...(allowed.has("displayName") ? { displayName: target.displayName } : {}),
-    ...(allowed.has("avatar") ? { avatar: target.avatar } : {}),
-    ...(allowed.has("bio") ? { bio: target.bio } : {}),
-    ...(allowed.has("educationBand")
-      ? { educationBand: target.educationBand }
-      : {}),
-  };
+  return friendship.userLowId === userId
+    ? friendship.userHighId
+    : friendship.userLowId;
 }
 
-export async function requestIdentity(userId: string) {
-  const [row] = await db
-    .select({
-      displayName: socialProfiles.displayName,
-      avatar: users.avatarUrl,
-      handle: socialProfiles.handle,
-    })
-    .from(socialProfiles)
-    .innerJoin(users, eq(users.id, socialProfiles.userId))
-    .where(
-      and(
-        eq(socialProfiles.userId, userId),
-        eq(socialProfiles.status, "active"),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
-}
-
-export function ownProfileDto(profile: typeof socialProfiles.$inferSelect) {
-  return {
-    status: profile.status,
-    discovery: profile.discovery,
-    handle: profile.handle,
-    displayName: profile.displayName,
-    bio: profile.bio,
-    educationBand: profile.educationBand,
-    revision: profile.revision,
-    createdAt: profile.createdAt,
-    updatedAt: profile.updatedAt,
-  };
-}
-
-export function grantDto(grant: typeof socialProfileGrants.$inferSelect) {
-  return {
-    id: grant.id,
-    fieldKey: grant.fieldKey,
-    audience: grant.audience,
-    audienceId: grant.audienceId || null,
-    grantedAt: grant.grantedAt,
-  };
-}
-
-export async function listActiveGrants(userId: string) {
-  const rows = await db
-    .select()
-    .from(socialProfileGrants)
-    .where(
-      and(
-        eq(socialProfileGrants.userId, userId),
-        isNull(socialProfileGrants.withdrawnAt),
-      ),
-    )
-    .orderBy(asc(socialProfileGrants.fieldKey));
-  return rows.map(grantDto);
-}
-
-export async function previewOwnProfile(input: {
-  ownerUserId: string;
-  audience: "friends" | "circle" | "specific_user";
-  audienceId: string | null;
+export async function notify(input: {
+  userId: string;
+  actorUserId?: string | null;
+  kind: string;
+  entityType: "friend_request" | "group" | "report" | "system";
+  entityId?: string | null;
+  safeParams?: Record<string, string>;
 }) {
-  const [profile] = await db
-    .select({
-      displayName: socialProfiles.displayName,
-      avatar: users.avatarUrl,
-      bio: socialProfiles.bio,
-      educationBand: socialProfiles.educationBand,
-    })
-    .from(socialProfiles)
-    .innerJoin(users, eq(users.id, socialProfiles.userId))
-    .where(eq(socialProfiles.userId, input.ownerUserId))
-    .limit(1);
-  if (!profile) notFound("Profile");
-  let friendshipId: string | null = null;
-  let circleIds = new Set<string>();
-  if (input.audience === "circle") {
-    const [circle] = await db
-      .select({ id: friendCircles.id })
-      .from(friendCircles)
-      .where(
-        and(
-          eq(friendCircles.id, input.audienceId ?? ""),
-          eq(friendCircles.ownerUserId, input.ownerUserId),
-        ),
-      )
-      .limit(1);
-    if (!circle) notFound("Circle");
-    circleIds = new Set([circle.id]);
-  } else if (input.audience === "specific_user") {
-    const [friendship] = await db
+  await db.insert(socialNotifications).values({
+    userId: input.userId,
+    actorUserId: input.actorUserId ?? null,
+    kind: input.kind,
+    entityType: input.entityType,
+    entityId: input.entityId ?? null,
+    safeParams: JSON.stringify(input.safeParams ?? {}),
+  });
+}
+
+/**
+ * The year whose figures a user shares: their explicit choice if it still
+ * exists, otherwise the current year. Falling back keeps sharing alive
+ * across a school-year rollover without anyone repeating setup.
+ */
+export async function resolveSharedYear(
+  userId: string,
+  sharedYearId: string | null,
+) {
+  if (sharedYearId) {
+    const [chosen] = await db
       .select()
-      .from(friendships)
+      .from(years)
+      .where(and(eq(years.id, sharedYearId), eq(years.userId, userId)))
+      .limit(1);
+    if (chosen) return chosen;
+  }
+  const now = new Date();
+  const candidates = await db
+    .select()
+    .from(years)
+    .where(and(eq(years.userId, userId), isNull(years.archivedAt)))
+    .orderBy(desc(years.startsAt));
+  return (
+    candidates.find((year) => year.startsAt <= now && year.endsAt >= now) ??
+    candidates[0] ??
+    null
+  );
+}
+
+export interface SharedSubjectView {
+  id: string;
+  name: string;
+  average: number | null;
+  gradeCount: number;
+}
+
+export interface SharedAcademics {
+  year: { name: string; scale: number; decimals: number };
+  /** Ratio in 0..1, formatted by the reader on the owner's scale. */
+  generalAverage: number | null;
+  gradeCount: number;
+  shareGeneralAverage: boolean;
+  subjects: SharedSubjectView[];
+}
+
+/**
+ * What `ownerUserId` currently shares, computed live from their real grades
+ * with the same engine the apps use. Subject averages are only reported for
+ * shared leaf subjects; the general average also respects the lock.
+ */
+export async function sharedAcademics(
+  ownerUserId: string,
+): Promise<SharedAcademics | null> {
+  const profile = await ensureProfile(ownerUserId);
+  if (
+    !profile.shareGeneralAverage &&
+    profile.shareSubjectsMode === "none"
+  ) {
+    return null;
+  }
+  const year = await resolveSharedYear(ownerUserId, profile.sharedYearId);
+  if (!year) return null;
+
+  const [subjectRows, gradeRows, sharedRows] = await Promise.all([
+    db
+      .select({
+        id: subjects.id,
+        name: subjects.name,
+        shortName: subjects.shortName,
+        parentId: subjects.parentId,
+        coefficient: subjects.coefficient,
+        kind: subjects.kind,
+        isMain: subjects.isMain,
+        sortOrder: subjects.sortOrder,
+      })
+      .from(subjects)
       .where(
-        and(
-          eq(friendships.id, input.audienceId ?? ""),
+        and(eq(subjects.userId, ownerUserId), eq(subjects.yearId, year.id)),
+      ),
+    db
+      .select({
+        id: grades.id,
+        name: grades.name,
+        value: grades.value,
+        outOf: grades.outOf,
+        coefficient: grades.coefficient,
+        passedAt: grades.passedAt,
+        createdAt: grades.createdAt,
+        subjectId: grades.subjectId,
+        periodId: grades.periodId,
+        note: grades.note,
+      })
+      .from(grades)
+      .where(and(eq(grades.userId, ownerUserId), eq(grades.yearId, year.id))),
+    profile.shareSubjectsMode === "selected"
+      ? db
+          .select({ subjectId: socialSharedSubjects.subjectId })
+          .from(socialSharedSubjects)
+          .where(eq(socialSharedSubjects.userId, ownerUserId))
+      : Promise.resolve([] as { subjectId: string }[]),
+  ]);
+
+  const gradesBySubject = new Map<string, typeof gradeRows>();
+  for (const grade of gradeRows) {
+    const list = gradesBySubject.get(grade.subjectId) ?? [];
+    list.push(grade);
+    gradesBySubject.set(grade.subjectId, list);
+  }
+  const graphSubjects: Subject[] = subjectRows.map((subject) => ({
+    ...subject,
+    kind: subject.kind === "category" ? "category" : "subject",
+    grades: (gradesBySubject.get(subject.id) ?? []).map((grade) => ({
+      ...grade,
+      components: [],
+    })),
+  }));
+  const graph = new SubjectGraph(graphSubjects);
+
+  const allowed =
+    profile.shareSubjectsMode === "all"
+      ? null
+      : new Set(sharedRows.map((row) => row.subjectId));
+  const shared: SharedSubjectView[] = [];
+  if (profile.shareSubjectsMode !== "none") {
+    for (const subject of graphSubjects) {
+      if (subject.kind !== "subject") continue;
+      if (allowed && !allowed.has(subject.id)) continue;
+      shared.push({
+        id: subject.id,
+        name: subject.name,
+        average: graph.ratio(subject.id),
+        gradeCount: graph.allGrades(subject.id).length,
+      });
+    }
+    shared.sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  return {
+    year: { name: year.name, scale: year.scale, decimals: year.decimals },
+    generalAverage: profile.shareGeneralAverage ? graph.ratio(null) : null,
+    gradeCount: gradeRows.length,
+    shareGeneralAverage: profile.shareGeneralAverage,
+    subjects: shared,
+  };
+}
+
+/** The user's social relations, for the account export. */
+export async function exportSocialData(userId: string) {
+  const [profile, sharedRows, friendRows, membershipRows, blockRows, reportRows] =
+    await Promise.all([
+      ensureProfile(userId),
+      db
+        .select({ subjectId: socialSharedSubjects.subjectId })
+        .from(socialSharedSubjects)
+        .where(eq(socialSharedSubjects.userId, userId)),
+      db
+        .select()
+        .from(friendships)
+        .where(
           or(
-            eq(friendships.userLowId, input.ownerUserId),
-            eq(friendships.userHighId, input.ownerUserId),
+            eq(friendships.userLowId, userId),
+            eq(friendships.userHighId, userId),
           ),
         ),
-      )
-      .limit(1);
-    if (!friendship) notFound("Friend");
-    friendshipId = friendship.id;
-    const friendUserId =
-      friendship.userLowId === input.ownerUserId
-        ? friendship.userHighId
-        : friendship.userLowId;
-    const rows = await db
-      .select({ id: friendCircles.id })
-      .from(friendCircles)
-      .innerJoin(
-        friendCircleMembers,
-        eq(friendCircleMembers.circleId, friendCircles.id),
-      )
-      .where(
-        and(
-          eq(friendCircles.ownerUserId, input.ownerUserId),
-          eq(friendCircleMembers.friendUserId, friendUserId),
-        ),
-      );
-    circleIds = new Set(rows.map((row) => row.id));
-  }
-  const grants = await db
-    .select()
-    .from(socialProfileGrants)
-    .where(
-      and(
-        eq(socialProfileGrants.userId, input.ownerUserId),
-        isNull(socialProfileGrants.withdrawnAt),
-      ),
-    );
-  const allowed = new Set<SocialProfileField>();
-  for (const grant of grants) {
-    if (
-      grant.audience === "friends" ||
-      (grant.audience === "circle" &&
-        grant.audienceId &&
-        circleIds.has(grant.audienceId)) ||
-      (grant.audience === "specific_user" && grant.audienceId === friendshipId)
-    )
-      allowed.add(grant.fieldKey);
-  }
+      db
+        .select({
+          groupName: socialGroups.name,
+          role: groupMemberships.role,
+          shareAverage: groupMemberships.shareAverage,
+          joinedAt: groupMemberships.createdAt,
+        })
+        .from(groupMemberships)
+        .innerJoin(socialGroups, eq(socialGroups.id, groupMemberships.groupId))
+        .where(eq(groupMemberships.userId, userId)),
+      db
+        .select({
+          blockedUserId: userBlocks.blockedUserId,
+          createdAt: userBlocks.createdAt,
+        })
+        .from(userBlocks)
+        .where(eq(userBlocks.blockerUserId, userId)),
+      db
+        .select({
+          category: socialReports.category,
+          status: socialReports.status,
+          createdAt: socialReports.createdAt,
+        })
+        .from(socialReports)
+        .where(eq(socialReports.reporterUserId, userId)),
+    ]);
+  const named = await identities(
+    friendRows.map((row) => friendOf(row, userId)),
+  );
   return {
-    ...(allowed.has("displayName") ? { displayName: profile.displayName } : {}),
-    ...(allowed.has("avatar") ? { avatar: profile.avatar } : {}),
-    ...(allowed.has("bio") ? { bio: profile.bio } : {}),
-    ...(allowed.has("educationBand")
-      ? { educationBand: profile.educationBand }
-      : {}),
+    sharing: {
+      handle: profile.handle,
+      shareGeneralAverage: profile.shareGeneralAverage,
+      shareSubjectsMode: profile.shareSubjectsMode,
+      sharedYearId: profile.sharedYearId,
+      sharedSubjectIds: sharedRows.map((row) => row.subjectId),
+    },
+    friends: friendRows.map((row) => ({
+      name: named.get(friendOf(row, userId))?.name ?? "",
+      since: row.createdAt,
+    })),
+    groups: membershipRows,
+    blocks: blockRows,
+    reports: reportRows,
+  };
+}
+
+/**
+ * Just the general average, for group leaderboards. Cheaper than the full
+ * view and indifferent to the subject locks — inside a group the only lock
+ * is the membership's own `shareAverage`.
+ */
+export async function generalAverageOf(ownerUserId: string): Promise<{
+  average: number | null;
+  scale: number;
+  decimals: number;
+} | null> {
+  const profile = await ensureProfile(ownerUserId);
+  const year = await resolveSharedYear(ownerUserId, profile.sharedYearId);
+  if (!year) return null;
+  const [subjectRows, gradeRows] = await Promise.all([
+    db
+      .select({
+        id: subjects.id,
+        name: subjects.name,
+        shortName: subjects.shortName,
+        parentId: subjects.parentId,
+        coefficient: subjects.coefficient,
+        kind: subjects.kind,
+        isMain: subjects.isMain,
+        sortOrder: subjects.sortOrder,
+      })
+      .from(subjects)
+      .where(
+        and(eq(subjects.userId, ownerUserId), eq(subjects.yearId, year.id)),
+      ),
+    db
+      .select({
+        id: grades.id,
+        name: grades.name,
+        value: grades.value,
+        outOf: grades.outOf,
+        coefficient: grades.coefficient,
+        passedAt: grades.passedAt,
+        createdAt: grades.createdAt,
+        subjectId: grades.subjectId,
+        periodId: grades.periodId,
+        note: grades.note,
+      })
+      .from(grades)
+      .where(and(eq(grades.userId, ownerUserId), eq(grades.yearId, year.id))),
+  ]);
+  const gradesBySubject = new Map<string, typeof gradeRows>();
+  for (const grade of gradeRows) {
+    const list = gradesBySubject.get(grade.subjectId) ?? [];
+    list.push(grade);
+    gradesBySubject.set(grade.subjectId, list);
+  }
+  const graph = new SubjectGraph(
+    subjectRows.map(
+      (subject): Subject => ({
+        ...subject,
+        kind: subject.kind === "category" ? "category" : "subject",
+        grades: (gradesBySubject.get(subject.id) ?? []).map((grade) => ({
+          ...grade,
+          components: [],
+        })),
+      }),
+    ),
+  );
+  return {
+    average: graph.ratio(null),
+    scale: year.scale,
+    decimals: year.decimals,
   };
 }

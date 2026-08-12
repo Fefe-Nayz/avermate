@@ -36,16 +36,8 @@ import {
   grades,
   periods,
   friendships,
-  groupMemberConsentFields,
-  groupMemberConsents,
   groupMemberships,
-  groupPolicyFields,
-  groupPolicyVersions,
-  socialEligibility,
-  socialFeatureConsents,
-  socialFeatureFlags,
   socialGroups,
-  socialProfileGrants,
   socialProfiles,
   sessions,
   subjects,
@@ -54,12 +46,7 @@ import {
 } from "../src/db/schema";
 import { auth } from "../src/lib/auth";
 import { newId } from "../src/lib/id";
-import {
-  SOCIAL_FEATURE_KEY,
-  SOCIAL_POLICY_VERSION,
-  canonicalPair,
-  groupPolicyDigest,
-} from "../src/lib/social-policy";
+import { canonicalPair } from "../src/lib/social-policy";
 import { defaultCards } from "@avermate/core";
 import {
   buildDemoCohort,
@@ -1035,125 +1022,42 @@ async function seedSocialDemo(primary: Awaited<ReturnType<typeof seedFull>>) {
     userId: peer.id,
   });
 
-  await db
-    .insert(socialFeatureFlags)
-    .values({ key: SOCIAL_FEATURE_KEY, enabled: true })
-    .onConflictDoUpdate({
-      target: socialFeatureFlags.key,
-      set: { enabled: true, updatedAt: now },
-    });
-  for (const [user, handle] of [
-    [primary.user, "camille-demo"],
-    [peer, "alex-demo"],
+  for (const [user, handle, sharedYear] of [
+    [primary.user, "camille-demo", primary.year],
+    [peer, "alex-demo", peerYear],
   ] as const) {
-    await db.insert(socialEligibility).values({
-      userId: user.id,
-      ageBand: "15to17",
-      assuranceLevel: "self_declared",
-      verifiedAt: now,
-    });
-    await db.insert(socialFeatureConsents).values({
-      userId: user.id,
-      policyVersion: SOCIAL_POLICY_VERSION,
-      actorType: "user",
-      event: "granted",
-      channel: "web",
-    });
     await db.insert(socialProfiles).values({
       userId: user.id,
-      status: "active",
-      discovery: "exact_handle",
       handle,
-      displayName: user.name,
-      educationBand: "high_school",
-    });
-    await db.insert(socialProfileGrants).values({
-      userId: user.id,
-      fieldKey: "displayName",
-      audience: "friends",
-      audienceId: "",
+      sharedYearId: sharedYear.id,
+      shareGeneralAverage: true,
+      shareSubjectsMode: "all",
     });
   }
   const [low, high] = canonicalPair(primary.user.id, peer.id);
   await db.insert(friendships).values({ userLowId: low, userHighId: high });
 
-  const policyInput = {
-    purpose: "Comparer des tendances dérivées dans la démonstration",
-    audienceDescription: "Deux comptes de démonstration auto-déclarés",
-    window: "current_academic_year" as const,
-    rankingsEnabled: false,
-    fields: [
-      {
-        fieldKey: "normalizedAverage" as const,
-        required: false,
-        exposure: "aggregate_only" as const,
-      },
-    ],
-  };
-  const digest = groupPolicyDigest(policyInput);
   const [group] = await db
     .insert(socialGroups)
     .values({
       ownerUserId: primary.user.id,
-      type: "study_group",
       name: "Groupe de démonstration",
-      description: "Les métriques restent masquées sous le seuil k=5.",
-      currentPolicyVersion: 1,
+      description: "Comparez vos moyennes générales.",
     })
     .returning();
   if (!group) throw new Error("The social demo group was not created");
-  const [policy] = await db
-    .insert(groupPolicyVersions)
-    .values({
-      groupId: group.id,
-      version: 1,
-      purpose: policyInput.purpose,
-      audienceDescription: policyInput.audienceDescription,
-      window: policyInput.window,
-      digest,
-      rankingsEnabled: false,
-      createdByUserId: primary.user.id,
-    })
-    .returning();
-  if (!policy) throw new Error("The social demo policy was not created");
-  await db.insert(groupPolicyFields).values({
-    policyVersionId: policy.id,
-    ...policyInput.fields[0],
-  });
-  for (const [user, sharedYear, role] of [
-    [primary.user, primary.year, "owner"],
-    [peer, peerYear, "member"],
+  for (const [user, role] of [
+    [primary.user, "owner"],
+    [peer, "member"],
   ] as const) {
     await db.insert(groupMemberships).values({
       groupId: group.id,
       userId: user.id,
       role,
-      state: "active",
-      alias: user.name,
-      sharedYearId: sharedYear.id,
-      joinedAt: now,
-    });
-    const [consent] = await db
-      .insert(groupMemberConsents)
-      .values({
-        groupId: group.id,
-        userId: user.id,
-        policyVersion: 1,
-        status: "accepted",
-        policyDigest: digest,
-        acceptedAt: now,
-        channel: "web",
-      })
-      .returning();
-    if (!consent) throw new Error("The social demo consent was not created");
-    await db.insert(groupMemberConsentFields).values({
-      consentId: consent.id,
-      fieldKey: "normalizedAverage",
+      shareAverage: true,
     });
   }
-  console.info(
-    "Social demo: 2 eligible profiles · friendship · private group · k-threshold suppression",
-  );
+  console.info("Social demo: friendship + group with shared averages");
 }
 
 // ---------------------------------------------------------------- the blank

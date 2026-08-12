@@ -6,7 +6,7 @@ import { db } from "../db";
 import { feedback, feedbackComments } from "../db/schema";
 import { env } from "../lib/env";
 import { badRequest, protectedProcedure } from "../lib/orpc";
-import { reserveSocialRateLimit } from "../lib/social-policy";
+import { reserveRateLimit } from "../lib/rate-limit";
 
 const CONTEXT_KEYS = new Set([
   "appVersion",
@@ -121,7 +121,7 @@ export const feedbackRouter = {
     .input(feedbackInput)
     .handler(async ({ context, input }) => {
       const user = context.session.user;
-      await reserveSocialRateLimit({
+      await reserveRateLimit({
         subject: user.id,
         action: "feedback.submit",
         limit: 20,
@@ -191,7 +191,7 @@ export const feedbackRouter = {
     .input(automaticFeedbackInput)
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await reserveSocialRateLimit({
+      await reserveRateLimit({
         subject: userId,
         action: "feedback.auto_report",
         limit: 30,

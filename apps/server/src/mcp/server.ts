@@ -16,7 +16,6 @@ import { CARD_METRICS } from "@avermate/core";
 import { db } from "../db";
 import { mcpOperations } from "../db/schema";
 import { env } from "../lib/env";
-import { SOCIAL_POLICY_VERSION } from "../lib/social-policy";
 import { appRouter } from "../routers";
 import type { McpPrincipal } from "./auth";
 
@@ -645,28 +644,22 @@ function registerSocialReadSurface(server: McpServer, api: Api): void {
     );
 
   tool(
-    "social.eligibility",
-    "Read social eligibility and guardian requirements.",
+    "social.sharing",
+    "Read the connected user's sharing locks and the exact view friends receive.",
     z.object({}),
-    () => call(() => api.social.eligibility.get()),
-  );
-  tool(
-    "social.profile",
-    "Read the connected user's opt-in social profile.",
-    z.object({}),
-    () => call(() => api.social.profile.mine()),
-  );
-  tool(
-    "social.grants",
-    "List active field-level social profile grants.",
-    z.object({}),
-    () => call(() => api.social.grants.list()),
+    () => call(() => api.social.sharing.get()),
   );
   tool(
     "social.friends",
-    "List friends using relationship capabilities, never account IDs.",
+    "List friends and whether each shares anything.",
     z.object({}),
     () => call(() => api.social.friends.list()),
+  );
+  tool(
+    "social.friend",
+    "Read one friend and the averages they currently share.",
+    z.object({ friendshipId: id }),
+    (input) => call(() => api.social.friends.detail(input)),
   );
   tool(
     "social.friend_requests",
@@ -675,75 +668,27 @@ function registerSocialReadSurface(server: McpServer, api: Api): void {
     () => call(() => api.social.friends.requests()),
   );
   tool(
-    "social.circles",
-    "List friend circles and their capability-safe members.",
-    z.object({}),
-    () => call(() => api.social.circles.list()),
-  );
-  tool(
     "social.blocks",
-    "List profiles blocked by the connected user.",
+    "List accounts blocked by the connected user.",
     z.object({}),
     () => call(() => api.social.blocks.list()),
   );
   tool(
     "social.groups",
-    "List private social groups and membership consent state.",
+    "List the connected user's groups.",
     z.object({}),
     () => call(() => api.social.groups.list()),
   );
   tool(
     "social.group",
-    "Read a private group, its immutable policy and allowed member projections.",
+    "Read a group with its members and their shared averages.",
     z.object({ groupId: id }),
     (input) => call(() => api.social.groups.get(input)),
   );
   tool(
-    "social.group_policy",
-    "Read a group's current sharing policy and viewer ranking opt-ins.",
-    z.object({ groupId: id }),
-    (input) => call(() => api.social.groups.policy.current(input)),
-  );
-  tool(
-    "social.group_stats",
-    "Read threshold-protected aggregate statistics for an allow-listed metric.",
-    z.object({
-      groupId: id,
-      metric: z.enum([
-        "normalizedAverage",
-        "median",
-        "trendBand",
-        "passRateBand",
-        "gradeCountBand",
-        "genericGoalProgress",
-      ]),
-    }),
-    (input) => call(() => api.social.groups.stats(input)),
-  );
-  tool(
-    "social.group_rankings",
-    "Read an opt-in, threshold-protected ranking or private percentile band.",
-    z.object({
-      groupId: id,
-      metric: z.enum([
-        "normalizedAverage",
-        "median",
-        "trendBand",
-        "passRateBand",
-        "gradeCountBand",
-        "genericGoalProgress",
-      ]),
-    }),
-    (input) => call(() => api.social.groups.rankings(input)),
-  );
-  tool(
     "social.notifications",
     "Read privacy-safe social notifications.",
-    z.object({
-      unreadOnly: z.boolean().default(false),
-      limit: z.number().int().min(1).max(100).default(50),
-      offset: z.number().int().min(0).default(0),
-    }),
+    z.object({ unreadOnly: z.boolean().default(false) }),
     (input) => call(() => api.social.notifications.list(input)),
   );
   tool(
@@ -751,12 +696,6 @@ function registerSocialReadSurface(server: McpServer, api: Api): void {
     "Read moderation reports submitted by the connected user.",
     z.object({}),
     () => call(() => api.social.reports.mine()),
-  );
-  tool(
-    "social.export",
-    "Export only the connected user's social relations and consent ledger.",
-    z.object({}),
-    () => call(() => api.social.account.export()),
   );
 }
 
@@ -769,146 +708,30 @@ function registerSocialManageSurface(
   const manageMeta = meta("avermate:social.manage");
   const confirmed = { destructiveHint: true, idempotentHint: true };
   const key = { idempotencyKey: z.string().uuid() };
-  const metric = z.enum([
-    "normalizedAverage",
-    "median",
-    "trendBand",
-    "passRateBand",
-    "gradeCountBand",
-    "genericGoalProgress",
-  ]);
-  const policy = z.object({
-    purpose: z.string().trim().min(10).max(500),
-    audienceDescription: z.string().trim().min(3).max(240),
-    window: z.enum(["current_academic_year", "last_90_days", "last_30_days"]),
-    rankingsEnabled: z.boolean().default(false),
-    fields: z
-      .array(
-        z.object({
-          fieldKey: metric,
-          required: z.boolean().default(false),
-          exposure: z.enum(["aggregate_only", "member_visible", "ranking"]),
-        }),
-      )
-      .min(1)
-      .max(6),
-  });
 
   server.registerTool(
-    "social.profile.update",
+    "social.sharing.update",
     {
-      description: "Update the connected user's opt-in friend profile.",
+      description:
+        "Update the connected user's handle, shared year and sharing locks.",
       inputSchema: z.object({
-        status: z.enum(["off", "active"]).optional(),
-        discovery: z.enum(["off", "invite_only", "exact_handle"]).optional(),
         handle: z.string().trim().min(3).max(32).nullable().optional(),
-        displayName: z.string().trim().min(1).max(80).optional(),
-        bio: z.string().trim().max(280).optional(),
-        educationBand: z
-          .enum([
-            "unknown",
-            "middle_school",
-            "high_school",
-            "higher_education",
-            "other",
-          ])
-          .optional(),
-        expectedRevision: z.number().int().min(1).optional(),
+        sharedYearId: id.nullable().optional(),
+        shareGeneralAverage: z.boolean().optional(),
+        shareSubjectsMode: z.enum(["all", "selected", "none"]).optional(),
+        sharedSubjectIds: z.array(id).max(500).optional(),
       }),
       _meta: manageMeta,
     },
-    (input) => call(() => api.social.profile.update(input)),
-  );
-  server.registerTool(
-    "social.grants.upsert",
-    {
-      description:
-        "Grant one allow-listed profile field to friends, a circle, or one friendship capability.",
-      inputSchema: z.object({
-        fieldKey: z.enum(["displayName", "avatar", "bio", "educationBand"]),
-        audience: z.enum(["friends", "circle", "specific_user"]),
-        audienceId: id.nullable().default(null),
-      }),
-      _meta: manageMeta,
-    },
-    (input) => call(() => api.social.grants.upsert(input)),
-  );
-  server.registerTool(
-    "social.grants.revoke",
-    {
-      description: "Immediately withdraw a profile field grant.",
-      inputSchema: z.object({ grantId: id }),
-      _meta: manageMeta,
-    },
-    (input) => call(() => api.social.grants.revoke(input)),
-  );
-  server.registerTool(
-    "social.ranking_opt_in",
-    {
-      description: "Opt in or out of one current-policy ranking metric.",
-      inputSchema: z.object({ groupId: id, metric, enabled: z.boolean() }),
-      _meta: manageMeta,
-    },
-    (input) => call(() => api.social.groups.policy.setRankingOptIn(input)),
-  );
-
-  server.registerTool(
-    "social.eligibility.begin",
-    {
-      description:
-        "Record the user's coarse age band and social-policy consent. No date of birth or document is stored.",
-      inputSchema: z.object({
-        ageBand: z.enum(["under15", "15to17", "adult"]),
-        acceptedPolicyVersion: z.literal(SOCIAL_POLICY_VERSION),
-        ...key,
-      }),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.eligibility.begin",
-        input,
-        context,
-        description: `Record ${input.ageBand} eligibility and consent to social policy ${input.acceptedPolicyVersion}.`,
-        execute: () =>
-          api.social.eligibility.begin({
-            ageBand: input.ageBand,
-            acceptedPolicyVersion: input.acceptedPolicyVersion,
-            channel: "mcp",
-          }),
-      }),
-  );
-  server.registerTool(
-    "social.eligibility.revoke",
-    {
-      description:
-        "Withdraw global social consent and immediately stop all projections.",
-      inputSchema: z.object(key),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.eligibility.revoke",
-        input,
-        context,
-        description: "Withdraw all social sharing consent.",
-        execute: () => api.social.eligibility.revoke({ channel: "mcp" }),
-      }),
+    (input) => call(() => api.social.sharing.update(input)),
   );
   server.registerTool(
     "social.friends.send",
     {
-      description:
-        "Send a friend request to an exact handle without exposing account identifiers.",
+      description: "Send a friend request to an exact handle.",
       inputSchema: z.object({
         handle: z.string().trim().min(3).max(32),
-        message: z.string().trim().max(180).nullable().default(null),
+        message: z.string().trim().max(280).optional(),
         ...key,
       }),
       annotations: confirmed,
@@ -923,17 +746,17 @@ function registerSocialManageSurface(
         context,
         description: `Send a friend request to handle ${input.handle}.`,
         execute: () =>
-          api.social.friends.send({
+          api.social.friends.request({
             handle: input.handle,
             message: input.message,
           }),
       }),
   );
   server.registerTool(
-    "social.friends.accept",
+    "social.friends.respond",
     {
-      description: "Accept a pending friend request capability.",
-      inputSchema: z.object({ requestId: id, ...key }),
+      description: "Accept or decline a pending friend request.",
+      inputSchema: z.object({ requestId: id, accept: z.boolean(), ...key }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -941,19 +764,21 @@ function registerSocialManageSurface(
       runDestructive({
         principal,
         codec,
-        toolName: "social.friends.accept",
+        toolName: "social.friends.respond",
         input,
         context,
-        description: `Accept friend request ${input.requestId}.`,
+        description: `${input.accept ? "Accept" : "Decline"} friend request ${input.requestId}.`,
         execute: () =>
-          api.social.friends.accept({ requestId: input.requestId }),
+          api.social.friends.respond({
+            requestId: input.requestId,
+            accept: input.accept,
+          }),
       }),
   );
   server.registerTool(
     "social.friends.remove",
     {
-      description:
-        "Remove a friendship and revoke its direct/circle sharing links.",
+      description: "Remove a friendship.",
       inputSchema: z.object({ friendshipId: id, ...key }),
       annotations: confirmed,
       _meta: manageMeta,
@@ -973,13 +798,8 @@ function registerSocialManageSurface(
   server.registerTool(
     "social.blocks.create",
     {
-      description:
-        "Block a capability-resolved profile and revoke friendship sharing atomically.",
-      inputSchema: z.object({
-        source: z.enum(["friendship", "friend_request", "group_membership"]),
-        sourceId: id,
-        ...key,
-      }),
+      description: "Block an account and sever the friendship both ways.",
+      inputSchema: z.object({ userId: id, ...key }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -990,27 +810,17 @@ function registerSocialManageSurface(
         toolName: "social.blocks.create",
         input,
         context,
-        description: `Block the profile resolved from ${input.source} ${input.sourceId}.`,
-        execute: () =>
-          api.social.blocks.create({
-            source: input.source,
-            sourceId: input.sourceId,
-          }),
+        description: "Block the selected account.",
+        execute: () => api.social.blocks.create({ userId: input.userId }),
       }),
   );
   server.registerTool(
     "social.groups.create",
     {
-      description:
-        "Create a private group with an immutable versioned sharing policy.",
+      description: "Create a group whose members compare averages.",
       inputSchema: z.object({
         name: z.string().trim().min(2).max(100),
         description: z.string().trim().max(500).default(""),
-        type: z.enum(["friends", "study_group", "class"]),
-        classSelfDeclared: z.boolean().default(false),
-        alias: z.string().trim().min(1).max(60),
-        sharedYearId: id,
-        policy,
         ...key,
       }),
       annotations: confirmed,
@@ -1023,31 +833,19 @@ function registerSocialManageSurface(
         toolName: "social.groups.create",
         input,
         context,
-        description: `Create private ${input.type} group ${input.name} and share the selected derived metrics.`,
+        description: `Create group ${input.name}.`,
         execute: () =>
           api.social.groups.create({
             name: input.name,
             description: input.description,
-            type: input.type,
-            classSelfDeclared: input.classSelfDeclared,
-            alias: input.alias,
-            sharedYearId: input.sharedYearId,
-            policy: input.policy,
-            accepted: true,
-            channel: "mcp",
           }),
       }),
   );
   server.registerTool(
     "social.groups.join",
     {
-      description:
-        "Accept a private group invitation; policy consent remains a separate confirmed step.",
-      inputSchema: z.object({
-        token: z.string().min(32).max(256),
-        alias: z.string().trim().min(1).max(60),
-        ...key,
-      }),
+      description: "Join a group through an invitation link token.",
+      inputSchema: z.object({ token: z.string().min(32).max(256), ...key }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -1058,26 +856,16 @@ function registerSocialManageSurface(
         toolName: "social.groups.join",
         input,
         context,
-        description:
-          "Join the group represented by this one-time bearer invitation.",
+        description: "Join the group represented by this invitation token.",
         execute: () =>
-          api.social.groups.invitations.accept({
-            token: input.token,
-            alias: input.alias,
-          }),
+          api.social.groups.invitations.accept({ token: input.token }),
       }),
   );
   server.registerTool(
-    "social.groups.policy.create_version",
+    "social.groups.set_sharing",
     {
-      description:
-        "Replace a group policy with a new immutable version and require every member to reconsent.",
-      inputSchema: z.object({
-        groupId: id,
-        expectedRevision: z.number().int().min(1),
-        policy,
-        ...key,
-      }),
+      description: "Turn the connected user's average on or off in a group.",
+      inputSchema: z.object({ groupId: id, shareAverage: z.boolean(), ...key }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -1085,129 +873,21 @@ function registerSocialManageSurface(
       runDestructive({
         principal,
         codec,
-        toolName: "social.groups.policy.create_version",
+        toolName: "social.groups.set_sharing",
         input,
         context,
-        description: `Create a new sharing policy for group ${input.groupId}; all current sharing stops until reconsent.`,
+        description: `${input.shareAverage ? "Share" : "Stop sharing"} the average in group ${input.groupId}.`,
         execute: () =>
-          api.social.groups.policy.createVersion({
+          api.social.groups.setSharing({
             groupId: input.groupId,
-            expectedRevision: input.expectedRevision,
-            policy: input.policy,
-          }),
-      }),
-  );
-  server.registerTool(
-    "social.groups.policy.reconsent",
-    {
-      description:
-        "Consent to an exact group policy digest and selected derived metrics.",
-      inputSchema: z.object({
-        groupId: id,
-        policyDigest: z.string().length(64),
-        selectedFields: z.array(metric).max(6),
-        sharedYearId: id,
-        ...key,
-      }),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.groups.policy.reconsent",
-        input,
-        context,
-        description: `Consent to policy ${input.policyDigest} in group ${input.groupId} for ${input.selectedFields.join(", ")}.`,
-        execute: () =>
-          api.social.groups.policy.reconsent({
-            groupId: input.groupId,
-            policyDigest: input.policyDigest,
-            selectedFields: input.selectedFields,
-            sharedYearId: input.sharedYearId,
-            accepted: true,
-            channel: "mcp",
-          }),
-      }),
-  );
-  server.registerTool(
-    "social.groups.policy.withdraw",
-    {
-      description:
-        "Immediately withdraw the connected user's current group sharing consent.",
-      inputSchema: z.object({ groupId: id, ...key }),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.groups.policy.withdraw",
-        input,
-        context,
-        description: `Withdraw all current sharing in group ${input.groupId}.`,
-        execute: () =>
-          api.social.groups.policy.withdraw({ groupId: input.groupId }),
-      }),
-  );
-  server.registerTool(
-    "social.groups.members.set_role",
-    {
-      description: "Change a capability-resolved group member role.",
-      inputSchema: z.object({
-        groupId: id,
-        membershipId: id,
-        role: z.enum(["member", "moderator"]),
-        ...key,
-      }),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.groups.members.set_role",
-        input,
-        context,
-        description: `Set membership ${input.membershipId} to role ${input.role}.`,
-        execute: () =>
-          api.social.groups.members.setRole({
-            groupId: input.groupId,
-            membershipId: input.membershipId,
-            role: input.role,
-          }),
-      }),
-  );
-  server.registerTool(
-    "social.groups.members.remove",
-    {
-      description: "Remove a capability-resolved member from a group.",
-      inputSchema: z.object({ groupId: id, membershipId: id, ...key }),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.groups.members.remove",
-        input,
-        context,
-        description: `Remove membership ${input.membershipId} from group ${input.groupId}.`,
-        execute: () =>
-          api.social.groups.members.remove({
-            groupId: input.groupId,
-            membershipId: input.membershipId,
+            shareAverage: input.shareAverage,
           }),
       }),
   );
   server.registerTool(
     "social.groups.leave",
     {
-      description: "Leave a group and stop all connected sharing.",
+      description: "Leave a group.",
       inputSchema: z.object({ groupId: id, ...key }),
       annotations: confirmed,
       _meta: manageMeta,
@@ -1220,20 +900,14 @@ function registerSocialManageSurface(
         input,
         context,
         description: `Leave group ${input.groupId}.`,
-        execute: () =>
-          api.social.groups.members.leave({ groupId: input.groupId }),
+        execute: () => api.social.groups.leave({ groupId: input.groupId }),
       }),
   );
   server.registerTool(
     "social.groups.delete",
     {
-      description:
-        "Permanently delete an owned group and all group-scoped consent records.",
-      inputSchema: z.object({
-        groupId: id,
-        expectedRevision: z.number().int().min(1),
-        ...key,
-      }),
+      description: "Permanently delete an owned group.",
+      inputSchema: z.object({ groupId: id, ...key }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -1245,26 +919,16 @@ function registerSocialManageSurface(
         input,
         context,
         description: `Permanently delete group ${input.groupId}.`,
-        execute: () =>
-          api.social.groups.delete({
-            groupId: input.groupId,
-            expectedRevision: input.expectedRevision,
-          }),
+        execute: () => api.social.groups.delete({ groupId: input.groupId }),
       }),
   );
   server.registerTool(
     "social.reports.create",
     {
-      description:
-        "Submit a social safety/privacy report against a capability-resolved target.",
+      description: "Submit a social safety report against a person or group.",
       inputSchema: z.object({
-        source: z.enum([
-          "friendship",
-          "friend_request",
-          "group",
-          "group_membership",
-        ]),
-        sourceId: id,
+        targetUserId: id.optional(),
+        groupId: id.optional(),
         category: z.enum([
           "harassment",
           "privacy",
@@ -1285,35 +949,14 @@ function registerSocialManageSurface(
         toolName: "social.reports.create",
         input,
         context,
-        description: `Submit a ${input.category} safety report for the selected social capability.`,
+        description: `Submit a ${input.category} safety report.`,
         execute: () =>
           api.social.reports.create({
-            source: input.source,
-            sourceId: input.sourceId,
+            targetUserId: input.targetUserId,
+            groupId: input.groupId,
             category: input.category,
             message: input.message,
           }),
-      }),
-  );
-  server.registerTool(
-    "social.account.reset",
-    {
-      description:
-        "Reset all social profile, relations, invitations and sharing consent while preserving academic data.",
-      inputSchema: z.object(key),
-      annotations: confirmed,
-      _meta: manageMeta,
-    },
-    (input, context) =>
-      runDestructive({
-        principal,
-        codec,
-        toolName: "social.account.reset",
-        input,
-        context,
-        description: "Reset the entire social account and stop all sharing.",
-        execute: () =>
-          api.social.account.reset({ confirmation: "RESET SOCIAL" }),
       }),
   );
 }
@@ -2145,15 +1788,9 @@ function registerSocialModerationSurface(
     {
       description: "List social safety reports for moderation.",
       inputSchema: z.object({
-        statuses: z
-          .array(z.enum(["open", "investigating", "resolved", "dismissed"]))
-          .default([]),
-        priorities: z
-          .array(z.enum(["low", "normal", "high", "urgent"]))
-          .default([]),
-        search: z.string().trim().max(100).default(""),
-        limit: z.number().int().min(1).max(100).default(50),
-        offset: z.number().int().min(0).default(0),
+        status: z
+          .enum(["all", "open", "investigating", "resolved", "dismissed"])
+          .default("all"),
       }),
       annotations: readOnly,
       _meta: moderateMeta,
@@ -2161,30 +1798,16 @@ function registerSocialModerationSurface(
     (input) => call(() => api.admin.socialReports(input)),
   );
   server.registerTool(
-    "social.moderation.audit",
+    "social.moderation.update_report",
     {
-      description: "Read the append-only value-free social audit ledger.",
+      description: "Change a report's status, priority or assignment.",
       inputSchema: z.object({
-        action: z.string().trim().max(100).default(""),
-        entityType: z.string().trim().max(100).default(""),
-        limit: z.number().int().min(1).max(200).default(100),
-        offset: z.number().int().min(0).default(0),
-      }),
-      annotations: readOnly,
-      _meta: moderateMeta,
-    },
-    (input) => call(() => api.admin.socialAudit(input)),
-  );
-  server.registerTool(
-    "social.moderation.freeze_group",
-    {
-      description:
-        "Freeze or unfreeze a social group with optimistic concurrency and audited reason.",
-      inputSchema: z.object({
-        groupId: id,
-        frozen: z.boolean(),
-        expectedRevision: z.number().int().min(1),
-        reason: z.string().trim().min(10).max(500),
+        reportId: id,
+        status: z
+          .enum(["open", "investigating", "resolved", "dismissed"])
+          .optional(),
+        priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+        assignToMe: z.boolean().optional(),
         ...key,
       }),
       annotations: confirmed,
@@ -2194,28 +1817,26 @@ function registerSocialModerationSurface(
       runDestructive({
         principal,
         codec,
-        toolName: "social.moderation.freeze_group",
+        toolName: "social.moderation.update_report",
         input,
         context,
-        description: `${input.frozen ? "Freeze" : "Unfreeze"} social group ${input.groupId}.`,
+        description: `Update social report ${input.reportId}.`,
         execute: () =>
-          api.admin.freezeSocialGroup({
-            groupId: input.groupId,
-            frozen: input.frozen,
-            expectedRevision: input.expectedRevision,
-            reason: input.reason,
+          api.admin.updateSocialReport({
+            reportId: input.reportId,
+            status: input.status,
+            priority: input.priority,
+            assignToMe: input.assignToMe,
           }),
       }),
   );
   server.registerTool(
-    "social.moderation.freeze_profile",
+    "social.moderation.set_group_state",
     {
-      description:
-        "Freeze or unfreeze a social profile and immediately revoke projections.",
+      description: "Place a group on an administrative hold or lift it.",
       inputSchema: z.object({
-        userId: id,
-        frozen: z.boolean(),
-        reason: z.string().trim().min(10).max(500),
+        groupId: id,
+        state: z.enum(["active", "frozen"]),
         ...key,
       }),
       annotations: confirmed,
@@ -2225,15 +1846,14 @@ function registerSocialModerationSurface(
       runDestructive({
         principal,
         codec,
-        toolName: "social.moderation.freeze_profile",
+        toolName: "social.moderation.set_group_state",
         input,
         context,
-        description: `${input.frozen ? "Freeze" : "Unfreeze"} the selected social profile.`,
+        description: `Set group ${input.groupId} to ${input.state}.`,
         execute: () =>
-          api.admin.freezeSocialProfile({
-            userId: input.userId,
-            frozen: input.frozen,
-            reason: input.reason,
+          api.admin.setSocialGroupState({
+            groupId: input.groupId,
+            state: input.state,
           }),
       }),
   );

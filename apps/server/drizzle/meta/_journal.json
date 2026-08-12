@@ -78,6 +78,13 @@
       "when": 1786465968598,
       "tag": "0010_easy_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786524710521,
+      "tag": "0011_demonic_purifiers",
+      "breakpoints": true
     }
   ]
 }
