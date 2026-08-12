@@ -344,13 +344,16 @@ export function CardBody({
     case "subject":
       return (
         <div className="flex flex-col gap-1">
+          {/* The name is the answer this card exists to give, so it wraps
+              rather than truncating — "Espagnol" cut to "Espag…" reports
+              nothing at all. */}
           <Link
             href={`/subjects/${result.subjectId}`}
-            className="truncate text-lg font-semibold hover:underline"
+            className="line-clamp-2 text-lg leading-tight font-semibold break-words hover:underline"
           >
             {result.name}
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <AverageValue
               ratio={result.ratio}
               showScale
@@ -367,11 +370,11 @@ export function CardBody({
         <div className="flex flex-col gap-1">
           <Link
             href={`/grades/${result.gradeId}`}
-            className="truncate text-lg font-semibold hover:underline"
+            className="line-clamp-2 text-lg leading-tight font-semibold break-words hover:underline"
           >
             {result.name}
           </Link>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
             <ResultBadge ratio={result.ratio} />
             <span className="truncate">{result.subjectName}</span>
           </div>

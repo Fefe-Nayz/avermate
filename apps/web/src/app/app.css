@@ -61,12 +61,20 @@
     );
   }
 
-  /* Horizontal rails: period pickers, subject chips, story cards. */
+  /* Horizontal rails: period pickers, subject chips, story cards.
+     `--rail-inset` is the page gutter the rail has to reproduce for itself,
+     because a rail bleeds past that gutter to show that it scrolls. */
   .snap-rail {
     display: flex;
     gap: 0.5rem;
     overflow-x: auto;
-    scroll-snap-type: x mandatory;
+    /* Without this the snapport starts at the bleed edge, so every chip that
+       snapped landed a gutter's width left of the cards below it. */
+    scroll-padding-inline: var(--rail-inset, 0px);
+    /* `mandatory` re-snaps the moment the finger lifts. At the end of the
+       range that pulled the last chip back under the edge, which is why the
+       rail could never rest on its final position. */
+    scroll-snap-type: x proximity;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
@@ -76,6 +84,15 @@
   .snap-rail > * {
     scroll-snap-align: start;
     flex: none;
+  }
+  /* The gutter rides on the end items rather than on the container: a
+     scroll container's own end padding is not reliably part of its
+     scrollable overflow, whereas an item's end margin always is. */
+  .snap-rail > :first-child {
+    margin-inline-start: var(--rail-inset, 0px);
+  }
+  .snap-rail > :last-child {
+    margin-inline-end: var(--rail-inset, 0px);
   }
 
   .no-scrollbar {

@@ -47,7 +47,7 @@ export function GoalStrip({ plans }: { plans: GoalPlan[] }) {
         </Link>
       </div>
 
-      <div className="snap-rail -mx-4 px-4 md:mx-0 md:grid md:grid-cols-3 md:px-0">
+      <div className="snap-rail -mx-4 [--rail-inset:1rem] md:mx-0 md:grid md:grid-cols-3 md:[--rail-inset:0px]">
         {plans.map((plan) => {
           const progress =
             plan.current === null || plan.target === 0

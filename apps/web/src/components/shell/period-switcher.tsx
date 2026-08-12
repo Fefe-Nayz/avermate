@@ -110,7 +110,7 @@ export function PeriodRail({ className }: { className?: string }) {
   if (periods.length <= 1 && !showYear) return null
 
   return (
-    <div className={cn("snap-rail px-4", className)}>
+    <div className={cn("snap-rail [--rail-inset:1rem]", className)}>
       {showYear ? (
         <>
           <button

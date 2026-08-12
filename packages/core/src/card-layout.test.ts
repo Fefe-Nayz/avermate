@@ -1,0 +1,178 @@
+import { describe, expect, test } from "bun:test";
+import {
+  availableSpans,
+  cardColumns,
+  layoutCards,
+  spanForColumns,
+  type CardDisplay,
+  type CardMetric,
+  type CardSpec,
+} from "./cards";
+
+function card(
+  id: string,
+  span: CardSpec["span"],
+  display: CardDisplay = "value",
+  metric: CardMetric = "average",
+): CardSpec {
+  return {
+    id,
+    metric,
+    target: { kind: "general", referenceId: null },
+    display,
+    span,
+    title: null,
+    accent: null,
+    goalId: null,
+    sortOrder: 0,
+    hidden: false,
+  };
+}
+
+const number = { display: "value" as const, metric: "average" as const };
+const named = { display: "value" as const, metric: "bestSubject" as const };
+
+const widths = (specs: CardSpec[], columns: number) =>
+  layoutCards(specs, columns).map((item) => item.columns);
+
+describe("card layout", () => {
+  test("a stored span means the same fraction of the row on every surface", () => {
+    expect(cardColumns(card("a", 1), 4)).toBe(1);
+    expect(cardColumns(card("a", 2), 4)).toBe(2);
+    expect(cardColumns(card("a", 4), 4)).toBe(4);
+
+    // Half the columns, so half the width — the layout is rescaled, not
+    // thrown away and replaced by a stack of full-width cards.
+    expect(cardColumns(card("a", 1), 2)).toBe(1);
+    expect(cardColumns(card("a", 2), 2)).toBe(1);
+    expect(cardColumns(card("a", 4), 2)).toBe(2);
+  });
+
+  test("a drawing is never squeezed below the width it needs", () => {
+    // A number survives a quarter of a wide grid; a chart does not.
+    expect(cardColumns(card("a", 1, "chart"), 4)).toBe(2);
+    expect(cardColumns(card("a", 1, "list"), 4)).toBe(2);
+    expect(cardColumns(card("a", 1, "gauge"), 4)).toBe(1);
+
+    // On a two-column phone that floor is the whole row.
+    expect(cardColumns(card("a", 1, "sparkline"), 2)).toBe(2);
+    expect(cardColumns(card("a", 2, "chart"), 2)).toBe(2);
+    expect(cardColumns(card("a", 1, "value"), 2)).toBe(1);
+  });
+
+  test("a text card keeps whatever width it was given", () => {
+    // The cards that used to read "STRONGE… / Espag…" are not narrowed by the
+    // engine: a grid only reaches four columns once it is wide enough for
+    // them, so a quarter is a real tile and the dashboard keeps its variety.
+    expect(cardColumns(card("a", 1, "value", "bestSubject"), 4)).toBe(1);
+    expect(cardColumns(card("a", 1, "value", "lastGrade"), 3)).toBe(1);
+    expect(cardColumns(card("a", 1, "value", "passRate"), 4)).toBe(1);
+  });
+
+  test("a short row is filled by growing its cards evenly", () => {
+    expect(widths([card("a", 1), card("b", 1)], 4)).toEqual([2, 2]);
+    expect(widths([card("a", 2), card("b", 1)], 4)).toEqual([2, 2]);
+    expect(widths([card("a", 3)], 4)).toEqual([4]);
+  });
+
+  test("a card is never grown to more than twice what it asked for", () => {
+    // A lone quarter-row card at the end would have to quadruple, so the
+    // dashboard keeps the hole and the card keeps its size.
+    expect(widths([card("a", 1)], 4)).toEqual([1]);
+    expect(widths([card("a", 4), card("b", 1)], 4)).toEqual([4, 1]);
+  });
+
+  test("a lone card on a phone takes the row rather than half of it", () => {
+    expect(widths([card("a", 1)], 2)).toEqual([2]);
+    expect(widths([card("a", 1), card("b", 1)], 2)).toEqual([1, 1]);
+    expect(widths([card("a", 1), card("b", 1), card("c", 1)], 2)).toEqual([
+      1, 1, 2,
+    ]);
+  });
+
+  test("the dashboard in the screenshot keeps its two-up rhythm on a phone", () => {
+    const dashboard = [
+      card("average", 2, "sparkline"),
+      card("best", 1, "value", "bestSubject"),
+      card("worst", 1, "value", "worstSubject"),
+      card("last", 1, "value", "lastGrade"),
+      card("pass", 1, "gauge", "passRate"),
+      card("ranking", 2, "list", "subjectRanking"),
+    ];
+
+    // Two up, with the sparkline and the ranking taking their own rows.
+    expect(widths(dashboard, 2)).toEqual([2, 1, 1, 1, 1, 2]);
+    // And on a wide grid the arrangement is kept exactly as it was built.
+    expect(widths(dashboard, 4)).toEqual([2, 1, 1, 1, 1, 2]);
+  });
+
+  test("no row ever overflows its grid", () => {
+    const specs = [
+      card("a", 3),
+      card("b", 2),
+      card("c", 1),
+      card("d", 4),
+      card("e", 1, "chart"),
+      card("f", 1, "value", "bestSubject"),
+      card("g", 1),
+    ];
+
+    for (const columns of [1, 2, 3, 4]) {
+      let used = 0;
+      for (const item of layoutCards(specs, columns)) {
+        expect(item.columns).toBeGreaterThanOrEqual(1);
+        expect(item.columns).toBeLessThanOrEqual(columns);
+        used =
+          used + item.columns > columns ? item.columns : used + item.columns;
+        expect(used).toBeLessThanOrEqual(columns);
+      }
+    }
+  });
+
+  test("the editor offers the widths the surface actually has", () => {
+    expect(availableSpans(number, 4).map((item) => item.columns)).toEqual([
+      1, 2, 3, 4,
+    ]);
+    // A phone has two widths, not four, so it must not pretend otherwise.
+    expect(availableSpans(number, 2).map((item) => item.columns)).toEqual([
+      1, 2,
+    ]);
+    // And a chart on a phone has one: it cannot be drawn at half a row.
+    expect(
+      availableSpans({ display: "chart", metric: "distribution" }, 2).map(
+        (item) => item.columns
+      )
+    ).toEqual([2]);
+    // A card that reports a name is offered every width, same as any other.
+    expect(availableSpans(named, 4).map((item) => item.columns)).toEqual([
+      1, 2, 3, 4,
+    ]);
+  });
+
+  test("editing a width on a phone leaves a desktop layout it already fits", () => {
+    // Span 1 and span 2 both draw at half a phone row. Choosing "half" while
+    // the card is already a desktop quarter must not silently widen it.
+    expect(spanForColumns(1, 1, number, 2)).toBe(1);
+    expect(spanForColumns(2, 1, number, 2)).toBe(2);
+    expect(spanForColumns(3, 2, number, 2)).toBe(3);
+  });
+
+  test("editing a width on a phone moves to the nearest span that draws it", () => {
+    expect(spanForColumns(1, 2, number, 2)).toBe(3);
+    expect(spanForColumns(4, 1, number, 2)).toBe(2);
+    expect(spanForColumns(2, 4, number, 4)).toBe(4);
+  });
+
+  test("a width the surface cannot draw leaves the stored span alone", () => {
+    expect(spanForColumns(2, 1, { display: "chart", metric: "average" }, 2)).toBe(
+      2
+    );
+  });
+
+  test("a round trip through a phone edit is stable", () => {
+    for (const span of [1, 2, 3, 4] as const) {
+      const drawn = cardColumns({ ...number, span }, 2);
+      expect(spanForColumns(span, drawn, number, 2)).toBe(span);
+    }
+  });
+});

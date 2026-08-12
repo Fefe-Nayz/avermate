@@ -170,7 +170,7 @@ export default function DashboardPage() {
               emptyHint={t(
                 "Record a few grades and the curve will appear here."
               )}
-              height={300}
+              height={340}
             />
           ) : null}
           <SubjectRadarChart title={t("Main subjects at a glance")} />

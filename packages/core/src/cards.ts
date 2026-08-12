@@ -458,6 +458,177 @@ export function defaultCards(): CardSpec[] {
   ];
 }
 
+/**
+ * Laying a dashboard out.
+ *
+ * A card stores one width — `span`, in quarters of a row — and every surface
+ * reads that same number. A phone has two columns rather than four, so the
+ * stored width is rescaled rather than ignored: the quarter-row card a student
+ * built on a laptop is the half-row card on their phone, and the order and the
+ * relative emphasis they arranged survive the trip.
+ *
+ * Two things then stop the result from looking accidental. A display has a
+ * width below which it stops being readable — a sparkline squeezed into half a
+ * phone row is a smudge — so it is widened to that floor. And a row that does
+ * not come out full is filled by growing its cards evenly, unless doing so
+ * would more than double one of them, which is the case where the hole is the
+ * lesser evil.
+ */
+
+/** The stored `span` is a count of these. */
+const SPAN_UNITS = 4;
+
+/** A card as some particular grid will draw it. */
+export interface PlacedCard {
+  spec: CardSpec;
+  /** Columns it occupies in that grid. */
+  columns: number;
+}
+
+/**
+ * The narrowest this card stays legible, in columns of the given grid.
+ *
+ * Only drawings have a floor. A chart, a sparkline or a ranking needs width to
+ * be a drawing at all, so it takes the whole of a two-column row and half of a
+ * wider one. Everything else is left alone: a grid only gains a column once it
+ * has the width to carry one, so a column is never a sliver, and a floor on
+ * text cards would buy nothing but a duller dashboard on a large screen.
+ */
+function minColumns(
+  spec: Pick<CardSpec, "display" | "metric">,
+  columns: number,
+): number {
+  if (columns <= 1) return 1;
+  if (spec.display === "value" || spec.display === "gauge") return 1;
+  return columns <= 2 ? columns : Math.min(2, columns);
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
+/** The width a single card asks for on a grid this wide, before packing. */
+export function cardColumns(
+  spec: Pick<CardSpec, "span" | "display" | "metric">,
+  columns: number,
+): number {
+  const scaled = Math.round((spec.span * columns) / SPAN_UNITS);
+  const floor = minColumns(spec, columns);
+  return clamp(Math.max(scaled, floor), 1, columns);
+}
+
+/** Hand the spare columns to the narrowest cards, one at a time. */
+function fillRow(row: PlacedCard[], columns: number): void {
+  const asked = row.map((item) => item.columns);
+  let spare = columns - asked.reduce((total, value) => total + value, 0);
+  if (spare <= 0) return;
+
+  const grown = [...asked];
+  while (spare > 0) {
+    let narrowest = 0;
+    for (let index = 1; index < grown.length; index += 1) {
+      if ((grown[index] as number) < (grown[narrowest] as number))
+        narrowest = index;
+    }
+    grown[narrowest] = (grown[narrowest] as number) + 1;
+    spare -= 1;
+  }
+
+  // A card that would end up more than twice the width it asked for is no
+  // longer the card its owner arranged, so the row keeps its hole instead.
+  const distorted = grown.some(
+    (value, index) => value > (asked[index] as number) * 2,
+  );
+  if (distorted) return;
+
+  row.forEach((item, index) => {
+    item.columns = grown[index] as number;
+  });
+}
+
+/**
+ * Place cards on a grid `columns` wide, in their stored order.
+ *
+ * Pure and shared: the dashboard, the phone and the editor's preview all call
+ * this, which is what makes the preview honest on whichever device is editing.
+ */
+export function layoutCards(
+  specs: readonly CardSpec[],
+  columns: number,
+): PlacedCard[] {
+  const placed: PlacedCard[] = specs.map((spec) => ({
+    spec,
+    columns: cardColumns(spec, columns),
+  }));
+
+  let row: PlacedCard[] = [];
+  let used = 0;
+  for (const item of placed) {
+    if (used > 0 && used + item.columns > columns) {
+      fillRow(row, columns);
+      row = [];
+      used = 0;
+    }
+    row.push(item);
+    used += item.columns;
+    if (used >= columns) {
+      row = [];
+      used = 0;
+    }
+  }
+  fillRow(row, columns);
+
+  return placed;
+}
+
+/**
+ * The widths a grid this wide can actually offer, as stored spans.
+ *
+ * The editor asks for these rather than hard-coding quarter/half/full, so a
+ * phone offers the two widths a phone has and a laptop offers four.
+ */
+export function availableSpans(
+  spec: Pick<CardSpec, "display" | "metric">,
+  columns: number,
+): Array<{ span: CardSpec["span"]; columns: number }> {
+  const seen = new Map<number, CardSpec["span"]>();
+  for (const span of [1, 2, 3, 4] as const) {
+    const width = cardColumns({ ...spec, span }, columns);
+    // The narrowest span that reaches a width is the one to store: it keeps
+    // the card as small as it can be on the surfaces that have room for more.
+    if (!seen.has(width)) seen.set(width, span);
+  }
+  return [...seen.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([width, span]) => ({ span, columns: width }));
+}
+
+/**
+ * The span to store when someone picks a width on a grid this wide.
+ *
+ * Editing on a phone must not flatten the desktop layout, so a stored span
+ * that already draws at the chosen width is kept untouched. Only a real change
+ * of width rewrites it, and then to the nearest span that draws it.
+ */
+export function spanForColumns(
+  current: CardSpec["span"],
+  chosen: number,
+  spec: Pick<CardSpec, "display" | "metric">,
+  columns: number,
+): CardSpec["span"] {
+  if (cardColumns({ ...spec, span: current }, columns) === chosen)
+    return current;
+
+  const candidates = ([1, 2, 3, 4] as const).filter(
+    (span) => cardColumns({ ...spec, span }, columns) === chosen,
+  );
+  if (candidates.length === 0) return current;
+
+  return candidates.reduce((best, span) =>
+    Math.abs(span - current) < Math.abs(best - current) ? span : best,
+  );
+}
+
 /** Displays that make sense for a metric, so the editor never offers nonsense. */
 export function allowedDisplays(metric: CardMetric): CardDisplay[] {
   switch (metric) {

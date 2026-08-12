@@ -8,6 +8,9 @@ import { toast } from "sonner"
 import {
   CARD_METRICS,
   allowedDisplays,
+  availableSpans,
+  cardColumns,
+  spanForColumns,
   type CardDisplay,
   type CardMetric,
   type CardSpec,
@@ -23,9 +26,18 @@ import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { CARD_ACCENTS, cardAccent } from "./card-accent"
 import { CardBody, useCardResult, useMetricLabels } from "./card-view"
 import { useYear } from "@/components/year/year-provider"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+
+/** Spelled out because Tailwind reads class names, not expressions. */
+const PREVIEW_SPAN: Record<number, string> = {
+  1: "col-span-1",
+  2: "col-span-2",
+  3: "col-span-3",
+  4: "col-span-4",
+}
 
 export interface CardFormValues {
   id?: string
@@ -79,6 +91,20 @@ export function CardForm({
   const effectiveDisplay = displays.includes(display)
     ? display
     : ((displays[0] ?? "value") as CardDisplay)
+
+  // The editor speaks the grid of the screen it is running on. The dashboard
+  // gains a column as it gains width, and these two queries are where — with
+  // room left for the sidebar the dashboard has and this page's column does
+  // not. One stored width sits underneath, so choosing "half" is the same
+  // decision everywhere; only its name and its drawing change.
+  const roomForFour = useMediaQuery("(min-width: 1200px)")
+  const roomForThree = useMediaQuery("(min-width: 900px)")
+  const columns = roomForFour ? 4 : roomForThree ? 3 : 2
+  const shape = { display: effectiveDisplay, metric }
+  const widths = availableSpans(shape, columns)
+  const drawn = cardColumns({ ...shape, span }, columns)
+  const rowRemainder = columns - drawn
+  const accentBar = cardAccent(accent)
 
   const spec: CardSpec = useMemo(() => {
     const validDisplays = allowedDisplays(metric)
@@ -189,6 +215,19 @@ export function CardForm({
     gauge: t("Progress bar"),
   }
 
+  /** Widths are named as fractions of a row, so the name travels between grids. */
+  const widthLabels: Record<string, string> = {
+    "1/2": t("Half"),
+    "2/2": t("Full"),
+    "1/3": t("A third"),
+    "2/3": t("Two thirds"),
+    "3/3": t("Full"),
+    "1/4": t("Quarter"),
+    "2/4": t("Half"),
+    "3/4": t("Three quarters"),
+    "4/4": t("Full"),
+  }
+
   return (
     <FormPage
       title={mode === "create" ? t("New card") : t("Edit card")}
@@ -208,16 +247,55 @@ export function CardForm({
       }
     >
       <FormSection title={t("Preview")}>
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {spec.title ?? labels[metric]}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4">
-            <CardBody spec={spec} result={preview} />
-          </CardContent>
-        </Card>
+        {/* Drawn inside this device's own grid, at the share of the row it
+            will really take, so the preview is the dashboard in miniature
+            rather than a card floating on its own. */}
+        <div
+          className={cn(
+            "grid gap-3",
+            columns === 4
+              ? "grid-cols-4"
+              : columns === 3
+                ? "grid-cols-3"
+                : "grid-cols-2"
+          )}
+        >
+          <Card
+            className={cn(
+              "relative gap-2 overflow-hidden py-4",
+              PREVIEW_SPAN[drawn]
+            )}
+          >
+            {accentBar ? (
+              <span
+                aria-hidden
+                className={cn("absolute inset-x-0 top-0 h-0.5", accentBar.bar)}
+              />
+            ) : null}
+            <CardHeader className="px-4">
+              <CardTitle
+                className={cn(
+                  "line-clamp-2 text-xs leading-tight font-medium tracking-wide uppercase",
+                  accentBar ? accentBar.text : "text-muted-foreground"
+                )}
+              >
+                {spec.title ?? labels[metric]}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4">
+              <CardBody spec={spec} result={preview} />
+            </CardContent>
+          </Card>
+          {rowRemainder > 0 ? (
+            <div
+              aria-hidden
+              className={cn(
+                "rounded-xl border border-dashed",
+                PREVIEW_SPAN[rowRemainder]
+              )}
+            />
+          ) : null}
+        </div>
       </FormSection>
 
       <FormSection title={t("What it shows")}>
@@ -295,19 +373,27 @@ export function CardForm({
           />
         ) : null}
 
-        <ChoiceField
-          label={t("Width")}
-          choices={[
-            { value: "1", label: t("Quarter") },
-            { value: "2", label: t("Half") },
-            { value: "4", label: t("Full") },
-          ]}
-          value={String(span)}
-          onValueChange={(value) =>
-            setSpan(Number.parseInt(value, 10) as CardFormValues["span"])
-          }
-          columns={3}
-        />
+        {widths.length > 1 ? (
+          <ChoiceField
+            label={t("Width")}
+            description={
+              columns > 2
+                ? t("On a narrower screen this becomes the nearest width that fits.")
+                : t("On a wider screen this becomes the nearest width that fits.")
+            }
+            choices={widths.map((width) => ({
+              value: String(width.columns),
+              label: widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
+            }))}
+            value={String(drawn)}
+            onValueChange={(value) =>
+              setSpan(
+                spanForColumns(span, Number.parseInt(value, 10), shape, columns)
+              )
+            }
+            columns={widths.length > 2 ? 4 : 2}
+          />
+        ) : null}
 
         <AccentField value={accent} onValueChange={setAccent} />
 

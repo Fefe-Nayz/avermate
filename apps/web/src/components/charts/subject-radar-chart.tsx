@@ -22,6 +22,13 @@ interface RadarPoint {
   value: number
 }
 
+/** Gap between the outer ring and a label. */
+const LABEL_OFFSET = 8
+/** That gap plus the breathing room a label needs at the very edge. */
+const LABEL_ROOM = LABEL_OFFSET + 4
+/** Advance width of a character, as a fraction of the font size. */
+const CHARACTER_WIDTH = 0.56
+
 function labelRotation(angle: number) {
   let rotation = (angle * 180) / Math.PI
   if (rotation > 180) rotation -= 360
@@ -55,14 +62,34 @@ export function SubjectRadarChart({ title }: { title: string }) {
 
   const definition = useMemo(() => {
     const domain = points.map((point) => point.subject)
+    const longest = domain.reduce(
+      (most, label) => Math.max(most, label.length),
+      0
+    )
+
     return defineChart({
-      chart: ({ width }) => {
-        const maxLength = width < 300 ? 5 : width < 440 ? 9 : 12
+      chart: ({ width, height }) => {
+        // Labels sit tangentially around the ring, so the room they have is
+        // whatever the shorter side of the box has left outside the radius —
+        // a budget a width-only rule cannot see, which is how a chart in a
+        // short box ends up with every name cut to five characters.
+        const half = Math.min(width, height) / 2
+        const fontSize = half < 140 ? 10 : 11
+        const wanted = longest * fontSize * CHARACTER_WIDTH + LABEL_ROOM
+        // Give the ring the space the names do not need, within reason: past
+        // this the radar is too small to read as a shape.
+        const radiusRatio = Math.min(0.72, Math.max(0.52, 1 - wanted / half))
+        const budget = half * (1 - radiusRatio) - LABEL_ROOM
+        const maxLength = Math.max(
+          4,
+          Math.floor(budget / (fontSize * CHARACTER_WIDTH))
+        )
+
         return {
           marks: [
             polar({
               id: "main-subject-radar",
-              radiusRatio: width < 360 ? 0.62 : 0.7,
+              radiusRatio,
               angle: {
                 scale: scalePoint<string>().domain(domain),
                 wrap: true,
@@ -84,8 +111,8 @@ export function SubjectRadarChart({ title }: { title: string }) {
                       : label
                   },
                   labelFill: "currentColor",
-                  labelFontSize: 11,
-                  labelOffset: 8,
+                  labelFontSize: fontSize,
+                  labelOffset: LABEL_OFFSET,
                   labelRotate: ({ angle }) => labelRotation(angle),
                   stroke: "currentColor",
                   strokeOpacity: 0.18,
@@ -145,14 +172,16 @@ export function SubjectRadarChart({ title }: { title: string }) {
       <CardHeader className="px-4">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="h-[300px] px-2 text-muted-foreground">
+      {/* The ring is bound by the shorter side of its box, so height buys
+          label room as directly as width does. */}
+      <CardContent className="h-[340px] px-2 text-muted-foreground">
         <ResponsiveChart
           ariaDescription={t(
             "Comparison of the current averages for your main subjects."
           )}
           ariaLabel={title}
           definition={definition}
-          height={300}
+          height={340}
           initialWidth={360}
         />
       </CardContent>
