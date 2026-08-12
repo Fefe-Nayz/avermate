@@ -142,13 +142,15 @@ describe("form flows", () => {
     )
   })
 
-  test("the number stepper is a pointer control", async () => {
+  test("the number field is openbacktest's stepper", async () => {
     const controls = await source("./controls.tsx")
 
     expect(controls).toContain("ButtonGroup")
-    // Hidden on a phone: the keypad is already there, and three of these
-    // fields share a row.
-    expect(controls).toContain("hidden size-9 shrink-0 md:inline-flex")
+    expect(controls).toContain("InputGroupAddon")
+    // The input flexes and the unit never does, so a narrow column shrinks
+    // the input rather than sliding the unit under the −/+.
+    expect(controls).toContain("min-w-24 flex-1")
+    expect(controls).toContain("grow basis-16")
   })
 
   test("a step whose only job is choosing shows the list, not a way in", async () => {

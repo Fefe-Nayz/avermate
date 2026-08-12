@@ -8,11 +8,18 @@ import { ButtonGroup } from "@/components/ui/button-group"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldError,
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group"
 import {
   Popover,
   PopoverContent,
@@ -74,21 +81,19 @@ export function TextField({
   )
 }
 
-/** Decimals the step itself carries, so nudging 0.5 does not print 14.500000001. */
-function decimalPlaces(step: number): number {
-  return step.toString().split(".")[1]?.length ?? 0
+function decimalPlaces(value: number): number {
+  return value.toString().split(".")[1]?.length ?? 0
 }
 
 /**
- * A number, with the two nudges that make one usable on a phone.
+ * A number, with a stepper.
  *
- * Typing "14" is four taps on a numeric keypad that has to be summoned first;
- * "one more than last time" is one tap on a stepper. Both are here, because a
- * result is typed and a weight is adjusted, and a field that only supports one
- * of those makes the other tedious.
- *
- * The `−`/`+` pattern is lifted from openbacktest, retuned to this app's
- * control heights: a comfortable 48px on a phone, the compact 36px on a laptop.
+ * This is openbacktest's `NumberStepperField`: the input flexes and the unit
+ * never does, the `−`/`+` hold their size, and the whole control keeps a floor
+ * so a narrow column shrinks the input rather than collapsing it to nothing.
+ * The one thing retuned here is the height — 48px on a phone, 36px from `md`
+ * up — because that is this app's control height, and a row mixing a date
+ * picker with a stepper has to come out level.
  */
 export function NumberField({
   label,
@@ -96,26 +101,30 @@ export function NumberField({
   error,
   required,
   suffix,
+  prefix,
   value,
   onValueChange,
   min,
   max,
-  step = "any",
+  step = 1,
   placeholder,
-  /** Off where a stepper would be noise, e.g. a mark out of 100. */
+  disabled = false,
+  /** Off where the number is typed and never nudged. */
   stepper = true,
 }: {
   label: string
   description?: string
   error?: string
   required?: boolean
-  suffix?: ReactNode
+  suffix?: string
+  prefix?: string
   value: string
   onValueChange: (value: string) => void
   min?: number
   max?: number
-  step?: string | number
+  step?: number
   placeholder?: string
+  disabled?: boolean
   stepper?: boolean
 }) {
   const t = useExtracted()
@@ -125,91 +134,98 @@ export function NumberField({
   // reject half the numbers people type.
   const decimalHint = locale.startsWith("fr") ? "[0-9]*[.,]?[0-9]*" : undefined
 
-  const current = Number.parseFloat(value.replace(",", "."))
-  const numeric = Number.isFinite(current)
-  const nudge = typeof step === "number" ? step : 1
+  const numericValue = Number(value)
+  const isNumeric = value.trim() !== "" && Number.isFinite(numericValue)
   const floor = min ?? Number.NEGATIVE_INFINITY
-  const ceiling = max ?? Number.POSITIVE_INFINITY
+  const ceiling = max ?? Number.MAX_SAFE_INTEGER
 
   const adjust = (direction: -1 | 1) => {
     haptic("selection")
-    const base = numeric ? current : (min ?? 0)
-    const next = Math.min(
-      ceiling,
-      Math.max(floor, base + direction * nudge)
-    )
-    onValueChange(next.toFixed(decimalPlaces(nudge)))
+    const base = isNumeric ? numericValue : (min ?? 0)
+    const next = Math.min(ceiling, Math.max(floor, base + direction * step))
+    onValueChange(next.toFixed(decimalPlaces(step)).replace(/\.0+$/, ""))
   }
 
-  const input = (
-    <Input
-      id={id}
-      inputMode="decimal"
-      enterKeyHint="next"
-      pattern={decimalHint}
-      type="text"
-      value={value}
-      min={min}
-      max={max}
-      step={step}
-      placeholder={placeholder}
-      aria-invalid={error ? true : undefined}
-      onChange={(event) => onValueChange(event.target.value.replace(",", "."))}
-      className={cn("numeric h-12 md:h-9", suffix && "pr-12")}
-    />
-  )
+  const inputProps = {
+    id,
+    value,
+    placeholder,
+    disabled,
+    inputMode: (step % 1 === 0 ? "numeric" : "decimal") as
+      | "numeric"
+      | "decimal",
+    enterKeyHint: "next" as const,
+    pattern: decimalHint,
+    type: "text",
+    "aria-invalid": error ? (true as const) : undefined,
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+      onValueChange(event.target.value.replace(",", ".")),
+  }
 
   return (
-    <Field data-invalid={error ? true : undefined}>
-      <FieldLabel htmlFor={id}>
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </FieldLabel>
+    <Field data-invalid={error ? true : undefined} data-disabled={disabled || undefined}>
+      <FieldContent className="min-w-0">
+        <FieldLabel htmlFor={id}>
+          {label}
+          {required ? <span className="text-destructive"> *</span> : null}
+        </FieldLabel>
+        {description && !error ? (
+          <FieldDescription>{description}</FieldDescription>
+        ) : null}
+        {error ? <FieldError>{error}</FieldError> : null}
+      </FieldContent>
 
       <ButtonGroup className="w-full">
-        <div className="relative min-w-0 flex-1">
-          {input}
-          {suffix ? (
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-              {suffix}
-            </span>
-          ) : null}
-        </div>
-        {/* Desktop only. A phone already offers a numeric keypad, and two
-            more targets on a row that often holds three of these fields would
-            take the width the number itself needs. */}
+        {prefix || suffix ? (
+          <InputGroup className="h-12 min-w-24 flex-1 md:h-9">
+            {prefix ? (
+              <InputGroupAddon className="shrink-0">
+                <InputGroupText>{prefix}</InputGroupText>
+              </InputGroupAddon>
+            ) : null}
+            <InputGroupInput
+              {...inputProps}
+              className="numeric min-w-0 grow basis-16"
+            />
+            {suffix ? (
+              <InputGroupAddon align="inline-end" className="shrink-0">
+                <InputGroupText>{suffix}</InputGroupText>
+              </InputGroupAddon>
+            ) : null}
+          </InputGroup>
+        ) : (
+          <Input
+            {...inputProps}
+            className="numeric h-12 min-w-16 grow basis-16 md:h-9"
+          />
+        )}
         {stepper ? (
           <>
             <Button
-              type="button"
               variant="outline"
               size="icon"
-              className="hidden size-9 shrink-0 md:inline-flex"
+              type="button"
+              className="size-12 shrink-0 md:size-9"
               aria-label={t("Decrease {label}", { label })}
               onClick={() => adjust(-1)}
-              disabled={numeric && current <= floor}
+              disabled={disabled || (isNumeric && numericValue <= floor)}
             >
-              <MinusIcon className="size-4" />
+              <MinusIcon />
             </Button>
             <Button
-              type="button"
               variant="outline"
               size="icon"
-              className="hidden size-9 shrink-0 md:inline-flex"
+              type="button"
+              className="size-12 shrink-0 md:size-9"
               aria-label={t("Increase {label}", { label })}
               onClick={() => adjust(1)}
-              disabled={numeric && current >= ceiling}
+              disabled={disabled || (isNumeric && numericValue >= ceiling)}
             >
-              <PlusIcon className="size-4" />
+              <PlusIcon />
             </Button>
           </>
         ) : null}
       </ButtonGroup>
-
-      {description && !error ? (
-        <FieldDescription>{description}</FieldDescription>
-      ) : null}
-      {error ? <FieldError>{error}</FieldError> : null}
     </Field>
   )
 }

@@ -182,41 +182,47 @@ function Calendar({
          * operating system's colours, ignoring the theme around it. This is
          * the app's own select, fed the same options.
          */
-        Dropdown: ({ value, onChange, options, "aria-label": ariaLabel }) => (
-          <Select
-            value={String(value ?? "")}
-            onValueChange={(next) =>
-              onChange?.({
-                target: { value: String(next ?? "") },
-              } as React.ChangeEvent<HTMLSelectElement>)
-            }
-          >
-            <SelectTrigger
-              type="button"
-              size="sm"
-              aria-label={ariaLabel}
-              className="border-none px-2 font-medium shadow-none hover:bg-accent"
+        Dropdown: ({ value, onChange, options, disabled, ...rest }) => (
+          // `nav` is `absolute inset-x-0 top-0` and so paints over the whole
+          // caption row. react-day-picker's own dropdown survives that because
+          // it sits in a positioned wrapper that comes later in the tree and
+          // therefore paints above it; without one, the trigger is under the
+          // nav and never sees a click.
+          <span className="relative z-10">
+            <Select
+              disabled={disabled}
+              value={String(value ?? "")}
+              onValueChange={(next) =>
+                onChange?.({
+                  target: { value: String(next ?? "") },
+                } as React.ChangeEvent<HTMLSelectElement>)
+              }
             >
-              <SelectValue>
-                {(current) =>
-                  options?.find(
-                    (option) => String(option.value) === String(current)
-                  )?.label ?? ""
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent className="max-h-64">
-              {options?.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={String(option.value)}
-                  disabled={option.disabled}
-                >
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                aria-label={rest["aria-label"]}
+                className="h-8 border-none px-2 font-medium shadow-none hover:bg-accent"
+              >
+                <SelectValue>
+                  {(current) =>
+                    options?.find(
+                      (option) => String(option.value) === String(current)
+                    )?.label ?? ""
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {options?.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={String(option.value)}
+                    disabled={option.disabled}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </span>
         ),
         DayButton: ({ ...props }) => (
           <CalendarDayButton locale={locale} {...props} />

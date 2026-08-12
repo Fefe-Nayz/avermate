@@ -130,8 +130,19 @@ export function FormFlow({
     onSubmit()
   }, [disabled, onSubmit, submitting])
 
+  /**
+   * On a phone, the review screen's button is the only thing that saves.
+   *
+   * A `<form>` submits for reasons that have nothing to do with intent: a
+   * control inside it that forgot `type="button"`, a browser's implicit
+   * submission on Enter, a third-party widget's own button. Chasing each one
+   * down as it appears is how a form ends up saving halfway through a flow.
+   * Refusing every submit that does not come from the last screen makes it a
+   * property of the flow rather than of every button inside it.
+   */
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
+    if (!wide && !onReview) return
     submit()
   }
 
