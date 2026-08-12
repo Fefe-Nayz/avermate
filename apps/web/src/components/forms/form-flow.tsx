@@ -12,7 +12,6 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  CheckIcon,
   PencilIcon,
   XIcon,
 } from "lucide-react"
@@ -499,11 +498,6 @@ function Review({
       </ul>
 
       {extra}
-
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <CheckIcon className="size-3.5 text-primary" />
-        {t("Nothing is saved until you tap the button below.")}
-      </p>
     </section>
   )
 }
