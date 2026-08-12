@@ -13,16 +13,34 @@ describe("the subjects radar", () => {
     expect(chart).toContain("if (rotation > 90) rotation -= 180")
     expect(chart).toContain("else if (rotation < -90) rotation += 180")
 
-    // A character budget stepped by width, and a ring that gives up a little
-    // radius on a narrow card. Deriving the radius from the longest name
-    // instead cost the shape most of its size, which is the whole reason a
-    // radar is on this dashboard rather than another ranked list.
-    expect(chart).toContain(
-      "const maxLength = width < 300 ? 5 : width < 440 ? 9 : 12"
-    )
-    expect(chart).toContain("radiusRatio: width < 360 ? 0.64 : 0.72")
-    expect(chart).toContain("labelFontSize: 12")
-    expect(chart).toContain("labelOffset: 8")
+    // The ring is the previous app's, so the shape keeps its size — which is
+    // the whole reason a radar is on this dashboard rather than another
+    // ranked list beside the one already there.
+    expect(chart).toContain("const radiusRatio = width < 360 ? 0.64 : 0.72")
+    expect(chart).toContain("LABEL_FONT_SIZE = 12")
+    expect(chart).toContain("LABEL_OFFSET = 8")
+  })
+
+  test("a name is cut to the room it has, not to a fixed number", async () => {
+    const chart = await source("./subject-radar-chart.tsx")
+
+    // A budget stepped by width alone cannot see how much room is left
+    // outside the ring, and the ring is bound by the shorter side of the box.
+    // On a card narrower than that ladder was tuned against, every label on
+    // the right ran off the edge.
+    expect(chart).toContain("const half = Math.min(width, height) / 2")
+    expect(chart).toContain("half - half * radiusRatio - LABEL_OFFSET")
+    expect(chart).toContain("Math.floor(room / (LABEL_FONT_SIZE")
+  })
+
+  test("the rings say what they are worth", async () => {
+    const chart = await source("./subject-radar-chart.tsx")
+
+    // Without values a radar is a shape with no units: you can see that one
+    // subject reaches further than another and not what either one is.
+    expect(chart).toContain("labelAngle: 90")
+    expect(chart).toContain("format: (value) => format.number(Number(value))")
+    expect(chart).toContain("values: [0, scale * 0.25")
   })
 
   test("it reads the year's own scale rather than assuming twenty", async () => {
