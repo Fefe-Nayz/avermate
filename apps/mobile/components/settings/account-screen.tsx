@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Share, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Stack, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Button,
@@ -352,7 +352,7 @@ export function AccountScreen() {
                   title={provider === "google" ? "Google" : "Microsoft"}
                   subtitle={linked ? t("Linked to this account") : t("Not linked")}
                   leading={
-                    <Ionicons
+                    <Icon
                       name={linked ? "shield-checkmark-outline" : "link-outline"}
                       size={19}
                       color={palette.textMuted}
@@ -389,7 +389,7 @@ export function AccountScreen() {
                   title={item.userAgent?.slice(0, 72) || t("Unknown device")}
                   subtitle={`${new Date(item.updatedAt).toLocaleString()}${current ? ` · ${t("this device")}` : ""}`}
                   leading={
-                    <Ionicons
+                    <Icon
                       name="phone-portrait-outline"
                       size={19}
                       color={palette.textMuted}

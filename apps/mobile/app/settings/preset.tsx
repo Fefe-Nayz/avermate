@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Card, Loading, Note, Screen, Section } from "@/components/ui";
@@ -193,7 +193,7 @@ export default function PresetSettings() {
           }}
         >
           <View style={{ flexDirection: "row", gap: space.md }}>
-            <Ionicons
+            <Icon
               name={statePresentation.icon}
               size={24}
               color={statePresentation.color}
@@ -366,7 +366,7 @@ export default function PresetSettings() {
                       v{preset.version}
                     </Text>
                     {selected ? (
-                      <Ionicons
+                      <Icon
                         name="checkmark-circle"
                         size={20}
                         color={palette.accent}

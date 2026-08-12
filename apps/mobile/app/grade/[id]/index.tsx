@@ -1,6 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   gradeImpact,
   gradeRatio,
@@ -123,7 +123,7 @@ export default function GradeDetail() {
                 backgroundColor: palette.accentSoft,
               }}
             >
-              <Ionicons
+              <Icon
                 name="pencil-outline"
                 size={17}
                 color={palette.accent}

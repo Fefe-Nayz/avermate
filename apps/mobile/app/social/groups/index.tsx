@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { ChoiceField, TextField } from "@/components/field";
 import { groupKindLabel } from "@/components/social/social-ui";
 import {
@@ -130,7 +130,7 @@ export default function Groups() {
                     (group.role === "owner" ? ` · ${t("Owner")}` : "")
                   }
                   leading={
-                    <Ionicons
+                    <Icon
                       name={
                         group.state === "frozen"
                           ? "snow-outline"

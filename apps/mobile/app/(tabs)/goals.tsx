@@ -1,8 +1,9 @@
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { Button, Card, Empty, Loading, ProgressBar } from "@/components/ui";
+import { Icon } from "@/components/icon";
+import { Heading,
+  Button, Card, Empty, Loading, ProgressBar } from "@/components/ui";
 import { AverageValue } from "@/components/value";
 import { StatusPill } from "@/components/goal-status";
 import { ScopeBar } from "@/components/scope-bar";
@@ -44,32 +45,29 @@ export default function Goals() {
         />
       }
     >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={[type.display, { color: palette.text }]}>{t("Goals")}</Text>
-        <Pressable
-          onPress={() => {
-            haptic("light");
-            router.push("/goal/new");
-          }}
-          hitSlop={10}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: radius.pill,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: palette.accent,
-          }}
-        >
-          <Ionicons name="add" size={18} color={palette.accentText} />
-        </Pressable>
-      </View>
+      <Heading
+        icon="target"
+        title={t("Goals")}
+        action={
+          <Pressable
+            onPress={() => {
+              haptic("light");
+              router.push("/goal/new");
+            }}
+            hitSlop={10}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: radius.pill,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: palette.accent,
+            }}
+          >
+            <Icon name="add" size={18} color={palette.accentText} />
+          </Pressable>
+        }
+      />
 
       <ScopeBar />
 

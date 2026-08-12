@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert, Share, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   SharedAverageText,
   SocialIdentity,
@@ -450,7 +450,7 @@ export default function GroupDetail() {
                       }}
                     >
                       {figure?.trend ? (
-                        <Ionicons
+                        <Icon
                           name={
                             figure.trend === "up"
                               ? "trending-up-outline"

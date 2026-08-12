@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon, type IconName } from "@/components/icon";
 import { Stack, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -29,7 +29,7 @@ function YearIconButton({
   destructive = false,
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   label: string;
   disabled?: boolean;
   destructive?: boolean;
@@ -56,7 +56,7 @@ function YearIconButton({
         opacity: disabled ? 0.3 : 1,
       })}
     >
-      <Ionicons
+      <Icon
         name={icon}
         size={19}
         color={destructive ? palette.negative : palette.textMuted}

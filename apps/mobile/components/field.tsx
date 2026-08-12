@@ -7,7 +7,7 @@ import {
   View,
   type KeyboardTypeOptions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { haptic } from "@/lib/haptics";
 import { NativeSlider, NativeSwitch } from "@/components/native-controls";
 import { numeric, radius, space, type, usePalette } from "@/lib/theme";
@@ -191,7 +191,7 @@ export function ChoiceField<TValue extends string = string>({
                 ) : null}
               </View>
               {active ? (
-                <Ionicons name="checkmark" size={18} color={palette.accent} />
+                <Icon name="checkmark" size={18} color={palette.accent} />
               ) : null}
             </Pressable>
           );
@@ -266,7 +266,7 @@ export function PickerField({
           >
             {selected?.label ?? placeholder ?? "…"}
           </Text>
-          <Ionicons
+          <Icon
             name={open ? "chevron-up" : "chevron-down"}
             size={16}
             color={palette.textFaint}
@@ -334,7 +334,7 @@ export function PickerField({
                       </Text>
                     ) : null}
                     {active ? (
-                      <Ionicons
+                      <Icon
                         name="checkmark"
                         size={18}
                         color={palette.accent}

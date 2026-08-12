@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 import { Stack } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Button,
@@ -80,7 +80,7 @@ export function AnnouncementsScreen() {
                           backgroundColor: palette.accentSoft,
                         }}
                       >
-                        <Ionicons
+                        <Icon
                           name="megaphone-outline"
                           size={18}
                           color={tone}

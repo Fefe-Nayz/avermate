@@ -3,7 +3,8 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
-import { Card, Loading, Row, Section } from "@/components/ui";
+import { Heading,
+  Card, Loading, Row, Section } from "@/components/ui";
 import { useYear } from "@/components/year-provider";
 import { signOut, useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
@@ -77,9 +78,7 @@ export default function Settings() {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[type.display, { color: palette.text }]}>
-        {t("Settings")}
-      </Text>
+      <Heading icon="settings" title={t("Settings")} />
 
       <Card>
         <View

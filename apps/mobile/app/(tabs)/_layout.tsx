@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { Loading } from "@/components/ui";
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
 import { useYear } from "@/components/year-provider";
@@ -35,7 +35,7 @@ export default function TabsLayout() {
       <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.text,
+        tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.textFaint,
         tabBarStyle: {
           backgroundColor: palette.background,
@@ -52,7 +52,7 @@ export default function TabsLayout() {
         options={{
           title: t("Home"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <Icon name="layout-dashboard" size={size} color={color} />
           ),
         }}
       />
@@ -61,7 +61,7 @@ export default function TabsLayout() {
         options={{
           title: t("Subjects"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="albums-outline" size={size} color={color} />
+            <Icon name="book-marked" size={size} color={color} />
           ),
         }}
       />
@@ -70,7 +70,7 @@ export default function TabsLayout() {
         options={{
           title: t("Grades"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" size={size} color={color} />
+            <Icon name="list-checks" size={size} color={color} />
           ),
         }}
       />
@@ -79,7 +79,7 @@ export default function TabsLayout() {
         options={{
           title: t("Goals"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flag-outline" size={size} color={color} />
+            <Icon name="target" size={size} color={color} />
           ),
         }}
       />
@@ -88,7 +88,7 @@ export default function TabsLayout() {
         options={{
           title: t("Settings"),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <Icon name="settings" size={size} color={color} />
           ),
         }}
       />

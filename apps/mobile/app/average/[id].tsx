@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { averageOverTime, dayRange, gradeRatio } from "@avermate/core";
 import { averageAnalytics } from "@/components/averages/average-analytics";
 import {
@@ -130,7 +130,7 @@ export default function AverageDetail() {
                     );
                   }}
                 >
-                  <Ionicons
+                  <Icon
                     name="options-outline"
                     size={20}
                     color={palette.textMuted}
@@ -151,7 +151,7 @@ export default function AverageDetail() {
           >
             <Text style={[type.title, { color: palette.text }]}>{title}</Text>
             {analytics.custom?.isMain ? (
-              <Ionicons name="star" size={19} color={palette.accent} />
+              <Icon name="star" size={19} color={palette.accent} />
             ) : null}
           </View>
           {analytics.custom?.isMain ? (

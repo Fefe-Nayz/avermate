@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Stack } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TextField } from "@/components/field";
@@ -130,7 +130,7 @@ function CopyValue({ label, value }: { label: string; value: string }) {
           {value}
         </Text>
       </View>
-      <Ionicons
+      <Icon
         name={copied ? "checkmark" : "copy-outline"}
         size={17}
         color={copied ? palette.positive : palette.textMuted}
@@ -175,7 +175,7 @@ function ScopeChoice({
         opacity: disabled ? 0.75 : pressed ? 0.8 : 1,
       })}
     >
-      <Ionicons
+      <Icon
         name={selected ? "checkbox" : "square-outline"}
         size={23}
         color={selected ? palette.text : palette.textFaint}
@@ -382,7 +382,7 @@ export default function Integrations() {
               gap: space.sm,
             }}
           >
-            <Ionicons name="sparkles" size={19} color={palette.accent} />
+            <Icon name="sparkles" size={19} color={palette.accent} />
             <Text style={[type.heading, { flex: 1, color: palette.text }]}>
               MCP 2026-07-28 · Streamable HTTP
             </Text>
@@ -521,7 +521,7 @@ export default function Integrations() {
                     }
                     style={{ padding: space.sm, opacity: busy ? 0.4 : 1 }}
                   >
-                    <Ionicons
+                    <Icon
                       name="trash-outline"
                       size={21}
                       color={palette.negative}
@@ -595,7 +595,7 @@ export default function Integrations() {
                   }
                   style={{ padding: space.sm, opacity: busy ? 0.4 : 1 }}
                 >
-                  <Ionicons
+                  <Icon
                     name="trash-outline"
                     size={21}
                     color={palette.negative}

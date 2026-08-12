@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAudioPlayer } from "expo-audio";
 import * as Sharing from "expo-sharing";
@@ -889,7 +889,7 @@ export function YearReviewStory({
               onPress={onClose}
               style={{ padding: space.sm }}
             >
-              <Ionicons name="close" size={24} color="white" />
+              <Icon name="close" size={24} color="white" />
             </Pressable>
             <View style={{ flexDirection: "row" }}>
               <Pressable
@@ -903,7 +903,7 @@ export function YearReviewStory({
                 }}
                 style={{ padding: space.sm }}
               >
-                <Ionicons
+                <Icon
                   name={paused ? "play" : "pause"}
                   size={20}
                   color="white"
@@ -920,7 +920,7 @@ export function YearReviewStory({
                 }}
                 style={{ padding: space.sm }}
               >
-                <Ionicons
+                <Icon
                   name={muted ? "volume-mute" : "volume-medium"}
                   size={20}
                   color="white"

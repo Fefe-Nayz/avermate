@@ -1,7 +1,7 @@
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon, type IconName } from "@/components/icon";
 import { Button, Card, Empty, Label, Loading, ProgressBar, Row, Section } from "@/components/ui";
 import { AverageValue } from "@/components/value";
 import { StatusPill } from "@/components/goal-status";
@@ -70,7 +70,9 @@ export default function GoalDetail() {
 
   const advice = plan.advice
     .map((item) => adviceText(item, { graph, scale, decimals }))
-    .filter((item): item is { icon: string; text: string } => item !== null);
+    .filter(
+      (item): item is { icon: IconName; text: string } => item !== null,
+    );
 
   const nextResults = plan.nextResults
     .filter((entry) => entry.achievable && !entry.alreadySecured)
@@ -96,7 +98,7 @@ export default function GoalDetail() {
               }}
               hitSlop={10}
             >
-              <Ionicons
+              <Icon
                 name="options-outline"
                 size={20}
                 color={palette.textMuted}
@@ -165,12 +167,13 @@ export default function GoalDetail() {
                     key={index}
                     style={{ flexDirection: "row", gap: space.md }}
                   >
-                    <Ionicons
-                      name={item.icon as never}
-                      size={17}
-                      color={palette.textFaint}
-                      style={{ marginTop: 2 }}
-                    />
+                    <View style={{ marginTop: 2 }}>
+                      <Icon
+                        name={item.icon}
+                        size={17}
+                        color={palette.textFaint}
+                      />
+                    </View>
                     <Text
                       style={[type.body, { flex: 1, color: palette.text }]}
                     >

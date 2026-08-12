@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   Card,
   Loading,
@@ -61,7 +61,7 @@ export function AdminSocialOverviewScreen() {
               first
               title={t("Reports")}
               leading={
-                <Ionicons
+                <Icon
                   name="flag-outline"
                   size={19}
                   color={palette.textMuted}
@@ -72,7 +72,7 @@ export function AdminSocialOverviewScreen() {
             <Row
               title={t("Groups")}
               leading={
-                <Ionicons
+                <Icon
                   name="people-circle-outline"
                   size={19}
                   color={palette.textMuted}

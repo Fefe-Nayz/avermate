@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   averageOverTime,
   consistency,
@@ -194,7 +194,7 @@ export default function SubjectDetail() {
               }}
               hitSlop={10}
             >
-              <Ionicons
+              <Icon
                 name="options-outline"
                 size={20}
                 color={palette.textMuted}
@@ -252,7 +252,7 @@ export default function SubjectDetail() {
               backgroundColor: palette.accentSoft,
             }}
           >
-            <Ionicons name="add" size={16} color={palette.text} />
+            <Icon name="add" size={16} color={palette.text} />
             <Text style={[type.callout, { color: palette.text }]}>
               {t("Add a grade here")}
             </Text>
@@ -290,7 +290,7 @@ export default function SubjectDetail() {
                   }}
                 >
                   <AverageValue ratio={impact.withoutValue} size="callout" />
-                  <Ionicons
+                  <Icon
                     name="arrow-forward"
                     size={13}
                     color={palette.textFaint}

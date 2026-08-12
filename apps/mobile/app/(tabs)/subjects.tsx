@@ -8,9 +8,10 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { resolveCustomAverage, type Subject } from "@avermate/core";
-import { Button, Card, Empty, Loading, Row, Section } from "@/components/ui";
+import { Heading,
+  Button, Card, Empty, Loading, Row, Section } from "@/components/ui";
 import { AverageValue, CoefficientTag } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { useYear } from "@/components/year-provider";
@@ -76,36 +77,31 @@ export default function Subjects() {
         />
       }
     >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={[type.display, { color: palette.text }]}>
-          {t("Subjects")}
-        </Text>
-        {yearId ? (
-          <Pressable
-            onPress={() => {
-              haptic("light");
-              router.push("/subject/new");
-            }}
-            hitSlop={10}
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: radius.pill,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: palette.accent,
-            }}
-          >
-            <Ionicons name="add" size={18} color={palette.accentText} />
-          </Pressable>
-        ) : null}
-      </View>
+      <Heading
+        icon="book-marked"
+        title={t("Subjects")}
+        action={
+          yearId ? (
+            <Pressable
+              onPress={() => {
+                haptic("light");
+                router.push("/subject/new");
+              }}
+              hitSlop={10}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: radius.pill,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: palette.accent,
+              }}
+            >
+              <Icon name="add" size={18} color={palette.accentText} />
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       <ScopeBar />
 
@@ -121,7 +117,7 @@ export default function Subjects() {
               router.push("/settings/averages");
             }}
           >
-            <Ionicons
+            <Icon
               name="options-outline"
               size={18}
               color={palette.textMuted}
@@ -135,7 +131,7 @@ export default function Subjects() {
             title={t("General average")}
             subtitle={t("{count} subjects", { count: graph.subjects.length })}
             leading={
-              <Ionicons
+              <Icon
                 name="analytics-outline"
                 size={19}
                 color={palette.textMuted}
@@ -164,9 +160,9 @@ export default function Subjects() {
               }
               leading={
                 average.isMain ? (
-                  <Ionicons name="star" size={18} color={palette.accent} />
+                  <Icon name="star" size={18} color={palette.accent} />
                 ) : (
-                  <Ionicons
+                  <Icon
                     name="calculator-outline"
                     size={18}
                     color={palette.textFaint}

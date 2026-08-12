@@ -10,10 +10,10 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon, type IconName } from "@/components/icon";
 import { haptic, type Tone } from "@/lib/haptics";
 import { useInteractionPreferences } from "@/lib/interaction-preferences";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { numeric, radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * The layout vocabulary.
@@ -112,25 +112,61 @@ export function Label({ children }: { children: string }) {
 
 export function Section({
   title,
+  icon,
+  description,
   action,
   children,
 }: {
   title?: string;
+  icon?: IconName;
+  description?: string;
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const palette = usePalette();
   return (
     <View style={{ gap: space.sm }}>
       {title || action ? (
         <View
           style={{
             flexDirection: "row",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "space-between",
+            gap: space.md,
             paddingHorizontal: space.xs,
           }}
         >
-          {title ? <Label>{title}</Label> : <View />}
+          <View
+            style={{
+              flex: 1,
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: space.sm,
+            }}
+          >
+            {icon ? (
+              <View style={{ marginTop: 2 }}>
+                <Icon name={icon} size={15} color={palette.textMuted} />
+              </View>
+            ) : null}
+            <View style={{ flex: 1, gap: 2 }}>
+              {title ? (
+                <Text
+                  style={[
+                    type.callout,
+                    { color: palette.text, fontWeight: "600" },
+                  ]}
+                >
+                  {title}
+                </Text>
+              ) : null}
+              {description ? (
+                <Text style={[type.footnote, { color: palette.textMuted }]}>
+                  {description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
           {action}
         </View>
       ) : null}
@@ -238,7 +274,7 @@ export function Row({
       </View>
       {trailing}
       {onPress || href ? (
-        <Ionicons
+        <Icon
           name="chevron-forward"
           size={16}
           color={palette.textFaint}
@@ -272,14 +308,16 @@ export function Button({
   loading = false,
   tone = "light",
   icon,
+  size = "default",
 }: {
   label: string;
   onPress: () => void;
-  variant?: "primary" | "secondary" | "ghost" | "destructive";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "destructive";
   disabled?: boolean;
   loading?: boolean;
   tone?: Tone;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
+  size?: "default" | "sm";
 }) {
   const palette = usePalette();
 
@@ -288,12 +326,14 @@ export function Button({
       ? palette.accent
       : variant === "secondary"
         ? palette.accentSoft
-        : "transparent";
+        : variant === "destructive"
+          ? palette.negative
+          : "transparent";
   const foreground =
-    variant === "primary"
+    variant === "primary" || variant === "destructive"
       ? palette.accentText
-      : variant === "destructive"
-        ? palette.negative
+      : variant === "ghost"
+        ? palette.textMuted
         : palette.text;
 
   return (
@@ -308,11 +348,12 @@ export function Button({
         alignItems: "center",
         justifyContent: "center",
         gap: space.sm,
-        minHeight: 52,
-        paddingHorizontal: space.lg,
-        borderRadius: radius.md,
+        minHeight: size === "sm" ? 38 : 46,
+        paddingHorizontal: size === "sm" ? space.md : space.lg,
+        borderRadius: 10,
+        borderCurve: "continuous" as const,
         backgroundColor: background,
-        borderWidth: variant === "ghost" ? StyleSheet.hairlineWidth : 0,
+        borderWidth: variant === "outline" ? StyleSheet.hairlineWidth : 0,
         borderColor: palette.border,
         opacity: disabled ? 0.4 : pressed ? 0.85 : 1,
       })}
@@ -320,9 +361,16 @@ export function Button({
       {loading ? (
         <ActivityIndicator size="small" color={foreground} />
       ) : icon ? (
-        <Ionicons name={icon} size={18} color={foreground} />
+        <Icon name={icon} size={size === "sm" ? 15 : 17} color={foreground} />
       ) : null}
-      <Text style={[type.heading, { color: foreground }]}>{label}</Text>
+      <Text
+        style={[
+          size === "sm" ? type.callout : type.heading,
+          { color: foreground, fontWeight: "600" },
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -333,7 +381,7 @@ export function Empty({
   body,
   action,
 }: {
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   title: string;
   body?: string;
   action?: ReactNode;
@@ -344,11 +392,16 @@ export function Empty({
       style={{
         alignItems: "center",
         gap: space.md,
-        paddingVertical: space.xxxl,
+        paddingVertical: space.xxl,
         paddingHorizontal: space.lg,
+        borderRadius: radius.lg,
+        borderCurve: "continuous",
+        borderWidth: 1,
+        borderStyle: "dashed",
+        borderColor: palette.border,
       }}
     >
-      <Ionicons name={icon} size={28} color={palette.textFaint} />
+      <Icon name={icon} size={26} color={palette.textFaint} />
       <Text style={[type.heading, { color: palette.text, textAlign: "center" }]}>
         {title}
       </Text>
@@ -363,6 +416,157 @@ export function Empty({
         </Text>
       ) : null}
       {action}
+    </View>
+  );
+}
+
+/**
+ * A screen heading the way the web draws one: a soft accent square holding
+ * the icon, the title beside it, a supporting line underneath, and room for
+ * one action on the right.
+ */
+export function Heading({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: IconName;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  const palette = usePalette();
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: space.md,
+        paddingTop: space.sm,
+      }}
+    >
+      <View
+        style={{
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "flex-start",
+          gap: space.md,
+        }}
+      >
+        <View
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 10,
+            borderCurve: "continuous",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: palette.accentSoft,
+          }}
+        >
+          <Icon name={icon} size={19} color={palette.accent} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[type.title, { color: palette.text }]}>{title}</Text>
+          {description ? (
+            <Text style={[type.footnote, { color: palette.textMuted }]}>
+              {description}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      {action}
+    </View>
+  );
+}
+
+/** A small pill, the web's badge vocabulary. */
+export function Badge({
+  label,
+  icon,
+  toneColor = "neutral",
+}: {
+  label: string;
+  icon?: IconName;
+  toneColor?: "neutral" | "accent" | "positive" | "negative";
+}) {
+  const palette = usePalette();
+  const color =
+    toneColor === "accent"
+      ? palette.accent
+      : toneColor === "positive"
+        ? palette.positive
+        : toneColor === "negative"
+          ? palette.negative
+          : palette.textMuted;
+  const background =
+    toneColor === "accent"
+      ? palette.accentSoft
+      : toneColor === "neutral"
+        ? palette.surface
+        : color + "22";
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        alignSelf: "flex-start",
+        paddingHorizontal: space.sm,
+        paddingVertical: 3,
+        borderRadius: radius.pill,
+        backgroundColor: background,
+        borderWidth: toneColor === "neutral" ? StyleSheet.hairlineWidth : 0,
+        borderColor: palette.border,
+      }}
+    >
+      {icon ? <Icon name={icon} size={11} color={color} /> : null}
+      <Text style={[type.label, { color, textTransform: "none" }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/** A bordered figure card, the web's stat tile: label above, number below. */
+export function StatTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  const palette = usePalette();
+  return (
+    <View
+      style={{
+        flex: 1,
+        gap: 4,
+        padding: space.md,
+        borderRadius: radius.lg,
+        borderCurve: "continuous",
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: palette.border,
+        backgroundColor: palette.surface,
+      }}
+    >
+      <Text style={[type.label, { color: palette.textFaint }]}>{label}</Text>
+      <Text
+        style={[type.title, numeric, { color: palette.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+      {hint ? (
+        <Text style={[type.footnote, { color: palette.textMuted }]}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -433,7 +637,7 @@ export function ChipRail({
   activeId,
   onSelect,
 }: {
-  items: Array<{ id: string; label: string; icon?: keyof typeof Ionicons.glyphMap }>;
+  items: Array<{ id: string; label: string; icon?: IconName }>;
   activeId: string;
   onSelect: (id: string) => void;
 }) {
@@ -463,22 +667,25 @@ export function ChipRail({
               minHeight: 38,
               paddingHorizontal: space.md,
               borderRadius: radius.pill,
-              backgroundColor: active ? palette.accent : palette.surface,
+              backgroundColor: active ? palette.accentSoft : palette.surface,
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: active ? palette.accent : palette.border,
             }}
           >
             {item.icon ? (
-              <Ionicons
+              <Icon
                 name={item.icon}
                 size={14}
-                color={active ? palette.accentText : palette.textMuted}
+                color={active ? palette.accent : palette.textMuted}
               />
             ) : null}
             <Text
               style={[
                 type.callout,
-                { color: active ? palette.accentText : palette.textMuted },
+                {
+                  color: active ? palette.accent : palette.textMuted,
+                  fontWeight: active ? "600" : "500",
+                },
               ]}
             >
               {item.label}

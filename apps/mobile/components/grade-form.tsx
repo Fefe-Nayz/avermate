@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import type { Grade, Subject } from "@avermate/core";
 import { FULL_YEAR_PERIOD_ID } from "@avermate/core";
 import { Button, Card, Label, Screen } from "@/components/ui";
@@ -378,7 +378,7 @@ export function GradeForm({
                         hitSlop={10}
                         style={{ paddingTop: space.lg }}
                       >
-                        <Ionicons
+                        <Icon
                           name="close-circle"
                           size={22}
                           color={palette.textFaint}
@@ -608,7 +608,7 @@ function PreviewRow({
         {label}
       </Text>
       <AverageValue ratio={before} size="callout" />
-      <Ionicons name="arrow-forward" size={13} color={palette.textFaint} />
+      <Icon name="arrow-forward" size={13} color={palette.textFaint} />
       <AverageValue ratio={after} size="callout" colored />
       <View
         style={{

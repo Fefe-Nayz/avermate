@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   averageOverTime,
   dayRange,
@@ -158,7 +158,7 @@ export default function Dashboard() {
               backgroundColor: palette.accent,
             }}
           >
-            <Ionicons name="add" size={16} color={palette.accentText} />
+            <Icon name="add" size={16} color={palette.accentText} />
             <Text style={[type.footnote, { color: palette.accentText, fontWeight: "600" }]}>
               {t("Add grade")}
             </Text>

@@ -1,7 +1,7 @@
 import { Alert } from "react-native";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   Card,
   Empty,
@@ -72,7 +72,7 @@ export function AdminSocialGroupsScreen() {
                     (group.state === "frozen" ? ` · ${t("On hold")}` : "")
                   }
                   leading={
-                    <Ionicons
+                    <Icon
                       name={
                         group.state === "frozen"
                           ? "snow-outline"

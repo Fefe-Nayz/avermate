@@ -2,9 +2,10 @@ import { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { gradeRatio, type Grade } from "@avermate/core";
-import { Button, Card, Empty, Label, Loading, Row } from "@/components/ui";
+import { Heading,
+  Button, Card, Empty, Label, Loading, Row } from "@/components/ui";
 import { PointsValue, ResultBadge } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { TextField } from "@/components/field";
@@ -83,34 +84,29 @@ export default function Grades() {
         />
       }
     >
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={[type.display, { color: palette.text }]}>
-          {t("Grades")}
-        </Text>
-        <Pressable
-          onPress={() => {
-            haptic("light");
-            router.push("/grade/new");
-          }}
-          hitSlop={10}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: radius.pill,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: palette.accent,
-          }}
-        >
-          <Ionicons name="add" size={18} color={palette.accentText} />
-        </Pressable>
-      </View>
+      <Heading
+        icon="list-checks"
+        title={t("Grades")}
+        action={
+          <Pressable
+            onPress={() => {
+              haptic("light");
+              router.push("/grade/new");
+            }}
+            hitSlop={10}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: radius.pill,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: palette.accent,
+            }}
+          >
+            <Icon name="add" size={18} color={palette.accentText} />
+          </Pressable>
+        }
+      />
 
       <ScopeBar />
 

@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import {
   Button,
   Card,
@@ -106,7 +106,7 @@ export default function SocialNotifications() {
                       timeStyle: "short",
                     }).format(new Date(item.createdAt))}
                     leading={
-                      <Ionicons
+                      <Icon
                         name={icon}
                         size={18}
                         color={

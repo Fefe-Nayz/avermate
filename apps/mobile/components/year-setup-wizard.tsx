@@ -10,7 +10,7 @@ import {
 import * as Crypto from "expo-crypto";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import type { Subject } from "@avermate/core";
 import { DateField } from "@/components/date-field";
 import {
@@ -917,7 +917,7 @@ function SubjectsStep({
             hitSlop={10}
             onPress={() => router.push(`/subject/new?yearId=${yearId}&setup=1`)}
           >
-            <Ionicons name="add-circle" size={24} color={palette.accent} />
+            <Icon name="add-circle" size={24} color={palette.accent} />
           </Pressable>
         }
       >
@@ -1087,7 +1087,7 @@ function PeriodsStep({
                   )
                 }
               >
-                <Ionicons
+                <Icon
                   name="trash-outline"
                   size={19}
                   color={palette.negative}

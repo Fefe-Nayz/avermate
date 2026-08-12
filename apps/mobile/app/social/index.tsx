@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert, Share, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { SocialIdentity } from "@/components/social/social-ui";
 import { TextField } from "@/components/field";
 import {
@@ -187,7 +187,7 @@ export default function Social() {
                       : t("Shares nothing")
                   }
                   leading={
-                    <Ionicons
+                    <Icon
                       name={
                         friend.sharesSomething
                           ? "eye-outline"
@@ -224,7 +224,7 @@ export default function Social() {
               first
               title={t("Groups")}
               leading={
-                <Ionicons
+                <Icon
                   name="people-circle-outline"
                   size={19}
                   color={palette.textMuted}
@@ -236,7 +236,7 @@ export default function Social() {
               title={t("Sharing")}
               subtitle={t("What your friends may see")}
               leading={
-                <Ionicons
+                <Icon
                   name="lock-closed-outline"
                   size={19}
                   color={palette.textMuted}
@@ -247,7 +247,7 @@ export default function Social() {
             <Row
               title={t("Updates")}
               leading={
-                <Ionicons
+                <Icon
                   name="notifications-outline"
                   size={19}
                   color={palette.textMuted}
@@ -258,7 +258,7 @@ export default function Social() {
             <Row
               title={t("Blocked accounts")}
               leading={
-                <Ionicons
+                <Icon
                   name="ban-outline"
                   size={19}
                   color={palette.textMuted}

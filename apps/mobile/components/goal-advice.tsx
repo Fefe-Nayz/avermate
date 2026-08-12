@@ -1,4 +1,5 @@
 import type { GoalAdvice, SubjectGraph } from "@avermate/core";
+import type { IconName } from "@/components/icon";
 import { locale, t } from "@/lib/i18n";
 
 /**
@@ -12,7 +13,7 @@ import { locale, t } from "@/lib/i18n";
 export function adviceText(
   advice: GoalAdvice,
   context: { graph: SubjectGraph; scale: number; decimals: number },
-): { icon: string; text: string } | null {
+): { icon: IconName; text: string } | null {
   const { graph, scale, decimals } = context;
 
   const show = (ratio: number) =>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { haptic } from "@/lib/haptics";
 import { formatDate, formatDay, formatMonth, formatNumber, parseNumber } from "@/components/format";
 import { locale, t } from "@/lib/i18n";
@@ -127,11 +127,11 @@ export function DateField({
             paddingHorizontal: space.md,
           }}
         >
-          <Ionicons name="calendar-outline" size={18} color={palette.textFaint} />
+          <Icon name="calendar-outline" size={18} color={palette.textFaint} />
           <Text style={[type.body, { flex: 1, color: palette.text }]}>
             {sameDay(value, today) ? t("Today") : formatDate(value)}
           </Text>
-          <Ionicons
+          <Icon
             name={open ? "chevron-up" : "chevron-down"}
             size={16}
             color={palette.textFaint}
@@ -155,7 +155,7 @@ export function DateField({
               }}
             >
               <Pressable onPress={() => shift(-1)} hitSlop={12} style={{ padding: space.xs }}>
-                <Ionicons name="chevron-back" size={18} color={palette.textMuted} />
+                <Icon name="chevron-back" size={18} color={palette.textMuted} />
               </Pressable>
               <Text style={[type.callout, { color: palette.text }]}>
                 {month.toLocaleDateString(tag(locale()), {
@@ -164,7 +164,7 @@ export function DateField({
                 })}
               </Text>
               <Pressable onPress={() => shift(1)} hitSlop={12} style={{ padding: space.xs }}>
-                <Ionicons
+                <Icon
                   name="chevron-forward"
                   size={18}
                   color={palette.textMuted}

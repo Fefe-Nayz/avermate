@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { NativeSlider } from "@/components/native-controls";
 import { formatDate } from "@/components/format";
 import { useYear } from "@/components/year-provider";
@@ -87,11 +87,11 @@ export function ScopeBar() {
                 borderColor: open ? palette.accent : palette.border,
               }}
             >
-              <Ionicons name="school-outline" size={14} color={palette.textMuted} />
+              <Icon name="school-outline" size={14} color={palette.textMuted} />
               <Text style={[type.callout, { color: palette.text }]}>
                 {year?.name ?? "—"}
               </Text>
-              <Ionicons
+              <Icon
                 name={open ? "chevron-up" : "chevron-down"}
                 size={12}
                 color={palette.textFaint}
@@ -176,7 +176,7 @@ export function ScopeBar() {
             borderColor: timelineDate ? palette.accent : palette.border,
           }}
         >
-          <Ionicons
+          <Icon
             name="time-outline"
             size={14}
             color={timelineDate ? palette.accentText : palette.textMuted}
@@ -226,7 +226,7 @@ export function ScopeBar() {
                   {item.name}
                 </Text>
                 {active ? (
-                  <Ionicons name="checkmark" size={18} color={palette.accent} />
+                  <Icon name="checkmark" size={18} color={palette.accent} />
                 ) : null}
               </Pressable>
             );
@@ -247,7 +247,7 @@ export function ScopeBar() {
               borderTopColor: palette.hairline,
             }}
           >
-            <Ionicons name="add" size={18} color={palette.textMuted} />
+            <Icon name="add" size={18} color={palette.textMuted} />
             <Text style={[type.body, { color: palette.textMuted }]}>
               {t("Add a year")}
             </Text>
@@ -298,7 +298,7 @@ export function ScopeBar() {
               }}
               style={{ padding: space.xs }}
             >
-              <Ionicons name="close" size={20} color={palette.textMuted} />
+              <Icon name="close" size={20} color={palette.textMuted} />
             </Pressable>
           </View>
 
@@ -315,7 +315,7 @@ export function ScopeBar() {
               }
               style={{ opacity: selectedDay <= 0 ? 0.35 : 1, padding: space.xs }}
             >
-              <Ionicons name="remove" size={18} color={palette.textMuted} />
+              <Icon name="remove" size={18} color={palette.textMuted} />
             </Pressable>
             <View style={{ flex: 1 }}>
               <NativeSlider
@@ -341,7 +341,7 @@ export function ScopeBar() {
                 padding: space.xs,
               }}
             >
-              <Ionicons name="add" size={18} color={palette.textMuted} />
+              <Icon name="add" size={18} color={palette.textMuted} />
             </Pressable>
           </View>
 

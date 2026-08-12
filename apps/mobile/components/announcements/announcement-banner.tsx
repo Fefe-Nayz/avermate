@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { orpc, queryClient } from "@/lib/orpc";
@@ -61,7 +61,7 @@ export function AnnouncementBanner() {
           alignItems: "flex-start",
         }}
       >
-        <Ionicons name="megaphone-outline" size={19} color={tone} />
+        <Icon name="megaphone-outline" size={19} color={tone} />
         <View style={{ flex: 1, gap: 2 }}>
           <Text
             selectable
@@ -89,7 +89,7 @@ export function AnnouncementBanner() {
             })
           }
         >
-          <Ionicons name="close" size={20} color={palette.textFaint} />
+          <Icon name="close" size={20} color={palette.textFaint} />
         </Pressable>
       </View>
     </View>

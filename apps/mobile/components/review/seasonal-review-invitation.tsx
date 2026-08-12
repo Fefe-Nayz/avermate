@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Icon } from "@/components/icon";
 import { useQuery } from "@tanstack/react-query";
 import * as SecureStore from "expo-secure-store";
 import { useYear } from "@/components/year-provider";
@@ -101,7 +101,7 @@ export function SeasonalReviewInvitation() {
             backgroundColor: palette.accentSoft,
           }}
         >
-          <Ionicons name="sparkles" size={20} color={palette.text} />
+          <Icon name="sparkles" size={20} color={palette.text} />
         </View>
         <View style={{ flex: 1, gap: space.xs }}>
           <Text selectable style={[type.heading, { color: palette.text }]}>
@@ -130,7 +130,7 @@ export function SeasonalReviewInvitation() {
           }}
           style={{ padding: space.xs }}
         >
-          <Ionicons name="close" size={18} color={palette.textFaint} />
+          <Icon name="close" size={18} color={palette.textFaint} />
         </Pressable>
       </View>
       <Pressable
