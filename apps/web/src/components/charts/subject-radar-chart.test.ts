@@ -16,21 +16,23 @@ describe("the subjects radar", () => {
     // The ring is the previous app's, so the shape keeps its size — which is
     // the whole reason a radar is on this dashboard rather than another
     // ranked list beside the one already there.
-    expect(chart).toContain("const radiusRatio = width < 360 ? 0.64 : 0.72")
+    expect(chart).toContain("radiusRatio: width < 360 ? 0.64 : 0.72")
     expect(chart).toContain("LABEL_FONT_SIZE = 12")
-    expect(chart).toContain("LABEL_OFFSET = 8")
   })
 
-  test("a name is cut to the room it has, not to a fixed number", async () => {
+  test("a long name is pulled inwards rather than off the card", async () => {
     const chart = await source("./subject-radar-chart.tsx")
 
-    // A budget stepped by width alone cannot see how much room is left
-    // outside the ring, and the ring is bound by the shorter side of the box.
-    // On a card narrower than that ladder was tuned against, every label on
-    // the right ran off the edge.
-    expect(chart).toContain("const half = Math.min(width, height) / 2")
-    expect(chart).toContain("half - half * radiusRatio - LABEL_OFFSET")
-    expect(chart).toContain("Math.floor(room / (LABEL_FONT_SIZE")
+    // This is what the pre-migration chart did and why its names stayed
+    // inside: a label is centred on its point, so pulling it in by half its
+    // own width lands its far end the same short distance past the ring
+    // however long the name is. Cutting names harder solves the wrong half.
+    expect(chart).toContain(
+      "const labelOffset = LABEL_LEAD - longest * HALF_CHARACTER"
+    )
+    expect(chart).toContain(
+      "const maxLength = width < 300 ? 5 : width < 440 ? 9 : 12"
+    )
   })
 
   test("the rings say what they are worth", async () => {

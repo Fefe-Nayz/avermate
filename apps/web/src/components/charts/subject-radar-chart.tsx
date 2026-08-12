@@ -22,13 +22,11 @@ interface RadarPoint {
   value: number
 }
 
-/** Gap between the outer ring and a name. */
-const LABEL_OFFSET = 8
-/** Breathing room kept between the longest name and the edge of the card. */
-const LABEL_PADDING = 6
 const LABEL_FONT_SIZE = 12
-/** Advance width of a character, as a fraction of the font size. */
-const CHARACTER_WIDTH = 0.6
+/** How far past the ring the far end of a name is allowed to reach. */
+const LABEL_LEAD = 10
+/** Half the advance width of a character at that size. */
+const HALF_CHARACTER = 3
 
 /**
  * Turn a label to lie along the ring rather than across it.
@@ -71,29 +69,29 @@ export function SubjectRadarChart({ title }: { title: string }) {
     const domain = points.map((point) => point.subject)
 
     return defineChart({
-      chart: ({ width, height }) => {
-        // The ring is the previous app's, to the number.
-        const radiusRatio = width < 360 ? 0.64 : 0.72
-
-        // The budget for a name is not. A ladder stepped by width alone does
-        // not know how much room is actually left outside the ring, and the
-        // ring is bound by the *shorter* side of the box — so on a card
-        // narrower than the one that ladder was tuned against, every label on
-        // the right ran off the edge. This measures the gap instead: labels
-        // lie along the ring, so the room a name has is what the shorter side
-        // has left over, and a name is cut to fit it rather than to a number.
-        const half = Math.min(width, height) / 2
-        const room = half - half * radiusRatio - LABEL_OFFSET - LABEL_PADDING
-        const maxLength = Math.max(
-          5,
-          Math.floor(room / (LABEL_FONT_SIZE * CHARACTER_WIDTH))
+      chart: ({ width }) => {
+        const maxLength = width < 300 ? 5 : width < 440 ? 9 : 12
+        const shown = domain.map((label) =>
+          label.length > maxLength ? `${label.slice(0, maxLength)}…` : label
         )
+        const longest = shown.reduce(
+          (most, label) => Math.max(most, label.length),
+          0
+        )
+
+        // The trick from before the chart library changed, and the reason
+        // names used to stay inside the card: a label is centred on its point,
+        // so it is pulled *inwards* by half its own width. However long a name
+        // is, its far end lands the same short distance past the ring instead
+        // of running off the edge. Cutting names harder — which is what the
+        // fix here had become — was solving the wrong half of it.
+        const labelOffset = LABEL_LEAD - longest * HALF_CHARACTER
 
         return {
           marks: [
             polar({
               id: "main-subject-radar",
-              radiusRatio,
+              radiusRatio: width < 360 ? 0.64 : 0.72,
               angle: {
                 scale: scalePoint<string>().domain(domain),
                 wrap: true,
@@ -126,7 +124,7 @@ export function SubjectRadarChart({ title }: { title: string }) {
                   },
                   labelFill: "currentColor",
                   labelFontSize: LABEL_FONT_SIZE,
-                  labelOffset: LABEL_OFFSET,
+                  labelOffset,
                   labelRotate: ({ angle }) => labelRotation(angle),
                   stroke: "currentColor",
                   strokeOpacity: 0.2,
