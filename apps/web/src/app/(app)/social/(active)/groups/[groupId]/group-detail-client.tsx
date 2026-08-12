@@ -1,27 +1,34 @@
 "use client"
 
-import Link from "next/link"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  ArrowLeftIcon,
-  ChartNoAxesColumnIcon,
-  ScrollTextIcon,
-  Settings2Icon,
-  ShieldCheckIcon,
+  CrownIcon,
+  DoorOpenIcon,
+  GaugeIcon,
+  LinkIcon,
+  PencilIcon,
+  SnowflakeIcon,
+  Trash2Icon,
+  TrophyIcon,
   UsersRoundIcon,
+  UserXIcon,
 } from "lucide-react"
-import { useExtracted } from "next-intl"
-import { GroupConsentPanel } from "@/components/social/group-consent-panel"
-import { GroupManagementPanel } from "@/components/social/group-management-panel"
-import { GroupMembersPanel } from "@/components/social/group-members-panel"
-import { GroupPolicySummary } from "@/components/social/group-policy-summary"
-import { GroupStatsPanel } from "@/components/social/group-stats-panel"
+import { useExtracted, useLocale } from "next-intl"
+import { toast } from "sonner"
+import { ReportDialog } from "@/components/social/report-dialog"
+import { SecretLink } from "@/components/social/secret-link"
 import {
-  GroupTypeBadge,
-  PrivacyNote,
-  RoleBadge,
+  SharedAverage,
+  SocialActions,
   SocialCallout,
+  SocialEmpty,
   SocialHeading,
+  SocialIdentity,
+  SocialList,
+  SocialRow,
+  SocialSection,
 } from "@/components/social/social-ui"
 import {
   AlertDialog,
@@ -35,62 +42,133 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SocialMetric } from "@/components/social/group-policy-editor"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
 /**
- * One group.
- *
- * Four unrelated concerns — the agreement, the roster, the comparisons and the
- * controls — used to sit end to end on one page, so reaching the members list
- * meant scrolling past a policy editor. They are now four destinations, and a
- * group whose policy is pending shows only the decision that unblocks it.
+ * One group: the leaderboard, your own switch, and — for the owner — the
+ * link and the membership. The board sorts sharers by average and lists
+ * non-sharers after them, so declining to share is visible but not shameful.
  */
 export function GroupDetailClient({ groupId }: { groupId: string }) {
   const t = useExtracted()
+  const locale = useLocale()
+  const router = useRouter()
   const queryClient = useQueryClient()
   const detail = useQuery(
     orpc.social.groups.get.queryOptions({ input: { groupId } })
   )
-  const current = useQuery(
-    orpc.social.groups.policy.current.queryOptions({ input: { groupId } })
-  )
-  const withdraw = useMutation({
-    ...orpc.social.groups.policy.withdraw.mutationOptions(),
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.get.key({ input: { groupId } }),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.list.key(),
+      }),
+    ])
+  }
+
+  const setSharing = useMutation({
+    ...orpc.social.groups.setSharing.mutationOptions(),
+    onSuccess: refresh,
+  })
+  const invite = useMutation({
+    ...orpc.social.groups.invitations.create.mutationOptions(),
+    onSuccess: (invitation) => {
+      haptic("success")
+      setInviteUrl(
+        `${window.location.origin}/social/invitations/${invitation.token}`
+      )
+    },
+  })
+  const update = useMutation({
+    ...orpc.social.groups.update.mutationOptions(),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.groups.list.key(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.groups.get.key(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.groups.policy.current.key(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.groups.stats.key(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.groups.rankings.key(),
-        }),
-      ])
+      haptic("success")
+      setEditOpen(false)
+      await refresh()
+    },
+  })
+  const removeMember = useMutation({
+    ...orpc.social.groups.removeMember.mutationOptions(),
+    onSuccess: refresh,
+  })
+  const leave = useMutation({
+    ...orpc.social.groups.leave.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      await queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.list.key(),
+      })
+      router.push("/social/groups")
+    },
+    onError: () =>
+      toast.error(
+        t("Transfer or remove the other members first, or delete the group.")
+      ),
+  })
+  const destroy = useMutation({
+    ...orpc.social.groups.delete.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      await queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.list.key(),
+      })
+      router.push("/social/groups")
     },
   })
 
-  if (!detail.data || !current.data) {
+  if (detail.isLoading && !detail.isError) {
     return (
-      <div className="grid min-h-64 place-items-center">
-        <Spinner className="size-5 text-muted-foreground" />
+      <div className="flex justify-center py-16">
+        <Spinner />
       </div>
     )
   }
+  const group = detail.data
+  if (!group) {
+    return (
+      <SocialEmpty
+        icon={UsersRoundIcon}
+        title={t("This group could not be found")}
+        description={t("It may have been deleted, or you were removed.")}
+        action={
+          <Button
+            variant="outline"
+            onClick={() => router.push("/social/groups")}
+          >
+            {t("Back to groups")}
+          </Button>
+        }
+      />
+    )
+  }
 
-  const group = detail.data.group
-  const policy = current.data.policy
-  const consentRequired = current.data.membershipState !== "active"
+  const isOwner = group.viewer.role === "owner"
+  const frozen = group.state === "frozen"
+  const sharers = group.members
+    .filter((member) => member.average !== null)
+    .sort((left, right) => (right.average ?? 0) - (left.average ?? 0))
+  const silent = group.members.filter((member) => member.average === null)
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,122 +177,257 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
         title={group.name}
         description={group.description || undefined}
         action={
-          <Button variant="outline" render={<Link href="/social/groups" />}>
-            <ArrowLeftIcon /> {t("All groups")}
-          </Button>
+          isOwner && !frozen ? (
+            <Dialog
+              open={editOpen}
+              onOpenChange={(open) => {
+                setEditOpen(open)
+                if (open) {
+                  setName(group.name)
+                  setDescription(group.description)
+                }
+              }}
+            >
+              <DialogTrigger
+                render={<Button type="button" size="sm" variant="outline" />}
+              >
+                <PencilIcon /> {t("Edit")}
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("Edit the group")}</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-name">{t("Group name")}</Label>
+                    <Input
+                      id="edit-group-name"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      maxLength={100}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-description">
+                      {t("Description (optional)")}
+                    </Label>
+                    <Textarea
+                      id="edit-group-description"
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      maxLength={500}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    disabled={update.isPending || name.trim().length < 2}
+                    onClick={() =>
+                      update.mutate({
+                        groupId,
+                        name: name.trim(),
+                        description: description.trim(),
+                      })
+                    }
+                  >
+                    {update.isPending ? <Spinner /> : null}
+                    {t("Save")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : undefined
         }
       />
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <GroupTypeBadge type={group.type} />
-        <RoleBadge role={group.role} />
-        {consentRequired ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-caution/12 px-2 py-0.5 text-xs font-medium text-caution">
-            {t("Sharing paused")}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-positive/10 px-2 py-0.5 text-xs font-medium text-positive">
-            <ShieldCheckIcon className="size-3" aria-hidden />
-            {t("Policy accepted")}
-          </span>
-        )}
-      </div>
-
-      {consentRequired ? (
-        <GroupConsentPanel groupId={groupId} policy={policy} />
+      {frozen ? (
+        <SocialCallout tone="caution" title={t("This group is on hold")}>
+          {t(
+            "A moderator paused it after a report. Figures are hidden until the hold is lifted; nothing has been deleted."
+          )}
+        </SocialCallout>
       ) : (
-        <Tabs defaultValue="policy" className="gap-4">
-          <TabsList className="w-full overflow-x-auto @lg/main:w-fit">
-            <TabsTrigger value="policy">
-              <ScrollTextIcon /> {t("Policy")}
-            </TabsTrigger>
-            <TabsTrigger value="members">
-              <UsersRoundIcon /> {t("Members")}
-            </TabsTrigger>
-            <TabsTrigger value="stats">
-              <ChartNoAxesColumnIcon /> {t("Comparisons")}
-            </TabsTrigger>
-            <TabsTrigger value="manage">
-              <Settings2Icon /> {t("Manage")}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="policy" className="flex flex-col gap-4">
-            <GroupPolicySummary policy={policy} />
-            <SocialCallout
-              tone="positive"
-              title={t("Your sharing is active")}
-              action={
-                <AlertDialog>
-                  <AlertDialogTrigger
-                    render={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={withdraw.isPending}
-                      />
-                    }
-                  >
-                    {t("Withdraw sharing")}
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t("Withdraw from this policy?")}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t(
-                          "Your membership remains pending so you can review again later, but member details, statistics and rankings become unavailable now."
-                        )}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
-                      <AlertDialogAction
-                        variant="destructive"
-                        onClick={() => withdraw.mutate({ groupId })}
-                      >
-                        {t("Withdraw now")}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+        <SocialSection
+          icon={GaugeIcon}
+          title={t("Your average in this group")}
+          description={t(
+            "One switch. Off means the others see you in the list without a figure."
+          )}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm">
+              {group.viewer.shareAverage
+                ? t("Your general average is visible to this group.")
+                : t("Your general average is hidden from this group.")}
+            </span>
+            <Switch
+              checked={group.viewer.shareAverage}
+              disabled={setSharing.isPending}
+              onCheckedChange={(checked) =>
+                setSharing.mutate({ groupId, shareAverage: checked })
               }
-            >
-              {t(
-                "Withdrawal is immediate: your year link is cleared, ranking opt-ins turn off, and the group's aggregates are recalculated without you."
-              )}
-            </SocialCallout>
-          </TabsContent>
-
-          <TabsContent value="members">
-            <GroupMembersPanel
-              groupId={groupId}
-              groupRevision={group.revision}
-              viewerMembershipId={group.membershipId}
-              viewerRole={group.role}
-              members={detail.data.members}
+              aria-label={t("Share my average with this group")}
             />
-          </TabsContent>
-
-          <TabsContent value="stats">
-            <GroupStatsPanel
-              groupId={groupId}
-              fields={policy.fields}
-              rankingsEnabled={policy.rankingsEnabled}
-              viewerRankingOptIns={
-                current.data.viewerRankingOptIns as SocialMetric[]
-              }
-            />
-          </TabsContent>
-
-          <TabsContent value="manage">
-            <GroupManagementPanel group={group} policy={policy} />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </SocialSection>
       )}
 
-      <PrivacyNote />
+      <SocialSection
+        icon={TrophyIcon}
+        title={t("Leaderboard")}
+        description={
+          group.groupAverage !== null && sharers[0]
+            ? t("Group average: {value}", {
+                value: new Intl.NumberFormat(locale, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(
+                  group.groupAverage * (sharers[0].scale ?? 20)
+                ),
+              })
+            : t("Averages appear as members turn their switch on.")
+        }
+      >
+        {group.members.length ? (
+          <SocialList>
+            {[...sharers, ...silent].map((member, index) => (
+              <SocialRow
+                key={member.membershipId}
+                leading={
+                  member.average !== null ? (
+                    <span className="numeric w-6 text-center text-sm font-semibold text-muted-foreground">
+                      {index + 1}
+                    </span>
+                  ) : (
+                    <span className="w-6" aria-hidden />
+                  )
+                }
+                trailing={
+                  <div className="flex items-center gap-2">
+                    {member.average !== null ? (
+                      <SharedAverage
+                        ratio={member.average}
+                        scale={member.scale ?? 20}
+                        decimals={member.decimals ?? 2}
+                        locale={locale}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {t("Not shared")}
+                      </span>
+                    )}
+                    {isOwner && member.role !== "owner" && !frozen ? (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("Remove from group")}
+                        disabled={removeMember.isPending}
+                        onClick={() =>
+                          removeMember.mutate({
+                            groupId,
+                            membershipId: member.membershipId,
+                          })
+                        }
+                      >
+                        <UserXIcon />
+                      </Button>
+                    ) : null}
+                  </div>
+                }
+              >
+                <SocialIdentity
+                  name={member.name}
+                  handle={member.handle}
+                  avatarUrl={member.avatar}
+                  hint={member.role === "owner" ? t("Owner") : undefined}
+                />
+              </SocialRow>
+            ))}
+          </SocialList>
+        ) : null}
+      </SocialSection>
+
+      {!frozen ? (
+        <SocialSection
+          icon={LinkIcon}
+          title={t("Invite people")}
+          description={t(
+            "Anyone with the link joins directly. It works for a month or until revoked."
+          )}
+        >
+          <SocialActions>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={invite.isPending}
+              onClick={() => invite.mutate({ groupId })}
+            >
+              {invite.isPending ? <Spinner /> : <LinkIcon />}
+              {t("Create an invitation link")}
+            </Button>
+          </SocialActions>
+          {inviteUrl ? (
+            <SecretLink url={inviteUrl} label={t("Group invitation link")} />
+          ) : null}
+        </SocialSection>
+      ) : null}
+
+      <SocialActions>
+        {isOwner ? (
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={<Button type="button" size="sm" variant="outline" />}
+            >
+              <Trash2Icon /> {t("Delete group")}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("Delete this group?")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t(
+                    "The group and its memberships disappear for everyone. Nobody's grades are affected."
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => destroy.mutate({ groupId })}
+                >
+                  {t("Delete group")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={leave.isPending}
+            onClick={() => leave.mutate({ groupId })}
+          >
+            <DoorOpenIcon /> {t("Leave group")}
+          </Button>
+        )}
+        <ReportDialog groupId={groupId} />
+        {isOwner ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <CrownIcon className="size-3" aria-hidden />
+            {t("You own this group.")}
+          </span>
+        ) : null}
+        {frozen ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <SnowflakeIcon className="size-3" aria-hidden />
+            {t("On hold")}
+          </span>
+        ) : null}
+      </SocialActions>
     </div>
   )
 }

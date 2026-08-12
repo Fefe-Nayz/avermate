@@ -45,11 +45,6 @@ const routes = [
     query: "admin.socialReports.queryOptions",
   },
   {
-    page: "../app/(app)/admin/social/audit/page.tsx",
-    client: "../app/(app)/admin/social/audit/social-audit-client.tsx",
-    query: "admin.socialAudit.queryOptions",
-  },
-  {
     page: "../app/(app)/admin/announcements/page.tsx",
     client: "../app/(app)/admin/announcements/admin-announcements-client.tsx",
     query: "admin.announcements.queryOptions",
@@ -113,7 +108,6 @@ describe("route-specific SSR prefetch", () => {
       announcements,
       socialGroups,
       socialReports,
-      socialAudit,
     ] = await Promise.all([
       source("../app/(app)/admin/layout.tsx"),
       source("./admin-data.ts"),
@@ -123,7 +117,6 @@ describe("route-specific SSR prefetch", () => {
       source("../app/(app)/admin/announcements/page.tsx"),
       source("../app/(app)/admin/social/groups/page.tsx"),
       source("../app/(app)/admin/social/reports/page.tsx"),
-      source("../app/(app)/admin/social/audit/page.tsx"),
     ])
 
     expect(layout).not.toContain('"use client"')
@@ -140,7 +133,6 @@ describe("route-specific SSR prefetch", () => {
       announcements,
       socialGroups,
       socialReports,
-      socialAudit,
     ]) {
       expect(page.indexOf("requireServerAdmin()")).toBeLessThan(
         page.indexOf("fetchQuery")

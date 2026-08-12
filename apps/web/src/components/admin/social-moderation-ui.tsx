@@ -8,7 +8,7 @@ import {
   SearchCheckIcon,
   SnowflakeIcon,
 } from "lucide-react"
-import { useSocialLabels } from "@/components/social/social-ui"
+import { useSocialLabels } from "@/components/social/social-labels"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 

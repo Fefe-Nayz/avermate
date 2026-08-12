@@ -9,14 +9,11 @@ export default async function AdminSocialReportsPage() {
   const queryClient = createServerQueryClient()
   const orpc = getServerOrpc()
 
-  await Promise.all([
-    queryClient.fetchQuery(
-      orpc.admin.socialReports.queryOptions({
-        input: INITIAL_ADMIN_SOCIAL_REPORTS_INPUT,
-      })
-    ),
-    queryClient.fetchQuery(orpc.admin.feedbackAssignees.queryOptions()),
-  ])
+  await queryClient.fetchQuery(
+    orpc.admin.socialReports.queryOptions({
+      input: INITIAL_ADMIN_SOCIAL_REPORTS_INPUT,
+    })
+  )
 
   return (
     <HydrateClient queryClient={queryClient}>

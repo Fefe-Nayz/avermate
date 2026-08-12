@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { FlagIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
@@ -23,11 +23,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
-type ReportSource =
-  | "friendship"
-  | "friend_request"
-  | "group"
-  | "group_membership"
 type ReportCategory =
   | "harassment"
   | "privacy"
@@ -36,21 +31,20 @@ type ReportCategory =
   | "other"
 
 /**
- * Reporting something.
+ * Reporting a person or a group.
  *
  * The one instruction that matters — do not paste grades into a moderation
- * queue — used to sit in the dialog's subtitle where it is read once and then
- * scrolled past. It sits beside the text box instead, where the mistake would
- * actually be made.
+ * queue — sits beside the text box, where the mistake would actually be made.
  */
 export function ReportDialog({
-  source,
-  sourceId,
+  targetUserId,
+  groupId,
 }: {
-  source: ReportSource
-  sourceId: string
+  targetUserId?: string
+  groupId?: string
 }) {
   const t = useExtracted()
+  const formId = useId()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [category, setCategory] = useState<ReportCategory>("harassment")
@@ -86,11 +80,9 @@ export function ReportDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="space-y-2">
-            <Label htmlFor={`report-category-${sourceId}`}>
-              {t("Category")}
-            </Label>
+            <Label htmlFor={`report-category-${formId}`}>{t("Category")}</Label>
             <SelectControl
-              id={`report-category-${sourceId}`}
+              id={`report-category-${formId}`}
               value={category}
               onValueChange={(value) => setCategory(value as ReportCategory)}
               options={[
@@ -103,11 +95,11 @@ export function ReportDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`report-message-${sourceId}`}>
+            <Label htmlFor={`report-message-${formId}`}>
               {t("What happened?")}
             </Label>
             <Textarea
-              id={`report-message-${sourceId}`}
+              id={`report-message-${formId}`}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               minLength={10}
@@ -134,8 +126,8 @@ export function ReportDialog({
             disabled={create.isPending || message.trim().length < 10}
             onClick={() =>
               create.mutate({
-                source,
-                sourceId,
+                targetUserId,
+                groupId,
                 category,
                 message: message.trim(),
               })

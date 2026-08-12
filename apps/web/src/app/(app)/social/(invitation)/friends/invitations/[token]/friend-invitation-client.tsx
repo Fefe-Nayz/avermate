@@ -1,129 +1,108 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { UserRoundCheckIcon, UserRoundPlusIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { LinkIcon, UserRoundPlusIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
-import { PageMeta } from "@/components/shell/page-chrome"
-import { ProfilePreview } from "@/components/social/profile-preview"
+import { toast } from "sonner"
 import {
-  PrivacyNote,
-  SocialCallout,
-  SocialFlow,
-  SocialHeading,
-  SocialOutcome,
+  SocialEmpty,
+  SocialIdentity,
+  SocialSection,
 } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
-type InvitationPreview = {
-  invitationId: string
-  expiresAt: Date
-  profile: { displayName: string | null; avatar: string | null }
-}
-
-export function FriendInvitationClient({
-  token,
-  preview,
-}: {
-  token: string
-  preview: InvitationPreview
-}) {
+/**
+ * Someone handed over a link. Show who is asking, then one button. There is
+ * no consent document any more: accepting a friend means your sharing locks
+ * apply to them, nothing else.
+ */
+export function FriendInvitationClient({ token }: { token: string }) {
   const t = useExtracted()
-  const queryClient = useQueryClient()
-  const [accepted, setAccepted] = useState(false)
+  const router = useRouter()
+  const preview = useQuery({
+    ...orpc.social.friends.invitations.preview.queryOptions({
+      input: { token },
+    }),
+    retry: false,
+  })
   const accept = useMutation({
     ...orpc.social.friends.invitations.accept.mutationOptions(),
-    onSuccess: async () => {
+    onSuccess: (result) => {
       haptic("success")
-      setAccepted(true)
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.friends.list.key(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.friends.requests.key(),
-        }),
-      ])
+      toast.success(t("You are now friends."))
+      router.push(
+        result.friendshipId
+          ? `/social/friends/${result.friendshipId}`
+          : "/social"
+      )
     },
+    onError: () => toast.error(t("This invitation can no longer be used.")),
   })
 
-  useEffect(() => {
-    window.history.replaceState(window.history.state, "", "/social/friends")
-  }, [])
-
-  if (accepted) {
+  if (preview.isLoading) {
     return (
-      <SocialFlow>
-        <PageMeta title={t("Private friend invitation")} />
-        <SocialOutcome
-          tone="positive"
-          icon={UserRoundCheckIcon}
-          title={t("You are now connected")}
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    )
+  }
+  const data = preview.data
+  if (!data) {
+    return (
+      <div className="mx-auto w-full max-w-md py-10">
+        <SocialEmpty
+          icon={LinkIcon}
+          title={t("This invitation is no longer valid")}
+          description={t("It may have expired, been revoked, or already used.")}
           action={
-            <Button render={<Link href="/social/friends" />}>
+            <Button variant="outline" onClick={() => router.push("/social")}>
               {t("Go to friends")}
             </Button>
           }
-        >
-          {t(
-            "Nothing is shared yet. Each of you still decides, field by field, what the other receives."
-          )}
-        </SocialOutcome>
-      </SocialFlow>
+        />
+      </div>
     )
   }
 
   return (
-    <>
-      <PageMeta
-        title={t("Private friend invitation")}
-        backHref="/social/friends"
-      />
-      <SocialFlow>
-        <SocialHeading
-          icon={UserRoundPlusIcon}
-          title={t("A private friend invitation")}
-          description={t(
-            "Someone sent you a one-time link. Here is everything they currently share."
-          )}
+    <div className="mx-auto w-full max-w-md py-10">
+      <SocialSection
+        icon={UserRoundPlusIcon}
+        title={t("Friend invitation")}
+        description={t("Becoming friends shares only what each of you unlocked.")}
+      >
+        <SocialIdentity
+          name={data.inviter.name}
+          handle={data.inviter.handle}
+          avatarUrl={data.inviter.avatar}
         />
-
-        <ProfilePreview
-          profile={preview.profile}
-          audienceLabel={t("The person who invited you")}
-        />
-
-        <SocialCallout tone="positive" title={t("What accepting does")}>
-          {t(
-            "It creates a mutual connection and nothing else. No profile field becomes visible by itself, and either of you can remove or block the other immediately."
-          )}
-        </SocialCallout>
-
-        {accept.error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {t("This invitation is unavailable or was already used.")}
+        {data.self ? (
+          <p className="text-sm text-muted-foreground">
+            {t("This is your own invitation link — send it to someone else.")}
           </p>
-        ) : null}
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" render={<Link href="/social/friends" />}>
-            {t("Not now")}
-          </Button>
+        ) : data.alreadyFriends ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              {t("You are already friends.")}
+            </p>
+            <Button variant="outline" onClick={() => router.push("/social")}>
+              {t("Go to friends")}
+            </Button>
+          </div>
+        ) : (
           <Button
             disabled={accept.isPending}
             onClick={() => accept.mutate({ token })}
           >
-            {accept.isPending ? <Spinner /> : null}
-            {t("Accept friendship")}
+            {accept.isPending ? <Spinner /> : <UserRoundPlusIcon />}
+            {t("Accept and become friends")}
           </Button>
-        </div>
-
-        <PrivacyNote />
-      </SocialFlow>
-    </>
+        )}
+      </SocialSection>
+    </div>
   )
 }

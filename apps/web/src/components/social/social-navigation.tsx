@@ -4,55 +4,32 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BellIcon,
-  ContactRoundIcon,
   ShieldCheckIcon,
   UserRoundIcon,
   UsersRoundIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
-import { useSocialAccess } from "@/hooks/use-social-access"
 import { cn } from "@/lib/utils"
 
 /**
- * Where you are in social.
- *
- * A rail on a wide screen and a scrolling row of pills on a phone — the same
- * arrangement settings and administration use, because these are the same kind
- * of thing. The section used to show the pill row at every width, which on a
- * desktop pinned five destinations into a strip across the top and left the
- * width beside it empty.
+ * Where you are in social: friends, groups, your locks, and what happened.
+ * A rail on a wide screen and a scrolling row of pills on a phone — one
+ * component, so the two layouts cannot drift apart.
  */
 export function SocialNavigation() {
   const pathname = usePathname()
   const t = useExtracted()
-  const { canAccessFriends } = useSocialAccess()
 
   const items = [
-    {
-      href: "/social",
-      label: t("Overview"),
-      icon: ContactRoundIcon,
-      exact: true,
-    },
-    ...(canAccessFriends
-      ? [{ href: "/social/friends", label: t("Friends"), icon: UserRoundIcon }]
-      : []),
+    { href: "/social", label: t("Friends"), icon: UserRoundIcon, exact: true },
     { href: "/social/groups", label: t("Groups"), icon: UsersRoundIcon },
-    ...(canAccessFriends
-      ? [
-          {
-            href: "/social/profile",
-            label: t("Sharing"),
-            icon: ShieldCheckIcon,
-          },
-        ]
-      : []),
+    { href: "/social/sharing", label: t("Sharing"), icon: ShieldCheckIcon },
     { href: "/social/notifications", label: t("Updates"), icon: BellIcon },
   ]
 
   const isActive = (item: (typeof items)[number]) =>
     "exact" in item && item.exact
-      ? pathname === item.href
+      ? pathname === item.href || pathname.startsWith("/social/friends")
       : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
   return (

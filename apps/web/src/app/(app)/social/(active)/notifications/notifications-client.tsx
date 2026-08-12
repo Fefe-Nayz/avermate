@@ -1,53 +1,38 @@
 "use client"
 
-import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   BellIcon,
   CheckCheckIcon,
-  LinkIcon,
   UserRoundCheckIcon,
   UserRoundPlusIcon,
+  UserXIcon,
   UsersRoundIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { PageMeta } from "@/components/shell/page-chrome"
 import {
-  PrivacyNote,
   SocialEmpty,
   SocialHeading,
   SocialList,
   SocialRow,
-  SocialSection,
 } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { orpc } from "@/lib/orpc"
-import {
-  INITIAL_SOCIAL_NOTIFICATIONS_INPUT,
-  socialNotificationsInput,
-} from "@/lib/social-query-inputs"
 
 /**
- * What happened while you were away.
- *
- * Every update used to arrive as the same bell in the same grey circle, so a
- * guardian decision looked exactly like a group join. The icon now says which
- * kind of thing happened, and unread items carry the accent — the only
- * distinction the old list drew was a border almost nobody would notice.
+ * What happened while you were away. The icon says which kind of thing
+ * happened; unread items carry the accent.
  */
 export function NotificationsClient() {
   const t = useExtracted()
   const queryClient = useQueryClient()
   const [unreadOnly, setUnreadOnly] = useState(false)
   const notifications = useQuery(
-    orpc.social.notifications.list.queryOptions({
-      input: unreadOnly
-        ? socialNotificationsInput(true)
-        : INITIAL_SOCIAL_NOTIFICATIONS_INPUT,
-    })
+    orpc.social.notifications.list.queryOptions({ input: { unreadOnly } })
   )
   const refresh = () =>
     queryClient.invalidateQueries({
@@ -62,70 +47,62 @@ export function NotificationsClient() {
     onSuccess: refresh,
   })
 
-  function describe(kind: string) {
+  function describe(kind: string, params: Record<string, string>) {
     switch (kind) {
-      case "friend_request.received":
+      case "friend_request":
         return {
           icon: UserRoundPlusIcon,
           label: t("You received a friend request."),
         }
-      case "friend_request.accepted":
+      case "friend_accept":
         return {
           icon: UserRoundCheckIcon,
-          label: t("A friend request was accepted."),
+          label: t("Your friend request was accepted."),
         }
-      case "friend_invitation.accepted":
-        return {
-          icon: LinkIcon,
-          label: t("A private friend invitation was accepted."),
-        }
-      case "group.member_joined":
+      case "group_joined":
         return {
           icon: UsersRoundIcon,
-          label: t("A member joined a private group."),
+          label: params.groupName
+            ? t("Someone joined {groupName}.", { groupName: params.groupName })
+            : t("Someone joined your group."),
         }
-      case "guardian_consent.accepted":
+      case "group_removed":
         return {
-          icon: UserRoundCheckIcon,
-          label: t("Guardian approval was recorded."),
-        }
-      case "guardian_consent.declined":
-        return {
-          icon: UserRoundCheckIcon,
-          label: t("A guardian request was declined."),
+          icon: UserXIcon,
+          label: params.groupName
+            ? t("You were removed from {groupName}.", {
+                groupName: params.groupName,
+              })
+            : t("You were removed from a group."),
         }
       default:
-        return {
-          icon: BellIcon,
-          label: t("A private social update is available."),
-        }
+        return { icon: BellIcon, label: t("A social update is available.") }
     }
   }
 
   function href(entityType: string, entityId: string | null) {
     if (entityType === "group" && entityId) return `/social/groups/${entityId}`
-    if (entityType === "guardian_consent") return "/settings/social"
-    return "/social/friends"
+    return "/social"
   }
 
   const unread = notifications.data?.filter((item) => !item.readAt).length ?? 0
 
   return (
     <>
-      <PageMeta title={t("Social updates")} backHref="/social" />
+      <PageMeta title={t("Updates")} backHref="/social" />
       <div className="flex flex-col gap-4">
         <SocialHeading
           icon={BellIcon}
           title={t("Updates")}
-          description={t(
-            "Only allow-listed event descriptions appear here. An update never embeds a grade, an account email or private report text."
-          )}
+          description={t("Requests, joins, and moderation outcomes.")}
           action={
-            unread ? (
+            unread > 0 ? (
               <Button
+                type="button"
+                size="sm"
                 variant="outline"
                 disabled={markAll.isPending}
-                onClick={() => markAll.mutate(undefined)}
+                onClick={() => markAll.mutate({})}
               >
                 <CheckCheckIcon /> {t("Mark all read")}
               </Button>
@@ -133,89 +110,79 @@ export function NotificationsClient() {
           }
         />
 
-        <SocialSection
-          icon={BellIcon}
-          title={
-            unread
-              ? t("{count} unread", { count: String(unread) })
-              : t("All caught up")
-          }
-          action={
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              {t("Unread only")}
-              <Switch checked={unreadOnly} onCheckedChange={setUnreadOnly} />
-            </label>
-          }
-          bodyClassName={
-            notifications.data?.length ? "p-0 px-4 py-1" : undefined
-          }
-        >
-          {notifications.data?.length ? (
-            <SocialList>
-              {notifications.data.map((notification) => {
-                const { icon: Icon, label } = describe(notification.kind)
-                const unreadItem = !notification.readAt
-                return (
-                  <SocialRow key={notification.id}>
-                    <Link
-                      href={href(
-                        notification.entityType,
-                        notification.entityId
-                      )}
-                      className="flex items-center gap-3"
-                      onClick={() => {
-                        if (unreadItem) {
-                          markRead.mutate({ notificationId: notification.id })
-                        }
-                      }}
-                    >
-                      <span
-                        className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-full",
-                          unreadItem
-                            ? "bg-primary/12 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        <Icon className="size-4" aria-hidden />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            "block text-sm",
-                            unreadItem
-                              ? "font-medium"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {label}
-                        </span>
-                      </span>
-                      {unreadItem ? (
-                        <span
-                          className="size-2 shrink-0 rounded-full bg-primary"
-                          aria-label={t("Unread")}
-                        />
-                      ) : null}
-                    </Link>
-                  </SocialRow>
-                )
-              })}
-            </SocialList>
-          ) : (
-            <SocialEmpty
-              icon={BellIcon}
-              title={
-                unreadOnly ? t("Nothing unread") : t("No social updates yet")
-              }
-              description={t(
-                "Friend requests, accepted invitations and guardian decisions land here."
-              )}
-            />
-          )}
-        </SocialSection>
+        <label className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+          {t("Unread only")}
+          <Switch checked={unreadOnly} onCheckedChange={setUnreadOnly} />
+        </label>
 
-        <PrivacyNote />
+        {notifications.data?.length ? (
+          <SocialList>
+            {notifications.data.map((item) => {
+              const { icon: IconComponent, label } = describe(
+                item.kind,
+                item.safeParams
+              )
+              const isUnread = !item.readAt
+              return (
+                <SocialRow
+                  key={item.id}
+                  href={href(item.entityType, item.entityId)}
+                  leading={
+                    <span
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-full",
+                        isUnread
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <IconComponent className="size-4" aria-hidden />
+                    </span>
+                  }
+                  trailing={
+                    isUnread ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={markRead.isPending}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          markRead.mutate({ notificationId: item.id })
+                        }}
+                      >
+                        {t("Mark read")}
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  <p
+                    className={cn(
+                      "truncate text-sm",
+                      isUnread ? "font-medium" : "text-muted-foreground"
+                    )}
+                  >
+                    {item.actor?.name ? `${item.actor.name} — ${label}` : label}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Intl.DateTimeFormat(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(item.createdAt))}
+                  </p>
+                </SocialRow>
+              )
+            })}
+          </SocialList>
+        ) : (
+          <SocialEmpty
+            icon={BellIcon}
+            title={unreadOnly ? t("Nothing unread") : t("Nothing yet")}
+            description={t(
+              "Friend requests and group activity will appear here."
+            )}
+          />
+        )}
       </div>
     </>
   )

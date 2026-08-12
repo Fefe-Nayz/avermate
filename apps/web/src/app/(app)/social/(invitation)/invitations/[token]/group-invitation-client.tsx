@@ -1,178 +1,109 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { UsersRoundIcon } from "lucide-react"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { LinkIcon, UsersRoundIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { toast } from "sonner"
 import {
-  GroupPolicySummary,
-  type GroupPolicyView,
-} from "@/components/social/group-policy-summary"
-import {
-  GroupTypeBadge,
-  PrivacyNote,
   SocialCallout,
-  SocialFlow,
-  SocialHeading,
-  SocialOutcome,
+  SocialEmpty,
   SocialSection,
 } from "@/components/social/social-ui"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
+import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
-type InvitationPreview = {
-  invitationId: string
-  group: {
-    id: string
-    name: string
-    description: string
-    type: "friends" | "study_group" | "class"
-  }
-  policy: GroupPolicyView & { digest: string }
-  expiresAt: Date
-  ownerAlias?: string
-}
-
 /**
- * Deciding on a group invitation.
- *
- * Joining is deliberately two steps — a pending membership first, the field
- * choices second — and the old screen buried that in a paragraph while the
- * button said "Continue". The button now says what it does, so nobody accepts
- * a policy they thought they were only previewing.
+ * A group link. Who invited, what the room is, one button. Your average only
+ * appears to the group while your own switch is on — and it starts on, which
+ * the screen says out loud before you join.
  */
-export function GroupInvitationClient({
-  token,
-  preview,
-}: {
-  token: string
-  preview: InvitationPreview
-}) {
+export function GroupInvitationClient({ token }: { token: string }) {
   const t = useExtracted()
   const router = useRouter()
-  const queryClient = useQueryClient()
-  const [alias, setAlias] = useState("")
-  const [declined, setDeclined] = useState(false)
+  const preview = useQuery({
+    ...orpc.social.groups.invitations.preview.queryOptions({
+      input: { token },
+    }),
+    retry: false,
+  })
   const accept = useMutation({
     ...orpc.social.groups.invitations.accept.mutationOptions(),
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({
-        queryKey: orpc.social.groups.list.key(),
-      })
+    onSuccess: (result) => {
+      haptic("success")
+      toast.success(result.joined ? t("Welcome to the group.") : t("You are already a member."))
       router.push(`/social/groups/${result.groupId}`)
     },
+    onError: () => toast.error(t("This invitation can no longer be used.")),
   })
-  const decline = useMutation({
-    ...orpc.social.groups.invitations.decline.mutationOptions(),
-    onSuccess: () => setDeclined(true),
-  })
-  const busy = accept.isPending || decline.isPending
 
-  useEffect(() => {
-    window.history.replaceState(window.history.state, "", "/social/groups")
-  }, [])
-
-  if (declined) {
+  if (preview.isLoading) {
     return (
-      <SocialFlow>
-        <SocialOutcome
-          title={t("Invitation declined")}
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    )
+  }
+  const data = preview.data
+  if (!data) {
+    return (
+      <div className="mx-auto w-full max-w-md py-10">
+        <SocialEmpty
+          icon={LinkIcon}
+          title={t("This invitation is no longer valid")}
+          description={t("It may have expired, been revoked, or the group is gone.")}
           action={
-            <Button render={<Link href="/social/groups" />}>
-              {t("Back to groups")}
+            <Button
+              variant="outline"
+              onClick={() => router.push("/social/groups")}
+            >
+              {t("Go to groups")}
             </Button>
           }
-        >
-          {t(
-            "No membership and no sharing permission were created. Nothing about your account changed."
-          )}
-        </SocialOutcome>
-      </SocialFlow>
+        />
+      </div>
     )
   }
 
   return (
-    <SocialFlow className="max-w-3xl">
-      <SocialHeading
-        icon={UsersRoundIcon}
-        title={t("A private group invitation")}
-        description={t(
-          "Read the purpose, the audience, the requested figures and how far each one travels before deciding."
-        )}
-      />
-
+    <div className="mx-auto w-full max-w-md py-10">
       <SocialSection
         icon={UsersRoundIcon}
-        title={preview.group.name}
-        description={preview.group.description || undefined}
+        title={data.group.name}
+        description={data.group.description || undefined}
       >
-        <div className="flex flex-wrap gap-1.5">
-          <GroupTypeBadge type={preview.group.type} />
-          <Badge variant="outline">
-            {t("Responsible alias")}: {preview.ownerAlias || t("Group owner")}
-          </Badge>
-        </div>
-      </SocialSection>
-
-      <GroupPolicySummary policy={preview.policy} reconsentRequired />
-
-      <SocialCallout tone="caution" title={t("This is step one of two")}>
-        {t(
-          "Continuing creates a pending membership only. On the next screen you choose the optional figures and your academic year — nothing is derived from your account before that."
-        )}
-      </SocialCallout>
-
-      <SocialSection
-        title={t("Your alias in this group")}
-        description={t("Your account email and profile handle are never shown.")}
-      >
-        <div className="space-y-2">
-          <Label htmlFor="invitation-alias" className="sr-only">
-            {t("Your alias in this group")}
-          </Label>
-          <Input
-            id="invitation-alias"
-            value={alias}
-            onChange={(event) => setAlias(event.target.value)}
-            maxLength={60}
-            placeholder={t("Visible to participating group members")}
-          />
-        </div>
-      </SocialSection>
-
-      {accept.error || decline.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {t(
-            "This invitation is unavailable, expired, changed or linked to another account."
-          )}
+        <p className="text-sm text-muted-foreground">
+          {data.inviter
+            ? t("{name} invites you. {count} people are in.", {
+                name: data.inviter.name,
+                count: String(data.group.memberCount),
+              })
+            : t("{count} people are in.", { count: String(data.group.memberCount) })}
         </p>
-      ) : null}
-
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          variant="outline"
-          disabled={busy}
-          onClick={() => decline.mutate({ token })}
-        >
-          {decline.isPending ? <Spinner /> : null}
-          {t("Decline without joining")}
-        </Button>
-        <Button
-          disabled={busy || !alias.trim()}
-          onClick={() => accept.mutate({ token, alias: alias.trim() })}
-        >
-          {accept.isPending ? <Spinner /> : null}
-          {t("Continue to field choices")}
-        </Button>
-      </div>
-
-      <PrivacyNote />
-    </SocialFlow>
+        <SocialCallout title={t("What joining shares")}>
+          {t(
+            "Members compare general averages. Yours is visible on joining, and one switch inside the group hides it whenever you want."
+          )}
+        </SocialCallout>
+        {data.alreadyMember ? (
+          <Button
+            variant="outline"
+            onClick={() => router.push("/social/groups")}
+          >
+            {t("You are already a member — open groups")}
+          </Button>
+        ) : (
+          <Button
+            disabled={accept.isPending}
+            onClick={() => accept.mutate({ token })}
+          >
+            {accept.isPending ? <Spinner /> : <UsersRoundIcon />}
+            {t("Join the group")}
+          </Button>
+        )}
+      </SocialSection>
+    </div>
   )
 }

@@ -76,11 +76,6 @@ export const prepareAuthenticatedShell = cache(
         staleTime: COMMON_QUERY_STALE_TIME,
         retry: false,
       }),
-      queryClient.prefetchQuery({
-        ...orpc.social.eligibility.get.queryOptions(),
-        staleTime: COMMON_QUERY_STALE_TIME,
-        retry: false,
-      }),
       preferredSnapshotOptions
         ? queryClient.prefetchQuery(preferredSnapshotOptions)
         : Promise.resolve(),

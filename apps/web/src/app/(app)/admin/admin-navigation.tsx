@@ -65,7 +65,7 @@ export function AdminNavigation() {
       items: [
         {
           href: "/admin/social",
-          label: t("Rollout"),
+          label: t("Overview"),
           icon: ShieldIcon,
           exact: true,
         },
@@ -78,11 +78,6 @@ export function AdminNavigation() {
           href: "/admin/social/groups",
           label: t("Groups"),
           icon: UsersRoundIcon,
-        },
-        {
-          href: "/admin/social/audit",
-          label: t("Audit log"),
-          icon: ScrollTextIcon,
         },
       ],
     },

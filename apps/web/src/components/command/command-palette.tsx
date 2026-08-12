@@ -34,7 +34,6 @@ import { NAV_ENTRIES } from "@/lib/nav"
 import { useMaybeYear } from "@/components/year/year-provider"
 import { AverageValue } from "@/components/data/value"
 import { useIsAdmin } from "@/hooks/use-admin"
-import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
  * Search everything: screens, subjects, grades, goals, and a few commands.
@@ -55,7 +54,6 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const year = useMaybeYear()
   const { isAdmin } = useIsAdmin()
-  const { canAccess: canAccessSocial } = useSocialAccess()
   const { resolvedTheme, toggleTheme } = useThemeControl()
   const [open, setOpen] = useState(false)
 
@@ -139,8 +137,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
             <CommandGroup heading={t("Go to")}>
               {NAV_ENTRIES.filter(
                 (entry) =>
-                  (!entry.adminOnly || isAdmin) &&
-                  (!entry.socialOnly || canAccessSocial)
+                  !entry.adminOnly || isAdmin
               ).map((entry) => (
                 <CommandItem
                   key={entry.href}

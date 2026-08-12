@@ -86,7 +86,6 @@ describe("authenticated shell data", () => {
       "announcements.active",
       "admin.access",
       "snapshot.get",
-      "social.eligibility.get",
     ]) {
       expect(data).toContain(query)
     }

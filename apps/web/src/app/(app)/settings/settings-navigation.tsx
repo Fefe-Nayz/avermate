@@ -15,7 +15,6 @@ import {
   UsersRoundIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
  * Only the active-route highlight needs the browser.
@@ -27,7 +26,6 @@ import { useSocialAccess } from "@/hooks/use-social-access"
 export function SettingsNavigation() {
   const t = useExtracted()
   const pathname = usePathname()
-  const { canConfigure: canConfigureSocial } = useSocialAccess()
 
   const sections = [
     {
@@ -58,15 +56,6 @@ export function SettingsNavigation() {
       label: t("Integrations"),
       icon: PlugIcon,
     },
-    ...(canConfigureSocial
-      ? [
-          {
-            href: "/settings/social",
-            label: t("Social & sharing"),
-            icon: UsersRoundIcon,
-          },
-        ]
-      : []),
     { href: "/settings/about", label: t("About"), icon: InfoIcon },
   ]
 

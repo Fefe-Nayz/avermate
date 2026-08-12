@@ -29,9 +29,7 @@ export interface NavEntry {
   /** Shown in the mobile tab bar. */
   tab?: boolean
   adminOnly?: boolean
-  /** Hidden until the request-prefetched eligibility projection is active. */
-  socialOnly?: boolean
-}
+  /** Hidden until the request-prefetched eligibility projection is active. */}
 
 export const NAV_ENTRIES: NavEntry[] = [
   {
@@ -66,7 +64,6 @@ export const NAV_ENTRIES: NavEntry[] = [
     href: "/social",
     label: "Social",
     icon: UsersRoundIcon,
-    socialOnly: true,
   },
   {
     href: "/review",

@@ -33,7 +33,6 @@ import { haptic } from "@/lib/haptics"
 import { useIsAdmin } from "@/hooks/use-admin"
 import { useYear } from "@/components/year/year-provider"
 import { useYearSheet } from "@/components/shell/year-sheet"
-import { useSocialAccess } from "@/hooks/use-social-access"
 
 /**
  * The account hub.
@@ -54,7 +53,6 @@ export default function MorePage() {
   const { isAdmin } = useIsAdmin()
   const { year, years } = useYear()
   const yearSheet = useYearSheet()
-  const { canAccess: canAccessSocial } = useSocialAccess()
 
   const groups: Array<{
     label?: string
@@ -78,9 +76,7 @@ export default function MorePage() {
             ]
           : []),
         { icon: TargetIcon, label: t("Goals"), href: "/goals" },
-        ...(canAccessSocial
-          ? [{ icon: UsersRoundIcon, label: t("Social"), href: "/social" }]
-          : []),
+        { icon: UsersRoundIcon, label: t("Social"), href: "/social" },
         {
           icon: ChartNoAxesCombinedIcon,
           label: t("Insights"),

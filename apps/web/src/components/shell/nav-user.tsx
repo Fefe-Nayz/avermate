@@ -38,7 +38,6 @@ import { haptic } from "@/lib/haptics"
 import { initialsOf } from "@/lib/name"
 import { useFeedback } from "@/components/feedback/feedback-provider"
 import { AccountBadges } from "@/components/settings/account-badges"
-import { useSocialAccess } from "@/hooks/use-social-access"
 
 export function NavUser({ user }: { user: AuthenticatedUser }) {
   const t = useExtracted()
@@ -46,7 +45,6 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
   const { state } = useSidebar()
   const { resolvedTheme, toggleTheme } = useThemeControl()
   const feedback = useFeedback()
-  const { canAccess: canAccessSocial } = useSocialAccess()
 
   const signOut = async () => {
     haptic("light")
@@ -106,12 +104,10 @@ export function NavUser({ user }: { user: AuthenticatedUser }) {
                 <SparklesIcon className="size-4" />
                 {t("Year in review")}
               </DropdownMenuItem>
-              {canAccessSocial ? (
-                <DropdownMenuItem render={<Link href="/social" />}>
-                  <UsersRoundIcon className="size-4" />
-                  {t("Social")}
-                </DropdownMenuItem>
-              ) : null}
+              <DropdownMenuItem render={<Link href="/social" />}>
+                <UsersRoundIcon className="size-4" />
+                {t("Social")}
+              </DropdownMenuItem>
               <DropdownMenuItem render={<Link href="/announcements" />}>
                 <BellIcon className="size-4" />
                 {t("Announcements")}

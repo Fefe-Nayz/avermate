@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  FileClockIcon,
   FlagIcon,
   LayoutDashboardIcon,
   UsersRoundIcon,
@@ -30,11 +29,6 @@ export function SocialAdminNav() {
       href: "/admin/social/reports",
       label: t("Reports"),
       icon: FlagIcon,
-    },
-    {
-      href: "/admin/social/audit",
-      label: t("Audit trail"),
-      icon: FileClockIcon,
     },
   ]
 
