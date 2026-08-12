@@ -249,6 +249,11 @@ export function GradeForm({
     if (composite && components.length === 0) {
       found.components = t("Add at least one part.")
     }
+    // `rollUp` has nothing to roll up when every part is blank, and the
+    // payload would have fallen back to a zero — a grade of 0/20 nobody typed.
+    if (composite && components.length > 0 && effectiveValue === null) {
+      found.components = t("Fill in the result of at least one part.")
+    }
     if (effectiveValue !== null && effectiveValue > outOfNumber) {
       found.value = t("A grade cannot be worth more than its maximum.")
     }
@@ -376,150 +381,20 @@ export function GradeForm({
             error={errors.name}
           />
 
-          <Field orientation="horizontal">
-            <FieldLabel htmlFor="composite-toggle" className="flex-1">
-              {t("Made of several parts")}
-              <span className="block text-xs font-normal text-muted-foreground">
-                {t(
-                  "Written and oral, or several exercises with their own weights"
-                )}
-              </span>
-            </FieldLabel>
-            <Switch
-              id="composite-toggle"
-              checked={composite}
-              onCheckedChange={(checked) => {
-                haptic("selection")
-                setComposite(checked)
-                if (checked && components.length === 0) {
-                  setComponents([
-                    {
-                      key: crypto.randomUUID(),
-                      name: "",
-                      value: "",
-                      outOf: outOf,
-                      coefficient: "1",
-                    },
-                  ])
-                }
-              }}
-            />
-          </Field>
-
-          {composite ? (
-            <div className="flex flex-col gap-3">
-              {components.map((component, index) => (
-                <div
-                  key={component.key}
-                  className="rounded-xl border bg-card p-3"
-                >
-                  <div className="flex items-center gap-2 pb-2">
-                    <input
-                      value={component.name}
-                      onChange={(event) =>
-                        setComponents((current) =>
-                          current.map((item, position) =>
-                            position === index
-                              ? { ...item, name: event.target.value }
-                              : item
-                          )
-                        )
-                      }
-                      placeholder={t("Part {number}", {
-                        number: String(index + 1),
-                      })}
-                      className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t("Remove")}
-                      onClick={() => {
-                        haptic("light")
-                        setComponents((current) =>
-                          current.filter((_, position) => position !== index)
-                        )
-                      }}
-                    >
-                      <Trash2Icon className="size-4" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <NumberField
-                      label={t("Result")}
-                      value={component.value}
-                      onValueChange={(next) =>
-                        setComponents((current) =>
-                          current.map((item, position) =>
-                            position === index ? { ...item, value: next } : item
-                          )
-                        )
-                      }
-                    />
-                    <NumberField
-                      label={t("Out of")}
-                      value={component.outOf}
-                      onValueChange={(next) =>
-                        setComponents((current) =>
-                          current.map((item, position) =>
-                            position === index ? { ...item, outOf: next } : item
-                          )
-                        )
-                      }
-                    />
-                    <NumberField
-                      label={t("Weight")}
-                      value={component.coefficient}
-                      onValueChange={(next) =>
-                        setComponents((current) =>
-                          current.map((item, position) =>
-                            position === index
-                              ? { ...item, coefficient: next }
-                              : item
-                          )
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  haptic("light")
-                  setComponents((current) => [
-                    ...current,
-                    {
-                      key: crypto.randomUUID(),
-                      name: "",
-                      value: "",
-                      outOf,
-                      coefficient: "1",
-                    },
-                  ])
-                }}
-              >
-                <PlusIcon className="size-4" />
-                {t("Add a part")}
-              </Button>
-            </div>
-          ) : null}
-
           <div className="grid grid-cols-2 gap-3">
             {composite ? (
               <Field>
                 <FieldLabel>{t("Result")}</FieldLabel>
-                <div className="flex h-12 items-center rounded-md border bg-muted/40 px-3 text-sm md:h-9">
-                  <span className="numeric">
+                {/* Same height as the input it stands in for, or the row it
+                    shares with "Out of" comes out uneven. */}
+                <div className="flex h-12 items-center gap-1.5 rounded-md border border-input bg-muted/40 px-3 py-1 text-base shadow-xs md:h-9 md:text-sm">
+                  <span className="numeric font-medium">
                     {effectiveValue === null
                       ? "—"
                       : effectiveValue.toFixed(2).replace(/\.00$/, "")}
                   </span>
-                  <span className="ms-1 text-muted-foreground">
-                    {t("computed from the parts")}
+                  <span className="truncate text-xs text-muted-foreground">
+                    {t("from the parts")}
                   </span>
                 </div>
               </Field>
@@ -573,11 +448,170 @@ export function GradeForm({
             min={0}
           />
 
-          {errors.components ? (
-            <p className="text-sm text-destructive">{errors.components}</p>
-          ) : null}
-
           {impactCard}
+
+          {/* Below everything and behind a rule: most grades are one mark, so
+              this is a departure from the normal shape rather than part of it.
+              The label owns the full width — squeezed into a column beside the
+              switch, its explanation wrapped into a two-word ribbon. */}
+          <div className="mt-1 border-t pt-4">
+            <div className="rounded-xl border bg-card">
+              <div className="flex items-start gap-3 p-3">
+                <label
+                  htmlFor="composite-toggle"
+                  className="min-w-0 flex-1 cursor-pointer"
+                >
+                  <span className="block text-sm font-medium">
+                    {t("Made of several parts")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t(
+                      "Written and oral, or several exercises with their own weights"
+                    )}
+                  </span>
+                </label>
+                <Switch
+                  id="composite-toggle"
+                  checked={composite}
+                  onCheckedChange={(checked) => {
+                    haptic("selection")
+                    setComposite(checked)
+                    if (checked && components.length === 0) {
+                      setComponents([
+                        {
+                          key: crypto.randomUUID(),
+                          name: "",
+                          value: "",
+                          outOf: outOf,
+                          coefficient: "1",
+                        },
+                      ])
+                    }
+                  }}
+                />
+              </div>
+
+              {composite ? (
+                <div className="flex flex-col gap-3 border-t p-3">
+                  {components.map((component, index) => (
+                    <div
+                      key={component.key}
+                      className="rounded-lg border bg-background p-3"
+                    >
+                      <div className="flex items-center gap-2 pb-2">
+                        <input
+                          value={component.name}
+                          onChange={(event) =>
+                            setComponents((current) =>
+                              current.map((item, position) =>
+                                position === index
+                                  ? { ...item, name: event.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          enterKeyHint="next"
+                          placeholder={t("Part {number}", {
+                            number: String(index + 1),
+                          })}
+                          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={t("Remove")}
+                          onClick={() => {
+                            haptic("light")
+                            setComponents((current) =>
+                              current.filter(
+                                (_, position) => position !== index
+                              )
+                            )
+                          }}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+
+                      {/* Three number fields side by side leaves each one
+                          about forty pixels wide on a phone. Two, then one. */}
+                      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                        <NumberField
+                          label={t("Result")}
+                          value={component.value}
+                          onValueChange={(next) =>
+                            setComponents((current) =>
+                              current.map((item, position) =>
+                                position === index
+                                  ? { ...item, value: next }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                        <NumberField
+                          label={t("Out of")}
+                          value={component.outOf}
+                          onValueChange={(next) =>
+                            setComponents((current) =>
+                              current.map((item, position) =>
+                                position === index
+                                  ? { ...item, outOf: next }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                        <div className="col-span-2 md:col-span-1">
+                          <NumberField
+                            label={t("Weight")}
+                            value={component.coefficient}
+                            onValueChange={(next) =>
+                              setComponents((current) =>
+                                current.map((item, position) =>
+                                  position === index
+                                    ? { ...item, coefficient: next }
+                                    : item
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      haptic("light")
+                      setComponents((current) => [
+                        ...current,
+                        {
+                          key: crypto.randomUUID(),
+                          name: "",
+                          value: "",
+                          outOf,
+                          coefficient: "1",
+                        },
+                      ])
+                    }}
+                  >
+                    <PlusIcon className="size-4" />
+                    {t("Add a part")}
+                  </Button>
+
+                  {errors.components ? (
+                    <p className="text-sm text-destructive">
+                      {errors.components}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       ),
     },
@@ -592,29 +626,11 @@ export function GradeForm({
       }),
       content: (
         <DateField
+          layout="page"
           label={t("Date")}
           value={passedAt}
           onValueChange={setPassedAt}
         />
-      ),
-    },
-    {
-      id: "note",
-      title: t("Anything to remember?"),
-      description: t("Optional. What went well, what to revise."),
-      summary: note.trim() || null,
-      content: (
-        <Field>
-          <FieldLabel htmlFor="grade-note">{t("Note")}</FieldLabel>
-          <Textarea
-            id="grade-note"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            rows={4}
-            maxLength={500}
-            placeholder={t("Anything worth remembering about this result")}
-          />
-        </Field>
       ),
     },
   ]
@@ -631,6 +647,21 @@ export function GradeForm({
       }
       backHref="/grades"
       steps={steps}
+      beforeSave={
+        <Field>
+          <FieldLabel htmlFor="grade-note">
+            {t("Anything to remember?")}
+          </FieldLabel>
+          <Textarea
+            id="grade-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder={t("Anything worth remembering about this result")}
+          />
+        </Field>
+      }
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Add grade") : t("Save changes")}
       submitting={saving}

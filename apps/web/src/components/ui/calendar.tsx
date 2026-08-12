@@ -11,6 +11,13 @@ import {
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronDownIcon,
@@ -80,15 +87,13 @@ function Calendar({
           "relative rounded-(--cell-radius)",
           defaultClassNames.dropdown_root
         ),
-        dropdown: cn(
-          "absolute inset-0 bg-popover opacity-0",
-          defaultClassNames.dropdown
-        ),
+        dropdown: cn(defaultClassNames.dropdown),
         caption_label: cn(
           "font-medium select-none",
-          captionLayout === "label"
-            ? "text-sm"
-            : "flex items-center gap-1 rounded-(--cell-radius) text-sm [&>svg]:size-3.5 [&>svg]:text-muted-foreground",
+          // With real selects in the caption the label is a duplicate of what
+          // they already say, so it stays for screen readers and goes for
+          // everyone else.
+          captionLayout === "label" ? "text-sm" : "sr-only",
           defaultClassNames.caption_label
         ),
         month_grid: cn("w-full border-collapse", defaultClassNames.month_grid),
@@ -168,6 +173,51 @@ function Calendar({
             <ChevronDownIcon className={cn("size-4", className)} {...props} />
           )
         },
+        /**
+         * The month and year pickers.
+         *
+         * react-day-picker draws a native `<select>`, which the shadcn recipe
+         * then hides behind an invisible overlay — so the one control in the
+         * calendar that opens a list opened an operating-system list, in the
+         * operating system's colours, ignoring the theme around it. This is
+         * the app's own select, fed the same options.
+         */
+        Dropdown: ({ value, onChange, options, "aria-label": ariaLabel }) => (
+          <Select
+            value={String(value ?? "")}
+            onValueChange={(next) =>
+              onChange?.({
+                target: { value: String(next ?? "") },
+              } as React.ChangeEvent<HTMLSelectElement>)
+            }
+          >
+            <SelectTrigger
+              type="button"
+              size="sm"
+              aria-label={ariaLabel}
+              className="border-none px-2 font-medium shadow-none hover:bg-accent"
+            >
+              <SelectValue>
+                {(current) =>
+                  options?.find(
+                    (option) => String(option.value) === String(current)
+                  )?.label ?? ""
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="max-h-64">
+              {options?.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={String(option.value)}
+                  disabled={option.disabled}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
         DayButton: ({ ...props }) => (
           <CalendarDayButton locale={locale} {...props} />
         ),
@@ -203,6 +253,9 @@ function CalendarDayButton({
 
   return (
     <Button
+      // Without this the day is a submit button, and a calendar inside a form
+      // saved the form the moment a date was picked.
+      type="button"
       variant="ghost"
       size="icon"
       data-day={day.date.toLocaleDateString(locale?.code)}

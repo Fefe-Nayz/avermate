@@ -56,18 +56,24 @@ export default function AppError({
             )}
           </p>
         </div>
+        {/* Full-height targets: these two are the only way out of this screen,
+            and at the default height they were shorter than every other button
+            on a phone in this app. */}
+        {/* The way out is last, as it is in every footer here: nearest the
+            thumb on a phone, right-aligned on a laptop. */}
         <div className="flex w-full flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" onClick={reset}>
-            <RotateCcwIcon className="size-4" />
-            {t("Try again")}
-          </Button>
           <Button
-            className="flex-1"
+            size="lg"
             variant="outline"
+            className="flex-1"
             render={<Link href="/dashboard" />}
           >
             <HomeIcon className="size-4" />
             {t("Dashboard")}
+          </Button>
+          <Button size="lg" className="flex-1" onClick={reset}>
+            <RotateCcwIcon className="size-4" />
+            {t("Try again")}
           </Button>
         </div>
       </section>

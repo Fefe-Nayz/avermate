@@ -200,7 +200,7 @@ export function PickerField({
             {showSearch ? (
               <div className="border-b p-2">{searchBox(true)}</div>
             ) : null}
-            <div className="max-h-72 overflow-y-auto overscroll-contain py-1">
+            <div className="max-h-72 overflow-y-auto overscroll-contain">
               {list}
             </div>
           </div>
@@ -246,40 +246,55 @@ function List({
   }
 
   return (
-    <>
+    <div className="p-1.5">
       {options.map((option) => {
         const isSelected = option.value === value
+        const indent = `${0.625 + (option.depth ?? 0) * 0.8}rem`
+
+        // An option that cannot be chosen but is still listed is a heading —
+        // a category, in this app — so it is drawn as one rather than as a
+        // greyed-out row that looks like something went wrong.
+        if (option.disabled) {
+          return (
+            <p
+              key={option.value}
+              style={{ paddingInlineStart: indent }}
+              className="pt-4 pb-1 pe-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase first:pt-1"
+            >
+              {option.label}
+            </p>
+          )
+        }
+
         return (
           <button
             key={option.value}
             type="button"
-            disabled={option.disabled}
             onClick={() => onChoose(option)}
-            style={{
-              paddingInlineStart: `${0.75 + (option.depth ?? 0) * 0.85}rem`,
-            }}
+            style={{ paddingInlineStart: indent }}
             className={cn(
-              "flex min-h-13 w-full items-center gap-2 pe-3 text-left text-sm transition-colors md:min-h-11",
-              option.disabled
-                ? "cursor-not-allowed text-muted-foreground/60"
-                : "hover:bg-accent active:bg-accent",
-              isSelected && "bg-primary/8 font-medium"
+              "flex min-h-12 w-full items-center gap-2 rounded-lg pe-2 text-left text-sm transition-colors md:min-h-10",
+              isSelected
+                ? "bg-primary/10 font-medium text-primary"
+                : "hover:bg-accent active:bg-accent"
             )}
           >
             <span className="min-w-0 flex-1 truncate">
               {option.label}
               {option.hint ? (
-                <span className="ms-2 text-xs text-muted-foreground">
+                <span className="ms-2 text-xs font-normal text-muted-foreground">
                   {option.hint}
                 </span>
               ) : null}
             </span>
             {isSelected ? (
-              <CheckIcon className="size-4 shrink-0 text-primary" />
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                <CheckIcon className="size-3" />
+              </span>
             ) : null}
           </button>
         )
       })}
-    </>
+    </div>
   )
 }

@@ -1,9 +1,10 @@
 "use client"
 
 import { useId, useState, type ReactNode } from "react"
-import { CalendarIcon, CheckIcon } from "lucide-react"
+import { CalendarIcon, CheckIcon, MinusIcon, PlusIcon } from "lucide-react"
 import { useExtracted, useLocale } from "next-intl"
 import { Button } from "@/components/ui/button"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Field,
@@ -56,10 +57,13 @@ export function TextField({
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </FieldLabel>
+      {/* "Next" rather than "Go" on the software keyboard: inside a flow the
+          key moves on, it does not submit. `FormFlow` makes it do that. */}
       <Input
         id={id}
+        enterKeyHint="next"
         aria-invalid={error ? true : undefined}
-        className="h-11 md:h-9"
+        className="h-12 md:h-9"
         {...props}
       />
       {description && !error ? (
@@ -70,6 +74,22 @@ export function TextField({
   )
 }
 
+/** Decimals the step itself carries, so nudging 0.5 does not print 14.500000001. */
+function decimalPlaces(step: number): number {
+  return step.toString().split(".")[1]?.length ?? 0
+}
+
+/**
+ * A number, with the two nudges that make one usable on a phone.
+ *
+ * Typing "14" is four taps on a numeric keypad that has to be summoned first;
+ * "one more than last time" is one tap on a stepper. Both are here, because a
+ * result is typed and a weight is adjusted, and a field that only supports one
+ * of those makes the other tedious.
+ *
+ * The `−`/`+` pattern is lifted from openbacktest, retuned to this app's
+ * control heights: a comfortable 48px on a phone, the compact 36px on a laptop.
+ */
 export function NumberField({
   label,
   description,
@@ -82,6 +102,8 @@ export function NumberField({
   max,
   step = "any",
   placeholder,
+  /** Off where a stepper would be noise, e.g. a mark out of 100. */
+  stepper = true,
 }: {
   label: string
   description?: string
@@ -94,12 +116,48 @@ export function NumberField({
   max?: number
   step?: string | number
   placeholder?: string
+  stepper?: boolean
 }) {
+  const t = useExtracted()
   const id = useId()
   const locale = useLocale()
   // French keyboards produce a comma; accepting only a dot would silently
   // reject half the numbers people type.
   const decimalHint = locale.startsWith("fr") ? "[0-9]*[.,]?[0-9]*" : undefined
+
+  const current = Number.parseFloat(value.replace(",", "."))
+  const numeric = Number.isFinite(current)
+  const nudge = typeof step === "number" ? step : 1
+  const floor = min ?? Number.NEGATIVE_INFINITY
+  const ceiling = max ?? Number.POSITIVE_INFINITY
+
+  const adjust = (direction: -1 | 1) => {
+    haptic("selection")
+    const base = numeric ? current : (min ?? 0)
+    const next = Math.min(
+      ceiling,
+      Math.max(floor, base + direction * nudge)
+    )
+    onValueChange(next.toFixed(decimalPlaces(nudge)))
+  }
+
+  const input = (
+    <Input
+      id={id}
+      inputMode="decimal"
+      enterKeyHint="next"
+      pattern={decimalHint}
+      type="text"
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      placeholder={placeholder}
+      aria-invalid={error ? true : undefined}
+      onChange={(event) => onValueChange(event.target.value.replace(",", "."))}
+      className={cn("numeric h-12 md:h-9", suffix && "pr-12")}
+    />
+  )
 
   return (
     <Field data-invalid={error ? true : undefined}>
@@ -107,29 +165,47 @@ export function NumberField({
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </FieldLabel>
-      <div className="relative">
-        <Input
-          id={id}
-          inputMode="decimal"
-          pattern={decimalHint}
-          type="text"
-          value={value}
-          min={min}
-          max={max}
-          step={step}
-          placeholder={placeholder}
-          aria-invalid={error ? true : undefined}
-          onChange={(event) =>
-            onValueChange(event.target.value.replace(",", "."))
-          }
-          className={cn("numeric h-11 md:h-9", suffix && "pr-12")}
-        />
-        {suffix ? (
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-            {suffix}
-          </span>
+
+      <ButtonGroup className="w-full">
+        <div className="relative min-w-0 flex-1">
+          {input}
+          {suffix ? (
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
+              {suffix}
+            </span>
+          ) : null}
+        </div>
+        {/* Desktop only. A phone already offers a numeric keypad, and two
+            more targets on a row that often holds three of these fields would
+            take the width the number itself needs. */}
+        {stepper ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="hidden size-9 shrink-0 md:inline-flex"
+              aria-label={t("Decrease {label}", { label })}
+              onClick={() => adjust(-1)}
+              disabled={numeric && current <= floor}
+            >
+              <MinusIcon className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="hidden size-9 shrink-0 md:inline-flex"
+              aria-label={t("Increase {label}", { label })}
+              onClick={() => adjust(1)}
+              disabled={numeric && current >= ceiling}
+            >
+              <PlusIcon className="size-4" />
+            </Button>
+          </>
         ) : null}
-      </div>
+      </ButtonGroup>
+
       {description && !error ? (
         <FieldDescription>{description}</FieldDescription>
       ) : null}
@@ -364,6 +440,7 @@ export function DatePicker({
   placeholder,
   className,
   format: style = "long",
+  layout = "field",
 }: {
   id?: string
   /** ISO `YYYY-MM-DD`, or an empty string for no date. */
@@ -376,6 +453,8 @@ export function DatePicker({
   placeholder?: string
   className?: string
   format?: "long" | "short"
+  /** `"page"` when the date *is* the screen: the calendar is simply open. */
+  layout?: "field" | "page"
 }) {
   const t = useExtracted()
   const locale = useLocale()
@@ -395,9 +474,10 @@ export function DatePicker({
     setOpen(false)
   }
 
-  const calendar = (
+  const calendarWith = (calendarClassName?: string) => (
     <Calendar
       mode="single"
+      className={calendarClassName}
       selected={selected}
       defaultMonth={selected ?? lower ?? undefined}
       captionLayout="dropdown"
@@ -416,6 +496,19 @@ export function DatePicker({
     />
   )
 
+  /**
+   * A month that fills the width it is given.
+   *
+   * The default cell is 1.75rem, which on a phone draws a small square
+   * calendar afloat in a card. Raising the floor and letting the cells
+   * distribute gives the same edge-to-edge month the grades page has — days
+   * stay square because the cell is, so the grid grows with the screen
+   * instead of leaving a margin around itself.
+   */
+  const wideCalendar = calendarWith(
+    "w-full p-3 [--cell-size:--spacing(10)] sm:[--cell-size:--spacing(11)]"
+  )
+
   const label = selected
     ? selected.toLocaleDateString(locale, {
         day: "numeric",
@@ -424,8 +517,52 @@ export function DatePicker({
       })
     : (placeholder ?? "—")
 
-  // A phone gets the calendar at the size it was drawn for, with the dates
-  // people actually reach for as one tap rather than a month of hunting.
+  // The dates people actually reach for, as one tap rather than a month of
+  // hunting. Kept beside the calendar rather than replacing it, because
+  // "last Tuesday" is a scan and "today" is a reflex.
+  const shortcuts = (
+    <div className="flex flex-wrap gap-2">
+      {relativeDays().map((option) => {
+        const date = option.date
+        if (!allowed(date)) return null
+        const isSelected =
+          selected !== undefined && toIsoDate(date) === toIsoDate(selected)
+        return (
+          <button
+            key={option.offset}
+            type="button"
+            onClick={() => pick(date)}
+            className={cn(
+              "min-h-11 rounded-full border px-4 text-sm transition-colors active:bg-accent",
+              isSelected
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-card"
+            )}
+          >
+            {option.offset === 0
+              ? t("Today")
+              : option.offset === -1
+                ? t("Yesterday")
+                : t("Tomorrow")}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  // When the date is the whole screen there is nothing to open: the calendar
+  // is the screen. Same rule as the subject list.
+  if (layout === "page" && !wide) {
+    return (
+      <div className="flex flex-col gap-4">
+        {shortcuts}
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {wideCalendar}
+        </div>
+      </div>
+    )
+  }
+
   if (!wide) {
     return (
       <>
@@ -455,43 +592,9 @@ export function DatePicker({
           description={selected ? label : undefined}
         >
           <div className="flex flex-col gap-4 p-4">
-            <div className="flex flex-wrap gap-2">
-              {relativeDays().map((option) => {
-                const date = option.date
-                if (!allowed(date)) return null
-                const isSelected =
-                  selected !== undefined &&
-                  toIsoDate(date) === toIsoDate(selected)
-                return (
-                  <button
-                    key={option.offset}
-                    type="button"
-                    onClick={() => pick(date)}
-                    className={cn(
-                      "min-h-11 rounded-full border px-4 text-sm transition-colors active:bg-accent",
-                      isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card"
-                    )}
-                  >
-                    {option.offset === 0
-                      ? t("Today")
-                      : option.offset === -1
-                        ? t("Yesterday")
-                        : option.offset === 1
-                          ? t("Tomorrow")
-                          : date.toLocaleDateString(locale, {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="rounded-xl border bg-card p-2 [&_table]:w-full [&_button]:size-11">
-              {calendar}
+            {shortcuts}
+            <div className="overflow-hidden rounded-xl border bg-card">
+              {wideCalendar}
             </div>
           </div>
         </FullScreenLayer>
@@ -521,7 +624,7 @@ export function DatePicker({
       </PopoverTrigger>
 
       <PopoverContent className="w-auto p-0" align="start">
-        {calendar}
+        {calendarWith()}
       </PopoverContent>
     </Popover>
   )

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { useKeyboardInset } from "@/hooks/use-keyboard-inset"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 
@@ -79,6 +80,14 @@ export function FormFlow({
   footerNote,
   /** Shown above the first step on both surfaces, e.g. a live preview. */
   aside,
+  /**
+   * The last optional touches — a note, a title — asked for on the review
+   * screen rather than as a step of their own. Nobody wants a whole screen
+   * for a field they will usually skip, and on the confirmation it is right
+   * where "anything else before I save?" belongs. Desktop gets it as a final
+   * section, since desktop has no review.
+   */
+  beforeSave,
   overlays,
 }: {
   title: string
@@ -92,12 +101,14 @@ export function FormFlow({
   destructive?: { label: string; onClick: () => void }
   footerNote?: ReactNode
   aside?: ReactNode
+  beforeSave?: ReactNode
   /** Dialogs and layers that belong to the form but to no single step. */
   overlays?: ReactNode
 }) {
   const t = useExtracted()
   const router = useRouter()
   const keyboard = useKeyboardInset()
+  const wide = useMediaQuery("(min-width: 768px)")
   const formRef = useRef<HTMLFormElement>(null)
   const active = useMemo(
     () => steps.filter((step) => step.when !== false),
@@ -140,6 +151,25 @@ export function FormFlow({
    * with a pinned action bar they routinely leave the field half-covered. One
    * frame after the viewport has settled is early enough not to be seen.
    */
+  /**
+   * The keyboard's own "next" key moves through the flow.
+   *
+   * A phone keyboard offers one action key, and inside a flow the thing it
+   * should do is go on — which is also why the fields ask for "next" rather
+   * than "go". On a laptop Enter keeps meaning submit, because there the whole
+   * form is on screen and there is nothing to advance to.
+   */
+  const onKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter" || wide) return
+    const target = event.target
+    // A textarea's Enter is a newline, and a button's is a click.
+    if (!(target instanceof HTMLInputElement)) return
+
+    event.preventDefault()
+    if (onReview) submit()
+    else advance()
+  }
+
   const revealFocused = (event: React.FocusEvent<HTMLFormElement>) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
@@ -166,6 +196,7 @@ export function FormFlow({
         ref={formRef}
         onSubmit={handleSubmit}
         onFocus={revealFocused}
+        onKeyDown={onKeyDown}
         className="mx-auto w-full max-w-2xl"
       >
         <div className="hidden items-start justify-between gap-4 pb-4 md:flex">
@@ -205,6 +236,7 @@ export function FormFlow({
               {item.content}
             </section>
           ))}
+          {beforeSave}
         </div>
 
         {/* Phone: one decision, then a read-back. */}
@@ -223,7 +255,7 @@ export function FormFlow({
           />
 
           {onReview ? (
-            <Review steps={active} onEdit={goto} />
+            <Review steps={active} onEdit={goto} extra={beforeSave} />
           ) : step ? (
             <section className="flex flex-col gap-4">
               <div>
@@ -401,9 +433,11 @@ function Progress({
 function Review({
   steps,
   onEdit,
+  extra,
 }: {
   steps: FlowStep[]
   onEdit: (index: number) => void
+  extra?: ReactNode
 }) {
   const t = useExtracted()
 
@@ -443,6 +477,8 @@ function Review({
           </li>
         ))}
       </ul>
+
+      {extra}
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <CheckIcon className="size-3.5 text-primary" />

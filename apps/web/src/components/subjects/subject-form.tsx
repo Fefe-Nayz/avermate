@@ -227,36 +227,6 @@ export function SubjectForm({
       ),
     },
     {
-      id: "kind",
-      title: t("Subject or category?"),
-      description: t("This is what decides how its average is worked out."),
-      summary: kind === "subject" ? t("Subject") : t("Category"),
-      content: (
-        <ChoiceField
-          choices={[
-            {
-              value: "subject",
-              label: t("Subject"),
-              description: t(
-                "Counted once, with its own weight, using its own average."
-              ),
-              icon: <BookMarkedIcon className="size-4" />,
-            },
-            {
-              value: "category",
-              label: t("Category"),
-              description: t(
-                "A heading. What it contains is weighed one by one at the level above."
-              ),
-              icon: <FolderIcon className="size-4" />,
-            },
-          ]}
-          value={kind}
-          onValueChange={setKind}
-        />
-      ),
-    },
-    {
       id: "place",
       title: t("Where does it sit?"),
       description: t("Leave it at the top level if it belongs to nothing else."),
@@ -273,18 +243,45 @@ export function SubjectForm({
       ),
     },
     {
-      id: "weight",
-      title: t("How much does it count?"),
+      // Kind and weight are one decision: choosing "category" is choosing to
+      // have no weight, so splitting them made the second screen answer a
+      // question the first had already settled.
+      id: "counts",
+      title: t("How does it count?"),
+      description: t("This is what decides how its average is worked out."),
       summary: [
         kind === "subject"
           ? t("Weight {weight}", { weight: coefficient || "1" })
-          : t("No weight of its own"),
+          : t("Category"),
         isMain ? t("On the dashboard") : null,
       ]
         .filter(Boolean)
         .join(" · "),
       content: (
         <div className="flex flex-col gap-4">
+          <ChoiceField
+            choices={[
+              {
+                value: "subject",
+                label: t("Subject"),
+                description: t(
+                  "Counted once, with its own weight, using its own average."
+                ),
+                icon: <BookMarkedIcon className="size-4" />,
+              },
+              {
+                value: "category",
+                label: t("Category"),
+                description: t(
+                  "A heading. What it contains is weighed one by one at the level above."
+                ),
+                icon: <FolderIcon className="size-4" />,
+              },
+            ]}
+            value={kind}
+            onValueChange={setKind}
+          />
+
           {kind === "subject" ? (
             <NumberField
               label={t("Weight")}

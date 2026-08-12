@@ -297,9 +297,16 @@ export function GoalForm({
     },
     {
       id: "target",
-      title: t("Where do you want to get to?"),
-      description: t("Move it and the plan underneath updates."),
-      summary: `${(targetRatio * scale).toFixed(2).replace(/\.00$/, "")} / ${scale}`,
+      title: t("How far, and by when?"),
+      description: t("Move the target and the plan underneath updates."),
+      summary: [
+        `${(targetRatio * scale).toFixed(2).replace(/\.00$/, "")} / ${scale}`,
+        periodOptions.find(
+          (option) => option.value === (periodId ?? "__full_year__")
+        )?.label,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       content: (
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border bg-card p-4">
@@ -338,38 +345,22 @@ export function GoalForm({
           </div>
 
           {preview ? <GoalPlanView plan={preview} /> : null}
-        </div>
-      ),
-    },
-    {
-      id: "when",
-      title: t("By when?"),
-      description: t(
-        "Tie the target to a period or a deadline when timing matters."
-      ),
-      summary: [
-        periodOptions.find(
-          (option) => option.value === (periodId ?? "__full_year__")
-        )?.label,
-        dueAt || null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      content: (
-        <div className="flex flex-col gap-4">
-          <PickerField
-            label={t("Period")}
-            options={periodOptions}
-            value={periodId ?? "__full_year__"}
-            onValueChange={(value) =>
-              setPeriodId(value === "__full_year__" ? null : value)
-            }
-          />
-          <DateField
-            label={t("Deadline (optional)")}
-            value={dueAt}
-            onValueChange={setDueAt}
-          />
+
+          <div className="mt-1 flex flex-col gap-4 border-t pt-4">
+            <PickerField
+              label={t("Period")}
+              options={periodOptions}
+              value={periodId ?? "__full_year__"}
+              onValueChange={(value) =>
+                setPeriodId(value === "__full_year__" ? null : value)
+              }
+            />
+            <DateField
+              label={t("Deadline (optional)")}
+              value={dueAt}
+              onValueChange={setDueAt}
+            />
+          </div>
         </div>
       ),
     },

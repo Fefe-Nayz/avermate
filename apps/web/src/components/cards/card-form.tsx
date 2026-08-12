@@ -412,22 +412,6 @@ export function CardForm({
         </div>
       ),
     },
-    {
-      id: "title",
-      title: t("Anything to call it?"),
-      description: t("Optional. The metric's own name is used otherwise."),
-      summary: title.trim() || labels[metric],
-      content: (
-        <TextField
-          label={t("Title")}
-          description={t("Leave blank to use the metric's own name.")}
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          maxLength={48}
-          placeholder={labels[metric]}
-        />
-      ),
-    },
   ]
 
   return (
@@ -436,6 +420,16 @@ export function CardForm({
       backHref="/dashboard"
       steps={steps}
       aside={previewGrid}
+      beforeSave={
+        <TextField
+          label={t("Title")}
+          description={t("Leave blank to use the metric's own name.")}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          maxLength={48}
+          placeholder={labels[metric]}
+        />
+      }
       onSubmit={submit}
       submitLabel={mode === "create" ? t("Add to dashboard") : t("Save changes")}
       submitting={create.isPending || update.isPending}

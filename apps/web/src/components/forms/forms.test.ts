@@ -96,6 +96,59 @@ describe("form flows", () => {
     expect(controls).toContain("relativeDays()")
     // And desktop keeps the popover.
     expect(controls).toContain("<Popover open={open}")
+    // A month that fills its card rather than floating in the middle of one.
+    expect(controls).toContain('layout === "page" && !wide')
+    expect(controls).toContain("[--cell-size:--spacing(10)]")
+  })
+
+  test("nothing saves before the last screen says so", async () => {
+    const calendar = await source("../ui/calendar.tsx")
+
+    // A day is a `<button>` inside a `<form>`. Without a type it defaults to
+    // submit, and picking a date saved the grade.
+    expect(calendar).toContain("type=\"button\"")
+
+    // The optional last touches are asked for on the review screen, where the
+    // only button is the one that saves.
+    expect(await source("../grades/grade-form.tsx")).toContain("beforeSave={")
+    expect(await source("../cards/card-form.tsx")).toContain("beforeSave={")
+  })
+
+  test("the calendar's month and year use this app's select", async () => {
+    const calendar = await source("../ui/calendar.tsx")
+
+    expect(calendar).toContain("Dropdown: ({ value, onChange, options")
+    expect(calendar).toContain("<SelectTrigger")
+    // The invisible native select the shadcn recipe overlays is gone.
+    expect(calendar).not.toContain("absolute inset-0 bg-popover opacity-0")
+  })
+
+  test("the keyboard's next key moves through the flow", async () => {
+    const flow = await source("./form-flow.tsx")
+    const controls = await source("./controls.tsx")
+
+    expect(flow).toContain("event.key !== \"Enter\" || wide")
+    expect(flow).toContain("if (onReview) submit()")
+    expect(controls).toContain("enterKeyHint=\"next\"")
+  })
+
+  test("a composite grade needs a part with a result in it", async () => {
+    const form = await source("../grades/grade-form.tsx")
+
+    // `rollUp` returns null when every part is blank, and the payload's
+    // `?? 0` would have saved a mark of zero nobody typed.
+    expect(form).toContain(
+      "composite && components.length > 0 && effectiveValue === null"
+    )
+  })
+
+  test("the number stepper is a pointer control", async () => {
+    const controls = await source("./controls.tsx")
+
+    expect(controls).toContain("ButtonGroup")
+    // Hidden on a phone: the keypad is already there, and three of these
+    // fields share a row.
+    expect(controls).toContain("hidden size-9 shrink-0 md:inline-flex")
   })
 
   test("a step whose only job is choosing shows the list, not a way in", async () => {
