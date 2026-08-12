@@ -1,10 +1,21 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { useExtracted } from "next-intl"
 import { useMaybeYear } from "@/components/year/year-provider"
-import type { Crumb } from "./responsive-breadcrumb"
+
+/**
+ * One step of the trail. `siblings` is what makes the separator before a
+ * crumb worth clicking: it opens the other subjects at that level.
+ */
+export interface Crumb {
+  key: string
+  label: string
+  href?: string
+  icon?: ReactNode
+  siblings?: Array<{ key: string; label: string; href: string }>
+}
 
 /**
  * The trail for the current route.

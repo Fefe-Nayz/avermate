@@ -48,7 +48,7 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
   const secondary = NAV_ENTRIES.filter(
     (entry) =>
       (!entry.adminOnly || isAdmin) &&
-      ["/review", "/settings", "/admin"].includes(entry.href)
+      ["/review", "/admin"].includes(entry.href)
   )
 
   const labels: Record<string, string> = {
@@ -59,7 +59,6 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
     Insights: t("Insights"),
     Social: t("Social"),
     "Year in review": t("Year in review"),
-    Settings: t("Settings"),
     Admin: t("Admin"),
   }
 

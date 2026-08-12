@@ -36,11 +36,14 @@ describe("subjects and averages parity", () => {
     expect(detail).toContain("series={averageSeries}")
   })
 
-  test("the desktop header vertically centers its divider", async () => {
+  test("the desktop header vertically centers its dividers", async () => {
     const header = await source("../shell/site-header.tsx")
 
-    expect(header).toContain("<span")
-    expect(header).toContain("aria-hidden")
-    expect(header).toContain('className="mr-1 h-4 w-px shrink-0 bg-border"')
+    // A vertical Separator stretches to the flex line by default, which drew
+    // a full-height rule through the header. Both classes are the fix: a
+    // fixed height, and self-auto so the flex container stops stretching it.
+    expect(header).toContain('orientation="vertical"')
+    expect(header).toContain("data-vertical:h-4")
+    expect(header).toContain("data-vertical:self-auto")
   })
 })

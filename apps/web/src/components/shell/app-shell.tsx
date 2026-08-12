@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     >
       <AppSidebar user={user} />
       <SidebarInset className="min-w-0 overflow-hidden">
-        <SiteHeader />
+        <SiteHeader user={user} />
         <MobileHeader user={user} condensed={condensed} />
         <TimelineBanner />
         <AnnouncementBanner />
