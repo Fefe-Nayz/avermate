@@ -22,13 +22,12 @@ interface RadarPoint {
   value: number
 }
 
-/** Gap between the outer ring and a label. */
-const LABEL_OFFSET = 8
-/** That gap plus the breathing room a label needs at the very edge. */
-const LABEL_ROOM = LABEL_OFFSET + 4
-/** Advance width of a character, as a fraction of the font size. */
-const CHARACTER_WIDTH = 0.56
-
+/**
+ * Turn a label to lie along the ring rather than across it.
+ *
+ * Straight from the previous app, unchanged: the two folds keep every name
+ * the right way up, so nothing on the left half reads upside down.
+ */
 function labelRotation(angle: number) {
   let rotation = (angle * 180) / Math.PI
   if (rotation > 180) rotation -= 360
@@ -62,34 +61,21 @@ export function SubjectRadarChart({ title }: { title: string }) {
 
   const definition = useMemo(() => {
     const domain = points.map((point) => point.subject)
-    const longest = domain.reduce(
-      (most, label) => Math.max(most, label.length),
-      0
-    )
 
     return defineChart({
-      chart: ({ width, height }) => {
-        // Labels sit tangentially around the ring, so the room they have is
-        // whatever the shorter side of the box has left outside the radius —
-        // a budget a width-only rule cannot see, which is how a chart in a
-        // short box ends up with every name cut to five characters.
-        const half = Math.min(width, height) / 2
-        const fontSize = half < 140 ? 10 : 11
-        const wanted = longest * fontSize * CHARACTER_WIDTH + LABEL_ROOM
-        // Give the ring the space the names do not need, within reason: past
-        // this the radar is too small to read as a shape.
-        const radiusRatio = Math.min(0.72, Math.max(0.52, 1 - wanted / half))
-        const budget = half * (1 - radiusRatio) - LABEL_ROOM
-        const maxLength = Math.max(
-          4,
-          Math.floor(budget / (fontSize * CHARACTER_WIDTH))
-        )
-
+      chart: ({ width }) => {
+        // The label treatment is the previous app's, kept to the number: a
+        // ring that gives up a little radius on a narrow card, a character
+        // budget stepped by width, and the tangential rotation above. Deriving
+        // the radius from the longest name instead — which is what this did —
+        // bought a few characters and cost the shape most of its size, and the
+        // shape is the reason a radar is here rather than a list.
+        const maxLength = width < 300 ? 5 : width < 440 ? 9 : 12
         return {
           marks: [
             polar({
               id: "main-subject-radar",
-              radiusRatio,
+              radiusRatio: width < 360 ? 0.64 : 0.72,
               angle: {
                 scale: scalePoint<string>().domain(domain),
                 wrap: true,
@@ -100,7 +86,7 @@ export function SubjectRadarChart({ title }: { title: string }) {
                   values: [scale * 0.25, scale * 0.5, scale * 0.75, scale],
                   shape: "polygon",
                   stroke: "currentColor",
-                  strokeOpacity: 0.18,
+                  strokeOpacity: 0.2,
                 }),
                 angleGrid({
                   labels: true,
@@ -111,11 +97,11 @@ export function SubjectRadarChart({ title }: { title: string }) {
                       : label
                   },
                   labelFill: "currentColor",
-                  labelFontSize: fontSize,
-                  labelOffset: LABEL_OFFSET,
+                  labelFontSize: 12,
+                  labelOffset: 8,
                   labelRotate: ({ angle }) => labelRotation(angle),
                   stroke: "currentColor",
-                  strokeOpacity: 0.18,
+                  strokeOpacity: 0.2,
                 }),
               ],
               marks: [
@@ -125,7 +111,7 @@ export function SubjectRadarChart({ title }: { title: string }) {
                   key: "subject",
                   curve: curveLinearClosed,
                   fill: "var(--chart-1)",
-                  fillOpacity: 0.13,
+                  fillOpacity: 0.1,
                   stroke: "var(--chart-1)",
                   strokeWidth: 2,
                 }),
