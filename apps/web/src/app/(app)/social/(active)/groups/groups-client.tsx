@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CrownIcon, PlusIcon, SnowflakeIcon, UsersRoundIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { useSocialLabels } from "@/components/social/social-labels"
 import {
   SocialEmpty,
   SocialHeading,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { haptic } from "@/lib/haptics"
@@ -38,12 +40,14 @@ import { orpc } from "@/lib/orpc"
  */
 export function GroupsClient() {
   const t = useExtracted()
+  const labels = useSocialLabels()
   const router = useRouter()
   const queryClient = useQueryClient()
   const groups = useQuery(orpc.social.groups.list.queryOptions())
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [kind, setKind] = useState<"friends" | "study" | "class">("friends")
 
   const create = useMutation({
     ...orpc.social.groups.create.mutationOptions(),
@@ -91,6 +95,21 @@ export function GroupsClient() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="new-group-kind">{t("Group type")}</Label>
+                  <SelectControl
+                    id="new-group-kind"
+                    value={kind}
+                    onValueChange={(value) =>
+                      setKind(value as "friends" | "study" | "class")
+                    }
+                    options={[
+                      { value: "friends", label: t("Friends group") },
+                      { value: "study", label: t("Study group") },
+                      { value: "class", label: t("Class") },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="new-group-description">
                     {t("Description (optional)")}
                   </Label>
@@ -110,6 +129,7 @@ export function GroupsClient() {
                     create.mutate({
                       name: name.trim(),
                       description: description.trim(),
+                      kind,
                     })
                   }
                 >
@@ -147,6 +167,7 @@ export function GroupsClient() {
                         {t("Owner")}
                       </Badge>
                     ) : null}
+                    <Badge variant="outline">{labels.groupKind(group.kind)}</Badge>
                   </div>
                 }
               >

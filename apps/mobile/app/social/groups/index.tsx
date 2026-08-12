@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import { TextField } from "@/components/field";
+import { ChoiceField, TextField } from "@/components/field";
+import { groupKindLabel } from "@/components/social/social-ui";
 import {
   Button,
   Card,
@@ -30,6 +31,7 @@ export default function Groups() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [kind, setKind] = useState<"friends" | "study" | "class">("friends");
 
   const create = useMutation({
     ...orpc.social.groups.create.mutationOptions(),
@@ -70,6 +72,16 @@ export default function Groups() {
               multiline
               maxLength={500}
             />
+            <ChoiceField
+              label={t("Group type")}
+              value={kind}
+              onChange={setKind}
+              choices={[
+                { value: "friends", label: t("Friends group") },
+                { value: "study", label: t("Study group") },
+                { value: "class", label: t("Class") },
+              ]}
+            />
             <Button
               label={t("Create group")}
               disabled={name.trim().length < 2}
@@ -78,6 +90,7 @@ export default function Groups() {
                 create.mutate({
                   name: name.trim(),
                   description: description.trim(),
+                  kind,
                 })
               }
             />
@@ -108,6 +121,8 @@ export default function Groups() {
                   first={index === 0}
                   title={group.name}
                   subtitle={
+                    groupKindLabel(group.kind) +
+                    " · " +
                     (group.memberCount === 1
                       ? t("1 member")
                       : t("{count} members", { count: group.memberCount })) +

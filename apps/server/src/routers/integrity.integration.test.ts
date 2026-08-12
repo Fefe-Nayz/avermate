@@ -1346,6 +1346,86 @@ describe("the simplified social model", () => {
     expect(joiner?.average).toBeNull();
     expect(detailForMember.groupAverage).toBeCloseTo(expectedAverage, 9);
 
+    // The owner configures what the room compares and what it displays.
+    await api.social.groups.update({
+      groupId: group.id,
+      kind: "class",
+      comparedSubjectName: "Subject A",
+    });
+    const configured = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(configured.kind).toBe("class");
+    expect(configured.comparedSubjectName).toBe("Subject A");
+    const configuredOwner = configured.members.find(
+      (member) => member.role === "owner",
+    );
+    // Every grade in the fixture year sits under Subject A, so the scoped
+    // figure exists; and every grade predates the 30-day window, so the
+    // trend is a computed "flat", not a missing value.
+    expect(configuredOwner?.average).not.toBeNull();
+    expect(configuredOwner?.trend).toBe("flat");
+    expect(configuredOwner?.gradeCount).toBeGreaterThan(0);
+    // A scope nobody's subjects match yields no figure rather than an error.
+    await api.social.groups.update({
+      groupId: group.id,
+      comparedSubjectName: "Astrophysics",
+    });
+    const unmatched = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(
+      unmatched.members.every((member) => member.average === null),
+    ).toBe(true);
+    await api.social.groups.update({
+      groupId: group.id,
+      comparedSubjectName: null,
+    });
+
+    // The optional common configuration: the owner offers year-a, the other
+    // member adopts it and gets a structural copy — no grades, no link back.
+    await api.social.groups.update({
+      groupId: group.id,
+      sharedSetupYearId: "year-a",
+    });
+    const withSetup = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    // Earlier suites grow year-a, so the summary is checked for shape and
+    // the copy for parity with it rather than against absolute counts.
+    expect(withSetup.sharedSetup?.yearName).toBe("Year A");
+    expect(withSetup.sharedSetup?.subjectCount).toBeGreaterThanOrEqual(1);
+    const adopted = await managedApi.social.groups.adoptSetup({
+      groupId: group.id,
+      name: "Adopted year",
+    });
+    expect(adopted.yearId).toBeTruthy();
+    const adoptedSubjects = await database
+      .select()
+      .from(schema.subjects)
+      .where(eq(schema.subjects.yearId, adopted.yearId));
+    expect(adoptedSubjects).toHaveLength(
+      withSetup.sharedSetup?.subjectCount ?? 0,
+    );
+    expect(adoptedSubjects.map((subject) => subject.name)).toContain(
+      "Subject A",
+    );
+    expect(adoptedSubjects[0]?.userId).toBe("managed-user");
+    expect(
+      await database
+        .select()
+        .from(schema.grades)
+        .where(eq(schema.grades.yearId, adopted.yearId)),
+    ).toHaveLength(0);
+    // Tidy up so later fixtures never meet the adopted copy.
+    await database
+      .delete(schema.years)
+      .where(eq(schema.years.id, adopted.yearId));
+    await api.social.groups.update({
+      groupId: group.id,
+      sharedSetupYearId: null,
+    });
+
     // The one lock a member has: their own switch.
     await api.social.groups.setSharing({
       groupId: group.id,

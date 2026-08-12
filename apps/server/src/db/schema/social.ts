@@ -187,7 +187,15 @@ export const userBlocks = sqliteTable(
   ],
 );
 
-/** A named room whose members compare averages. Nothing more. */
+export type SocialGroupKind = "friends" | "study" | "class";
+
+/**
+ * A named room whose members compare figures. The owner decides what is
+ * compared — the general average, or the subjects matching a name, which is
+ * what a class group actually wants — and what the leaderboard shows beside
+ * each member. Configuration is the owner's; each member's only lock is
+ * their membership switch.
+ */
 export const socialGroups = sqliteTable(
   "social_groups",
   {
@@ -198,6 +206,25 @@ export const socialGroups = sqliteTable(
     ownerUserId: userRef(),
     name: text().notNull(),
     description: text().notNull().default(""),
+    kind: text().$type<SocialGroupKind>().notNull().default("friends"),
+    /**
+     * Null compares general averages. A name compares each member's average
+     * across their own subjects whose name matches it, so "Maths" works even
+     * though every member spells their tree differently.
+     */
+    comparedSubjectName: text(),
+    showTrend: integer({ mode: "boolean" }).notNull().default(true),
+    showGradeCount: integer({ mode: "boolean" }).notNull().default(true),
+    /**
+     * Optional common configuration: one of the owner's years, offered as a
+     * template. Adopting copies its structure — settings, periods, subjects,
+     * custom averages — into a fresh year of the member's own; grades never
+     * travel. A copy, not a subscription: re-adopt to pick up changes.
+     */
+    sharedSetupYearId: text().references(() => years.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     /** `frozen` is an administrative hold after a report. */
     state: text().$type<"active" | "frozen">().notNull().default("active"),
     ...timestamps,

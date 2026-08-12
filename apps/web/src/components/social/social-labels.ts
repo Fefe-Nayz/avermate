@@ -52,5 +52,15 @@ export function useSocialLabels() {
           return t("Active")
       }
     },
+    groupKind(value: string) {
+      switch (value) {
+        case "class":
+          return t("Class")
+        case "study":
+          return t("Study group")
+        default:
+          return t("Friends group")
+      }
+    },
   }
 }

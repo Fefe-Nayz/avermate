@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Alert, Share, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import {
   SharedAverageText,
   SocialIdentity,
+  groupKindLabel,
 } from "@/components/social/social-ui";
-import { SwitchField, TextField } from "@/components/field";
+import { ChoiceField, SwitchField, TextField } from "@/components/field";
 import {
   Button,
   Card,
@@ -17,6 +19,7 @@ import {
   Screen,
   Section,
 } from "@/components/ui";
+import { useYear } from "@/components/year-provider";
 import { env } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
@@ -30,6 +33,7 @@ import { numeric, space, type, usePalette } from "@/lib/theme";
 export default function GroupDetail() {
   const palette = usePalette();
   const router = useRouter();
+  const { years, refresh: refreshYears } = useYear();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const detail = useQuery({
     ...orpc.social.groups.get.queryOptions({
@@ -93,6 +97,20 @@ export default function GroupDetail() {
     },
   });
 
+  const adopt = useMutation({
+    ...orpc.social.groups.adoptSetup.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      refreshYears();
+      await queryClient.invalidateQueries({
+        queryKey: orpc.years.list.queryKey(),
+      });
+      Alert.alert(
+        t("Year created"),
+        t("Find it in your year picker. It is fully yours from here."),
+      );
+    },
+  });
   const update = useMutation({
     ...orpc.social.groups.update.mutationOptions(),
     onSuccess: async () => {
@@ -104,6 +122,8 @@ export default function GroupDetail() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [kind, setKind] = useState<"friends" | "study" | "class">("friends");
+  const [scopeSubject, setScopeSubject] = useState("");
 
   const group = detail.data;
 
@@ -158,6 +178,13 @@ export default function GroupDetail() {
       <Stack.Screen options={{ title: group.name }} />
       <Screen>
         {group.description ? <Note>{group.description}</Note> : null}
+        <Note>
+          {groupKindLabel(group.kind) +
+            " · " +
+            (group.comparedSubjectName
+              ? t("Compares {name}", { name: group.comparedSubjectName })
+              : t("Compares general averages"))}
+        </Note>
 
         {frozen ? (
           <Card>
@@ -247,7 +274,18 @@ export default function GroupDetail() {
                 key={member.membershipId}
                 first={index === 0}
                 title={member.name}
-                subtitle={member.role === "owner" ? t("Owner") : undefined}
+                subtitle={
+                  [
+                    member.role === "owner" ? t("Owner") : null,
+                    member.gradeCount !== null
+                      ? member.gradeCount === 1
+                        ? t("1 grade")
+                        : t("{count} grades", { count: member.gradeCount })
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
                 leading={
                   member.average !== null ? (
                     <Text
@@ -271,6 +309,25 @@ export default function GroupDetail() {
                       gap: space.sm,
                     }}
                   >
+                    {member.trend ? (
+                      <Ionicons
+                        name={
+                          member.trend === "up"
+                            ? "trending-up-outline"
+                            : member.trend === "down"
+                              ? "trending-down-outline"
+                              : "remove-outline"
+                        }
+                        size={16}
+                        color={
+                          member.trend === "up"
+                            ? palette.positive
+                            : member.trend === "down"
+                              ? palette.negative
+                              : palette.textFaint
+                        }
+                      />
+                    ) : null}
                     <SharedAverageText
                       ratio={member.average}
                       scale={member.scale}
@@ -324,6 +381,80 @@ export default function GroupDetail() {
           </Section>
         ) : null}
 
+        {!frozen ? (
+          <Section title={t("Common configuration")}>
+            <Card style={{ gap: space.md }}>
+              {group.sharedSetup ? (
+                <>
+                  <Note>
+                    {group.sharedSetup.yearName +
+                      " — " +
+                      t(
+                        "{subjects} subjects · {averages} custom averages · {periods} periods",
+                        {
+                          subjects: group.sharedSetup.subjectCount,
+                          averages: group.sharedSetup.averageCount,
+                          periods: group.sharedSetup.periodCount,
+                        },
+                      )}
+                  </Note>
+                  <Button
+                    label={t("Adopt this configuration")}
+                    variant="secondary"
+                    icon="copy-outline"
+                    loading={adopt.isPending}
+                    onPress={() =>
+                      Alert.alert(
+                        t("Adopt this configuration?"),
+                        t(
+                          "This copies the subjects, periods and custom averages into a fresh year of your own. Never any grades — and it is a copy, not a subscription.",
+                        ),
+                        [
+                          { text: t("Cancel"), style: "cancel" },
+                          {
+                            text: t("Create my year"),
+                            onPress: () =>
+                              adopt.mutate({ groupId: groupId ?? "" }),
+                          },
+                        ],
+                      )
+                    }
+                  />
+                </>
+              ) : (
+                <Note>{t("This group has no common configuration yet.")}</Note>
+              )}
+              {isOwner ? (
+                <Button
+                  label={t("Offer one of your years as the template")}
+                  variant="ghost"
+                  onPress={() =>
+                    Alert.alert(t("Common configuration"), undefined, [
+                      { text: t("Cancel"), style: "cancel" },
+                      {
+                        text: t("No common configuration"),
+                        onPress: () =>
+                          update.mutate({
+                            groupId: groupId ?? "",
+                            sharedSetupYearId: null,
+                          }),
+                      },
+                      ...years.map((year) => ({
+                        text: year.name,
+                        onPress: () =>
+                          update.mutate({
+                            groupId: groupId ?? "",
+                            sharedSetupYearId: year.id,
+                          }),
+                      })),
+                    ])
+                  }
+                />
+              ) : null}
+            </Card>
+          </Section>
+        ) : null}
+
         {isOwner && !frozen ? (
           <Section title={t("Group settings")}>
             {editing ? (
@@ -341,6 +472,42 @@ export default function GroupDetail() {
                   multiline
                   maxLength={500}
                 />
+                <ChoiceField
+                  label={t("Group type")}
+                  value={kind}
+                  onChange={setKind}
+                  choices={[
+                    { value: "friends", label: t("Friends group") },
+                    { value: "study", label: t("Study group") },
+                    { value: "class", label: t("Class") },
+                  ]}
+                />
+                <TextField
+                  label={t("What the leaderboard compares")}
+                  value={scopeSubject}
+                  onChangeText={setScopeSubject}
+                  placeholder={t("Empty = general average")}
+                  maxLength={100}
+                />
+                <SwitchField
+                  label={t("Show each member's 30-day trend")}
+                  value={group.showTrend}
+                  disabled={update.isPending}
+                  onValueChange={(value) =>
+                    update.mutate({ groupId: groupId ?? "", showTrend: value })
+                  }
+                />
+                <SwitchField
+                  label={t("Show grade counts")}
+                  value={group.showGradeCount}
+                  disabled={update.isPending}
+                  onValueChange={(value) =>
+                    update.mutate({
+                      groupId: groupId ?? "",
+                      showGradeCount: value,
+                    })
+                  }
+                />
                 <Button
                   label={t("Save")}
                   disabled={name.trim().length < 2}
@@ -350,6 +517,8 @@ export default function GroupDetail() {
                       groupId: groupId ?? "",
                       name: name.trim(),
                       description: description.trim(),
+                      kind,
+                      comparedSubjectName: scopeSubject.trim() || null,
                     })
                   }
                 />
@@ -366,6 +535,8 @@ export default function GroupDetail() {
                 onPress={() => {
                   setName(group.name);
                   setDescription(group.description);
+                  setKind(group.kind);
+                  setScopeSubject(group.comparedSubjectName ?? "");
                   setEditing(true);
                 }}
               />

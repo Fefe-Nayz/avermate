@@ -1,19 +1,25 @@
 import { ORPCError } from "@orpc/server";
-import { and, count, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
+  customAverageEntries,
+  customAverages,
   groupInvitations,
   groupMemberships,
+  periods,
   socialGroups,
+  subjects,
+  years,
 } from "../../db/schema";
+import { newId } from "../../lib/id";
 import { badRequest, notFound, protectedProcedure } from "../../lib/orpc";
 import {
   GROUP_INVITATION_TTL_MS,
   hashOpaque,
   issueOpaqueToken,
 } from "../../lib/social-policy";
-import { blocked, generalAverageOf, identities, identity, notify } from "./shared";
+import { blocked, groupFigures, identities, identity, notify } from "./shared";
 
 /**
  * A group is a named room whose members compare general averages. Joining
@@ -51,6 +57,38 @@ function assertOwner(access: Awaited<ReturnType<typeof groupAccess>>) {
   }
 }
 
+/** What the common configuration contains, for the join/adopt cards. */
+async function sharedSetupSummary(sharedSetupYearId: string | null) {
+  if (!sharedSetupYearId) return null;
+  const [year] = await db
+    .select()
+    .from(years)
+    .where(eq(years.id, sharedSetupYearId))
+    .limit(1);
+  if (!year) return null;
+  const [subjectRows, averageRows, periodRows] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(subjects)
+      .where(eq(subjects.yearId, year.id)),
+    db
+      .select({ value: count() })
+      .from(customAverages)
+      .where(eq(customAverages.yearId, year.id)),
+    db
+      .select({ value: count() })
+      .from(periods)
+      .where(eq(periods.yearId, year.id)),
+  ]);
+  return {
+    yearName: year.name,
+    scale: year.scale,
+    subjectCount: subjectRows[0]?.value ?? 0,
+    averageCount: averageRows[0]?.value ?? 0,
+    periodCount: periodRows[0]?.value ?? 0,
+  };
+}
+
 async function memberCountOf(groupId: string) {
   const [row] = await db
     .select({ value: count() })
@@ -65,6 +103,7 @@ export const socialGroupsRouter = {
       z.object({
         name: nameSchema,
         description: descriptionSchema.default(""),
+        kind: z.enum(["friends", "study", "class"]).default("friends"),
       }),
     )
     .handler(async ({ context, input }) => {
@@ -75,6 +114,7 @@ export const socialGroupsRouter = {
           ownerUserId: userId,
           name: input.name,
           description: input.description,
+          kind: input.kind,
         })
         .returning();
       if (!group) badRequest("The group could not be created");
@@ -99,6 +139,7 @@ export const socialGroupsRouter = {
         id: row.group.id,
         name: row.group.name,
         description: row.group.description,
+        kind: row.group.kind,
         state: row.group.state,
         role: row.membership.role,
         shareAverage: row.membership.shareAverage,
@@ -121,11 +162,21 @@ export const socialGroupsRouter = {
       const named = await identities(memberships.map((row) => row.userId));
 
       const frozen = access.group.state !== "active";
+      const sharedSetup = await sharedSetupSummary(
+        access.group.sharedSetupYearId,
+      );
+      const figureOptions = {
+        comparedSubjectName: access.group.comparedSubjectName,
+        includeTrend: access.group.showTrend,
+        includeGradeCount: access.group.showGradeCount,
+      };
       const members = await Promise.all(
         memberships.map(async (row) => {
           const who = named.get(row.userId);
           const shares = !frozen && row.shareAverage;
-          const academic = shares ? await generalAverageOf(row.userId) : null;
+          const academic = shares
+            ? await groupFigures(row.userId, figureOptions)
+            : null;
           return {
             membershipId: row.id,
             userId: row.userId,
@@ -138,6 +189,8 @@ export const socialGroupsRouter = {
             average: academic?.average ?? null,
             scale: academic?.scale ?? null,
             decimals: academic?.decimals ?? null,
+            trend: academic?.trend ?? null,
+            gradeCount: academic?.gradeCount ?? null,
           };
         }),
       );
@@ -153,6 +206,12 @@ export const socialGroupsRouter = {
         id: access.group.id,
         name: access.group.name,
         description: access.group.description,
+        kind: access.group.kind,
+        comparedSubjectName: access.group.comparedSubjectName,
+        showTrend: access.group.showTrend,
+        showGradeCount: access.group.showGradeCount,
+        sharedSetupYearId: access.group.sharedSetupYearId,
+        sharedSetup,
         state: access.group.state,
         ownerUserId: access.group.ownerUserId,
         createdAt: access.group.createdAt,
@@ -174,18 +233,55 @@ export const socialGroupsRouter = {
         groupId: z.string().min(1),
         name: nameSchema.optional(),
         description: descriptionSchema.optional(),
+        kind: z.enum(["friends", "study", "class"]).optional(),
+        comparedSubjectName: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .nullable()
+          .optional(),
+        showTrend: z.boolean().optional(),
+        showGradeCount: z.boolean().optional(),
+        sharedSetupYearId: z.string().min(1).nullable().optional(),
       }),
     )
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
       assertActive(access.group);
       assertOwner(access);
+      if (input.sharedSetupYearId) {
+        const [owned] = await db
+          .select({ id: years.id })
+          .from(years)
+          .where(
+            and(
+              eq(years.id, input.sharedSetupYearId),
+              eq(years.userId, context.session.user.id),
+            ),
+          )
+          .limit(1);
+        if (!owned) notFound("Year");
+      }
       await db
         .update(socialGroups)
         .set({
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.description !== undefined
             ? { description: input.description }
+            : {}),
+          ...(input.kind !== undefined ? { kind: input.kind } : {}),
+          ...(input.comparedSubjectName !== undefined
+            ? { comparedSubjectName: input.comparedSubjectName }
+            : {}),
+          ...(input.showTrend !== undefined
+            ? { showTrend: input.showTrend }
+            : {}),
+          ...(input.showGradeCount !== undefined
+            ? { showGradeCount: input.showGradeCount }
+            : {}),
+          ...(input.sharedSetupYearId !== undefined
+            ? { sharedSetupYearId: input.sharedSetupYearId }
             : {}),
           updatedAt: new Date(),
         })
@@ -232,6 +328,135 @@ export const socialGroupsRouter = {
         .set({ shareAverage: input.shareAverage, updatedAt: new Date() })
         .where(eq(groupMemberships.id, access.membership.id));
       return { shareAverage: input.shareAverage };
+    }),
+
+  /**
+   * Copy the group's common configuration — year settings, periods, the
+   * subject tree, custom averages — into a fresh year of the caller's own.
+   * Grades never travel, and nothing links back: adopting is a copy, so a
+   * member owns their year completely afterwards.
+   */
+  adoptSetup: protectedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        name: z.string().trim().min(1).max(100).optional(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const access = await groupAccess(input.groupId, userId);
+      assertActive(access.group);
+      if (!access.group.sharedSetupYearId) {
+        badRequest("This group has no common configuration");
+      }
+      const [reference] = await db
+        .select()
+        .from(years)
+        .where(eq(years.id, access.group.sharedSetupYearId ?? ""))
+        .limit(1);
+      if (!reference) notFound("Year");
+
+      const [subjectRows, periodRows, averageRows] = await Promise.all([
+        db.select().from(subjects).where(eq(subjects.yearId, reference.id)),
+        db.select().from(periods).where(eq(periods.yearId, reference.id)),
+        db
+          .select()
+          .from(customAverages)
+          .where(eq(customAverages.yearId, reference.id)),
+      ]);
+      const entryRows =
+        averageRows.length === 0
+          ? []
+          : await db
+              .select()
+              .from(customAverageEntries)
+              .where(
+                inArray(
+                  customAverageEntries.averageId,
+                  averageRows.map((row) => row.id),
+                ),
+              );
+
+      const [created] = await db
+        .insert(years)
+        .values({
+          name: input.name?.trim() || reference.name,
+          startsAt: reference.startsAt,
+          endsAt: reference.endsAt,
+          scale: reference.scale,
+          defaultOutOf: reference.defaultOutOf,
+          passingRatio: reference.passingRatio,
+          decimals: reference.decimals,
+          userId,
+        })
+        .returning();
+      if (!created) badRequest("The year could not be created");
+
+      // Ids are drawn up front so parent links and average entries can be
+      // remapped in one pass — the schema deliberately has no subject FK.
+      const subjectIds = new Map(
+        subjectRows.map((row) => [row.id, newId("sub")]),
+      );
+      if (subjectRows.length > 0) {
+        await db.insert(subjects).values(
+          subjectRows.map((row) => ({
+            id: subjectIds.get(row.id),
+            name: row.name,
+            shortName: row.shortName,
+            parentId: row.parentId
+              ? (subjectIds.get(row.parentId) ?? null)
+              : null,
+            coefficient: row.coefficient,
+            kind: row.kind,
+            isMain: row.isMain,
+            sortOrder: row.sortOrder,
+            yearId: created.id,
+            userId,
+          })),
+        );
+      }
+      if (periodRows.length > 0) {
+        await db.insert(periods).values(
+          periodRows.map((row) => ({
+            name: row.name,
+            startAt: row.startAt,
+            endAt: row.endAt,
+            isCumulative: row.isCumulative,
+            sortOrder: row.sortOrder,
+            yearId: created.id,
+            userId,
+          })),
+        );
+      }
+      for (const average of averageRows) {
+        const [copied] = await db
+          .insert(customAverages)
+          .values({
+            name: average.name,
+            isMain: average.isMain,
+            sortOrder: average.sortOrder,
+            yearId: created.id,
+            userId,
+          })
+          .returning({ id: customAverages.id });
+        if (!copied) continue;
+        const entries = entryRows.filter(
+          (entry) =>
+            entry.averageId === average.id && subjectIds.has(entry.subjectId),
+        );
+        if (entries.length > 0) {
+          await db.insert(customAverageEntries).values(
+            entries.map((entry) => ({
+              averageId: copied.id,
+              subjectId: subjectIds.get(entry.subjectId) as string,
+              coefficient: entry.coefficient,
+              includeChildren: entry.includeChildren,
+            })),
+          );
+        }
+      }
+      return { yearId: created.id };
     }),
 
   removeMember: protectedProcedure
@@ -378,6 +603,9 @@ export const socialGroupInvitationsRouter = {
         group: {
           name: group.name,
           description: group.description,
+          kind: group.kind,
+          comparedSubjectName: group.comparedSubjectName,
+          hasSharedSetup: Boolean(group.sharedSetupYearId),
           memberCount,
         },
         inviter: inviter

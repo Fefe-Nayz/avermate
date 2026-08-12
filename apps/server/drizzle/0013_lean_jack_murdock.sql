@@ -1,0 +1,1 @@
+ALTER TABLE `social_groups` ADD `sharedSetupYearId` text REFERENCES years(id);

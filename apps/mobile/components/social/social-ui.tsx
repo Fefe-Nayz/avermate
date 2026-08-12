@@ -1,7 +1,18 @@
 import { Text, View } from "react-native";
 import { Image } from "expo-image";
-import { locale } from "@/lib/i18n";
+import { locale, t } from "@/lib/i18n";
 import { numeric, radius, space, type, usePalette } from "@/lib/theme";
+
+export function groupKindLabel(value: string): string {
+  switch (value) {
+    case "class":
+      return t("Class");
+    case "study":
+      return t("Study group");
+    default:
+      return t("Friends group");
+  }
+}
 
 /**
  * The small social vocabulary on native: a person, and a shared figure.

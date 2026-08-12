@@ -82,6 +82,13 @@ export function GroupInvitationClient({ token }: { token: string }) {
               })
             : t("{count} people are in.", { count: String(data.group.memberCount) })}
         </p>
+        {data.group.hasSharedSetup ? (
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "This group offers a common year configuration you can adopt after joining."
+            )}
+          </p>
+        ) : null}
         <SocialCallout title={t("What joining shares")}>
           {t(
             "Members compare general averages. Yours is visible on joining, and one switch inside the group hides it whenever you want."

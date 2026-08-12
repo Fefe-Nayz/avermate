@@ -1,5 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { groupKindLabel } from "@/components/social/social-ui";
 import {
   Button,
   Card,
@@ -65,6 +66,15 @@ export default function GroupInvitation() {
               {data.group.description ? (
                 <Note>{data.group.description}</Note>
               ) : null}
+              <Note>
+                {groupKindLabel(data.group.kind) +
+                  " · " +
+                  (data.group.comparedSubjectName
+                    ? t("Compares {name}", {
+                        name: data.group.comparedSubjectName,
+                      })
+                    : t("Compares general averages"))}
+              </Note>
               <Note>
                 {data.inviter
                   ? t("{name} invites you. {count} people are in.", {

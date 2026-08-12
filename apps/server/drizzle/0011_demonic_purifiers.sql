@@ -176,4 +176,4 @@ CREATE TABLE `social_reports` (
 );
 --> statement-breakpoint
 CREATE INDEX `social_reports_status_idx` ON `social_reports` (`status`,`priority`);--> statement-breakpoint
-CREATE INDEX `social_reports_reporter_idx` ON `social_reports` (`reporterUserId`)
+CREATE INDEX `social_reports_reporter_idx` ON `social_reports` (`reporterUserId`);

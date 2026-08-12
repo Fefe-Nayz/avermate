@@ -365,16 +365,34 @@ export async function exportSocialData(userId: string) {
   };
 }
 
-/**
- * Just the general average, for group leaderboards. Cheaper than the full
- * view and indifferent to the subject locks — inside a group the only lock
- * is the membership's own `shareAverage`.
- */
-export async function generalAverageOf(ownerUserId: string): Promise<{
+/** How far a 30-day drift must go before an arrow claims a direction. */
+const TREND_THRESHOLD = 0.01;
+const TREND_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+
+export interface GroupFigureOptions {
+  /** Null compares general averages; a name matches the member's subjects. */
+  comparedSubjectName: string | null;
+  includeTrend: boolean;
+  includeGradeCount: boolean;
+}
+
+export interface GroupFigures {
   average: number | null;
   scale: number;
   decimals: number;
-} | null> {
+  gradeCount: number | null;
+  trend: "up" | "down" | "flat" | null;
+}
+
+/**
+ * One member's figures for a group leaderboard, computed to the group's own
+ * configuration. Indifferent to the friend-facing subject locks — inside a
+ * group the only lock is the membership's `shareAverage` switch.
+ */
+export async function groupFigures(
+  ownerUserId: string,
+  options: GroupFigureOptions,
+): Promise<GroupFigures | null> {
   const profile = await ensureProfile(ownerUserId);
   const year = await resolveSharedYear(ownerUserId, profile.sharedYearId);
   if (!year) return null;
@@ -416,21 +434,71 @@ export async function generalAverageOf(ownerUserId: string): Promise<{
     list.push(grade);
     gradesBySubject.set(grade.subjectId, list);
   }
-  const graph = new SubjectGraph(
-    subjectRows.map(
-      (subject): Subject => ({
-        ...subject,
-        kind: subject.kind === "category" ? "category" : "subject",
-        grades: (gradesBySubject.get(subject.id) ?? []).map((grade) => ({
-          ...grade,
-          components: [],
-        })),
-      }),
-    ),
-  );
+  const toGraph = (rows: typeof gradeRows) => {
+    const bySubject = new Map<string, typeof gradeRows>();
+    for (const grade of rows) {
+      const list = bySubject.get(grade.subjectId) ?? [];
+      list.push(grade);
+      bySubject.set(grade.subjectId, list);
+    }
+    return new SubjectGraph(
+      subjectRows.map(
+        (subject): Subject => ({
+          ...subject,
+          kind: subject.kind === "category" ? "category" : "subject",
+          grades: (bySubject.get(subject.id) ?? []).map((grade) => ({
+            ...grade,
+            components: [],
+          })),
+        }),
+      ),
+    );
+  };
+
+  // The compared scope: everything, or the sub-trees whose name matches.
+  // Matching by name is what lets a class group compare "Maths" even though
+  // every member spells and nests their own tree differently.
+  const scope = (graph: SubjectGraph): SubjectGraph => {
+    const needle = options.comparedSubjectName?.trim().toLowerCase();
+    if (!needle) return graph;
+    const include = new Set<string>();
+    for (const subject of graph.subjects) {
+      if (!subject.name.toLowerCase().includes(needle)) continue;
+      include.add(subject.id);
+      for (const descendant of graph.descendantsOf(subject.id)) {
+        include.add(descendant.id);
+      }
+    }
+    return graph.subset(include);
+  };
+
+  const current = scope(toGraph(gradeRows));
+  const average = current.ratio(null);
+
+  let trend: GroupFigures["trend"] = null;
+  if (options.includeTrend && average !== null) {
+    const cutoff = new Date(Date.now() - TREND_WINDOW_MS);
+    const earlier = scope(
+      toGraph(gradeRows.filter((grade) => grade.passedAt <= cutoff)),
+    ).ratio(null);
+    if (earlier !== null) {
+      const delta = average - earlier;
+      trend =
+        delta > TREND_THRESHOLD
+          ? "up"
+          : delta < -TREND_THRESHOLD
+            ? "down"
+            : "flat";
+    }
+  }
+
   return {
-    average: graph.ratio(null),
+    average,
     scale: year.scale,
     decimals: year.decimals,
+    gradeCount: options.includeGradeCount
+      ? current.allGrades().length
+      : null,
+    trend,
   };
 }

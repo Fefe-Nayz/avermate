@@ -4,13 +4,18 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  BookOpenIcon,
+  CopyPlusIcon,
   CrownIcon,
   DoorOpenIcon,
   GaugeIcon,
   LinkIcon,
+  MoveRightIcon,
   PencilIcon,
   SnowflakeIcon,
   Trash2Icon,
+  TrendingDownIcon,
+  TrendingUpIcon,
   TrophyIcon,
   UsersRoundIcon,
   UserXIcon,
@@ -19,6 +24,7 @@ import {
 import { useExtracted, useLocale } from "next-intl"
 import { toast } from "sonner"
 import { ReportDialog } from "@/components/social/report-dialog"
+import { useSocialLabels } from "@/components/social/social-labels"
 import { SecretLink } from "@/components/social/secret-link"
 import {
   SharedAverage,
@@ -42,6 +48,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -53,6 +60,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -66,12 +74,14 @@ import { orpc } from "@/lib/orpc"
  */
 export function GroupDetailClient({ groupId }: { groupId: string }) {
   const t = useExtracted()
+  const labels = useSocialLabels()
   const locale = useLocale()
   const router = useRouter()
   const queryClient = useQueryClient()
   const detail = useQuery(
     orpc.social.groups.get.queryOptions({ input: { groupId } })
   )
+  const years = useQuery(orpc.years.list.queryOptions())
   const invitations = useQuery({
     ...orpc.social.groups.invitations.list.queryOptions({
       input: { groupId },
@@ -82,6 +92,10 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   const [editOpen, setEditOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [kind, setKind] = useState<"friends" | "study" | "class">("friends")
+  const [scopeSubject, setScopeSubject] = useState("")
+  const [adoptOpen, setAdoptOpen] = useState(false)
+  const [adoptName, setAdoptName] = useState("")
 
   const refresh = async () => {
     await Promise.all([
@@ -128,6 +142,20 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
       setEditOpen(false)
       await refresh()
     },
+  })
+  const adopt = useMutation({
+    ...orpc.social.groups.adoptSetup.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      setAdoptOpen(false)
+      toast.success(
+        t("Year created from the group's configuration. Find it in your year picker.")
+      )
+      await queryClient.invalidateQueries({
+        queryKey: orpc.years.list.key(),
+      })
+    },
+    onError: () => toast.error(t("The configuration could not be adopted.")),
   })
   const removeMember = useMutation({
     ...orpc.social.groups.removeMember.mutationOptions(),
@@ -209,6 +237,20 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline">{labels.groupKind(group.kind)}</Badge>
+        {group.comparedSubjectName ? (
+          <Badge variant="secondary" className="gap-1">
+            <BookOpenIcon className="size-3" aria-hidden />
+            {t("Compares {name}", { name: group.comparedSubjectName })}
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="gap-1">
+            <GaugeIcon className="size-3" aria-hidden />
+            {t("Compares general averages")}
+          </Badge>
+        )}
+      </div>
       <SocialHeading
         icon={UsersRoundIcon}
         title={group.name}
@@ -222,6 +264,8 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                 if (open) {
                   setName(group.name)
                   setDescription(group.description)
+                  setKind(group.kind)
+                  setScopeSubject(group.comparedSubjectName ?? "")
                 }
               }}
             >
@@ -256,6 +300,62 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                       rows={3}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-kind">{t("Group type")}</Label>
+                    <SelectControl
+                      id="edit-group-kind"
+                      value={kind}
+                      onValueChange={(value) =>
+                        setKind(value as "friends" | "study" | "class")
+                      }
+                      options={[
+                        { value: "friends", label: t("Friends group") },
+                        { value: "study", label: t("Study group") },
+                        { value: "class", label: t("Class") },
+                      ]}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-scope">
+                      {t("What the leaderboard compares")}
+                    </Label>
+                    <Input
+                      id="edit-group-scope"
+                      value={scopeSubject}
+                      onChange={(event) => setScopeSubject(event.target.value)}
+                      placeholder={t("Empty = general average")}
+                      maxLength={100}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        "Name a subject — Maths, Physics — and each member is ranked on their own subjects matching that name."
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="edit-group-trend">
+                      {t("Show each member's 30-day trend")}
+                    </Label>
+                    <Switch
+                      id="edit-group-trend"
+                      checked={group.showTrend}
+                      onCheckedChange={(checked) =>
+                        update.mutate({ groupId, showTrend: checked })
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="edit-group-count">
+                      {t("Show grade counts")}
+                    </Label>
+                    <Switch
+                      id="edit-group-count"
+                      checked={group.showGradeCount}
+                      onCheckedChange={(checked) =>
+                        update.mutate({ groupId, showGradeCount: checked })
+                      }
+                    />
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button
@@ -265,6 +365,8 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                         groupId,
                         name: name.trim(),
                         description: description.trim(),
+                        kind,
+                        comparedSubjectName: scopeSubject.trim() || null,
                       })
                     }
                   >
@@ -386,6 +488,24 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                 }
                 trailing={
                   <div className="flex items-center gap-2">
+                    {member.trend ? (
+                      member.trend === "up" ? (
+                        <TrendingUpIcon
+                          className="size-4 text-positive"
+                          aria-label={t("Improving")}
+                        />
+                      ) : member.trend === "down" ? (
+                        <TrendingDownIcon
+                          className="size-4 text-negative"
+                          aria-label={t("Declining")}
+                        />
+                      ) : (
+                        <MoveRightIcon
+                          className="size-4 text-muted-foreground"
+                          aria-label={t("Stable")}
+                        />
+                      )
+                    ) : null}
                     {member.average !== null ? (
                       <SharedAverage
                         ratio={member.average}
@@ -422,7 +542,20 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                   name={member.name}
                   handle={member.handle}
                   avatarUrl={member.avatar}
-                  hint={member.role === "owner" ? t("Owner") : undefined}
+                  hint={
+                    [
+                      member.role === "owner" ? t("Owner") : null,
+                      member.gradeCount !== null
+                        ? member.gradeCount === 1
+                          ? t("1 grade")
+                          : t("{count} grades", {
+                              count: String(member.gradeCount),
+                            })
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || undefined
+                  }
                 />
               </SocialRow>
             ))}
@@ -486,6 +619,109 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
               ))}
             </SocialList>
           ) : null}
+        </SocialSection>
+      ) : null}
+
+      {!frozen ? (
+        <SocialSection
+          icon={CopyPlusIcon}
+          title={t("Common configuration")}
+          description={t(
+            "An optional template year. Adopting copies its subjects, periods and custom averages into a fresh year of your own — never any grades."
+          )}
+        >
+          {isOwner ? (
+            <div className="space-y-2">
+              <Label htmlFor="shared-setup-year">
+                {t("Offer one of your years as the template")}
+              </Label>
+              <SelectControl
+                id="shared-setup-year"
+                value={group.sharedSetupYearId ?? "__none__"}
+                onValueChange={(value) =>
+                  update.mutate({
+                    groupId,
+                    sharedSetupYearId: value === "__none__" ? null : value,
+                  })
+                }
+                options={[
+                  { value: "__none__", label: t("No common configuration") },
+                  ...(years.data ?? [])
+                    .filter((year) => !year.archivedAt)
+                    .map((year) => ({ value: year.id, label: year.name })),
+                ]}
+              />
+            </div>
+          ) : null}
+          {group.sharedSetup ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {group.sharedSetup.yearName}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "{subjects} subjects · {averages} custom averages · {periods} periods · /{scale}",
+                    {
+                      subjects: String(group.sharedSetup.subjectCount),
+                      averages: String(group.sharedSetup.averageCount),
+                      periods: String(group.sharedSetup.periodCount),
+                      scale: String(group.sharedSetup.scale),
+                    }
+                  )}
+                </p>
+              </div>
+              <Dialog
+                open={adoptOpen}
+                onOpenChange={(open) => {
+                  setAdoptOpen(open)
+                  if (open) setAdoptName(group.sharedSetup?.yearName ?? "")
+                }}
+              >
+                <DialogTrigger
+                  render={<Button type="button" size="sm" variant="outline" />}
+                >
+                  <CopyPlusIcon /> {t("Adopt this configuration")}
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("Adopt this configuration")}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <Label htmlFor="adopt-year-name">
+                      {t("Name of your new year")}
+                    </Label>
+                    <Input
+                      id="adopt-year-name"
+                      value={adoptName}
+                      onChange={(event) => setAdoptName(event.target.value)}
+                      maxLength={100}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        "A copy, not a subscription: if the template changes later, adopt it again."
+                      )}
+                    </p>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      disabled={adopt.isPending || !adoptName.trim()}
+                      onClick={() =>
+                        adopt.mutate({ groupId, name: adoptName.trim() })
+                      }
+                    >
+                      {adopt.isPending ? <Spinner /> : null}
+                      {t("Create my year")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t("This group has no common configuration yet.")}
+            </p>
+          )}
         </SocialSection>
       ) : null}
 

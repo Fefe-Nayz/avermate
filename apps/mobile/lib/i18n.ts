@@ -1272,6 +1272,17 @@ const fr: Record<string, string> = {
   "What it is made of": "Sa composition",
 
   // ---------------------------------------------------- social, rebuilt
+  "Year created": "Année créée",
+  "Find it in your year picker. It is fully yours from here.": "Retrouvez-la dans votre sélecteur d’années. Elle est entièrement à vous désormais.",
+  "Common configuration": "Configuration commune",
+  "{subjects} subjects · {averages} custom averages · {periods} periods": "{subjects} matières · {averages} moyennes personnalisées · {periods} périodes",
+  "Adopt this configuration": "Adopter cette configuration",
+  "Adopt this configuration?": "Adopter cette configuration ?",
+  "This copies the subjects, periods and custom averages into a fresh year of your own. Never any grades — and it is a copy, not a subscription.": "Cela copie les matières, les périodes et les moyennes personnalisées dans une nouvelle année à vous. Jamais aucune note — et c’est une copie, pas un abonnement.",
+  "Create my year": "Créer mon année",
+  "This group has no common configuration yet.": "Ce groupe n’a pas encore de configuration commune.",
+  "Offer one of your years as the template": "Proposer une de vos années comme modèle",
+  "No common configuration": "Aucune configuration commune",
   "Group type": "Type de groupe",
   "Friends group": "Groupe d'amis",
   "Study group": "Groupe d'étude",
