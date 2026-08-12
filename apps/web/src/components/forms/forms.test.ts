@@ -35,13 +35,33 @@ describe("form flows", () => {
     expect(flow).toContain("function Review(")
   })
 
-  test("the primary action stays above the keyboard on a phone", async () => {
+  test("the primary action clears both the tab bar and the keyboard", async () => {
     const flow = await source("./form-flow.tsx")
 
-    expect(flow).toContain("fixed inset-x-0 bottom-0")
-    expect(flow).toContain("env(safe-area-inset-bottom)")
+    // Two ways to be unreachable: behind the z-40 tab bar, and behind the
+    // keyboard, which does not shrink the viewport a fixed bar is placed in.
+    expect(flow).toContain("useKeyboardInset")
+    expect(flow).toContain("var(--spacing-tabbar) + var(--spacing-safe-bottom)")
+    expect(flow).toContain("z-40")
     // Static again on desktop, where nothing needs pinning.
     expect(flow).toContain("md:static")
+  })
+
+  test("a focused field is pulled clear of the keyboard", async () => {
+    const flow = await source("./form-flow.tsx")
+
+    expect(flow).toContain("scrollIntoView({ block: \"center\"")
+    // The document does not scroll; the shell scrolls a pane.
+    expect(flow).toContain("closest(\".scroll-pane\")")
+  })
+
+  test("the keyboard inset is measured from the visual viewport", async () => {
+    const hook = await source("../../hooks/use-keyboard-inset.ts")
+
+    expect(hook).toContain("window.visualViewport")
+    expect(hook).toContain("viewport.offsetTop")
+    // A collapsing browser toolbar is not a keyboard.
+    expect(hook).toContain("covered > 80")
   })
 
   test("a step can refuse to be left behind", async () => {
@@ -76,5 +96,23 @@ describe("form flows", () => {
     expect(controls).toContain("relativeDays()")
     // And desktop keeps the popover.
     expect(controls).toContain("<Popover open={open}")
+  })
+
+  test("a step whose only job is choosing shows the list, not a way in", async () => {
+    const picker = await source("./picker.tsx")
+    expect(picker).toContain('layout === "page"')
+    // Arriving with the keyboard already up would hide the very list the
+    // step exists to show.
+    expect(picker).toContain("searchBox(false)")
+
+    // Every choice that is a step of its own is laid out that way.
+    for (const path of [
+      "../grades/grade-form.tsx",
+      "../subjects/subject-form.tsx",
+      "../goals/goal-form.tsx",
+      "../cards/card-form.tsx",
+    ]) {
+      expect(await source(path)).toContain('layout="page"')
+    }
   })
 })

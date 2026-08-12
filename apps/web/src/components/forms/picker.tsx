@@ -47,6 +47,7 @@ export function PickerField({
   placeholder,
   emptyHint,
   searchable = true,
+  layout = "field",
 }: {
   label: string
   description?: string
@@ -58,6 +59,13 @@ export function PickerField({
   placeholder?: string
   emptyHint?: string
   searchable?: boolean
+  /**
+   * `"page"` when the choice *is* the screen — the list is simply there,
+   * scrollable, with nothing to open first. That is the right shape for a step
+   * whose only job is picking one thing, and it is one tap shorter than any
+   * arrangement that starts closed.
+   */
+  layout?: "field" | "page"
 }) {
   const t = useExtracted()
   const [open, setOpen] = useState(false)
@@ -94,7 +102,7 @@ export function PickerField({
     />
   )
 
-  const search = (
+  const searchBox = (focus: boolean) => (
     <div className="relative">
       <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
@@ -102,12 +110,52 @@ export function PickerField({
         onChange={(event) => setQuery(event.target.value)}
         placeholder={t("Search…")}
         className="h-11 pl-9 md:h-10"
-        autoFocus
+        autoFocus={focus}
       />
     </div>
   )
 
   const showSearch = searchable && options.length > 7
+
+  if (layout === "page") {
+    return (
+      <Field data-invalid={error ? true : undefined}>
+        <FieldLabel>
+          {label}
+          {required ? <span className="text-destructive"> *</span> : null}
+        </FieldLabel>
+
+        {/* Nothing autofocuses: arriving on a step with the keyboard already
+            up hides the list this step exists to show. */}
+        {showSearch ? searchBox(false) : null}
+
+        <div
+          className={cn(
+            "overflow-hidden rounded-xl border bg-card",
+            // The step's own page does the scrolling on a phone. On a laptop
+            // the form is one long screen, so the list is capped instead.
+            "md:max-h-80 md:overflow-y-auto md:overscroll-contain",
+            error && "border-destructive"
+          )}
+        >
+          <List
+            options={filtered}
+            value={value}
+            emptyHint={emptyHint ?? t("Nothing matches.")}
+            onChoose={(option) => {
+              haptic("selection")
+              onValueChange(option.value)
+            }}
+          />
+        </div>
+
+        {description && !error ? (
+          <FieldDescription>{description}</FieldDescription>
+        ) : null}
+        {error ? <FieldError>{error}</FieldError> : null}
+      </Field>
+    )
+  }
 
   return (
     <Field data-invalid={error ? true : undefined}>
@@ -149,7 +197,9 @@ export function PickerField({
 
         {open && wide ? (
           <div className="border-t">
-            {showSearch ? <div className="border-b p-2">{search}</div> : null}
+            {showSearch ? (
+              <div className="border-b p-2">{searchBox(true)}</div>
+            ) : null}
             <div className="max-h-72 overflow-y-auto overscroll-contain py-1">
               {list}
             </div>
@@ -161,7 +211,7 @@ export function PickerField({
         <FullScreenLayer open onClose={close} title={label}>
           {showSearch ? (
             <div className="sticky top-0 z-10 border-b bg-background p-3">
-              {search}
+              {searchBox(true)}
             </div>
           ) : null}
           <div className="pb-4">{list}</div>

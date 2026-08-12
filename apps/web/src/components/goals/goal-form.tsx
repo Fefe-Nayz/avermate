@@ -271,6 +271,7 @@ export function GoalForm({
 
           {kind === "subject" ? (
             <PickerField
+              layout="page"
               label={t("Subject")}
               required
               options={subjectOptions}
@@ -282,6 +283,7 @@ export function GoalForm({
 
           {kind === "custom" ? (
             <PickerField
+              layout="page"
               label={t("Custom average")}
               required
               options={averageOptions}

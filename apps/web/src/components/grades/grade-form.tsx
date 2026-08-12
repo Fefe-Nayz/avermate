@@ -342,25 +342,31 @@ export function GradeForm({
 
   const steps: FlowStep[] = [
     {
-      id: "what",
-      title: t("What is it?"),
-      description: t("The subject it counts towards, and what to call it."),
-      summary: subjectId
-        ? [graph.byId(subjectId)?.name, name.trim()].filter(Boolean).join(" · ")
-        : null,
-      validate: () => check(["subjectId", "name"]),
+      id: "subject",
+      title: t("Which subject?"),
+      summary: subjectId ? (graph.byId(subjectId)?.name ?? null) : null,
+      validate: () => check(["subjectId"]),
+      content: (
+        <PickerField
+          layout="page"
+          label={t("Subject")}
+          required
+          options={options}
+          value={subjectId}
+          onValueChange={setSubjectId}
+          error={errors.subjectId}
+          emptyHint={t("No subject matches. Add one first.")}
+        />
+      ),
+    },
+    {
+      id: "result",
+      title: t("The result"),
+      description: t("What to call it, what you got, and how much it counts."),
+      summary: [name.trim(), resultSummary].filter(Boolean).join(" · "),
+      validate: () => check(["name", "value", "outOf", "components"]),
       content: (
         <div className="flex flex-col gap-4">
-          <PickerField
-            label={t("Subject")}
-            required
-            options={options}
-            value={subjectId}
-            onValueChange={setSubjectId}
-            error={errors.subjectId}
-            placeholder={t("Which subject is this for?")}
-            emptyHint={t("No subject matches. Add one first.")}
-          />
           <TextField
             label={t("Name")}
             required
@@ -369,17 +375,7 @@ export function GradeForm({
             placeholder={t("Mock exam, chapter 4, oral…")}
             error={errors.name}
           />
-        </div>
-      ),
-    },
-    {
-      id: "result",
-      title: t("The result"),
-      description: t("What you were given, and how much it counts."),
-      summary: resultSummary,
-      validate: () => check(["value", "outOf", "components"]),
-      content: (
-        <div className="flex flex-col gap-4">
+
           <Field orientation="horizontal">
             <FieldLabel htmlFor="composite-toggle" className="flex-1">
               {t("Made of several parts")}

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -19,6 +20,7 @@ import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 
@@ -95,6 +97,8 @@ export function FormFlow({
 }) {
   const t = useExtracted()
   const router = useRouter()
+  const keyboard = useKeyboardInset()
+  const formRef = useRef<HTMLFormElement>(null)
   const active = useMemo(
     () => steps.filter((step) => step.when !== false),
     [steps]
@@ -124,7 +128,26 @@ export function FormFlow({
     haptic("selection")
     setIndex(next)
     // A new step starts at its own top, not wherever the last one was read to.
-    window.scrollTo({ top: 0 })
+    // The document does not scroll here — the shell scrolls a pane — so the
+    // pane is what has to be told.
+    formRef.current?.closest(".scroll-pane")?.scrollTo({ top: 0 })
+  }
+
+  /**
+   * Keep whatever is focused above the keyboard.
+   *
+   * Browsers do this for a document that scrolls itself; inside a scroll pane
+   * with a pinned action bar they routinely leave the field half-covered. One
+   * frame after the viewport has settled is early enough not to be seen.
+   */
+  const revealFocused = (event: React.FocusEvent<HTMLFormElement>) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    if (!target.matches("input, textarea, [contenteditable]")) return
+    window.setTimeout(
+      () => target.scrollIntoView({ block: "center", behavior: "smooth" }),
+      120
+    )
   }
 
   const advance = () => {
@@ -139,7 +162,12 @@ export function FormFlow({
     <>
       <PageMeta title={title} subtitle={description} backHref={backHref} />
 
-      <form onSubmit={handleSubmit} className="mx-auto w-full max-w-2xl">
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        onFocus={revealFocused}
+        className="mx-auto w-full max-w-2xl"
+      >
         <div className="hidden items-start justify-between gap-4 pb-4 md:flex">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
@@ -219,10 +247,22 @@ export function FormFlow({
           </p>
         ) : null}
 
+        {/* Above the tab bar rather than under it, and above the keyboard
+            when there is one — a bar the thumb cannot reach is not pinned,
+            it is hidden. The tab bar's own offset is dropped while the
+            keyboard is up, because the keyboard already covers it. */}
         <div
+          style={
+            keyboard > 0
+              ? { bottom: `${keyboard}px` }
+              : {
+                  bottom:
+                    "calc(var(--spacing-tabbar) + var(--spacing-safe-bottom))",
+                }
+          }
           className={cn(
-            "fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl",
-            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0 md:backdrop-blur-none"
+            "fixed inset-x-0 z-40 border-t border-border/70 bg-background px-4 pt-3 pb-3",
+            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0"
           )}
         >
           {/* Phone: move through the flow, and only save from the review. */}

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { ArrowLeftIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
+import { useKeyboardInset } from "@/hooks/use-keyboard-inset"
 
 /**
  * A control that takes the whole screen instead of floating over the form.
@@ -36,6 +37,7 @@ export function FullScreenLayer({
   footer?: ReactNode
 }) {
   const t = useExtracted()
+  const keyboard = useKeyboardInset()
   const close = useRef(onClose)
   close.current = onClose
 
@@ -70,6 +72,9 @@ export function FullScreenLayer({
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      // The layer ends where the keyboard begins, so its own footer and the
+      // bottom of its list stay reachable instead of sliding underneath.
+      style={keyboard > 0 ? { bottom: `${keyboard}px` } : undefined}
       className="fixed inset-0 z-50 flex flex-col bg-background md:hidden"
     >
       <header className="flex shrink-0 items-start gap-2 border-b px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">

@@ -290,6 +290,7 @@ export function CardForm({
       summary: labels[metric],
       content: (
         <PickerField
+          layout="page"
           label={t("Metric")}
           options={CARD_METRICS.map((item) => ({
             value: item,
@@ -323,6 +324,7 @@ export function CardForm({
 
           {targetKind === "subject" ? (
             <PickerField
+              layout="page"
               label={t("Subject")}
               options={subjectOptions}
               value={targetId}

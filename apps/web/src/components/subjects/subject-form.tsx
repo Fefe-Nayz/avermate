@@ -263,6 +263,7 @@ export function SubjectForm({
       summary: parentName ?? t("Top level"),
       content: (
         <PickerField
+          layout="page"
           label={t("Sits inside")}
           options={parentOptions}
           value={parentId ?? ""}
