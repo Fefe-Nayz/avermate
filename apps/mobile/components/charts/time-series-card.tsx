@@ -1,9 +1,8 @@
 import { Text, View } from "react-native";
 import { Card } from "@/components/ui";
 import { t, locale } from "@/lib/i18n";
-import { useInteractionPreferences } from "@/lib/interaction-preferences";
 import { space, type, usePalette } from "@/lib/theme";
-import TimeSeriesChartDom from "./time-series-chart-dom";
+import { TimeSeriesChart } from "./time-series-chart";
 import type { SerializableTimeSeriesModel } from "./time-series-model";
 import { useChartSettings } from "@/lib/chart-settings";
 
@@ -20,19 +19,19 @@ export const TIME_SERIES_COLORS = [
 
 export function TimeSeriesCard({
   description,
-  height = 278,
+  height = 240,
   model,
   passingValue,
   title,
 }: {
   description?: string;
+  /** Plot height. The series legend is drawn above it and adds its own. */
   height?: number;
   model: SerializableTimeSeriesModel;
   passingValue?: number;
   title: string;
 }) {
   const palette = usePalette();
-  const { reduceMotion } = useInteractionPreferences();
   const { showPoints } = useChartSettings();
   const points = model.series.reduce(
     (total, series) => total + series.points.length,
@@ -70,11 +69,11 @@ export function TimeSeriesCard({
           {t("Not enough data yet")}
         </Text>
       ) : (
-        <TimeSeriesChartDom
-          model={model}
+        <TimeSeriesChart
+          height={height}
           locale={locale()}
+          model={model}
           passingValue={passingValue}
-          reducedMotion={reduceMotion}
           showPoints={showPoints}
           strings={{
             hideSeries: t("Hide {name}"),
@@ -90,11 +89,6 @@ export function TimeSeriesCard({
             muted: palette.textMuted,
             text: palette.text,
             tooltip: palette.surfaceRaised,
-          }}
-          dom={{
-            contentInsetAdjustmentBehavior: "never",
-            scrollEnabled: false,
-            style: { height, width: "100%" },
           }}
         />
       )}

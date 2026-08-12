@@ -16,7 +16,6 @@ import * as Sharing from "expo-sharing";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { captureRef } from "react-native-view-shot";
 import { heatmapDays, type Year, type YearReview } from "@avermate/core";
 import { formatDate, formatNumber } from "@/components/format";
 import { haptic } from "@/lib/haptics";
@@ -46,6 +45,23 @@ function loadMediaLibrary(): MediaLibraryModule | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require("expo-media-library") as MediaLibraryModule
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Same story for the screenshot module. A module-scope import of a native
+ * module that is not in the running binary does not fail at the call site — it
+ * fails while the route is being evaluated, and expo-router then reports the
+ * whole screen as missing its default export.
+ */
+type ViewShotModule = typeof import("react-native-view-shot")
+
+function loadViewShot(): ViewShotModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("react-native-view-shot") as ViewShotModule
   } catch {
     return null
   }
@@ -269,7 +285,12 @@ export function YearReviewStory({
       if (exporting) return;
       setExporting(action);
       try {
-        if (process.env.EXPO_OS === "web" || !shareCardRef.current) {
+        const viewShot = loadViewShot();
+        if (
+          process.env.EXPO_OS === "web" ||
+          !shareCardRef.current ||
+          !viewShot
+        ) {
           await Share.share({
             message: summary,
             title: t("My Avermate recap"),
@@ -277,7 +298,7 @@ export function YearReviewStory({
           return;
         }
         const pixelRatio = PixelRatio.get();
-        const uri = await captureRef(shareCardRef, {
+        const uri = await viewShot.captureRef(shareCardRef, {
           format: "png",
           height: 1080 / pixelRatio,
           quality: 1,
