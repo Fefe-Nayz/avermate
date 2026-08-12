@@ -112,12 +112,7 @@ function DashboardCard({
             accent ? accent.text : "text-muted-foreground"
           )}
         >
-          {spec.title ??
-            (headlineAverage &&
-            spec.metric === "average" &&
-            spec.target.kind === "general"
-              ? headlineAverage.name
-              : labels[spec.metric])}
+          {spec.title ?? labels[spec.metric]}
         </CardTitle>
         {editing ? (
           <>

@@ -64,6 +64,22 @@ export function AverageForm({
     [entries]
   )
 
+  // Subjects swept in by an ancestor's "with children": their inclusion is
+  // decided upstream, so their own checkbox must read as checked — greyed,
+  // because unticking them individually is not a thing that can happen.
+  const impliedBy = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of entries) {
+      if (!entry.includeChildren) continue
+      const parent = graph.byId(entry.subjectId)
+      if (!parent) continue
+      for (const descendant of graph.descendantsOf(entry.subjectId)) {
+        if (!map.has(descendant.id)) map.set(descendant.id, parent.name)
+      }
+    }
+    return map
+  }, [entries, graph])
+
   const preview = useMemo(() => {
     if (entries.length === 0) return null
     const resolved = resolveCustomAverage(graph, {
@@ -245,6 +261,7 @@ export function AverageForm({
           {graph.flatten().map((subject, index) => {
             const entry = selected.get(subject.id)
             const isCategory = subject.kind === "category"
+            const impliedParent = impliedBy.get(subject.id)
 
             return (
               <div
@@ -259,7 +276,8 @@ export function AverageForm({
                 }}
               >
                 <Checkbox
-                  checked={Boolean(entry)}
+                  checked={Boolean(entry) || Boolean(impliedParent)}
+                  disabled={Boolean(impliedParent) && !entry}
                   onCheckedChange={() => toggle(subject.id)}
                   aria-label={subject.name}
                 />
@@ -273,6 +291,11 @@ export function AverageForm({
                   {subject.name}
                 </span>
 
+                {!entry && impliedParent ? (
+                  <span className="text-xs text-muted-foreground">
+                    {t("included with {name}", { name: impliedParent })}
+                  </span>
+                ) : null}
                 {entry ? (
                   <>
                     <label className="flex items-center gap-1.5 text-xs text-muted-foreground">

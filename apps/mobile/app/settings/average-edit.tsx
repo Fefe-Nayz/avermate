@@ -55,6 +55,22 @@ export default function AverageEdit() {
   const entryFor = (subjectId: string) =>
     entries.find((entry) => entry.subjectId === subjectId);
 
+  // Subjects swept in by an ancestor's "include nested subjects": their
+  // switch must read as on — greyed, because their inclusion is decided by
+  // the parent, not here.
+  const impliedBy = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of entries) {
+      if (!entry.includeChildren) continue;
+      const parent = yearGraph.byId(entry.subjectId);
+      if (!parent) continue;
+      for (const descendant of yearGraph.descendantsOf(entry.subjectId)) {
+        if (!map.has(descendant.id)) map.set(descendant.id, parent.name);
+      }
+    }
+    return map;
+  }, [entries, yearGraph]);
+
   const toggle = (subjectId: string, on: boolean) => {
     haptic("selection");
     setEntries((current) =>
@@ -143,6 +159,7 @@ export default function AverageEdit() {
         <Section title={t("What goes in")}>
           {flat.map(({ subject, depth }) => {
             const entry = entryFor(subject.id);
+            const impliedParent = impliedBy.get(subject.id);
             return (
               <SwitchField
                 key={subject.id}
@@ -154,9 +171,12 @@ export default function AverageEdit() {
                           value: subject.coefficient,
                         })
                       : t("Weighted ×{value} here", { value: entry.coefficient })
-                    : undefined
+                    : impliedParent
+                      ? t("included with {name}", { name: impliedParent })
+                      : undefined
                 }
-                value={Boolean(entry)}
+                value={Boolean(entry) || Boolean(impliedParent)}
+                disabled={Boolean(impliedParent) && !entry}
                 onValueChange={(on) => toggle(subject.id, on)}
               />
             );

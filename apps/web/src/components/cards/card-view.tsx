@@ -92,13 +92,12 @@ export function useCardResult(spec: CardSpec): CardResult {
       passingRatio,
       goals,
       remaining,
+      // A card shows exactly what it is configured to show. The headline
+      // substitution (a custom average marked "main") belongs to the
+      // dashboard hero alone — leaking it here made every general-average
+      // card silently display the main custom average instead.
       resolveTarget: (target) => {
-        const resolved =
-          headlineAverage &&
-          spec.metric === "average" &&
-          target.kind === "general"
-            ? resolveHeadline()
-            : resolve(target)
+        const resolved = resolve(target)
         if (!resolved) return null
         return { ...resolved, subjects: resolved.graph.subjects }
       },

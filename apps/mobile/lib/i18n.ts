@@ -1272,6 +1272,7 @@ const fr: Record<string, string> = {
   "What it is made of": "Sa composition",
 
   // ---------------------------------------------------- social, rebuilt
+  "included with {name}": "incluse avec {name}",
   "That comparison already exists.": "Cette comparaison existe déjà.",
   "Share my figures with this group": "Partager mes chiffres avec ce groupe",
   "Off means the others see you in the list without figures.": "Désactivé, les autres vous voient dans la liste sans chiffres.",
