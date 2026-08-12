@@ -156,7 +156,8 @@ export function gradeSeriesInputs(input: {
       color: input.colors[seriesIndex % input.colors.length] ?? "#5B8FF9",
       id: subjectId,
       label: subjectNames.get(subjectId) ?? subjectId,
-      points: [...grades]
+      points: grades
+        .slice()
         .sort(
           (left, right) => left.passedAt.getTime() - right.passedAt.getTime(),
         )

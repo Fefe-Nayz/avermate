@@ -34,23 +34,27 @@ export default function Subjects() {
   const { customAverages, isLoading, graph, yearId, refresh } = useYear();
 
   const rows = useMemo(() => flatten(graph.roots, graph, 0), [graph]);
-  const averageRows = useMemo(
-    () =>
-      [...customAverages]
-        .sort(
-          (left, right) =>
-            left.sortOrder - right.sortOrder ||
-            left.name.localeCompare(right.name),
-        )
-        .map((average) => {
-          const resolved = resolveCustomAverage(graph, average);
-          return {
-            ...average,
-            ratio: resolved.graph.ratio(null, resolved.scope),
-          };
-        }),
-    [customAverages, graph],
-  );
+  const averageRows = useMemo(() => {
+    // `slice()` rather than `[...customAverages]`: the spread goes through the
+    // iterator protocol, so anything that is not a real array fails with
+    // "undefined is not a function" pointing at the closing bracket — which is
+    // exactly the crash this screen was throwing, and a useless message. The
+    // guard turns a value of the wrong shape into an empty list instead of a
+    // dead screen.
+    const list = Array.isArray(customAverages) ? customAverages.slice() : [];
+    list.sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder ||
+        left.name.localeCompare(right.name),
+    );
+    return list.map((average) => {
+      const resolved = resolveCustomAverage(graph, average);
+      return {
+        ...average,
+        ratio: resolved.graph.ratio(null, resolved.scope),
+      };
+    });
+  }, [customAverages, graph]);
 
   if (isLoading) return <Loading />;
 
