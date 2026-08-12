@@ -1,152 +1,99 @@
-import { useRef } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSocialEligibility } from "@/components/social/social-gate";
-import {
-  socialAppIsAccessible,
-  socialCoreIsAccessible,
-} from "@/components/social/social-model";
-import {
-  PrivacyBoundaryNotice,
-  SocialIdentity,
-} from "@/components/social/social-ui";
+import { SocialIdentity } from "@/components/social/social-ui";
 import {
   Button,
   Card,
-  Confirmation,
   Empty,
   Loading,
-  Problem,
+  Note,
   Screen,
   Section,
 } from "@/components/ui";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { orpc, queryClient } from "@/lib/orpc";
 import { space } from "@/lib/theme";
-import {
-  discardSocialInvitation,
-  holdSocialInvitation,
-} from "@/lib/social-invitation-session";
 
-export default function AcceptFriendInvitation() {
-  const { token } = useLocalSearchParams<{ token: string }>();
-  return <FriendInvitationDecision token={token} />;
-}
-
-export function FriendInvitationDecision({
-  token,
-  flowId,
-}: {
-  token: string;
-  flowId?: string;
-}) {
+/** Someone handed over a link: who is asking, then one button. */
+export default function FriendInvitation() {
   const router = useRouter();
-  const eligibility = useSocialEligibility();
-  const heldFlow = useRef<string | null>(flowId ?? null);
-  const socialReady = socialCoreIsAccessible(eligibility.data);
-  const profileReady = socialAppIsAccessible(eligibility.data);
+  const { token } = useLocalSearchParams<{ token: string }>();
   const preview = useQuery({
     ...orpc.social.friends.invitations.preview.queryOptions({
-      input: { token },
+      input: { token: token ?? "" },
     }),
     enabled: Boolean(token),
     retry: false,
   });
-
-  const continueSetup = () => {
-    heldFlow.current ??= holdSocialInvitation("friend", token);
-    router.replace({
-      pathname: socialReady ? "/social/profile" : "/social/setup",
-      params: { resume: heldFlow.current },
-    });
-  };
   const accept = useMutation({
     ...orpc.social.friends.invitations.accept.mutationOptions(),
-    onSuccess: async () => {
-      discardSocialInvitation(heldFlow.current);
-      heldFlow.current = null;
+    onSuccess: async (result) => {
+      haptic("success");
       await queryClient.invalidateQueries({
         queryKey: orpc.social.friends.list.queryKey(),
       });
+      if (result.friendshipId) {
+        router.replace(`/social/friend/${result.friendshipId}`);
+      } else {
+        router.replace("/social");
+      }
     },
   });
+
+  const data = preview.data;
 
   return (
     <>
       <Stack.Screen options={{ title: t("Friend invitation") }} />
       <Screen>
-        <PrivacyBoundaryNotice compact />
-        {eligibility.isLoading || preview.isLoading ? (
+        {preview.isLoading ? (
           <Loading />
-        ) : preview.isError || !preview.data ? (
+        ) : !data ? (
           <Empty
             icon="link-outline"
-            title={t("This invitation is unavailable")}
-            body={t(
-              "It may be expired, revoked, already used, blocked or unavailable.",
-            )}
+            title={t("This invitation is no longer valid")}
+            body={t("It may have expired, been revoked, or already used.")}
+            action={
+              <Button
+                label={t("Go to friends")}
+                variant="secondary"
+                onPress={() => router.replace("/social")}
+              />
+            }
           />
         ) : (
-          <Section title={t("Invitation from")}>
+          <Section title={t("Friend invitation")}>
             <Card style={{ gap: space.lg }}>
               <SocialIdentity
-                displayName={preview.data.profile.displayName}
-                avatar={preview.data.profile.avatar}
+                name={data.inviter.name}
+                handle={data.inviter.handle}
+                avatar={data.inviter.avatar}
               />
-              {profileReady ? (
+              <Note>
+                {t(
+                  "Becoming friends shares only what each of you unlocked.",
+                )}
+              </Note>
+              {data.self ? (
+                <Note>
+                  {t(
+                    "This is your own invitation link — send it to someone else.",
+                  )}
+                </Note>
+              ) : data.alreadyFriends ? (
                 <Button
-                  label={t("Accept friendship")}
-                  disabled={accept.isSuccess}
-                  loading={accept.isPending}
-                  onPress={() => accept.mutate({ token })}
+                  label={t("You are already friends.")}
+                  variant="secondary"
+                  onPress={() => router.replace("/social")}
                 />
               ) : (
-                <>
-                  <Problem>
-                    {socialReady
-                      ? t(
-                          "Activate a friend profile before accepting. The invitation is not consumed.",
-                        )
-                      : t(
-                          "Complete social consent before accepting. The invitation is not consumed.",
-                        )}
-                  </Problem>
-                  <Button
-                    label={
-                      socialReady
-                        ? t("Activate friend profile")
-                        : t("Set up social")
-                    }
-                    onPress={continueSetup}
-                  />
-                </>
+                <Button
+                  label={t("Accept and become friends")}
+                  loading={accept.isPending}
+                  onPress={() => accept.mutate({ token: token ?? "" })}
+                />
               )}
-              <Button
-                label={t("Not now")}
-                variant="ghost"
-                onPress={() => {
-                  discardSocialInvitation(heldFlow.current);
-                  heldFlow.current = null;
-                  router.replace("/social");
-                }}
-              />
-              {accept.isSuccess ? (
-                <>
-                  <Confirmation>
-                    {t(
-                      "Friendship accepted. Only explicit profile grants are now visible.",
-                    )}
-                  </Confirmation>
-                  <Button
-                    label={t("Open friends")}
-                    variant="secondary"
-                    onPress={() => router.replace("/social/friends")}
-                  />
-                </>
-              ) : null}
-              {accept.isError ? (
-                <Problem>{t("The invitation could not be accepted.")}</Problem>
-              ) : null}
             </Card>
           </Section>
         )}

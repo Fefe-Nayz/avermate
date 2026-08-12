@@ -62,20 +62,10 @@ const fr: Record<string, string> = {
   Statistics: "Statistiques",
   "Impact by subject": "Impact par matière",
   "Effect on this average": "Effet sur cette moyenne",
-  "Cancel invitation setup": "Annuler la configuration de l’invitation",
-  "Request code {code}": "Code de demande {code}",
-  "Invitation unavailable": "Invitation indisponible",
-  "The private continuation expired. Reopen the original link; its secret was not stored on this device.":
-    "La reprise privée a expiré. Rouvrez le lien d’origine ; son secret n’a pas été stocké sur cet appareil.",
-  "Private social invitation": "Invitation sociale privée",
-  "The link is invalid, expired or incomplete. No membership or sharing permission was created.":
-    "Le lien est invalide, expiré ou incomplet. Aucune adhésion ni autorisation de partage n’a été créée.",
   "Feedback detail": "Détail du retour",
   "Social moderation": "Modération sociale",
   "Safety reports": "Signalements de sécurité",
-  "Safety report": "Signalement de sécurité",
   "Social groups": "Groupes sociaux",
-  "Social audit": "Audit social",
   "Managed presets": "Presets administrés",
   "New managed preset": "Nouveau preset administré",
   "Managed preset": "Preset administré",
@@ -170,100 +160,8 @@ const fr: Record<string, string> = {
   "Version history": "Historique des versions",
   "The preset changed elsewhere or could not be updated.":
     "Le preset a changé ailleurs ou n’a pas pu être mis à jour.",
-  "Freeze this group?": "Geler ce groupe ?",
-  "Unfreeze this group?": "Dégeler ce groupe ?",
-  "Accepted consents are withdrawn, invitations are revoked and sharing stops until members consent again.":
-    "Les consentements acceptés sont retirés, les invitations révoquées et le partage s’arrête jusqu’au nouveau consentement des membres.",
-  "The group becomes active again, but prior consent and ranking opt-ins are not silently restored.":
-    "Le groupe redevient actif, mais les consentements et accords de classement antérieurs ne sont pas restaurés silencieusement.",
-  Freeze: "Geler",
-  Unfreeze: "Dégeler",
-  "Class groups are self-declared. This moderation view contains group metadata and counts only, never academic rows.":
-    "Les groupes de classe sont autodéclarés. Cette vue de modération ne contient que les métadonnées et décomptes du groupe, jamais de lignes scolaires.",
-  "Search group name": "Rechercher un nom de groupe",
-  Frozen: "Gelé",
   Type: "Type",
-  "Social groups could not be loaded.":
-    "Impossible de charger les groupes sociaux.",
-  "{count} groups": "{count} groupes",
-  members: "membres",
-  "Moderate {name}": "Modérer {name}",
-  "Required audit reason": "Motif d’audit obligatoire",
-  "At least 10 characters": "Au moins 10 caractères",
-  "Unfreeze group": "Dégeler le groupe",
-  "Freeze group sharing": "Geler le partage du groupe",
-  "Archived groups cannot be unfrozen.":
-    "Les groupes archivés ne peuvent pas être dégelés.",
-  "The group changed elsewhere. Refresh before trying again.":
-    "Le groupe a changé ailleurs. Actualisez avant de réessayer.",
-  "This timeline is read-only. Reasons are represented by opaque digests; invitation secrets and academic data are excluded.":
-    "Cet historique est en lecture seule. Les motifs sont représentés par des empreintes opaques ; les secrets d’invitation et données scolaires sont exclus.",
-  "Exact action": "Action exacte",
-  "Exact entity type": "Type d’entité exact",
-  "The social audit could not be loaded.":
-    "Impossible de charger l’audit social.",
-  "{count} events": "{count} événements",
-  "reason recorded": "motif enregistré",
-  "no reason digest": "aucune empreinte de motif",
-  "Enable social features?": "Activer les fonctions sociales ?",
-  "Disable social features?": "Désactiver les fonctions sociales ?",
-  "This opens eligibility setup. Profiles and sharing still require explicit consent.":
-    "Cela ouvre la configuration d’éligibilité. Les profils et le partage exigent toujours un consentement explicite.",
-  "Social access stops immediately and aggregate caches are cleared. Moderation and audit records remain.":
-    "L’accès social s’arrête immédiatement et les caches agrégés sont vidés. Les dossiers de modération et d’audit restent conservés.",
-  Enable: "Activer",
-  Disable: "Désactiver",
-  "Global social feature flag": "Drapeau global des fonctions sociales",
-  Enabled: "Activé",
-  Disabled: "Désactivé",
-  "Revision {revision}": "Révision {revision}",
-  ON: "ACTIF",
-  OFF: "INACTIF",
-  "The safe default is off. Changing this flag never bypasses age, guardian, profile or group consent checks.":
-    "La valeur sûre par défaut est désactivée. Ce drapeau ne contourne jamais les contrôles d’âge, de responsable, de profil ou de consentement de groupe.",
-  "Disable social": "Désactiver le social",
-  "Enable social": "Activer le social",
-  "The social feature flag was updated.":
-    "Le drapeau des fonctions sociales a été mis à jour.",
-  "The feature flag changed elsewhere or could not be saved.":
-    "Le drapeau a changé ailleurs ou n’a pas pu être enregistré.",
-  "Privacy-safe overview": "Vue d’ensemble respectueuse de la confidentialité",
-  Profiles: "Profils",
-  Memberships: "Adhésions",
   Reports: "Signalements",
-  "These are aggregate moderation counts only. No grade, subject or raw school record is exposed.":
-    "Il s’agit uniquement de décomptes de modération agrégés. Aucune note, matière ou donnée scolaire brute n’est exposée.",
-  Moderate: "Modérer",
-  "Resolve, dismiss, assign or freeze safely":
-    "Résoudre, classer, attribuer ou geler en sécurité",
-  "Inspect state and freeze sharing": "Examiner l’état et geler le partage",
-  "Read-only privacy and moderation events":
-    "Événements de confidentialité et modération en lecture seule",
-  "Moderation shows the submitted safety message and opaque target capabilities, never grades or academic rows.":
-    "La modération affiche le message de sécurité envoyé et des capacités de cible opaques, jamais les notes ni des lignes scolaires.",
-  "Search report message": "Rechercher dans le message du signalement",
-  "Social reports could not be loaded.":
-    "Impossible de charger les signalements sociaux.",
-  "{count} reports": "{count} signalements",
-  Request: "Demande",
-  "Freeze the reported profile?": "Geler le profil signalé ?",
-  "Sharing stops immediately. This action is audited and does not expose or alter academic records.":
-    "Le partage s’arrête immédiatement. Cette action est auditée et n’expose ni ne modifie les dossiers scolaires.",
-  "This safety report could not be loaded.":
-    "Impossible de charger ce signalement de sécurité.",
-  "Reported by {name}": "Signalé par {name}",
-  "The target remains an administrator-only capability. Grades, subjects and raw school records are not part of this view.":
-    "La cible reste une capacité réservée aux administrateurs. Les notes, matières et dossiers scolaires bruts ne font pas partie de cette vue.",
-  "Moderation decision": "Décision de modération",
-  Resolve: "Résoudre",
-  "This report changed elsewhere. Refresh before trying again.":
-    "Ce signalement a changé ailleurs. Actualisez avant de réessayer.",
-  "Immediate safety action": "Action de sécurité immédiate",
-  "Freeze reported profile": "Geler le profil signalé",
-  "The target changed or could not be frozen safely.":
-    "La cible a changé ou n’a pas pu être gelée en sécurité.",
-  "This group is outside the first moderation page. Open Social groups to find and freeze it.":
-    "Ce groupe n’est pas sur la première page de modération. Ouvrez Groupes sociaux pour le trouver et le geler.",
   "That stable key is already used.": "Cette clé stable est déjà utilisée.",
   "Use a valid stable key and subject name.":
     "Utilisez une clé stable valide et un nom de matière.",
@@ -1319,638 +1217,188 @@ const fr: Record<string, string> = {
     "Composez le tableau de bord de cette année avec 21 widgets d’analyse réutilisables.",
   Duplicate: "Dupliquer",
   // --------------------------------------------------------------- social
-  Social: "Social",
   "Social, friends and groups": "Social, amis et groupes",
   "Private by default; sharing is always explicit":
     "Privé par défaut ; le partage est toujours explicite",
-  Overview: "Vue d’ensemble",
   Friends: "Amis",
   Groups: "Groupes",
   Sharing: "Partage",
   Updates: "Actualités",
-  Requests: "Demandes",
-  Notifications: "Notifications",
-  "Shared by choice": "Partagé par choix",
-  "A missing permission always means no access. Social views never expose complete grades, subject names, comments, dates or your email.":
-    "Une autorisation absente signifie toujours aucun accès. Les vues sociales n’exposent jamais les notes détaillées, noms de matières, commentaires, dates ou votre e-mail.",
-  "Private by default, useful by mutual choice":
-    "Privé par défaut, utile par choix mutuel",
-  "Your social space": "Votre espace social",
-  "Your profile": "Votre profil",
-  "Activate friend features": "Activer les fonctionnalités entre amis",
-  "Groups work without a discoverable friend profile":
-    "Les groupes fonctionnent sans profil d’ami découvrable",
-  "Private profile": "Profil privé",
-  "Review exactly what friends can see":
-    "Vérifier exactement ce que vos amis voient",
-  "Permissions are field-by-field and reversible":
-    "Les autorisations sont détaillées par champ et réversibles",
-  "Social data could not be refreshed":
-    "Impossible d’actualiser les données sociales",
-  "Reconnect before making a sharing decision.":
-    "Reconnectez-vous avant toute décision de partage.",
-  Connect: "Se connecter aux autres",
-  "Friends and requests": "Amis et demandes",
-  "Mutual acceptance, exact handle or private invitation":
-    "Acceptation mutuelle, identifiant exact ou invitation privée",
-  "Groups and classes": "Groupes et classes",
-  "Join only after reviewing the current sharing policy":
-    "Rejoindre uniquement après avoir vérifié la politique de partage actuelle",
-  "Friend, invitation, consent and moderation updates":
-    "Actualités des amis, invitations, consentements et modération",
-  "Social is unavailable offline": "Le social est indisponible hors ligne",
-  "Reconnect to verify your current sharing permissions.":
-    "Reconnectez-vous pour vérifier vos autorisations de partage actuelles.",
-  "Social is not available yet": "Le social n’est pas encore disponible",
-  "Administrators can enable it when the privacy and moderation controls are ready for your account.":
-    "Les administrateurs pourront l’activer lorsque les protections de confidentialité et de modération seront prêtes pour votre compte.",
-  "Social access is paused": "L’accès social est suspendu",
-  "Finish social setup": "Terminer la configuration sociale",
-  "Activate a friend profile": "Activer un profil d’ami",
-  "Friend features require an active profile. Groups remain available without one.":
-    "Les fonctionnalités entre amis exigent un profil actif. Les groupes restent disponibles sans profil.",
-  "Choose your age band and consent to the current policy before anything is shared.":
-    "Choisissez votre tranche d’âge et acceptez la politique actuelle avant tout partage.",
-  "Open social profile": "Ouvrir le profil social",
-  "Your academic data remains private while an administrator reviews this account.":
-    "Vos données scolaires restent privées pendant l’examen de ce compte par un administrateur.",
-  "Review setup": "Vérifier la configuration",
-  "Contact support if you think this pause is a mistake.":
-    "Contactez l’assistance si vous pensez que cette suspension est une erreur.",
-  "Social setup": "Configuration sociale",
-  "Setup cannot be verified": "La configuration ne peut pas être vérifiée",
-  "Reconnect and try again. No social permission was changed.":
-    "Reconnectez-vous puis réessayez. Aucune autorisation sociale n’a été modifiée.",
-  "Joint consent required": "Consentement conjoint requis",
-  "Your choice is recorded": "Votre choix est enregistré",
-  "No profile or sharing is active yet":
-    "Aucun profil ni partage n’est encore actif",
-  "Guardian verification is still required":
-    "La vérification du responsable légal reste nécessaire",
-  "For accounts under 15 in France":
-    "Pour les comptes de moins de 15 ans en France",
-  "A parent or guardian must complete the verified consent flow. A name, checkbox or code shared by the student is not accepted as proof.":
-    "Un parent ou responsable légal doit terminer le parcours de consentement vérifié. Un nom, une case cochée ou un code communiqué par l’élève ne constitue pas une preuve.",
-  "Guardian email": "E-mail du responsable légal",
-  "Send secure guardian link": "Envoyer le lien sécurisé au responsable légal",
-  "A secure, single-use link was sent. Your guardian must sign in with that exact verified email within 72 hours.":
-    "Un lien sécurisé à usage unique a été envoyé. Votre responsable légal doit se connecter avec cette adresse e-mail vérifiée exacte sous 72 heures.",
-  "The guardian request could not be sent. Verify the address or try again tomorrow.":
-    "Impossible d’envoyer la demande au responsable légal. Vérifiez l’adresse ou réessayez demain.",
-  "The guardian completes the decision on Avermate web after signing in with the addressed account. The app never receives the secret link or their email back.":
-    "Le responsable légal prend sa décision sur Avermate web après connexion avec le compte destinataire. L’application ne reçoit jamais le lien secret ni son e-mail en retour.",
-  "Guardian request · {status}": "Demande au responsable · {status}",
-  "Policy {version}": "Politique {version}",
-  pending: "en attente",
-  accepted: "acceptée",
-  declined: "refusée",
-  revoked: "révoquée",
-  expired: "expirée",
-  "Guardian request status could not be updated. No permission was granted silently.":
-    "Impossible de mettre à jour l’état de la demande au responsable légal. Aucune autorisation n’a été accordée silencieusement.",
-  "Check guardian decision": "Vérifier la décision du responsable légal",
-  "The private invitation continuation expired. Reopen the original link; its secret was not stored on this device.":
-    "La reprise de l’invitation privée a expiré. Rouvrez le lien d’origine ; son secret n’a pas été conservé sur cet appareil.",
-  "Age band": "Tranche d’âge",
-  "Under 15": "Moins de 15 ans",
-  "15 to 17": "15 à 17 ans",
-  "18 or older": "18 ans ou plus",
-  "Joint consent with a verified guardian is required in France":
-    "Un consentement conjoint avec un responsable légal vérifié est requis en France",
-  "Avermate stores only this broad band and assurance status, never a birth date or identity document.":
-    "Avermate conserve uniquement cette tranche générale et le niveau de vérification, jamais une date de naissance ni une pièce d’identité.",
-  "Current policy": "Politique actuelle",
-  "Policy version": "Version de la politique",
-  "Friends require mutual acceptance":
-    "Les amis nécessitent une acceptation mutuelle",
-  "Exact-handle discovery only; no contact upload":
-    "Découverte uniquement par identifiant exact ; aucun import de contacts",
-  "Groups require a separate data choice":
-    "Les groupes nécessitent un choix de données distinct",
-  "A policy change always asks again":
-    "Toute modification de politique demande un nouveau consentement",
-  "Named rankings are off by default":
-    "Les classements nominatifs sont désactivés par défaut",
-  "Separate opt-in and privacy thresholds apply":
-    "Un accord distinct et des seuils de confidentialité s’appliquent",
-  "I understand and consent to this policy":
-    "Je comprends et j’accepte cette politique",
-  "You can withdraw later; withdrawal stops future social access.":
-    "Vous pourrez retirer votre consentement ; le retrait bloque les futurs accès sociaux.",
-  "Consent and continue": "Accepter et continuer",
-  "Social setup could not be saved.":
-    "Impossible d’enregistrer la configuration sociale.",
-  "Social profile": "Profil social",
-  "Profile permissions could not be loaded":
-    "Impossible de charger les autorisations du profil",
-  "Reconnect before changing what other people can see.":
-    "Reconnectez-vous avant de modifier ce que les autres peuvent voir.",
-  "Complete consent first": "Terminer d’abord le consentement",
-  "A social profile cannot be activated before the current eligibility decision is complete.":
-    "Un profil social ne peut pas être activé avant la fin de la décision d’éligibilité actuelle.",
-  "Profile status": "État du profil",
-  "Activate my social profile": "Activer mon profil social",
-  "Off means nobody can discover or view it, including existing friends.":
-    "Désactivé signifie que personne ne peut le découvrir ni le voir, y compris vos amis actuels.",
-  "Display name": "Nom affiché",
-  "Exact handle": "Identifiant exact",
-  "A short introduction without school or contact details":
-    "Une courte présentation sans établissement ni coordonnées",
-  "Education level": "Niveau d’études",
-  Discovery: "Découverte",
-  Off: "Désactivé",
-  "Only existing accepted relationships remain":
-    "Seules les relations déjà acceptées subsistent",
-  "Invitation links only": "Liens d’invitation uniquement",
-  "Useful for joining groups without appearing in search":
-    "Utile pour rejoindre des groupes sans apparaître dans une recherche",
-  "People must type the complete handle; there is no directory":
-    "Il faut saisir l’identifiant complet ; aucun annuaire n’existe",
-  "What every accepted friend can see": "Ce que chaque ami accepté peut voir",
-  "Profile picture": "Photo de profil",
-  Bio: "Présentation",
-  "Circle- and person-specific exceptions are managed from Friends. A missing grant always hides the field.":
-    "Les exceptions par cercle ou personne se gèrent depuis Amis. Une autorisation absente masque toujours le champ.",
-  "Exact friend preview": "Aperçu exact pour un ami",
-  "Bio not shared": "Présentation non partagée",
-  "Education level not shared": "Niveau d’études non partagé",
-  "Social profile saved.": "Profil social enregistré.",
-  "That exact handle is unavailable.":
-    "Cet identifiant exact est indisponible.",
-  "The social profile could not be saved.":
-    "Impossible d’enregistrer le profil social.",
-  "That sharing permission could not be changed.":
-    "Impossible de modifier cette autorisation de partage.",
-  "Withdraw social consent": "Retirer le consentement social",
-  "Turn off social and withdraw":
-    "Désactiver le social et retirer le consentement",
-  "Future profile and group access stops immediately":
-    "Les futurs accès au profil et aux groupes cessent immédiatement",
-  "Withdraw social consent?": "Retirer le consentement social ?",
-  "Your profile turns off and future social access stops. Existing moderation and consent audit records remain as required for safety.":
-    "Votre profil est désactivé et les futurs accès sociaux cessent. Les traces de modération et de consentement existantes sont conservées pour la sécurité.",
-  Withdraw: "Retirer",
-  "Social data controls": "Contrôles des données sociales",
-  "Export my social data": "Exporter mes données sociales",
-  "My Avermate social data": "Mes données sociales Avermate",
-  "The export opens the system share sheet only after your explicit action. Review the destination because it contains your social history.":
-    "L’export ouvre la feuille de partage système uniquement après votre action explicite. Vérifiez la destination, car il contient votre historique social.",
-  "Reset all social data": "Réinitialiser toutes les données sociales",
-  "Reset all social data?": "Réinitialiser toutes les données sociales ?",
-  "This permanently removes your social profile, friendships, circles, group memberships, invitations and sharing decisions. Your private grades remain.":
-    "Cela supprime définitivement votre profil social, vos amitiés, cercles, adhésions aux groupes, invitations et décisions de partage. Vos notes privées restent intactes.",
-  Reset: "Réinitialiser",
-  "The social data action could not be completed.":
-    "Impossible d’effectuer l’action sur les données sociales.",
-  "Add by exact handle": "Ajouter par identifiant exact",
-  "Message (optional)": "Message (facultatif)",
-  "A short context without personal contact details":
-    "Un court contexte sans coordonnées personnelles",
   "Send request": "Envoyer la demande",
-  "Avermate gives the same response for unknown, blocked and unavailable handles, so this form cannot be used as an account directory.":
-    "Avermate renvoie la même réponse pour les identifiants inconnus, bloqués et indisponibles ; ce formulaire ne peut donc pas servir d’annuaire.",
-  "If that exact handle can receive requests, the invitation is now pending.":
-    "Si cet identifiant exact peut recevoir des demandes, l’invitation est maintenant en attente.",
-  "The friend request could not be sent. Try again later.":
-    "Impossible d’envoyer la demande d’ami. Réessayez plus tard.",
-  "Use a private invitation link instead":
-    "Utiliser plutôt un lien d’invitation privé",
-  "Requests could not be refreshed. Cached friends stay visible.":
-    "Impossible d’actualiser les demandes. Les amis en cache restent visibles.",
-  "Requests to you": "Demandes reçues",
-  "Private account": "Compte privé",
   Accept: "Accepter",
   Decline: "Refuser",
   Block: "Bloquer",
-  Report: "Signaler",
-  "Sent requests": "Demandes envoyées",
-  "Pending invitation": "Invitation en attente",
-  "Waiting for a response": "En attente d’une réponse",
   "Your friends": "Vos amis",
-  "Friends could not be refreshed": "Impossible d’actualiser les amis",
-  "Reconnect to verify the latest privacy grants.":
-    "Reconnectez-vous pour vérifier les dernières autorisations de confidentialité.",
-  "No accepted friends yet": "Aucun ami accepté pour le moment",
-  "Friendships appear here only after mutual acceptance.":
-    "Les amitiés apparaissent ici uniquement après une acceptation mutuelle.",
-  "Private friend": "Ami au profil privé",
-  "View exact shared profile": "Voir le profil partagé exact",
-  "Friend circles": "Cercles d’amis",
-  "Give selected friends different profile permissions":
-    "Accorder des autorisations de profil différentes à certains amis",
   "Blocked accounts": "Comptes bloqués",
-  "Requests and discovery stop in both directions":
-    "Les demandes et la découverte cessent dans les deux sens",
-  "That account could not be blocked.": "Impossible de bloquer ce compte.",
-  "Shared profile": "Profil partagé",
-  "This profile is no longer available": "Ce profil n’est plus disponible",
-  "The friendship, profile status or sharing permissions may have changed.":
-    "L’amitié, l’état du profil ou les autorisations de partage ont peut-être changé.",
-  "Back to friends": "Retour aux amis",
-  "Privacy boundary": "Limite de confidentialité",
-  "Choose what I share with this friend":
-    "Choisir ce que je partage avec cet ami",
-  "this friend": "cet ami",
-  "Only fields this friend explicitly granted to you are present. Empty fields are not inferred or replaced with account data.":
-    "Seuls les champs explicitement partagés par cet ami sont présents. Les champs vides ne sont ni déduits ni remplacés par des données de compte.",
-  "Relationship actions": "Actions sur la relation",
-  "Remove friendship": "Supprimer l’amitié",
   "Remove this friend?": "Supprimer cet ami ?",
-  "Both profiles stop being shared and circle membership is removed.":
-    "Les deux profils cessent d’être partagés et l’appartenance aux cercles est supprimée.",
   Remove: "Supprimer",
-  "Block account": "Bloquer le compte",
   "Block this account?": "Bloquer ce compte ?",
-  "Friendship, requests, circle membership and sharing stop in both directions.":
-    "L’amitié, les demandes, l’appartenance aux cercles et le partage cessent dans les deux sens.",
   "Report a safety concern": "Signaler un problème de sécurité",
-  "That action could not be completed. Refresh and try again.":
-    "Impossible d’effectuer cette action. Actualisez puis réessayez.",
-  "New circle": "Nouveau cercle",
-  "Circle name": "Nom du cercle",
-  "Close friends": "Amis proches",
-  "Create circle": "Créer le cercle",
-  "The circle could not be created.": "Impossible de créer le cercle.",
-  "Your circles": "Vos cercles",
-  "Circles could not be refreshed": "Impossible d’actualiser les cercles",
-  "Reconnect before changing profile permissions.":
-    "Reconnectez-vous avant de modifier les autorisations du profil.",
-  "No circles yet": "Aucun cercle pour le moment",
-  "A circle groups accepted friends for more precise field permissions.":
-    "Un cercle regroupe des amis acceptés pour définir des autorisations de champ plus précises.",
   "{count} members": "{count} membres",
-  "Friend circle": "Cercle d’amis",
-  "This circle could not be loaded": "Impossible de charger ce cercle",
-  "It may have been deleted or changed in another session.":
-    "Il a peut-être été supprimé ou modifié dans une autre session.",
-  "The circle changed elsewhere. It has been refreshed.":
-    "Le cercle a été modifié ailleurs. Il a été actualisé.",
-  Members: "Membres",
-  "No members in this circle": "Aucun membre dans ce cercle",
-  "Only accepted friends can be added.":
-    "Seuls les amis acceptés peuvent être ajoutés.",
-  "Remove from circle": "Retirer du cercle",
-  "Add accepted friends": "Ajouter des amis acceptés",
-  "Add to {circle}": "Ajouter à {circle}",
-  "Membership changed elsewhere. Refresh and try again.":
-    "L’appartenance a été modifiée ailleurs. Actualisez puis réessayez.",
-  "Delete circle": "Supprimer le cercle",
-  "Circle privacy": "Confidentialité du cercle",
-  "Choose fields shared with this circle":
-    "Choisir les champs partagés avec ce cercle",
-  "Delete this circle?": "Supprimer ce cercle ?",
-  "Circle-specific sharing stops. Friendships are not removed.":
-    "Le partage propre au cercle cesse. Les amitiés ne sont pas supprimées.",
-  "Blocking removes friendship, pending requests, circle membership and sharing in both directions. Unblocking never recreates them.":
-    "Le blocage supprime l’amitié, les demandes en attente, l’appartenance aux cercles et le partage dans les deux sens. Le déblocage ne les recrée jamais.",
   "Blocked by you": "Bloqués par vous",
   "Blocked accounts could not be refreshed.":
     "Impossible d’actualiser les comptes bloqués.",
   "No blocked accounts": "Aucun compte bloqué",
-  "Unavailable profile": "Profil indisponible",
-  "You can block from a friend profile or an incoming request.":
-    "Vous pouvez bloquer depuis le profil d’un ami ou une demande reçue.",
   Unblock: "Débloquer",
   "Unblock this account?": "Débloquer ce compte ?",
-  "No friendship or sharing permission will be restored automatically.":
-    "Aucune amitié ni autorisation de partage ne sera restaurée automatiquement.",
-  "Private invitations": "Invitations privées",
-  "Create an invitation": "Créer une invitation",
-  "Each link is single-use and expires after seven days. Share it only with the intended person.":
-    "Chaque lien est à usage unique et expire après sept jours. Partagez-le uniquement avec la personne concernée.",
-  "Create private link": "Créer un lien privé",
-  "The link is ready. For safety, this is the only time its secret can be displayed.":
-    "Le lien est prêt. Par sécurité, c’est la seule fois où son secret peut être affiché.",
-  "Share now": "Partager maintenant",
-  "Set discovery to Invitation links only in your social profile, then try again.":
-    "Réglez la découverte sur Liens d’invitation uniquement dans votre profil social, puis réessayez.",
-  "Invitation history": "Historique des invitations",
-  "Invitation history could not be refreshed.":
-    "Impossible d’actualiser l’historique des invitations.",
-  "No invitation links": "Aucun lien d’invitation",
-  "Create one when an exact handle is not appropriate.":
-    "Créez-en un lorsqu’un identifiant exact n’est pas approprié.",
-  Used: "Utilisée",
-  Revoked: "Révoquée",
-  Expired: "Expirée",
-  "Invitation · {prefix}": "Invitation · {prefix}",
-  "Avermate friend invitation": "Invitation d’ami Avermate",
-  "Open this private, single-use Avermate invitation: {url}":
-    "Ouvrez cette invitation Avermate privée et à usage unique : {url}",
   "Friend invitation": "Invitation d’ami",
-  "This invitation is unavailable": "Cette invitation est indisponible",
-  "It may be expired, revoked, already used, blocked or unavailable.":
-    "Elle est peut-être expirée, révoquée, déjà utilisée, bloquée ou indisponible.",
-  "Invitation from": "Invitation de",
-  "Accept friendship": "Accepter l’amitié",
-  "Not now": "Pas maintenant",
-  "Friendship accepted. Only explicit profile grants are now visible.":
-    "Amitié acceptée. Seules les autorisations de profil explicites sont désormais visibles.",
-  "Open friends": "Ouvrir les amis",
-  "The invitation could not be accepted.":
-    "Impossible d’accepter l’invitation.",
-  "Activate a friend profile before accepting. The invitation is not consumed.":
-    "Activez un profil d’ami avant d’accepter. L’invitation n’est pas consommée.",
-  "Complete social consent before accepting. The invitation is not consumed.":
-    "Terminez le consentement social avant d’accepter. L’invitation n’est pas consommée.",
-  "Activate friend profile": "Activer le profil d’ami",
-  "Set up social": "Configurer le social",
-  "Profile picture for {name}": "Photo de profil de {name}",
-  "Middle school": "Collège",
-  "High school": "Lycée",
-  "Higher education": "Enseignement supérieur",
-  "Other education": "Autre niveau d’études",
-  "Not specified": "Non précisé",
-  Class: "Classe",
-  "Study group": "Groupe d’étude",
-  "Friends group": "Groupe d’amis",
-  "Normalized average": "Moyenne normalisée",
-  "Trend range": "Plage de tendance",
-  "Success-rate range": "Plage de taux de réussite",
-  "Activity range": "Plage d’activité",
-  "Goal progress range": "Plage de progression des objectifs",
-  "Group aggregate only": "Agrégat du groupe uniquement",
-  "Visible to participating members": "Visible par les membres participants",
-  "Eligible for an optional ranking": "Éligible à un classement facultatif",
-  "Every group has a versioned policy. Joining never starts academic sharing until you accept the exact current fields and choose a school year.":
-    "Chaque groupe possède une politique versionnée. Rejoindre ne démarre aucun partage scolaire avant d’avoir accepté les champs exacts actuels et choisi une année scolaire.",
-  "Create a group": "Créer un groupe",
   "Your groups": "Vos groupes",
   "Groups could not be refreshed.": "Impossible d’actualiser les groupes.",
   "No groups yet": "Aucun groupe pour le moment",
-  "Create one or open a private invitation link.":
-    "Créez-en un ou ouvrez un lien d’invitation privé.",
-  "Review updated sharing policy":
-    "Vérifier la politique de partage mise à jour",
-  "Create with this policy": "Créer avec cette politique",
-  "Group identity": "Identité du groupe",
   "Group name": "Nom du groupe",
   Description: "Description",
-  "Group type": "Type de groupe",
-  "Self-declared class": "Classe autodéclarée",
-  "I confirm this class is self-declared":
-    "Je confirme que cette classe est autodéclarée",
-  "It is not an official enrolment record or school-verified directory.":
-    "Il ne s’agit ni d’une inscription officielle ni d’un annuaire vérifié par l’établissement.",
-  "Your group alias": "Votre pseudonyme dans le groupe",
-  "A name group members will see": "Un nom visible par les membres du groupe",
-  "School year used for your derived metrics":
-    "Année scolaire utilisée pour vos indicateurs dérivés",
-  "Version 1 sharing policy": "Politique de partage version 1",
-  Purpose: "Finalité",
-  "Why these aggregated metrics help this group":
-    "Pourquoi ces indicateurs agrégés sont utiles à ce groupe",
-  "Who is expected to join": "Qui est censé rejoindre",
-  "For example: students in the same study project":
-    "Par exemple : élèves du même projet d’étude",
-  "Time window": "Période analysée",
-  "Current academic year": "Année scolaire actuelle",
-  "Last 90 days": "90 derniers jours",
   "Last 30 days": "30 derniers jours",
-  "Derived metrics": "Indicateurs dérivés",
-  "Aggregate-only is the default. Raw grades, subjects, comments and dates can never be selected.":
-    "L’agrégat seul est la valeur par défaut. Les notes brutes, matières, commentaires et dates ne peuvent jamais être sélectionnés.",
-  Visibility: "Visibilité",
-  "Required to participate": "Obligatoire pour participer",
-  "People who decline a required field cannot activate membership under this policy.":
-    "Une personne refusant un champ obligatoire ne peut pas activer son adhésion sous cette politique.",
-  "Allow optional named rankings":
-    "Autoriser les classements nominatifs facultatifs",
-  "Still off for every member until a separate opt-in; privacy thresholds always apply.":
-    "Ils restent désactivés pour chaque membre jusqu’à un accord distinct ; les seuils de confidentialité s’appliquent toujours.",
-  "Your consent": "Votre consentement",
-  "I accept every required field in version 1":
-    "J’accepte chaque champ obligatoire de la version 1",
-  "Changing the policy creates a new immutable version and requires consent again.":
-    "Modifier la politique crée une nouvelle version immuable et exige un nouveau consentement.",
-  "The group could not be created.": "Impossible de créer le groupe.",
   Owner: "Propriétaire",
-  Moderator: "Modérateur",
-  Member: "Membre",
   Group: "Groupe",
-  "This group could not be loaded": "Impossible de charger ce groupe",
-  "Access may have changed. Reconnect before making a sharing decision.":
-    "L’accès a peut-être changé. Reconnectez-vous avant toute décision de partage.",
-  "Shared statistics": "Statistiques partagées",
-  "Unavailable metric": "Indicateur indisponible",
-  "Aggregates, ranges and optional rankings":
-    "Agrégats, plages et classements facultatifs",
-  "No active members": "Aucun membre actif",
-  "Members awaiting consent do not expose metrics.":
-    "Les membres en attente de consentement n’exposent aucun indicateur.",
-  "Consent required": "Consentement requis",
-  "Make member": "Passer membre",
-  "Make moderator": "Passer modérateur",
-  "Transfer ownership": "Transférer la propriété",
-  "Transfer group ownership?": "Transférer la propriété du groupe ?",
-  "You become a regular member and cannot undo this without the new owner.":
-    "Vous devenez membre ordinaire et ne pourrez pas annuler sans le nouveau propriétaire.",
-  Transfer: "Transférer",
   "Remove from group": "Retirer du groupe",
-  "Block member": "Bloquer le membre",
-  "Report member": "Signaler le membre",
-  "Group actions": "Actions du groupe",
-  "Manage invitation links": "Gérer les liens d’invitation",
-  "Group settings and policy": "Réglages et politique du groupe",
-  "Withdraw sharing consent": "Retirer le consentement de partage",
-  "Report this group": "Signaler ce groupe",
   "Leave group": "Quitter le groupe",
-  "Transfer ownership before leaving this group.":
-    "Transférez la propriété avant de quitter ce groupe.",
-  "The group action could not be completed. Refresh and try again.":
-    "Impossible d’effectuer l’action sur le groupe. Actualisez puis réessayez.",
-  "Avermate group invitation": "Invitation à un groupe Avermate",
-  "Review the current group policy before joining: {url}":
-    "Vérifiez la politique actuelle du groupe avant de rejoindre : {url}",
-  "Group invitations": "Invitations au groupe",
-  "Create a single-use link": "Créer un lien à usage unique",
-  "Target email (optional)": "E-mail destinataire (facultatif)",
-  "Restrict this link to one verified account":
-    "Limiter ce lien à un seul compte vérifié",
-  "The invitation is bound to the current policy version. Any policy update invalidates unused old links.":
-    "L’invitation est liée à la version actuelle de la politique. Toute mise à jour invalide les anciens liens non utilisés.",
-  "Create invitation": "Créer l’invitation",
-  "This is the only time the secret invitation link can be displayed.":
-    "C’est la seule fois où le lien d’invitation secret peut être affiché.",
-  "The invitation could not be created.": "Impossible de créer l’invitation.",
-  "Email-restricted": "Limité à un e-mail",
-  "Owner access required": "Accès propriétaire requis",
-  "No group setting was changed.": "Aucun réglage du groupe n’a été modifié.",
   "Group settings": "Réglages du groupe",
-  "Save group": "Enregistrer le groupe",
-  "Group saved.": "Groupe enregistré.",
-  "Sharing policy": "Politique de partage",
-  "Editing a policy always creates a new immutable version, pauses every membership and disables ranking opt-ins until people consent again.":
-    "Modifier une politique crée toujours une nouvelle version immuable, suspend toutes les adhésions et désactive les accords aux classements jusqu’à un nouveau consentement.",
-  "Create a new policy version": "Créer une nouvelle version de politique",
-  "Group lifecycle": "Cycle de vie du groupe",
-  "Restore group": "Restaurer le groupe",
-  "Archive group": "Archiver le groupe",
-  "Delete group permanently": "Supprimer définitivement le groupe",
-  "Delete this group permanently?": "Supprimer définitivement ce groupe ?",
-  "Memberships, invitations, consents and group statistics are removed. This cannot be undone.":
-    "Les adhésions, invitations, consentements et statistiques du groupe sont supprimés. Cette action est définitive.",
-  "The group changed elsewhere. Refresh and try again.":
-    "Le groupe a été modifié ailleurs. Actualisez puis réessayez.",
-  "Top quartile": "Quart supérieur",
-  "Upper-middle quartile": "Quart intermédiaire supérieur",
-  "Lower-middle quartile": "Quart intermédiaire inférieur",
-  "Bottom quartile": "Quart inférieur",
-  "Not participating": "Non participant",
-  "No social data was requested.": "Aucune donnée sociale n’a été demandée.",
-  "This metric is not in the current policy":
-    "Cet indicateur ne figure pas dans la politique actuelle",
-  "The group policy may have changed. Return to the group and review it.":
-    "La politique du groupe a peut-être changé. Revenez au groupe pour la vérifier.",
-  "Accept the exact current policy before group statistics become available.":
-    "Acceptez la politique actuelle exacte avant d’accéder aux statistiques du groupe.",
-  "Group statistics could not be refreshed.":
-    "Impossible d’actualiser les statistiques du groupe.",
-  "Protected until the group is large enough":
-    "Protégé tant que le groupe n’est pas assez grand",
-  "Consent is required first.": "Le consentement est d’abord requis.",
-  "Only {count} consenting members currently contribute; at least {required} are required.":
-    "Seuls {count} membres consentants contribuent actuellement ; au moins {required} sont requis.",
-  "Group aggregate": "Agrégat du groupe",
-  "Built only from members who accepted this metric under policy version {version}.":
-    "Calculé uniquement avec les membres ayant accepté cet indicateur sous la politique version {version}.",
-  Minimum: "Minimum",
   Median: "Médiane",
-  Maximum: "Maximum",
-  "Middle half": "Moitié centrale",
-  "Protected small bucket": "Petite catégorie protégée",
-  "Optional ranking": "Classement facultatif",
-  "This is a second opt-in. Under-18 accounts receive only a private percentile band; adult names appear only after the ranking threshold is met.":
-    "Il s’agit d’un second accord. Les comptes mineurs reçoivent uniquement une plage de percentile privée ; les noms adultes n’apparaissent qu’une fois le seuil de classement atteint.",
-  "Participate in this ranking": "Participer à ce classement",
-  "This affects only this metric and can be switched off at any time.":
-    "Cela concerne uniquement cet indicateur et peut être désactivé à tout moment.",
-  "Ranking participation is enabled for this metric.":
-    "La participation au classement est activée pour cet indicateur.",
-  "Ranking participation is disabled for this metric.":
-    "La participation au classement est désactivée pour cet indicateur.",
-  "Ranking preference or results could not be refreshed.":
-    "Impossible d’actualiser la préférence ou les résultats du classement.",
-  "The named ranking stays hidden until its separate privacy threshold is met.":
-    "Le classement nominatif reste masqué jusqu’à ce que son seuil de confidentialité distinct soit atteint.",
-  "Your private position": "Votre position privée",
-  "No policy was changed.": "Aucune politique n’a été modifiée.",
-  "New policy version": "Nouvelle version de politique",
-  "Publish version {version}": "Publier la version {version}",
-  "Purpose and audience": "Finalité et public",
-  "Who is expected to participate": "Qui est censé participer",
-  "Reconsent impact": "Impact du nouveau consentement",
-  "Publishing pauses every membership, clears ranking opt-ins and requires each person to review the new immutable policy before any further sharing.":
-    "La publication suspend toutes les adhésions, efface les accords aux classements et exige que chacun vérifie la nouvelle politique immuable avant tout nouveau partage.",
-  "I understand everyone must consent again":
-    "Je comprends que tout le monde doit consentir à nouveau",
-  "The policy could not be published.": "Impossible de publier la politique.",
   "Group invitation": "Invitation à un groupe",
-  "It may be expired, used, revoked, blocked or tied to an older policy.":
-    "Elle est peut-être expirée, utilisée, révoquée, bloquée ou liée à une ancienne politique.",
-  "You were invited to": "Vous avez été invité à",
-  "Created by {alias}{selfDeclared}": "Créé par {alias}{selfDeclared}",
-  "self-declared identity": "identité autodéclarée",
-  "Join without sharing yet": "Rejoindre sans encore partager",
-  "Accepting this invitation creates a pending membership only. You choose metrics and school year on the next screen.":
-    "Accepter cette invitation crée uniquement une adhésion en attente. Vous choisirez les indicateurs et l’année scolaire à l’écran suivant.",
-  "Continue to consent choices": "Continuer vers les choix de consentement",
-  "Decline invitation": "Refuser l’invitation",
-  "The invitation decision could not be saved.":
-    "Impossible d’enregistrer la décision sur l’invitation.",
-  "Complete social consent before joining. The invitation is not consumed and no group data is shared.":
-    "Terminez le consentement social avant de rejoindre. L’invitation n’est pas consommée et aucune donnée de groupe n’est partagée.",
-  "New friend request": "Nouvelle demande d’ami",
-  "Friend request accepted": "Demande d’ami acceptée",
-  "Private invitation accepted": "Invitation privée acceptée",
-  "A member joined your group": "Un membre a rejoint votre groupe",
-  "A group sharing policy changed":
-    "Une politique de partage de groupe a changé",
-  "Guardian consent accepted": "Consentement du responsable légal accepté",
-  "Guardian consent declined": "Consentement du responsable légal refusé",
-  "Social access paused by moderation":
-    "Accès social suspendu par la modération",
-  "Social update": "Actualité sociale",
-  "Social notifications": "Notifications sociales",
-  "Latest updates": "Dernières actualités",
   "Mark all read": "Tout marquer comme lu",
-  "Notifications could not be refreshed.":
-    "Impossible d’actualiser les notifications.",
-  "No social updates": "Aucune actualité sociale",
-  "Friend, group, consent and moderation changes appear here.":
-    "Les changements concernant les amis, groupes, consentements et la modération apparaissent ici.",
-  Unread: "Non lu",
-  "Your safety reports": "Vos signalements de sécurité",
-  "View submitted reports": "Voir les signalements envoyés",
-  "Invalid report target": "Cible de signalement invalide",
-  "No report was sent.": "Aucun signalement n’a été envoyé.",
   "What happened?": "Que s’est-il passé ?",
   Harassment: "Harcèlement",
-  "Privacy violation": "Atteinte à la vie privée",
   Impersonation: "Usurpation d’identité",
   "Unsafe content": "Contenu dangereux",
   Other: "Autre",
-  "Describe the concern": "Décrire le problème",
-  "Include useful context without copying grades or unnecessary personal data":
-    "Ajoutez le contexte utile sans copier de notes ni de données personnelles inutiles",
-  "Reports go to Avermate’s admin moderation queue, not Discord. Blocking remains a separate immediate action.":
-    "Les signalements arrivent dans la file de modération de l’administration Avermate, pas sur Discord. Le blocage reste une action immédiate distincte.",
-  "Submit report": "Envoyer le signalement",
-  "Report submitted. You can follow its status without exposing the reported account.":
-    "Signalement envoyé. Vous pouvez suivre son état sans exposer le compte signalé.",
-  "The report could not be submitted. Try again later.":
-    "Impossible d’envoyer le signalement. Réessayez plus tard.",
-  "Under review": "En cours d’examen",
   Resolved: "Résolu",
   Dismissed: "Classé sans suite",
-  "Submitted reports": "Signalements envoyés",
-  "Moderation status": "État de la modération",
-  "Report status could not be refreshed.":
-    "Impossible d’actualiser l’état des signalements.",
-  "No submitted reports": "Aucun signalement envoyé",
-  "Safety reports you create appear here without identifying the target.":
-    "Vos signalements de sécurité apparaissent ici sans identifier leur cible.",
-  "Group statistics": "Statistiques du groupe",
-  "Your explicit choices": "Vos choix explicites",
-  "Select only the derived metrics you agree to share. Raw grades, subject names, comments and dates stay excluded.":
-    "Sélectionnez uniquement les indicateurs dérivés que vous acceptez de partager. Les notes brutes, noms de matières, commentaires et dates restent exclus.",
-  Required: "Obligatoire",
-  Optional: "Facultatif",
-  "School year used to derive these metrics":
-    "Année scolaire utilisée pour calculer ces indicateurs",
-  "I accept this exact policy version":
-    "J’accepte cette version exacte de la politique",
-  "A future policy version stops sharing and asks for consent again.":
-    "Une future version de la politique arrête le partage et demande à nouveau votre consentement.",
-  "Accept selected fields and join":
-    "Accepter les champs sélectionnés et rejoindre",
-  "Consent could not be saved. The policy may have changed; refresh before deciding again.":
-    "Impossible d’enregistrer le consentement. La politique a peut-être changé ; actualisez avant de décider à nouveau.",
-  "Sharing policy · version {version}":
-    "Politique de partage · version {version}",
-  "Named rankings still require a separate personal opt-in and the minimum privacy threshold.":
-    "Les classements nominatifs exigent toujours un accord personnel distinct et le seuil minimal de confidentialité.",
-  "Insufficient data": "Données insuffisantes",
-  Improving: "En progression",
-  Stable: "Stable",
-  Declining: "En baisse",
-  High: "Élevé",
-  Medium: "Moyen",
-  Low: "Faible",
-  "Protected range": "Plage protégée",
-  "Sharing permissions": "Autorisations de partage",
-  "Invalid sharing target": "Cible de partage invalide",
-  "No permission was changed.": "Aucune autorisation n’a été modifiée.",
-  "Sharing with {target}": "Partage avec {target}",
-  "this audience": "ce public",
-  "Additional fields for this audience":
-    "Champs supplémentaires pour ce public",
-  "These permissions add to any friend-wide grant. Avermate never infers a missing field.":
-    "Ces autorisations s’ajoutent au partage accordé à tous les amis. Avermate ne déduit jamais un champ absent.",
-  "Exact preview for this audience": "Aperçu exact pour ce public",
-  "The exact preview could not be verified.":
-    "Impossible de vérifier l’aperçu exact.",
   Copy: "Copie",
+
+  // ---------------------------------------------------- social, rebuilt
+  "Blocking removes the friendship and pending requests in both directions. Unblocking never recreates them.": "Bloquer supprime l'amitié et les demandes en attente dans les deux sens. Débloquer ne les recrée jamais.",
+  "You can block someone from their friend screen.": "Vous pouvez bloquer quelqu'un depuis sa fiche d'ami.",
+  "No friendship will be restored automatically — either of you can send a new request.": "Aucune amitié ne sera restaurée automatiquement — chacun peut renvoyer une demande.",
+  "Friend": "Ami",
+  "This friend could not be found": "Cet ami est introuvable",
+  "The friendship may have been removed.": "L'amitié a peut-être été supprimée.",
+  "Computed from {year}": "Calculée à partir de {year}",
+  "Shared subjects": "Matières partagées",
+  "Nothing is shared right now": "Rien n'est partagé pour le moment",
+  "They locked their figures, or have no academic year to share yet.": "Cette personne a verrouillé ses chiffres, ou n'a pas encore d'année scolaire à partager.",
+  "Actions": "Actions",
+  "Remove friend": "Retirer l'ami",
+  "Neither of you will see the other's figures any more.": "Aucun de vous ne verra plus les chiffres de l'autre.",
+  "The friendship ends immediately and they can no longer reach you. They are not notified.": "L'amitié prend fin immédiatement et cette personne ne peut plus vous joindre. Elle n'est pas prévenue.",
+  "This invitation is no longer valid": "Cette invitation n'est plus valide",
+  "It may have expired, been revoked, or already used.": "Elle a peut-être expiré, été révoquée ou déjà utilisée.",
+  "Go to friends": "Aller aux amis",
+  "Becoming friends shares only what each of you unlocked.": "Devenir amis ne partage que ce que chacun de vous a déverrouillé.",
+  "This is your own invitation link — send it to someone else.": "C'est votre propre lien d'invitation — envoyez-le à quelqu'un d'autre.",
+  "You are already friends.": "Vous êtes déjà amis.",
+  "Accept and become friends": "Accepter et devenir amis",
+  "Compare general averages with a class or a group of friends. Each member decides whether their own figure appears.": "Comparez vos moyennes générales avec une classe ou un groupe d'amis. Chaque membre décide si son propre chiffre apparaît.",
+  "Description (optional)": "Description (facultative)",
+  "Create group": "Créer le groupe",
+  "New group": "Nouveau groupe",
+  "1 member": "1 membre",
+  "On hold": "En pause",
+  "Create one and send the link, or open an invitation someone sent you.": "Créez-en un et envoyez le lien, ou ouvrez une invitation reçue.",
+  "You still own this group": "Vous possédez encore ce groupe",
+  "Transfer or remove the other members first, or delete the group.": "Transférez ou retirez d'abord les autres membres, ou supprimez le groupe.",
+  "This group could not be found": "Ce groupe est introuvable",
+  "It may have been deleted, or you were removed.": "Il a peut-être été supprimé, ou vous en avez été retiré.",
+  "A moderator paused this group after a report. Figures are hidden until the hold is lifted; nothing has been deleted.": "Un modérateur a suspendu ce groupe après un signalement. Les chiffres sont masqués jusqu'à la levée de la pause ; rien n'a été supprimé.",
+  "Share my average with this group": "Partager ma moyenne avec ce groupe",
+  "Off means the others see you in the list without a figure.": "Désactivé, les autres vous voient dans la liste sans chiffre.",
+  "Group figures": "Chiffres du groupe",
+  "Group average": "Moyenne du groupe",
+  "Range": "Étendue",
+  "Leaderboard": "Classement",
+  "Members without a figure keep their switch off, or have no year to share.": "Les membres sans chiffre gardent leur interrupteur désactivé, ou n'ont pas d'année à partager.",
+  "Invite people": "Inviter des personnes",
+  "Share an invitation link": "Partager un lien d'invitation",
+  "Anyone with the link joins directly. It works for a month or until revoked.": "Toute personne avec le lien rejoint directement. Il fonctionne un mois ou jusqu'à révocation.",
+  "Edit name and description": "Modifier le nom et la description",
+  "Delete group": "Supprimer le groupe",
+  "Delete this group?": "Supprimer ce groupe ?",
+  "The group and its memberships disappear for everyone. Nobody's grades are affected.": "Le groupe et ses adhésions disparaissent pour tout le monde. Les notes de personne ne sont affectées.",
+  "Add a friend": "Ajouter un ami",
+  "Their handle": "Son pseudo",
+  "their-handle": "son-pseudo",
+  "Nobody with that handle could be reached.": "Personne avec ce pseudo n'a pu être joint.",
+  "Requests for you": "Demandes reçues",
+  "Waiting for an answer": "En attente d'une réponse",
+  "Sent — you can cancel it": "Envoyée — vous pouvez l'annuler",
+  "Cancel this request?": "Annuler cette demande ?",
+  "Keep waiting": "Continuer d'attendre",
+  "Cancel request": "Annuler la demande",
+  "Friends could not be refreshed.": "Les amis n'ont pas pu être actualisés.",
+  "Shares their figures": "Partage ses chiffres",
+  "Shares nothing": "Ne partage rien",
+  "No friends yet": "Pas encore d'amis",
+  "Send a request to a handle you know, or share an invitation link.": "Envoyez une demande à un pseudo que vous connaissez, ou partagez un lien d'invitation.",
+  "Elsewhere": "Ailleurs",
+  "What your friends may see": "Ce que vos amis peuvent voir",
+  "Each friend sees exactly what your sharing locks allow — nothing more.": "Chaque ami voit exactement ce que vos verrous de partage autorisent — rien de plus.",
+  "It may have expired, been revoked, or the group is gone.": "Elle a peut-être expiré, été révoquée, ou le groupe n'existe plus.",
+  "Go to groups": "Aller aux groupes",
+  "{name} invites you. {count} people are in.": "{name} vous invite. {count} personnes y sont.",
+  "{count} people are in.": "{count} personnes y sont.",
+  "Members compare general averages. Yours is visible on joining, and one switch inside the group hides it whenever you want.": "Les membres comparent leurs moyennes générales. La vôtre est visible dès l'arrivée, et un interrupteur dans le groupe la masque quand vous voulez.",
+  "You are already a member.": "Vous êtes déjà membre.",
+  "Join the group": "Rejoindre le groupe",
+  "You received a friend request.": "Vous avez reçu une demande d'ami.",
+  "Your friend request was accepted.": "Votre demande d'ami a été acceptée.",
+  "Someone joined {groupName}.": "Quelqu'un a rejoint {groupName}.",
+  "Someone joined your group.": "Quelqu'un a rejoint votre groupe.",
+  "You were removed from {groupName}.": "Vous avez été retiré de {groupName}.",
+  "You were removed from a group.": "Vous avez été retiré d'un groupe.",
+  "A social update is available.": "Une mise à jour sociale est disponible.",
+  "Latest": "Récents",
+  "Updates could not be refreshed.": "Les mises à jour n'ont pas pu être actualisées.",
+  "Nothing yet": "Rien pour l'instant",
+  "Friend requests and group activity will appear here.": "Les demandes d'amis et l'activité des groupes apparaîtront ici.",
+  "Describe the problem": "Décrivez le problème",
+  "Write only what a moderator needs. Do not paste grades, subject names or anyone's academic results.": "N'écrivez que ce dont un modérateur a besoin. Ne collez ni notes, ni noms de matières, ni résultats scolaires de quiconque.",
+  "The report could not be sent. Try again later.": "Le signalement n'a pas pu être envoyé. Réessayez plus tard.",
+  "Send private report": "Envoyer le signalement privé",
+  "Sharing settings could not be loaded.": "Les réglages de partage n'ont pas pu être chargés.",
+  "Your handle": "Votre pseudo",
+  "Handle": "Pseudo",
+  "your-handle": "votre-pseudo",
+  "That handle is already taken.": "Ce pseudo est déjà pris.",
+  "Save handle": "Enregistrer le pseudo",
+  "Friends find you with it. Leave empty to be reachable by invitation link only.": "Les amis vous trouvent avec. Laissez vide pour n'être joignable que par lien d'invitation.",
+  "What friends see": "Ce que voient les amis",
+  "One number for the whole year.": "Un seul chiffre pour toute l'année.",
+  "Subject averages": "Moyennes par matière",
+  "All subjects": "Toutes les matières",
+  "Only subjects I pick": "Seulement celles que je choisis",
+  "No subjects": "Aucune matière",
+  "Year being shared": "Année partagée",
+  "My current year ({name})": "Mon année en cours ({name})",
+  "My current year": "Mon année en cours",
+  "Subjects you share": "Matières que vous partagez",
+  "The shared year has no subjects yet.": "L'année partagée n'a pas encore de matières.",
+  "Exactly what a friend sees": "Exactement ce qu'un ami voit",
+  "Locked": "Verrouillée",
+  "Friends currently see nothing: both locks are closed, or there is no academic year to share yet.": "Les amis ne voient rien actuellement : les deux verrous sont fermés, ou il n'y a pas encore d'année scolaire à partager.",
+  "Hold a reported group, or delete it outright.": "Mettez en pause un groupe signalé, ou supprimez-le.",
+  "All groups": "Tous les groupes",
+  "Owner: {name}": "Propriétaire : {name}",
+  "Lift hold": "Lever la pause",
+  "Put on hold": "Mettre en pause",
+  "It disappears for every member. Nobody's grades are affected.": "Il disparaît pour chaque membre. Les notes de personne ne sont affectées.",
+  "No groups": "Aucun groupe",
+  "Nothing has been created yet.": "Rien n'a encore été créé.",
+  "Reports and group holds. Academic figures never appear here.": "Signalements et pauses de groupes. Les chiffres scolaires n'apparaissent jamais ici.",
+  "Moderation counts could not be refreshed.": "Les compteurs de modération n'ont pas pu être actualisés.",
+  "Friendships": "Amitiés",
+  "Open reports": "Signalements ouverts",
+  "Sharing profiles": "Profils de partage",
+  "Queues": "Files d'attente",
+  "Investigating": "En cours d'examen",
+  "What members flagged. Messages never contain academic figures.": "Ce que les membres ont signalé. Les messages ne contiennent jamais de chiffres scolaires.",
+  "Queue": "File d'attente",
+  "Reports could not be refreshed.": "Les signalements n'ont pas pu être actualisés.",
+  "From {name}": "De {name}",
+  "about {name}": "à propos de {name}",
+  "group {name}": "groupe {name}",
+  "Change status": "Changer le statut",
+  "No reports": "Aucun signalement",
+  "Nothing waits in this view.": "Rien n'attend dans cette vue.",
+
 };
 
 const dictionaries: Record<Locale, Record<string, string>> = { fr, en: {} };

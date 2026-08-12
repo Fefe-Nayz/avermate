@@ -1,11 +1,7 @@
 import { Alert } from "react-native";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { SocialRouteGate } from "@/components/social/social-gate";
-import {
-  PrivacyBoundaryNotice,
-  SocialIdentity,
-} from "@/components/social/social-ui";
+import { SocialIdentity } from "@/components/social/social-ui";
 import {
   Button,
   Card,
@@ -31,63 +27,54 @@ export default function BlockedAccounts() {
   });
 
   return (
-    <SocialRouteGate>
-      <>
-        <Stack.Screen options={{ title: t("Blocked accounts") }} />
-        <Screen>
-          <PrivacyBoundaryNotice compact />
-          <Note>
-            {t(
-              "Blocking removes friendship, pending requests, circle membership and sharing in both directions. Unblocking never recreates them.",
-            )}
-          </Note>
-          <Section title={t("Blocked by you")}>
-            {blocks.isLoading ? (
-              <Loading />
-            ) : blocks.isError ? (
-              <Problem>{t("Blocked accounts could not be refreshed.")}</Problem>
-            ) : (blocks.data?.length ?? 0) === 0 ? (
-              <Empty
-                icon="shield-checkmark-outline"
-                title={t("No blocked accounts")}
-                body={t(
-                  "You can block from a friend profile or an incoming request.",
-                )}
-              />
-            ) : (
-              (blocks.data ?? []).map((block) => (
-                <Card key={block.id} style={{ gap: space.md }}>
-                  <SocialIdentity
-                    displayName={block.displayName ?? t("Unavailable profile")}
-                    handle={block.handle}
-                  />
-                  <Button
-                    label={t("Unblock")}
-                    variant="ghost"
-                    disabled={unblock.isPending}
-                    onPress={() =>
-                      Alert.alert(
-                        t("Unblock this account?"),
-                        t(
-                          "No friendship or sharing permission will be restored automatically.",
-                        ),
-                        [
-                          { text: t("Cancel"), style: "cancel" },
-                          {
-                            text: t("Unblock"),
-                            onPress: () =>
-                              unblock.mutate({ blockId: block.id }),
-                          },
-                        ],
-                      )
-                    }
-                  />
-                </Card>
-              ))
-            )}
-          </Section>
-        </Screen>
-      </>
-    </SocialRouteGate>
+    <>
+      <Stack.Screen options={{ title: t("Blocked accounts") }} />
+      <Screen>
+        <Note>
+          {t(
+            "Blocking removes the friendship and pending requests in both directions. Unblocking never recreates them.",
+          )}
+        </Note>
+        <Section title={t("Blocked by you")}>
+          {blocks.isLoading ? (
+            <Loading />
+          ) : blocks.isError ? (
+            <Problem>{t("Blocked accounts could not be refreshed.")}</Problem>
+          ) : (blocks.data?.length ?? 0) === 0 ? (
+            <Empty
+              icon="shield-checkmark-outline"
+              title={t("No blocked accounts")}
+              body={t("You can block someone from their friend screen.")}
+            />
+          ) : (
+            (blocks.data ?? []).map((block) => (
+              <Card key={block.id} style={{ gap: space.md }}>
+                <SocialIdentity name={block.name} avatar={block.avatar} />
+                <Button
+                  label={t("Unblock")}
+                  variant="ghost"
+                  disabled={unblock.isPending}
+                  onPress={() =>
+                    Alert.alert(
+                      t("Unblock this account?"),
+                      t(
+                        "No friendship will be restored automatically — either of you can send a new request.",
+                      ),
+                      [
+                        { text: t("Cancel"), style: "cancel" },
+                        {
+                          text: t("Unblock"),
+                          onPress: () => unblock.mutate({ blockId: block.id }),
+                        },
+                      ],
+                    )
+                  }
+                />
+              </Card>
+            ))
+          )}
+        </Section>
+      </Screen>
+    </>
   );
 }

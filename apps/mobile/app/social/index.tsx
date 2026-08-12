@@ -1,149 +1,280 @@
-import { Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Share, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
+import { SocialIdentity } from "@/components/social/social-ui";
+import { TextField } from "@/components/field";
 import {
-  SocialRouteGate,
-  useSocialEligibility,
-} from "@/components/social/social-gate";
-import { socialAppIsAccessible } from "@/components/social/social-model";
-import {
-  PrivacyBoundaryNotice,
-  SocialIdentity,
-  SocialNavigation,
-} from "@/components/social/social-ui";
-import {
+  Button,
   Card,
   Empty,
   Loading,
+  Note,
+  Problem,
   Row,
   Screen,
   Section,
-  Title,
 } from "@/components/ui";
+import { env } from "@/lib/env";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { orpc } from "@/lib/orpc";
-import { numeric, space, type, usePalette } from "@/lib/theme";
+import { orpc, queryClient } from "@/lib/orpc";
+import { space, usePalette } from "@/lib/theme";
 
-export default function SocialOverview() {
-  const router = useRouter();
+/**
+ * Friends. The list, the requests in both directions, and the two ways to
+ * add someone. What each friend actually shares is one tap deeper.
+ */
+export default function Social() {
   const palette = usePalette();
-  const eligibility = useSocialEligibility();
-  const friendsEnabled = socialAppIsAccessible(eligibility.data);
-  const profile = useQuery({
-    ...orpc.social.profile.mine.queryOptions(),
-    staleTime: 30_000,
+  const router = useRouter();
+  const friends = useQuery(orpc.social.friends.list.queryOptions());
+  const requests = useQuery(orpc.social.friends.requests.queryOptions());
+  const [handle, setHandle] = useState("");
+
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.friends.list.queryKey(),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.friends.requests.queryKey(),
+      }),
+    ]);
+
+  const send = useMutation({
+    ...orpc.social.friends.request.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      setHandle("");
+      await refresh();
+    },
   });
-  const friends = useQuery({
-    ...orpc.social.friends.list.queryOptions(),
-    staleTime: 30_000,
-    enabled: friendsEnabled,
+  const respond = useMutation({
+    ...orpc.social.friends.respond.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      await refresh();
+    },
   });
-  const requests = useQuery({
-    ...orpc.social.friends.requests.queryOptions(),
-    staleTime: 15_000,
-    enabled: friendsEnabled,
+  const cancel = useMutation({
+    ...orpc.social.friends.cancel.mutationOptions(),
+    onSuccess: refresh,
+  });
+  const invite = useMutation({
+    ...orpc.social.friends.invitations.create.mutationOptions(),
+    onSuccess: async (invitation) => {
+      haptic("success");
+      await Share.share({
+        message: `${env.webUrl}/social/friends/invitations/${invitation.token}`,
+      });
+    },
   });
 
   return (
-    <SocialRouteGate requireActiveProfile={false}>
-      <>
-        <Stack.Screen options={{ title: t("Social") }} />
-        <Screen>
-          <SocialNavigation current="overview" />
-          <Title subtitle={t("Private by default, useful by mutual choice")}>
-            {t("Your social space")}
-          </Title>
-          <PrivacyBoundaryNotice />
-
-          {profile.isLoading ||
-          (friendsEnabled && (friends.isLoading || requests.isLoading)) ? (
-            <Loading />
-          ) : profile.isError ||
-            (friendsEnabled && (friends.isError || requests.isError)) ? (
-            <Empty
-              icon="cloud-offline-outline"
-              title={t("Social data could not be refreshed")}
-              body={t("Reconnect before making a sharing decision.")}
+    <>
+      <Stack.Screen options={{ title: t("Friends") }} />
+      <Screen>
+        <Section title={t("Add a friend")}>
+          <Card style={{ gap: space.md }}>
+            <TextField
+              label={t("Their handle")}
+              value={handle}
+              onChangeText={setHandle}
+              placeholder={t("their-handle")}
+              autoCapitalize="none"
+              maxLength={32}
+              error={
+                send.isError
+                  ? t("Nobody with that handle could be reached.")
+                  : undefined
+              }
             />
-          ) : (
-            <>
-              <Section title={t("Your profile")}>
-                <Card style={{ gap: space.md }}>
-                  <SocialIdentity
-                    displayName={
-                      profile.data?.profile?.displayName ?? t("Private profile")
-                    }
-                    handle={profile.data?.profile?.handle}
-                  />
-                  <Row
-                    first
-                    title={t("Review exactly what friends can see")}
-                    subtitle={t(
-                      "Permissions are field-by-field and reversible",
-                    )}
-                    onPress={() => router.push("/social/profile")}
-                  />
-                  {!friendsEnabled ? (
-                    <Row
-                      title={t("Activate friend features")}
-                      subtitle={t(
-                        "Groups work without a discoverable friend profile",
-                      )}
-                      onPress={() => router.push("/social/profile")}
+            <Button
+              label={t("Send request")}
+              disabled={!handle.trim()}
+              loading={send.isPending}
+              onPress={() => send.mutate({ handle: handle.trim() })}
+            />
+            <Button
+              label={t("Share an invitation link")}
+              variant="secondary"
+              icon="link-outline"
+              loading={invite.isPending}
+              onPress={() => invite.mutate({})}
+            />
+          </Card>
+        </Section>
+
+        {requests.data?.incoming.length ? (
+          <Section title={t("Requests for you")}>
+            {requests.data.incoming.map((request) => (
+              <Card key={request.id} style={{ gap: space.md }}>
+                <SocialIdentity
+                  name={request.name}
+                  handle={request.handle}
+                  avatar={request.avatar}
+                  secondary={request.message ?? undefined}
+                />
+                <View style={{ flexDirection: "row", gap: space.sm }}>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label={t("Accept")}
+                      disabled={respond.isPending}
+                      onPress={() =>
+                        respond.mutate({ requestId: request.id, accept: true })
+                      }
                     />
-                  ) : null}
-                </Card>
-              </Section>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      label={t("Decline")}
+                      variant="secondary"
+                      disabled={respond.isPending}
+                      onPress={() =>
+                        respond.mutate({ requestId: request.id, accept: false })
+                      }
+                    />
+                  </View>
+                </View>
+              </Card>
+            ))}
+          </Section>
+        ) : null}
 
-              <View style={{ flexDirection: "row", gap: space.md }}>
-                <Card style={{ flex: 1, alignItems: "center", gap: space.xs }}>
-                  <Text style={[type.title, numeric, { color: palette.text }]}>
-                    {friends.data?.friends.length ?? 0}
-                  </Text>
-                  <Text style={[type.footnote, { color: palette.textMuted }]}>
-                    {t("Friends")}
-                  </Text>
-                </Card>
-                <Card style={{ flex: 1, alignItems: "center", gap: space.xs }}>
-                  <Text style={[type.title, numeric, { color: palette.text }]}>
-                    {requests.data?.incoming.length ?? 0}
-                  </Text>
-                  <Text style={[type.footnote, { color: palette.textMuted }]}>
-                    {t("Requests")}
-                  </Text>
-                </Card>
-              </View>
+        {requests.data?.outgoing.length ? (
+          <Section title={t("Waiting for an answer")}>
+            <Card padded={false}>
+              {requests.data.outgoing.map((request, index) => (
+                <Row
+                  key={request.id}
+                  first={index === 0}
+                  title={request.name || (request.handle ?? "")}
+                  subtitle={t("Sent — you can cancel it")}
+                  onPress={() =>
+                    Alert.alert(t("Cancel this request?"), undefined, [
+                      { text: t("Keep waiting"), style: "cancel" },
+                      {
+                        text: t("Cancel request"),
+                        style: "destructive",
+                        onPress: () =>
+                          cancel.mutate({ requestId: request.id }),
+                      },
+                    ])
+                  }
+                />
+              ))}
+            </Card>
+          </Section>
+        ) : null}
 
-              <Section title={t("Connect")}>
-                <Card padded={false}>
-                  <Row
-                    first
-                    title={t("Friends and requests")}
-                    subtitle={t(
-                      "Mutual acceptance, exact handle or private invitation",
-                    )}
-                    onPress={() => router.push("/social/friends")}
-                  />
-                  <Row
-                    title={t("Groups and classes")}
-                    subtitle={t(
-                      "Join only after reviewing the current sharing policy",
-                    )}
-                    onPress={() => router.push("/social/groups")}
-                  />
-                  <Row
-                    title={t("Notifications")}
-                    subtitle={t(
-                      "Friend, invitation, consent and moderation updates",
-                    )}
-                    onPress={() => router.push("/social/notifications")}
-                  />
-                </Card>
-              </Section>
-            </>
+        <Section title={t("Your friends")}>
+          {friends.isLoading ? (
+            <Loading />
+          ) : friends.isError ? (
+            <Problem>{t("Friends could not be refreshed.")}</Problem>
+          ) : friends.data?.friends.length ? (
+            <Card padded={false}>
+              {friends.data.friends.map((friend, index) => (
+                <Row
+                  key={friend.friendshipId}
+                  first={index === 0}
+                  title={friend.name}
+                  subtitle={
+                    friend.sharesSomething
+                      ? t("Shares their figures")
+                      : t("Shares nothing")
+                  }
+                  leading={
+                    <Ionicons
+                      name={
+                        friend.sharesSomething
+                          ? "eye-outline"
+                          : "eye-off-outline"
+                      }
+                      size={18}
+                      color={
+                        friend.sharesSomething
+                          ? palette.positive
+                          : palette.textFaint
+                      }
+                    />
+                  }
+                  onPress={() =>
+                    router.push(`/social/friend/${friend.friendshipId}`)
+                  }
+                />
+              ))}
+            </Card>
+          ) : (
+            <Empty
+              icon="people-outline"
+              title={t("No friends yet")}
+              body={t(
+                "Send a request to a handle you know, or share an invitation link.",
+              )}
+            />
           )}
-        </Screen>
-      </>
-    </SocialRouteGate>
+        </Section>
+
+        <Section title={t("Elsewhere")}>
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Groups")}
+              leading={
+                <Ionicons
+                  name="people-circle-outline"
+                  size={19}
+                  color={palette.textMuted}
+                />
+              }
+              onPress={() => router.push("/social/groups")}
+            />
+            <Row
+              title={t("Sharing")}
+              subtitle={t("What your friends may see")}
+              leading={
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={19}
+                  color={palette.textMuted}
+                />
+              }
+              onPress={() => router.push("/social/sharing")}
+            />
+            <Row
+              title={t("Updates")}
+              leading={
+                <Ionicons
+                  name="notifications-outline"
+                  size={19}
+                  color={palette.textMuted}
+                />
+              }
+              onPress={() => router.push("/social/notifications")}
+            />
+            <Row
+              title={t("Blocked accounts")}
+              leading={
+                <Ionicons
+                  name="ban-outline"
+                  size={19}
+                  color={palette.textMuted}
+                />
+              }
+              onPress={() => router.push("/social/blocks")}
+            />
+          </Card>
+        </Section>
+
+        <Note>
+          {t(
+            "Each friend sees exactly what your sharing locks allow — nothing more.",
+          )}
+        </Note>
+      </Screen>
+    </>
   );
 }

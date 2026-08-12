@@ -50,7 +50,6 @@ import {
 } from "@/lib/theme";
 import { client } from "@/lib/orpc";
 import { DEFAULT_CHART_SETTINGS, setChartSettings } from "@/lib/chart-settings";
-import { clearHeldSocialInvitations } from "@/lib/social-invitation-session";
 
 export const unstable_settings = { initialRouteName: "(tabs)" };
 
@@ -150,7 +149,6 @@ function usePreferences(identity: string): boolean {
 
     const previous = previousIdentity.current;
     previousIdentity.current = identity;
-    if (previous && previous !== identity) clearHeldSocialInvitations();
     if (previous?.startsWith("user:") && previous !== identity) {
       void clearLocalUserSettings(previous.slice(5)).catch(() => undefined);
     }
@@ -308,99 +306,43 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 />
                 <Stack.Screen
                   name="social/index"
-                  options={{ title: t("Social") }}
-                />
-                <Stack.Screen
-                  name="social/setup"
-                  options={{ title: t("Social setup") }}
-                />
-                <Stack.Screen
-                  name="social/profile"
-                  options={{ title: t("Social profile") }}
-                />
-                <Stack.Screen
-                  name="social/friends"
                   options={{ title: t("Friends") }}
                 />
                 <Stack.Screen
-                  name="social/friend/[friendshipId]"
-                  options={{ title: t("Shared profile") }}
+                  name="social/sharing"
+                  options={{ title: t("Sharing") }}
                 />
                 <Stack.Screen
-                  name="social/friend-invitations/index"
-                  options={{ title: t("Private invitations") }}
+                  name="social/friend/[friendshipId]"
+                  options={{ title: t("Friend") }}
                 />
                 <Stack.Screen
                   name="social/friend-invitations/[token]"
                   options={{ title: t("Friend invitation") }}
                 />
                 <Stack.Screen
-                  name="social/circles/index"
-                  options={{ title: t("Friend circles") }}
-                />
-                <Stack.Screen
-                  name="social/circles/[circleId]"
-                  options={{ title: t("Friend circle") }}
-                />
-                <Stack.Screen
                   name="social/blocks"
                   options={{ title: t("Blocked accounts") }}
                 />
                 <Stack.Screen
-                  name="social/grants"
-                  options={{ title: t("Sharing permissions") }}
-                />
-                <Stack.Screen
                   name="social/groups/index"
-                  options={{ title: t("Groups and classes") }}
-                />
-                <Stack.Screen
-                  name="social/groups/new"
-                  options={{ title: t("Create a group") }}
+                  options={{ title: t("Groups") }}
                 />
                 <Stack.Screen
                   name="social/groups/[groupId]/index"
                   options={{ title: t("Group") }}
                 />
                 <Stack.Screen
-                  name="social/groups/[groupId]/metric"
-                  options={{ title: t("Group statistics") }}
-                />
-                <Stack.Screen
-                  name="social/groups/[groupId]/invitations"
-                  options={{ title: t("Group invitations") }}
-                />
-                <Stack.Screen
-                  name="social/groups/[groupId]/manage"
-                  options={{ title: t("Group settings") }}
-                />
-                <Stack.Screen
-                  name="social/groups/[groupId]/policy"
-                  options={{ title: t("New policy version") }}
-                />
-                <Stack.Screen
                   name="social/invitations/[token]"
                   options={{ title: t("Group invitation") }}
                 />
                 <Stack.Screen
-                  name="social/invitation"
-                  options={{ title: t("Private social invitation") }}
-                />
-                <Stack.Screen
-                  name="social/invitation-process"
-                  options={{ title: t("Private social invitation") }}
-                />
-                <Stack.Screen
                   name="social/notifications"
-                  options={{ title: t("Social notifications") }}
+                  options={{ title: t("Updates") }}
                 />
                 <Stack.Screen
                   name="social/report"
                   options={{ title: t("Report a safety concern") }}
-                />
-                <Stack.Screen
-                  name="social/reports"
-                  options={{ title: t("Submitted reports") }}
                 />
                 <Stack.Screen
                   name="admin/index"
@@ -435,16 +377,8 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   options={{ title: t("Safety reports") }}
                 />
                 <Stack.Screen
-                  name="admin/social/report/[id]"
-                  options={{ title: t("Safety report") }}
-                />
-                <Stack.Screen
                   name="admin/social/groups"
                   options={{ title: t("Social groups") }}
-                />
-                <Stack.Screen
-                  name="admin/social/audit"
-                  options={{ title: t("Social audit") }}
                 />
                 <Stack.Screen
                   name="admin/presets"

@@ -2,130 +2,91 @@ import { useState } from "react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ChoiceField, TextField } from "@/components/field";
-import { SocialRouteGate } from "@/components/social/social-gate";
-import { PrivacyBoundaryNotice } from "@/components/social/social-ui";
-import {
-  Button,
-  Confirmation,
-  Empty,
-  Note,
-  Problem,
-  Screen,
-  Section,
-} from "@/components/ui";
+import { Button, Card, Note, Problem, Screen, Section } from "@/components/ui";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { orpc, queryClient } from "@/lib/orpc";
+import { orpc } from "@/lib/orpc";
+import { space } from "@/lib/theme";
 
-type Source = "friendship" | "friend_request" | "group" | "group_membership";
 type Category =
-  "harassment" | "privacy" | "impersonation" | "unsafe_content" | "other";
+  | "harassment"
+  | "privacy"
+  | "impersonation"
+  | "unsafe_content"
+  | "other";
 
-function isSource(value: string | undefined): value is Source {
-  return ["friendship", "friend_request", "group", "group_membership"].includes(
-    value ?? "",
-  );
-}
-
-export default function CreateSocialReport() {
-  const params = useLocalSearchParams<{ source?: string; sourceId?: string }>();
+/**
+ * Reporting a person or a group. The one instruction that matters — keep
+ * grades out of a moderation queue — sits beside the text box.
+ */
+export default function Report() {
   const router = useRouter();
+  const { targetUserId, groupId } = useLocalSearchParams<{
+    targetUserId?: string;
+    groupId?: string;
+  }>();
   const [category, setCategory] = useState<Category>("harassment");
   const [message, setMessage] = useState("");
-  const source = isSource(params.source) ? params.source : null;
-  const validTarget = Boolean(source && params.sourceId);
+
   const create = useMutation({
     ...orpc.social.reports.create.mutationOptions(),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: orpc.social.reports.mine.queryKey(),
-      });
+    onSuccess: () => {
+      haptic("success");
+      router.back();
     },
   });
 
-  if (!validTarget) {
-    return (
-      <Screen>
-        <Empty
-          icon="lock-closed-outline"
-          title={t("Invalid report target")}
-          body={t("No report was sent.")}
-        />
-      </Screen>
-    );
-  }
-
   return (
-    <SocialRouteGate requireActiveProfile={false}>
-      <>
-        <Stack.Screen options={{ title: t("Report a safety concern") }} />
-        <Screen>
-          <PrivacyBoundaryNotice compact />
-          <Section title={t("What happened?")}>
-            <ChoiceField<Category>
+    <>
+      <Stack.Screen options={{ title: t("Report a safety concern") }} />
+      <Screen>
+        <Section title={t("What happened?")}>
+          <Card style={{ gap: space.lg }}>
+            <ChoiceField
+              label={t("Category")}
               value={category}
               onChange={setCategory}
               choices={[
                 { value: "harassment", label: t("Harassment") },
-                { value: "privacy", label: t("Privacy violation") },
+                { value: "privacy", label: t("Privacy") },
                 { value: "impersonation", label: t("Impersonation") },
                 { value: "unsafe_content", label: t("Unsafe content") },
                 { value: "other", label: t("Other") },
               ]}
             />
             <TextField
-              label={t("Describe the concern")}
+              label={t("Describe the problem")}
               value={message}
               onChangeText={setMessage}
               multiline
               maxLength={2000}
-              placeholder={t(
-                "Include useful context without copying grades or unnecessary personal data",
-              )}
             />
             <Note>
               {t(
-                "Reports go to Avermate’s admin moderation queue, not Discord. Blocking remains a separate immediate action.",
+                "Write only what a moderator needs. Do not paste grades, subject names or anyone's academic results.",
               )}
             </Note>
+            {create.isError ? (
+              <Problem>
+                {t("The report could not be sent. Try again later.")}
+              </Problem>
+            ) : null}
             <Button
-              label={t("Submit report")}
-              disabled={
-                message.trim().length < 10 ||
-                create.isPending ||
-                create.isSuccess
-              }
+              label={t("Send private report")}
+              disabled={message.trim().length < 10}
               loading={create.isPending}
               onPress={() =>
                 create.mutate({
-                  source: source!,
-                  sourceId: params.sourceId!,
+                  targetUserId: targetUserId || undefined,
+                  groupId: groupId || undefined,
                   category,
                   message: message.trim(),
                 })
               }
             />
-            {create.isSuccess ? (
-              <>
-                <Confirmation>
-                  {t(
-                    "Report submitted. You can follow its status without exposing the reported account.",
-                  )}
-                </Confirmation>
-                <Button
-                  label={t("View submitted reports")}
-                  variant="secondary"
-                  onPress={() => router.replace("/social/reports")}
-                />
-              </>
-            ) : null}
-            {create.isError ? (
-              <Problem>
-                {t("The report could not be submitted. Try again later.")}
-              </Problem>
-            ) : null}
-          </Section>
-        </Screen>
-      </>
-    </SocialRouteGate>
+          </Card>
+        </Section>
+      </Screen>
+    </>
   );
 }

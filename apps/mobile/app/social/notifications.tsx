@@ -1,8 +1,6 @@
-import { View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { SocialRouteGate } from "@/components/social/social-gate";
-import { SocialNavigation } from "@/components/social/social-ui";
+import { Ionicons } from "@expo/vector-icons";
 import {
   Button,
   Card,
@@ -15,133 +13,127 @@ import {
 } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { orpc, queryClient } from "@/lib/orpc";
-import { radius, usePalette } from "@/lib/theme";
+import { usePalette } from "@/lib/theme";
 
-function notificationLabel(kind: string): string {
-  if (kind === "friend_request.received") return t("New friend request");
-  if (kind === "friend_request.accepted") return t("Friend request accepted");
-  if (kind === "friend_invitation.accepted")
-    return t("Private invitation accepted");
-  if (kind === "group.member_joined") return t("A member joined your group");
-  if (kind === "group.policy_changed")
-    return t("A group sharing policy changed");
-  if (kind === "guardian_consent.accepted")
-    return t("Guardian consent accepted");
-  if (kind === "guardian_consent.declined")
-    return t("Guardian consent declined");
-  if (kind === "moderation.account_frozen")
-    return t("Social access paused by moderation");
-  return t("Social update");
-}
-
+/** What happened while you were away. */
 export default function SocialNotifications() {
-  const router = useRouter();
   const palette = usePalette();
-  const input = { unreadOnly: false, limit: 50, offset: 0 } as const;
+  const router = useRouter();
   const notifications = useQuery(
-    orpc.social.notifications.list.queryOptions({ input }),
+    orpc.social.notifications.list.queryOptions({
+      input: { unreadOnly: false },
+    }),
   );
-  const refresh = () =>
-    queryClient.invalidateQueries({
-      queryKey: orpc.social.notifications.list.queryKey({ input }),
-    });
-  const read = useMutation({
-    ...orpc.social.notifications.markRead.mutationOptions(),
-    onSuccess: refresh,
-  });
-  const readAll = useMutation({
+  const markAll = useMutation({
     ...orpc.social.notifications.markAllRead.mutationOptions(),
-    onSuccess: refresh,
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.notifications.list.key(),
+      }),
   });
 
-  const open = (notification: {
-    id: string;
-    readAt: Date | null;
-    entityType: string;
-    entityId: string | null;
-  }) => {
-    if (!notification.readAt) read.mutate({ notificationId: notification.id });
-    if (notification.entityType === "group" && notification.entityId) {
-      router.push(`/social/groups/${notification.entityId}`);
-    } else if (notification.entityType === "friend_request") {
-      router.push("/social/friends");
-    } else {
-      router.push("/social/setup");
+  function describe(kind: string, params: Record<string, string>) {
+    switch (kind) {
+      case "friend_request":
+        return {
+          icon: "person-add-outline" as const,
+          label: t("You received a friend request."),
+        };
+      case "friend_accept":
+        return {
+          icon: "checkmark-circle-outline" as const,
+          label: t("Your friend request was accepted."),
+        };
+      case "group_joined":
+        return {
+          icon: "people-circle-outline" as const,
+          label: params.groupName
+            ? t("Someone joined {groupName}.", { groupName: params.groupName })
+            : t("Someone joined your group."),
+        };
+      case "group_removed":
+        return {
+          icon: "person-remove-outline" as const,
+          label: params.groupName
+            ? t("You were removed from {groupName}.", {
+                groupName: params.groupName,
+              })
+            : t("You were removed from a group."),
+        };
+      default:
+        return {
+          icon: "notifications-outline" as const,
+          label: t("A social update is available."),
+        };
     }
-  };
+  }
+
+  const unread =
+    notifications.data?.filter((item) => !item.readAt).length ?? 0;
 
   return (
-    <SocialRouteGate requireActiveProfile={false}>
-      <>
-        <Stack.Screen options={{ title: t("Social notifications") }} />
-        <Screen>
-          <SocialNavigation current="updates" />
-          <Section
-            title={t("Latest updates")}
-            action={
-              (notifications.data?.some((item) => !item.readAt) ?? false) ? (
-                <Button
-                  label={t("Mark all read")}
-                  variant="ghost"
-                  disabled={readAll.isPending}
-                  onPress={() => readAll.mutate(undefined)}
-                />
-              ) : undefined
-            }
-          >
-            {notifications.isLoading ? (
-              <Loading />
-            ) : notifications.isError ? (
-              <Problem>{t("Notifications could not be refreshed.")}</Problem>
-            ) : (notifications.data?.length ?? 0) === 0 ? (
-              <Empty
-                icon="notifications-outline"
-                title={t("No social updates")}
-                body={t(
-                  "Friend, group, consent and moderation changes appear here.",
-                )}
-              />
-            ) : (
-              <Card padded={false}>
-                {notifications.data?.map((notification, index) => (
+    <>
+      <Stack.Screen options={{ title: t("Updates") }} />
+      <Screen>
+        {unread > 0 ? (
+          <Button
+            label={t("Mark all read")}
+            variant="secondary"
+            loading={markAll.isPending}
+            onPress={() => markAll.mutate({})}
+          />
+        ) : null}
+
+        <Section title={t("Latest")}>
+          {notifications.isLoading ? (
+            <Loading />
+          ) : notifications.isError ? (
+            <Problem>{t("Updates could not be refreshed.")}</Problem>
+          ) : notifications.data?.length ? (
+            <Card padded={false}>
+              {notifications.data.map((item, index) => {
+                const { icon, label } = describe(item.kind, item.safeParams);
+                return (
                   <Row
-                    key={notification.id}
+                    key={item.id}
                     first={index === 0}
-                    title={notificationLabel(notification.kind)}
+                    title={
+                      item.actor?.name ? `${item.actor.name} — ${label}` : label
+                    }
+                    muted={Boolean(item.readAt)}
                     subtitle={new Intl.DateTimeFormat(undefined, {
                       dateStyle: "medium",
                       timeStyle: "short",
-                    }).format(new Date(notification.createdAt))}
+                    }).format(new Date(item.createdAt))}
                     leading={
-                      <View
-                        accessibilityLabel={
-                          notification.readAt ? t("Read") : t("Unread")
+                      <Ionicons
+                        name={icon}
+                        size={18}
+                        color={
+                          item.readAt ? palette.textFaint : palette.accent
                         }
-                        style={{
-                          width: 9,
-                          height: 9,
-                          borderRadius: radius.pill,
-                          backgroundColor: notification.readAt
-                            ? palette.border
-                            : palette.accent,
-                        }}
                       />
                     }
-                    onPress={() => open(notification)}
+                    onPress={
+                      item.entityType === "group" && item.entityId
+                        ? () => router.push(`/social/groups/${item.entityId}`)
+                        : () => router.push("/social")
+                    }
                   />
-                ))}
-              </Card>
-            )}
-          </Section>
-          <Section title={t("Your safety reports")}>
-            <Button
-              label={t("View submitted reports")}
-              variant="secondary"
-              onPress={() => router.push("/social/reports")}
+                );
+              })}
+            </Card>
+          ) : (
+            <Empty
+              icon="notifications-outline"
+              title={t("Nothing yet")}
+              body={t(
+                "Friend requests and group activity will appear here.",
+              )}
             />
-          </Section>
-        </Screen>
-      </>
-    </SocialRouteGate>
+          )}
+        </Section>
+      </Screen>
+    </>
   );
 }

@@ -1,9 +1,8 @@
-import { Alert, Text } from "react-native";
+import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { SocialRouteGate } from "@/components/social/social-gate";
 import {
-  PrivacyBoundaryNotice,
+  SharedAverageText,
   SocialIdentity,
 } from "@/components/social/social-ui";
 import {
@@ -13,43 +12,43 @@ import {
   Loading,
   Note,
   Problem,
+  Row,
   Screen,
   Section,
 } from "@/components/ui";
-import { educationBandLabel } from "@/components/social/social-copy";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { orpc, queryClient } from "@/lib/orpc";
-import { space, type, usePalette } from "@/lib/theme";
+import { space } from "@/lib/theme";
 
-export default function SharedFriendProfile() {
-  const { friendshipId } = useLocalSearchParams<{ friendshipId: string }>();
+/**
+ * One friend: who they are, then the real averages they chose to share, on
+ * their own scale. The destructive actions sit at the end.
+ */
+export default function FriendDetail() {
   const router = useRouter();
-  const palette = usePalette();
-  const preview = useQuery({
-    ...orpc.social.profile.preview.queryOptions({ input: { friendshipId } }),
+  const { friendshipId } = useLocalSearchParams<{ friendshipId: string }>();
+  const detail = useQuery({
+    ...orpc.social.friends.detail.queryOptions({
+      input: { friendshipId: friendshipId ?? "" },
+    }),
     enabled: Boolean(friendshipId),
   });
 
-  const leave = useMutation({
+  const remove = useMutation({
     ...orpc.social.friends.remove.mutationOptions(),
     onSuccess: async () => {
-      haptic("warning");
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.friends.list.queryKey(),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.circles.list.queryKey(),
-        }),
-      ]);
-      router.replace("/social/friends");
+      haptic("success");
+      await queryClient.invalidateQueries({
+        queryKey: orpc.social.friends.list.queryKey(),
+      });
+      router.back();
     },
   });
   const block = useMutation({
     ...orpc.social.blocks.create.mutationOptions(),
     onSuccess: async () => {
-      haptic("warning");
+      haptic("success");
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: orpc.social.friends.list.queryKey(),
@@ -57,119 +56,134 @@ export default function SharedFriendProfile() {
         queryClient.invalidateQueries({
           queryKey: orpc.social.blocks.list.queryKey(),
         }),
-        queryClient.invalidateQueries({
-          queryKey: orpc.social.circles.list.queryKey(),
-        }),
       ]);
-      router.replace("/social/friends");
+      router.back();
     },
   });
 
+  const friend = detail.data;
+
   return (
-    <SocialRouteGate>
-      <>
-        <Stack.Screen options={{ title: t("Shared profile") }} />
-        <Screen>
-          <PrivacyBoundaryNotice compact />
-          {preview.isLoading ? (
-            <Loading />
-          ) : preview.isError || !preview.data ? (
-            <Empty
-              icon="lock-closed-outline"
-              title={t("This profile is no longer available")}
-              body={t(
-                "The friendship, profile status or sharing permissions may have changed.",
-              )}
-              action={
-                <Button
-                  label={t("Back to friends")}
-                  onPress={() => router.replace("/social/friends")}
-                />
-              }
-            />
-          ) : (
-            <>
-              <Section>
-                <Card style={{ gap: space.lg }}>
-                  <SocialIdentity
-                    displayName={
-                      preview.data.profile.displayName ?? t("Private friend")
-                    }
-                    avatar={preview.data.profile.avatar}
-                  />
-                  {preview.data.profile.bio ? (
-                    <Text
-                      selectable
-                      style={[type.body, { color: palette.text }]}
-                    >
-                      {preview.data.profile.bio}
-                    </Text>
-                  ) : null}
-                  {preview.data.profile.educationBand ? (
-                    <Text
-                      selectable
-                      style={[type.footnote, { color: palette.textMuted }]}
-                    >
-                      {educationBandLabel(preview.data.profile.educationBand)}
-                    </Text>
-                  ) : null}
-                </Card>
-              </Section>
+    <>
+      <Stack.Screen options={{ title: friend?.name ?? t("Friend") }} />
+      <Screen>
+        {detail.isLoading ? (
+          <Loading />
+        ) : detail.isError || !friend ? (
+          <Empty
+            icon="person-outline"
+            title={t("This friend could not be found")}
+            body={t("The friendship may have been removed.")}
+          />
+        ) : (
+          <>
+            <Card>
+              <SocialIdentity
+                name={friend.name}
+                handle={friend.handle}
+                avatar={friend.avatar}
+              />
+            </Card>
 
-              <Section title={t("Privacy boundary")}>
-                <Note>
-                  {t(
-                    "Only fields this friend explicitly granted to you are present. Empty fields are not inferred or replaced with account data.",
-                  )}
-                </Note>
-                <Button
-                  label={t("Choose what I share with this friend")}
-                  variant="secondary"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/social/grants",
-                      params: {
-                        audience: "specific_user",
-                        audienceId: friendshipId,
-                        label:
-                          preview.data.profile.displayName ?? t("this friend"),
-                      },
-                    })
-                  }
-                />
-              </Section>
+            {friend.sharing ? (
+              <>
+                {friend.sharing.shareGeneralAverage ? (
+                  <Section title={t("General average")}>
+                    <Card
+                      style={{
+                        alignItems: "center",
+                        gap: space.xs,
+                        paddingVertical: space.xl,
+                      }}
+                    >
+                      <SharedAverageText
+                        ratio={friend.sharing.generalAverage}
+                        scale={friend.sharing.year.scale}
+                        decimals={friend.sharing.year.decimals}
+                        size="title"
+                      />
+                      <Note>
+                        {t("Computed from {year}", {
+                          year: friend.sharing.year.name,
+                        })}
+                      </Note>
+                    </Card>
+                  </Section>
+                ) : null}
 
-              <Section title={t("Relationship actions")}>
+                {friend.sharing.subjects.length ? (
+                  <Section title={t("Shared subjects")}>
+                    <Card padded={false}>
+                      {friend.sharing.subjects.map((subject, index) => (
+                        <Row
+                          key={subject.id}
+                          first={index === 0}
+                          title={subject.name}
+                          subtitle={
+                            subject.gradeCount === 1
+                              ? t("1 grade")
+                              : t("{count} grades", {
+                                  count: subject.gradeCount,
+                                })
+                          }
+                          trailing={
+                            <SharedAverageText
+                              ratio={subject.average}
+                              scale={friend.sharing?.year.scale ?? null}
+                              decimals={friend.sharing?.year.decimals ?? null}
+                            />
+                          }
+                        />
+                      ))}
+                    </Card>
+                  </Section>
+                ) : null}
+              </>
+            ) : (
+              <Empty
+                icon="eye-off-outline"
+                title={t("Nothing is shared right now")}
+                body={t(
+                  "They locked their figures, or have no academic year to share yet.",
+                )}
+              />
+            )}
+
+            <Section title={t("Actions")}>
+              <Card style={{ gap: space.sm }}>
                 <Button
-                  label={t("Remove friendship")}
+                  label={t("Remove friend")}
                   variant="secondary"
-                  loading={leave.isPending}
+                  disabled={remove.isPending}
                   onPress={() =>
                     Alert.alert(
                       t("Remove this friend?"),
                       t(
-                        "Both profiles stop being shared and circle membership is removed.",
+                        "Neither of you will see the other's figures any more.",
                       ),
                       [
                         { text: t("Cancel"), style: "cancel" },
                         {
-                          text: t("Remove"),
+                          text: t("Remove friend"),
                           style: "destructive",
-                          onPress: () => leave.mutate({ friendshipId }),
+                          onPress: () =>
+                            remove.mutate({
+                              friendshipId: friendshipId ?? "",
+                            }),
                         },
                       ],
                     )
                   }
                 />
                 <Button
-                  label={t("Block account")}
+                  label={t("Block")}
                   variant="destructive"
-                  loading={block.isPending}
+                  disabled={block.isPending}
                   onPress={() =>
                     Alert.alert(
                       t("Block this account?"),
                       t(
-                        "Friendship, requests, circle membership and sharing stop in both directions.",
+                        "The friendship ends immediately and they can no longer reach you. They are not notified.",
                       ),
                       [
                         { text: t("Cancel"), style: "cancel" },
@@ -177,10 +191,7 @@ export default function SharedFriendProfile() {
                           text: t("Block"),
                           style: "destructive",
                           onPress: () =>
-                            block.mutate({
-                              source: "friendship",
-                              sourceId: friendshipId,
-                            }),
+                            block.mutate({ userId: friend.userId }),
                         },
                       ],
                     )
@@ -192,22 +203,15 @@ export default function SharedFriendProfile() {
                   onPress={() =>
                     router.push({
                       pathname: "/social/report",
-                      params: { source: "friendship", sourceId: friendshipId },
+                      params: { targetUserId: friend.userId },
                     })
                   }
                 />
-                {leave.isError || block.isError ? (
-                  <Problem>
-                    {t(
-                      "That action could not be completed. Refresh and try again.",
-                    )}
-                  </Problem>
-                ) : null}
-              </Section>
-            </>
-          )}
-        </Screen>
-      </>
-    </SocialRouteGate>
+              </Card>
+            </Section>
+          </>
+        )}
+      </Screen>
+    </>
   );
 }

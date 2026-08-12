@@ -1,390 +1,424 @@
-import { Alert, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Share, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { GroupConsentForm } from "@/components/social/group-consent-form";
 import {
-  GroupPolicySummary,
-  socialMetricValue,
-} from "@/components/social/group-policy-ui";
-import {
-  groupTypeLabel,
-  socialMetricLabel,
-} from "@/components/social/social-copy";
-import { SocialRouteGate } from "@/components/social/social-gate";
-import { isSocialMetric } from "@/components/social/social-model";
-import {
-  PrivacyBoundaryNotice,
+  SharedAverageText,
   SocialIdentity,
 } from "@/components/social/social-ui";
+import { SwitchField, TextField } from "@/components/field";
 import {
   Button,
   Card,
   Empty,
   Loading,
   Note,
-  Problem,
   Row,
   Screen,
   Section,
 } from "@/components/ui";
+import { env } from "@/lib/env";
+import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { orpc, queryClient } from "@/lib/orpc";
-import { space, type, usePalette } from "@/lib/theme";
+import { numeric, space, type, usePalette } from "@/lib/theme";
 
-function roleLabel(role: string): string {
-  if (role === "owner") return t("Owner");
-  if (role === "moderator") return t("Moderator");
-  return t("Member");
-}
-
-export default function SocialGroupDetails() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const router = useRouter();
+/**
+ * One group: the leaderboard, your own switch, the invite link, and the
+ * owner's tools. Sharers rank first with real figures; non-sharers follow.
+ */
+export default function GroupDetail() {
   const palette = usePalette();
-  const details = useQuery({
-    ...orpc.social.groups.get.queryOptions({ input: { groupId } }),
+  const router = useRouter();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const detail = useQuery({
+    ...orpc.social.groups.get.queryOptions({
+      input: { groupId: groupId ?? "" },
+    }),
     enabled: Boolean(groupId),
   });
-  const refresh = async () => {
-    await Promise.all([
+
+  const refresh = () =>
+    Promise.all([
       queryClient.invalidateQueries({
-        queryKey: orpc.social.groups.get.queryKey({ input: { groupId } }),
+        queryKey: orpc.social.groups.get.queryKey({
+          input: { groupId: groupId ?? "" },
+        }),
       }),
       queryClient.invalidateQueries({
         queryKey: orpc.social.groups.list.queryKey(),
       }),
     ]);
-  };
-  const setRole = useMutation({
-    ...orpc.social.groups.members.setRole.mutationOptions(),
+
+  const setSharing = useMutation({
+    ...orpc.social.groups.setSharing.mutationOptions(),
     onSuccess: refresh,
+  });
+  const invite = useMutation({
+    ...orpc.social.groups.invitations.create.mutationOptions(),
+    onSuccess: async (invitation) => {
+      haptic("success");
+      await Share.share({
+        message: `${env.webUrl}/social/invitations/${invitation.token}`,
+      });
+    },
   });
   const removeMember = useMutation({
-    ...orpc.social.groups.members.remove.mutationOptions(),
-    onSuccess: refresh,
-  });
-  const transfer = useMutation({
-    ...orpc.social.groups.transfer.mutationOptions(),
-    onSuccess: refresh,
-  });
-  const block = useMutation({
-    ...orpc.social.blocks.create.mutationOptions(),
-    onSuccess: refresh,
-  });
-  const withdraw = useMutation({
-    ...orpc.social.groups.policy.withdraw.mutationOptions(),
+    ...orpc.social.groups.removeMember.mutationOptions(),
     onSuccess: refresh,
   });
   const leave = useMutation({
-    ...orpc.social.groups.members.leave.mutationOptions(),
+    ...orpc.social.groups.leave.mutationOptions(),
     onSuccess: async () => {
+      haptic("success");
       await queryClient.invalidateQueries({
         queryKey: orpc.social.groups.list.queryKey(),
       });
-      router.replace("/social/groups");
+      router.back();
+    },
+    onError: () =>
+      Alert.alert(
+        t("You still own this group"),
+        t("Transfer or remove the other members first, or delete the group."),
+      ),
+  });
+  const destroy = useMutation({
+    ...orpc.social.groups.delete.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      await queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.list.queryKey(),
+      });
+      router.back();
     },
   });
 
-  if (details.isLoading) return <Loading />;
+  const update = useMutation({
+    ...orpc.social.groups.update.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      setEditing(false);
+      await refresh();
+    },
+  });
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
 
-  return (
-    <SocialRouteGate requireActiveProfile={false}>
+  const group = detail.data;
+
+  if (detail.isLoading) {
+    return (
       <>
-        <Stack.Screen
-          options={{ title: details.data?.group.name ?? t("Group") }}
-        />
+        <Stack.Screen options={{ title: t("Group") }} />
+        <Loading />
+      </>
+    );
+  }
+  if (detail.isError || !group) {
+    return (
+      <>
+        <Stack.Screen options={{ title: t("Group") }} />
         <Screen>
-          <PrivacyBoundaryNotice compact />
-          {details.isError || !details.data ? (
-            <Empty
-              icon="cloud-offline-outline"
-              title={t("This group could not be loaded")}
-              body={t(
-                "Access may have changed. Reconnect before making a sharing decision.",
-              )}
-            />
-          ) : (
-            <>
-              <Section>
-                <Card style={{ gap: space.md }}>
-                  <Text
-                    selectable
-                    style={[type.title, { color: palette.text }]}
-                  >
-                    {details.data.group.name}
-                  </Text>
-                  {details.data.group.description ? (
-                    <Text
-                      selectable
-                      style={[type.body, { color: palette.textMuted }]}
-                    >
-                      {details.data.group.description}
-                    </Text>
-                  ) : null}
-                  <Text style={[type.footnote, { color: palette.textFaint }]}>
-                    {`${groupTypeLabel(details.data.group.type)} · ${roleLabel(details.data.group.role)} · ${t("{count} members", { count: details.data.group.memberCount })}`}
-                  </Text>
-                </Card>
-              </Section>
-
-              {details.data.group.membershipState === "consent_required" ? (
-                <GroupConsentForm
-                  groupId={groupId}
-                  policy={details.data.policy}
-                  onAccepted={refresh}
-                />
-              ) : (
-                <>
-                  <GroupPolicySummary policy={details.data.policy} />
-
-                  <Section title={t("Shared statistics")}>
-                    <Card padded={false}>
-                      {details.data.policy.fields.map((field, index) => (
-                        <Row
-                          key={field.fieldKey}
-                          first={index === 0}
-                          title={
-                            isSocialMetric(field.fieldKey)
-                              ? socialMetricLabel(field.fieldKey)
-                              : t("Unavailable metric")
-                          }
-                          subtitle={t(
-                            "Aggregates, ranges and optional rankings",
-                          )}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/social/groups/[groupId]/metric",
-                              params: { groupId, metric: field.fieldKey },
-                            })
-                          }
-                        />
-                      ))}
-                    </Card>
-                  </Section>
-
-                  <Section title={t("Members")}>
-                    {details.data.members.length === 0 ? (
-                      <Empty
-                        icon="people-outline"
-                        title={t("No active members")}
-                        body={t(
-                          "Members awaiting consent do not expose metrics.",
-                        )}
-                      />
-                    ) : (
-                      details.data.members.map((member) => {
-                        const self =
-                          member.membershipId ===
-                          details.data.group.membershipId;
-                        const manager =
-                          details.data.group.role === "owner" ||
-                          details.data.group.role === "moderator";
-                        return (
-                          <Card
-                            key={member.membershipId}
-                            style={{ gap: space.md }}
-                          >
-                            <SocialIdentity
-                              displayName={member.alias}
-                              secondary={`${roleLabel(member.role)} · ${
-                                member.state === "active"
-                                  ? t("Active")
-                                  : t("Consent required")
-                              }`}
-                            />
-                            {Object.keys(member.metrics).length > 0 ? (
-                              <View style={{ gap: space.xs }}>
-                                {Object.entries(member.metrics).map(
-                                  ([metric, value]) => (
-                                    <Text
-                                      key={metric}
-                                      selectable
-                                      style={[
-                                        type.footnote,
-                                        { color: palette.textMuted },
-                                      ]}
-                                    >
-                                      {isSocialMetric(metric)
-                                        ? socialMetricLabel(metric)
-                                        : metric}
-                                      : {socialMetricValue(value)}
-                                    </Text>
-                                  ),
-                                )}
-                              </View>
-                            ) : null}
-                            {!self && manager ? (
-                              <View style={{ gap: space.sm }}>
-                                {details.data.group.role === "owner" &&
-                                member.role !== "owner" ? (
-                                  <Button
-                                    label={
-                                      member.role === "moderator"
-                                        ? t("Make member")
-                                        : t("Make moderator")
-                                    }
-                                    variant="ghost"
-                                    disabled={setRole.isPending}
-                                    onPress={() =>
-                                      setRole.mutate({
-                                        groupId,
-                                        membershipId: member.membershipId,
-                                        role:
-                                          member.role === "moderator"
-                                            ? "member"
-                                            : "moderator",
-                                      })
-                                    }
-                                  />
-                                ) : null}
-                                {details.data.group.role === "owner" &&
-                                member.state === "active" ? (
-                                  <Button
-                                    label={t("Transfer ownership")}
-                                    variant="ghost"
-                                    disabled={transfer.isPending}
-                                    onPress={() =>
-                                      Alert.alert(
-                                        t("Transfer group ownership?"),
-                                        t(
-                                          "You become a regular member and cannot undo this without the new owner.",
-                                        ),
-                                        [
-                                          {
-                                            text: t("Cancel"),
-                                            style: "cancel",
-                                          },
-                                          {
-                                            text: t("Transfer"),
-                                            onPress: () =>
-                                              transfer.mutate({
-                                                groupId,
-                                                membershipId:
-                                                  member.membershipId,
-                                                expectedRevision:
-                                                  details.data.group.revision,
-                                              }),
-                                          },
-                                        ],
-                                      )
-                                    }
-                                  />
-                                ) : null}
-                                <Button
-                                  label={t("Remove from group")}
-                                  variant="destructive"
-                                  disabled={removeMember.isPending}
-                                  onPress={() =>
-                                    removeMember.mutate({
-                                      groupId,
-                                      membershipId: member.membershipId,
-                                    })
-                                  }
-                                />
-                              </View>
-                            ) : null}
-                            {!self ? (
-                              <View style={{ gap: space.sm }}>
-                                <Button
-                                  label={t("Block member")}
-                                  variant="ghost"
-                                  disabled={block.isPending}
-                                  onPress={() =>
-                                    block.mutate({
-                                      source: "group_membership",
-                                      sourceId: member.membershipId,
-                                    })
-                                  }
-                                />
-                                <Button
-                                  label={t("Report member")}
-                                  variant="ghost"
-                                  onPress={() =>
-                                    router.push({
-                                      pathname: "/social/report",
-                                      params: {
-                                        source: "group_membership",
-                                        sourceId: member.membershipId,
-                                        groupId,
-                                      },
-                                    })
-                                  }
-                                />
-                              </View>
-                            ) : null}
-                          </Card>
-                        );
-                      })
-                    )}
-                  </Section>
-
-                  <Section title={t("Group actions")}>
-                    {details.data.group.role === "owner" ||
-                    details.data.group.role === "moderator" ? (
-                      <Button
-                        label={t("Manage invitation links")}
-                        variant="secondary"
-                        onPress={() =>
-                          router.push(`/social/groups/${groupId}/invitations`)
-                        }
-                      />
-                    ) : null}
-                    {details.data.group.role === "owner" ? (
-                      <Button
-                        label={t("Group settings and policy")}
-                        variant="secondary"
-                        onPress={() =>
-                          router.push(`/social/groups/${groupId}/manage`)
-                        }
-                      />
-                    ) : null}
-                    <Button
-                      label={t("Withdraw sharing consent")}
-                      variant="ghost"
-                      loading={withdraw.isPending}
-                      onPress={() => withdraw.mutate({ groupId })}
-                    />
-                    <Button
-                      label={t("Report this group")}
-                      variant="ghost"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/social/report",
-                          params: { source: "group", sourceId: groupId },
-                        })
-                      }
-                    />
-                    {details.data.group.role !== "owner" ? (
-                      <Button
-                        label={t("Leave group")}
-                        variant="destructive"
-                        loading={leave.isPending}
-                        onPress={() => leave.mutate({ groupId })}
-                      />
-                    ) : (
-                      <Note>
-                        {t("Transfer ownership before leaving this group.")}
-                      </Note>
-                    )}
-                    {setRole.isError ||
-                    removeMember.isError ||
-                    transfer.isError ||
-                    block.isError ||
-                    withdraw.isError ||
-                    leave.isError ? (
-                      <Problem>
-                        {t(
-                          "The group action could not be completed. Refresh and try again.",
-                        )}
-                      </Problem>
-                    ) : null}
-                  </Section>
-                </>
-              )}
-            </>
-          )}
+          <Empty
+            icon="people-circle-outline"
+            title={t("This group could not be found")}
+            body={t("It may have been deleted, or you were removed.")}
+          />
         </Screen>
       </>
-    </SocialRouteGate>
+    );
+  }
+
+  const isOwner = group.viewer.role === "owner";
+  const frozen = group.state === "frozen";
+  const sharers = group.members
+    .filter((member) => member.average !== null)
+    .sort((left, right) => (right.average ?? 0) - (left.average ?? 0));
+  const silent = group.members.filter((member) => member.average === null);
+
+  // The payload already carries every shared ratio; the stats row is
+  // arithmetic, not another request.
+  const ratios = sharers
+    .map((member) => member.average as number)
+    .sort((left, right) => left - right);
+  const median =
+    ratios.length === 0
+      ? null
+      : ratios.length % 2 === 1
+        ? (ratios[(ratios.length - 1) / 2] ?? null)
+        : ((ratios[ratios.length / 2 - 1] ?? 0) +
+            (ratios[ratios.length / 2] ?? 0)) /
+          2;
+  const statScale = sharers[0]?.scale ?? null;
+  const statDecimals = sharers[0]?.decimals ?? null;
+
+  return (
+    <>
+      <Stack.Screen options={{ title: group.name }} />
+      <Screen>
+        {group.description ? <Note>{group.description}</Note> : null}
+
+        {frozen ? (
+          <Card>
+            <Note>
+              {t(
+                "A moderator paused this group after a report. Figures are hidden until the hold is lifted; nothing has been deleted.",
+              )}
+            </Note>
+          </Card>
+        ) : (
+          <Card style={{ gap: space.md }}>
+            <SwitchField
+              label={t("Share my average with this group")}
+              hint={t(
+                "Off means the others see you in the list without a figure.",
+              )}
+              value={group.viewer.shareAverage}
+              disabled={setSharing.isPending}
+              onValueChange={(value) =>
+                setSharing.mutate({
+                  groupId: groupId ?? "",
+                  shareAverage: value,
+                })
+              }
+            />
+          </Card>
+        )}
+
+        {!frozen && ratios.length > 0 ? (
+          <Section title={t("Group figures")}>
+            <Card padded={false}>
+              <Row
+                first
+                title={t("Group average")}
+                trailing={
+                  <SharedAverageText
+                    ratio={group.groupAverage}
+                    scale={statScale}
+                    decimals={statDecimals}
+                  />
+                }
+              />
+              <Row
+                title={t("Median")}
+                trailing={
+                  <SharedAverageText
+                    ratio={median}
+                    scale={statScale}
+                    decimals={statDecimals}
+                  />
+                }
+              />
+              <Row
+                title={t("Range")}
+                trailing={
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space.xs,
+                    }}
+                  >
+                    <SharedAverageText
+                      ratio={ratios[0] ?? null}
+                      scale={statScale}
+                      decimals={statDecimals}
+                    />
+                    <Text style={[type.footnote, { color: palette.textFaint }]}>
+                      →
+                    </Text>
+                    <SharedAverageText
+                      ratio={ratios.at(-1) ?? null}
+                      scale={statScale}
+                      decimals={statDecimals}
+                    />
+                  </View>
+                }
+              />
+            </Card>
+          </Section>
+        ) : null}
+
+        <Section title={t("Leaderboard")}>
+          <Card padded={false}>
+            {[...sharers, ...silent].map((member, index) => (
+              <Row
+                key={member.membershipId}
+                first={index === 0}
+                title={member.name}
+                subtitle={member.role === "owner" ? t("Owner") : undefined}
+                leading={
+                  member.average !== null ? (
+                    <Text
+                      style={[
+                        type.callout,
+                        numeric,
+                        { color: palette.textFaint, width: 22, textAlign: "center" },
+                      ]}
+                    >
+                      {index + 1}
+                    </Text>
+                  ) : (
+                    <View style={{ width: 22 }} />
+                  )
+                }
+                trailing={
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: space.sm,
+                    }}
+                  >
+                    <SharedAverageText
+                      ratio={member.average}
+                      scale={member.scale}
+                      decimals={member.decimals}
+                    />
+                  </View>
+                }
+                onPress={
+                  isOwner && member.role !== "owner" && !frozen
+                    ? () =>
+                        Alert.alert(member.name, undefined, [
+                          { text: t("Cancel"), style: "cancel" },
+                          {
+                            text: t("Remove from group"),
+                            style: "destructive",
+                            onPress: () =>
+                              removeMember.mutate({
+                                groupId: groupId ?? "",
+                                membershipId: member.membershipId,
+                              }),
+                          },
+                        ])
+                    : undefined
+                }
+              />
+            ))}
+          </Card>
+          {!frozen && silent.length > 0 ? (
+            <Note>
+              {t("Members without a figure keep their switch off, or have no year to share.")}
+            </Note>
+          ) : null}
+        </Section>
+
+        {!frozen ? (
+          <Section title={t("Invite people")}>
+            <Card style={{ gap: space.md }}>
+              <Button
+                label={t("Share an invitation link")}
+                variant="secondary"
+                icon="link-outline"
+                loading={invite.isPending}
+                onPress={() => invite.mutate({ groupId: groupId ?? "" })}
+              />
+              <Note>
+                {t(
+                  "Anyone with the link joins directly. It works for a month or until revoked.",
+                )}
+              </Note>
+            </Card>
+          </Section>
+        ) : null}
+
+        {isOwner && !frozen ? (
+          <Section title={t("Group settings")}>
+            {editing ? (
+              <Card style={{ gap: space.md }}>
+                <TextField
+                  label={t("Group name")}
+                  value={name}
+                  onChangeText={setName}
+                  maxLength={100}
+                />
+                <TextField
+                  label={t("Description (optional)")}
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  maxLength={500}
+                />
+                <Button
+                  label={t("Save")}
+                  disabled={name.trim().length < 2}
+                  loading={update.isPending}
+                  onPress={() =>
+                    update.mutate({
+                      groupId: groupId ?? "",
+                      name: name.trim(),
+                      description: description.trim(),
+                    })
+                  }
+                />
+                <Button
+                  label={t("Cancel")}
+                  variant="ghost"
+                  onPress={() => setEditing(false)}
+                />
+              </Card>
+            ) : (
+              <Button
+                label={t("Edit name and description")}
+                variant="secondary"
+                onPress={() => {
+                  setName(group.name);
+                  setDescription(group.description);
+                  setEditing(true);
+                }}
+              />
+            )}
+          </Section>
+        ) : null}
+
+        <Section title={t("Actions")}>
+          <Card style={{ gap: space.sm }}>
+            {isOwner ? (
+              <Button
+                label={t("Delete group")}
+                variant="destructive"
+                disabled={destroy.isPending}
+                onPress={() =>
+                  Alert.alert(
+                    t("Delete this group?"),
+                    t(
+                      "The group and its memberships disappear for everyone. Nobody's grades are affected.",
+                    ),
+                    [
+                      { text: t("Cancel"), style: "cancel" },
+                      {
+                        text: t("Delete group"),
+                        style: "destructive",
+                        onPress: () =>
+                          destroy.mutate({ groupId: groupId ?? "" }),
+                      },
+                    ],
+                  )
+                }
+              />
+            ) : (
+              <Button
+                label={t("Leave group")}
+                variant="secondary"
+                disabled={leave.isPending}
+                onPress={() => leave.mutate({ groupId: groupId ?? "" })}
+              />
+            )}
+            <Button
+              label={t("Report a safety concern")}
+              variant="ghost"
+              onPress={() =>
+                router.push({
+                  pathname: "/social/report",
+                  params: { groupId: groupId ?? "" },
+                })
+              }
+            />
+          </Card>
+        </Section>
+      </Screen>
+    </>
   );
 }

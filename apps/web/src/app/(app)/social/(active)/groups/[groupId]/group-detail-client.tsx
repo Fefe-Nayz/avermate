@@ -14,6 +14,7 @@ import {
   TrophyIcon,
   UsersRoundIcon,
   UserXIcon,
+  XIcon,
 } from "lucide-react"
 import { useExtracted, useLocale } from "next-intl"
 import { toast } from "sonner"
@@ -71,6 +72,12 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   const detail = useQuery(
     orpc.social.groups.get.queryOptions({ input: { groupId } })
   )
+  const invitations = useQuery({
+    ...orpc.social.groups.invitations.list.queryOptions({
+      input: { groupId },
+    }),
+    enabled: detail.data?.viewer.role === "owner",
+  })
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [name, setName] = useState("")
@@ -93,12 +100,26 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   })
   const invite = useMutation({
     ...orpc.social.groups.invitations.create.mutationOptions(),
-    onSuccess: (invitation) => {
+    onSuccess: async (invitation) => {
       haptic("success")
       setInviteUrl(
         `${window.location.origin}/social/invitations/${invitation.token}`
       )
+      await queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.invitations.list.key({
+          input: { groupId },
+        }),
+      })
     },
+  })
+  const revokeInvite = useMutation({
+    ...orpc.social.groups.invitations.revoke.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.groups.invitations.list.key({
+          input: { groupId },
+        }),
+      }),
   })
   const update = useMutation({
     ...orpc.social.groups.update.mutationOptions(),
@@ -169,6 +190,22 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
     .filter((member) => member.average !== null)
     .sort((left, right) => (right.average ?? 0) - (left.average ?? 0))
   const silent = group.members.filter((member) => member.average === null)
+
+  // Everything a stats row needs is already in the payload: the shared
+  // ratios. Median and range are computed here rather than asked for.
+  const ratios = sharers
+    .map((member) => member.average as number)
+    .sort((left, right) => left - right)
+  const median =
+    ratios.length === 0
+      ? null
+      : ratios.length % 2 === 1
+        ? (ratios[(ratios.length - 1) / 2] ?? null)
+        : ((ratios[ratios.length / 2 - 1] ?? 0) +
+            (ratios[ratios.length / 2] ?? 0)) /
+          2
+  const statScale = sharers[0]?.scale ?? 20
+  const statDecimals = sharers[0]?.decimals ?? 2
 
   return (
     <div className="flex flex-col gap-4">
@@ -273,18 +310,62 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
         </SocialSection>
       )}
 
+      {!frozen && ratios.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: t("Group average"), value: group.groupAverage },
+            { label: t("Median"), value: median },
+            {
+              label: t("Range"),
+              value: null,
+              range: [ratios[0] ?? null, ratios.at(-1) ?? null] as const,
+            },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="flex flex-col gap-1 rounded-xl border bg-card p-4"
+            >
+              <span className="text-xs font-medium text-muted-foreground">
+                {stat.label}
+              </span>
+              {stat.range ? (
+                <span className="flex items-baseline gap-1.5">
+                  <SharedAverage
+                    ratio={stat.range[0]}
+                    scale={statScale}
+                    decimals={statDecimals}
+                    locale={locale}
+                  />
+                  <span className="text-xs text-muted-foreground">→</span>
+                  <SharedAverage
+                    ratio={stat.range[1]}
+                    scale={statScale}
+                    decimals={statDecimals}
+                    locale={locale}
+                  />
+                </span>
+              ) : (
+                <SharedAverage
+                  ratio={stat.value}
+                  scale={statScale}
+                  decimals={statDecimals}
+                  locale={locale}
+                  className="text-lg"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <SocialSection
         icon={TrophyIcon}
         title={t("Leaderboard")}
         description={
-          group.groupAverage !== null && sharers[0]
-            ? t("Group average: {value}", {
-                value: new Intl.NumberFormat(locale, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }).format(
-                  group.groupAverage * (sharers[0].scale ?? 20)
-                ),
+          ratios.length > 0
+            ? t("{count} of {total} members share their figure.", {
+                count: String(ratios.length),
+                total: String(group.members.length),
               })
             : t("Averages appear as members turn their switch on.")
         }
@@ -371,6 +452,39 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
           </SocialActions>
           {inviteUrl ? (
             <SecretLink url={inviteUrl} label={t("Group invitation link")} />
+          ) : null}
+          {isOwner && invitations.data?.length ? (
+            <SocialList>
+              {invitations.data.map((invitation) => (
+                <SocialRow
+                  key={invitation.id}
+                  trailing={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={revokeInvite.isPending}
+                      onClick={() =>
+                        revokeInvite.mutate({
+                          groupId,
+                          invitationId: invitation.id,
+                        })
+                      }
+                    >
+                      <XIcon /> {t("Revoke")}
+                    </Button>
+                  }
+                >
+                  <p className="font-mono text-xs">{invitation.tokenPrefix}…</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("{count} joins · by {name}", {
+                      count: String(invitation.useCount),
+                      name: invitation.createdBy,
+                    })}
+                  </p>
+                </SocialRow>
+              ))}
+            </SocialList>
           ) : null}
         </SocialSection>
       ) : null}
