@@ -5,16 +5,19 @@ import { useTheme } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
 import { MotionPolicyProvider } from "@/components/motion-policy-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { loadHapticsPreference } from "@/lib/haptics"
 
 function ToasterBridge() {
   const { resolvedTheme } = useTheme()
+  const isMobile = useIsMobile()
   return (
     <Toaster
-      position="top-center"
+      position={isMobile ? "top-center" : "bottom-right"}
       theme={resolvedTheme === "dark" ? "dark" : "light"}
-      className="md:right-4 md:bottom-4"
-      toastOptions={{ classNames: { toast: "pt-safe md:pt-0" } }}
+      toastOptions={{
+        classNames: { toast: "pointer-events-none pt-safe md:pt-0" },
+      }}
     />
   )
 }
