@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { createChartScene, defaultChartTheme } from "@tanstack/charts"
 import {
+  CHARACTER_WIDTH,
   LABEL_FONT_SIZE,
+  LABEL_OFFSET,
+  labelAnchorFor,
   labelRotation,
   maxLabelLengthFor,
   radarSpec,
@@ -11,9 +14,11 @@ import {
 /**
  * Where the names land, measured rather than eyeballed.
  *
- * The renderer will say exactly where it put each label, so the three things
- * that have gone wrong on this chart — names inside the ring, names off the
- * card, names on top of each other — are all checkable without a browser.
+ * Several passes at this chart were judged from screenshots and most of them
+ * were wrong. The renderer reports each label's anchor point, its rotation and
+ * which end of the run is pinned there — enough to check the three things that
+ * actually matter: the names lie along their spokes, they end just past the
+ * ring, and they stay on the card.
  */
 
 const SUBJECTS = [
@@ -33,7 +38,10 @@ const points = SUBJECTS.map((subject, index) => ({
 
 interface Placed {
   text: string
-  distance: number
+  rotation: number
+  /** Radius of the end nearest the centre, and of the end furthest from it. */
+  inner: number
+  outer: number
   left: number
   right: number
   top: number
@@ -59,7 +67,7 @@ function collect(
   return found
 }
 
-/** The subject names, as boxes on the canvas. */
+/** The subject names, as the renderer places them. */
 function place(width: number, height: number): Placed[] {
   const scene = createChartScene(
     radarSpec({
@@ -67,10 +75,9 @@ function place(width: number, height: number): Placed[] {
       scale: 20,
       width,
       formatValue: (value) => String(value),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any,
+    }) as never,
     { width, height },
-    // The theme only supplies colours, and colours do not move anything.
+    // Only colours come from the theme, and colours move nothing.
     { theme: defaultChartTheme } as never
   )
 
@@ -79,26 +86,32 @@ function place(width: number, height: number): Placed[] {
     // The ring values are numbers; only the names are under test here.
     if (!text || /^-?\d+([.,]\d+)?$/.test(text)) return []
 
-    const runWidth = text.length * LABEL_FONT_SIZE * 0.55
-    const angle = ((Number(label.rotate) || 0) * Math.PI) / 180
-    const spanX =
-      Math.abs((runWidth / 2) * Math.cos(angle)) +
-      Math.abs((LABEL_FONT_SIZE / 2) * Math.sin(angle))
-    const spanY =
-      Math.abs((runWidth / 2) * Math.sin(angle)) +
-      Math.abs((LABEL_FONT_SIZE / 2) * Math.cos(angle))
+    const run = text.length * LABEL_FONT_SIZE * CHARACTER_WIDTH
+    const rotation = Number(label.rotate) || 0
+    const radians = (rotation * Math.PI) / 180
+    const anchor = String(label.anchor)
+    // Where the run begins relative to its anchor, along the baseline.
+    const lead = anchor === "start" ? 0 : anchor === "end" ? -run : -run / 2
 
-    // Scene coordinates for a polar guide are relative to its centre.
-    const dx = Number(label.x) || 0
-    const dy = Number(label.y) || 0
+    const ax = Number(label.x) || 0
+    const ay = Number(label.y) || 0
+    const x1 = ax + lead * Math.cos(radians)
+    const y1 = ay + lead * Math.sin(radians)
+    const x2 = ax + (lead + run) * Math.cos(radians)
+    const y2 = ay + (lead + run) * Math.sin(radians)
+
+    // A little slack for the cap height either side of the baseline.
+    const pad = LABEL_FONT_SIZE / 2
     return [
       {
         text,
-        distance: Math.hypot(dx, dy),
-        left: width / 2 + dx - spanX,
-        right: width / 2 + dx + spanX,
-        top: height / 2 + dy - spanY,
-        bottom: height / 2 + dy + spanY,
+        rotation,
+        inner: Math.min(Math.hypot(x1, y1), Math.hypot(x2, y2)),
+        outer: Math.max(Math.hypot(x1, y1), Math.hypot(x2, y2)),
+        left: width / 2 + Math.min(x1, x2) - pad,
+        right: width / 2 + Math.max(x1, x2) + pad,
+        top: height / 2 + Math.min(y1, y2) - pad,
+        bottom: height / 2 + Math.max(y1, y2) + pad,
       },
     ]
   })
@@ -119,13 +132,31 @@ describe("the subjects radar", () => {
     }
   })
 
-  test("no name sits inside the ring", () => {
+  test("names lie along their spokes, pointing at the centre", () => {
+    // The library measures its angle from the top, clockwise; a screen
+    // rotation is measured from the x axis. Skipping that quarter turn laid
+    // every name tangentially across its spoke instead of along it.
+    const spoke = (index: number) => (index * 2 * Math.PI) / SUBJECTS.length
+    for (let index = 0; index < SUBJECTS.length; index += 1) {
+      const radial = (spoke(index) * 180) / Math.PI - 90
+      const drawn = labelRotation(spoke(index))
+      // Same line, give or take the fold that keeps it readable.
+      const difference = Math.abs(((radial - drawn) % 180) + 180) % 180
+      expect(Math.min(difference, 180 - difference)).toBeLessThan(0.001)
+      expect(Math.abs(drawn)).toBeLessThanOrEqual(90.001)
+    }
+  })
+
+  test("a name grows inwards, so it ends just past the ring", () => {
     for (const [width, height] of SIZES) {
       const ring = (Math.min(width, height) / 2) * radiusRatioFor(width)
       for (const label of place(width, height)) {
-        // Deriving the offset from the longest name put all seven of them on
-        // top of the shape, which is what a negative offset means here.
-        expect(label.distance).toBeGreaterThan(ring)
+        // Left to itself a radial name grows outwards and the long ones leave
+        // the card. Anchoring the far end is what keeps every one of them
+        // ending in the same place.
+        expect(label.outer).toBeGreaterThan(ring)
+        expect(label.outer).toBeLessThan(ring + LABEL_OFFSET + 1)
+        expect(label.inner).toBeLessThan(label.outer)
       }
     }
   })
@@ -133,10 +164,18 @@ describe("the subjects radar", () => {
   test("no name leaves the card", () => {
     for (const [width, height] of SIZES) {
       for (const label of place(width, height)) {
-        expect(label.left).toBeGreaterThanOrEqual(0)
-        expect(label.right).toBeLessThanOrEqual(width)
-        expect(label.top).toBeGreaterThanOrEqual(0)
-        expect(label.bottom).toBeLessThanOrEqual(height)
+        expect(`${label.text} left ${label.left >= 0}`).toBe(
+          `${label.text} left true`
+        )
+        expect(`${label.text} right ${label.right <= width}`).toBe(
+          `${label.text} right true`
+        )
+        expect(`${label.text} top ${label.top >= 0}`).toBe(
+          `${label.text} top true`
+        )
+        expect(`${label.text} bottom ${label.bottom <= height}`).toBe(
+          `${label.text} bottom true`
+        )
       }
     }
   })
@@ -161,15 +200,15 @@ describe("the subjects radar", () => {
     }
   })
 
-  test("names lie along the ring, the right way up", () => {
-    // A quarter turn past vertical folds back, so nothing reads upside down.
-    expect(labelRotation(0)).toBe(0)
-    expect(labelRotation(Math.PI / 2)).toBeCloseTo(90)
-    expect(labelRotation(Math.PI)).toBeCloseTo(0)
-    expect(labelRotation((3 * Math.PI) / 2)).toBeCloseTo(-90)
-    for (let angle = 0; angle < 2 * Math.PI; angle += 0.05) {
-      expect(Math.abs(labelRotation(angle))).toBeLessThanOrEqual(90.001)
-    }
+  test("the anchored end follows the fold", () => {
+    // A name turned back to stay readable runs the other way along its spoke,
+    // so the end that is pinned to the ring swaps with it.
+    // The right half reads outwards, so its far end is the last character.
+    expect(labelAnchorFor(0)).toBe("end")
+    expect(labelAnchorFor(Math.PI / 2)).toBe("end")
+    // The left half is folded, so it reads inwards and the ends swap.
+    expect(labelAnchorFor((3 * Math.PI) / 2)).toBe("start")
+    expect(labelAnchorFor((7 * Math.PI) / 4)).toBe("start")
   })
 
   test("a narrow card cuts names harder than a wide one", () => {
