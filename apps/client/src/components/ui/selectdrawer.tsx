@@ -118,7 +118,7 @@ function SelectDrawerContent({
     if (isMobile) {
         return (
             <DrawerContent
-                className={cn("max-h-[calc(100svh-1rem)]", className)}
+                className={className}
                 {...props}
             >
                 <DrawerHeader>

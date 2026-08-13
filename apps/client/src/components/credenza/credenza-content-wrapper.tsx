@@ -11,7 +11,7 @@ export default function CredenzaContentWrapper({ children }: { children: React.R
     return (
         <CredenzaContent
             className={cn(
-                "max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] overflow-hidden overscroll-contain after:hidden after:content-none",
+                "overflow-hidden overscroll-contain after:hidden after:content-none",
                 isDesktop && "max-h-[95vh] overflow-y-auto"
             )}
         >

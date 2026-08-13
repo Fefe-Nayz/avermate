@@ -291,7 +291,7 @@ function DropDrawerContent({
       >
         <DrawerContent
           data-slot="drop-drawer-content"
-          className={cn("max-h-[calc(100svh-1rem)]", className)}
+          className={className}
           {...props}
         >
           {activeSubmenu ? (

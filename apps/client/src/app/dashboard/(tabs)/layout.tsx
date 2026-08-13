@@ -25,8 +25,15 @@ export default function AuthenticatedLayout({
       <YearReviewTrigger />
 
       {/* Page */}
-      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-16">
-        {children}
+      <div
+        style={{
+          paddingLeft: "var(--safe-area-inset-left)",
+          paddingRight: "var(--safe-area-inset-right)",
+        }}
+      >
+        <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-[calc(6rem+var(--safe-area-inset-bottom))] md:pb-[max(4rem,var(--safe-area-inset-bottom))]">
+          {children}
+        </div>
       </div>
     </div>
   );

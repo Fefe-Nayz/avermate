@@ -67,12 +67,30 @@ function SheetContent({
             "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b",
           side === "bottom" &&
             "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
-          className
+          className,
+          side === "right" &&
+            "pt-[var(--safe-area-inset-top)] pr-[var(--safe-area-inset-right)] pb-[max(var(--keyboard-inset-bottom,0px),var(--safe-area-inset-bottom))]",
+          side === "left" &&
+            "pt-[var(--safe-area-inset-top)] pb-[max(var(--keyboard-inset-bottom,0px),var(--safe-area-inset-bottom))] pl-[var(--safe-area-inset-left)]",
+          side === "top" &&
+            "pt-[var(--safe-area-inset-top)] pr-[var(--safe-area-inset-right)] pl-[var(--safe-area-inset-left)]",
+          side === "bottom" &&
+            "pr-[var(--safe-area-inset-right)] pb-[max(var(--keyboard-inset-bottom,0px),var(--safe-area-inset-bottom))] pl-[var(--safe-area-inset-left)]"
         )}
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <SheetPrimitive.Close
+          className={cn(
+            "ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none",
+            side === "bottom"
+              ? "top-4"
+              : "top-[calc(1rem+var(--safe-area-inset-top))]",
+            side === "left"
+              ? "right-4"
+              : "right-[calc(1rem+var(--safe-area-inset-right))]"
+          )}
+        >
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

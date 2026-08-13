@@ -57,18 +57,25 @@ export default function ProfileLayout({
       <DashboardHeader />
       {showNav && <DashboardNav />}
       {showNav && <TimelineModeBanner />}
-      <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-24 md:pb-16">
-        {/* Pass the handleBack function to ProfileNav */}
-        <div className="m-auto flex max-w-[2000px] flex-col gap-4 md:flex-row md:gap-8">
-          <div className="hidden md:block">
-            <ProfileNav onBack={handleBack} />
-          </div>
+      <div
+        style={{
+          paddingLeft: "var(--safe-area-inset-left)",
+          paddingRight: "var(--safe-area-inset-right)",
+        }}
+      >
+        <div className="px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96 py-4 sm:py-16 pb-[calc(6rem+var(--safe-area-inset-bottom))] md:pb-[max(4rem,var(--safe-area-inset-bottom))]">
+          {/* Pass the handleBack function to ProfileNav */}
+          <div className="m-auto flex max-w-[2000px] flex-col gap-4 md:flex-row md:gap-8">
+            <div className="hidden md:block">
+              <ProfileNav onBack={handleBack} />
+            </div>
 
-          <div className="flex w-full flex-col gap-4 md:gap-8">
-            {mobileSettingsTitle ? (
-              <MobileSettingsDetailHeader title={mobileSettingsTitle} />
-            ) : null}
-            {children}
+            <div className="flex w-full flex-col gap-4 md:gap-8">
+              {mobileSettingsTitle ? (
+                <MobileSettingsDetailHeader title={mobileSettingsTitle} />
+              ) : null}
+              {children}
+            </div>
           </div>
         </div>
       </div>

@@ -119,10 +119,19 @@ export default function DashboardNav() {
             "fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur border-t z-50 transition-transform duration-300 md:hidden",
             shouldShow ? "translate-y-0" : "translate-y-full"
           )}
-          style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+          style={{
+            paddingBottom:
+              "max(0.5rem, var(--safe-area-inset-bottom))",
+          }}
         >
-          {/* Align bottoms so the center can be taller than the sides */}
-          <div className="flex justify-center px-2 py-1.5 gap-1">
+          <div
+            style={{
+              paddingLeft: "var(--safe-area-inset-left)",
+              paddingRight: "var(--safe-area-inset-right)",
+            }}
+          >
+            {/* Align bottoms so the center can be taller than the sides */}
+            <div className="flex justify-center px-2 py-1.5 gap-1">
             {/* Left navigation buttons - equal width; equal height within the group */}
             <div className="flex flex-1 basis-0 min-w-0 gap-1 items-stretch">
               {mobileRoutes.slice(0, 2).map((route) => {
@@ -207,6 +216,7 @@ export default function DashboardNav() {
                   </Link>
                 );
               })}
+            </div>
             </div>
           </div>
         </nav>

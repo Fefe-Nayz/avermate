@@ -129,33 +129,40 @@ export default function DashboardHeader({
 
   // The actual header content (shared by fixed/portaled vs in-flow versions)
   const HeaderInner = (
-    <div className="flex justify-center px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96">
-      <div className="flex w-full items-center justify-between gap-8 max-w-[2000px]">
-        {/* Left side - Logo and Title (on mobile) */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Logo />
-          {showTitle && (
-            <h1 className="text-lg font-semibold text-foreground truncate min-w-0 flex-1">
-              {pageTitle}
-            </h1>
-          )}
-        </div>
+    <div
+      style={{
+        paddingLeft: "var(--safe-area-inset-left)",
+        paddingRight: "var(--safe-area-inset-right)",
+      }}
+    >
+      <div className="flex justify-center px-4 sm:px-16 lg:px-32 2xl:px-64 3xl:px-96">
+        <div className="flex w-full items-center justify-between gap-8 max-w-[2000px]">
+          {/* Left side - Logo and Title (on mobile) */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <Logo />
+            {showTitle && (
+              <h1 className="text-lg font-semibold text-foreground truncate min-w-0 flex-1">
+                {pageTitle}
+              </h1>
+            )}
+          </div>
 
-        {/* Right side - Controls */}
-        <div className="flex items-center justify-between gap-4 flex-shrink-0">
-          {!hideWorkspaces && (
-            <div
-              className={cn(
-                "transition-all duration-300",
-                isCompact
-                  ? "w-0 overflow-hidden opacity-0 pointer-events-none"
-                  : "w-auto overflow-visible opacity-100"
-              )}
-            >
-              <YearWorkspaceSelect />
-            </div>
-          )}
-          <AccountDropdown />
+          {/* Right side - Controls */}
+          <div className="flex items-center justify-between gap-4 flex-shrink-0">
+            {!hideWorkspaces && (
+              <div
+                className={cn(
+                  "transition-all duration-300",
+                  isCompact
+                    ? "w-0 overflow-hidden opacity-0 pointer-events-none"
+                    : "w-auto overflow-visible opacity-100"
+                )}
+              >
+                <YearWorkspaceSelect />
+              </div>
+            )}
+            <AccountDropdown />
+          </div>
         </div>
       </div>
     </div>
@@ -168,6 +175,10 @@ export default function DashboardHeader({
         ref={headerRef}
         className={cn("border-b transition-all duration-300", "py-4 sm:py-8")}
       >
+        <div
+          aria-hidden
+          style={{ height: "var(--safe-area-inset-top)" }}
+        />
         {HeaderInner}
       </header>
     );
@@ -188,6 +199,10 @@ export default function DashboardHeader({
             isCompact ? "py-2" : "py-4 sm:py-8"
           )}
         >
+          <div
+            aria-hidden
+            style={{ height: "var(--safe-area-inset-top)" }}
+          />
           {HeaderInner}
         </header>
       </BodyPortal>

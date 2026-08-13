@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type RefObject } from "react";
 import { X, ChevronLeft, ChevronRight, Share2, Sparkles, Trophy, TrendingUp, Calendar, Zap, Award, Star, Activity, Rocket, Pause, Play, Crown, BookOpen, Target, Scale, RefreshCcw, Dices, Shuffle, Crosshair, Gem, UserCheck, Plane, Volume2, VolumeX } from "lucide-react";
 import { YearReviewStats, Award as AwardData, AwardType } from "@/types/year-review";
 import { cn } from "@/lib/utils";
@@ -10,23 +10,16 @@ import confetti from "canvas-confetti";
 import { toPng } from "@jpinsonneau/html-to-image";
 import LightPillar from "@/components/LightPillar";
 import { useFormatter, useTranslations } from "next-intl";
+import {
+    calculateYearReviewLayout,
+    YEAR_REVIEW_CANONICAL_HEIGHT,
+    YEAR_REVIEW_CANONICAL_WIDTH,
+} from "./year-review-layout";
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
-const CANONICAL_WIDTH = 390;
-const CANONICAL_HEIGHT = 693;
-const STORY_ASPECT_RATIO = CANONICAL_WIDTH / CANONICAL_HEIGHT;
-
-// Furniture sizes at 100% zoom (in CSS pixels at zoom=1)
-const NAV_BUTTON_SIZE_BASE = 70;
-const CLOSE_BUTTON_SIZE_BASE = 32;
-const BUTTON_GAP_BASE = 16;
-const CLOSE_BUTTON_GAP_BASE = 12;
-const MIN_MARGIN_BASE = 20; // Minimum margin in pixels at 100% zoom
-
-// Threshold: hide nav buttons when PHYSICAL viewport width is below this
-// (we use screen width to make this zoom-independent)
-const NAV_BUTTON_HIDE_THRESHOLD = 600;
+const CANONICAL_WIDTH = YEAR_REVIEW_CANONICAL_WIDTH;
+const CANONICAL_HEIGHT = YEAR_REVIEW_CANONICAL_HEIGHT;
 
 // Hook to calculate zoom level - cross-browser (Chrome + Firefox)
 function useZoomLevel() {
@@ -85,71 +78,32 @@ function useZoomLevel() {
     return zoom;
 }
 
-// Hook to calculate the complete layout with zoom compensation
-function useStoryLayout() {
+// The browser resolves env(safe-area-inset-*) on this frame. Its children can
+// therefore use safe-area-local coordinates without parsing CSS values in JS.
+function useStoryLayout(safeAreaRef: RefObject<HTMLDivElement | null>, isOpen: boolean) {
     const zoom = useZoomLevel();
 
-    const [layout, setLayout] = useState({
-        storyScale: 1,
-        showNavButtons: true,
-        storyWidth: CANONICAL_WIDTH,
-        storyHeight: CANONICAL_HEIGHT,
-        // Furniture sizes adjusted for zoom
-        navButtonSize: NAV_BUTTON_SIZE_BASE,
-        closeButtonSize: CLOSE_BUTTON_SIZE_BASE,
-        buttonGap: BUTTON_GAP_BASE,
-        closeButtonGap: CLOSE_BUTTON_GAP_BASE,
-    });
+    const [layout, setLayout] = useState(() => calculateYearReviewLayout({
+        viewportWidth: CANONICAL_WIDTH,
+        safeAreaWidth: CANONICAL_WIDTH,
+        safeAreaHeight: CANONICAL_HEIGHT,
+        zoom: 1,
+    }));
 
     useEffect(() => {
+        if (!isOpen) return;
+
         const updateLayout = () => {
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
+            const safeArea = safeAreaRef.current;
+            if (!safeArea) return;
 
-            // Calculate zoom-compensated furniture sizes
-            // When zoom is 2x, we want buttons to be half the CSS pixels so they appear same physical size
-            const navButtonSize = NAV_BUTTON_SIZE_BASE / zoom;
-            const closeButtonSize = CLOSE_BUTTON_SIZE_BASE / zoom;
-            const buttonGap = BUTTON_GAP_BASE / zoom;
-            const closeButtonGap = CLOSE_BUTTON_GAP_BASE / zoom;
-            const minMargin = MIN_MARGIN_BASE / zoom;
-
-            // Physical viewport width (zoom-independent) for threshold check
-            const physicalWidth = vw * zoom;
-            const showNavButtons = physicalWidth >= NAV_BUTTON_HIDE_THRESHOLD;
-
-            // Calculate margins (5% of viewport, minimum of zoom-adjusted margin)
-            const sideMargin = Math.max(vw * 0.05, minMargin);
-            const topMargin = Math.max(vh * 0.05, minMargin);
-            const bottomMargin = Math.max(vh * 0.05, minMargin);
-
-            // Space taken by furniture (in current CSS pixels)
-            const navButtonSpace = showNavButtons ? (navButtonSize + buttonGap) * 2 : 0;
-            const closeButtonSpace = closeButtonSize + closeButtonGap;
-
-            // Available space for the story
-            const availableWidth = Math.max(vw - sideMargin * 2 - navButtonSpace, 50);
-            const availableHeight = Math.max(vh - topMargin - bottomMargin - closeButtonSpace, 50);
-
-            // Calculate story scale to fit available space while ALWAYS maintaining aspect ratio
-            const scaleX = availableWidth / CANONICAL_WIDTH;
-            const scaleY = availableHeight / CANONICAL_HEIGHT;
-            const storyScale = Math.max(0.1, Math.min(scaleX, scaleY)); // Clamp to prevent zero/negative
-
-            // Final rendered story dimensions (always maintains aspect ratio)
-            const storyWidth = CANONICAL_WIDTH * storyScale;
-            const storyHeight = CANONICAL_HEIGHT * storyScale;
-
-            setLayout({
-                storyScale,
-                showNavButtons,
-                storyWidth,
-                storyHeight,
-                navButtonSize,
-                closeButtonSize,
-                buttonGap,
-                closeButtonGap,
-            });
+            const safeAreaRect = safeArea.getBoundingClientRect();
+            setLayout(calculateYearReviewLayout({
+                viewportWidth: window.innerWidth,
+                safeAreaWidth: safeAreaRect.width,
+                safeAreaHeight: safeAreaRect.height,
+                zoom,
+            }));
         };
 
         updateLayout();
@@ -159,13 +113,14 @@ function useStoryLayout() {
 
         // Also use ResizeObserver for more reliable updates
         const resizeObserver = new ResizeObserver(updateLayout);
-        resizeObserver.observe(document.body);
+        const safeArea = safeAreaRef.current;
+        if (safeArea) resizeObserver.observe(safeArea);
 
         return () => {
             window.removeEventListener('resize', updateLayout);
             resizeObserver.disconnect();
         };
-    }, [zoom]);
+    }, [isOpen, safeAreaRef, zoom]);
 
     return layout;
 }
@@ -2423,11 +2378,12 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
     const [animatedBars, setAnimatedBars] = useState<Record<number, number>>({});
     const [stepDuration, setStepDuration] = useState(120); // Dynamic per-step duration
     const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const safeAreaRef = useRef<HTMLDivElement>(null);
     const storyContainerRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Get the complete layout with zoom compensation
-    const layout = useStoryLayout();
+    const layout = useStoryLayout(safeAreaRef, isOpen);
 
     const slides = useMemo(() => [
         { component: IntroSlide, duration: 3000 },
@@ -2643,80 +2599,88 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
     const {
         storyScale,
         showNavButtons,
-        storyWidth,
-        storyHeight,
-        navButtonSize,
-        closeButtonSize,
-        buttonGap,
-        closeButtonGap,
+        storyRect,
+        closeButtonRect,
+        previousButtonRect,
+        nextButtonRect,
     } = layout;
 
     return (
         <div className="fixed inset-0 z-[100] bg-black overflow-hidden">
             {/* 
                 Layout structure:
-                - Outer container fills viewport (no flex to avoid high-zoom cropping)
-                - All children use absolute positioning relative to viewport center
+                - Outer container remains full bleed behind system UI
+                - The inner frame follows all four safe-area insets independently
+                - All children use safe-area-local absolute coordinates
                 - Button sizes are zoom-compensated to appear constant physical size
                 - Story scales to fill available space after margins/buttons
             */}
+
+            <div
+                ref={safeAreaRef}
+                className="absolute"
+                style={{
+                    top: "var(--safe-area-inset-top, 0px)",
+                    right: "var(--safe-area-inset-right, 0px)",
+                    bottom: "var(--safe-area-inset-bottom, 0px)",
+                    left: "var(--safe-area-inset-left, 0px)",
+                }}
+            >
 
             {/* Close Button - positioned at top-right of story, zoom-compensated size */}
             <button
                 onClick={onClose}
                 className="absolute z-[110] text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                 style={{
-                    width: closeButtonSize,
-                    height: closeButtonSize,
-                    top: `calc(50% - ${storyHeight / 2}px - ${closeButtonSize + closeButtonGap}px)`,
-                    left: `calc(50% + ${storyWidth / 2}px - ${closeButtonSize}px)`,
+                    width: closeButtonRect.width,
+                    height: closeButtonRect.height,
+                    top: closeButtonRect.y,
+                    left: closeButtonRect.x,
                 }}
                 aria-label={t("controls.close")}
             >
-                <X style={{ width: closeButtonSize * 0.5, height: closeButtonSize * 0.5 }} />
+                <X style={{ width: closeButtonRect.width * 0.5, height: closeButtonRect.height * 0.5 }} />
             </button>
 
             {/* Left Navigation Button - hidden on small screens, zoom-compensated size */}
-            {showNavButtons && (
+            {showNavButtons && previousButtonRect && (
                 <button
                     onClick={prevSlide}
                     className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${currentSlide === 0
                         ? 'text-white/20 bg-white/5 cursor-not-allowed'
                         : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
-                        }`}
+                    }`}
                     style={{
-                        width: navButtonSize,
-                        height: navButtonSize,
-                        left: `calc(50% - ${storyWidth / 2}px - ${navButtonSize + buttonGap}px)`,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
+                        width: previousButtonRect.width,
+                        height: previousButtonRect.height,
+                        left: previousButtonRect.x,
+                        top: previousButtonRect.y,
                     }}
                     aria-label={t("controls.previousSlide")}
                     disabled={currentSlide === 0}
                 >
-                    <ChevronLeft style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
+                    <ChevronLeft style={{ width: previousButtonRect.width * 0.5, height: previousButtonRect.height * 0.5 }} />
                 </button>
             )}
 
             {/* Right Navigation Button - hidden on small screens, zoom-compensated size */}
-            {showNavButtons && (
+            {showNavButtons && nextButtonRect && (
                 <button
                     onClick={nextSlide}
                     className={`absolute z-[110] rounded-full transition-colors flex items-center justify-center outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${isLastSlide
                         ? 'text-white/20 bg-white/5 cursor-not-allowed'
                         : 'text-white/50 hover:text-white bg-white/10 hover:bg-white/20'
-                        }`}
+                    }`}
                     style={{
-                        width: navButtonSize,
-                        height: navButtonSize,
-                        right: `calc(50% - ${storyWidth / 2}px - ${navButtonSize + buttonGap}px)`,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
+                        width: nextButtonRect.width,
+                        height: nextButtonRect.height,
+                        left: nextButtonRect.x,
+                        top: nextButtonRect.y,
                     }}
                     aria-label={t("controls.nextSlide")}
                     disabled={isLastSlide}
                 >
-                    <ChevronRight style={{ width: navButtonSize * 0.5, height: navButtonSize * 0.5 }} />
+                    <ChevronRight style={{ width: nextButtonRect.width * 0.5, height: nextButtonRect.height * 0.5 }} />
                 </button>
             )}
 
@@ -2724,10 +2688,10 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
             <div
                 className="absolute"
                 style={{
-                    left: '50%',
-                    top: '50%',
-                    transform: `translate(-50%, -50%) scale(${storyScale})`,
-                    transformOrigin: 'center center',
+                    left: storyRect.x,
+                    top: storyRect.y,
+                    transform: `scale(${storyScale})`,
+                    transformOrigin: 'top left',
                 }}
             >
                 <AmbilightWrapper storyScale={storyScale}>
@@ -2743,9 +2707,8 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                             willChange: 'transform',
                             backfaceVisibility: 'hidden',
                             // CSS variable for inverse scale
-                            //@ts-expect-error nike ta race
-                            '--border-scale': 1 / storyScale,
-                        }}
+                            '--border-scale': storyScale > 0 ? 1 / storyScale : 1,
+                        } as CSSProperties}
                         onClick={handleClick}
                     >
                         {/* Progress Bars */}
@@ -2820,6 +2783,7 @@ export function YearReviewStory({ stats, year, yearStartDate, yearEndDate, isOpe
                         </div>
                     </div>
                 </AmbilightWrapper>
+            </div>
             </div>
         </div>
     );
