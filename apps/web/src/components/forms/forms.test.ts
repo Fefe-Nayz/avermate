@@ -127,6 +127,31 @@ describe("form flows", () => {
     expect(flow).toContain("if (!wide && !onReview) return")
   })
 
+  test("editing a phone review answer returns to the review, either way out", async () => {
+    const flow = await source("./form-flow.tsx")
+
+    expect(flow).toContain("const [returning, setReturning]")
+    expect(flow).toContain("const editFromReview = (next: number)")
+    expect(flow).toContain("goto(reviewIndex)")
+    expect(flow).toContain("onEdit={editFromReview}")
+    // Backing out of a detour is a return too, and the button says so.
+    expect(flow).toContain("const back = ()")
+    expect(flow).toContain("onClick={back}")
+    expect(flow).toContain(") : returning ? (")
+  })
+
+  test("a step whose answer is the whole screen can advance itself", async () => {
+    const flow = await source("./form-flow.tsx")
+    const picker = await source("./picker.tsx")
+
+    expect(flow).toContain("const FlowAdvanceContext")
+    expect(flow).toContain("export function useFlowAdvance()")
+    // Nowhere to advance to when every step is already on screen.
+    expect(flow).toContain("if (wide || onReview) return")
+    expect(picker).toContain("advanceOnSelect")
+    expect(picker).toContain("useFlowAdvance()")
+  })
+
   test("nothing saves before the last screen says so", async () => {
     const calendar = await source("../ui/calendar.tsx")
 
