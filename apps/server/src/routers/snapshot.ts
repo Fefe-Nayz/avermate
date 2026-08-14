@@ -107,6 +107,8 @@ export const snapshotRouter = {
             accent: dashboardCards.accent,
             sortOrder: dashboardCards.sortOrder,
             hidden: dashboardCards.hidden,
+            definitionVersion: dashboardCards.definitionVersion,
+            definitionJson: dashboardCards.definitionJson,
           })
           .from(dashboardCards)
           .where(eq(dashboardCards.yearId, year.id))
@@ -197,7 +199,9 @@ export const snapshotRouter = {
         customAverages: averageRows.map((average) => ({
           id: average.id,
           name: average.name,
-          isMain: average.isMain,
+          // Historical rows can still carry this bit; it has no product
+          // meaning now and must never alter the general average.
+          isMain: false,
           sortOrder: average.sortOrder,
           entries: entriesByAverage.get(average.id) ?? [],
         })),

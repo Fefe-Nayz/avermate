@@ -1,7 +1,17 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import {
+  legacyCardToWidgetDefinition,
+  WIDGET_DEFINITION_VERSION,
+  widgetDefinitionToLegacyProjection,
+} from "@avermate/core";
 import { db } from "../db";
-import { customAverageEntries, customAverages } from "../db/schema";
+import {
+  customAverageEntries,
+  customAverages,
+  dashboardCardReferences,
+  dashboardCards,
+} from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { assertSameYear } from "../lib/domain-integrity";
 import { newId } from "../lib/id";
@@ -20,9 +30,19 @@ const entryInput = z.object({
 
 const averageInput = z.object({
   name: z.string().trim().min(1).max(64),
-  isMain: z.boolean().default(false),
   entries: z.array(entryInput).min(1).max(200),
 });
+
+const CARD_TITLE_MAX_LENGTH = 48;
+
+function generatedCardTitle(name: string): string {
+  let title = "";
+  for (const character of name) {
+    if (title.length + character.length > CARD_TITLE_MAX_LENGTH) break;
+    title += character;
+  }
+  return title.trimEnd();
+}
 
 async function assertEntriesBelongToYear(
   userId: string,
@@ -52,17 +72,9 @@ async function withEntries(averageId: string) {
     .select()
     .from(customAverageEntries)
     .where(eq(customAverageEntries.averageId, averageId));
-  return average ? { ...average, entries } : null;
-}
-
-/** Only one average can stand in for the general one on the dashboard. */
-function demoteOthers(yearId: string, keepId: string) {
-  return db
-    .update(customAverages)
-    .set({ isMain: false, updatedAt: new Date() })
-    .where(
-      and(eq(customAverages.yearId, yearId), ne(customAverages.id, keepId)),
-    );
+  // `isMain` is retained in storage for backwards-compatible snapshots, but
+  // custom averages never replace the general average anymore.
+  return average ? { ...average, isMain: false, entries } : null;
 }
 
 export const averagesRouter = {
@@ -87,6 +99,7 @@ export const averagesRouter = {
 
       return averages.map((average) => ({
         ...average,
+        isMain: false,
         entries: entries
           .filter((row) => row.custom_average_entries.averageId === average.id)
           .map((row) => row.custom_average_entries),
@@ -101,39 +114,90 @@ export const averagesRouter = {
     }),
 
   create: protectedProcedure
-    .input(averageInput.extend({ yearId: z.string() }))
+    .input(
+      averageInput.extend({
+        yearId: z.string(),
+        /** One-shot convenience; the card is independent after creation. */
+        addDashboardCard: z.boolean().default(false),
+      }),
+    )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
       await assertEntriesBelongToYear(userId, input.yearId, input.entries);
 
-      const existing = await db
-        .select({ sortOrder: customAverages.sortOrder })
-        .from(customAverages)
-        .where(eq(customAverages.yearId, input.yearId));
+      const [existing, existingCards] = await Promise.all([
+        db
+          .select({ sortOrder: customAverages.sortOrder })
+          .from(customAverages)
+          .where(eq(customAverages.yearId, input.yearId)),
+        input.addDashboardCard
+          ? db
+              .select({ sortOrder: dashboardCards.sortOrder })
+              .from(dashboardCards)
+              .where(
+                and(
+                  eq(dashboardCards.yearId, input.yearId),
+                  eq(dashboardCards.surface, "overview"),
+                ),
+              )
+          : Promise.resolve([]),
+      ]);
 
       const averageId = newId("avg");
       const insertAverage = db.insert(customAverages).values({
-          id: averageId,
-          name: input.name,
-          isMain: input.isMain,
-          sortOrder: existing.reduce(
-            (max, row) => Math.max(max, row.sortOrder + 1),
-            0,
-          ),
-          yearId: input.yearId,
-          userId,
-        });
-      const insertEntries = db.insert(customAverageEntries).values(
-        input.entries.map((entry) => ({ ...entry, averageId })),
-      );
-      const demote = input.isMain
-        ? [demoteOthers(input.yearId, averageId)]
+        id: averageId,
+        name: input.name,
+        isMain: false,
+        sortOrder: existing.reduce(
+          (max, row) => Math.max(max, row.sortOrder + 1),
+          0,
+        ),
+        yearId: input.yearId,
+        userId,
+      });
+      const insertEntries = db
+        .insert(customAverageEntries)
+        .values(input.entries.map((entry) => ({ ...entry, averageId })));
+      const cardId = newId("card");
+      const cardDefinition = legacyCardToWidgetDefinition({
+        metric: "average",
+        targetKind: "custom",
+        targetId: averageId,
+        goalId: null,
+        display: "sparkline",
+      });
+      const insertCard = input.addDashboardCard
+        ? [
+            db.insert(dashboardCards).values({
+              id: cardId,
+              surface: "overview",
+              ...widgetDefinitionToLegacyProjection(cardDefinition),
+              span: 2,
+              // Average names may be longer than editable DataCard titles.
+              title: generatedCardTitle(input.name),
+              accent: null,
+              sortOrder: existingCards.reduce(
+                (max, row) => Math.max(max, row.sortOrder + 1),
+                0,
+              ),
+              hidden: false,
+              definitionVersion: WIDGET_DEFINITION_VERSION,
+              definitionJson: cardDefinition,
+              yearId: input.yearId,
+              userId,
+            }),
+            db.insert(dashboardCardReferences).values({
+              cardId,
+              kind: "custom-average",
+              referenceId: averageId,
+            }),
+          ]
         : [];
       const statements = [
         insertAverage,
         insertEntries,
-        ...demote,
+        ...insertCard,
         detachYearPresetStatement(userId, input.yearId, "average_created"),
       ];
       await db.batch(
@@ -174,13 +238,9 @@ export const averagesRouter = {
               .values(entries.map((entry) => ({ ...entry, averageId }))),
           ]
         : [];
-      const demote = patch.isMain
-        ? [demoteOthers(existing.yearId, averageId)]
-        : [];
       const statements = [
         updateAverage,
         ...replaceEntries,
-        ...demote,
         detachYearPresetStatement(userId, existing.yearId, "average_updated"),
       ];
       await db.batch(
@@ -203,7 +263,12 @@ export const averagesRouter = {
       const owned = await db
         .select({ id: customAverages.id, yearId: customAverages.yearId })
         .from(customAverages)
-        .where(and(eq(customAverages.userId, userId), inArray(customAverages.id, input.averageIds)));
+        .where(
+          and(
+            eq(customAverages.userId, userId),
+            inArray(customAverages.id, input.averageIds),
+          ),
+        );
       if (owned.length !== input.averageIds.length) {
         badRequest("Every reordered average must belong to this account");
       }
@@ -237,6 +302,15 @@ export const averagesRouter = {
       const userId = context.session.user.id;
       const existing = await requireCustomAverage(userId, input.averageId);
       await db.batch([
+        db
+          .delete(dashboardCards)
+          .where(
+            and(
+              eq(dashboardCards.userId, userId),
+              eq(dashboardCards.targetKind, "custom"),
+              eq(dashboardCards.targetId, input.averageId),
+            ),
+          ),
         db.delete(customAverages).where(eq(customAverages.id, input.averageId)),
         detachYearPresetStatement(userId, existing.yearId, "average_deleted"),
       ]);

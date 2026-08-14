@@ -12,9 +12,12 @@ import {
 import { createRouterClient } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { CARD_METRICS } from "@avermate/core";
+import { CARD_METRICS, WIDGET_DEFINITION_VERSION } from "@avermate/core";
+import { managedPresetConfigurationSchema } from "../data/managed-presets";
 import { db } from "../db";
 import { mcpOperations } from "../db/schema";
+import { periodTemplateIds } from "../lib/academic-setup";
+import { cardSurfaceSchema } from "../lib/card-storage";
 import { env } from "../lib/env";
 import { appRouter } from "../routers";
 import type { McpPrincipal } from "./auth";
@@ -58,6 +61,27 @@ const periodFields = {
   isCumulative: z.boolean().default(false),
 };
 
+const classPeriods = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("template"),
+    templateId: z.enum(periodTemplateIds),
+    names: z.array(z.string().trim().min(1).max(64)).max(12).default([]),
+  }),
+  z.object({
+    mode: z.literal("custom"),
+    items: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(64),
+          startsAt: isoDate,
+          endsAt: isoDate,
+          isCumulative: z.boolean().default(false),
+        }),
+      )
+      .max(12),
+  }),
+]);
+
 const subjectFields = {
   name: z.string().trim().min(1).max(96),
   shortName: z.string().trim().max(24).nullable().default(null),
@@ -94,7 +118,6 @@ const averageEntry = z.object({
 
 const averageFields = {
   name: z.string().trim().min(1).max(64),
-  isMain: z.boolean().default(false),
   entries: z.array(averageEntry).min(1).max(200),
 };
 
@@ -108,19 +131,43 @@ const goalFields = {
   isPinned: z.boolean().default(false),
 };
 
-const cardFields = {
-  surface: z.enum(["overview", "subject", "grade"]).default("overview"),
-  metric: z.enum(CARD_METRICS),
-  targetKind: z.enum(["general", "subject", "custom"]).default("general"),
-  targetId: id.nullable().default(null),
-  goalId: id.nullable().default(null),
-  display: z
-    .enum(["value", "sparkline", "chart", "list", "gauge"])
-    .default("value"),
+// MCP needs a publishable JSON Schema. The oRPC router still performs the
+// complete canonical validation, compatibility checks and ownership checks.
+const mcpWidgetDefinition = z.object({
+  apiVersion: z.literal(WIDGET_DEFINITION_VERSION),
+  query: z.record(z.string(), z.json()),
+  analysis: z.record(z.string(), z.json()),
+  visualization: z.record(z.string(), z.json()),
+});
+
+const mcpCardFields = {
+  surface: cardSurfaceSchema.default("overview"),
+  metric: z.enum(CARD_METRICS).optional(),
+  targetKind: z.enum(["general", "subject", "custom"]).optional(),
+  targetId: id.nullable().optional(),
+  goalId: id.nullable().optional(),
+  display: z.enum(["value", "sparkline", "chart", "list", "gauge"]).optional(),
+  definitionVersion: z.literal(WIDGET_DEFINITION_VERSION).optional(),
+  definitionJson: mcpWidgetDefinition.optional(),
   span: z.number().int().min(1).max(4).default(1),
   title: z.string().trim().max(48).nullable().default(null),
   accent: z.string().trim().max(24).nullable().default(null),
   hidden: z.boolean().default(false),
+};
+
+const mcpCardPatchFields = {
+  surface: cardSurfaceSchema.optional(),
+  metric: z.enum(CARD_METRICS).optional(),
+  targetKind: z.enum(["general", "subject", "custom"]).optional(),
+  targetId: id.nullable().optional(),
+  goalId: id.nullable().optional(),
+  display: z.enum(["value", "sparkline", "chart", "list", "gauge"]).optional(),
+  definitionVersion: z.literal(WIDGET_DEFINITION_VERSION).optional(),
+  definitionJson: mcpWidgetDefinition.optional(),
+  span: z.number().int().min(1).max(4).optional(),
+  title: z.string().trim().max(48).nullable().optional(),
+  accent: z.string().trim().max(24).nullable().optional(),
+  hidden: z.boolean().optional(),
 };
 
 function normalize(value: unknown): unknown {
@@ -461,7 +508,7 @@ function registerReadSurface(server: McpServer, api: Api): void {
     "subjects.delete_impact",
     {
       description:
-        "Count descendants and grades affected by deleting a subject.",
+        "Count descendants, grades, and widgets affected by deleting a subject.",
       inputSchema: z.object({ subjectId: id }),
       annotations: readOnly,
       _meta: readMeta,
@@ -527,7 +574,7 @@ function registerReadSurface(server: McpServer, api: Api): void {
       description: "List dashboard cards for a year and surface.",
       inputSchema: z.object({
         yearId: id,
-        surface: z.enum(["overview", "subject", "grade"]).default("overview"),
+        surface: cardSurfaceSchema.default("overview"),
       }),
       annotations: readOnly,
       _meta: readMeta,
@@ -675,13 +722,13 @@ function registerSocialReadSurface(server: McpServer, api: Api): void {
   );
   tool(
     "social.groups",
-    "List the connected user's groups.",
+    "List the connected user's classes.",
     z.object({}),
     () => call(() => api.social.groups.list()),
   );
   tool(
     "social.group",
-    "Read a group with its members and their shared averages.",
+    "Read a class with its members and their shared averages.",
     z.object({ groupId: id }),
     (input) => call(() => api.social.groups.get(input)),
   );
@@ -817,10 +864,21 @@ function registerSocialManageSurface(
   server.registerTool(
     "social.groups.create",
     {
-      description: "Create a group whose members compare averages.",
+      description:
+        "Create a class from an existing year or a new academic template.",
       inputSchema: z.object({
         name: z.string().trim().min(2).max(100),
         description: z.string().trim().max(500).default(""),
+        template: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("year"), yearId: id }),
+          z.object({
+            mode: z.literal("builder"),
+            year: yearCreate,
+            presetId: id.nullable().default(null),
+            configuration: managedPresetConfigurationSchema,
+            periods: classPeriods,
+          }),
+        ]),
         ...key,
       }),
       annotations: confirmed,
@@ -833,19 +891,30 @@ function registerSocialManageSurface(
         toolName: "social.groups.create",
         input,
         context,
-        description: `Create group ${input.name}.`,
+        description: `Create class ${input.name}.`,
         execute: () =>
           api.social.groups.create({
             name: input.name,
             description: input.description,
+            template: input.template,
           }),
       }),
   );
   server.registerTool(
     "social.groups.join",
     {
-      description: "Join a group through an invitation link token.",
-      inputSchema: z.object({ token: z.string().min(32).max(256), ...key }),
+      description: "Join a class through an invitation link token.",
+      inputSchema: z.object({
+        token: z.string().min(32).max(256),
+        year: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("existing"), yearId: id }),
+          z.object({
+            mode: z.literal("copy"),
+            name: z.string().trim().min(1).max(100).optional(),
+          }),
+        ]),
+        ...key,
+      }),
       annotations: confirmed,
       _meta: manageMeta,
     },
@@ -856,15 +925,18 @@ function registerSocialManageSurface(
         toolName: "social.groups.join",
         input,
         context,
-        description: "Join the group represented by this invitation token.",
+        description: "Join the class represented by this invitation token.",
         execute: () =>
-          api.social.groups.invitations.accept({ token: input.token }),
+          api.social.groups.invitations.accept({
+            token: input.token,
+            year: input.year,
+          }),
       }),
   );
   server.registerTool(
     "social.groups.set_sharing",
     {
-      description: "Turn the connected user's average on or off in a group.",
+      description: "Turn the connected user's average on or off in a class.",
       inputSchema: z.object({ groupId: id, shareAverage: z.boolean(), ...key }),
       annotations: confirmed,
       _meta: manageMeta,
@@ -1137,7 +1209,11 @@ function registerWriteSurface(server: McpServer, api: Api): void {
     "averages.create",
     {
       description: "Create a custom weighted average.",
-      inputSchema: z.object({ yearId: id, ...averageFields }),
+      inputSchema: z.object({
+        yearId: id,
+        ...averageFields,
+        addDashboardCard: z.boolean().default(false),
+      }),
       _meta: writeMeta,
     },
     (input) => call(() => api.averages.create(input)),
@@ -1204,20 +1280,22 @@ function registerWriteSurface(server: McpServer, api: Api): void {
   server.registerTool(
     "cards.create",
     {
-      description: "Create a dashboard card.",
-      inputSchema: z.object({ yearId: id, ...cardFields }),
+      description:
+        "Create a dashboard card or analytical widget from either legacy fields or one complete V1 definition.",
+      inputSchema: z.object({ yearId: id, ...mcpCardFields }),
       _meta: writeMeta,
     },
-    (input) => call(() => api.cards.create(input)),
+    (input) => call(() => api.cards.create(input as never)),
   );
   server.registerTool(
     "cards.update",
     {
-      description: "Update a dashboard card.",
-      inputSchema: z.object(cardFields).partial().extend({ cardId: id }),
+      description:
+        "Update presentation fields or replace a card's legacy/V1 analytical definition.",
+      inputSchema: z.object({ cardId: id, ...mcpCardPatchFields }),
       _meta: writeMeta,
     },
-    (input) => call(() => api.cards.update(input)),
+    (input) => call(() => api.cards.update(input as never)),
   );
   server.registerTool(
     "cards.reorder",
@@ -1478,7 +1556,7 @@ function registerDestructiveSurface(
         "Delete a surface layout and restore defaults where available.",
       inputSchema: z.object({
         yearId: id,
-        surface: z.enum(["overview", "subject", "grade"]).default("overview"),
+        surface: cardSurfaceSchema.default("overview"),
         ...key,
       }),
       annotations: destructive,

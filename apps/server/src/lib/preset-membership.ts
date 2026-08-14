@@ -61,24 +61,38 @@ export function summarizePresetChanges(
   from: ManagedPresetConfiguration,
   to: ManagedPresetConfiguration,
 ): PresetChangeSummary {
-  const fromSubjects = new Map(flattenSubjects(from.subjects).map((row) => [row.key, row]));
-  const toSubjects = new Map(flattenSubjects(to.subjects).map((row) => [row.key, row]));
+  const fromSubjects = new Map(
+    flattenSubjects(from.subjects).map((row) => [row.key, row]),
+  );
+  const toSubjects = new Map(
+    flattenSubjects(to.subjects).map((row) => [row.key, row]),
+  );
   const fromAverages = new Map(from.averages.map((row) => [row.key, row]));
   const toAverages = new Map(to.averages.map((row) => [row.key, row]));
   const changed = <T>(left: T, right: T) =>
     JSON.stringify(left) !== JSON.stringify(right);
 
   return {
-    subjectsAdded: [...toSubjects.keys()].filter((key) => !fromSubjects.has(key)).length,
+    subjectsAdded: [...toSubjects.keys()].filter(
+      (key) => !fromSubjects.has(key),
+    ).length,
     subjectsChanged: [...toSubjects].filter(
-      ([key, row]) => fromSubjects.has(key) && changed(fromSubjects.get(key), row),
+      ([key, row]) =>
+        fromSubjects.has(key) && changed(fromSubjects.get(key), row),
     ).length,
-    subjectsRemoved: [...fromSubjects.keys()].filter((key) => !toSubjects.has(key)).length,
-    averagesAdded: [...toAverages.keys()].filter((key) => !fromAverages.has(key)).length,
+    subjectsRemoved: [...fromSubjects.keys()].filter(
+      (key) => !toSubjects.has(key),
+    ).length,
+    averagesAdded: [...toAverages.keys()].filter(
+      (key) => !fromAverages.has(key),
+    ).length,
     averagesChanged: [...toAverages].filter(
-      ([key, row]) => fromAverages.has(key) && changed(fromAverages.get(key), row),
+      ([key, row]) =>
+        fromAverages.has(key) && changed(fromAverages.get(key), row),
     ).length,
-    averagesRemoved: [...fromAverages.keys()].filter((key) => !toAverages.has(key)).length,
+    averagesRemoved: [...fromAverages.keys()].filter(
+      (key) => !toAverages.has(key),
+    ).length,
   };
 }
 
@@ -122,7 +136,10 @@ export function materializePresetConfiguration(
 ) {
   const flat = flattenSubjects(configuration.subjects);
   const subjectIds = new Map(
-    flat.map((node) => [node.key, existingSubjectIds.get(node.key) ?? newId("sub")]),
+    flat.map((node) => [
+      node.key,
+      existingSubjectIds.get(node.key) ?? newId("sub"),
+    ]),
   );
   const subjectRows: Array<typeof subjects.$inferInsert> = flat.map((node) => ({
     id: subjectIds.get(node.key) as string,
@@ -138,17 +155,16 @@ export function materializePresetConfiguration(
     userId,
   }));
 
-  const averageRows: Array<typeof customAverages.$inferInsert> = configuration.averages.map(
-    (average, sortOrder) => ({
+  const averageRows: Array<typeof customAverages.$inferInsert> =
+    configuration.averages.map((average, sortOrder) => ({
       id: existingAverageIds.get(average.key) ?? newId("avg"),
       name: average.name,
-      isMain: average.isMain,
+      isMain: false,
       sortOrder,
       presetNodeKey: average.key,
       yearId,
       userId,
-    }),
-  );
+    }));
   const averageIds = new Map(
     averageRows.map((row) => [row.presetNodeKey as string, row.id as string]),
   );
@@ -167,8 +183,16 @@ export function materializePresetConfiguration(
 
 async function loadYearConfiguration(yearId: string) {
   const [subjectRows, averageRows, entryRows] = await Promise.all([
-    db.select().from(subjects).where(eq(subjects.yearId, yearId)).orderBy(asc(subjects.sortOrder)),
-    db.select().from(customAverages).where(eq(customAverages.yearId, yearId)).orderBy(asc(customAverages.sortOrder)),
+    db
+      .select()
+      .from(subjects)
+      .where(eq(subjects.yearId, yearId))
+      .orderBy(asc(subjects.sortOrder)),
+    db
+      .select()
+      .from(customAverages)
+      .where(eq(customAverages.yearId, yearId))
+      .orderBy(asc(customAverages.sortOrder)),
     db
       .select({
         averageId: customAverageEntries.averageId,
@@ -177,7 +201,10 @@ async function loadYearConfiguration(yearId: string) {
         includeChildren: customAverageEntries.includeChildren,
       })
       .from(customAverageEntries)
-      .innerJoin(customAverages, eq(customAverageEntries.averageId, customAverages.id))
+      .innerJoin(
+        customAverages,
+        eq(customAverageEntries.averageId, customAverages.id),
+      )
       .where(eq(customAverages.yearId, yearId)),
   ]);
   return { subjectRows, averageRows, entryRows };
@@ -217,8 +244,9 @@ export async function yearMatchesPresetConfiguration(
       row.kind !== expected.kind ||
       row.isMain !== expected.isMain ||
       row.sortOrder !== expected.sortOrder ||
-      (row.parentId ? actualSubjectKeyById.get(row.parentId) ?? null : null) !==
-        expected.parentKey
+      (row.parentId
+        ? (actualSubjectKeyById.get(row.parentId) ?? null)
+        : null) !== expected.parentKey
     ) {
       return false;
     }
@@ -229,14 +257,18 @@ export async function yearMatchesPresetConfiguration(
       .filter((row) => row.presetNodeKey)
       .map((row) => [row.presetNodeKey as string, row]),
   );
-  for (let sortOrder = 0; sortOrder < configuration.averages.length; sortOrder += 1) {
+  for (
+    let sortOrder = 0;
+    sortOrder < configuration.averages.length;
+    sortOrder += 1
+  ) {
     const expected = configuration.averages[sortOrder];
     if (!expected) return false;
     const row = actualAverageByKey.get(expected.key);
     if (
       !row ||
       row.name !== expected.name ||
-      row.isMain !== expected.isMain ||
+      row.isMain !== false ||
       row.sortOrder !== sortOrder
     ) {
       return false;
@@ -248,11 +280,14 @@ export async function yearMatchesPresetConfiguration(
         coefficient: entry.coefficient,
         includeChildren: entry.includeChildren,
       }))
-      .sort((left, right) => String(left.subjectKey).localeCompare(String(right.subjectKey)));
+      .sort((left, right) =>
+        String(left.subjectKey).localeCompare(String(right.subjectKey)),
+      );
     const expectedEntries = [...expected.entries].sort((left, right) =>
       left.subjectKey.localeCompare(right.subjectKey),
     );
-    if (JSON.stringify(entries) !== JSON.stringify(expectedEntries)) return false;
+    if (JSON.stringify(entries) !== JSON.stringify(expectedEntries))
+      return false;
   }
   return true;
 }
@@ -261,9 +296,15 @@ async function removalBlockers(
   yearId: string,
   target: ManagedPresetConfiguration,
 ) {
-  const targetKeys = new Set(flattenSubjects(target.subjects).map((row) => row.key));
+  const targetKeys = new Set(
+    flattenSubjects(target.subjects).map((row) => row.key),
+  );
   const current = await db
-    .select({ id: subjects.id, name: subjects.name, presetNodeKey: subjects.presetNodeKey })
+    .select({
+      id: subjects.id,
+      name: subjects.name,
+      presetNodeKey: subjects.presetNodeKey,
+    })
     .from(subjects)
     .where(eq(subjects.yearId, yearId));
   const removed = current.filter(
@@ -273,7 +314,12 @@ async function removalBlockers(
   const gradeRows = await db
     .select({ subjectId: grades.subjectId })
     .from(grades)
-    .where(inArray(grades.subjectId, removed.map((row) => row.id)));
+    .where(
+      inArray(
+        grades.subjectId,
+        removed.map((row) => row.id),
+      ),
+    );
   const counts = new Map<string, number>();
   for (const grade of gradeRows) {
     counts.set(grade.subjectId, (counts.get(grade.subjectId) ?? 0) + 1);
@@ -299,11 +345,20 @@ export async function getYearPresetStatus(userId: string, yearId: string) {
     )
     .limit(1);
   if (!membership) {
-    return { state: "none" as const, membership: null, preset: null, changes: null, blockers: [] };
+    return {
+      state: "none" as const,
+      membership: null,
+      preset: null,
+      changes: null,
+      blockers: [],
+    };
   }
 
   const definition = await findPresetDefinition(membership.presetId);
-  const appliedRow = await findPresetVersion(membership.presetId, membership.appliedVersion);
+  const appliedRow = await findPresetVersion(
+    membership.presetId,
+    membership.appliedVersion,
+  );
   if (!definition || !appliedRow) {
     return {
       state: "action_required" as const,
@@ -327,7 +382,11 @@ export async function getYearPresetStatus(userId: string, yearId: string) {
     await markYearPresetCustomized(userId, yearId, "configuration_changed");
     return {
       state: "customized" as const,
-      membership: { ...membership, mode: "customized", detachedReason: "configuration_changed" },
+      membership: {
+        ...membership,
+        mode: "customized",
+        detachedReason: "configuration_changed",
+      },
       preset: definition,
       changes: null,
       blockers: [],
@@ -342,7 +401,10 @@ export async function getYearPresetStatus(userId: string, yearId: string) {
       blockers: [],
     };
   }
-  const targetRow = await findPresetVersion(membership.presetId, definition.currentVersion);
+  const targetRow = await findPresetVersion(
+    membership.presetId,
+    definition.currentVersion,
+  );
   if (!targetRow) {
     return {
       state: "action_required" as const,
@@ -355,7 +417,10 @@ export async function getYearPresetStatus(userId: string, yearId: string) {
   const target = parsePresetConfiguration(targetRow.configuration);
   const blockers = await removalBlockers(yearId, target);
   return {
-    state: blockers.length > 0 ? ("action_required" as const) : ("update_available" as const),
+    state:
+      blockers.length > 0
+        ? ("action_required" as const)
+        : ("update_available" as const),
     membership,
     preset: definition,
     changes: summarizePresetChanges(applied, target),
@@ -366,14 +431,21 @@ export async function getYearPresetStatus(userId: string, yearId: string) {
 export async function synchronizeYearPreset(userId: string, yearId: string) {
   const status = await getYearPresetStatus(userId, yearId);
   if (status.state === "current") return status;
-  if (status.state !== "update_available" || !status.membership || !status.preset) {
+  if (
+    status.state !== "update_available" ||
+    !status.membership ||
+    !status.preset
+  ) {
     throw new Error(
       status.state === "action_required"
         ? "This update would remove a subject that already has grades"
         : "This year is not linked to an updatable preset",
     );
   }
-  const targetRow = await findPresetVersion(status.preset.id, status.preset.currentVersion);
+  const targetRow = await findPresetVersion(
+    status.preset.id,
+    status.preset.currentVersion,
+  );
   if (!targetRow) throw new Error("Preset version not found");
   const configuration = parsePresetConfiguration(targetRow.configuration);
   const current = await loadYearConfiguration(yearId);
@@ -394,18 +466,32 @@ export async function synchronizeYearPreset(userId: string, yearId: string) {
     subjectIds,
     averageIds,
   );
-  const targetSubjectKeys = materialized.subjectRows.map((row) => row.presetNodeKey as string);
-  const targetAverageKeys = materialized.averageRows.map((row) => row.presetNodeKey as string);
+  const targetSubjectKeys = materialized.subjectRows.map(
+    (row) => row.presetNodeKey as string,
+  );
+  const targetAverageKeys = materialized.averageRows.map(
+    (row) => row.presetNodeKey as string,
+  );
   const removedAverageIds = current.averageRows
-    .filter((row) => row.presetNodeKey && !targetAverageKeys.includes(row.presetNodeKey))
+    .filter(
+      (row) =>
+        row.presetNodeKey && !targetAverageKeys.includes(row.presetNodeKey),
+    )
     .map((row) => row.id);
   const removedSubjectIds = current.subjectRows
-    .filter((row) => row.presetNodeKey && !targetSubjectKeys.includes(row.presetNodeKey))
+    .filter(
+      (row) =>
+        row.presetNodeKey && !targetSubjectKeys.includes(row.presetNodeKey),
+    )
     .map((row) => row.id);
 
   const statements = [
     ...(removedAverageIds.length > 0
-      ? [db.delete(customAverages).where(inArray(customAverages.id, removedAverageIds))]
+      ? [
+          db
+            .delete(customAverages)
+            .where(inArray(customAverages.id, removedAverageIds)),
+        ]
       : []),
     ...(removedSubjectIds.length > 0
       ? [db.delete(subjects).where(inArray(subjects.id, removedSubjectIds))]
@@ -442,14 +528,12 @@ export async function synchronizeYearPreset(userId: string, yearId: string) {
     ),
     ...(materialized.averageRows.length > 0
       ? [
-          db
-            .delete(customAverageEntries)
-            .where(
-              inArray(
-                customAverageEntries.averageId,
-                materialized.averageRows.map((row) => row.id as string),
-              ),
+          db.delete(customAverageEntries).where(
+            inArray(
+              customAverageEntries.averageId,
+              materialized.averageRows.map((row) => row.id as string),
             ),
+          ),
         ]
       : []),
     ...(materialized.entryRows.length > 0

@@ -8,7 +8,12 @@ import type {
   PresetSubject,
 } from "./preset-types";
 
-const nodeKey = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9:._-]+$/);
+const nodeKey = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9:._-]+$/);
 
 const managedSubjectSchema: z.ZodType<ManagedPresetSubject> = z.lazy(() =>
   z.object({
@@ -25,7 +30,11 @@ const managedSubjectSchema: z.ZodType<ManagedPresetSubject> = z.lazy(() =>
 const managedAverageSchema: z.ZodType<ManagedPresetAverage> = z.object({
   key: nodeKey,
   name: z.string().trim().min(1).max(64),
-  isMain: z.boolean(),
+  // Accept old preset payloads, but headline custom averages are retired.
+  isMain: z
+    .boolean()
+    .optional()
+    .transform(() => false),
   entries: z
     .array(
       z.object({
@@ -116,7 +125,8 @@ export function normalizeLegacyPreset(
   ): ManagedPresetSubject[] =>
     nodes.map((node, index) => {
       const path = [...indexPath, index];
-      const key = node.key ?? `legacy-subject:${path.join(".")}:${slug(node.name)}`;
+      const key =
+        node.key ?? `legacy-subject:${path.join(".")}:${slug(node.name)}`;
       keyByName.set(node.name, key);
       return {
         key,
@@ -134,10 +144,11 @@ export function normalizeLegacyPreset(
     averages: preset.averages.map((average, index) => ({
       key: average.key ?? `legacy-average:${index}:${slug(average.name)}`,
       name: average.name,
-      isMain: average.isMain ?? false,
+      isMain: false,
       entries: average.entries.map((entry) => {
         const subjectKey =
-          entry.subjectKey ?? (entry.name ? keyByName.get(entry.name) : undefined);
+          entry.subjectKey ??
+          (entry.name ? keyByName.get(entry.name) : undefined);
         if (!subjectKey) {
           throw new Error(
             `Preset ${preset.id} average ${average.name} references an unknown subject`,
@@ -155,7 +166,9 @@ export function normalizeLegacyPreset(
   return managedPresetConfigurationSchema.parse(configuration);
 }
 
-export function parsePresetConfiguration(value: string): ManagedPresetConfiguration {
+export function parsePresetConfiguration(
+  value: string,
+): ManagedPresetConfiguration {
   return managedPresetConfigurationSchema.parse(JSON.parse(value));
 }
 

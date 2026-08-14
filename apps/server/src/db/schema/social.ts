@@ -223,6 +223,11 @@ export const socialGroups = sqliteTable(
       onUpdate: "cascade",
     }),
     sharedSetupConfig: text(),
+    /**
+     * Immutable academic contract for a class. Legacy groups keep this null
+     * until their owner explicitly configures them once.
+     */
+    classTemplate: text(),
     /** `frozen` is an administrative hold after a report. */
     state: text().$type<"active" | "frozen">().notNull().default("active"),
     ...timestamps,
@@ -262,6 +267,8 @@ export const groupComparisons = sqliteTable(
     kind: text().$type<GroupComparisonKind>().notNull().default("general"),
     /** Only for subject comparisons. */
     subjectName: text(),
+    /** Stable subject identity inside `classTemplate`. */
+    subjectKey: text(),
     sortOrder: integer().notNull().default(0),
     createdAt: integer({ mode: "timestamp" })
       .notNull()
@@ -286,12 +293,18 @@ export const groupMemberships = sqliteTable(
     userId: userRef(),
     role: text().$type<"owner" | "member">().notNull().default("member"),
     /** The one lock a member has inside a group. */
-    shareAverage: integer({ mode: "boolean" }).notNull().default(true),
+    shareAverage: integer({ mode: "boolean" }).notNull().default(false),
+    /** The member-owned year explicitly connected to this class. */
+    yearId: text().references(() => years.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     ...timestamps,
   },
   (t) => [
     uniqueIndex("group_memberships_user_unique").on(t.groupId, t.userId),
     index("group_memberships_user_idx").on(t.userId),
+    index("group_memberships_year_idx").on(t.yearId),
   ],
 );
 

@@ -25,8 +25,8 @@ import {
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireYear } from "../lib/ownership";
 import { newId } from "../lib/id";
-import { defaultCards } from "@avermate/core";
 import { assertPeriodRangesWithinYear } from "../lib/academic-periods";
+import { academicCardRows } from "../lib/academic-setup";
 import { getYearPresetStatus } from "../lib/preset-membership";
 
 const yearInput = z.object({
@@ -46,24 +46,6 @@ function assertRange(startsAt: Date, endsAt: Date) {
 }
 
 /** Every year seeds the dashboard it starts with — an empty grid reads as broken. */
-function seedCardValues(userId: string, yearId: string) {
-  return defaultCards().map((card) => ({
-      surface: "overview",
-      metric: card.metric,
-      targetKind: card.target.kind,
-      targetId: card.target.referenceId,
-      goalId: null,
-      display: card.display,
-      span: card.span,
-      title: card.title,
-      accent: card.accent,
-      sortOrder: card.sortOrder,
-      hidden: card.hidden,
-      yearId,
-      userId,
-    }));
-}
-
 export const yearsRouter = {
   list: protectedProcedure.handler(async ({ context }) =>
     db
@@ -89,30 +71,36 @@ export const yearsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const year = await requireYear(userId, input.yearId);
-      const [subjectRows, periodRows, averageRows, gradeRows, goalRows, preset] =
-        await Promise.all([
-          db
-            .select({ id: subjects.id })
-            .from(subjects)
-            .where(eq(subjects.yearId, year.id)),
-          db
-            .select({ id: periods.id })
-            .from(periods)
-            .where(eq(periods.yearId, year.id)),
-          db
-            .select({ id: customAverages.id })
-            .from(customAverages)
-            .where(eq(customAverages.yearId, year.id)),
-          db
-            .select({ id: grades.id })
-            .from(grades)
-            .where(eq(grades.yearId, year.id)),
-          db
-            .select({ id: goals.id })
-            .from(goals)
-            .where(eq(goals.yearId, year.id)),
-          getYearPresetStatus(userId, year.id),
-        ]);
+      const [
+        subjectRows,
+        periodRows,
+        averageRows,
+        gradeRows,
+        goalRows,
+        preset,
+      ] = await Promise.all([
+        db
+          .select({ id: subjects.id })
+          .from(subjects)
+          .where(eq(subjects.yearId, year.id)),
+        db
+          .select({ id: periods.id })
+          .from(periods)
+          .where(eq(periods.yearId, year.id)),
+        db
+          .select({ id: customAverages.id })
+          .from(customAverages)
+          .where(eq(customAverages.yearId, year.id)),
+        db
+          .select({ id: grades.id })
+          .from(grades)
+          .where(eq(grades.yearId, year.id)),
+        db
+          .select({ id: goals.id })
+          .from(goals)
+          .where(eq(goals.yearId, year.id)),
+        getYearPresetStatus(userId, year.id),
+      ]);
       const counts = {
         subjects: subjectRows.length,
         periods: periodRows.length,
@@ -146,10 +134,12 @@ export const yearsRouter = {
       assertRange(input.startsAt, input.endsAt);
       const userId = context.session.user.id;
       const yearId = newId("y");
-      const insertYear = db.insert(years).values({ id: yearId, ...input, userId });
+      const insertYear = db
+        .insert(years)
+        .values({ id: yearId, ...input, userId });
       const insertCards = db
         .insert(dashboardCards)
-        .values(seedCardValues(userId, yearId));
+        .values(academicCardRows(userId, yearId));
       await db.batch([insertYear, insertCards]);
 
       const [created] = await db
@@ -201,9 +191,7 @@ export const yearsRouter = {
       const selected = await db
         .select({ id: years.id })
         .from(years)
-        .where(
-          and(eq(years.userId, userId), inArray(years.id, input.yearIds)),
-        );
+        .where(and(eq(years.userId, userId), inArray(years.id, input.yearIds)));
       if (selected.length !== input.yearIds.length) {
         badRequest("Every reordered year must belong to this account");
       }
@@ -218,10 +206,10 @@ export const yearsRouter = {
         ...current.map((year) => year.id).filter((id) => !requested.has(id)),
       ];
       const statements = orderedIds.map((yearId, index) =>
-          db
-            .update(years)
-            .set({ sortOrder: index, updatedAt: new Date() })
-            .where(and(eq(years.id, yearId), eq(years.userId, userId))),
+        db
+          .update(years)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(and(eq(years.id, yearId), eq(years.userId, userId))),
       );
       await db.batch(
         statements as [
@@ -323,14 +311,26 @@ export const yearsRouter = {
         cardRows,
         reviewRows,
       ] = await Promise.all([
-        db.select({ id: subjects.id }).from(subjects).where(eq(subjects.yearId, input.yearId)),
-        db.select({ id: grades.id }).from(grades).where(eq(grades.yearId, input.yearId)),
-        db.select({ id: periods.id }).from(periods).where(eq(periods.yearId, input.yearId)),
+        db
+          .select({ id: subjects.id })
+          .from(subjects)
+          .where(eq(subjects.yearId, input.yearId)),
+        db
+          .select({ id: grades.id })
+          .from(grades)
+          .where(eq(grades.yearId, input.yearId)),
+        db
+          .select({ id: periods.id })
+          .from(periods)
+          .where(eq(periods.yearId, input.yearId)),
         db
           .select({ id: customAverages.id })
           .from(customAverages)
           .where(eq(customAverages.yearId, input.yearId)),
-        db.select({ id: goals.id }).from(goals).where(eq(goals.yearId, input.yearId)),
+        db
+          .select({ id: goals.id })
+          .from(goals)
+          .where(eq(goals.yearId, input.yearId)),
         db
           .select({ id: dashboardCards.id })
           .from(dashboardCards)

@@ -375,6 +375,8 @@ export interface GroupFigureScope {
   kind: "general" | "subject" | "median" | "passRate" | "goalProgress";
   /** Only for subject scopes; matches the member's subjects by name. */
   subjectName: string | null;
+  /** Stable subject identity for configured classes. */
+  subjectKey: string | null;
 }
 
 export interface GroupFigureOptions {
@@ -404,10 +406,14 @@ export interface GroupFigures {
  */
 export async function groupFigures(
   ownerUserId: string,
+  yearId: string,
   options: GroupFigureOptions,
 ): Promise<GroupFigures | null> {
-  const profile = await ensureProfile(ownerUserId);
-  const year = await resolveSharedYear(ownerUserId, profile.sharedYearId);
+  const [year] = await db
+    .select()
+    .from(years)
+    .where(and(eq(years.id, yearId), eq(years.userId, ownerUserId)))
+    .limit(1);
   if (!year) return null;
   const [subjectRows, gradeRows] = await Promise.all([
     db
@@ -420,6 +426,7 @@ export async function groupFigures(
         kind: subjects.kind,
         isMain: subjects.isMain,
         sortOrder: subjects.sortOrder,
+        presetNodeKey: subjects.presetNodeKey,
       })
       .from(subjects)
       .where(
@@ -468,10 +475,28 @@ export async function groupFigures(
     );
   };
 
-  // A compared scope: everything, or the sub-trees whose name matches.
-  // Matching by name is what lets a class group compare "Maths" even though
-  // every member spells and nests their own tree differently.
-  const scope = (graph: SubjectGraph, subjectName: string | null) => {
+  // Configured classes use stable template keys. Name matching survives only
+  // for preserved legacy comparison rows.
+  const scope = (
+    graph: SubjectGraph,
+    subjectKey: string | null,
+    subjectName: string | null,
+  ) => {
+    if (subjectKey) {
+      const matched = subjectRows.find(
+        (subject) =>
+          subject.presetNodeKey === subjectKey ||
+          (subjectKey.startsWith("class-subject:") &&
+            subject.id === subjectKey.slice("class-subject:".length)),
+      );
+      if (!matched) return graph.subset(new Set());
+      return graph.subset(
+        new Set([
+          matched.id,
+          ...graph.descendantsOf(matched.id).map((subject) => subject.id),
+        ]),
+      );
+    }
     const needle = subjectName?.trim().toLowerCase();
     if (!needle) return graph;
     const include = new Set<string>();
@@ -529,7 +554,7 @@ export async function groupFigures(
       case "general":
         return graph.ratio(null);
       case "subject":
-        return scope(graph, entry.subjectName).ratio(null);
+        return scope(graph, entry.subjectKey, entry.subjectName).ratio(null);
       case "median":
         return median(validRatios(rows));
       case "passRate":
@@ -567,7 +592,8 @@ export async function groupFigures(
       average,
       gradeCount: options.includeGradeCount
         ? entry.kind === "subject"
-          ? scope(current, entry.subjectName).allGrades().length
+          ? scope(current, entry.subjectKey, entry.subjectName).allGrades()
+              .length
           : gradeRows.length
         : null,
       trend,

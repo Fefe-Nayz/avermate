@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
+import { createWidgetDefinition } from "@avermate/core";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -161,6 +162,19 @@ function toolNames(result: JsonObject | undefined): string[] {
         : "",
     )
     .filter(Boolean);
+}
+
+function toolDefinition(
+  result: JsonObject | undefined,
+  name: string,
+): JsonObject | null {
+  const tools = result?.tools;
+  if (!Array.isArray(tools)) return null;
+  const found = tools.find(
+    (tool) =>
+      tool && typeof tool === "object" && "name" in tool && tool.name === name,
+  );
+  return found && typeof found === "object" ? (found as JsonObject) : null;
 }
 
 function cookieJar() {
@@ -433,6 +447,37 @@ describe("MCP authorization, scopes and ownership", () => {
     );
     expect(toolNames(admin.json.result)).toContain("admin.overview");
     expect(toolNames(admin.json.result)).toContain("admin.presets");
+
+    const createAverage = JSON.stringify(
+      toolDefinition(write.json.result, "averages.create")?.inputSchema,
+    );
+    const updateAverage = JSON.stringify(
+      toolDefinition(write.json.result, "averages.update")?.inputSchema,
+    );
+    expect(createAverage).toContain("addDashboardCard");
+    expect(createAverage).not.toContain("isMain");
+    expect(updateAverage).not.toContain("addDashboardCard");
+    expect(updateAverage).not.toContain("isMain");
+
+    const cardsList = JSON.stringify(
+      toolDefinition(read.json.result, "cards.list")?.inputSchema,
+    );
+    const cardsCreate = JSON.stringify(
+      toolDefinition(write.json.result, "cards.create")?.inputSchema,
+    );
+    const cardsUpdate = JSON.stringify(
+      toolDefinition(write.json.result, "cards.update")?.inputSchema,
+    );
+    const cardsReset = JSON.stringify(
+      toolDefinition(destructive.json.result, "cards.reset")?.inputSchema,
+    );
+    expect(cardsList).toContain("insights");
+    expect(cardsCreate).toContain("insights");
+    expect(cardsCreate).toContain("definitionVersion");
+    expect(cardsCreate).toContain("definitionJson");
+    expect(cardsUpdate).toContain("definitionVersion");
+    expect(cardsUpdate).toContain("visualization");
+    expect(cardsReset).toContain("insights");
   });
 
   test("cannot invoke an unregistered mutation through a read-only handler", async () => {
@@ -453,6 +498,74 @@ describe("MCP authorization, scopes and ownership", () => {
     expect(await database.select().from(schema.years)).toHaveLength(
       before.length,
     );
+  });
+
+  test("round-trips canonical analytical widgets through MCP", async () => {
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read", "avermate:write"]),
+    );
+    const definition = createWidgetDefinition("insights");
+    definition.query.scope = {
+      kind: "subjects",
+      subjectIds: ["subject-owned"],
+      includeDescendants: true,
+    };
+    const createdResponse = await callMcp(handler, "tools/call", {
+      name: "cards.create",
+      arguments: {
+        yearId: "year-owned",
+        surface: "insights",
+        definitionVersion: 1,
+        definitionJson: definition,
+        title: "MCP analytical widget",
+      },
+    });
+    expect(createdResponse.json.result?.isError).not.toBe(true);
+
+    const [created] = await database
+      .select()
+      .from(schema.dashboardCards)
+      .where(eq(schema.dashboardCards.title, "MCP analytical widget"));
+    expect(created).toMatchObject({
+      surface: "insights",
+      targetKind: "subject",
+      targetId: "subject-owned",
+      definitionVersion: 1,
+    });
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCardReferences)
+        .where(eq(schema.dashboardCardReferences.cardId, created?.id ?? "")),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "subject",
+        referenceId: "subject-owned",
+      }),
+    ]);
+
+    const updatedResponse = await callMcp(handler, "tools/call", {
+      name: "cards.update",
+      arguments: {
+        cardId: created?.id,
+        title: "MCP analytical widget renamed",
+      },
+    });
+    expect(updatedResponse.json.result?.isError).not.toBe(true);
+    const listedResponse = await callMcp(handler, "tools/call", {
+      name: "cards.list",
+      arguments: { yearId: "year-owned", surface: "insights" },
+    });
+    expect(JSON.stringify(listedResponse.json.result)).toContain(
+      '"definitionVersion":1',
+    );
+    expect(JSON.stringify(listedResponse.json.result)).toContain(
+      "MCP analytical widget renamed",
+    );
+
+    await database
+      .delete(schema.dashboardCards)
+      .where(eq(schema.dashboardCards.id, created?.id ?? ""));
   });
 
   test("keeps preset targeting when MCP applies an unrelated partial patch", async () => {

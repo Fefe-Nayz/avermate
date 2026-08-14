@@ -1,7 +1,20 @@
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
+import { WIDGET_DEFINITION_VERSION } from "@avermate/core";
 import { db } from "../db";
-import { grades, subjects } from "../db/schema";
+import {
+  dashboardCardReferences,
+  dashboardCards,
+  grades,
+  subjects,
+} from "../db/schema";
+import {
+  cardSurfaceSchema,
+  compileStoredWidgetDefinition,
+  ownedWidgetReferenceSets,
+  widgetReferenceReplacementStatements,
+  widgetSemanticColumns,
+} from "../lib/card-storage";
 import { assertSameYear, collectDescendantIds } from "../lib/domain-integrity";
 import { newId } from "../lib/id";
 import { badRequest, protectedProcedure } from "../lib/orpc";
@@ -57,6 +70,112 @@ async function nextSortOrder(yearId: string, parentId: string | null) {
         : eq(subjects.yearId, yearId),
     );
   return siblings.reduce((max, row) => Math.max(max, row.sortOrder + 1), 0);
+}
+
+async function subjectReferencedCards(
+  userId: string,
+  yearId: string,
+  subjectIds: readonly string[],
+) {
+  const rows = await db
+    .select({
+      id: dashboardCards.id,
+      surface: dashboardCards.surface,
+      definitionVersion: dashboardCards.definitionVersion,
+      definitionJson: dashboardCards.definitionJson,
+    })
+    .from(dashboardCardReferences)
+    .innerJoin(
+      dashboardCards,
+      eq(dashboardCards.id, dashboardCardReferences.cardId),
+    )
+    .where(
+      and(
+        eq(dashboardCardReferences.kind, "subject"),
+        inArray(dashboardCardReferences.referenceId, [...subjectIds]),
+        eq(dashboardCards.userId, userId),
+        eq(dashboardCards.yearId, yearId),
+      ),
+    );
+
+  return [...new Map(rows.map((row) => [row.id, row])).values()];
+}
+
+/**
+ * Preserve V1 multi-subject widgets by removing only the deleted subjects.
+ * Legacy and now-empty widgets cannot express a useful remaining scope, so
+ * they are removed before the subject trigger runs.
+ */
+async function subjectWidgetDeleteStatements(
+  userId: string,
+  yearId: string,
+  subjectIds: readonly string[],
+) {
+  const deletedSubjectIds = new Set(subjectIds);
+  const cards = await subjectReferencedCards(userId, yearId, subjectIds);
+  if (cards.length === 0) return [];
+
+  const references = await ownedWidgetReferenceSets(userId, yearId, {
+    subjectIds: deletedSubjectIds,
+  });
+  const statements = [];
+
+  for (const card of cards) {
+    const definition = card.definitionJson;
+    const scope = definition?.query.scope;
+    const isPrunableV1 =
+      card.definitionVersion === WIDGET_DEFINITION_VERSION &&
+      definition &&
+      scope?.kind === "subjects";
+    const remainingSubjectIds = isPrunableV1
+      ? scope.subjectIds.filter(
+          (subjectId) => !deletedSubjectIds.has(subjectId),
+        )
+      : [];
+
+    if (!isPrunableV1 || remainingSubjectIds.length === 0) {
+      statements.push(
+        db
+          .delete(dashboardCards)
+          .where(
+            and(
+              eq(dashboardCards.id, card.id),
+              eq(dashboardCards.userId, userId),
+            ),
+          ),
+      );
+      continue;
+    }
+
+    const nextDefinition = compileStoredWidgetDefinition(
+      cardSurfaceSchema.parse(card.surface),
+      {
+        ...definition,
+        query: {
+          ...definition.query,
+          scope: { ...scope, subjectIds: remainingSubjectIds },
+        },
+      },
+      references,
+    );
+    statements.push(
+      db
+        .update(dashboardCards)
+        .set({
+          ...widgetSemanticColumns(nextDefinition),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(dashboardCards.id, card.id),
+            eq(dashboardCards.userId, userId),
+          ),
+        ),
+      ...widgetReferenceReplacementStatements(card.id, nextDefinition),
+    );
+  }
+
+  return statements;
 }
 
 export const subjectsRouter = {
@@ -248,7 +367,12 @@ export const subjectsRouter = {
       const subject = await requireSubject(userId, input.subjectId);
 
       if (input.promoteChildren) {
-        await db.batch([
+        const widgetStatements = await subjectWidgetDeleteStatements(
+          userId,
+          subject.yearId,
+          [subject.id],
+        );
+        const statements = [
           db
             .update(subjects)
             .set({ parentId: subject.parentId, updatedAt: new Date() })
@@ -258,9 +382,20 @@ export const subjectsRouter = {
                 eq(subjects.userId, userId),
               ),
             ),
-          db.delete(subjects).where(eq(subjects.id, subject.id)),
+          ...widgetStatements,
+          db
+            .delete(subjects)
+            .where(
+              and(eq(subjects.id, subject.id), eq(subjects.userId, userId)),
+            ),
           detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
-        ]);
+        ];
+        await db.batch(
+          statements as [
+            (typeof statements)[number],
+            ...(typeof statements)[number][],
+          ],
+        );
       } else {
         const rows = await db
           .select({ id: subjects.id, parentId: subjects.parentId })
@@ -272,14 +407,26 @@ export const subjectsRouter = {
             ),
           );
         const subtree = [subject.id, ...collectDescendantIds(rows, subject.id)];
-        await db.batch([
+        const widgetStatements = await subjectWidgetDeleteStatements(
+          userId,
+          subject.yearId,
+          subtree,
+        );
+        const statements = [
+          ...widgetStatements,
           db
             .delete(subjects)
             .where(
               and(inArray(subjects.id, subtree), eq(subjects.userId, userId)),
             ),
           detachYearPresetStatement(userId, subject.yearId, "subject_deleted"),
-        ]);
+        ];
+        await db.batch(
+          statements as [
+            (typeof statements)[number],
+            ...(typeof statements)[number][],
+          ],
+        );
         return { ok: true, deleted: subtree.length };
       }
       return { ok: true, deleted: 1 };
@@ -309,6 +456,15 @@ export const subjectsRouter = {
           ),
         );
 
-      return { descendants: descendants.length, grades: affected.length };
+      const widgets = await subjectReferencedCards(userId, subject.yearId, [
+        subject.id,
+        ...descendants,
+      ]);
+
+      return {
+        descendants: descendants.length,
+        grades: affected.length,
+        widgets: widgets.length,
+      };
     }),
 };

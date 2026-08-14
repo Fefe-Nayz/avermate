@@ -1,10 +1,10 @@
-import { defaultCards } from "@avermate/core";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import {
   customAverageEntries,
   customAverages,
+  dashboardCardReferences,
   dashboardCards,
   grades,
   goals,
@@ -23,6 +23,14 @@ import {
   serializePresetConfiguration,
 } from "../data/managed-presets";
 import type { ManagedPresetConfiguration } from "../data/preset-types";
+import {
+  academicCardRows,
+  academicYearInput,
+  assertAcademicYearRange,
+  PERIOD_TEMPLATES,
+  periodRowsFor,
+  periodTemplateIds,
+} from "../lib/academic-setup";
 import { newId } from "../lib/id";
 import {
   adminProcedure,
@@ -44,58 +52,8 @@ import {
 } from "../lib/preset-membership";
 import { requireYear } from "../lib/ownership";
 
-/** Period templates remain independent from curriculum preset versioning. */
-export const PERIOD_TEMPLATES = [
-  {
-    id: "trimesters",
-    periods: [
-      { key: "trimester1", from: 0, to: 1 / 3 },
-      { key: "trimester2", from: 1 / 3, to: 2 / 3 },
-      { key: "trimester3", from: 2 / 3, to: 1 },
-    ],
-  },
-  {
-    id: "semesters",
-    periods: [
-      { key: "semester1", from: 0, to: 0.5 },
-      { key: "semester2", from: 0.5, to: 1 },
-    ],
-  },
-  {
-    id: "semesters-cumulative",
-    periods: [
-      { key: "semester1", from: 0, to: 0.5 },
-      { key: "semester2", from: 0.5, to: 1, isCumulative: true },
-    ],
-  },
-  {
-    id: "quarters",
-    periods: [
-      { key: "quarter1", from: 0, to: 0.25 },
-      { key: "quarter2", from: 0.25, to: 0.5 },
-      { key: "quarter3", from: 0.5, to: 0.75 },
-      { key: "quarter4", from: 0.75, to: 1 },
-    ],
-  },
-  { id: "none", periods: [] },
-] as const;
-
-export type PeriodTemplateId = (typeof PERIOD_TEMPLATES)[number]["id"];
-
-const periodTemplateIds = PERIOD_TEMPLATES.map((template) => template.id) as [
-  PeriodTemplateId,
-  ...PeriodTemplateId[],
-];
-
-const yearInput = z.object({
-  name: z.string().trim().min(1).max(64),
-  startsAt: z.coerce.date(),
-  endsAt: z.coerce.date(),
-  scale: z.number().positive().max(1000).default(20),
-  defaultOutOf: z.number().positive().max(1000).default(20),
-  passingRatio: z.number().min(0).max(1).default(0.5),
-  decimals: z.number().int().min(0).max(4).default(2),
-});
+export { PERIOD_TEMPLATES } from "../lib/academic-setup";
+export type { PeriodTemplateId } from "../lib/academic-setup";
 
 const presetMetadataInput = z.object({
   name: z.string().trim().min(1).max(96),
@@ -103,16 +61,6 @@ const presetMetadataInput = z.object({
   tags: z.array(z.string().trim().min(1).max(32)).max(20).default([]),
   featured: z.boolean().default(false),
 });
-
-function at(from: Date, to: Date, fraction: number): Date {
-  return new Date(from.getTime() + (to.getTime() - from.getTime()) * fraction);
-}
-
-function assertYearRange(startsAt: Date, endsAt: Date) {
-  if (endsAt.getTime() <= startsAt.getTime()) {
-    badRequest("The year must end after it starts");
-  }
-}
 
 function parseTags(value: string): string[] {
   try {
@@ -131,45 +79,6 @@ function subjectCount(configuration: ManagedPresetConfiguration): number {
       count + 1 + subjectCount({ subjects: subject.children, averages: [] }),
     0,
   );
-}
-
-function periodRowsFor(
-  templateId: PeriodTemplateId,
-  names: readonly string[],
-  year: { id: string; startsAt: Date; endsAt: Date },
-  userId: string,
-) {
-  const template = PERIOD_TEMPLATES.find(
-    (candidate) => candidate.id === templateId,
-  );
-  if (!template) notFound("Period template");
-  return template.periods.map((period, index) => ({
-    name: names[index] ?? `Period ${index + 1}`,
-    startAt: at(year.startsAt, year.endsAt, period.from),
-    endAt: at(year.startsAt, year.endsAt, period.to),
-    isCumulative: "isCumulative" in period ? period.isCumulative : false,
-    sortOrder: index,
-    yearId: year.id,
-    userId,
-  }));
-}
-
-function cardRowsFor(userId: string, yearId: string) {
-  return defaultCards().map((card) => ({
-    surface: "overview",
-    metric: card.metric,
-    targetKind: card.target.kind,
-    targetId: card.target.referenceId,
-    goalId: null,
-    display: card.display,
-    span: card.span,
-    title: card.title,
-    accent: card.accent,
-    sortOrder: card.sortOrder,
-    hidden: card.hidden,
-    yearId,
-    userId,
-  }));
 }
 
 async function currentPresetConfiguration(presetId: string) {
@@ -237,15 +146,27 @@ async function presetReplacementPlan(
   );
   const oldSubjectIds = new Set(existingSubjectRows.map((row) => row.id));
   const oldAverageIds = new Set(existingAverageRows.map((row) => row.id));
-  const [yearGoals, yearCards] = hasConfiguration
+  const [yearGoals, yearCards, yearCardReferences] = hasConfiguration
     ? await Promise.all([
         db.select().from(goals).where(eq(goals.yearId, year.id)),
         db
           .select()
           .from(dashboardCards)
           .where(eq(dashboardCards.yearId, year.id)),
+        db
+          .select({
+            cardId: dashboardCardReferences.cardId,
+            kind: dashboardCardReferences.kind,
+            referenceId: dashboardCardReferences.referenceId,
+          })
+          .from(dashboardCardReferences)
+          .innerJoin(
+            dashboardCards,
+            eq(dashboardCards.id, dashboardCardReferences.cardId),
+          )
+          .where(eq(dashboardCards.yearId, year.id)),
       ])
-    : [[], []];
+    : [[], [], []];
   const targetWouldDisappear = (
     kind: string,
     referenceId: string | null,
@@ -270,7 +191,18 @@ async function presetReplacementPlan(
         targetId: goal.referenceId,
       })),
     ...yearCards
-      .filter((card) => targetWouldDisappear(card.targetKind, card.targetId))
+      .filter(
+        (card) =>
+          targetWouldDisappear(card.targetKind, card.targetId) ||
+          yearCardReferences.some(
+            (reference) =>
+              reference.cardId === card.id &&
+              targetWouldDisappear(
+                reference.kind === "custom-average" ? "custom" : reference.kind,
+                reference.referenceId,
+              ),
+          ),
+      )
       .map((card) => ({
         resource: "dashboard_card" as const,
         id: card.id,
@@ -298,7 +230,13 @@ async function applyManagedPreset(
   const year = await requireYear(userId, yearId);
   const preset = await currentPresetConfiguration(presetId);
   const plan = await presetReplacementPlan(userId, year, preset);
-  const { hasConfiguration, materialized, referenceBlockers } = plan;
+  const {
+    existingSubjectRows,
+    existingAverageRows,
+    hasConfiguration,
+    materialized,
+    referenceBlockers,
+  } = plan;
   if (hasConfiguration && !replaceExisting) {
     badRequest(
       "This year already has a configuration; preview and explicitly reapply the preset instead",
@@ -312,17 +250,85 @@ async function applyManagedPreset(
       "This preset replacement would invalidate goals or dashboard cards; retarget them before continuing",
     );
   }
-  const statements = [
-    ...(hasConfiguration
+  const existingSubjectIds = new Set(existingSubjectRows.map((row) => row.id));
+  const existingAverageIds = new Set(existingAverageRows.map((row) => row.id));
+  const nextSubjectIds = new Set(
+    materialized.subjectRows.map((row) => row.id as string),
+  );
+  const nextAverageIds = new Set(
+    materialized.averageRows.map((row) => row.id as string),
+  );
+  const removedSubjectIds = [...existingSubjectIds].filter(
+    (id) => !nextSubjectIds.has(id),
+  );
+  const removedAverageIds = [...existingAverageIds].filter(
+    (id) => !nextAverageIds.has(id),
+  );
+  const removeObsolete = [
+    ...(removedAverageIds.length > 0
       ? [
-          db.delete(customAverages).where(eq(customAverages.yearId, yearId)),
-          db.delete(subjects).where(eq(subjects.yearId, yearId)),
+          db
+            .delete(customAverages)
+            .where(inArray(customAverages.id, removedAverageIds)),
         ]
       : []),
-    db.insert(subjects).values(materialized.subjectRows),
-    ...(materialized.averageRows.length > 0
-      ? [db.insert(customAverages).values(materialized.averageRows)]
+    ...(removedSubjectIds.length > 0
+      ? [db.delete(subjects).where(inArray(subjects.id, removedSubjectIds))]
       : []),
+  ];
+  const writeSubjects = materialized.subjectRows.map((row) =>
+    existingSubjectIds.has(row.id as string)
+      ? db
+          .update(subjects)
+          .set({
+            name: row.name,
+            shortName: row.shortName,
+            parentId: row.parentId,
+            coefficient: row.coefficient,
+            kind: row.kind,
+            isMain: row.isMain,
+            sortOrder: row.sortOrder,
+            presetNodeKey: row.presetNodeKey,
+            updatedAt: new Date(),
+          })
+          .where(eq(subjects.id, row.id as string))
+      : db.insert(subjects).values(row),
+  );
+  const writeAverages = materialized.averageRows.map((row) =>
+    existingAverageIds.has(row.id as string)
+      ? db
+          .update(customAverages)
+          .set({
+            name: row.name,
+            isMain: row.isMain,
+            sortOrder: row.sortOrder,
+            presetNodeKey: row.presetNodeKey,
+            updatedAt: new Date(),
+          })
+          .where(eq(customAverages.id, row.id as string))
+      : db.insert(customAverages).values(row),
+  );
+  const preservesStableIds =
+    materialized.subjectRows.some((row) =>
+      existingSubjectIds.has(row.id as string),
+    ) ||
+    materialized.averageRows.some((row) =>
+      existingAverageIds.has(row.id as string),
+    );
+  const statements = [
+    ...(existingAverageIds.size > 0
+      ? [
+          db
+            .delete(customAverageEntries)
+            .where(
+              inArray(customAverageEntries.averageId, [...existingAverageIds]),
+            ),
+        ]
+      : []),
+    ...(!preservesStableIds ? removeObsolete : []),
+    ...writeSubjects,
+    ...writeAverages,
+    ...(preservesStableIds ? removeObsolete : []),
     ...(materialized.entryRows.length > 0
       ? [db.insert(customAverageEntries).values(materialized.entryRows)]
       : []),
@@ -563,7 +569,7 @@ export const presetsRouter = {
     .input(
       z.object({
         idempotencyKey: z.string().trim().min(8).max(128),
-        year: yearInput,
+        year: academicYearInput,
         presetId: z.string().nullable().default(null),
         periodTemplateId: z.enum(periodTemplateIds).default("trimesters"),
         periodNames: z
@@ -574,7 +580,7 @@ export const presetsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      assertYearRange(input.year.startsAt, input.year.endsAt);
+      assertAcademicYearRange(input.year.startsAt, input.year.endsAt);
       const inputHash = hashPresetSetupInput(input);
       const [existing] = await db
         .select()
@@ -617,7 +623,7 @@ export const presetsRouter = {
           presetId: preset?.definition.id ?? null,
           userId,
         }),
-        db.insert(dashboardCards).values(cardRowsFor(userId, yearId)),
+        db.insert(dashboardCards).values(academicCardRows(userId, yearId)),
         ...(periodRows.length > 0
           ? [db.insert(periods).values(periodRows)]
           : []),

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 import { createRouterClient } from "@orpc/server";
+import { createWidgetDefinition } from "@avermate/core";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -309,9 +310,7 @@ describe("router year invariants", () => {
     ).rejects.toThrow("must stay within the academic year");
 
     const unchanged = await api.years.get({ yearId: year?.id ?? "" });
-    expect(unchanged.startsAt).toEqual(
-      new Date("2038-09-01T00:00:00.000Z"),
-    );
+    expect(unchanged.startsAt).toEqual(new Date("2038-09-01T00:00:00.000Z"));
   });
 
   test("rejects cross-year grade, hierarchy, average, goal and card references", async () => {
@@ -530,6 +529,602 @@ describe("router year invariants", () => {
     const cards = await api.cards.list({ yearId: "year-a" });
     expect(new Set(cards.map((card) => card.sortOrder)).size).toBe(
       cards.length,
+    );
+  });
+
+  test("keeps the insights layout isolated and restores explicit recommendations", async () => {
+    const first = await api.cards.create({
+      yearId: "year-a",
+      surface: "insights",
+      metric: "average",
+    });
+    const second = await api.cards.create({
+      yearId: "year-a",
+      surface: "insights",
+      metric: "gradeCount",
+    });
+
+    const insights = await api.cards.list({
+      yearId: "year-a",
+      surface: "insights",
+    });
+    expect(insights.map((card) => card.id)).toEqual([first?.id, second?.id]);
+    expect(
+      (await api.cards.list({ yearId: "year-a", surface: "overview" })).some(
+        (card) => card.id === first?.id || card.id === second?.id,
+      ),
+    ).toBe(false);
+
+    await api.cards.reorder({ cardIds: [second?.id ?? "", first?.id ?? ""] });
+    expect(
+      (await api.cards.list({ yearId: "year-a", surface: "insights" })).map(
+        (card) => card.id,
+      ),
+    ).toEqual([second?.id, first?.id]);
+
+    const recommended = await api.cards.reset({
+      yearId: "year-a",
+      surface: "insights",
+    });
+    expect(recommended).toHaveLength(4);
+    expect(recommended.map((card) => card.metric)).toEqual([
+      "average",
+      "distribution",
+      "mostImproved",
+      "consistency",
+    ]);
+    expect(recommended.every((card) => card.definitionVersion === 1)).toBe(
+      true,
+    );
+
+    for (const card of recommended) {
+      await api.cards.delete({ cardId: card.id });
+    }
+    expect(
+      await api.cards.list({ yearId: "year-a", surface: "insights" }),
+    ).toEqual([]);
+  });
+
+  test("canonicalizes V1 widgets, projects legacy columns and rejects forged references", async () => {
+    const definition = createWidgetDefinition("insights");
+    definition.query.scope = {
+      kind: "subjects",
+      subjectIds: ["subject-a", "subject-a"],
+      includeDescendants: true,
+    };
+    definition.query.window = { kind: "period", periodId: "period-a" };
+    definition.visualization.mark = "bar";
+    definition.visualization.options = {
+      kind: "bar",
+      orientation: "horizontal",
+      stacked: false,
+      cornerRadius: 3,
+    };
+
+    const created = await api.cards.create({
+      yearId: "year-a",
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: definition,
+      span: 3,
+      title: "Owned widget",
+    });
+    expect(created).toMatchObject({
+      surface: "insights",
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-a",
+      display: "chart",
+      span: 3,
+      title: "Owned widget",
+      definitionVersion: 1,
+      definitionJson: {
+        apiVersion: 1,
+        query: {
+          scope: { kind: "subjects", subjectIds: ["subject-a"] },
+          window: { kind: "period", periodId: "period-a" },
+        },
+      },
+    });
+    expect((await api.snapshot.get({ yearId: "year-a" })).cards).toContainEqual(
+      expect.objectContaining({
+        id: created?.id,
+        definitionVersion: 1,
+        definitionJson: expect.objectContaining({ apiVersion: 1 }),
+      }),
+    );
+
+    const foreign = createWidgetDefinition("insights");
+    foreign.query.scope = {
+      kind: "subjects",
+      subjectIds: ["subject-b"],
+      includeDescendants: false,
+    };
+    foreign.query.window = { kind: "period", periodId: "period-b" };
+    await expect(
+      api.cards.create({
+        yearId: "year-a",
+        surface: "insights",
+        definitionVersion: 1,
+        definitionJson: foreign,
+      }),
+    ).rejects.toThrow("Invalid widget definition");
+
+    await expect(
+      api.cards.create({
+        yearId: "year-a",
+        surface: "insights",
+        definitionVersion: 1,
+        definitionJson: definition,
+        metric: "average",
+      } as never),
+    ).rejects.toThrow();
+  });
+
+  test("keeps legacy writes lossless and protects V1 formulas", async () => {
+    const legacy = await api.cards.create({
+      yearId: "year-a",
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-a",
+      display: "sparkline",
+    });
+    expect(legacy).toMatchObject({
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-a",
+      display: "sparkline",
+      definitionVersion: null,
+      definitionJson: null,
+    });
+    const renamed = await api.cards.update({
+      cardId: legacy?.id ?? "",
+      title: "Renamed without rewriting semantics",
+    });
+    expect(renamed).toMatchObject({
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-a",
+      span: 1,
+      title: "Renamed without rewriting semantics",
+      display: "sparkline",
+      definitionVersion: null,
+      definitionJson: null,
+    });
+    const legacySemanticUpdate = await api.cards.update({
+      cardId: legacy?.id ?? "",
+      display: "chart",
+    });
+    expect(legacySemanticUpdate).toMatchObject({
+      display: "chart",
+      definitionVersion: null,
+      definitionJson: null,
+    });
+
+    const formula = createWidgetDefinition("insights");
+    formula.analysis.measure = {
+      kind: "formula",
+      formula: {
+        kind: "binary",
+        operation: "multiply",
+        left: { kind: "aggregate", operation: "mean", field: "ratio" },
+        right: { kind: "literal", value: 100 },
+      },
+      valueType: "percent",
+    };
+    const formulaCard = await api.cards.create({
+      yearId: "year-a",
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: formula,
+    });
+    expect(formulaCard).toMatchObject({
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: {
+        analysis: { measure: { kind: "formula", valueType: "percent" } },
+      },
+    });
+
+    await expect(
+      api.cards.update({
+        cardId: formulaCard?.id ?? "",
+        display: "value",
+      }),
+    ).rejects.toThrow(
+      "A legacy semantic update cannot modify a V1 widget definition",
+    );
+    expect(
+      await api.cards.list({ yearId: "year-a", surface: "insights" }),
+    ).toContainEqual(
+      expect.objectContaining({
+        id: formulaCard?.id,
+        definitionVersion: 1,
+        definitionJson: expect.objectContaining({
+          analysis: expect.objectContaining({
+            measure: expect.objectContaining({ kind: "formula" }),
+          }),
+        }),
+      }),
+    );
+
+    await expect(
+      api.cards.update({ cardId: formulaCard?.id ?? "", surface: "overview" }),
+    ).rejects.toThrow("A card cannot change surface through an update");
+    const unchanged = await api.cards.list({
+      yearId: "year-a",
+      surface: "insights",
+    });
+    expect(unchanged.some((card) => card.id === formulaCard?.id)).toBe(true);
+  });
+
+  test("keeps presentation-only updates lossless for migrated legacy cards", async () => {
+    await database.insert(schema.dashboardCards).values({
+      id: "legacy-card-presentation",
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-a",
+      display: "sparkline",
+      span: 1,
+      yearId: "year-a",
+      userId: "user-a",
+      definitionVersion: null,
+      definitionJson: null,
+    });
+
+    const updated = await api.cards.update({
+      cardId: "legacy-card-presentation",
+      hidden: true,
+      span: 2,
+    });
+
+    expect(updated).toMatchObject({
+      display: "sparkline",
+      hidden: true,
+      span: 2,
+      definitionVersion: null,
+      definitionJson: null,
+    });
+  });
+
+  test("keeps derived widget references current and cascades every reference kind", async () => {
+    const yearId = "year-widget-references";
+    await database.insert(schema.years).values({
+      id: yearId,
+      name: "Widget references",
+      startsAt: new Date("2027-09-01T00:00:00.000Z"),
+      endsAt: new Date("2028-07-01T00:00:00.000Z"),
+      userId: "user-a",
+    });
+    await database.insert(schema.subjects).values(
+      ["one", "two", "three"].map((suffix, sortOrder) => ({
+        id: `subject-ref-${suffix}`,
+        name: `Reference ${suffix}`,
+        sortOrder,
+        yearId,
+        userId: "user-a",
+      })),
+    );
+    await database.insert(schema.periods).values([
+      {
+        id: "period-ref-one",
+        name: "Reference period one",
+        startAt: new Date("2027-09-01T00:00:00.000Z"),
+        endAt: new Date("2028-01-01T00:00:00.000Z"),
+        yearId,
+        userId: "user-a",
+      },
+      {
+        id: "period-ref-two",
+        name: "Reference period two",
+        startAt: new Date("2028-01-02T00:00:00.000Z"),
+        endAt: new Date("2028-07-01T00:00:00.000Z"),
+        sortOrder: 1,
+        yearId,
+        userId: "user-a",
+      },
+    ]);
+    await database.insert(schema.customAverages).values({
+      id: "average-ref-one",
+      name: "Reference average",
+      yearId,
+      userId: "user-a",
+    });
+    await database.insert(schema.goals).values({
+      id: "goal-ref-one",
+      name: "Reference goal",
+      targetRatio: 0.75,
+      yearId,
+      userId: "user-a",
+    });
+
+    const multiSubject = createWidgetDefinition("insights");
+    multiSubject.query.scope = {
+      kind: "subjects",
+      subjectIds: ["subject-ref-one", "subject-ref-two"],
+      includeDescendants: false,
+    };
+    multiSubject.query.window = {
+      kind: "period",
+      periodId: "period-ref-one",
+    };
+    const multiCard = await api.cards.create({
+      yearId,
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: multiSubject,
+    });
+    expect(
+      await database
+        .select({
+          kind: schema.dashboardCardReferences.kind,
+          referenceId: schema.dashboardCardReferences.referenceId,
+        })
+        .from(schema.dashboardCardReferences)
+        .where(eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? "")),
+    ).toEqual(
+      expect.arrayContaining([
+        { kind: "subject", referenceId: "subject-ref-one" },
+        { kind: "subject", referenceId: "subject-ref-two" },
+        { kind: "period", referenceId: "period-ref-one" },
+      ]),
+    );
+
+    multiSubject.query.scope.subjectIds = [
+      "subject-ref-one",
+      "subject-ref-three",
+    ];
+    multiSubject.query.window = { kind: "whole-year" };
+    await database.$client.executeMultiple(`
+      CREATE TRIGGER reject_test_widget_reference
+      BEFORE INSERT ON dashboard_card_references
+      WHEN NEW.referenceId = 'subject-ref-three'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced widget reference failure');
+      END;
+    `);
+    try {
+      await expect(
+        api.cards.update({
+          cardId: multiCard?.id ?? "",
+          definitionVersion: 1,
+          definitionJson: multiSubject,
+        }),
+      ).rejects.toThrow("forced widget reference failure");
+    } finally {
+      await database.$client.executeMultiple(
+        "DROP TRIGGER IF EXISTS reject_test_widget_reference;",
+      );
+    }
+    expect(
+      (
+        await database
+          .select({ referenceId: schema.dashboardCardReferences.referenceId })
+          .from(schema.dashboardCardReferences)
+          .where(eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? ""))
+      )
+        .map((row) => row.referenceId)
+        .sort(),
+    ).toEqual(["period-ref-one", "subject-ref-one", "subject-ref-two"]);
+    expect(
+      (await api.cards.list({ yearId, surface: "insights" })).find(
+        (card) => card.id === multiCard?.id,
+      )?.definitionJson?.query.window,
+    ).toEqual({ kind: "period", periodId: "period-ref-one" });
+    await api.cards.update({
+      cardId: multiCard?.id ?? "",
+      definitionVersion: 1,
+      definitionJson: multiSubject,
+    });
+    expect(
+      (
+        await database
+          .select({ referenceId: schema.dashboardCardReferences.referenceId })
+          .from(schema.dashboardCardReferences)
+          .where(eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? ""))
+      ).map((row) => row.referenceId),
+    ).toEqual(["subject-ref-one", "subject-ref-three"]);
+    await database
+      .delete(schema.subjects)
+      .where(eq(schema.subjects.id, "subject-ref-two"));
+    expect(
+      await api.cards.list({ yearId, surface: "insights" }),
+    ).toContainEqual(expect.objectContaining({ id: multiCard?.id }));
+    await database
+      .delete(schema.subjects)
+      .where(eq(schema.subjects.id, "subject-ref-three"));
+    expect(
+      await api.cards.list({ yearId, surface: "insights" }),
+    ).not.toContainEqual(expect.objectContaining({ id: multiCard?.id }));
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCardReferences)
+        .where(eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? "")),
+    ).toHaveLength(0);
+
+    const periodDefinition = createWidgetDefinition("insights");
+    periodDefinition.query.window = {
+      kind: "period",
+      periodId: "period-ref-two",
+    };
+    const periodCard = await api.cards.create({
+      yearId,
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: periodDefinition,
+    });
+    await database
+      .delete(schema.periods)
+      .where(eq(schema.periods.id, "period-ref-two"));
+    expect(
+      await api.cards.list({ yearId, surface: "insights" }),
+    ).not.toContainEqual(expect.objectContaining({ id: periodCard?.id }));
+
+    const averageDefinition = createWidgetDefinition("overview");
+    averageDefinition.query.scope = {
+      kind: "custom-average",
+      averageId: "average-ref-one",
+    };
+    const averageCard = await api.cards.create({
+      yearId,
+      definitionVersion: 1,
+      definitionJson: averageDefinition,
+    });
+    await database
+      .delete(schema.customAverages)
+      .where(eq(schema.customAverages.id, "average-ref-one"));
+    expect(await api.cards.list({ yearId })).not.toContainEqual(
+      expect.objectContaining({ id: averageCard?.id }),
+    );
+
+    const goalDefinition = createWidgetDefinition("overview");
+    goalDefinition.analysis.measure = {
+      kind: "metric",
+      metric: "goalProgress",
+      goalId: "goal-ref-one",
+    };
+    goalDefinition.visualization.mark = "gauge";
+    goalDefinition.visualization.options = {
+      kind: "gauge",
+      showValue: true,
+      thickness: 10,
+    };
+    const goalCard = await api.cards.create({
+      yearId,
+      definitionVersion: 1,
+      definitionJson: goalDefinition,
+    });
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCardReferences)
+        .where(
+          and(
+            eq(schema.dashboardCardReferences.cardId, goalCard?.id ?? ""),
+            eq(schema.dashboardCardReferences.kind, "goal"),
+          ),
+        ),
+    ).toHaveLength(1);
+    await database
+      .delete(schema.goals)
+      .where(eq(schema.goals.id, "goal-ref-one"));
+    expect(await api.cards.list({ yearId })).not.toContainEqual(
+      expect.objectContaining({ id: goalCard?.id }),
+    );
+  });
+
+  test("reports affected widgets and prunes V1 multi-subject cards on API deletion", async () => {
+    const yearId = "year-subject-widget-delete";
+    await database.insert(schema.years).values({
+      id: yearId,
+      name: "Subject widget deletion",
+      startsAt: new Date("2029-09-01T00:00:00.000Z"),
+      endsAt: new Date("2030-07-01T00:00:00.000Z"),
+      userId: "user-a",
+    });
+    await database.insert(schema.subjects).values([
+      {
+        id: "subject-widget-removed",
+        name: "Removed subject",
+        yearId,
+        userId: "user-a",
+      },
+      {
+        id: "subject-widget-retained",
+        name: "Retained subject",
+        yearId,
+        userId: "user-a",
+      },
+      {
+        id: "subject-widget-removed-child",
+        name: "Removed child subject",
+        parentId: "subject-widget-removed",
+        yearId,
+        userId: "user-a",
+      },
+    ]);
+
+    const multiDefinition = createWidgetDefinition("insights");
+    multiDefinition.query.scope = {
+      kind: "subjects",
+      subjectIds: [
+        "subject-widget-removed-child",
+        "subject-widget-retained",
+      ],
+      includeDescendants: false,
+    };
+    const multiCard = await api.cards.create({
+      yearId,
+      surface: "insights",
+      definitionVersion: 1,
+      definitionJson: multiDefinition,
+    });
+
+    const singleDefinition = createWidgetDefinition("overview");
+    singleDefinition.query.scope = {
+      kind: "subjects",
+      subjectIds: ["subject-widget-removed"],
+      includeDescendants: false,
+    };
+    const singleCard = await api.cards.create({
+      yearId,
+      definitionVersion: 1,
+      definitionJson: singleDefinition,
+    });
+    const legacyCard = await api.cards.create({
+      yearId,
+      metric: "average",
+      targetKind: "subject",
+      targetId: "subject-widget-removed-child",
+    });
+
+    await expect(
+      api.subjects.impact({ subjectId: "subject-widget-removed" }),
+    ).resolves.toMatchObject({ descendants: 1, grades: 0, widgets: 3 });
+
+    await api.subjects.delete({
+      subjectId: "subject-widget-removed",
+      promoteChildren: false,
+    });
+
+    const retained = (
+      await api.cards.list({ yearId, surface: "insights" })
+    ).find((card) => card.id === multiCard?.id);
+    expect(retained).toMatchObject({
+      id: multiCard?.id,
+      targetKind: "subject",
+      targetId: "subject-widget-retained",
+      definitionVersion: 1,
+      definitionJson: {
+        query: {
+          scope: {
+            kind: "subjects",
+            subjectIds: ["subject-widget-retained"],
+          },
+        },
+      },
+    });
+    expect(
+      await database
+        .select({
+          kind: schema.dashboardCardReferences.kind,
+          referenceId: schema.dashboardCardReferences.referenceId,
+        })
+        .from(schema.dashboardCardReferences)
+        .where(
+          eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? ""),
+        ),
+    ).toEqual([
+      { kind: "subject", referenceId: "subject-widget-retained" },
+    ]);
+
+    const overviewCards = await api.cards.list({ yearId });
+    expect(overviewCards).not.toContainEqual(
+      expect.objectContaining({ id: singleCard?.id }),
+    );
+    expect(overviewCards).not.toContainEqual(
+      expect.objectContaining({ id: legacyCard?.id }),
     );
   });
 
@@ -838,6 +1433,123 @@ describe("router year invariants", () => {
         },
       ],
     });
+  });
+
+  test("creates a dedicated custom-average card once and cleans it up with the average", async () => {
+    await database.$client.executeMultiple(`
+      CREATE TRIGGER reject_test_average_card
+      BEFORE INSERT ON dashboard_cards
+      WHEN NEW.title = 'Atomic card failure'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced average card failure');
+      END;
+    `);
+    try {
+      await expect(
+        api.averages.create({
+          name: "Atomic card failure",
+          yearId: "year-a",
+          addDashboardCard: true,
+          entries: [{ subjectId: "subject-a" }],
+        }),
+      ).rejects.toThrow("forced average card failure");
+    } finally {
+      await database.$client.executeMultiple(
+        "DROP TRIGGER IF EXISTS reject_test_average_card;",
+      );
+    }
+    expect(
+      await database
+        .select()
+        .from(schema.customAverages)
+        .where(eq(schema.customAverages.name, "Atomic card failure")),
+    ).toHaveLength(0);
+
+    const created = await api.averages.create({
+      name: "Dashboard science",
+      yearId: "year-a",
+      addDashboardCard: true,
+      entries: [
+        {
+          subjectId: "subject-a",
+          coefficient: null,
+          includeChildren: false,
+        },
+      ],
+    });
+
+    expect(created).toMatchObject({ name: "Dashboard science", isMain: false });
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCards)
+        .where(eq(schema.dashboardCards.targetId, created?.id ?? "")),
+    ).toMatchObject([
+      {
+        surface: "overview",
+        metric: "average",
+        targetKind: "custom",
+        targetId: created?.id,
+        display: "chart",
+        span: 2,
+        title: "Dashboard science",
+        hidden: false,
+        yearId: "year-a",
+      },
+    ]);
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCardReferences)
+        .where(
+          and(
+            eq(schema.dashboardCardReferences.kind, "custom-average"),
+            eq(schema.dashboardCardReferences.referenceId, created?.id ?? ""),
+          ),
+        ),
+    ).toHaveLength(1);
+
+    // A historical bit in storage must not bring back headline substitution.
+    await database
+      .update(schema.customAverages)
+      .set({ isMain: true })
+      .where(eq(schema.customAverages.id, created?.id ?? ""));
+    expect(
+      await api.averages.get({ averageId: created?.id ?? "" }),
+    ).toMatchObject({
+      isMain: false,
+    });
+    expect(await api.averages.list({ yearId: "year-a" })).toContainEqual(
+      expect.objectContaining({ id: created?.id, isMain: false }),
+    );
+    expect(await api.snapshot.get({ yearId: "year-a" })).toMatchObject({
+      customAverages: expect.arrayContaining([
+        expect.objectContaining({ id: created?.id, isMain: false }),
+      ]),
+    });
+
+    await api.averages.delete({ averageId: created?.id ?? "" });
+    expect(
+      await database
+        .select()
+        .from(schema.dashboardCards)
+        .where(eq(schema.dashboardCards.targetId, created?.id ?? "")),
+    ).toHaveLength(0);
+
+    const longName = "A".repeat(64);
+    const longNamed = await api.averages.create({
+      name: longName,
+      yearId: "year-a",
+      addDashboardCard: true,
+      entries: [{ subjectId: "subject-a" }],
+    });
+    const [longNamedCard] = await database
+      .select()
+      .from(schema.dashboardCards)
+      .where(eq(schema.dashboardCards.targetId, longNamed?.id ?? ""));
+    expect(longNamed?.name).toBe(longName);
+    expect(longNamedCard?.title).toBe("A".repeat(48));
+    await api.averages.delete({ averageId: longNamed?.id ?? "" });
   });
 
   test("rolls back year creation and dashboard reset when card seeding fails", async () => {
@@ -1290,9 +2002,9 @@ describe("the simplified social model", () => {
     expect(detail.sharing).not.toBeNull();
     expect(detail.sharing!.generalAverage).toBeCloseTo(expectedAverage, 9);
     expect(detail.sharing!.year.scale).toBe(20);
-    expect(
-      detail.sharing!.subjects.map((subject) => subject.name),
-    ).toContain("Subject A");
+    expect(detail.sharing!.subjects.map((subject) => subject.name)).toContain(
+      "Subject A",
+    );
 
     // Locking the general average keeps subjects; locking everything hides all.
     await api.social.sharing.update({ shareGeneralAverage: false });
@@ -1314,10 +2026,334 @@ describe("the simplified social model", () => {
       shareSubjectsMode: "all",
     });
 
+    // Preserved legacy groups are inert until the owner configures a class.
+    await database.insert(schema.socialGroups).values({
+      id: "legacy-class",
+      ownerUserId: "user-a",
+      name: "Legacy class",
+      kind: "friends",
+    });
+    await database.insert(schema.groupMemberships).values({
+      id: "legacy-class-owner",
+      groupId: "legacy-class",
+      userId: "user-a",
+      role: "owner",
+      shareAverage: true,
+    });
+    await database.insert(schema.groupMemberships).values({
+      id: "legacy-class-member",
+      groupId: "legacy-class",
+      userId: "managed-user",
+      role: "member",
+    });
+    const [defaultPrivateMembership] = await database
+      .select({ shareAverage: schema.groupMemberships.shareAverage })
+      .from(schema.groupMemberships)
+      .where(eq(schema.groupMemberships.id, "legacy-class-member"));
+    expect(defaultPrivateMembership?.shareAverage).toBe(false);
+    expect(
+      (await api.social.groups.get({ groupId: "legacy-class" })).setupRequired,
+    ).toBe(true);
+    await expect(
+      api.social.groups.invitations.create({ groupId: "legacy-class" }),
+    ).rejects.toThrow("Configure the class");
+    await api.social.groups.configureClass({
+      groupId: "legacy-class",
+      templateYearId: "year-a",
+    });
+    const configuredLegacy = await api.social.groups.get({
+      groupId: "legacy-class",
+    });
+    expect(configuredLegacy.setupRequired).toBe(false);
+    expect(configuredLegacy.viewer.shareAverage).toBe(false);
+    await expect(
+      api.social.groups.configureClass({
+        groupId: "legacy-class",
+        templateYearId: "year-b",
+      }),
+    ).rejects.toThrow("already has an academic template");
+    expect(
+      (await api.social.groups.get({ groupId: "legacy-class" })).classTemplate
+        ?.yearName,
+    ).toBe("Year A");
+    await api.social.groups.delete({ groupId: "legacy-class" });
+
+    await database
+      .update(schema.years)
+      .set({ archivedAt: new Date() })
+      .where(eq(schema.years.id, "year-a"));
+    await expect(
+      api.social.groups.create({
+        name: "Archived template",
+        template: { mode: "year", yearId: "year-a" },
+      }),
+    ).rejects.toThrow("template year");
+    await database
+      .update(schema.years)
+      .set({ archivedAt: null })
+      .where(eq(schema.years.id, "year-a"));
+
+    const customBuilder = await api.social.groups.create({
+      name: "Custom builder class",
+      template: {
+        mode: "builder",
+        year: {
+          name: "Builder year",
+          startsAt: new Date("2039-09-01T00:00:00.000Z"),
+          endsAt: new Date("2040-07-01T00:00:00.000Z"),
+          scale: 20,
+          defaultOutOf: 20,
+          passingRatio: 0.5,
+          decimals: 2,
+        },
+        presetId: null,
+        configuration: {
+          subjects: [
+            {
+              key: "builder-subject",
+              name: "Builder subject",
+              kind: "subject",
+              isMain: true,
+              coefficient: 1,
+              children: [],
+            },
+          ],
+          averages: [],
+        },
+        periods: {
+          mode: "custom",
+          items: [
+            {
+              name: "Teaching block",
+              startsAt: new Date("2039-09-01T12:00:00.000Z"),
+              endsAt: new Date("2040-01-15T00:00:00.000Z"),
+              isCumulative: false,
+            },
+            {
+              name: "Final block",
+              startsAt: new Date("2040-01-15T00:00:00.000Z"),
+              endsAt: new Date("2040-07-01T12:00:00.000Z"),
+              isCumulative: true,
+            },
+          ],
+        },
+      },
+    });
+    const customBuilderDetail = await api.social.groups.get({
+      groupId: customBuilder.id,
+    });
+    expect(customBuilderDetail.viewer).toMatchObject({
+      yearId: customBuilder.yearId,
+      yearStatus: "connected",
+      shareAverage: false,
+    });
+    expect(customBuilderDetail.classTemplate?.source).toBe("custom");
+    expect(customBuilderDetail.availableSubjectOptions).toContainEqual({
+      key: "builder-subject",
+      name: "Builder subject",
+    });
+    const customPeriods = await database
+      .select()
+      .from(schema.periods)
+      .where(eq(schema.periods.yearId, customBuilder.yearId));
+    expect(customPeriods).toHaveLength(2);
+    expect(
+      customPeriods
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((period) => ({
+          name: period.name,
+          startsAt: period.startAt.toISOString(),
+          endsAt: period.endAt.toISOString(),
+          isCumulative: period.isCumulative,
+          sortOrder: period.sortOrder,
+        })),
+    ).toEqual([
+      {
+        name: "Teaching block",
+        startsAt: "2039-09-01T00:00:00.000Z",
+        endsAt: "2040-01-15T00:00:00.000Z",
+        isCumulative: false,
+        sortOrder: 0,
+      },
+      {
+        name: "Final block",
+        startsAt: "2040-01-15T00:00:00.000Z",
+        endsAt: "2040-07-01T00:00:00.000Z",
+        isCumulative: true,
+        sortOrder: 1,
+      },
+    ]);
+    await database
+      .update(schema.subjects)
+      .set({ name: "Edited after class creation" })
+      .where(eq(schema.subjects.yearId, customBuilder.yearId));
+    const immutableBuilder = await api.social.groups.get({
+      groupId: customBuilder.id,
+    });
+    expect(immutableBuilder.viewer.yearStatus).toBe("incompatible");
+    expect(immutableBuilder.availableSubjectOptions).toContainEqual({
+      key: "builder-subject",
+      name: "Builder subject",
+    });
+    await api.social.groups.delete({ groupId: customBuilder.id });
+    await database
+      .delete(schema.years)
+      .where(eq(schema.years.id, customBuilder.yearId));
+
+    const invalidPeriodBuilder = {
+      year: {
+        name: "Invalid period builder year",
+        startsAt: new Date("2042-09-01T00:00:00.000Z"),
+        endsAt: new Date("2043-07-01T00:00:00.000Z"),
+      },
+      configuration: {
+        subjects: [
+          {
+            key: "invalid-period-subject",
+            name: "Invalid period subject",
+            kind: "subject" as const,
+            isMain: true,
+            coefficient: 1,
+            children: [],
+          },
+        ],
+        averages: [],
+      },
+    };
+    await expect(
+      api.social.groups.create({
+        name: "Out-of-bounds period class",
+        template: {
+          mode: "builder",
+          ...invalidPeriodBuilder,
+          periods: {
+            mode: "custom",
+            items: [
+              {
+                name: "Too early",
+                startsAt: new Date("2042-08-01T00:00:00.000Z"),
+                endsAt: new Date("2042-12-01T00:00:00.000Z"),
+              },
+            ],
+          },
+        },
+      }),
+    ).rejects.toThrow("within the academic year");
+    await expect(
+      api.social.groups.create({
+        name: "Overlapping period class",
+        template: {
+          mode: "builder",
+          ...invalidPeriodBuilder,
+          periods: {
+            mode: "custom",
+            items: [
+              {
+                name: "First",
+                startsAt: new Date("2042-09-01T00:00:00.000Z"),
+                endsAt: new Date("2043-02-01T00:00:00.000Z"),
+              },
+              {
+                name: "Overlap",
+                startsAt: new Date("2043-01-01T00:00:00.000Z"),
+                endsAt: new Date("2043-07-01T00:00:00.000Z"),
+              },
+            ],
+          },
+        },
+      }),
+    ).rejects.toThrow("ordered and cannot overlap");
+    expect(
+      await database
+        .select({ id: schema.years.id })
+        .from(schema.years)
+        .where(eq(schema.years.name, invalidPeriodBuilder.year.name)),
+    ).toHaveLength(0);
+
+    const [presetSummary] = await api.presets.list();
+    const preset = await api.presets.get({ presetId: presetSummary!.id });
+    const presetBuilder = await api.social.groups.create({
+      name: "Preset builder class",
+      template: {
+        mode: "builder",
+        year: {
+          name: "Preset builder year",
+          startsAt: new Date("2040-09-01T00:00:00.000Z"),
+          endsAt: new Date("2041-07-01T00:00:00.000Z"),
+          scale: 20,
+          defaultOutOf: 20,
+          passingRatio: 0.5,
+          decimals: 2,
+        },
+        presetId: preset.id,
+        configuration: preset.configuration,
+        periods: { mode: "template", templateId: "none", names: [] },
+      },
+    });
+    const presetBuilderDetail = await api.social.groups.get({
+      groupId: presetBuilder.id,
+    });
+    expect(presetBuilderDetail.classTemplate?.source).toBe("preset");
+    expect(presetBuilderDetail.viewer.yearStatus).toBe("connected");
+    await api.social.groups.delete({ groupId: presetBuilder.id });
+    await database
+      .delete(schema.years)
+      .where(eq(schema.years.id, presetBuilder.yearId));
+
+    await database.$client.execute(
+      "CREATE TRIGGER fail_class_builder BEFORE INSERT ON subjects WHEN NEW.name = 'Rollback subject' BEGIN SELECT RAISE(ABORT, 'forced class builder failure'); END",
+    );
+    await expect(
+      api.social.groups.create({
+        name: "Rolled back builder class",
+        template: {
+          mode: "builder",
+          year: {
+            name: "Rolled back builder year",
+            startsAt: new Date("2041-09-01T00:00:00.000Z"),
+            endsAt: new Date("2042-07-01T00:00:00.000Z"),
+            scale: 20,
+            defaultOutOf: 20,
+            passingRatio: 0.5,
+            decimals: 2,
+          },
+          configuration: {
+            subjects: [
+              {
+                key: "rollback-subject",
+                name: "Rollback subject",
+                kind: "subject",
+                isMain: true,
+                coefficient: 1,
+                children: [],
+              },
+            ],
+            averages: [],
+          },
+          presetId: null,
+          periods: { mode: "template", templateId: "none", names: [] },
+        },
+      }),
+    ).rejects.toThrow("forced class builder failure");
+    await database.$client.execute("DROP TRIGGER fail_class_builder");
+    expect(
+      await database
+        .select({ id: schema.years.id })
+        .from(schema.years)
+        .where(eq(schema.years.name, "Rolled back builder year")),
+    ).toHaveLength(0);
+    expect(
+      await database
+        .select({ id: schema.socialGroups.id })
+        .from(schema.socialGroups)
+        .where(eq(schema.socialGroups.name, "Rolled back builder class")),
+    ).toHaveLength(0);
+
     // Groups: one link, one switch, real values, no minimum head-count.
     const group = await api.social.groups.create({
       name: "Integration group",
       description: "",
+      template: { mode: "year", yearId: "year-a" },
     });
     const invitation = await api.social.groups.invitations.create({
       groupId: group.id,
@@ -1326,10 +2362,67 @@ describe("the simplified social model", () => {
       token: invitation.token,
     });
     expect(preview.group.name).toBe("Integration group");
+    expect(preview.group.setupRequired).toBe(false);
+    expect(preview.group.classTemplate?.subjectCount).toBeGreaterThan(0);
     const joined = await managedApi.social.groups.invitations.accept({
       token: invitation.token,
+      year: { mode: "copy", name: "Managed class year" },
     });
     expect(joined.joined).toBe(true);
+    expect(joined.yearId).toBeTruthy();
+
+    await managedApi.social.groups.setSharing({
+      groupId: group.id,
+      shareAverage: true,
+    });
+    await database
+      .update(schema.years)
+      .set({ archivedAt: new Date() })
+      .where(eq(schema.years.id, joined.yearId ?? ""));
+    const archivedConnection = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(archivedConnection.viewer.yearStatus).toBe("incompatible");
+    expect(
+      archivedConnection.members.find((member) => member.role === "member")
+        ?.figures,
+    ).toHaveLength(0);
+    await expect(
+      managedApi.social.groups.selectYear({
+        groupId: group.id,
+        yearId: joined.yearId ?? "",
+      }),
+    ).rejects.toThrow("not compatible");
+    await database
+      .update(schema.years)
+      .set({ archivedAt: null })
+      .where(eq(schema.years.id, joined.yearId ?? ""));
+    await managedApi.social.groups.selectYear({
+      groupId: group.id,
+      yearId: joined.yearId ?? "",
+    });
+
+    // Links issued by non-owners before invitations became owner-only must
+    // not remain valid after a group is configured as a class.
+    const legacyMemberToken = "legacy-member-invitation";
+    const { hashOpaque } = await import("../lib/social-policy");
+    await database.insert(schema.groupInvitations).values({
+      id: "legacy-member-invitation",
+      groupId: group.id,
+      createdByUserId: "managed-user",
+      tokenHash: hashOpaque(legacyMemberToken),
+      tokenPrefix: legacyMemberToken.slice(0, 8),
+      expiresAt: new Date("2027-01-01T00:00:00.000Z"),
+    });
+    await expect(
+      adminApi.social.groups.invitations.preview({ token: legacyMemberToken }),
+    ).rejects.toThrow("Invitation");
+    await expect(
+      adminApi.social.groups.invitations.accept({
+        token: legacyMemberToken,
+        year: { mode: "copy" },
+      }),
+    ).rejects.toThrow("Invitation");
 
     // A fresh group carries one board: the general average.
     const detailForMember = await managedApi.social.groups.get({
@@ -1342,47 +2435,91 @@ describe("the simplified social model", () => {
     const owner = detailForMember.members.find(
       (member) => member.role === "owner",
     );
-    const ownerGeneral = owner?.figures.find(
-      (figure) => figure.scopeId === generalId,
-    );
-    expect(ownerGeneral?.average).toBeCloseTo(expectedAverage, 9);
-    // Every fixture grade predates the 30-day window, so the trend is a
-    // computed "flat", not a missing value.
-    expect(ownerGeneral?.trend).toBe("flat");
-    expect(ownerGeneral?.gradeCount).toBeGreaterThan(0);
-    // The joiner has no academic year, so they appear without figures.
+    expect(owner?.shareAverage).toBe(false);
+    expect(owner?.figures).toHaveLength(0);
     const joiner = detailForMember.members.find(
       (member) => member.role === "member",
     );
     expect(joiner?.figures).toHaveLength(0);
-    expect(detailForMember.sharingCount).toBe(1);
-    // The owner's own subjects feed the comparison picker.
-    expect(detailForMember.availableSubjects).toContain("Subject A");
+    expect(joiner?.yearStatus).toBe("connected");
+    expect(detailForMember.sharingCount).toBe(0);
+    expect(detailForMember.availableSubjectOptions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "Subject A" })]),
+    );
 
-    // The owner adds boards from the old metric palette, plus a subject
-    // matched by name — several figures side by side, not one.
-    await api.social.groups.update({ groupId: group.id, kind: "class" });
+    // Year selection is personal, not an owner operation, and revokes any
+    // previous sharing choice until the member opts in again.
+    await managedApi.social.groups.setSharing({
+      groupId: group.id,
+      shareAverage: true,
+    });
+    await managedApi.social.groups.selectYear({
+      groupId: group.id,
+      yearId: joined.yearId ?? "",
+    });
+    expect(
+      (await managedApi.social.groups.get({ groupId: group.id })).viewer
+        .shareAverage,
+    ).toBe(false);
+    await expect(
+      managedApi.social.groups.invitations.create({ groupId: group.id }),
+    ).rejects.toThrow("owner access required");
+
+    await api.social.groups.setSharing({
+      groupId: group.id,
+      shareAverage: true,
+    });
+    const sharing = await api.social.groups.get({ groupId: group.id });
+    const ownerGeneral = sharing.members
+      .find((member) => member.role === "owner")
+      ?.figures.find((figure) => figure.scopeId === generalId);
+    expect(ownerGeneral?.average).toBeCloseTo(expectedAverage, 9);
+    expect(ownerGeneral?.gradeCount).toBeGreaterThan(0);
+
+    const subjectOption = sharing.availableSubjectOptions.find(
+      (subject) => subject.name === "Subject A",
+    );
     await api.social.groups.comparisons.add({
       groupId: group.id,
       kind: "subject",
-      subjectName: "Subject A",
+      subjectKey: subjectOption?.key,
     });
-    await api.social.groups.comparisons.add({
+    const copiedSubjects = await database
+      .select()
+      .from(schema.subjects)
+      .where(eq(schema.subjects.yearId, joined.yearId ?? ""));
+    const copiedPeriods = await database
+      .select()
+      .from(schema.periods)
+      .where(eq(schema.periods.yearId, joined.yearId ?? ""));
+    const copiedSubject = copiedSubjects.find(
+      (subject) => subject.name === "Subject A",
+    );
+    await managedApi.grades.create({
+      name: "Class copy grade",
+      value: 16,
+      outOf: 20,
+      passedAt: new Date("2026-04-02T00:00:00.000Z"),
+      subjectId: copiedSubject?.id ?? "",
+      periodId: copiedPeriods[0]?.id ?? null,
+    });
+    await managedApi.social.groups.setSharing({
       groupId: group.id,
-      kind: "median",
+      shareAverage: true,
     });
-    await api.social.groups.comparisons.add({
-      groupId: group.id,
-      kind: "passRate",
-    });
-    // Duplicates are refused rather than silently stacked.
     await expect(
       api.social.groups.comparisons.add({
         groupId: group.id,
         kind: "subject",
-        subjectName: "subject a",
+        subjectKey: subjectOption?.key,
       }),
     ).rejects.toThrow();
+    await expect(
+      api.social.groups.comparisons.add({
+        groupId: group.id,
+        kind: "median",
+      }),
+    ).rejects.toThrow("only compare general and subject");
     const configured = await managedApi.social.groups.get({
       groupId: group.id,
     });
@@ -1390,13 +2527,15 @@ describe("the simplified social model", () => {
     expect(configured.comparisons.map((entry) => entry.kind)).toEqual([
       "general",
       "subject",
-      "median",
-      "passRate",
     ]);
     const configuredOwner = configured.members.find(
       (member) => member.role === "owner",
     );
-    expect(configuredOwner?.figures).toHaveLength(4);
+    const configuredMember = configured.members.find(
+      (member) => member.role === "member",
+    );
+    expect(configuredOwner?.figures).toHaveLength(2);
+    expect(configuredMember?.figures).toHaveLength(2);
     for (const comparison of configured.comparisons) {
       const figure = configuredOwner?.figures.find(
         (entry) => entry.scopeId === comparison.id,
@@ -1405,40 +2544,16 @@ describe("the simplified social model", () => {
       // real value for the owner.
       expect(figure?.average).not.toBeNull();
     }
-    // A scope nobody's subjects match yields no figure rather than an error.
-    const ghost = await api.social.groups.comparisons.add({
-      groupId: group.id,
-      kind: "subject",
-      subjectName: "Astrophysics",
-    });
-    const unmatched = await managedApi.social.groups.get({
-      groupId: group.id,
-    });
+    const subjectComparisonId = configured.comparisons.find(
+      (comparison) => comparison.kind === "subject",
+    )?.id;
     expect(
-      unmatched.members.every(
-        (member) =>
-          member.figures.find((figure) => figure.scopeId === ghost.id)
-            ?.average == null,
-      ),
-    ).toBe(true);
-    await api.social.groups.comparisons.remove({
-      groupId: group.id,
-      comparisonId: ghost.id ?? "",
-    });
-
-    // The optional common configuration: the owner offers year-a, the other
-    // member adopts it and gets a structural copy — no grades, no link back.
-    await api.social.groups.update({
-      groupId: group.id,
-      sharedSetupYearId: "year-a",
-    });
-    const withSetup = await managedApi.social.groups.get({
-      groupId: group.id,
-    });
-    // Earlier suites grow year-a, so the summary is checked for shape and
-    // the copy for parity with it rather than against absolute counts.
-    expect(withSetup.sharedSetup?.yearName).toBe("Year A");
-    expect(withSetup.sharedSetup?.subjectCount).toBeGreaterThanOrEqual(1);
+      configuredMember?.figures.find(
+        (figure) => figure.scopeId === subjectComparisonId,
+      )?.average,
+    ).toBeCloseTo(0.8, 9);
+    // Adoption creates another independent copy and connects it; it never
+    // overwrites the previously connected year or copies grades.
     const adopted = await managedApi.social.groups.adoptSetup({
       groupId: group.id,
       name: "Adopted year",
@@ -1449,7 +2564,7 @@ describe("the simplified social model", () => {
       .from(schema.subjects)
       .where(eq(schema.subjects.yearId, adopted.yearId));
     expect(adoptedSubjects).toHaveLength(
-      withSetup.sharedSetup?.subjectCount ?? 0,
+      configured.classTemplate?.subjectCount ?? 0,
     );
     expect(adoptedSubjects.map((subject) => subject.name)).toContain(
       "Subject A",
@@ -1461,90 +2576,20 @@ describe("the simplified social model", () => {
         .from(schema.grades)
         .where(eq(schema.grades.yearId, adopted.yearId)),
     ).toHaveLength(0);
-    // Tidy up so later fixtures never meet the adopted copy.
+    const connectedAfterAdopt = await managedApi.social.groups.get({
+      groupId: group.id,
+    });
+    expect(connectedAfterAdopt.viewer.yearId).toBe(adopted.yearId);
+    expect(connectedAfterAdopt.viewer.yearStatus).toBe("connected");
+    expect(connectedAfterAdopt.viewer.shareAverage).toBe(false);
     await database
       .delete(schema.years)
       .where(eq(schema.years.id, adopted.yearId));
-
-    // The template can also be built by hand: the owner saves a
-    // configuration (or imports a curated preset into one), members adopt
-    // it, and the picker follows its subject names.
-    await api.social.groups.update({
-      groupId: group.id,
-      sharedSetupConfig: {
-        subjects: [
-          {
-            key: "maths",
-            name: "Mathématiques",
-            kind: "subject",
-            isMain: true,
-            coefficient: 4,
-            children: [],
-          },
-          {
-            key: "physique",
-            name: "Physique",
-            kind: "subject",
-            isMain: false,
-            coefficient: 2,
-            children: [],
-          },
-        ],
-        averages: [
-          {
-            key: "sciences",
-            name: "Sciences",
-            isMain: false,
-            entries: [
-              { subjectKey: "maths", coefficient: null, includeChildren: false },
-              {
-                subjectKey: "physique",
-                coefficient: null,
-                includeChildren: false,
-              },
-            ],
-          },
-        ],
-      },
-    });
-    const withBuilder = await managedApi.social.groups.get({
+    const afterLinkedYearDelete = await managedApi.social.groups.get({
       groupId: group.id,
     });
-    expect(withBuilder.sharedSetup).toMatchObject({
-      source: "builder",
-      subjectCount: 2,
-      averageCount: 1,
-    });
-    expect(withBuilder.sharedSetupYearId).toBeNull();
-    expect(withBuilder.availableSubjects).toEqual([
-      "Mathématiques",
-      "Physique",
-    ]);
-    const built = await managedApi.social.groups.adoptSetup({
-      groupId: group.id,
-      name: "Built year",
-    });
-    const builtSubjects = await database
-      .select()
-      .from(schema.subjects)
-      .where(eq(schema.subjects.yearId, built.yearId));
-    expect(builtSubjects.map((subject) => subject.name).sort()).toEqual([
-      "Mathématiques",
-      "Physique",
-    ]);
-    expect(
-      await database
-        .select()
-        .from(schema.customAverages)
-        .where(eq(schema.customAverages.yearId, built.yearId)),
-    ).toHaveLength(1);
-    await database
-      .delete(schema.years)
-      .where(eq(schema.years.id, built.yearId));
-    await api.social.groups.update({
-      groupId: group.id,
-      sharedSetupConfig: null,
-    });
+    expect(afterLinkedYearDelete.viewer.yearId).toBeNull();
+    expect(afterLinkedYearDelete.viewer.yearStatus).toBe("not_connected");
 
     // The one lock a member has: their own switch.
     await api.social.groups.setSharing({
@@ -1570,9 +2615,9 @@ describe("the simplified social model", () => {
     });
     const frozen = await managedApi.social.groups.get({ groupId: group.id });
     expect(frozen.state).toBe("frozen");
-    expect(
-      frozen.members.every((member) => member.figures.length === 0),
-    ).toBe(true);
+    expect(frozen.members.every((member) => member.figures.length === 0)).toBe(
+      true,
+    );
     await adminApi.admin.setSocialGroupState({
       groupId: group.id,
       state: "active",
@@ -1592,6 +2637,12 @@ describe("the simplified social model", () => {
 
     // Leave the world as this test found it.
     await api.social.groups.delete({ groupId: group.id });
+    await database.delete(schema.years).where(
+      inArray(
+        schema.years.id,
+        [joined.yearId].filter((yearId): yearId is string => Boolean(yearId)),
+      ),
+    );
     await api.grades.delete({ gradeId: grade.id });
   });
 });
@@ -1864,6 +2915,8 @@ describe("managed preset lifecycle", () => {
     expect(mathematics).toBeDefined();
     expect(physics).toBeDefined();
     expect(scienceAverage).toBeDefined();
+    expect(mathematics?.isMain).toBe(true);
+    expect(scienceAverage?.isMain).toBe(false);
 
     const mathematicsGoal = await api.goals.create({
       yearId: year.id,
@@ -1904,6 +2957,17 @@ describe("managed preset lifecycle", () => {
       targetKind: "subject",
       targetId: physics?.id,
     });
+    const multiSubjectDefinition = createWidgetDefinition("overview");
+    multiSubjectDefinition.query.scope = {
+      kind: "subjects",
+      subjectIds: [mathematics?.id ?? "", physics?.id ?? ""],
+      includeDescendants: false,
+    };
+    const multiSubjectCard = await api.cards.create({
+      yearId: year.id,
+      definitionVersion: 1,
+      definitionJson: multiSubjectDefinition,
+    });
 
     await api.presets.reapply({
       yearId: year.id,
@@ -1938,11 +3002,27 @@ describe("managed preset lifecycle", () => {
         expect.objectContaining({ id: physicsGoal?.id }),
       ]),
     );
-    expect(await api.cards.list({ yearId: year.id, surface: "overview" })).toEqual(
+    expect(
+      await api.cards.list({ yearId: year.id, surface: "overview" }),
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: mathematicsCard?.id }),
         expect.objectContaining({ id: averageCard?.id }),
         expect.objectContaining({ id: physicsCard?.id }),
+        expect.objectContaining({ id: multiSubjectCard?.id }),
+      ]),
+    );
+    expect(
+      await database
+        .select({ referenceId: schema.dashboardCardReferences.referenceId })
+        .from(schema.dashboardCardReferences)
+        .where(
+          eq(schema.dashboardCardReferences.cardId, multiSubjectCard?.id ?? ""),
+        ),
+    ).toEqual(
+      expect.arrayContaining([
+        { referenceId: mathematics?.id },
+        { referenceId: physics?.id },
       ]),
     );
 
@@ -1957,7 +3037,9 @@ describe("managed preset lifecycle", () => {
         ...baseConfiguration,
         subjects: baseConfiguration.subjects.map((root) => ({
           ...root,
-          children: root.children.filter((subject) => subject.key !== "physics"),
+          children: root.children.filter(
+            (subject) => subject.key !== "physics",
+          ),
         })),
       },
     });
@@ -1972,6 +3054,10 @@ describe("managed preset lifecycle", () => {
         expect.objectContaining({
           resource: "dashboard_card",
           id: physicsCard?.id,
+        }),
+        expect.objectContaining({
+          resource: "dashboard_card",
+          id: multiSubjectCard?.id,
         }),
       ]),
     );
@@ -1994,9 +3080,12 @@ describe("managed preset lifecycle", () => {
     expect(cardsAfterRemoval.some((card) => card.id === physicsCard?.id)).toBe(
       true,
     );
-    expect(goalsAfterRemoval.some((goal) => goal.id === mathematicsGoal?.id)).toBe(
-      true,
-    );
+    expect(
+      cardsAfterRemoval.some((card) => card.id === multiSubjectCard?.id),
+    ).toBe(true);
+    expect(
+      goalsAfterRemoval.some((goal) => goal.id === mathematicsGoal?.id),
+    ).toBe(true);
     expect(cardsAfterRemoval.some((card) => card.id === averageCard?.id)).toBe(
       true,
     );

@@ -5,12 +5,14 @@ import { db } from "../../db";
 import {
   customAverageEntries,
   customAverages,
+  dashboardCards,
   groupComparisons,
   groupInvitations,
   groupMemberships,
   periods,
   socialGroups,
   subjects,
+  yearPresetMemberships,
   years,
 } from "../../db/schema";
 import {
@@ -22,6 +24,24 @@ import type {
   ManagedPresetConfiguration,
   ManagedPresetSubject,
 } from "../../data/preset-types";
+import {
+  academicCardRows,
+  academicPeriodsInput,
+  academicYearInput,
+  assertAcademicYearRange,
+  periodRowsForSetup,
+} from "../../lib/academic-setup";
+import {
+  buildClassTemplate,
+  classTemplateSubjects,
+  classTemplateSummary,
+  classYearInsertStatements,
+  classYearStatus,
+  compatibleClassYears,
+  parseClassTemplate,
+  serializeClassTemplate,
+  snapshotClassTemplate,
+} from "../../lib/class-template";
 import { newId } from "../../lib/id";
 import { materializePresetConfiguration } from "../../lib/preset-membership";
 import {
@@ -50,6 +70,25 @@ const comparisonKindSchema = z.enum([
   "median",
   "passRate",
   "goalProgress",
+]);
+
+const invitationYearSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("existing"), yearId: z.string().min(1) }),
+  z.object({
+    mode: z.literal("copy"),
+    name: z.string().trim().min(1).max(100).optional(),
+  }),
+]);
+
+const classCreationTemplateSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("year"), yearId: z.string().min(1) }),
+  z.object({
+    mode: z.literal("builder"),
+    year: academicYearInput,
+    presetId: z.string().min(1).nullable().default(null),
+    configuration: managedPresetConfigurationSchema,
+    periods: academicPeriodsInput,
+  }),
 ]);
 
 /**
@@ -117,13 +156,13 @@ function assertActive(group: typeof socialGroups.$inferSelect) {
 
 function assertOwner(access: Awaited<ReturnType<typeof groupAccess>>) {
   if (access.membership.role !== "owner") {
-    throw new ORPCError("FORBIDDEN", { message: "Group owner access required" });
+    throw new ORPCError("FORBIDDEN", {
+      message: "Group owner access required",
+    });
   }
 }
 
-function flattenedSubjectCount(
-  nodes: readonly ManagedPresetSubject[],
-): number {
+function flattenedSubjectCount(nodes: readonly ManagedPresetSubject[]): number {
   return nodes.reduce(
     (total, node) => total + 1 + flattenedSubjectCount(node.children),
     0,
@@ -206,30 +245,153 @@ export const socialGroupsRouter = {
       z.object({
         name: nameSchema,
         description: descriptionSchema.default(""),
-        kind: z.enum(["friends", "study", "class"]).default("friends"),
+        template: classCreationTemplateSchema,
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      const [group] = await db
-        .insert(socialGroups)
-        .values({
+      if (input.template.mode === "year") {
+        const template = await snapshotClassTemplate(
+          userId,
+          input.template.yearId,
+        );
+        if (!template) {
+          badRequest(
+            "The template year must belong to you and contain subjects",
+          );
+        }
+        const groupId = newId("sg");
+        await db.batch([
+          db.insert(socialGroups).values({
+            id: groupId,
+            ownerUserId: userId,
+            name: input.name,
+            description: input.description,
+            kind: "class",
+            classTemplate: serializeClassTemplate(template),
+          }),
+          db.insert(groupMemberships).values({
+            groupId,
+            userId,
+            role: "owner",
+            yearId: input.template.yearId,
+            shareAverage: false,
+          }),
+          db
+            .insert(groupComparisons)
+            .values({ groupId, kind: "general", sortOrder: 0 }),
+        ]);
+        return { id: groupId, yearId: input.template.yearId };
+      }
+
+      assertAcademicYearRange(
+        input.template.year.startsAt,
+        input.template.year.endsAt,
+      );
+      const presetDefinition = input.template.presetId
+        ? await findPresetDefinition(input.template.presetId)
+        : null;
+      if (
+        input.template.presetId &&
+        (!presetDefinition || presetDefinition.archived)
+      ) {
+        notFound("Preset");
+      }
+      const presetVersion = presetDefinition
+        ? await findPresetVersion(
+            presetDefinition.id,
+            presetDefinition.currentVersion,
+          )
+        : null;
+      if (presetDefinition && !presetVersion) notFound("Preset version");
+      const presetConfiguration = presetVersion
+        ? parsePresetConfiguration(presetVersion.configuration)
+        : null;
+      const remainsPresetLinked = Boolean(
+        presetDefinition &&
+        presetConfiguration &&
+        JSON.stringify(presetConfiguration) ===
+          JSON.stringify(input.template.configuration),
+      );
+
+      const groupId = newId("sg");
+      const yearId = newId("y");
+      const periodRows = periodRowsForSetup(
+        input.template.periods,
+        { id: yearId, ...input.template.year },
+        userId,
+      );
+      const materialized = materializePresetConfiguration(
+        input.template.configuration,
+        yearId,
+        userId,
+      );
+      const template = buildClassTemplate({
+        year: input.template.year,
+        periods: periodRows,
+        configuration: input.template.configuration,
+        source:
+          remainsPresetLinked && presetDefinition
+            ? {
+                kind: "preset",
+                presetId: presetDefinition.id,
+                presetVersion: presetDefinition.currentVersion,
+              }
+            : { kind: "custom", yearId },
+      });
+      const statements = [
+        db.insert(years).values({
+          id: yearId,
+          ...input.template.year,
+          presetId: remainsPresetLinked ? presetDefinition?.id : null,
+          userId,
+        }),
+        db.insert(dashboardCards).values(academicCardRows(userId, yearId)),
+        ...(periodRows.length ? [db.insert(periods).values(periodRows)] : []),
+        db.insert(subjects).values(materialized.subjectRows),
+        ...(materialized.averageRows.length
+          ? [db.insert(customAverages).values(materialized.averageRows)]
+          : []),
+        ...(materialized.entryRows.length
+          ? [db.insert(customAverageEntries).values(materialized.entryRows)]
+          : []),
+        ...(remainsPresetLinked && presetDefinition
+          ? [
+              db.insert(yearPresetMemberships).values({
+                yearId,
+                presetId: presetDefinition.id,
+                appliedVersion: presetDefinition.currentVersion,
+                mode: "linked",
+                userId,
+              }),
+            ]
+          : []),
+        db.insert(socialGroups).values({
+          id: groupId,
           ownerUserId: userId,
           name: input.name,
           description: input.description,
-          kind: input.kind,
-        })
-        .returning();
-      if (!group) badRequest("The group could not be created");
-      await db.insert(groupMemberships).values({
-        groupId: group.id,
-        userId,
-        role: "owner",
-      });
-      await db
-        .insert(groupComparisons)
-        .values({ groupId: group.id, kind: "general", sortOrder: 0 });
-      return { id: group.id };
+          kind: "class",
+          classTemplate: serializeClassTemplate(template),
+        }),
+        db.insert(groupMemberships).values({
+          groupId,
+          userId,
+          role: "owner",
+          yearId,
+          shareAverage: false,
+        }),
+        db
+          .insert(groupComparisons)
+          .values({ groupId, kind: "general", sortOrder: 0 }),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+      return { id: groupId, yearId };
     }),
 
   list: protectedProcedure.handler(async ({ context }) => {
@@ -241,17 +403,41 @@ export const socialGroupsRouter = {
       .where(eq(groupMemberships.userId, userId))
       .orderBy(desc(socialGroups.createdAt));
     return Promise.all(
-      rows.map(async (row) => ({
-        id: row.group.id,
-        name: row.group.name,
-        description: row.group.description,
-        kind: row.group.kind,
-        state: row.group.state,
-        role: row.membership.role,
-        shareAverage: row.membership.shareAverage,
-        memberCount: await memberCountOf(row.group.id),
-        createdAt: row.group.createdAt,
-      })),
+      rows.map(async (row) => {
+        const template = parseClassTemplate(row.group.classTemplate);
+        const status = await classYearStatus(
+          userId,
+          row.membership.yearId,
+          template,
+        );
+        const linkedYear = row.membership.yearId
+          ? await db
+              .select({ name: years.name })
+              .from(years)
+              .where(
+                and(
+                  eq(years.id, row.membership.yearId),
+                  eq(years.userId, userId),
+                ),
+              )
+              .limit(1)
+              .then((items) => items[0] ?? null)
+          : null;
+        return {
+          id: row.group.id,
+          name: row.group.name,
+          description: row.group.description,
+          kind: row.group.kind,
+          state: row.group.state,
+          role: row.membership.role,
+          shareAverage: row.membership.shareAverage,
+          setupRequired: !template,
+          yearStatus: status,
+          linkedYearName: linkedYear?.name ?? null,
+          memberCount: await memberCountOf(row.group.id),
+          createdAt: row.group.createdAt,
+        };
+      }),
     );
   }),
 
@@ -268,6 +454,7 @@ export const socialGroupsRouter = {
       const named = await identities(memberships.map((row) => row.userId));
 
       const frozen = access.group.state !== "active";
+      const classTemplate = parseClassTemplate(access.group.classTemplate);
       const [sharedSetup, comparisonRows, availableSubjects] =
         await Promise.all([
           sharedSetupSummary(access.group),
@@ -282,6 +469,7 @@ export const socialGroupsRouter = {
         id: row.id,
         kind: row.kind,
         subjectName: row.subjectName,
+        subjectKey: row.subjectKey,
       }));
       const figureOptions = {
         scopes,
@@ -291,10 +479,16 @@ export const socialGroupsRouter = {
       const members = await Promise.all(
         memberships.map(async (row) => {
           const who = named.get(row.userId);
-          const shares = !frozen && row.shareAverage;
+          const yearStatus = await classYearStatus(
+            row.userId,
+            row.yearId,
+            classTemplate,
+          );
+          const shares =
+            !frozen && row.shareAverage && yearStatus === "connected";
           const academic =
-            shares && scopes.length > 0
-              ? await groupFigures(row.userId, figureOptions)
+            shares && scopes.length > 0 && row.yearId
+              ? await groupFigures(row.userId, row.yearId, figureOptions)
               : null;
           return {
             membershipId: row.id,
@@ -304,6 +498,7 @@ export const socialGroupsRouter = {
             handle: who?.handle ?? null,
             role: row.role,
             shareAverage: row.shareAverage,
+            yearStatus,
             joinedAt: row.createdAt,
             scale: academic?.scale ?? null,
             decimals: academic?.decimals ?? null,
@@ -325,6 +520,11 @@ export const socialGroupsRouter = {
         showGradeCount: access.group.showGradeCount,
         sharedSetupYearId: access.group.sharedSetupYearId,
         sharedSetup,
+        setupRequired: !classTemplate,
+        classTemplate: classTemplate
+          ? classTemplateSummary(classTemplate)
+          : null,
+        compatibleYears: await compatibleClassYears(userId, classTemplate),
         /** The builder's editable draft; only the owner's screen loads it. */
         sharedSetupDraft:
           access.membership.role === "owner"
@@ -334,8 +534,12 @@ export const socialGroupsRouter = {
           id: row.id,
           kind: row.kind,
           subjectName: row.subjectName,
+          subjectKey: row.subjectKey,
         })),
         availableSubjects,
+        availableSubjectOptions: classTemplate
+          ? classTemplateSubjects(classTemplate)
+          : [],
         state: access.group.state,
         ownerUserId: access.group.ownerUserId,
         createdAt: access.group.createdAt,
@@ -343,6 +547,12 @@ export const socialGroupsRouter = {
           membershipId: access.membership.id,
           role: access.membership.role,
           shareAverage: access.membership.shareAverage,
+          yearId: access.membership.yearId,
+          yearStatus: await classYearStatus(
+            userId,
+            access.membership.yearId,
+            classTemplate,
+          ),
         },
         members,
         sharingCount,
@@ -356,6 +566,7 @@ export const socialGroupsRouter = {
         z.object({
           groupId: z.string().min(1),
           kind: comparisonKindSchema,
+          subjectKey: z.string().trim().min(1).max(128).optional(),
           subjectName: z.string().trim().min(1).max(100).optional(),
         }),
       )
@@ -366,7 +577,23 @@ export const socialGroupsRouter = {
         );
         assertActive(access.group);
         assertOwner(access);
-        if (input.kind === "subject" && !input.subjectName) {
+        const template = parseClassTemplate(access.group.classTemplate);
+        let subjectName = input.subjectName ?? null;
+        let subjectKey = input.subjectKey ?? null;
+        if (template) {
+          if (input.kind !== "general" && input.kind !== "subject") {
+            badRequest("Classes only compare general and subject averages");
+          }
+          if (input.kind === "subject") {
+            const subject = classTemplateSubjects(template).find(
+              (candidate) => candidate.key === input.subjectKey,
+            );
+            if (!subject)
+              badRequest("Choose a subject from the class template");
+            subjectKey = subject.key;
+            subjectName = subject.name;
+          }
+        } else if (input.kind === "subject" && !input.subjectName) {
           badRequest("A subject comparison needs a subject name");
         }
         const existing = await db
@@ -380,8 +607,10 @@ export const socialGroupsRouter = {
           (row) =>
             row.kind === input.kind &&
             (input.kind !== "subject" ||
-              (row.subjectName ?? "").toLowerCase() ===
-                (input.subjectName ?? "").toLowerCase()),
+              (subjectKey
+                ? row.subjectKey === subjectKey
+                : (row.subjectName ?? "").toLowerCase() ===
+                  (subjectName ?? "").toLowerCase())),
         );
         if (duplicate) badRequest("That comparison already exists");
         const [created] = await db
@@ -389,8 +618,8 @@ export const socialGroupsRouter = {
           .values({
             groupId: input.groupId,
             kind: input.kind,
-            subjectName:
-              input.kind === "subject" ? (input.subjectName ?? null) : null,
+            subjectName: input.kind === "subject" ? subjectName : null,
+            subjectKey: input.kind === "subject" ? subjectKey : null,
             sortOrder: existing.length,
           })
           .returning({ id: groupComparisons.id });
@@ -425,6 +654,84 @@ export const socialGroupsRouter = {
       }),
   },
 
+  /** Configure one preserved legacy group as a class exactly once. */
+  configureClass: protectedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        templateYearId: z.string().min(1),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const access = await groupAccess(input.groupId, userId);
+      assertActive(access.group);
+      assertOwner(access);
+      if (parseClassTemplate(access.group.classTemplate)) {
+        badRequest("This class already has an academic template");
+      }
+      const template = await snapshotClassTemplate(
+        userId,
+        input.templateYearId,
+      );
+      if (!template) {
+        badRequest("The template year must belong to you and contain subjects");
+      }
+      await db.batch([
+        db
+          .update(socialGroups)
+          .set({
+            kind: "class",
+            classTemplate: serializeClassTemplate(template),
+            updatedAt: new Date(),
+          })
+          .where(eq(socialGroups.id, input.groupId)),
+        db
+          .update(groupMemberships)
+          .set({
+            yearId: input.templateYearId,
+            shareAverage: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(groupMemberships.id, access.membership.id)),
+        db
+          .update(groupMemberships)
+          .set({ shareAverage: false, updatedAt: new Date() })
+          .where(eq(groupMemberships.groupId, input.groupId)),
+        db
+          .delete(groupComparisons)
+          .where(eq(groupComparisons.groupId, input.groupId)),
+        db
+          .insert(groupComparisons)
+          .values({ groupId: input.groupId, kind: "general", sortOrder: 0 }),
+      ]);
+      return { configured: true };
+    }),
+
+  selectYear: protectedProcedure
+    .input(z.object({ groupId: z.string().min(1), yearId: z.string().min(1) }))
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const access = await groupAccess(input.groupId, userId);
+      assertActive(access.group);
+      const template = parseClassTemplate(access.group.classTemplate);
+      if (!template) badRequest("This class still needs an academic template");
+      if (
+        (await classYearStatus(userId, input.yearId, template)) !== "connected"
+      ) {
+        badRequest("This year is not compatible with the class template");
+      }
+      await db
+        .update(groupMemberships)
+        .set({
+          yearId: input.yearId,
+          shareAverage: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(groupMemberships.id, access.membership.id));
+      return { yearId: input.yearId };
+    }),
+
   update: protectedProcedure
     .input(
       z.object({
@@ -446,6 +753,15 @@ export const socialGroupsRouter = {
       const access = await groupAccess(input.groupId, context.session.user.id);
       assertActive(access.group);
       assertOwner(access);
+      if (
+        parseClassTemplate(access.group.classTemplate) &&
+        (input.kind !== undefined ||
+          input.sharedSetupYearId !== undefined ||
+          input.sharedSetupConfig !== undefined ||
+          input.sharedSetupFromPresetId !== undefined)
+      ) {
+        badRequest("A class academic template cannot be changed");
+      }
       let presetConfig: string | undefined;
       if (input.sharedSetupFromPresetId) {
         const definition = await findPresetDefinition(
@@ -501,9 +817,7 @@ export const socialGroupsRouter = {
                 sharedSetupConfig: input.sharedSetupConfig
                   ? serializePresetConfiguration(input.sharedSetupConfig)
                   : null,
-                ...(input.sharedSetupConfig
-                  ? { sharedSetupYearId: null }
-                  : {}),
+                ...(input.sharedSetupConfig ? { sharedSetupYearId: null } : {}),
               }
             : {}),
           ...(presetConfig !== undefined
@@ -534,9 +848,7 @@ export const socialGroupsRouter = {
             "Transfer or remove the other members first, or delete the group",
           );
         }
-        await db
-          .delete(socialGroups)
-          .where(eq(socialGroups.id, input.groupId));
+        await db.delete(socialGroups).where(eq(socialGroups.id, input.groupId));
         return { left: true };
       }
       await db
@@ -549,6 +861,19 @@ export const socialGroupsRouter = {
     .input(z.object({ groupId: z.string().min(1), shareAverage: z.boolean() }))
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
+      if (input.shareAverage && access.group.kind === "class") {
+        const template = parseClassTemplate(access.group.classTemplate);
+        if (
+          !template ||
+          (await classYearStatus(
+            context.session.user.id,
+            access.membership.yearId,
+            template,
+          )) !== "connected"
+        ) {
+          badRequest("Connect a compatible year before sharing class results");
+        }
+      }
       await db
         .update(groupMemberships)
         .set({ shareAverage: input.shareAverage, updatedAt: new Date() })
@@ -559,8 +884,8 @@ export const socialGroupsRouter = {
   /**
    * Copy the group's common configuration — year settings, periods, the
    * subject tree, custom averages — into a fresh year of the caller's own.
-   * Grades never travel, and nothing links back: adopting is a copy, so a
-   * member owns their year completely afterwards.
+   * Grades never travel. A class membership records the new year explicitly;
+   * the copied academic data remains independently owned by the member.
    */
   adoptSetup: protectedProcedure
     .input(
@@ -573,6 +898,32 @@ export const socialGroupsRouter = {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
       assertActive(access.group);
+      const classTemplate = parseClassTemplate(access.group.classTemplate);
+      if (classTemplate) {
+        const copy = classYearInsertStatements({
+          userId,
+          template: classTemplate,
+          name: input.name,
+        });
+        const statements = [
+          ...copy.statements,
+          db
+            .update(groupMemberships)
+            .set({
+              yearId: copy.yearId,
+              shareAverage: false,
+              updatedAt: new Date(),
+            })
+            .where(eq(groupMemberships.id, access.membership.id)),
+        ];
+        await db.batch(
+          statements as [
+            (typeof statements)[number],
+            ...(typeof statements)[number][],
+          ],
+        );
+        return { yearId: copy.yearId };
+      }
       const builderConfig = parseSharedSetupConfig(access.group);
       if (!access.group.sharedSetupYearId && !builderConfig) {
         badRequest("This group has no common configuration");
@@ -595,8 +946,7 @@ export const socialGroupsRouter = {
             name: input.name?.trim() || access.group.name,
             startsAt: own?.startsAt ?? septemberFirst,
             endsAt:
-              own?.endsAt ??
-              new Date(septemberFirst.getFullYear() + 1, 6, 1),
+              own?.endsAt ?? new Date(septemberFirst.getFullYear() + 1, 6, 1),
             scale: own?.scale ?? 20,
             defaultOutOf: own?.defaultOutOf ?? 20,
             passingRatio: own?.passingRatio ?? 0.5,
@@ -617,9 +967,7 @@ export const socialGroupsRouter = {
           await db.insert(customAverages).values(materialized.averageRows);
         }
         if (materialized.entryRows.length > 0) {
-          await db
-            .insert(customAverageEntries)
-            .values(materialized.entryRows);
+          await db.insert(customAverageEntries).values(materialized.entryRows);
         }
         return { yearId: created.id };
       }
@@ -708,7 +1056,7 @@ export const socialGroupsRouter = {
           .insert(customAverages)
           .values({
             name: average.name,
-            isMain: average.isMain,
+            isMain: false,
             sortOrder: average.sortOrder,
             yearId: created.id,
             userId,
@@ -772,6 +1120,10 @@ export const socialGroupInvitationsRouter = {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
       assertActive(access.group);
+      assertOwner(access);
+      if (!parseClassTemplate(access.group.classTemplate)) {
+        badRequest("Configure the class before inviting members");
+      }
       const { token, tokenHash, tokenPrefix } = issueOpaqueToken();
       const expiresAt = new Date(Date.now() + GROUP_INVITATION_TTL_MS);
       const [invitation] = await db
@@ -799,6 +1151,7 @@ export const socialGroupInvitationsRouter = {
         .where(
           and(
             eq(groupInvitations.groupId, input.groupId),
+            eq(groupInvitations.createdByUserId, access.group.ownerUserId),
             isNull(groupInvitations.revokedAt),
             gt(groupInvitations.expiresAt, new Date()),
           ),
@@ -859,6 +1212,10 @@ export const socialGroupInvitationsRouter = {
         .where(eq(socialGroups.id, invitation.groupId))
         .limit(1);
       if (!group || group.state !== "active") notFound("Invitation");
+      if (invitation.createdByUserId !== group.ownerUserId) {
+        notFound("Invitation");
+      }
+      if (await blocked(userId, group.ownerUserId)) notFound("Invitation");
       const [inviter, memberCount, existing] = await Promise.all([
         identity(invitation.createdByUserId),
         memberCountOf(group.id),
@@ -873,6 +1230,7 @@ export const socialGroupInvitationsRouter = {
           )
           .limit(1),
       ]);
+      const template = parseClassTemplate(group.classTemplate);
       return {
         group: {
           name: group.name,
@@ -881,18 +1239,26 @@ export const socialGroupInvitationsRouter = {
           hasSharedSetup: Boolean(
             group.sharedSetupYearId || group.sharedSetupConfig,
           ),
+          setupRequired: !template,
+          classTemplate: template ? classTemplateSummary(template) : null,
           memberCount,
         },
         inviter: inviter
           ? { name: inviter.name, avatar: inviter.avatar }
           : null,
         alreadyMember: existing.length > 0,
+        compatibleYears: await compatibleClassYears(userId, template),
         expiresAt: invitation.expiresAt,
       };
     }),
 
   accept: protectedProcedure
-    .input(z.object({ token: z.string().min(1) }))
+    .input(
+      z.object({
+        token: z.string().min(1),
+        year: invitationYearSchema,
+      }),
+    )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const [invitation] = await db
@@ -913,10 +1279,13 @@ export const socialGroupInvitationsRouter = {
         .where(eq(socialGroups.id, invitation.groupId))
         .limit(1);
       if (!group || group.state !== "active") notFound("Invitation");
+      if (invitation.createdByUserId !== group.ownerUserId) {
+        notFound("Invitation");
+      }
       if (await blocked(userId, group.ownerUserId)) notFound("Invitation");
 
       const [existing] = await db
-        .select({ id: groupMemberships.id })
+        .select({ id: groupMemberships.id, yearId: groupMemberships.yearId })
         .from(groupMemberships)
         .where(
           and(
@@ -925,17 +1294,62 @@ export const socialGroupInvitationsRouter = {
           ),
         )
         .limit(1);
-      if (existing) return { groupId: group.id, joined: false };
+      if (existing) {
+        return {
+          groupId: group.id,
+          joined: false,
+          yearId: existing.yearId,
+        };
+      }
 
-      await db.insert(groupMemberships).values({
-        groupId: group.id,
-        userId,
-        role: "member",
-      });
-      await db
-        .update(groupInvitations)
-        .set({ useCount: invitation.useCount + 1 })
-        .where(eq(groupInvitations.id, invitation.id));
+      const template = parseClassTemplate(group.classTemplate);
+      if (!template) badRequest("This class still needs an academic template");
+      const choice = input.year;
+      let yearId: string | null = null;
+      let copyStatements: ReturnType<
+        typeof classYearInsertStatements
+      >["statements"] = [];
+      if (choice.mode === "existing") {
+        if (
+          !template ||
+          (await classYearStatus(userId, choice.yearId, template)) !==
+            "connected"
+        ) {
+          badRequest("This year is not compatible with the class template");
+        }
+        yearId = choice.yearId;
+      } else if (choice.mode === "copy") {
+        if (!template)
+          badRequest("This class still needs an academic template");
+        const copy = classYearInsertStatements({
+          userId,
+          template,
+          name: choice.name,
+        });
+        yearId = copy.yearId;
+        copyStatements = copy.statements;
+      }
+
+      const statements = [
+        ...copyStatements,
+        db.insert(groupMemberships).values({
+          groupId: group.id,
+          userId,
+          role: "member",
+          yearId,
+          shareAverage: false,
+        }),
+        db
+          .update(groupInvitations)
+          .set({ useCount: invitation.useCount + 1 })
+          .where(eq(groupInvitations.id, invitation.id)),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
       if (group.ownerUserId !== userId) {
         await notify({
           userId: group.ownerUserId,
@@ -946,6 +1360,6 @@ export const socialGroupInvitationsRouter = {
           safeParams: { groupName: group.name },
         });
       }
-      return { groupId: group.id, joined: true };
+      return { groupId: group.id, joined: true, yearId };
     }),
 };

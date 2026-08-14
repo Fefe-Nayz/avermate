@@ -113,6 +113,20 @@
       "when": 1786535435609,
       "tag": "0015_blushing_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1786656992884,
+      "tag": "0016_class_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1786667332178,
+      "tag": "0017_widget_definitions",
+      "breakpoints": true
     }
   ]
 }

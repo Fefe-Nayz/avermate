@@ -1,13 +1,38 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import {
+  CARD_METRICS,
+  defaultCards,
+  defaultInsightWidgets,
+  legacyCardToWidgetDefinition,
+  WIDGET_DEFINITION_VERSION,
+  type CardDisplay,
+  type CardMetric,
+  type WidgetDefinitionV1,
+  type WidgetLegacyAdapterInput,
+  type WidgetSurface,
+} from "@avermate/core";
 import { db } from "../db";
-import { dashboardCards } from "../db/schema";
-import { badRequest, protectedProcedure } from "../lib/orpc";
+import { dashboardCardReferences, dashboardCards } from "../db/schema";
+import {
+  cardCreateInputSchema,
+  cardSurfaceSchema,
+  cardUpdateInputSchema,
+  compileOwnedWidgetDefinition,
+  hasWidgetDefinition,
+  widgetReferenceReplacementStatements,
+  widgetReferenceRows,
+  widgetSemanticColumns,
+  type CardCreateInput,
+  type CardUpdateInput,
+} from "../lib/card-storage";
 import {
   assertSameYear,
   normalizeTargetReference,
   type TargetKind,
 } from "../lib/domain-integrity";
+import { badRequest, protectedProcedure } from "../lib/orpc";
+import { newId } from "../lib/id";
 import {
   requireCustomAverage,
   requireDashboardCard,
@@ -15,48 +40,184 @@ import {
   requireSubject,
   requireYear,
 } from "../lib/ownership";
-import { CARD_METRICS, defaultCards } from "@avermate/core";
 
-const cardInput = z.object({
-  surface: z.enum(["overview", "subject", "grade"]).default("overview"),
-  metric: z.enum(CARD_METRICS),
-  targetKind: z.enum(["general", "subject", "custom"]).default("general"),
-  targetId: z.string().nullable().default(null),
-  goalId: z.string().nullable().default(null),
-  display: z
-    .enum(["value", "sparkline", "chart", "list", "gauge"])
-    .default("value"),
-  span: z.number().int().min(1).max(4).default(1),
-  title: z.string().trim().max(48).nullable().default(null),
-  accent: z.string().trim().max(24).nullable().default(null),
-  hidden: z.boolean().default(false),
-});
+const cardMetrics = z.enum(CARD_METRICS);
+const cardDisplays = z.enum(["value", "sparkline", "chart", "list", "gauge"]);
+const targetKinds = z.enum(["general", "subject", "custom"]);
+const legacyKeys = [
+  "metric",
+  "targetKind",
+  "targetId",
+  "goalId",
+  "display",
+] as const;
 
-async function validateCardScope(
+type CardRow = typeof dashboardCards.$inferSelect;
+
+async function validateLegacyScope(
   userId: string,
   yearId: string,
-  targetKind: TargetKind,
-  targetId: string | null | undefined,
-  goalId: string | null,
-): Promise<{ targetId: string | null; goalId: string | null }> {
-  const normalizedTarget = normalizeTargetReference(
-    targetKind,
-    targetId,
+  input: WidgetLegacyAdapterInput,
+): Promise<WidgetLegacyAdapterInput> {
+  const targetId = normalizeTargetReference(
+    input.targetKind,
+    input.targetId,
     "Card target",
   );
-  if (targetKind === "subject" && normalizedTarget) {
-    const subject = await requireSubject(userId, normalizedTarget);
+  if (input.targetKind === "subject" && targetId) {
+    const subject = await requireSubject(userId, targetId);
     assertSameYear("Card subject", yearId, subject.yearId);
   }
-  if (targetKind === "custom" && normalizedTarget) {
-    const average = await requireCustomAverage(userId, normalizedTarget);
+  if (input.targetKind === "custom" && targetId) {
+    const average = await requireCustomAverage(userId, targetId);
     assertSameYear("Card average", yearId, average.yearId);
   }
+  const goalId = input.metric === "goalProgress" ? input.goalId : null;
   if (goalId) {
     const goal = await requireGoal(userId, goalId);
     assertSameYear("Card goal", yearId, goal.yearId);
   }
-  return { targetId: normalizedTarget, goalId };
+  return { ...input, targetId, goalId };
+}
+
+function storedLegacy(row: CardRow): WidgetLegacyAdapterInput {
+  return {
+    metric: cardMetrics.parse(row.metric),
+    targetKind: targetKinds.parse(row.targetKind),
+    targetId: row.targetId,
+    goalId: row.goalId,
+    display: cardDisplays.parse(row.display),
+  };
+}
+
+function isLegacyPatch(input: CardUpdateInput): boolean {
+  return legacyKeys.some((key) => key in input);
+}
+
+function mergedLegacyPatch(
+  row: CardRow,
+  input: CardUpdateInput,
+): WidgetLegacyAdapterInput {
+  const patch = input as Partial<WidgetLegacyAdapterInput>;
+  const stored = storedLegacy(row);
+  const targetKind = patch.targetKind ?? stored.targetKind;
+  const changedKind =
+    patch.targetKind !== undefined && patch.targetKind !== stored.targetKind;
+  return {
+    metric: patch.metric ?? stored.metric,
+    targetKind,
+    targetId:
+      patch.targetId !== undefined
+        ? patch.targetId
+        : changedKind
+          ? null
+          : stored.targetId,
+    goalId: patch.goalId !== undefined ? patch.goalId : stored.goalId,
+    display: patch.display ?? stored.display,
+  };
+}
+
+interface PreparedSemantics {
+  definition: WidgetDefinitionV1;
+  columns: {
+    metric: CardMetric;
+    targetKind: TargetKind;
+    targetId: string | null;
+    goalId: string | null;
+    display: CardDisplay;
+    definitionVersion: number | null;
+    definitionJson: WidgetDefinitionV1 | null;
+  };
+}
+
+function legacySemanticColumns(
+  legacy: WidgetLegacyAdapterInput,
+): PreparedSemantics["columns"] {
+  return {
+    ...legacy,
+    definitionVersion: null,
+    definitionJson: null,
+  };
+}
+
+async function semanticsForCreate(
+  userId: string,
+  input: CardCreateInput,
+): Promise<PreparedSemantics> {
+  const surface = input.surface;
+  if (hasWidgetDefinition(input)) {
+    const definition = await compileOwnedWidgetDefinition(
+      userId,
+      input.yearId,
+      surface,
+      input.definitionJson,
+    );
+    return { definition, columns: widgetSemanticColumns(definition) };
+  }
+  const legacy = await validateLegacyScope(userId, input.yearId, input);
+  const definition = await compileOwnedWidgetDefinition(
+    userId,
+    input.yearId,
+    surface,
+    legacyCardToWidgetDefinition(legacy),
+  );
+  return { definition, columns: legacySemanticColumns(legacy) };
+}
+
+async function semanticsForUpdate(
+  userId: string,
+  row: CardRow,
+  input: CardUpdateInput,
+  surface: WidgetSurface,
+): Promise<PreparedSemantics> {
+  if (hasWidgetDefinition(input)) {
+    const definition = await compileOwnedWidgetDefinition(
+      userId,
+      row.yearId,
+      surface,
+      input.definitionJson,
+    );
+    return { definition, columns: widgetSemanticColumns(definition) };
+  }
+  if (isLegacyPatch(input)) {
+    if (
+      row.definitionVersion === WIDGET_DEFINITION_VERSION &&
+      row.definitionJson
+    ) {
+      badRequest(
+        "A legacy semantic update cannot modify a V1 widget definition",
+      );
+    }
+    const legacy = await validateLegacyScope(
+      userId,
+      row.yearId,
+      mergedLegacyPatch(row, input),
+    );
+    const definition = await compileOwnedWidgetDefinition(
+      userId,
+      row.yearId,
+      surface,
+      legacyCardToWidgetDefinition(legacy),
+    );
+    return { definition, columns: legacySemanticColumns(legacy) };
+  }
+  const existing =
+    row.definitionVersion === WIDGET_DEFINITION_VERSION && row.definitionJson
+      ? row.definitionJson
+      : legacyCardToWidgetDefinition(storedLegacy(row));
+  const definition = await compileOwnedWidgetDefinition(
+    userId,
+    row.yearId,
+    surface,
+    existing,
+  );
+  return {
+    definition,
+    columns:
+      row.definitionVersion === WIDGET_DEFINITION_VERSION && row.definitionJson
+        ? widgetSemanticColumns(definition)
+        : legacySemanticColumns(storedLegacy(row)),
+  };
 }
 
 export const cardsRouter = {
@@ -64,7 +225,7 @@ export const cardsRouter = {
     .input(
       z.object({
         yearId: z.string(),
-        surface: z.enum(["overview", "subject", "grade"]).default("overview"),
+        surface: cardSurfaceSchema.default("overview"),
       }),
     )
     .handler(async ({ context, input }) => {
@@ -82,18 +243,11 @@ export const cardsRouter = {
     }),
 
   create: protectedProcedure
-    .input(cardInput.extend({ yearId: z.string() }))
+    .input(cardCreateInputSchema)
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
-      const scope = await validateCardScope(
-        userId,
-        input.yearId,
-        input.targetKind,
-        input.targetId,
-        input.goalId,
-      );
-
+      const semantics = await semanticsForCreate(userId, input);
       const existing = await db
         .select({ sortOrder: dashboardCards.sortOrder })
         .from(dashboardCards)
@@ -104,56 +258,100 @@ export const cardsRouter = {
           ),
         );
 
-      const [created] = await db
-        .insert(dashboardCards)
-        .values({
-          ...input,
-          ...scope,
+      const cardId = newId("card");
+      const references = widgetReferenceRows(cardId, semantics.definition);
+      const statements = [
+        db.insert(dashboardCards).values({
+          id: cardId,
+          surface: input.surface,
+          span: input.span,
+          title: input.title,
+          accent: input.accent,
+          hidden: input.hidden,
+          ...semantics.columns,
           sortOrder: existing.reduce(
             (max, row) => Math.max(max, row.sortOrder + 1),
             0,
           ),
+          yearId: input.yearId,
           userId,
-        })
-        .returning();
-      return created;
+        }),
+        ...(references.length > 0
+          ? [db.insert(dashboardCardReferences).values(references)]
+          : []),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+      return requireDashboardCard(userId, cardId);
     }),
 
   update: protectedProcedure
-    .input(cardInput.partial().extend({ cardId: z.string() }))
+    .input(cardUpdateInputSchema)
     .handler(async ({ context, input }) => {
-      const { cardId, ...patch } = input;
+      const { cardId } = input;
       const userId = context.session.user.id;
       const existing = await requireDashboardCard(userId, cardId);
-      const targetKind = z
-        .enum(["general", "subject", "custom"])
-        .parse(patch.targetKind ?? existing.targetKind);
-      const changedKind =
-        patch.targetKind !== undefined &&
-        patch.targetKind !== existing.targetKind;
-      const targetId =
-        patch.targetId !== undefined
-          ? patch.targetId
-          : changedKind
-            ? null
-            : existing.targetId;
-      const goalId =
-        patch.goalId !== undefined ? patch.goalId : existing.goalId;
-      const scope = await validateCardScope(
-        userId,
-        existing.yearId,
-        targetKind,
-        targetId,
-        goalId,
+      const surface = cardSurfaceSchema.parse(
+        input.surface ?? existing.surface,
       );
-      const [updated] = await db
-        .update(dashboardCards)
-        .set({ ...patch, targetKind, ...scope, updatedAt: new Date() })
-        .where(
-          and(eq(dashboardCards.id, cardId), eq(dashboardCards.userId, userId)),
-        )
-        .returning();
-      return updated;
+      if (surface !== existing.surface) {
+        badRequest("A card cannot change surface through an update");
+      }
+      if (!hasWidgetDefinition(input) && !isLegacyPatch(input)) {
+        await db
+          .update(dashboardCards)
+          .set({
+            ...(input.span !== undefined ? { span: input.span } : {}),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.accent !== undefined ? { accent: input.accent } : {}),
+            ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(dashboardCards.id, cardId),
+              eq(dashboardCards.userId, userId),
+            ),
+          );
+        return requireDashboardCard(userId, cardId);
+      }
+      const semantics = await semanticsForUpdate(
+        userId,
+        existing,
+        input,
+        surface,
+      );
+      const statements = [
+        db
+          .update(dashboardCards)
+          .set({
+            surface,
+            ...(input.span !== undefined ? { span: input.span } : {}),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.accent !== undefined ? { accent: input.accent } : {}),
+            ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
+            ...semantics.columns,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(dashboardCards.id, cardId),
+              eq(dashboardCards.userId, userId),
+            ),
+          ),
+        ...widgetReferenceReplacementStatements(cardId, semantics.definition),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
+      return requireDashboardCard(userId, cardId);
     }),
 
   reorder: protectedProcedure
@@ -202,12 +400,12 @@ export const cardsRouter = {
         ...current.map((card) => card.id).filter((id) => !requested.has(id)),
       ];
       const statements = orderedIds.map((id, index) =>
-          db
-            .update(dashboardCards)
-            .set({ sortOrder: index, updatedAt: new Date() })
-            .where(
-              and(eq(dashboardCards.id, id), eq(dashboardCards.userId, userId)),
-            ),
+        db
+          .update(dashboardCards)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(
+            and(eq(dashboardCards.id, id), eq(dashboardCards.userId, userId)),
+          ),
       );
       await db.batch(
         statements as [
@@ -221,29 +419,72 @@ export const cardsRouter = {
   delete: protectedProcedure
     .input(z.object({ cardId: z.string() }))
     .handler(async ({ context, input }) => {
-      const userId = context.session.user.id;
       await db
         .delete(dashboardCards)
         .where(
           and(
             eq(dashboardCards.id, input.cardId),
-            eq(dashboardCards.userId, userId),
+            eq(dashboardCards.userId, context.session.user.id),
           ),
         );
       return { ok: true };
     }),
 
-  /** Back to the starting dashboard, for when a layout gets away from someone. */
+  /** Restore an explicit recommended layout; an empty surface stays empty. */
   reset: protectedProcedure
     .input(
       z.object({
         yearId: z.string(),
-        surface: z.enum(["overview", "subject", "grade"]).default("overview"),
+        surface: cardSurfaceSchema.default("overview"),
       }),
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
+
+      const presets =
+        input.surface === "overview"
+          ? defaultCards().map((card) => ({
+              definition: legacyCardToWidgetDefinition({
+                metric: card.metric,
+                targetKind: card.target.kind,
+                targetId: card.target.referenceId,
+                goalId: null,
+                display: card.display,
+              }),
+              presentation: {
+                span: card.span,
+                title: card.title,
+                accent: card.accent,
+              },
+            }))
+          : input.surface === "insights"
+            ? defaultInsightWidgets()
+            : [];
+
+      const rows = await Promise.all(
+        presets.map(async (preset, sortOrder) => {
+          const definition = await compileOwnedWidgetDefinition(
+            userId,
+            input.yearId,
+            input.surface,
+            preset.definition,
+          );
+          const id = newId("card");
+          return {
+            id,
+            surface: input.surface,
+            ...widgetSemanticColumns(definition),
+            span: preset.presentation.span,
+            title: preset.presentation.title,
+            accent: preset.presentation.accent,
+            sortOrder,
+            hidden: false,
+            yearId: input.yearId,
+            userId,
+          };
+        }),
+      );
 
       const removeExisting = db
         .delete(dashboardCards)
@@ -253,32 +494,26 @@ export const cardsRouter = {
             eq(dashboardCards.surface, input.surface),
           ),
         );
-
-      if (input.surface !== "overview") {
+      if (rows.length === 0) {
         await removeExisting;
         return [];
       }
-
-      const insertDefaults = db
-        .insert(dashboardCards)
-        .values(
-          defaultCards().map((card) => ({
-            surface: "overview",
-            metric: card.metric,
-            targetKind: card.target.kind,
-            targetId: card.target.referenceId,
-            goalId: null,
-            display: card.display,
-            span: card.span,
-            title: card.title,
-            accent: card.accent,
-            sortOrder: card.sortOrder,
-            hidden: card.hidden,
-            yearId: input.yearId,
-            userId,
-          })),
-        );
-      await db.batch([removeExisting, insertDefaults]);
+      const references = rows.flatMap((row) =>
+        widgetReferenceRows(row.id, row.definitionJson),
+      );
+      const statements = [
+        removeExisting,
+        db.insert(dashboardCards).values(rows),
+        ...(references.length > 0
+          ? [db.insert(dashboardCardReferences).values(references)]
+          : []),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
       return db
         .select()
         .from(dashboardCards)

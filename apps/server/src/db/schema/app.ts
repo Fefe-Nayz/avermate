@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -9,6 +10,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { newId } from "../../lib/id";
 import { users } from "./auth";
+import type { WidgetDefinitionV1 } from "@avermate/core/widget-types";
 
 /**
  * Application schema.
@@ -377,7 +379,7 @@ export const customAverages = sqliteTable(
       .primaryKey()
       .$defaultFn(() => newId("avg")),
     name: text().notNull(),
-    /** Shown in place of the general average on the dashboard. */
+    /** @deprecated Kept only for backwards-compatible stored snapshots. */
     isMain: integer({ mode: "boolean" }).notNull().default(false),
     sortOrder: integer().notNull().default(0),
     /** Stable preset average identity across published versions. */
@@ -481,7 +483,7 @@ export const dashboardCards = sqliteTable(
       .notNull()
       .primaryKey()
       .$defaultFn(() => newId("card")),
-    /** Which screen the card belongs to: "overview" | "subject" | "grade". */
+    /** Which screen owns the card: overview, subject, grade or insights. */
     surface: text().notNull().default("overview"),
 
     metric: text().notNull(),
@@ -501,6 +503,10 @@ export const dashboardCards = sqliteTable(
     sortOrder: integer().notNull().default(0),
     hidden: integer({ mode: "boolean" }).notNull().default(false),
 
+    /** Versioned analytics definition. Null means the legacy columns are canonical. */
+    definitionVersion: integer(),
+    definitionJson: text({ mode: "json" }).$type<WidgetDefinitionV1>(),
+
     yearId: text()
       .notNull()
       .references(() => years.id, { onDelete: "cascade", onUpdate: "cascade" }),
@@ -510,6 +516,31 @@ export const dashboardCards = sqliteTable(
   (t) => [
     index("dashboard_cards_year_id_idx").on(t.yearId),
     index("dashboard_cards_user_id_idx").on(t.userId),
+  ],
+);
+
+export type DashboardCardReferenceKind =
+  "subject" | "custom-average" | "goal" | "period";
+
+/**
+ * Derived references keep widget definitions relationally observable without
+ * making the JSON document itself part of a delete or ownership query.
+ */
+export const dashboardCardReferences = sqliteTable(
+  "dashboard_card_references",
+  {
+    cardId: text()
+      .notNull()
+      .references(() => dashboardCards.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    kind: text().$type<DashboardCardReferenceKind>().notNull(),
+    referenceId: text().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.cardId, t.kind, t.referenceId] }),
+    index("dashboard_card_references_lookup_idx").on(t.kind, t.referenceId),
   ],
 );
 
