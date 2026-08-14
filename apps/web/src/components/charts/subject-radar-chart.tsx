@@ -35,11 +35,12 @@ export function SubjectRadarChart({ title }: { title: string }) {
   const definition = useMemo(
     () =>
       defineChart({
-        chart: ({ width }) =>
+        chart: ({ width, height }) =>
           radarSpec({
             points,
             scale,
             width,
+            height,
             formatValue: (value) => format.number(value),
           }),
         focus: "nearest",
@@ -90,6 +91,7 @@ export function SubjectRadarChart({ title }: { title: string }) {
           )}
           ariaLabel={title}
           definition={definition}
+          entrance="rise"
           height={340}
           initialWidth={360}
         />

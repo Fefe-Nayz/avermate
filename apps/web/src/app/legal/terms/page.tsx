@@ -53,17 +53,17 @@ export default function TermsPage() {
         )}
       </p>
 
-      <h2>{t("Friends, groups and rankings")}</h2>
+      <h2>{t("Friends, classes and rankings")}</h2>
       <p>
         {t(
-          "Friendships and group membership depend on mutual or explicit acceptance. Group owners define a purpose and sharing policy, but cannot override a member's consent or use hidden fields. Rankings are optional and are not official academic records."
+          "Friendships require mutual acceptance. Joining a class requires explicit acceptance and a compatible academic year. Sharing in class rankings stays optional, and rankings are not official academic records."
         )}
       </p>
 
       <h2>{t("Moderation")}</h2>
       <p>
         {t(
-          "Avermate may limit social access, freeze a group or review reports to protect users and operate the service. Moderation decisions are based on available records and may be revised when additional context is provided."
+          "Avermate may limit social access, place a class on hold or review reports to protect users and operate the service. Moderation decisions are based on available records and may be revised when additional context is provided."
         )}
       </p>
 

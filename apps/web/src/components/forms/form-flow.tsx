@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation"
 import {
+  createContext,
   useCallback,
+  useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +15,7 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  CheckIcon,
   PencilIcon,
   XIcon,
 } from "lucide-react"
@@ -49,6 +53,20 @@ export interface FlowStep {
 }
 
 /**
+ * A control can move the flow on when its answer is the whole step.
+ *
+ * The subject step's list is the step: once a row is tapped there is nothing
+ * left on the screen to do, and a "Continue" that only repeats the tap is a
+ * second tap for nothing. The context no-ops on a laptop — where every step
+ * is on screen and there is nowhere to advance to — and outside a flow.
+ */
+const FlowAdvanceContext = createContext<() => void>(() => {})
+
+export function useFlowAdvance() {
+  return useContext(FlowAdvanceContext)
+}
+
+/**
  * The shell every form screen uses.
  *
  * Forms are screens, not dialogs: a dialog on a phone fights the keyboard,
@@ -77,8 +95,9 @@ export function FormFlow({
   disabled = false,
   destructive,
   footerNote,
-  /** Shown above the first step on both surfaces, e.g. a live preview. */
+  /** Shown above the first step by default, e.g. a live preview. */
   aside,
+  asidePlacement = "top",
   /**
    * The last optional touches — a note, a title — asked for on the review
    * screen rather than as a step of their own. Nobody wants a whole screen
@@ -100,6 +119,8 @@ export function FormFlow({
   destructive?: { label: string; onClick: () => void }
   footerNote?: ReactNode
   aside?: ReactNode
+  /** Keeps the aside in flow on small screens and pins it beside the form when space allows. */
+  asidePlacement?: "top" | "sticky-end"
   beforeSave?: ReactNode
   /** Dialogs and layers that belong to the form but to no single step. */
   overlays?: ReactNode
@@ -114,6 +135,10 @@ export function FormFlow({
     [steps]
   )
   const [index, setIndex] = useState(0)
+  // Set when a step was reached from the review screen. An edit is a detour,
+  // not a restart: its "Continue" goes back to the review it came from
+  // instead of replaying every step in between.
+  const [returning, setReturning] = useState(false)
 
   // A step can disappear under the cursor — turning off "made of several
   // parts" removes one — so the position is clamped at read time rather than
@@ -195,11 +220,44 @@ export function FormFlow({
       haptic("warning")
       return
     }
+    if (returning) {
+      setReturning(false)
+      goto(reviewIndex)
+      return
+    }
     goto(position + 1)
   }
 
+  const back = () => {
+    // Backing out of an edit is also a return to the review, not a walk
+    // through the steps behind it.
+    if (returning) {
+      setReturning(false)
+      goto(reviewIndex)
+      return
+    }
+    goto(position - 1)
+  }
+
+  const editFromReview = (next: number) => {
+    setReturning(true)
+    goto(next)
+  }
+
+  // A stable identity for the context: consumers deep inside a step get the
+  // current advance without re-rendering when the flow does. Wide screens
+  // show every step at once, so there is nothing to advance to.
+  const advanceRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    advanceRef.current = () => {
+      if (wide || onReview) return
+      advance()
+    }
+  })
+  const flowAdvance = useCallback(() => advanceRef.current(), [])
+
   return (
-    <>
+    <FlowAdvanceContext.Provider value={flowAdvance}>
       <PageMeta title={title} subtitle={description} backHref={backHref} />
 
       <form
@@ -207,9 +265,19 @@ export function FormFlow({
         onSubmit={handleSubmit}
         onFocus={revealFocused}
         onKeyDown={onKeyDown}
-        className="mx-auto w-full max-w-2xl"
+        className={cn(
+          "mx-auto w-full",
+          aside && asidePlacement === "sticky-end"
+            ? "max-w-6xl @4xl/main:grid @4xl/main:grid-cols-[minmax(0,1fr)_minmax(20rem,0.7fr)] @4xl/main:items-start @4xl/main:gap-x-6"
+            : "max-w-2xl"
+        )}
       >
-        <div className="hidden items-start justify-between gap-4 pb-4 md:flex">
+        <div
+          className={cn(
+            "hidden items-start justify-between gap-4 pb-4 md:flex",
+            aside && asidePlacement === "sticky-end" && "@4xl/main:col-span-2"
+          )}
+        >
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             {description ? (
@@ -229,10 +297,27 @@ export function FormFlow({
           </Button>
         </div>
 
-        {aside ? <div className="pb-5">{aside}</div> : null}
+        {aside ? (
+          <aside
+            className={cn(
+              "pb-5",
+              asidePlacement === "sticky-end" &&
+                "@4xl/main:sticky @4xl/main:top-4 @4xl/main:col-start-2 @4xl/main:row-start-2 @4xl/main:pb-0"
+            )}
+          >
+            {aside}
+          </aside>
+        ) : null}
 
         {/* Desktop: the whole form, once. */}
-        <div className="hidden flex-col gap-6 md:flex">
+        <div
+          className={cn(
+            "hidden flex-col gap-6 md:flex",
+            aside &&
+              asidePlacement === "sticky-end" &&
+              "@4xl/main:col-start-1 @4xl/main:row-start-2 @4xl/main:min-w-0"
+          )}
+        >
           {active.map((item) => (
             <section key={item.id} className="flex flex-col gap-3">
               <div>
@@ -265,7 +350,7 @@ export function FormFlow({
           />
 
           {onReview ? (
-            <Review steps={active} onEdit={goto} extra={beforeSave} />
+            <Review steps={active} onEdit={editFromReview} extra={beforeSave} />
           ) : step ? (
             <section className="flex flex-col gap-4">
               <div>
@@ -284,7 +369,14 @@ export function FormFlow({
         </div>
 
         {footerNote ? (
-          <p className="pt-4 pb-28 text-xs text-muted-foreground md:pb-0">
+          <p
+            className={cn(
+              "pt-4 pb-28 text-xs text-muted-foreground md:pb-0",
+              aside &&
+                asidePlacement === "sticky-end" &&
+                "@4xl/main:col-start-1"
+            )}
+          >
             {footerNote}
           </p>
         ) : null}
@@ -304,18 +396,19 @@ export function FormFlow({
           }
           className={cn(
             "fixed inset-x-0 z-40 border-t border-border/70 bg-background px-4 pt-3 pb-3",
-            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0"
+            "md:static md:mt-6 md:border-0 md:bg-transparent md:px-0 md:pt-0 md:pb-0",
+            aside && asidePlacement === "sticky-end" && "@4xl/main:col-start-1"
           )}
         >
           {/* Phone: move through the flow, and only save from the review. */}
           <div className="flex items-center gap-2 md:hidden">
-            {position > 0 ? (
+            {position > 0 || returning ? (
               <Button
                 type="button"
                 variant="outline"
                 size="lg"
                 aria-label={t("Back")}
-                onClick={() => goto(position - 1)}
+                onClick={back}
               >
                 <ArrowLeftIcon className="size-4" />
               </Button>
@@ -337,6 +430,17 @@ export function FormFlow({
               >
                 {submitting ? <Spinner className="size-4" /> : null}
                 {submitLabel}
+              </Button>
+            ) : returning ? (
+              <Button
+                key="continue"
+                type="button"
+                size="lg"
+                className="flex-1"
+                onClick={advance}
+              >
+                {t("Done")}
+                <CheckIcon className="size-4" />
               </Button>
             ) : (
               <Button
@@ -401,7 +505,7 @@ export function FormFlow({
 
         {overlays}
       </form>
-    </>
+    </FlowAdvanceContext.Provider>
   )
 }
 

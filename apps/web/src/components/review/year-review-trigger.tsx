@@ -6,13 +6,18 @@ import { useQuery } from "@tanstack/react-query"
 import { CalendarDaysIcon, PlayIcon, XIcon } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { useExtracted } from "next-intl"
+import dynamic from "next/dynamic"
 import { buildYearReview } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 import { yearReviewWindowKey } from "@/lib/year-review-window"
-import { YearReviewStory } from "./year-review-story"
+
+const YearReviewStory = dynamic(
+  () => import("./year-review-story").then((module) => module.YearReviewStory),
+  { ssr: false }
+)
 
 /**
  * The one-time seasonal invitation from the original app, rebuilt as a small
@@ -114,7 +119,7 @@ export function YearReviewTrigger() {
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ type: "spring", bounce: 0.12, duration: 0.45 }}
             aria-label={t("Year recap available")}
-            className="fixed right-4 bottom-[calc(var(--spacing-tabbar)+env(safe-area-inset-bottom)+1rem)] left-4 z-40 mx-auto max-w-sm rounded-2xl border bg-popover/96 p-4 text-popover-foreground shadow-2xl backdrop-blur-xl md:right-7 md:bottom-7 md:left-auto md:mx-0"
+            className="fixed right-[calc(var(--spacing-safe-right)+1rem)] bottom-[calc(var(--spacing-tabbar)+var(--spacing-safe-bottom)+1rem)] left-[calc(var(--spacing-safe-left)+1rem)] z-40 mx-auto max-w-sm rounded-2xl border bg-popover/96 p-4 text-popover-foreground shadow-2xl backdrop-blur-xl md:right-[calc(var(--spacing-safe-right)+1.75rem)] md:bottom-[calc(var(--spacing-safe-bottom)+1.75rem)] md:left-auto md:mx-0"
           >
             <div className="flex items-start gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">

@@ -50,7 +50,7 @@ export function ResponsiveSheet({
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="pb-safe">
+        <DrawerContent>
           <DrawerHeader className="pb-2 text-left">
             <DrawerTitle>{title}</DrawerTitle>
             {description ? (

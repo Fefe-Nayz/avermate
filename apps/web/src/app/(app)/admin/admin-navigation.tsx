@@ -76,7 +76,7 @@ export function AdminNavigation() {
         },
         {
           href: "/admin/social/groups",
-          label: t("Groups"),
+          label: t("Classes"),
           icon: UsersRoundIcon,
         },
       ],

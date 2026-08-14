@@ -41,12 +41,7 @@ function templatePresentation(id: string, t: ReturnType<typeof useExtracted>) {
     case "quarters":
       return {
         label: t("Four quarters"),
-        names: [
-          t("Quarter 1"),
-          t("Quarter 2"),
-          t("Quarter 3"),
-          t("Quarter 4"),
-        ],
+        names: [t("Quarter 1"), t("Quarter 2"), t("Quarter 3"), t("Quarter 4")],
       }
     default:
       return { label: t("No split"), names: [] }
@@ -182,8 +177,11 @@ export function PeriodDraftEditor({
                 <DragHandle className="-ml-1" />
                 <input
                   value={draft.name}
+                  maxLength={64}
                   aria-label={t("Period name")}
-                  onChange={(event) => update(index, { name: event.target.value })}
+                  onChange={(event) =>
+                    update(index, { name: event.target.value })
+                  }
                   className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
                 />
                 <Button

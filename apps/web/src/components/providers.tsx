@@ -16,7 +16,10 @@ function ToasterBridge() {
       position={isMobile ? "top-center" : "bottom-right"}
       theme={resolvedTheme === "dark" ? "dark" : "light"}
       toastOptions={{
-        classNames: { toast: "pointer-events-none pt-safe md:pt-0" },
+        classNames: {
+          toast:
+            "pointer-events-none pt-safe has-[[data-button]]:pointer-events-auto has-[[data-close-button]]:pointer-events-auto md:pt-0 [&_[data-button]]:pointer-events-auto [&_[data-close-button]]:pointer-events-auto",
+        },
       }}
     />
   )

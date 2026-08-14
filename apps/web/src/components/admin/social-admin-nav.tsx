@@ -22,7 +22,7 @@ export function SocialAdminNav() {
     },
     {
       href: "/admin/social/groups",
-      label: t("Groups"),
+      label: t("Classes"),
       icon: UsersRoundIcon,
     },
     {

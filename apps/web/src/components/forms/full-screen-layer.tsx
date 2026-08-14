@@ -39,7 +39,10 @@ export function FullScreenLayer({
   const t = useExtracted()
   const keyboard = useKeyboardInset()
   const close = useRef(onClose)
-  close.current = onClose
+
+  useEffect(() => {
+    close.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
@@ -77,7 +80,7 @@ export function FullScreenLayer({
       style={keyboard > 0 ? { bottom: `${keyboard}px` } : undefined}
       className="fixed inset-0 z-50 flex flex-col bg-background md:hidden"
     >
-      <header className="flex shrink-0 items-start gap-2 border-b px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="flex shrink-0 items-start gap-2 border-b pt-[max(0.5rem,var(--spacing-safe-top))] pr-[max(0.5rem,var(--spacing-safe-right))] pb-2 pl-[max(0.5rem,var(--spacing-safe-left))]">
         <Button
           type="button"
           variant="ghost"
@@ -97,12 +100,12 @@ export function FullScreenLayer({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-[var(--spacing-safe-right)] pl-[var(--spacing-safe-left)]">
         {children}
       </div>
 
       {footer ? (
-        <div className="shrink-0 border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t bg-background pt-3 pr-[max(1rem,var(--spacing-safe-right))] pb-[max(0.75rem,var(--spacing-safe-bottom))] pl-[max(1rem,var(--spacing-safe-left))]">
           {footer}
         </div>
       ) : null}

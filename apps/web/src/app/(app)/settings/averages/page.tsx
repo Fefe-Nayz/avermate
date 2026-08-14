@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { ChevronRightIcon, PlusIcon, SigmaIcon, StarIcon } from "lucide-react"
+import { ChevronRightIcon, PlusIcon, SigmaIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { resolveCustomAverage } from "@avermate/core"
@@ -121,9 +121,6 @@ export default function AveragesSettingsPage() {
                       <div className="min-w-0 flex-1">
                         <p className="flex items-center gap-1.5 truncate text-sm font-medium">
                           {average.name}
-                          {average.isMain ? (
-                            <StarIcon className="size-3.5 shrink-0 text-primary" />
-                          ) : null}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {t("{count} subjects", {

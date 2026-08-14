@@ -260,7 +260,10 @@ export function MultiSeriesAverageChart({
             strokeWidth: 2,
             states: [
               {
-                when: { focus: "key" },
+                // "group", not "key": the independent-series focus returns
+                // one nearest point per series, and every one of them gets
+                // its dot — "key" lit only the single closest series.
+                when: { focus: "group" },
                 style: { r: 5, fillOpacity: 1 },
                 transition: {
                   type: "tween",

@@ -2,12 +2,12 @@
 
 import Link from "next/link"
 import { use, useMemo } from "react"
-import { ChevronRightIcon, PencilIcon, StarIcon } from "lucide-react"
+import { ChevronRightIcon, PencilIcon } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import {
+  averageEventDates,
   averageOverTime,
   consistency,
-  dayRange,
   gradeRatio,
   gradeRatios,
   median,
@@ -75,10 +75,9 @@ export default function AverageAnalyticsPage({
       Math.min(timelineEnd, period.endAt.getTime(), year.endsAt.getTime())
     )
     if (to <= from) return []
-    const span = (to.getTime() - from.getTime()) / 86_400_000
     return averageOverTime(
       resolved.graph.subjects,
-      dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
+      averageEventDates(resolved.graph.subjects, from, to),
       null,
       resolved.scope
     )
@@ -163,11 +162,7 @@ export default function AverageAnalyticsPage({
 
   return (
     <>
-      <PageMeta
-        title={title}
-        subtitle={custom?.isMain ? t("Headline average") : undefined}
-        backHref="/subjects"
-      />
+      <PageMeta title={title} backHref="/subjects" />
       <PageActions>
         <TimelineTrigger />
         {custom ? (
@@ -187,9 +182,6 @@ export default function AverageAnalyticsPage({
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
               {title}
-              {custom?.isMain ? (
-                <StarIcon className="size-5 text-primary" />
-              ) : null}
             </h1>
             <p className="text-sm text-muted-foreground">
               {t("A complete view of this average")}

@@ -26,7 +26,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <div className="relative flex min-h-svh flex-col bg-background">
       <AuthBackdrop />
 
-      <header className="pt-safe relative z-10 flex h-16 items-center gap-2 px-4 sm:px-6">
+      <header className="pt-safe relative z-10 flex h-[calc(4rem+var(--spacing-safe-top))] items-center gap-2 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
         <Link
           href="/"
           className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -39,7 +39,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="relative z-10 flex flex-1 items-center justify-center px-4 pb-12 sm:px-6">
+      <main className="relative z-10 flex flex-1 items-center justify-center pr-[max(1rem,var(--spacing-safe-right))] pb-[max(3rem,var(--spacing-safe-bottom))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
         <div className="flex w-full max-w-sm flex-col gap-5 md:max-w-4xl">
           <Link
             href="/"

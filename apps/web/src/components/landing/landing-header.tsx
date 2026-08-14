@@ -61,13 +61,13 @@ export function LandingHeader() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 transition-colors duration-300",
+        "pt-safe sticky top-0 z-40 transition-colors duration-300",
         scrolled
           ? "border-b border-border/60 bg-background/80 backdrop-blur-xl"
           : "border-b border-transparent"
       )}
     >
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
         <Link
           href="/"
           aria-label={t("Avermate home")}
@@ -102,7 +102,11 @@ export function LandingHeader() {
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <PublicThemeToggle />
-          <Button variant="ghost" size="sm" render={<Link href="/auth/sign-in" />}>
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<Link href="/auth/sign-in" />}
+          >
             {t("Sign in")}
           </Button>
           <Button size="sm" render={<Link href="/auth/sign-up" />}>

@@ -68,7 +68,7 @@ export function TimelineBanner() {
   const visibleGrades = yearGraph.allGrades().length
 
   return (
-    <section className="shrink-0 border-b border-band-fair/40 bg-band-fair/12 px-4 py-2.5 md:px-6">
+    <section className="shrink-0 border-b border-band-fair/40 bg-band-fair/12 py-2.5 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 text-sm">
         <HistoryIcon className="size-4 shrink-0 opacity-70" />
         <div className="min-w-0 flex-1">

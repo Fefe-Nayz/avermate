@@ -44,7 +44,7 @@ export function MobileHeader({
           "border-b border-border/70 bg-background/85 backdrop-blur-xl"
       )}
     >
-      <div className="flex h-mobile-header items-center gap-1 px-2">
+      <div className="flex h-mobile-header items-center gap-1 pr-[max(0.5rem,var(--spacing-safe-right))] pl-[max(0.5rem,var(--spacing-safe-left))]">
         {backHref ? (
           <button
             type="button"

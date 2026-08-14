@@ -68,7 +68,7 @@ export function AnnouncementBanner() {
     <div
       role="status"
       className={cn(
-        "flex shrink-0 items-start gap-2.5 border-b px-4 py-2.5 text-sm md:px-6",
+        "flex shrink-0 items-start gap-2.5 border-b py-2.5 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] text-sm md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]",
         tone.className
       )}
     >

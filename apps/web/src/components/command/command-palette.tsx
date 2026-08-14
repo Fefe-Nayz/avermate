@@ -34,6 +34,7 @@ import { NAV_ENTRIES } from "@/lib/nav"
 import { useMaybeYear } from "@/components/year/year-provider"
 import { AverageValue } from "@/components/data/value"
 import { useIsAdmin } from "@/hooks/use-admin"
+import { cn } from "@/lib/utils"
 
 /**
  * Search everything: screens, subjects, grades, goals, and a few commands.
@@ -45,6 +46,42 @@ import { useIsAdmin } from "@/hooks/use-admin"
 interface PaletteStore {
   open: () => void
   close: () => void
+}
+
+export function CommandResultColumns({
+  primary,
+  secondary,
+  secondaryKind,
+}: {
+  primary: ReactNode
+  secondary: ReactNode
+  secondaryKind: "label" | "value"
+}) {
+  return (
+    <span
+      data-slot="command-result-columns"
+      data-secondary-kind={secondaryKind}
+      className={cn(
+        "grid min-w-0 flex-1 items-center gap-3",
+        secondaryKind === "label"
+          ? "grid-cols-[minmax(0,1fr)_minmax(6rem,40%)]"
+          : "grid-cols-[minmax(0,1fr)_minmax(3rem,auto)]"
+      )}
+    >
+      <span
+        data-slot="command-result-primary"
+        className="min-w-0 break-words whitespace-normal"
+      >
+        {primary}
+      </span>
+      <span
+        data-slot="command-result-secondary"
+        className="min-w-0 justify-self-end text-right break-words whitespace-normal"
+      >
+        {secondary}
+      </span>
+    </span>
+  )
 }
 
 const PaletteContext = createContext<PaletteStore | null>(null)
@@ -156,18 +193,24 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
                   <CommandItem
                     key={subject.id}
                     value={`${subject.name} ${subject.shortName ?? ""}`}
+                    className="[&>svg:last-child]:hidden"
                     onSelect={() =>
                       run(() => router.push(`/subjects/${subject.id}`))
                     }
                   >
                     <BookMarkedIcon />
-                    <span className="truncate">{subject.name}</span>
-                    <AverageValue
-                      ratio={year?.graph.ratio(subject.id) ?? null}
-                      animate={false}
-                      decimals={1}
-                      colored
-                      className="ml-auto text-xs"
+                    <CommandResultColumns
+                      primary={subject.name}
+                      secondaryKind="value"
+                      secondary={
+                        <AverageValue
+                          ratio={year?.graph.ratio(subject.id) ?? null}
+                          animate={false}
+                          decimals={1}
+                          colored
+                          className="text-xs"
+                        />
+                      }
                     />
                   </CommandItem>
                 ))}
@@ -204,14 +247,20 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
                   <CommandItem
                     key={grade.id}
                     value={`${grade.name} ${year?.graph.byId(grade.subjectId)?.name ?? ""}`}
+                    className="[&>svg:last-child]:hidden"
                     onSelect={() =>
                       run(() => router.push(`/grades/${grade.id}`))
                     }
                   >
-                    <span className="truncate">{grade.name}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {year?.graph.byId(grade.subjectId)?.name}
-                    </span>
+                    <CommandResultColumns
+                      primary={grade.name}
+                      secondaryKind="label"
+                      secondary={
+                        <span className="text-xs text-muted-foreground">
+                          {year?.graph.byId(grade.subjectId)?.name}
+                        </span>
+                      }
+                    />
                   </CommandItem>
                 ))}
               </CommandGroup>

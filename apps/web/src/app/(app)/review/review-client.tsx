@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { PlayIcon, SparklesIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
+import dynamic from "next/dynamic"
 import { buildYearReview } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +15,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { PageMeta } from "@/components/shell/page-chrome"
-import { YearReviewStory } from "@/components/review/year-review-story"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
@@ -27,6 +27,14 @@ import { reviewStatusInput } from "@/lib/route-query-inputs"
  * from the server — the one number that needs everybody else's data.
  */
 const subscribeToHydration = () => () => undefined
+
+const YearReviewStory = dynamic(
+  () =>
+    import("@/components/review/year-review-story").then(
+      (module) => module.YearReviewStory
+    ),
+  { ssr: false }
+)
 
 export function ReviewClient({
   initialTopPercentile,
@@ -104,52 +112,71 @@ export function ReviewClient({
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/12 via-card to-card p-8 text-center">
-            <SparklesIcon className="mx-auto size-8 text-primary" />
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
-              {year?.name}
-            </h2>
-            <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-              {t(
-                "{count} grades, one story. Take a minute to see how the year actually went.",
-                { count: String(review?.gradeCount ?? 0) }
-              )}
-            </p>
-            <Button
-              size="lg"
-              className="mt-6"
-              onClick={() => {
-                haptic("medium")
-                setPlaying(true)
-              }}
-            >
-              <PlayIcon className="size-4" />
-              {t("Play my recap")}
-            </Button>
+          // The poster for the story it opens: the same black frame and
+          // coloured glow the recap itself plays in, filling the viewport
+          // the way the story will — pressing play is stepping through it.
+          <div className="relative flex min-h-[calc(100svh-var(--spacing-tabbar)-var(--spacing-safe-bottom)-9rem)] flex-col overflow-hidden rounded-3xl bg-zinc-950 p-8 text-center text-white ring-1 ring-white/10 md:min-h-[calc(100svh-14rem)]">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -top-32 left-1/2 size-96 -translate-x-1/2 rounded-full bg-primary/35 blur-3xl"
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -bottom-28 -left-20 size-80 rounded-full bg-orange-500/25 blur-3xl"
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-1/3 -right-24 size-72 rounded-full bg-fuchsia-500/20 blur-3xl"
+            />
+
+            <div className="relative flex flex-1 flex-col items-center justify-center py-8">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
+                <SparklesIcon className="size-3.5" />
+                {t("Year in review")}
+              </span>
+              <h2 className="mt-5 text-4xl font-semibold tracking-tight md:text-5xl">
+                {year?.name}
+              </h2>
+              <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-white/70 md:text-base">
+                {t(
+                  "{count} grades, one story. Take a minute to see how the year actually went.",
+                  { count: String(review?.gradeCount ?? 0) }
+                )}
+              </p>
+              <Button
+                size="lg"
+                className="mt-8 bg-white text-black hover:bg-white/90"
+                onClick={() => {
+                  haptic("medium")
+                  setPlaying(true)
+                }}
+              >
+                <PlayIcon className="size-4" />
+                {t("Play my recap")}
+              </Button>
+            </div>
 
             {review ? (
-              <dl className="mt-8 grid grid-cols-3 gap-4 border-t pt-6 text-left">
-                <div>
-                  <dt className="text-xs text-muted-foreground">
-                    {t("Grades")}
-                  </dt>
-                  <dd className="numeric text-xl font-semibold">
+              <dl className="relative grid grid-cols-3 gap-3 text-left">
+                <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+                  <dt className="text-xs text-white/60">{t("Grades")}</dt>
+                  <dd className="numeric mt-1 text-xl font-semibold">
                     {review.gradeCount}
                   </dd>
                 </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">
+                <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+                  <dt className="text-xs text-white/60">
                     {t("Longest streak")}
                   </dt>
-                  <dd className="numeric text-xl font-semibold">
+                  <dd className="numeric mt-1 text-xl font-semibold">
                     {review.longestStreak}
                   </dd>
                 </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">
+                <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+                  <dt className="text-xs text-white/60">
                     {t("Top percentile")}
                   </dt>
-                  <dd className="numeric text-xl font-semibold">
+                  <dd className="numeric mt-1 text-xl font-semibold">
                     {review.topPercentile > 0
                       ? format.number(review.topPercentile / 100, {
                           style: "percent",

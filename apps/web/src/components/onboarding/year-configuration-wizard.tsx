@@ -132,7 +132,7 @@ export function YearConfigurationWizard({
   }
 
   return (
-    <div className="pt-safe mx-auto flex min-h-svh w-full max-w-3xl flex-col px-4 pb-8">
+    <div className="pt-safe mx-auto flex min-h-svh w-full max-w-3xl flex-col pr-[max(1rem,var(--spacing-safe-right))] pb-[max(2rem,var(--spacing-safe-bottom))] pl-[max(1rem,var(--spacing-safe-left))]">
       <header className="flex min-h-14 items-center gap-3 border-b py-2">
         <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <GraduationCapIcon className="size-4" aria-hidden />
@@ -561,7 +561,6 @@ function SubjectsConfigurationStep({
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">
                     {average.name}
                   </span>
-                  {average.isMain ? <Badge>{t("Main")}</Badge> : null}
                   <span className="text-xs text-muted-foreground">
                     {t("{count} subjects", {
                       count: String(average.entries.length),

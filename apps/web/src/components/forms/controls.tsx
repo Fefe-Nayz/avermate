@@ -152,8 +152,7 @@ export function NumberField({
     placeholder,
     disabled,
     inputMode: (step % 1 === 0 ? "numeric" : "decimal") as
-      | "numeric"
-      | "decimal",
+      "numeric" | "decimal",
     enterKeyHint: "next" as const,
     pattern: decimalHint,
     type: "text",
@@ -163,7 +162,10 @@ export function NumberField({
   }
 
   return (
-    <Field data-invalid={error ? true : undefined} data-disabled={disabled || undefined}>
+    <Field
+      data-invalid={error ? true : undefined}
+      data-disabled={disabled || undefined}
+    >
       <FieldContent className="min-w-0">
         <FieldLabel htmlFor={id}>
           {label}
@@ -235,6 +237,7 @@ export interface Choice<T extends string> {
   label: string
   description?: string
   icon?: ReactNode
+  disabled?: boolean
 }
 
 /** Radio behaviour, card presentation. Works with one hand. */
@@ -273,12 +276,13 @@ export function ChoiceField<T extends string>({
               type="button"
               role="radio"
               aria-checked={selected}
+              disabled={choice.disabled}
               onClick={() => {
                 haptic("selection")
                 onValueChange(choice.value)
               }}
               className={cn(
-                "flex min-h-11 items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                "flex min-h-11 items-start gap-3 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                 selected
                   ? "border-primary bg-primary/6 ring-1 ring-primary/40"
                   : "border-border bg-card hover:bg-accent/50 active:bg-accent"
@@ -567,14 +571,13 @@ export function DatePicker({
   )
 
   // When the date is the whole screen there is nothing to open: the calendar
-  // is the screen. Same rule as the subject list.
+  // is the screen. Same rule as the subject list. No shortcut chips here —
+  // "today" is one tap on the month anyway, since that is where a calendar
+  // opens, and the row was costing the calendar a chip-row of height.
   if (layout === "page" && !wide) {
     return (
-      <div className="flex flex-col gap-4">
-        {shortcuts}
-        <div className="overflow-hidden rounded-xl border bg-card">
-          {wideCalendar}
-        </div>
+      <div className="overflow-hidden rounded-xl border bg-card">
+        {wideCalendar}
       </div>
     )
   }
@@ -630,7 +633,7 @@ export function DatePicker({
             className={cn(
               "justify-start gap-2 px-3 font-normal",
               !selected && "text-muted-foreground",
-              className,
+              className
             )}
           />
         }

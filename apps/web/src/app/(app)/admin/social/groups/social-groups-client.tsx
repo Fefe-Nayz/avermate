@@ -58,7 +58,7 @@ export function AdminSocialGroupsClient() {
       haptic("success")
       toast.success(
         result.state === "frozen"
-          ? t("Group placed on hold.")
+          ? t("Class placed on hold.")
           : t("Hold lifted.")
       )
       await refresh()
@@ -68,19 +68,19 @@ export function AdminSocialGroupsClient() {
     ...orpc.admin.deleteSocialGroup.mutationOptions(),
     onSuccess: async () => {
       haptic("success")
-      toast.success(t("Group deleted."))
+      toast.success(t("Class deleted."))
       await refresh()
     },
   })
 
   return (
     <>
-      <PageMeta title={t("Groups")} />
+      <PageMeta title={t("Classes")} />
       <div className="flex flex-col gap-4">
         <SocialHeading
           icon={UsersRoundIcon}
-          title={t("Groups")}
-          description={t("Hold a reported group, or delete it outright.")}
+          title={t("Classes")}
+          description={t("Hold a reported class, or delete it outright.")}
         />
 
         <div className="flex flex-wrap gap-2">
@@ -145,7 +145,7 @@ export function AdminSocialGroupsClient() {
                             type="button"
                             size="icon-sm"
                             variant="ghost"
-                            aria-label={t("Delete group")}
+                            aria-label={t("Delete class")}
                           />
                         }
                       >
@@ -154,7 +154,7 @@ export function AdminSocialGroupsClient() {
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>
-                            {t("Delete this group?")}
+                            {t("Delete this class?")}
                           </AlertDialogTitle>
                           <AlertDialogDescription>
                             {t(
@@ -168,7 +168,7 @@ export function AdminSocialGroupsClient() {
                             variant="destructive"
                             onClick={() => remove.mutate({ groupId: group.id })}
                           >
-                            {t("Delete group")}
+                            {t("Delete class")}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -190,7 +190,7 @@ export function AdminSocialGroupsClient() {
         ) : (
           <SocialEmpty
             icon={UsersRoundIcon}
-            title={t("No groups match")}
+            title={t("No classes match")}
             description={t("Adjust the search or the state filter.")}
           />
         )}

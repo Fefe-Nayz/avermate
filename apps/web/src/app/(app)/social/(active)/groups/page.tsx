@@ -6,7 +6,7 @@ export default async function SocialGroupsPage() {
   const t = await getExtracted()
   return (
     <>
-      <PageMeta title={t("Groups")} />
+      <PageMeta title={t("Classes")} />
       <GroupsClient />
     </>
   )

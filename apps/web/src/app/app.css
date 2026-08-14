@@ -127,6 +127,104 @@
   .animating-value {
     font-variant-numeric: tabular-nums;
   }
+
+  /* The streak card's flame sways from its base while the streak is alive,
+     and sheds the occasional ember. The global reduced-motion rule below
+     stills both. */
+  .animate-flame {
+    animation: flame-sway 1.8s ease-in-out infinite;
+    transform-origin: 50% 85%;
+  }
+  .animate-ember {
+    animation: ember-rise 2.6s ease-in infinite;
+    opacity: 0;
+  }
+
+  /* The sparkline's closing dot breathes: the reading is live, not final.
+     Scoped to the wrapper because the chart draws the dot itself, deep in
+     its own SVG; the sparkline has exactly one dot mark, so the class
+     cannot catch anything else. */
+  .spark-live .ts-chart__dot circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: live-dot 2s ease-in-out infinite;
+  }
+
+  /* Chart entrances (see ResponsiveChart's `entrance`): curves wipe in
+     along their time axis, radial shapes rise. GPU-only properties, and
+     the tooltip lives in a portal the clip never touches. */
+  .chart-enter-wipe {
+    animation: chart-wipe 800ms cubic-bezier(0.25, 1, 0.4, 1) both;
+  }
+  .chart-enter-rise {
+    animation: chart-rise 500ms cubic-bezier(0.25, 1, 0.4, 1) both;
+  }
+
+  /* A paused story is paused everywhere: every CSS animation inside the
+     frame holds its current frame until play. The shader and the music
+     stop through their own props; this catches the rest. */
+  .story-paused *,
+  .story-paused *::before,
+  .story-paused *::after {
+    animation-play-state: paused !important;
+  }
+}
+
+@keyframes flame-sway {
+  0%,
+  100% {
+    transform: scale(1) rotate(-2deg);
+  }
+  50% {
+    transform: scale(1.08) rotate(2deg);
+  }
+}
+
+@keyframes ember-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1);
+  }
+}
+
+@keyframes live-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
+  }
+}
+
+@keyframes chart-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes chart-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

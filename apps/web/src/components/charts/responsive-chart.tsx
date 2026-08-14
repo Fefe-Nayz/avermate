@@ -1,8 +1,19 @@
 "use client"
 
-import type { ChartRenderContext, ChartValue } from "@tanstack/charts"
-import { Chart, type ChartProps } from "@tanstack/charts/react/tooltip"
-import { useCallback, useState, useSyncExternalStore } from "react"
+import type { ChartRendererRenderContext, ChartValue } from "@tanstack/charts"
+import { motion } from "@tanstack/charts/motion"
+import {
+  RendererChart,
+  type RendererChartProps,
+} from "@tanstack/charts/react/tooltip"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 
 const MEASUREMENT_TOLERANCE = 0.5
 const subscribeToClient = () => () => undefined
@@ -19,21 +30,90 @@ const getServerSnapshot = () => false
  * surface only after hydration avoids that mismatch. The surrounding route and
  * its chart data remain server-rendered, and the fixed-height placeholder keeps
  * the layout stable while the real container width is measured.
+ *
+ * The box is measured *before* the chart mounts, and the chart mounts straight
+ * at that size. The order matters for the entrance: the motion renderer
+ * animates the first client render, and when the first render happened at
+ * `initialWidth` behind the placeholder, the entrance played to an audience of
+ * nobody and the visible chart simply popped in after the re-measure.
+ *
+ * With `fill`, the chart also takes whatever height its box resolves to
+ * instead of imposing one: the surface is absolutely positioned so the drawn
+ * SVG can never push its own container taller, and `height` becomes the floor
+ * drawn while the box is measured. The caller owns the box — typically
+ * `min-h-* flex-1`, so the chart absorbs whatever the row has spare.
  */
 export function ResponsiveChart<
   TDatum,
   TXValue extends ChartValue = ChartValue,
   TYValue extends ChartValue = ChartValue,
->({ onRender, ...props }: ChartProps<TDatum, TXValue, TYValue>) {
+>({
+  onRender,
+  fill = false,
+  entrance = "wipe",
+  ...props
+}: Omit<RendererChartProps<TDatum, TXValue, TYValue>, "renderer"> & {
+  fill?: boolean
+  /**
+   * How the chart makes its entrance. The library cannot: its React host
+   * adopts a pre-rendered SVG, and adopted roots skip the initial animation
+   * by design. So the reveal is ours — a left-to-right wipe for anything
+   * with a time axis, a rise for radial shapes — and it replays on every
+   * mount because the class arrives with the first measured render.
+   */
+  entrance?: "wipe" | "rise" | "none"
+}) {
   const isClient = useSyncExternalStore(
     subscribeToClient,
     getClientSnapshot,
     getServerSnapshot
   )
   const [hasMeasuredLayout, setHasMeasuredLayout] = useState(false)
+  const [box, setBox] = useState<{ width: number; height: number } | null>(
+    null
+  )
+  const boxRef = useRef<HTMLDivElement | null>(null)
+
+  // The motion renderer animates the first client render — marks grow, draw
+  // and stagger in — where the plain SVG renderer only animates updates.
+  const renderer = useMemo(
+    () =>
+      motion<TDatum, TXValue, TYValue>({
+        initial: true,
+        respectReducedMotion: true,
+        resize: false,
+      }),
+    []
+  )
+
+  useEffect(() => {
+    const node = boxRef.current
+    if (!node) return
+    const measure = () => {
+      const rect = node.getBoundingClientRect()
+      const next = {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+      setBox((current) =>
+        current &&
+        current.width === next.width &&
+        current.height === next.height
+          ? current
+          : next.width > 0
+            ? next
+            : current
+      )
+    }
+    measure()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   const handleRender = useCallback(
-    (context: ChartRenderContext<TDatum, TXValue, TYValue>) => {
+    (context: ChartRendererRenderContext<TDatum, TXValue, TYValue>) => {
       onRender?.(context)
 
       const containerWidth = context.container.getBoundingClientRect().width
@@ -49,10 +129,11 @@ export function ResponsiveChart<
 
   return (
     <div
+      ref={boxRef}
       aria-busy={hasMeasuredLayout ? undefined : true}
-      className="relative"
+      className={fill ? "relative h-full" : "relative"}
       data-chart-layout={hasMeasuredLayout ? "measured" : "pending"}
-      style={{ height: props.height }}
+      style={fill ? undefined : { height: props.height }}
     >
       <div
         aria-hidden="true"
@@ -70,11 +151,27 @@ export function ResponsiveChart<
       </div>
       <div
         className={
-          hasMeasuredLayout ? "opacity-100" : "pointer-events-none opacity-0"
+          (hasMeasuredLayout
+            ? "opacity-100" +
+              (entrance === "wipe"
+                ? " chart-enter-wipe"
+                : entrance === "rise"
+                  ? " chart-enter-rise"
+                  : "")
+            : "pointer-events-none opacity-0") +
+          (fill ? " absolute inset-0" : "")
         }
         data-chart-surface
       >
-        {isClient ? <Chart {...props} onRender={handleRender} /> : null}
+        {isClient && box ? (
+          <RendererChart
+            {...props}
+            renderer={renderer}
+            width={box.width}
+            height={fill ? Math.max(box.height, 1) : props.height}
+            onRender={handleRender}
+          />
+        ) : null}
       </div>
     </div>
   )

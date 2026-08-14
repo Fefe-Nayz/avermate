@@ -132,7 +132,11 @@ function YearSetupForm({
   const yearsOptions = orpc.years.list.queryOptions()
   const existing = useQuery(yearsOptions)
 
-  const [step, setStep] = useState<Step>(initialDraft.step)
+  const [step, setStep] = useState<Step>(
+    initialDraft.presetId && initialDraft.step === "periods"
+      ? "preset"
+      : initialDraft.step
+  )
   const [name, setName] = useState(initialDraft.name)
   const [startsAt, setStartsAt] = useState(initialDraft.startsAt)
   const [endsAt, setEndsAt] = useState(initialDraft.endsAt)
@@ -195,7 +199,9 @@ function YearSetupForm({
     writeActiveYearCookie(recovered.id)
     localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(recovered.id))
     router.replace(
-      `/onboarding/year/${encodeURIComponent(recovered.id)}?step=subjects`
+      recovered.presetId
+        ? "/dashboard"
+        : `/onboarding/year/${encodeURIComponent(recovered.id)}?step=subjects`
     )
   }, [
     existing.data,
@@ -221,6 +227,7 @@ function YearSetupForm({
   const finish = async () => {
     try {
       haptic("light")
+      const selectedTemplate = presetId ? "none" : template
       const created = await setupYear.mutateAsync({
         idempotencyKey: initialDraft.idempotencyKey,
         year: {
@@ -233,8 +240,8 @@ function YearSetupForm({
           decimals: 2,
         },
         presetId,
-        periodTemplateId: template,
-        periodNames: periodNames[template],
+        periodTemplateId: selectedTemplate,
+        periodNames: periodNames[selectedTemplate],
       })
 
       writeActiveYearCookie(created.id)
@@ -246,12 +253,16 @@ function YearSetupForm({
       clearYearSetupDraft(sessionStorage, mode)
       haptic("success")
       toast.success(
-        mode === "first"
-          ? t("Year created. Check the details before finishing.")
-          : t("Year created. Check its subjects and periods.")
+        presetId
+          ? t("Year ready.")
+          : mode === "first"
+            ? t("Year created. Check the details before finishing.")
+            : t("Year created. Check its subjects and periods.")
       )
       router.replace(
-        `/onboarding/year/${encodeURIComponent(created.id)}?step=subjects`
+        presetId
+          ? "/dashboard"
+          : `/onboarding/year/${encodeURIComponent(created.id)}?step=subjects`
       )
     } catch (error) {
       haptic("error")
@@ -263,7 +274,9 @@ function YearSetupForm({
     }
   }
 
-  const steps: Step[] = ["year", "preset", "periods"]
+  const steps: Step[] = presetId
+    ? ["year", "preset"]
+    : ["year", "preset", "periods"]
   const index = steps.indexOf(step)
   const busy = setupYear.isPending || setupStatus.isFetching
   const numericScale = Number(scale)
@@ -273,7 +286,7 @@ function YearSetupForm({
     Boolean(startsAt) && Boolean(endsAt) && startsAt.localeCompare(endsAt) < 0
 
   return (
-    <div className="pt-safe mx-auto flex min-h-svh w-full max-w-lg flex-col px-4 pb-10">
+    <div className="pt-safe mx-auto flex min-h-svh w-full max-w-lg flex-col pr-[max(1rem,var(--spacing-safe-right))] pb-[max(2.5rem,var(--spacing-safe-bottom))] pl-[max(1rem,var(--spacing-safe-left))]">
       <header className="flex h-14 items-center gap-2">
         <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <GraduationCapIcon className="size-4" aria-hidden />
@@ -447,10 +460,19 @@ function YearSetupForm({
               <Button
                 size="lg"
                 className="flex-1"
-                onClick={() => setStep("periods")}
+                disabled={busy}
+                onClick={() => {
+                  if (presetId) void finish()
+                  else setStep("periods")
+                }}
               >
-                {t("Continue")}
-                <ArrowRightIcon className="size-4" />
+                {busy ? <Spinner className="size-4" /> : null}
+                {presetId ? t("Finish") : t("Continue")}
+                {presetId ? (
+                  <CheckIcon className="size-4" />
+                ) : (
+                  <ArrowRightIcon className="size-4" />
+                )}
               </Button>
             </div>
           </>

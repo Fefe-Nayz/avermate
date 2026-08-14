@@ -63,17 +63,19 @@ export function NotificationsClient() {
         return {
           icon: UsersRoundIcon,
           label: params.groupName
-            ? t("Someone joined {groupName}.", { groupName: params.groupName })
-            : t("Someone joined your group."),
+            ? t("Someone joined the class {className}.", {
+                className: params.groupName,
+              })
+            : t("Someone joined your class."),
         }
       case "group_removed":
         return {
           icon: UserXIcon,
           label: params.groupName
-            ? t("You were removed from {groupName}.", {
-                groupName: params.groupName,
+            ? t("You were removed from the class {className}.", {
+                className: params.groupName,
               })
-            : t("You were removed from a group."),
+            : t("You were removed from a class."),
         }
       default:
         return { icon: BellIcon, label: t("A social update is available.") }
@@ -179,7 +181,7 @@ export function NotificationsClient() {
             icon={BellIcon}
             title={unreadOnly ? t("Nothing unread") : t("Nothing yet")}
             description={t(
-              "Friend requests and group activity will appear here."
+              "Friend requests and class activity will appear here."
             )}
           />
         )}

@@ -1,18 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import {
-  gradeRatio,
-  resolveCustomAverage,
-  type SubjectGraph,
-} from "@avermate/core"
-import { ChevronRightIcon, StarIcon } from "lucide-react"
+import { resolveCustomAverage, type SubjectGraph } from "@avermate/core"
+import { ChevronRightIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
-import {
-  AverageValue,
-  CoefficientBadge,
-  ResultBadge,
-} from "@/components/data/value"
+import { AverageValue, CoefficientBadge } from "@/components/data/value"
+import { GradeResultBadge } from "@/components/grades/grade-result-badge"
 import {
   Table,
   TableBody,
@@ -100,9 +93,6 @@ export function HierarchicalGradeTable({ query }: { query: string }) {
                     className="inline-flex min-h-9 items-center gap-1 font-medium hover:underline"
                   >
                     {average.name}
-                    {average.isMain ? (
-                      <StarIcon className="size-3.5 text-primary" />
-                    ) : null}
                     <ChevronRightIcon className="size-3.5" />
                   </Link>
                 </TableCell>
@@ -166,16 +156,7 @@ function SubjectRow({
                 (left, right) =>
                   right.passedAt.getTime() - left.passedAt.getTime()
               )
-              .map((grade) => (
-                <Link
-                  key={grade.id}
-                  href={`/grades/${grade.id}`}
-                  title={grade.name}
-                  className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  <ResultBadge ratio={gradeRatio(grade)} />
-                </Link>
-              ))
+              .map((grade) => <GradeResultBadge key={grade.id} grade={grade} />)
           )}
         </div>
       </TableCell>

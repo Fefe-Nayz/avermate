@@ -20,7 +20,12 @@ import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
 import { ChoiceField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { CARD_ACCENTS, cardAccent } from "./card-accent"
-import { CardBody, useCardResult, useMetricLabels } from "./card-view"
+import {
+  CardBody,
+  cardSurface,
+  useCardResult,
+  useMetricLabels,
+} from "./card-view"
 import { useYear } from "@/components/year/year-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { orpc } from "@/lib/orpc"
@@ -240,7 +245,11 @@ export function CardForm({
       )}
     >
       <Card
-        className={cn("relative gap-2 overflow-hidden py-4", PREVIEW_SPAN[drawn])}
+        className={cn(
+          "@container/card relative gap-2 overflow-hidden py-4",
+          cardSurface(preview),
+          PREVIEW_SPAN[drawn]
+        )}
       >
         {accentBar ? (
           <span
@@ -401,7 +410,12 @@ export function CardForm({
               value={String(drawn)}
               onValueChange={(value) =>
                 setSpan(
-                  spanForColumns(span, Number.parseInt(value, 10), shape, columns)
+                  spanForColumns(
+                    span,
+                    Number.parseInt(value, 10),
+                    shape,
+                    columns
+                  )
                 )
               }
               columns={widths.length > 2 ? 4 : 2}
@@ -420,6 +434,7 @@ export function CardForm({
       backHref="/dashboard"
       steps={steps}
       aside={previewGrid}
+      asidePlacement="sticky-end"
       beforeSave={
         <TextField
           label={t("Title")}
@@ -431,7 +446,9 @@ export function CardForm({
         />
       }
       onSubmit={submit}
-      submitLabel={mode === "create" ? t("Add to dashboard") : t("Save changes")}
+      submitLabel={
+        mode === "create" ? t("Add to dashboard") : t("Save changes")
+      }
       submitting={create.isPending || update.isPending}
       destructive={
         mode === "edit" && initial?.id
@@ -503,7 +520,9 @@ function AccentField({
             onClick={() => onValueChange(accent.value)}
             className={cn(
               "flex size-9 items-center justify-center rounded-full border-2 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              value === accent.value ? "border-foreground" : "border-transparent"
+              value === accent.value
+                ? "border-foreground"
+                : "border-transparent"
             )}
           >
             <span className={cn("size-6 rounded-full", accent.swatch)} />

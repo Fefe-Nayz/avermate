@@ -52,7 +52,6 @@ export default function EditAveragePage({
       initial={{
         id: average.id,
         name: average.name,
-        isMain: average.isMain,
         entries: average.entries.map((entry) => ({
           subjectId: entry.subjectId,
           coefficient:

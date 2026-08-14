@@ -111,7 +111,7 @@ export function AdminSocialReportsClient() {
                     ? ` · ${t("about {name}", { name: report.target })}`
                     : ""}
                   {report.groupName
-                    ? ` · ${t("group {name}", { name: report.groupName })}`
+                    ? ` · ${t("class {name}", { name: report.groupName })}`
                     : ""}
                   {report.assignedTo
                     ? ` · ${t("assigned to {name}", { name: report.assignedTo })}`

@@ -10,7 +10,6 @@ import {
   PlusIcon,
   SearchIcon,
   SparklesIcon,
-  StarIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
@@ -265,12 +264,6 @@ export default function SubjectsPage() {
                           <span className="truncate text-sm font-medium">
                             {average.name}
                           </span>
-                          {average.isMain ? (
-                            <StarIcon
-                              aria-label={t("Headline average")}
-                              className="size-3.5 shrink-0 fill-primary/20 text-primary"
-                            />
-                          ) : null}
                         </span>
                         <AverageValue
                           ratio={average.ratio}

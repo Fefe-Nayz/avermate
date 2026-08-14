@@ -21,9 +21,22 @@ import {
   useSortable,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVerticalIcon, PencilIcon, PlusIcon } from "lucide-react"
+import {
+  EyeIcon,
+  EyeOffIcon,
+  GripVerticalIcon,
+  PencilIcon,
+  PlusIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
-import { layoutCards, type CardSpec } from "@avermate/core"
+import {
+  layoutCards,
+  widgetCapability,
+  widgetDefinitionToLegacyProjection,
+  widgetMeasureId,
+  type CardSpec,
+  type WidgetSurface,
+} from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
@@ -31,7 +44,20 @@ import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { cardAccent } from "./card-accent"
-import { CardBody, useCardResult, useMetricLabels } from "./card-view"
+import {
+  legacyCardSpec,
+  resolveWidgetRow,
+  widgetEvaluationMode,
+} from "./widget-row"
+import { useWidgetMessages } from "./use-widget-messages"
+import { useWidgetResult } from "./use-widget-result"
+import { WidgetBody } from "./widget-view"
+import {
+  CardBody,
+  cardSurface,
+  useCardResult,
+  useMetricLabels,
+} from "./card-view"
 
 /**
  * The dashboard grid.
@@ -43,18 +69,24 @@ import { CardBody, useCardResult, useMetricLabels } from "./card-view"
  */
 
 export function toSpec(row: DashboardCardRow): CardSpec {
+  const resolved = resolveWidgetRow(row)
+  if (resolved.source === "legacy") return legacyCardSpec(row)
+  const projection =
+    resolved.source === "v1"
+      ? widgetDefinitionToLegacyProjection(resolved.definition)
+      : null
   return {
     id: row.id,
-    metric: row.metric as CardSpec["metric"],
+    metric: projection?.metric ?? "average",
     target: {
-      kind: row.targetKind as CardSpec["target"]["kind"],
-      referenceId: row.targetId,
+      kind: projection?.targetKind ?? "general",
+      referenceId: projection?.targetId ?? row.targetId,
     },
-    display: row.display as CardSpec["display"],
+    display: projection?.display ?? (row.display as CardSpec["display"]),
     span: Math.min(4, Math.max(1, row.span)) as CardSpec["span"],
     title: row.title,
     accent: row.accent,
-    goalId: row.goalId,
+    goalId: projection?.goalId ?? row.goalId,
     sortOrder: row.sortOrder,
     hidden: row.hidden,
   }
@@ -102,16 +134,44 @@ function DashboardCard({
   row,
   editing,
   spanClasses,
+  surface,
 }: {
   row: DashboardCardRow
   editing: boolean
   spanClasses: string
+  surface: WidgetSurface
 }) {
   const t = useExtracted()
+  const { yearId } = useYear()
+  const message = useWidgetMessages()
   const labels = useMetricLabels()
+  const resolved = useMemo(() => resolveWidgetRow(row), [row])
+  const evaluation = widgetEvaluationMode(resolved.source)
   const spec = useMemo(() => toSpec(row), [row])
-  const result = useCardResult(spec)
+  const legacyResult = useCardResult(spec, evaluation.legacy)
+  const widgetResult = useWidgetResult(
+    resolved.definition,
+    surface,
+    evaluation.v1
+  )
+  const defaultTitle = message(
+    widgetCapability(widgetMeasureId(resolved.definition.analysis.measure))
+      .messageKey
+  )
   const accent = cardAccent(spec.accent)
+  const route = surface === "insights" ? "/insights/cards" : "/dashboard/cards"
+  const queryClient = useQueryClient()
+  const visibility = useMutation({
+    ...orpc.cards.update.mutationOptions(),
+    onSuccess: () => {
+      haptic("light")
+      void queryClient.invalidateQueries({
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+    },
+  })
   const {
     attributes,
     listeners,
@@ -126,8 +186,12 @@ function DashboardCard({
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
-        "relative gap-2 overflow-hidden py-4",
+        // Its own query container: the body scales its type to the width the
+        // grid actually gave this card, not to the viewport.
+        "@container/card relative gap-2 overflow-hidden py-4",
+        cardSurface(resolved.source === "legacy" ? legacyResult : widgetResult),
         spanClasses,
+        row.hidden && "opacity-55",
         isDragging && "z-10 opacity-80 shadow-lg"
       )}
     >
@@ -147,15 +211,31 @@ function DashboardCard({
             accent ? accent.text : "text-muted-foreground"
           )}
         >
-          {spec.title ?? labels[spec.metric]}
+          {spec.title ??
+            (resolved.source === "v1" ? defaultTitle : labels[spec.metric])}
         </CardTitle>
         {editing ? (
           <>
             <Button
               variant="ghost"
               size="icon-sm"
+              disabled={visibility.isPending}
+              aria-label={row.hidden ? t("Show card") : t("Hide card")}
+              onClick={() =>
+                visibility.mutate({ cardId: row.id, hidden: !row.hidden })
+              }
+            >
+              {row.hidden ? (
+                <EyeIcon className="size-3.5" />
+              ) : (
+                <EyeOffIcon className="size-3.5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
               aria-label={t("Edit card")}
-              render={<Link href={`/dashboard/cards/${row.id}`} />}
+              render={<Link href={`${route}/${row.id}`} />}
             >
               <PencilIcon className="size-3.5" />
             </Button>
@@ -171,24 +251,45 @@ function DashboardCard({
           </>
         ) : null}
       </CardHeader>
-      <CardContent className="px-4">
-        <CardBody spec={spec} result={result} />
+      {/* The row's height is set by its tallest card; `flex-1` hands the
+          difference to the body so charts can drink it. Bodies that keep
+          their natural height simply leave it. */}
+      <CardContent className="min-h-0 flex-1 px-4">
+        {resolved.source === "v1" ? (
+          <WidgetBody
+            definition={resolved.definition}
+            result={widgetResult}
+            expanded={surface === "insights"}
+          />
+        ) : (
+          <CardBody spec={spec} result={legacyResult} />
+        )}
       </CardContent>
     </Card>
   )
 }
 
-export function CardGrid({ editing }: { editing: boolean }) {
+export function CardGrid({
+  editing,
+  surface = "overview",
+}: {
+  editing: boolean
+  surface?: Extract<WidgetSurface, "overview" | "insights">
+}) {
   const t = useExtracted()
   const queryClient = useQueryClient()
   const { cards, yearId } = useYear()
 
-  const visible = useMemo(
+  const surfaceCards = useMemo(
     () =>
       cards
-        .filter((card) => card.surface === "overview" && !card.hidden)
+        .filter((card) => card.surface === surface)
         .sort((a, b) => a.sortOrder - b.sortOrder),
-    [cards]
+    [cards, surface]
+  )
+  const visible = useMemo(
+    () => surfaceCards.filter((card) => editing || !card.hidden),
+    [editing, surfaceCards]
   )
 
   // The same stored spans, read once for every grid this page can become.
@@ -229,6 +330,17 @@ export function CardGrid({ editing }: { editing: boolean }) {
       })
     },
   })
+  const reset = useMutation({
+    ...orpc.cards.reset.mutationOptions(),
+    onSuccess: () => {
+      haptic("success")
+      void queryClient.invalidateQueries({
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      })
+    },
+  })
 
   const sensors = useSensors(
     // A small distance before a drag starts, so a tap on a card link is still
@@ -253,20 +365,42 @@ export function CardGrid({ editing }: { editing: boolean }) {
   }
 
   if (visible.length === 0) {
+    const allHidden = surfaceCards.length > 0
+    const addHref =
+      surface === "insights" ? "/insights/cards/new" : "/dashboard/cards/new"
     return (
       <div className="rounded-xl border border-dashed p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          {t("Your dashboard is empty.")}
+          {allHidden
+            ? t("All cards are hidden. Customise this page to show them again.")
+            : surface === "insights"
+              ? t("You have not added any insights yet.")
+              : t("Your dashboard is empty.")}
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          render={<Link href="/dashboard/cards/new" />}
-        >
-          <PlusIcon className="size-4" />
-          {t("Add a card")}
-        </Button>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          {!allHidden ? (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={addHref} />}
+            >
+              <PlusIcon className="size-4" />
+              {surface === "insights" ? t("Add an insight") : t("Add a card")}
+            </Button>
+          ) : null}
+          {surface === "insights" && !allHidden ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!yearId || reset.isPending}
+              onClick={() =>
+                reset.mutate({ yearId: yearId as string, surface: "insights" })
+              }
+            >
+              {t("Restore recommended insights")}
+            </Button>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -289,6 +423,7 @@ export function CardGrid({ editing }: { editing: boolean }) {
               row={row}
               editing={editing}
               spanClasses={placement.spans.get(row.id) ?? ""}
+              surface={surface}
             />
           ))}
           {editing ? (
@@ -296,14 +431,19 @@ export function CardGrid({ editing }: { editing: boolean }) {
             // deliberately kept reads as an invitation rather than a mistake.
             <Button
               variant="outline"
-              className={cn(
-                "h-full min-h-24 border-dashed",
-                placement.gap
-              )}
-              render={<Link href="/dashboard/cards/new" />}
+              className={cn("h-full min-h-24 border-dashed", placement.gap)}
+              render={
+                <Link
+                  href={
+                    surface === "insights"
+                      ? "/insights/cards/new"
+                      : "/dashboard/cards/new"
+                  }
+                />
+              }
             >
               <PlusIcon className="size-4" />
-              {t("Add a card")}
+              {surface === "insights" ? t("Add an insight") : t("Add a card")}
             </Button>
           ) : null}
         </div>

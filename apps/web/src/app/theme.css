@@ -214,7 +214,7 @@
  * day, and it can be switched off like any other seasonal theme.
  */
 
-:root[data-season="newYear"] {
+:root:not(.dark)[data-season="newYear"] {
   --primary: oklch(0.62 0.16 265);
   --accent: oklch(0.95 0.03 265);
   --ring: oklch(0.62 0.16 265);
@@ -222,7 +222,7 @@
   --chart-2: oklch(0.78 0.11 250);
 }
 
-:root[data-season="spring"] {
+:root:not(.dark)[data-season="spring"] {
   --primary: oklch(0.62 0.14 145);
   --accent: oklch(0.95 0.04 145);
   --ring: oklch(0.62 0.14 145);
@@ -230,7 +230,7 @@
   --chart-2: oklch(0.8 0.12 120);
 }
 
-:root[data-season="summer"] {
+:root:not(.dark)[data-season="summer"] {
   --primary: oklch(0.68 0.15 205);
   --accent: oklch(0.95 0.04 205);
   --ring: oklch(0.68 0.15 205);
@@ -238,7 +238,7 @@
   --chart-2: oklch(0.82 0.12 190);
 }
 
-:root[data-season="autumn"] {
+:root:not(.dark)[data-season="autumn"] {
   --primary: oklch(0.6 0.15 55);
   --accent: oklch(0.95 0.04 55);
   --ring: oklch(0.6 0.15 55);
@@ -246,7 +246,7 @@
   --chart-2: oklch(0.78 0.13 75);
 }
 
-:root[data-season="halloween"] {
+:root:not(.dark)[data-season="halloween"] {
   --primary: oklch(0.66 0.19 45);
   --primary-foreground: oklch(0.16 0.03 45);
   --accent: oklch(0.95 0.04 45);
@@ -255,12 +255,57 @@
   --chart-2: oklch(0.52 0.16 300);
 }
 
-:root[data-season="winter"] {
+:root:not(.dark)[data-season="winter"] {
   --primary: oklch(0.62 0.11 230);
   --accent: oklch(0.95 0.025 230);
   --ring: oklch(0.62 0.11 230);
   --chart-1: oklch(0.7 0.11 230);
   --chart-2: oklch(0.82 0.08 215);
+}
+
+/* Dark seasons keep the same hue while defining complete surface/foreground
+   pairs. A light-season accent over the dark theme used to leave white text
+   on an almost-white background in navigation hover and selected states. */
+:root.dark[data-season="newYear"] {
+  --primary: oklch(0.74 0.13 265);
+  --primary-foreground: oklch(0.18 0.04 265);
+  --accent: oklch(0.3 0.05 265);
+  --accent-foreground: oklch(0.95 0.02 265);
+}
+
+:root.dark[data-season="spring"] {
+  --primary: oklch(0.72 0.13 145);
+  --primary-foreground: oklch(0.18 0.04 145);
+  --accent: oklch(0.3 0.05 145);
+  --accent-foreground: oklch(0.95 0.02 145);
+}
+
+:root.dark[data-season="summer"] {
+  --primary: oklch(0.75 0.12 205);
+  --primary-foreground: oklch(0.18 0.04 205);
+  --accent: oklch(0.3 0.05 205);
+  --accent-foreground: oklch(0.95 0.02 205);
+}
+
+:root.dark[data-season="autumn"] {
+  --primary: oklch(0.74 0.14 55);
+  --primary-foreground: oklch(0.2 0.04 55);
+  --accent: oklch(0.31 0.05 55);
+  --accent-foreground: oklch(0.95 0.03 55);
+}
+
+:root.dark[data-season="halloween"] {
+  --primary: oklch(0.76 0.17 45);
+  --primary-foreground: oklch(0.2 0.04 45);
+  --accent: oklch(0.31 0.06 300);
+  --accent-foreground: oklch(0.95 0.03 300);
+}
+
+:root.dark[data-season="winter"] {
+  --primary: oklch(0.74 0.11 230);
+  --primary-foreground: oklch(0.18 0.04 230);
+  --accent: oklch(0.3 0.04 230);
+  --accent-foreground: oklch(0.95 0.02 230);
 }
 
 /* Ambient seasonal light: decorative, motionless and never mixed into grade

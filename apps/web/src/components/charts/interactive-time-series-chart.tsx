@@ -1,7 +1,7 @@
 "use client"
 
 import type {
-  ChartRenderContext,
+  ChartRendererRenderContext,
   DomChartDefinition,
   ResolvedScale,
 } from "@tanstack/charts"
@@ -70,7 +70,7 @@ function sameDomain(left: NumericDomain, right: NumericDomain) {
 }
 
 function isInsidePlot<TDatum>(
-  context: ChartRenderContext<TDatum, number, number>,
+  context: ChartRendererRenderContext<TDatum, number, number>,
   position: { x: number; y: number }
 ) {
   const { chart } = context.scene
@@ -100,7 +100,7 @@ export function InteractiveTimeSeriesChart<TDatum>({
   const [viewport, setViewport] = useState<NumericDomain>(domain)
   const viewportRef = useRef(viewport)
   const renderContextRef = useRef<
-    ChartRenderContext<TDatum, number, number> | undefined
+    ChartRendererRenderContext<TDatum, number, number> | undefined
   >(undefined)
   const gestureHostRef = useRef<HTMLDivElement>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())

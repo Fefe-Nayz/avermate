@@ -5,6 +5,10 @@ import {
   sanitizeThemeValue,
 } from "./theme"
 
+async function source(relativePath: string): Promise<string> {
+  return Bun.file(new URL(relativePath, import.meta.url)).text()
+}
+
 describe("custom theme CSS safety", () => {
   test("accepts modern colour syntax used by presets and migrations", () => {
     const values = [
@@ -61,5 +65,29 @@ describe("custom theme CSS safety", () => {
         ':root[data-palette="custom"] {\n  --not-a-token: red;\n}'
       )
     ).toBe("")
+  })
+})
+
+describe("seasonal theme contrast", () => {
+  test("light seasonal accents do not overwrite dark palette pairs", async () => {
+    const css = await source("../app/theme.css")
+    for (const season of [
+      "newYear",
+      "spring",
+      "summer",
+      "autumn",
+      "halloween",
+      "winter",
+    ]) {
+      expect(css).toContain(`:root:not(.dark)[data-season="${season}"]`)
+      expect(css).not.toContain(`:root[data-season="${season}"] {`)
+      const darkBlock = css.match(
+        new RegExp(`:root\\.dark\\[data-season="${season}"\\] \\{([^}]+)\\}`)
+      )?.[1]
+      expect(darkBlock).toContain("--primary:")
+      expect(darkBlock).toContain("--primary-foreground:")
+      expect(darkBlock).toContain("--accent:")
+      expect(darkBlock).toContain("--accent-foreground:")
+    }
   })
 })

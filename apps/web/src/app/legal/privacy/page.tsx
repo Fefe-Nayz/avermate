@@ -42,27 +42,27 @@ export default function PrivacyPage() {
         </li>
         <li>
           {t(
-            "Social activity, if you enable it: your social profile, friendship and group relationships, sharing choices, consent history, blocks, reports and notifications."
+            "Social activity, if you enable it: your social profile, friendships, class memberships, connected class years, sharing choices, blocks, reports and notifications."
           )}
         </li>
       </ul>
 
-      <h2>{t("Sharing with friends and groups")}</h2>
+      <h2>{t("Sharing with friends and classes")}</h2>
       <p>
         {t(
-          "Social sharing is optional and off until your account is eligible and you turn it on. You choose individual profile fields that friends may see. A group can request a defined set of information, but joining requires a clear summary and explicit acceptance of the current sharing policy."
+          "Social sharing is optional. You choose the information friends may see, and each class has a separate sharing switch that starts off. Joining a class connects only the compatible academic year you choose."
         )}
       </p>
       <p>
         {t(
-          "A group only receives the fields covered by your active consent. If its policy changes, access to newly requested information stays paused until you review it. You can leave, withdraw consent, opt out of rankings, remove a friend or block an account from the social settings."
+          "A class receives derived comparison figures only while its switch is on. It never receives your raw grades. You can turn sharing off or leave the class at any time without deleting or changing your academic year."
         )}
       </p>
 
       <h2>{t("Comparisons and rankings")}</h2>
       <p>
         {t(
-          "Group statistics are intended to compare members who deliberately participate. Rankings are opt-in, use the group policy in force, and should not expose a member's underlying grades or subjects when those fields were not shared. Small cohorts may be withheld to reduce the risk of identifying someone from an aggregate."
+          "Class comparisons include only members who deliberately turn sharing on. They use the year connected to that class and expose derived figures, not the underlying grades."
         )}
       </p>
 
@@ -90,7 +90,7 @@ export default function PrivacyPage() {
       <h2>{t("Aggregates")}</h2>
       <p>
         {t(
-          "Product metrics and broad comparisons can be calculated from aggregated data. Social group statistics follow a separate, versioned sharing policy and only include eligible, consenting members. Aggregates are suppressed where a cohort is too small for a meaningful privacy boundary."
+          "Product metrics and broad comparisons can be calculated from aggregated data. Class statistics include only members who chose to share with that class."
         )}
       </p>
 

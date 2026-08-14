@@ -4,31 +4,26 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  CopyPlusIcon,
+  BookCopyIcon,
+  CalendarRangeIcon,
+  CircleCheckIcon,
   CrownIcon,
   DoorOpenIcon,
   LinkIcon,
-  MoveRightIcon,
   PencilIcon,
   PlusIcon,
+  SchoolIcon,
   SnowflakeIcon,
   Trash2Icon,
-  TrendingDownIcon,
-  TrendingUpIcon,
   TrophyIcon,
-  UsersRoundIcon,
   UserXIcon,
   XIcon,
 } from "lucide-react"
 import { useExtracted, useLocale } from "next-intl"
 import { toast } from "sonner"
-import {
-  PresetVisualEditor,
-  type PresetEditorConfiguration,
-} from "@/components/admin/preset-visual-editor"
 import { ReportDialog } from "@/components/social/report-dialog"
-import { useSocialLabels } from "@/components/social/social-labels"
 import { SecretLink } from "@/components/social/secret-link"
+import { useSocialLabels } from "@/components/social/social-labels"
 import {
   SharedAverage,
   SocialActions,
@@ -67,79 +62,44 @@ import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { orpc } from "@/lib/orpc"
 
-type ComparisonKind =
-  | "general"
-  | "subject"
-  | "median"
-  | "passRate"
-  | "goalProgress"
+type ComparisonKind = "general" | "subject"
 
-/** The builder needs a starting point; one plain subject is the smallest. */
-function emptyConfiguration(): PresetEditorConfiguration {
-  return {
-    subjects: [
-      {
-        key: `subject:${crypto.randomUUID().replaceAll("-", "")}`,
-        name: "Matière 1",
-        kind: "subject",
-        isMain: false,
-        coefficient: 1,
-        children: [],
-      },
-    ],
-    averages: [],
-  }
-}
-
-/** Percent metrics carry no denominator; everything else sits on a scale. */
 function unitOf(kind: string): "scale" | "percent" {
   return kind === "passRate" || kind === "goalProgress" ? "percent" : "scale"
 }
 
-/**
- * One group: several boards side by side — pick a comparison chip and the
- * leaderboard, stats and trends follow it. The owner composes the boards
- * from the metric palette and real subject names; each member's only lock
- * stays their own switch.
- */
+/** A class is one frozen academic model and one explicitly linked year per member. */
 export function GroupDetailClient({ groupId }: { groupId: string }) {
   const t = useExtracted()
-  const labels = useSocialLabels()
   const locale = useLocale()
+  const labels = useSocialLabels()
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { years } = useYear()
   const detail = useQuery(
     orpc.social.groups.get.queryOptions({ input: { groupId } })
   )
-  const years = useQuery(orpc.years.list.queryOptions())
   const invitations = useQuery({
-    ...orpc.social.groups.invitations.list.queryOptions({
-      input: { groupId },
-    }),
+    ...orpc.social.groups.invitations.list.queryOptions({ input: { groupId } }),
     enabled: detail.data?.viewer.role === "owner",
   })
+
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [kind, setKind] = useState<"friends" | "study" | "class">("friends")
-  const [adoptOpen, setAdoptOpen] = useState(false)
-  const [adoptName, setAdoptName] = useState("")
-  const [builderOpen, setBuilderOpen] = useState(false)
-  const [builderDraft, setBuilderDraft] =
-    useState<PresetEditorConfiguration | null>(null)
-  const [presetOpen, setPresetOpen] = useState(false)
-  const presets = useQuery({
-    ...orpc.presets.list.queryOptions(),
-    enabled: presetOpen,
-  })
   const [activeId, setActiveId] = useState<string | null>(null)
   const [addKind, setAddKind] = useState<ComparisonKind>("subject")
-  const [addSubject, setAddSubject] = useState("")
+  const [addSubjectKey, setAddSubjectKey] = useState("")
+  const [selectedYearId, setSelectedYearId] = useState("")
+  const [legacyTemplateYearId, setLegacyTemplateYearId] = useState("")
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyName, setCopyName] = useState("")
 
   const refresh = async () => {
     await Promise.all([
@@ -152,8 +112,56 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
     ])
   }
 
+  const update = useMutation({
+    ...orpc.social.groups.update.mutationOptions(),
+    onSuccess: refresh,
+  })
+  const configureClass = useMutation({
+    ...orpc.social.groups.configureClass.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      await refresh()
+    },
+    onError: (error) => toast.error(error.message),
+  })
+  const selectYear = useMutation({
+    ...orpc.social.groups.selectYear.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      toast.success(t("Year connected. Sharing remains off."))
+      await refresh()
+    },
+    onError: (error) => toast.error(error.message),
+  })
+  const adopt = useMutation({
+    ...orpc.social.groups.adoptSetup.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      setCopyOpen(false)
+      toast.success(t("A new year was created and connected to this class."))
+      await Promise.all([
+        refresh(),
+        queryClient.invalidateQueries({ queryKey: orpc.years.list.key() }),
+      ])
+    },
+    onError: (error) => toast.error(error.message),
+  })
   const setSharing = useMutation({
     ...orpc.social.groups.setSharing.mutationOptions(),
+    onSuccess: refresh,
+    onError: (error) => toast.error(error.message),
+  })
+  const addComparison = useMutation({
+    ...orpc.social.groups.comparisons.add.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success")
+      setAddSubjectKey("")
+      await refresh()
+    },
+    onError: () => toast.error(t("That comparison already exists.")),
+  })
+  const removeComparison = useMutation({
+    ...orpc.social.groups.comparisons.remove.mutationOptions(),
     onSuccess: refresh,
   })
   const invite = useMutation({
@@ -179,41 +187,6 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
         }),
       }),
   })
-  const update = useMutation({
-    ...orpc.social.groups.update.mutationOptions(),
-    onSuccess: async () => {
-      haptic("success")
-      setEditOpen(false)
-      await refresh()
-    },
-  })
-  const addComparison = useMutation({
-    ...orpc.social.groups.comparisons.add.mutationOptions(),
-    onSuccess: async () => {
-      haptic("success")
-      setAddSubject("")
-      await refresh()
-    },
-    onError: () => toast.error(t("That comparison already exists.")),
-  })
-  const removeComparison = useMutation({
-    ...orpc.social.groups.comparisons.remove.mutationOptions(),
-    onSuccess: refresh,
-  })
-  const adopt = useMutation({
-    ...orpc.social.groups.adoptSetup.mutationOptions(),
-    onSuccess: async () => {
-      haptic("success")
-      setAdoptOpen(false)
-      toast.success(
-        t(
-          "Year created from the group's configuration. Find it in your year picker."
-        )
-      )
-      await queryClient.invalidateQueries({ queryKey: orpc.years.list.key() })
-    },
-    onError: () => toast.error(t("The configuration could not be adopted.")),
-  })
   const removeMember = useMutation({
     ...orpc.social.groups.removeMember.mutationOptions(),
     onSuccess: refresh,
@@ -221,7 +194,6 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   const leave = useMutation({
     ...orpc.social.groups.leave.mutationOptions(),
     onSuccess: async () => {
-      haptic("success")
       await queryClient.invalidateQueries({
         queryKey: orpc.social.groups.list.key(),
       })
@@ -229,13 +201,12 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
     },
     onError: () =>
       toast.error(
-        t("Transfer or remove the other members first, or delete the group.")
+        t("Transfer or remove the other members first, or delete the class.")
       ),
   })
   const destroy = useMutation({
     ...orpc.social.groups.delete.mutationOptions(),
     onSuccess: async () => {
-      haptic("success")
       await queryClient.invalidateQueries({
         queryKey: orpc.social.groups.list.key(),
       })
@@ -254,15 +225,15 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   if (!group) {
     return (
       <SocialEmpty
-        icon={UsersRoundIcon}
-        title={t("This group could not be found")}
+        icon={SchoolIcon}
+        title={t("This class could not be found")}
         description={t("It may have been deleted, or you were removed.")}
         action={
           <Button
             variant="outline"
             onClick={() => router.push("/social/groups")}
           >
-            {t("Back to groups")}
+            {t("Back to classes")}
           </Button>
         }
       />
@@ -271,11 +242,18 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const isOwner = group.viewer.role === "owner"
   const frozen = group.state === "frozen"
+  const template = group.classTemplate
+  const linkedYear = years.find((year) => year.id === group.viewer.yearId)
+  const compatibleYearId =
+    selectedYearId ||
+    group.compatibleYears.find((year) => year.id === group.viewer.yearId)?.id ||
+    group.compatibleYears[0]?.id ||
+    ""
+  const legacyYearId = legacyTemplateYearId || years[0]?.id || ""
   const comparisons = group.comparisons
   const active =
     comparisons.find((entry) => entry.id === activeId) ?? comparisons[0]
   const activeUnit = active ? unitOf(active.kind) : "scale"
-
   const figureOf = (member: (typeof group.members)[number]) =>
     active
       ? (member.figures.find((figure) => figure.scopeId === active.id) ?? null)
@@ -292,39 +270,22 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
   const ratios = sharers
     .map((member) => figureOf(member)?.average as number)
     .sort((left, right) => left - right)
-  const mean =
-    ratios.length === 0
-      ? null
-      : ratios.reduce((total, value) => total + value, 0) / ratios.length
-  const median =
-    ratios.length === 0
-      ? null
-      : ratios.length % 2 === 1
-        ? (ratios[(ratios.length - 1) / 2] ?? null)
-        : ((ratios[ratios.length / 2 - 1] ?? 0) +
-            (ratios[ratios.length / 2] ?? 0)) /
-          2
+  const mean = ratios.length
+    ? ratios.reduce((total, value) => total + value, 0) / ratios.length
+    : null
   const statScale = sharers[0]?.scale ?? 20
   const statDecimals = sharers[0]?.decimals ?? 2
-
-  const kindOptions: Array<{ value: ComparisonKind; label: string }> = [
-    { value: "subject", label: t("A subject") },
-    { value: "general", label: t("General average") },
-    { value: "median", label: t("Median grade") },
-    { value: "passRate", label: t("Pass rate") },
-    { value: "goalProgress", label: t("Goals achieved") },
-  ]
+  const date = (value: Date) =>
+    new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+      new Date(value)
+    )
 
   return (
     <div className="flex flex-col gap-4">
       <SocialHeading
-        icon={UsersRoundIcon}
+        icon={SchoolIcon}
         title={group.name}
-        description={
-          [labels.groupKind(group.kind), group.description]
-            .filter(Boolean)
-            .join(" · ") || undefined
-        }
+        description={group.description || t("Class")}
         action={
           isOwner && !frozen ? (
             <Dialog
@@ -334,7 +295,6 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                 if (open) {
                   setName(group.name)
                   setDescription(group.description)
-                  setKind(group.kind)
                 }
               }}
             >
@@ -345,66 +305,51 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{t("Edit the group")}</DialogTitle>
+                  <DialogTitle>{t("Edit the class")}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-3">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-group-name">{t("Group name")}</Label>
+                    <Label htmlFor="edit-class-name">{t("Class name")}</Label>
                     <Input
-                      id="edit-group-name"
+                      id="edit-class-name"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
                       maxLength={100}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-group-description">
+                    <Label htmlFor="edit-class-description">
                       {t("Description (optional)")}
                     </Label>
                     <Textarea
-                      id="edit-group-description"
+                      id="edit-class-description"
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
                       maxLength={500}
                       rows={3}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-group-kind">{t("Group type")}</Label>
-                    <SelectControl
-                      id="edit-group-kind"
-                      value={kind}
-                      onValueChange={(value) =>
-                        setKind(value as "friends" | "study" | "class")
-                      }
-                      options={[
-                        { value: "friends", label: t("Friends group") },
-                        { value: "study", label: t("Study group") },
-                        { value: "class", label: t("Class") },
-                      ]}
-                    />
-                  </div>
                   <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="edit-group-trend">
+                    <Label htmlFor="edit-class-trend">
                       {t("Show each member's 30-day trend")}
                     </Label>
                     <Switch
-                      id="edit-group-trend"
+                      id="edit-class-trend"
                       checked={group.showTrend}
-                      onCheckedChange={(checked) =>
-                        update.mutate({ groupId, showTrend: checked })
+                      onCheckedChange={(showTrend) =>
+                        update.mutate({ groupId, showTrend })
                       }
                     />
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <Label htmlFor="edit-group-count">
+                    <Label htmlFor="edit-class-count">
                       {t("Show grade counts")}
                     </Label>
                     <Switch
-                      id="edit-group-count"
+                      id="edit-class-count"
                       checked={group.showGradeCount}
-                      onCheckedChange={(checked) =>
-                        update.mutate({ groupId, showGradeCount: checked })
+                      onCheckedChange={(showGradeCount) =>
+                        update.mutate({ groupId, showGradeCount })
                       }
                     />
                   </div>
@@ -413,12 +358,14 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                   <Button
                     disabled={update.isPending || name.trim().length < 2}
                     onClick={() =>
-                      update.mutate({
-                        groupId,
-                        name: name.trim(),
-                        description: description.trim(),
-                        kind,
-                      })
+                      update.mutate(
+                        {
+                          groupId,
+                          name: name.trim(),
+                          description: description.trim(),
+                        },
+                        { onSuccess: () => setEditOpen(false) }
+                      )
                     }
                   >
                     {update.isPending ? <Spinner /> : null}
@@ -432,225 +379,393 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
       />
 
       {frozen ? (
-        <SocialCallout tone="caution" title={t("This group is on hold")}>
+        <SocialCallout tone="caution" title={t("This class is on hold")}>
           {t(
             "A moderator paused it after a report. Figures are hidden until the hold is lifted; nothing has been deleted."
           )}
         </SocialCallout>
-      ) : (
-        <SocialSection
-          icon={TrophyIcon}
-          title={t("Your figures in this group")}
-          description={t(
-            "One switch. Off means the others see you in the list without figures."
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm">
-              {group.viewer.shareAverage
-                ? t("Your figures are visible to this group.")
-                : t("Your figures are hidden from this group.")}
-            </span>
-            <Switch
-              checked={group.viewer.shareAverage}
-              disabled={setSharing.isPending}
-              onCheckedChange={(checked) =>
-                setSharing.mutate({ groupId, shareAverage: checked })
-              }
-              aria-label={t("Share my figures with this group")}
-            />
-          </div>
-        </SocialSection>
-      )}
+      ) : null}
 
       <SocialSection
-        icon={TrophyIcon}
-        title={t("Boards")}
-        description={
-          isOwner
-            ? t("Members see every board. Pick one to read; add from the palette below.")
-            : t("Pick a board — the ranking follows it.")
-        }
+        icon={CalendarRangeIcon}
+        title={t("Class model")}
+        description={t(
+          "The shared subjects, periods and grading scale are fixed for this class."
+        )}
       >
-        <div className="flex flex-wrap gap-2">
-          {comparisons.map((entry) => {
-            const isActive = active?.id === entry.id
-            return (
-              <span key={entry.id} className="inline-flex items-center">
-                <button
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setActiveId(entry.id)}
-                  className={cn(
-                    "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
-                    isOwner && !frozen && comparisons.length > 1
-                      ? "rounded-r-none border-r-0"
-                      : "",
-                    isActive
-                      ? "border-primary bg-primary/10 font-medium text-primary"
-                      : "hover:bg-accent/60"
-                  )}
-                >
-                  {labels.comparison(entry.kind, entry.subjectName)}
-                </button>
-                {isOwner && !frozen && comparisons.length > 1 ? (
-                  <button
-                    type="button"
-                    aria-label={t("Remove this board")}
-                    disabled={removeComparison.isPending}
-                    onClick={() =>
-                      removeComparison.mutate({
-                        groupId,
-                        comparisonId: entry.id,
-                      })
-                    }
-                    className={cn(
-                      "inline-flex min-h-8 items-center rounded-r-full border border-l-0 pr-2.5 pl-1 text-muted-foreground transition-colors hover:text-destructive",
-                      isActive ? "border-primary bg-primary/10" : ""
-                    )}
-                  >
-                    <XIcon className="size-3.5" aria-hidden />
-                  </button>
-                ) : null}
-              </span>
-            )
-          })}
-        </div>
-
-        {isOwner && !frozen ? (
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="w-44 space-y-2">
-              <Label htmlFor="add-comparison-kind">{t("Add a board")}</Label>
-              <SelectControl
-                id="add-comparison-kind"
-                value={addKind}
-                onValueChange={(value) => setAddKind(value as ComparisonKind)}
-                options={kindOptions}
-              />
+        {template ? (
+          <div className="rounded-lg border bg-muted/40 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">{template.yearName}</p>
+              <Badge variant="outline">
+                {template.source === "preset"
+                  ? t("Preset model")
+                  : t("Custom model")}
+              </Badge>
             </div>
-            {addKind === "subject" ? (
-              <div className="min-w-44 flex-1 space-y-2">
-                <Label htmlFor="add-comparison-subject">{t("Subject")}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("{start} – {end} · /{scale}", {
+                start: date(template.startsAt),
+                end: date(template.endsAt),
+                scale: String(template.scale),
+              })}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t(
+                "{subjects} subjects · {averages} custom averages · {periods} periods",
+                {
+                  subjects: String(template.subjectCount),
+                  averages: String(template.averageCount),
+                  periods: String(template.periodCount),
+                }
+              )}
+            </p>
+          </div>
+        ) : isOwner ? (
+          <div className="flex flex-col gap-3">
+            <SocialCallout tone="caution" title={t("Choose the class model")}>
+              {t(
+                "This class must be connected to one of your years before it can be used. The choice cannot be changed later."
+              )}
+            </SocialCallout>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-52 flex-1 space-y-2">
+                <Label htmlFor="legacy-class-year">{t("Model year")}</Label>
                 <SelectControl
-                  id="add-comparison-subject"
-                  value={addSubject}
-                  onValueChange={setAddSubject}
-                  placeholder={t("Choose a subject…")}
-                  options={group.availableSubjects.map((name) => ({
-                    value: name,
-                    label: name,
+                  id="legacy-class-year"
+                  value={legacyYearId}
+                  onValueChange={setLegacyTemplateYearId}
+                  options={years.map((year) => ({
+                    value: year.id,
+                    label: year.name,
+                  }))}
+                />
+              </div>
+              <Button
+                disabled={configureClass.isPending || !legacyYearId}
+                onClick={() =>
+                  configureClass.mutate({
+                    groupId,
+                    templateYearId: legacyYearId,
+                  })
+                }
+              >
+                {configureClass.isPending ? <Spinner /> : <SchoolIcon />}
+                {t("Configure class")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <SocialCallout tone="caution" title={t("Class setup incomplete")}>
+            {t(
+              "The owner must choose a model year before the class can be used."
+            )}
+          </SocialCallout>
+        )}
+      </SocialSection>
+
+      {template ? (
+        <SocialSection
+          icon={CircleCheckIcon}
+          title={t("Your year in this class")}
+          description={t(
+            "Only the year connected here is used for class comparisons."
+          )}
+        >
+          {group.viewer.yearStatus === "connected" ? (
+            <SocialCallout tone="positive" title={t("Year connected")}>
+              {linkedYear?.name ?? template.yearName}
+            </SocialCallout>
+          ) : (
+            <SocialCallout tone="caution" title={t("Choose a compatible year")}>
+              {group.viewer.yearStatus === "incompatible"
+                ? t(
+                    "Your previously connected year no longer matches this class. Choose another one or create a fresh copy."
+                  )
+                : t(
+                    "Connect a compatible year before sharing results with the class."
+                  )}
+            </SocialCallout>
+          )}
+
+          <div className="flex flex-wrap items-end gap-2">
+            {group.compatibleYears.length ? (
+              <div className="min-w-52 flex-1 space-y-2">
+                <Label htmlFor="class-year">{t("Compatible year")}</Label>
+                <SelectControl
+                  id="class-year"
+                  value={compatibleYearId}
+                  onValueChange={setSelectedYearId}
+                  options={group.compatibleYears.map((year) => ({
+                    value: year.id,
+                    label: year.name,
                   }))}
                 />
               </div>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                addComparison.isPending ||
-                (addKind === "subject" && !addSubject)
-              }
-              onClick={() =>
-                addComparison.mutate({
-                  groupId,
-                  kind: addKind,
-                  subjectName: addKind === "subject" ? addSubject : undefined,
-                })
-              }
-            >
-              {addComparison.isPending ? <Spinner /> : <PlusIcon />}
-              {t("Add")}
-            </Button>
-            {addKind === "subject" && group.availableSubjects.length === 0 ? (
-              <p className="w-full text-xs text-muted-foreground">
-                {t(
-                  "The picker lists the template year's subjects, or yours. Offer a common configuration below to widen it."
-                )}
-              </p>
+            {group.compatibleYears.length ? (
+              <Button
+                variant="outline"
+                disabled={
+                  selectYear.isPending ||
+                  !compatibleYearId ||
+                  compatibleYearId === group.viewer.yearId
+                }
+                onClick={() =>
+                  selectYear.mutate({ groupId, yearId: compatibleYearId })
+                }
+              >
+                {selectYear.isPending ? <Spinner /> : <CircleCheckIcon />}
+                {t("Connect year")}
+              </Button>
             ) : null}
-          </div>
-        ) : null}
-      </SocialSection>
-
-      {!frozen && active && ratios.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            { label: t("Group average"), value: mean, range: null },
-            { label: t("Median"), value: median, range: null },
-            {
-              label: t("Range"),
-              value: null,
-              range: [ratios[0] ?? null, ratios.at(-1) ?? null] as const,
-            },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="flex flex-col gap-1 rounded-xl border bg-card p-4"
+            <Dialog
+              open={copyOpen}
+              onOpenChange={(open) => {
+                setCopyOpen(open)
+                if (open) setCopyName(template.yearName)
+              }}
             >
-              <span className="text-xs font-medium text-muted-foreground">
-                {stat.label}
-              </span>
-              {stat.range ? (
-                <span className="flex items-baseline gap-1.5">
-                  <SharedAverage
-                    ratio={stat.range[0]}
-                    scale={statScale}
-                    decimals={statDecimals}
-                    locale={locale}
-                    unit={activeUnit}
+              <DialogTrigger
+                render={<Button type="button" variant="outline" />}
+              >
+                <BookCopyIcon /> {t("Create a new year")}
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    {t("Create a year from this class")}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="class-copy-name">{t("New year name")}</Label>
+                  <Input
+                    id="class-copy-name"
+                    value={copyName}
+                    onChange={(event) => setCopyName(event.target.value)}
+                    maxLength={100}
                   />
-                  <span className="text-xs text-muted-foreground">→</span>
-                  <SharedAverage
-                    ratio={stat.range[1]}
-                    scale={statScale}
-                    decimals={statDecimals}
-                    locale={locale}
-                    unit={activeUnit}
-                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t(
+                      "A separate empty year is created and connected. Existing years and grades are never changed."
+                    )}
+                  </p>
+                </div>
+                <DialogFooter>
+                  <Button
+                    disabled={adopt.isPending || !copyName.trim()}
+                    onClick={() =>
+                      adopt.mutate({ groupId, name: copyName.trim() })
+                    }
+                  >
+                    {adopt.isPending ? <Spinner /> : <BookCopyIcon />}
+                    {t("Create and connect")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </SocialSection>
+      ) : null}
+
+      {template && !frozen ? (
+        <SocialSection
+          icon={TrophyIcon}
+          title={t("Share in class comparisons")}
+          description={t(
+            "Sharing is optional and only uses the compatible year connected above."
+          )}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm">
+              {group.viewer.yearStatus !== "connected"
+                ? t("Connect a compatible year to enable sharing.")
+                : group.viewer.shareAverage
+                  ? t("Your figures are visible to this class.")
+                  : t("Your figures are hidden from this class.")}
+            </span>
+            <Switch
+              checked={group.viewer.shareAverage}
+              disabled={
+                setSharing.isPending || group.viewer.yearStatus !== "connected"
+              }
+              onCheckedChange={(shareAverage) =>
+                setSharing.mutate({ groupId, shareAverage })
+              }
+              aria-label={t("Share my figures with this class")}
+            />
+          </div>
+        </SocialSection>
+      ) : null}
+
+      {template ? (
+        <SocialSection
+          icon={TrophyIcon}
+          title={t("Comparisons")}
+          description={t(
+            "Compare the general average or a subject from the shared class model."
+          )}
+        >
+          <div className="flex flex-wrap gap-2">
+            {comparisons.map((entry) => {
+              const selected = active?.id === entry.id
+              return (
+                <span key={entry.id} className="inline-flex items-center">
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setActiveId(entry.id)}
+                    className={cn(
+                      "inline-flex min-h-8 items-center rounded-full border px-3 text-sm transition-colors",
+                      isOwner && !frozen && comparisons.length > 1
+                        ? "rounded-r-none border-r-0"
+                        : "",
+                      selected
+                        ? "border-primary bg-primary/10 font-medium text-primary"
+                        : "hover:bg-accent/60"
+                    )}
+                  >
+                    {labels.comparison(entry.kind, entry.subjectName)}
+                  </button>
+                  {isOwner && !frozen && comparisons.length > 1 ? (
+                    <button
+                      type="button"
+                      aria-label={t("Remove this comparison")}
+                      disabled={removeComparison.isPending}
+                      onClick={() =>
+                        removeComparison.mutate({
+                          groupId,
+                          comparisonId: entry.id,
+                        })
+                      }
+                      className={cn(
+                        "inline-flex min-h-8 items-center rounded-r-full border border-l-0 pr-2.5 pl-1 text-muted-foreground hover:text-destructive",
+                        selected ? "border-primary bg-primary/10" : ""
+                      )}
+                    >
+                      <XIcon className="size-3.5" aria-hidden />
+                    </button>
+                  ) : null}
                 </span>
-              ) : (
-                <SharedAverage
-                  ratio={stat.value}
-                  scale={statScale}
-                  decimals={statDecimals}
-                  locale={locale}
-                  unit={activeUnit}
-                  className="text-lg"
+              )
+            })}
+          </div>
+
+          {isOwner && !frozen ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-44 space-y-2">
+                <Label htmlFor="add-comparison-kind">
+                  {t("Add a comparison")}
+                </Label>
+                <SelectControl
+                  id="add-comparison-kind"
+                  value={addKind}
+                  onValueChange={(value) => setAddKind(value as ComparisonKind)}
+                  options={[
+                    { value: "general", label: t("General average") },
+                    { value: "subject", label: t("A subject") },
+                  ]}
                 />
-              )}
+              </div>
+              {addKind === "subject" ? (
+                <div className="min-w-44 flex-1 space-y-2">
+                  <Label htmlFor="add-comparison-subject">{t("Subject")}</Label>
+                  <SelectControl
+                    id="add-comparison-subject"
+                    value={addSubjectKey}
+                    onValueChange={setAddSubjectKey}
+                    placeholder={t("Choose a subject…")}
+                    options={group.availableSubjectOptions.map((subject) => ({
+                      value: subject.key,
+                      label: subject.name,
+                    }))}
+                  />
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  addComparison.isPending ||
+                  (addKind === "subject" && !addSubjectKey)
+                }
+                onClick={() =>
+                  addComparison.mutate({
+                    groupId,
+                    kind: addKind,
+                    subjectKey:
+                      addKind === "subject" ? addSubjectKey : undefined,
+                  })
+                }
+              >
+                {addComparison.isPending ? <Spinner /> : <PlusIcon />}
+                {t("Add")}
+              </Button>
             </div>
-          ))}
+          ) : null}
+        </SocialSection>
+      ) : null}
+
+      {!frozen && active && ratios.length ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1 rounded-xl border bg-card p-4">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("Class average")}
+            </span>
+            <SharedAverage
+              ratio={mean}
+              scale={statScale}
+              decimals={statDecimals}
+              locale={locale}
+              unit={activeUnit}
+              className="text-lg"
+            />
+          </div>
+          <div className="flex flex-col gap-1 rounded-xl border bg-card p-4">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("Participation")}
+            </span>
+            <span className="text-lg font-semibold tabular-nums">
+              {t("{count} of {total}", {
+                count: String(ratios.length),
+                total: String(group.members.length),
+              })}
+            </span>
+          </div>
         </div>
       ) : null}
 
-      <SocialSection
-        icon={TrophyIcon}
-        title={
-          active
-            ? t("Leaderboard — {name}", {
-                name: labels.comparison(active.kind, active.subjectName),
-              })
-            : t("Leaderboard")
-        }
-        description={
-          ratios.length > 0
-            ? t("{count} of {total} members share their figure.", {
-                count: String(ratios.length),
-                total: String(group.members.length),
-              })
-            : t("Averages appear as members turn their switch on.")
-        }
-      >
-        {group.members.length ? (
+      {template ? (
+        <SocialSection
+          icon={SchoolIcon}
+          title={
+            active
+              ? t("Class leaderboard — {name}", {
+                  name: labels.comparison(active.kind, active.subjectName),
+                })
+              : t("Class members")
+          }
+          description={
+            ratios.length
+              ? t("Only members who opted in appear with a figure.")
+              : t("No class figures are shared yet.")
+          }
+        >
           <SocialList>
             {[...sharers, ...silent].map((member, index) => {
               const figure = figureOf(member)
+              const unavailable =
+                member.yearStatus === "not_connected"
+                  ? t("No year connected")
+                  : member.yearStatus === "incompatible"
+                    ? t("Year incompatible")
+                    : t("Not shared")
               return (
                 <SocialRow
                   key={member.membershipId}
                   leading={
                     figure?.average != null ? (
-                      <span className="numeric w-6 text-center text-sm font-semibold text-muted-foreground">
+                      <span className="w-6 text-center text-sm font-semibold text-muted-foreground tabular-nums">
                         {index + 1}
                       </span>
                     ) : (
@@ -659,24 +774,6 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                   }
                   trailing={
                     <div className="flex items-center gap-2">
-                      {figure?.trend ? (
-                        figure.trend === "up" ? (
-                          <TrendingUpIcon
-                            className="size-4 text-positive"
-                            aria-label={t("Improving")}
-                          />
-                        ) : figure.trend === "down" ? (
-                          <TrendingDownIcon
-                            className="size-4 text-negative"
-                            aria-label={t("Declining")}
-                          />
-                        ) : (
-                          <MoveRightIcon
-                            className="size-4 text-muted-foreground"
-                            aria-label={t("Stable")}
-                          />
-                        )
-                      ) : null}
                       {figure?.average != null ? (
                         <SharedAverage
                           ratio={figure.average}
@@ -687,7 +784,7 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                         />
                       ) : (
                         <span className="text-xs text-muted-foreground">
-                          {t("Not shared")}
+                          {unavailable}
                         </span>
                       )}
                       {isOwner && member.role !== "owner" && !frozen ? (
@@ -695,7 +792,7 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                           type="button"
                           size="icon-sm"
                           variant="ghost"
-                          aria-label={t("Remove from group")}
+                          aria-label={t("Remove from class")}
                           disabled={removeMember.isPending}
                           onClick={() =>
                             removeMember.mutate({
@@ -714,276 +811,21 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                     name={member.name}
                     handle={member.handle}
                     avatarUrl={member.avatar}
-                    hint={
-                      [
-                        member.role === "owner" ? t("Owner") : null,
-                        figure?.gradeCount != null
-                          ? figure.gradeCount === 1
-                            ? t("1 grade")
-                            : t("{count} grades", {
-                                count: String(figure.gradeCount),
-                              })
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || undefined
-                    }
+                    hint={member.role === "owner" ? t("Owner") : undefined}
                   />
                 </SocialRow>
               )
             })}
           </SocialList>
-        ) : null}
-      </SocialSection>
-
-      {!frozen ? (
-        <SocialSection
-          icon={CopyPlusIcon}
-          title={t("Common configuration")}
-          description={t(
-            "An optional template year. Adopting copies its subjects, periods and custom averages into a fresh year of your own — never any grades."
-          )}
-        >
-          {isOwner ? (
-            <div className="flex flex-col gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="shared-setup-source">{t("Template")}</Label>
-                <SelectControl
-                  id="shared-setup-source"
-                  value={
-                    group.sharedSetupYearId ??
-                    (group.sharedSetup?.source === "builder"
-                      ? "__builder__"
-                      : "__none__")
-                  }
-                  onValueChange={(value) => {
-                    if (value === "__none__") {
-                      update.mutate({
-                        groupId,
-                        sharedSetupYearId: null,
-                        sharedSetupConfig: null,
-                      })
-                    } else if (value === "__builder__") {
-                      setBuilderDraft(
-                        (group.sharedSetupDraft as PresetEditorConfiguration | null) ??
-                          emptyConfiguration()
-                      )
-                      setBuilderOpen(true)
-                    } else if (value === "__preset__") {
-                      setPresetOpen(true)
-                    } else {
-                      update.mutate({ groupId, sharedSetupYearId: value })
-                    }
-                  }}
-                  options={[
-                    { value: "__none__", label: t("No common configuration") },
-                    {
-                      value: "__builder__",
-                      label: t("Build a configuration by hand"),
-                    },
-                    {
-                      value: "__preset__",
-                      label: t("Start from a curated preset"),
-                    },
-                    ...(years.data ?? [])
-                      .filter((year) => !year.archivedAt)
-                      .map((year) => ({
-                        value: year.id,
-                        label: t("My year: {name}", { name: year.name }),
-                      })),
-                  ]}
-                />
-              </div>
-              {group.sharedSetup?.source === "builder" ? (
-                <SocialActions>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setBuilderDraft(
-                        (group.sharedSetupDraft as PresetEditorConfiguration | null) ??
-                          emptyConfiguration()
-                      )
-                      setBuilderOpen(true)
-                    }}
-                  >
-                    <PencilIcon /> {t("Edit the configuration")}
-                  </Button>
-                </SocialActions>
-              ) : null}
-
-              <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
-                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-                  <DialogHeader>
-                    <DialogTitle>{t("Configuration builder")}</DialogTitle>
-                  </DialogHeader>
-                  {builderDraft ? (
-                    <PresetVisualEditor
-                      value={builderDraft}
-                      onChange={setBuilderDraft}
-                    />
-                  ) : null}
-                  <DialogFooter>
-                    <Button
-                      disabled={
-                        update.isPending ||
-                        !builderDraft ||
-                        builderDraft.subjects.length === 0
-                      }
-                      onClick={() => {
-                        if (!builderDraft) return
-                        update.mutate(
-                          { groupId, sharedSetupConfig: builderDraft },
-                          { onSuccess: () => setBuilderOpen(false) }
-                        )
-                      }}
-                    >
-                      {update.isPending ? <Spinner /> : null}
-                      {t("Save the configuration")}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={presetOpen} onOpenChange={setPresetOpen}>
-                <DialogContent className="max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{t("Start from a curated preset")}</DialogTitle>
-                  </DialogHeader>
-                  {presets.isLoading ? (
-                    <div className="flex justify-center py-8">
-                      <Spinner />
-                    </div>
-                  ) : (
-                    <SocialList>
-                      {(presets.data ?? []).map((preset) => (
-                        <SocialRow
-                          key={preset.id}
-                          trailing={
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={update.isPending}
-                              onClick={() =>
-                                update.mutate(
-                                  {
-                                    groupId,
-                                    sharedSetupFromPresetId: preset.id,
-                                  },
-                                  { onSuccess: () => setPresetOpen(false) }
-                                )
-                              }
-                            >
-                              {t("Use")}
-                            </Button>
-                          }
-                        >
-                          <p className="truncate text-sm font-medium">
-                            {preset.name}
-                          </p>
-                          {preset.description ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              {preset.description}
-                            </p>
-                          ) : null}
-                        </SocialRow>
-                      ))}
-                    </SocialList>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {t(
-                      "The preset is copied into the group; you can adjust it in the builder afterwards."
-                    )}
-                  </p>
-                </DialogContent>
-              </Dialog>
-            </div>
-          ) : null}
-          {group.sharedSetup ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">
-                  {group.sharedSetup.yearName ?? t("Built configuration")}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {group.sharedSetup.source === "year"
-                    ? t(
-                        "{subjects} subjects · {averages} custom averages · {periods} periods · /{scale}",
-                        {
-                          subjects: String(group.sharedSetup.subjectCount),
-                          averages: String(group.sharedSetup.averageCount),
-                          periods: String(group.sharedSetup.periodCount),
-                          scale: String(group.sharedSetup.scale),
-                        }
-                      )
-                    : t("{subjects} subjects · {averages} custom averages", {
-                        subjects: String(group.sharedSetup.subjectCount),
-                        averages: String(group.sharedSetup.averageCount),
-                      })}
-                </p>
-              </div>
-              <Dialog
-                open={adoptOpen}
-                onOpenChange={(open) => {
-                  setAdoptOpen(open)
-                  if (open) setAdoptName(group.sharedSetup?.yearName ?? "")
-                }}
-              >
-                <DialogTrigger
-                  render={<Button type="button" size="sm" variant="outline" />}
-                >
-                  <CopyPlusIcon /> {t("Adopt this configuration")}
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{t("Adopt this configuration")}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-2">
-                    <Label htmlFor="adopt-year-name">
-                      {t("Name of your new year")}
-                    </Label>
-                    <Input
-                      id="adopt-year-name"
-                      value={adoptName}
-                      onChange={(event) => setAdoptName(event.target.value)}
-                      maxLength={100}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        "A copy, not a subscription: if the template changes later, adopt it again."
-                      )}
-                    </p>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      disabled={adopt.isPending || !adoptName.trim()}
-                      onClick={() =>
-                        adopt.mutate({ groupId, name: adoptName.trim() })
-                      }
-                    >
-                      {adopt.isPending ? <Spinner /> : null}
-                      {t("Create my year")}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {t("This group has no common configuration yet.")}
-            </p>
-          )}
         </SocialSection>
       ) : null}
 
-      {!frozen ? (
+      {isOwner && template && !frozen ? (
         <SocialSection
           icon={LinkIcon}
-          title={t("Invite people")}
+          title={t("Invite classmates")}
           description={t(
-            "Anyone with the link joins directly. It works for a month or until revoked."
+            "The invitation shows the class model before the person chooses or creates a compatible year."
           )}
         >
           <SocialActions>
@@ -999,9 +841,9 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
             </Button>
           </SocialActions>
           {inviteUrl ? (
-            <SecretLink url={inviteUrl} label={t("Group invitation link")} />
+            <SecretLink url={inviteUrl} label={t("Class invitation link")} />
           ) : null}
-          {isOwner && invitations.data?.length ? (
+          {invitations.data?.length ? (
             <SocialList>
               {invitations.data.map((invitation) => (
                 <SocialRow
@@ -1043,14 +885,14 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
             <AlertDialogTrigger
               render={<Button type="button" size="sm" variant="outline" />}
             >
-              <Trash2Icon /> {t("Delete group")}
+              <Trash2Icon /> {t("Delete class")}
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>{t("Delete this group?")}</AlertDialogTitle>
+                <AlertDialogTitle>{t("Delete this class?")}</AlertDialogTitle>
                 <AlertDialogDescription>
                   {t(
-                    "The group and its memberships disappear for everyone. Nobody's grades are affected."
+                    "The class and its memberships disappear for everyone. Nobody's years or grades are affected."
                   )}
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -1060,7 +902,7 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                   variant="destructive"
                   onClick={() => destroy.mutate({ groupId })}
                 >
-                  {t("Delete group")}
+                  {t("Delete class")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -1073,14 +915,14 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
             disabled={leave.isPending}
             onClick={() => leave.mutate({ groupId })}
           >
-            <DoorOpenIcon /> {t("Leave group")}
+            <DoorOpenIcon /> {t("Leave class")}
           </Button>
         )}
         <ReportDialog groupId={groupId} />
         {isOwner ? (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <CrownIcon className="size-3" aria-hidden />
-            {t("You own this group.")}
+            {t("You own this class.")}
           </span>
         ) : null}
         {frozen ? (

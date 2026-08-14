@@ -41,6 +41,7 @@ export interface PresetEditorAverageEntry {
 export interface PresetEditorAverage {
   key: string
   name: string
+  /** @deprecated Kept in the serialized preset shape; always false. */
   isMain: boolean
   entries: PresetEditorAverageEntry[]
 }
@@ -233,9 +234,12 @@ function Group({
 export function PresetVisualEditor({
   value,
   onChange,
+  showStableKeys = true,
 }: {
   value: PresetEditorConfiguration
   onChange: (value: PresetEditorConfiguration) => void
+  /** Stable identifiers matter to preset admins, but are internal class-builder data. */
+  showStableKeys?: boolean
 }) {
   const t = useExtracted()
   const flat = useMemo(() => flatten(value.subjects), [value.subjects])
@@ -244,7 +248,10 @@ export function PresetVisualEditor({
   const updateSubjects = (subjects: PresetEditorSubject[]) =>
     onChange({ ...value, subjects })
   const updateAverages = (averages: PresetEditorAverage[]) =>
-    onChange({ ...value, averages })
+    onChange({
+      ...value,
+      averages: averages.map((average) => ({ ...average, isMain: false })),
+    })
 
   const removeSubject = (key: string) => {
     const result = removeNode(value.subjects, key)
@@ -460,13 +467,15 @@ export function PresetVisualEditor({
                     />
                     {t("Main subject")}
                   </label>
-                  <span
-                    title={node.key}
-                    className="ml-auto flex min-w-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/70"
-                  >
-                    <KeyRoundIcon className="size-3 shrink-0" />
-                    <span className="truncate">{node.key}</span>
-                  </span>
+                  {showStableKeys ? (
+                    <span
+                      title={node.key}
+                      className="ml-auto flex min-w-0 items-center gap-1 font-mono text-[10px] text-muted-foreground/70"
+                    >
+                      <KeyRoundIcon className="size-3 shrink-0" />
+                      <span className="truncate">{node.key}</span>
+                    </span>
+                  ) : null}
                 </div>
               </article>
               {renderSubjectLevel(node.children, depth + 1)}
@@ -600,25 +609,6 @@ export function PresetVisualEditor({
                           )
                         }
                       />
-                      <label className="flex shrink-0 items-center gap-2 text-xs">
-                        <Switch
-                          checked={average.isMain}
-                          onCheckedChange={(isMain) =>
-                            updateAverages(
-                              value.averages.map((item) => ({
-                                ...item,
-                                isMain:
-                                  item.key === average.key
-                                    ? isMain
-                                    : isMain
-                                      ? false
-                                      : item.isMain,
-                              }))
-                            )
-                          }
-                        />
-                        {t("Headline")}
-                      </label>
                       <Button
                         type="button"
                         variant="ghost"

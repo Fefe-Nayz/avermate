@@ -178,7 +178,7 @@ export function useBreadcrumbs(): Crumb[] {
         const section = segments[1]
         const labels: Record<string, string> = {
           friends: t("Friends"),
-          groups: t("Groups"),
+          groups: t("Classes"),
           profile: t("Sharing"),
           notifications: t("Updates"),
           invitations: t("Invitation"),
@@ -231,7 +231,7 @@ export function useBreadcrumbs(): Crumb[] {
         if (section === "social") {
           const socialSection = segments[2]
           const socialLabels: Record<string, string> = {
-            groups: t("Groups"),
+            groups: t("Classes"),
             reports: t("Reports"),
             audit: t("Audit trail"),
           }

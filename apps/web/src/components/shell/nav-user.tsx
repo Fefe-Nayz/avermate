@@ -68,16 +68,27 @@ export function NavUser({
         "data-[popup-open]:bg-sidebar-accent",
         iconOnly && [
           // Outside the sidebar the button has no sidebar surface to sit on,
-          // so it borrows the header's own hover and focus treatment.
-          "group size-8 shrink-0 justify-center rounded-md p-1 outline-none transition-all",
+          // so it borrows the header's own hover and focus treatment. The
+          // button is exactly the avatar — same size, same corner radius —
+          // so the focus and open rings trace the picture, not a box
+          // shifted around it.
+          "group size-8 shrink-0 justify-center rounded-lg p-0 outline-none transition-all",
           "hover:bg-muted hover:text-foreground",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
           "data-[popup-open]:bg-transparent data-[popup-open]:ring-[3px] data-[popup-open]:ring-ring/50",
         ]
       )}
     >
-      <Avatar className="size-8 rounded-lg">
-        <AvatarImage src={user.image ?? undefined} alt={user.name} />
+      {/* The radius must land on all three layers: the root, its border
+          overlay, and the image itself — AvatarImage bakes in its own
+          rounded-full, so overriding the root alone left the picture a
+          circle inside a squarer ring. */}
+      <Avatar className="size-8 rounded-lg after:rounded-lg">
+        <AvatarImage
+          className="rounded-lg"
+          src={user.image ?? undefined}
+          alt={user.name}
+        />
         <AvatarFallback className="rounded-lg">
           {initialsOf(user.name)}
         </AvatarFallback>
@@ -107,8 +118,12 @@ export function NavUser({
       <DropdownMenuGroup>
         <DropdownMenuLabel className="p-0 font-normal">
           <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-            <Avatar className="size-8 rounded-lg">
-              <AvatarImage src={user.image ?? undefined} alt={user.name} />
+            <Avatar className="size-8 rounded-lg after:rounded-lg">
+              <AvatarImage
+                className="rounded-lg"
+                src={user.image ?? undefined}
+                alt={user.name}
+              />
               <AvatarFallback className="rounded-lg">
                 {initialsOf(user.name)}
               </AvatarFallback>

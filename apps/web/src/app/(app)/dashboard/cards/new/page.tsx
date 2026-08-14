@@ -1,5 +1,5 @@
-import { CardForm } from "@/components/cards/card-form"
+import { WidgetForm } from "@/components/cards/widget-form"
 
 export default function NewCardPage() {
-  return <CardForm mode="create" />
+  return <WidgetForm mode="create" surface="overview" />
 }

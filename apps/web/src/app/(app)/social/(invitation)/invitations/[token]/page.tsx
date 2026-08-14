@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { GroupInvitationClient } from "./group-invitation-client"
 
 export const metadata: Metadata = {
-  title: "Group invitation",
+  title: "Class invitation",
   robots: { index: false, follow: false },
 }
 

@@ -4,7 +4,7 @@ import { SocialNavigation } from "@/components/social/social-navigation"
 
 export const metadata: Metadata = {
   title: "Social",
-  description: "Share averages with friends and groups in Avermate.",
+  description: "Share with friends and follow a class in Avermate.",
   robots: { index: false, follow: false },
 }
 

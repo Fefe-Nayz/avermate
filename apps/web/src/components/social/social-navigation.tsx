@@ -12,7 +12,7 @@ import { useExtracted } from "next-intl"
 import { cn } from "@/lib/utils"
 
 /**
- * Where you are in social: friends, groups, your locks, and what happened.
+ * Where you are in social: friends, classes, your locks, and what happened.
  * A rail on a wide screen and a scrolling row of pills on a phone — one
  * component, so the two layouts cannot drift apart.
  */
@@ -22,7 +22,7 @@ export function SocialNavigation() {
 
   const items = [
     { href: "/social", label: t("Friends"), icon: UserRoundIcon, exact: true },
-    { href: "/social/groups", label: t("Groups"), icon: UsersRoundIcon },
+    { href: "/social/groups", label: t("Classes"), icon: UsersRoundIcon },
     { href: "/social/sharing", label: t("Sharing"), icon: ShieldCheckIcon },
     { href: "/social/notifications", label: t("Updates"), icon: BellIcon },
   ]
@@ -50,10 +50,10 @@ export function SocialNavigation() {
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-2.5 rounded-md border border-transparent px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                     active
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                      ? "border-primary/20 bg-primary font-medium text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   <item.icon className="size-4 shrink-0" aria-hidden />
@@ -67,7 +67,7 @@ export function SocialNavigation() {
 
       <nav
         aria-label={t("Social sections")}
-        className="-mx-1 overflow-x-auto px-1 pb-1 md:hidden"
+        className="-mx-1 no-scrollbar overflow-x-auto px-1 pb-1 md:hidden"
       >
         <ul className="flex min-w-max gap-1 rounded-xl border bg-card p-1">
           {items.map((item) => {
@@ -81,7 +81,7 @@ export function SocialNavigation() {
                     "flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                     active
                       ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground active:bg-muted"
                   )}
                 >
                   <item.icon className="size-4" aria-hidden />

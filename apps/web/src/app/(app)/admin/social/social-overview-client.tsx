@@ -31,7 +31,7 @@ export function AdminSocialOverviewClient() {
     },
     {
       icon: UsersRoundIcon,
-      label: t("Groups"),
+      label: t("Classes"),
       value: overview.data?.groups,
     },
     {
@@ -54,7 +54,7 @@ export function AdminSocialOverviewClient() {
           icon={ShieldCheckIcon}
           title={t("Social moderation")}
           description={t(
-            "Reports and group holds. Academic figures never appear here."
+            "Reports and class holds. Academic figures never appear here."
           )}
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -79,7 +79,7 @@ export function AdminSocialOverviewClient() {
               <FlagIcon /> {t("Review reports")}
             </Button>
             <Button variant="outline" render={<Link href="/admin/social/groups" />}>
-              <UsersRoundIcon /> {t("Browse groups")}
+              <UsersRoundIcon /> {t("Browse classes")}
             </Button>
           </div>
         </SocialSection>

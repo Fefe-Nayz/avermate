@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AtSignIcon,
@@ -41,7 +41,7 @@ export function SharingClient() {
   const queryClient = useQueryClient()
   const sharing = useQuery(orpc.social.sharing.get.queryOptions())
   const years = useQuery(orpc.years.list.queryOptions())
-  const [handle, setHandle] = useState<string | null>(null)
+  const [handle, setHandle] = useState<string | undefined>(undefined)
 
   const settings = sharing.data
   const yearId = settings?.sharedYearId ?? settings?.resolvedYear?.id ?? ""
@@ -50,9 +50,7 @@ export function SharingClient() {
     enabled: Boolean(yearId),
   })
 
-  useEffect(() => {
-    if (settings && handle === null) setHandle(settings.handle ?? "")
-  }, [settings, handle])
+  const handleValue = handle ?? settings?.handle ?? ""
 
   const update = useMutation({
     ...orpc.social.sharing.update.mutationOptions(),
@@ -97,18 +95,20 @@ export function SharingClient() {
         icon={ShieldCheckIcon}
         title={t("Sharing")}
         description={t(
-          "Two locks decide what every friend sees: your general average, and your subjects. Groups have their own switch, per group."
+          "Two locks decide what every friend sees: your general average, and your subjects. Each class has its own separate switch."
         )}
       />
 
       <SocialSection
         icon={AtSignIcon}
         title={t("Your handle")}
-        description={t("Friends find you with it. Leave empty to be reachable by invitation link only.")}
+        description={t(
+          "Friends find you with it. Leave empty to be reachable by invitation link only."
+        )}
       >
         <div className="flex gap-2">
           <Input
-            value={handle ?? ""}
+            value={handleValue}
             onChange={(event) => setHandle(event.target.value)}
             placeholder={t("your-handle")}
             aria-label={t("Your handle")}
@@ -118,10 +118,12 @@ export function SharingClient() {
             type="button"
             variant="outline"
             disabled={
-              update.isPending || (handle ?? "") === (settings.handle ?? "")
+              update.isPending || handleValue === (settings.handle ?? "")
             }
             onClick={() =>
-              update.mutate({ handle: handle?.trim() ? handle.trim() : null })
+              update.mutate({
+                handle: handleValue.trim() ? handleValue.trim() : null,
+              })
             }
           >
             {update.isPending ? <Spinner /> : null}
@@ -242,7 +244,9 @@ export function SharingClient() {
       <SocialSection
         icon={EyeIcon}
         title={t("Exactly what a friend sees")}
-        description={t("This preview is the same answer the server gives them.")}
+        description={t(
+          "This preview is the same answer the server gives them."
+        )}
       >
         {settings.preview ? (
           <div className="flex flex-col gap-3">

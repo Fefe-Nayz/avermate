@@ -42,6 +42,21 @@ describe("targeted year configuration flow", () => {
     expect(wizard).not.toContain('router.replace("/dashboard")\n    } catch')
   })
 
+  test("preset setup skips subject and period review while manual setup keeps it", async () => {
+    const wizard = await source("./year-setup-wizard.tsx")
+
+    expect(wizard).toContain(
+      'const selectedTemplate = presetId ? "none" : template'
+    )
+    expect(wizard).toContain('recovered.presetId\n        ? "/dashboard"')
+    expect(wizard).toContain('presetId\n          ? "/dashboard"')
+    expect(wizard).toContain(
+      'initialDraft.presetId && initialDraft.step === "periods"'
+    )
+    expect(wizard).toContain('else setStep("periods")')
+    expect(wizard).toContain("?step=subjects")
+  })
+
   test("an empty subject page offers guided setup and manual creation", async () => {
     const subjects = await source("../../app/(app)/subjects/page.tsx")
 

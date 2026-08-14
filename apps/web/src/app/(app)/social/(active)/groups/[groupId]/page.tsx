@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { GroupDetailClient } from "./group-detail-client"
 
 export const metadata: Metadata = {
-  title: "Group",
+  title: "Class",
   robots: { index: false, follow: false },
 }
 

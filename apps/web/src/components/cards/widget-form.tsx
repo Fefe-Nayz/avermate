@@ -1,0 +1,451 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useExtracted } from "next-intl"
+import { toast } from "sonner"
+import {
+  availableSpans,
+  cardColumns,
+  compileWidgetDefinition,
+  createWidgetDefinition,
+  resolveWidgetFlow,
+  spanForColumns,
+  widgetCapability,
+  widgetDefinitionToLegacyProjection,
+  widgetMeasureId,
+  WIDGET_DEFINITION_VERSION,
+  type CardSpec,
+  type WidgetDefinitionV1,
+  type WidgetFlowSection,
+  type WidgetOptionProvider,
+  type WidgetSurface,
+} from "@avermate/core"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  ChoiceField,
+  FormSection,
+  TextField,
+} from "@/components/forms/controls"
+import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
+import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { haptic } from "@/lib/haptics"
+import { orpc } from "@/lib/orpc"
+import { cn } from "@/lib/utils"
+import { CARD_ACCENTS, cardAccent } from "./card-accent"
+import {
+  WidgetFieldRenderer,
+  type WidgetOptionSets,
+} from "./widget-field-renderer"
+import { resolveWidgetRow } from "./widget-row"
+import { useWidgetMessages } from "./use-widget-messages"
+import { useWidgetResult } from "./use-widget-result"
+import { WidgetBody } from "./widget-view"
+import type { WidgetDraftValue } from "./widget-draft"
+import {
+  resolveWidgetEditorChange,
+  widgetIssueForPath,
+} from "./widget-editor-model"
+
+const PREVIEW_SPAN: Record<number, string> = {
+  1: "col-span-1",
+  2: "col-span-2",
+  3: "col-span-3",
+  4: "col-span-4",
+}
+
+export function WidgetForm({
+  mode,
+  surface,
+  initial,
+}: {
+  mode: "create" | "edit"
+  surface: WidgetSurface
+  initial?: DashboardCardRow
+}) {
+  const t = useExtracted()
+  const message = useWidgetMessages()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { graph, customAverages, goals, periods, yearId } = useYear()
+  const initialDefinition = useMemo(
+    () =>
+      initial
+        ? resolveWidgetRow(initial).definition
+        : createWidgetDefinition(surface),
+    [initial, surface]
+  )
+  const [definition, setDefinition] = useState(initialDefinition)
+  const [span, setSpan] = useState<CardSpec["span"]>(
+    initial ? clampSpan(initial.span) : surface === "insights" ? 4 : 2
+  )
+  const [title, setTitle] = useState(initial?.title ?? "")
+  const [accent, setAccent] = useState(initial?.accent ?? null)
+  const [hidden] = useState(initial?.hidden ?? false)
+
+  const optionSets = useMemo<WidgetOptionSets>(
+    () => ({
+      subjects: graph.flatten().map((subject) => ({
+        value: subject.id,
+        messageKey: subject.name,
+      })),
+      "custom-averages": customAverages.map((average) => ({
+        value: average.id,
+        messageKey: average.name,
+      })),
+      goals: goals.map((goal) => ({
+        value: goal.id,
+        messageKey: goal.name,
+      })),
+      periods: periods.map((period) => ({
+        value: period.id,
+        messageKey: period.name,
+      })),
+    }),
+    [customAverages, goals, graph, periods]
+  )
+  const flow = useMemo(
+    () =>
+      resolveWidgetFlow(definition, {
+        surface,
+        options: optionSets as Partial<
+          Record<WidgetOptionProvider, { value: string; messageKey: string }[]>
+        >,
+      }),
+    [definition, optionSets, surface]
+  )
+  const draftCompilation = useMemo(
+    () => compileWidgetDefinition(definition, { surface }),
+    [definition, surface]
+  )
+  const result = useWidgetResult(flow.prunedDefinition, surface)
+  const capability = widgetCapability(
+    widgetMeasureId(flow.prunedDefinition.analysis.measure)
+  )
+  const defaultTitle = message(capability.messageKey)
+
+  const roomForFour = useMediaQuery("(min-width: 1200px)")
+  const roomForThree = useMediaQuery("(min-width: 900px)")
+  const columns = roomForFour ? 4 : roomForThree ? 3 : 2
+  const projection = widgetDefinitionToLegacyProjection(flow.prunedDefinition)
+  const shape = { metric: projection.metric, display: projection.display }
+  const widths = availableSpans(shape, columns)
+  const drawn = cardColumns({ ...shape, span }, columns)
+  const accentStyle = cardAccent(accent)
+
+  const updateDraft = (draft: WidgetDraftValue) => {
+    setDefinition(
+      resolveWidgetEditorChange(draft as unknown as WidgetDefinitionV1, {
+        surface,
+        options: optionSets,
+      })
+    )
+  }
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: orpc.snapshot.get.queryKey({ input: { yearId: yearId ?? "" } }),
+    })
+  const returnHref = surface === "insights" ? "/insights" : "/dashboard"
+  const onSaved = {
+    onSuccess: () => {
+      haptic("success")
+      toast.success(mode === "create" ? t("Card added") : t("Card updated"))
+      void invalidate()
+      router.push(returnHref)
+    },
+    onError: (error: Error) => {
+      haptic("error")
+      toast.error(error.message || t("The card could not be saved."))
+    },
+  }
+  const create = useMutation({
+    ...orpc.cards.create.mutationOptions(),
+    ...onSaved,
+  })
+  const update = useMutation({
+    ...orpc.cards.update.mutationOptions(),
+    ...onSaved,
+  })
+  const remove = useMutation({
+    ...orpc.cards.delete.mutationOptions(),
+    onSuccess: () => {
+      haptic("success")
+      void invalidate()
+      router.push(returnHref)
+    },
+  })
+
+  const submit = () => {
+    const compiled = compileWidgetDefinition(definition, { surface })
+    if (!compiled.valid || !compiled.plan) {
+      toast.error(message("widget.error.definition"))
+      return
+    }
+    const payload = {
+      span,
+      title: title.trim() || null,
+      accent,
+      hidden,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
+      definitionJson: compiled.plan.definition,
+    } as const
+    if (mode === "create") {
+      create.mutate({
+        yearId: yearId as string,
+        surface,
+        ...payload,
+      })
+    } else {
+      update.mutate({ cardId: initial?.id as string, ...payload })
+    }
+  }
+
+  const preview = (
+    <div
+      className={cn(
+        "grid gap-3",
+        columns === 4
+          ? "grid-cols-4"
+          : columns === 3
+            ? "grid-cols-3"
+            : "grid-cols-2"
+      )}
+    >
+      <Card
+        className={cn(
+          "@container/card relative min-h-36 gap-2 overflow-hidden py-4",
+          PREVIEW_SPAN[drawn]
+        )}
+      >
+        {accentStyle ? (
+          <span
+            aria-hidden
+            className={cn("absolute inset-x-0 top-0 h-0.5", accentStyle.bar)}
+          />
+        ) : null}
+        <CardHeader className="px-4">
+          <CardTitle
+            className={cn(
+              "text-xs leading-tight font-medium tracking-wide uppercase",
+              accentStyle ? accentStyle.text : "text-muted-foreground"
+            )}
+          >
+            {title.trim() || defaultTitle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="min-h-0 flex-1 px-4">
+          <WidgetBody definition={flow.prunedDefinition} result={result} />
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  const steps: FlowStep[] = [
+    editorStep("definition", t("Data and analysis"), flow.definition),
+    editorStep("visualization", t("Visualisation"), flow.visualization),
+  ]
+
+  function editorStep(
+    id: string,
+    label: string,
+    sections: WidgetFlowSection[]
+  ): FlowStep {
+    return {
+      id,
+      title: label,
+      summary: summarize(sections, flow.prunedDefinition, message),
+      content: (
+        <div className="flex flex-col gap-8">
+          {sections.map((section) => (
+            <FormSection
+              key={section.id}
+              title={message(section.messageKey)}
+              description={
+                section.descriptionKey
+                  ? message(section.descriptionKey)
+                  : undefined
+              }
+            >
+              {section.fields
+                .filter((field) => field.active)
+                .map((field) => (
+                  <WidgetFieldRenderer
+                    key={field.id}
+                    field={{
+                      ...field,
+                      error:
+                        widgetIssueForPath(draftCompilation.issues, field.path)
+                          ?.messageKey ?? null,
+                    }}
+                    draft={definition as unknown as WidgetDraftValue}
+                    message={message}
+                    optionSets={optionSets}
+                    onChange={updateDraft}
+                  />
+                ))}
+            </FormSection>
+          ))}
+        </div>
+      ),
+    }
+  }
+
+  const widthLabels: Record<string, string> = {
+    "1/2": t("Half"),
+    "2/2": t("Full"),
+    "1/3": t("A third"),
+    "2/3": t("Two thirds"),
+    "3/3": t("Full"),
+    "1/4": t("Quarter"),
+    "2/4": t("Half"),
+    "3/4": t("Three quarters"),
+    "4/4": t("Full"),
+  }
+
+  return (
+    <FormFlow
+      title={mode === "create" ? t("New card") : t("Edit card")}
+      description={
+        surface === "insights"
+          ? t(
+              "Build the analysis and chart around the question you want to answer."
+            )
+          : t(
+              "Choose the data, calculation and presentation for this DataCard."
+            )
+      }
+      backHref={returnHref}
+      steps={steps}
+      aside={preview}
+      asidePlacement="sticky-end"
+      beforeSave={
+        <div className="flex flex-col gap-5">
+          <ChoiceField
+            label={t("Width")}
+            choices={widths.map((width) => ({
+              value: String(width.columns),
+              label: widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
+            }))}
+            value={String(drawn)}
+            onValueChange={(value) =>
+              setSpan(
+                spanForColumns(span, Number.parseInt(value, 10), shape, columns)
+              )
+            }
+            columns={widths.length > 2 ? 4 : 2}
+          />
+          <WidgetAccentField value={accent} onValueChange={setAccent} />
+          <TextField
+            label={t("Title")}
+            description={t("Leave blank to use the metric's own name.")}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={48}
+            placeholder={defaultTitle}
+          />
+        </div>
+      }
+      onSubmit={submit}
+      submitLabel={
+        mode === "create"
+          ? surface === "insights"
+            ? t("Add to Insights")
+            : t("Add to dashboard")
+          : t("Save changes")
+      }
+      submitting={create.isPending || update.isPending}
+      disabled={!draftCompilation.valid || !yearId}
+      destructive={
+        mode === "edit" && initial
+          ? {
+              label: t("Remove"),
+              onClick: () => remove.mutate({ cardId: initial.id }),
+            }
+          : undefined
+      }
+    />
+  )
+}
+
+function clampSpan(span: number): CardSpec["span"] {
+  return Math.min(4, Math.max(1, span)) as CardSpec["span"]
+}
+
+function summarize(
+  sections: WidgetFlowSection[],
+  definition: WidgetDefinitionV1,
+  message: (key: string) => string
+): string {
+  const summaries = sections.flatMap((section) =>
+    section.fields.flatMap((field) => {
+      if (!field.active) return []
+      const segments = field.path.split(".")
+      let current: unknown = definition
+      for (const segment of segments) {
+        if (!current || typeof current !== "object") return []
+        current = (current as Record<string, unknown>)[segment]
+      }
+      if (typeof current !== "string" && typeof current !== "number") return []
+      const option = field.options.find(
+        (item) => item.value === String(current)
+      )
+      return [option ? message(option.messageKey) : String(current)]
+    })
+  )
+  return [...new Set(summaries)].slice(0, 3).join(" · ")
+}
+
+function WidgetAccentField({
+  value,
+  onValueChange,
+}: {
+  value: string | null
+  onValueChange: (value: string | null) => void
+}) {
+  const t = useExtracted()
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm font-medium">{t("Colour")}</span>
+      <div
+        role="radiogroup"
+        aria-label={t("Colour")}
+        className="flex flex-wrap gap-2"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === null}
+          aria-label={t("No colour")}
+          onClick={() => onValueChange(null)}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-full border-2",
+            value === null ? "border-foreground" : "border-transparent"
+          )}
+        >
+          <span className="size-6 rounded-full border border-dashed" />
+        </button>
+        {CARD_ACCENTS.map((accent) => (
+          <button
+            key={accent.value}
+            type="button"
+            role="radio"
+            aria-checked={value === accent.value}
+            aria-label={accent.label}
+            onClick={() => onValueChange(accent.value)}
+            className={cn(
+              "flex size-9 items-center justify-center rounded-full border-2",
+              value === accent.value
+                ? "border-foreground"
+                : "border-transparent"
+            )}
+          >
+            <span className={cn("size-6 rounded-full", accent.swatch)} />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}

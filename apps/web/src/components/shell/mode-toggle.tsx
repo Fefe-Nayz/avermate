@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
  */
 export function ModeToggle({ className }: { className?: string }) {
   const t = useExtracted()
-  const { theme, resolvedTheme, setPreferredTheme } = useThemeControl()
+  const { theme, setPreferredTheme } = useThemeControl()
 
   const options = [
     { value: "light" as const, label: t("Light"), icon: SunIcon },
@@ -42,11 +42,14 @@ export function ModeToggle({ className }: { className?: string }) {
           />
         }
       >
-        {resolvedTheme === "dark" ? (
-          <MoonIcon className="size-4" />
-        ) : (
-          <SunIcon className="size-4" />
-        )}
+        {/* Both icons, CSS choosing — the same pattern as the public
+            toggle. `resolvedTheme` is unknowable on the server, so
+            branching on it desynced the server HTML from a dark client's
+            first render and React threw the whole tree away — which is
+            also what client-rendered the theme provider's inline script
+            and triggered the console warning about it. */}
+        <SunIcon className="size-4 dark:hidden" />
+        <MoonIcon className="hidden size-4 dark:block" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuGroup>

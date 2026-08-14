@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { StarIcon } from "lucide-react"
+import { LayoutDashboardIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { resolveCustomAverage } from "@avermate/core"
@@ -29,7 +29,6 @@ interface Entry {
 export interface AverageFormValues {
   id?: string
   name: string
-  isMain: boolean
   entries: Entry[]
 }
 
@@ -55,7 +54,7 @@ export function AverageForm({
   const { graph, yearId } = useYear()
 
   const [name, setName] = useState(initial?.name ?? "")
-  const [isMain, setIsMain] = useState(initial?.isMain ?? false)
+  const [addDashboardCard, setAddDashboardCard] = useState(false)
   const [entries, setEntries] = useState<Entry[]>(initial?.entries ?? [])
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -85,7 +84,7 @@ export function AverageForm({
     const resolved = resolveCustomAverage(graph, {
       id: "__preview__",
       name,
-      isMain,
+      isMain: false,
       sortOrder: 0,
       entries: entries.map((entry) => ({
         subjectId: entry.subjectId,
@@ -97,7 +96,7 @@ export function AverageForm({
       })),
     })
     return resolved.graph.ratio(null, resolved.scope)
-  }, [graph, entries, name, isMain])
+  }, [graph, entries, name])
 
   const toggle = (subjectId: string) => {
     haptic("selection")
@@ -167,7 +166,6 @@ export function AverageForm({
 
     const payload = {
       name: name.trim(),
-      isMain,
       entries: entries.map((entry) => ({
         subjectId: entry.subjectId,
         coefficient:
@@ -179,7 +177,11 @@ export function AverageForm({
     }
 
     if (mode === "create") {
-      create.mutate({ yearId: yearId as string, ...payload })
+      create.mutate({
+        yearId: yearId as string,
+        addDashboardCard,
+        ...payload,
+      })
     } else {
       update.mutate({ averageId: initial?.id as string, ...payload })
     }
@@ -312,7 +314,7 @@ export function AverageForm({
     {
       id: "name",
       title: t("Name it"),
-      description: t("And decide whether it replaces the headline figure."),
+      description: t("Give this calculation a clear, recognisable name."),
       summary: name.trim() || null,
       validate: () => {
         const problem: Record<string, string> = name.trim()
@@ -332,25 +334,29 @@ export function AverageForm({
             error={errors.name}
           />
 
-          <Field orientation="horizontal">
-            <FieldLabel htmlFor="is-main-average" className="flex-1">
-              <span className="flex items-center gap-1.5">
-                <StarIcon className="size-4" />
-                {t("Use this instead of the general average")}
-              </span>
-              <span className="block text-xs font-normal text-muted-foreground">
-                {t("Shown wherever the headline average appears")}
-              </span>
-            </FieldLabel>
-            <Switch
-              id="is-main-average"
-              checked={isMain}
-              onCheckedChange={(checked) => {
-                haptic("selection")
-                setIsMain(checked)
-              }}
-            />
-          </Field>
+          {mode === "create" ? (
+            <Field orientation="horizontal">
+              <FieldLabel htmlFor="add-average-card" className="flex-1">
+                <span className="flex items-center gap-1.5">
+                  <LayoutDashboardIcon className="size-4" />
+                  {t("Add a DataCard to the dashboard")}
+                </span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {t(
+                    "Creates a separate card for this average. You can edit or remove it later."
+                  )}
+                </span>
+              </FieldLabel>
+              <Switch
+                id="add-average-card"
+                checked={addDashboardCard}
+                onCheckedChange={(checked) => {
+                  haptic("selection")
+                  setAddDashboardCard(checked)
+                }}
+              />
+            </Field>
+          ) : null}
         </div>
       ),
     },

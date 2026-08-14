@@ -31,8 +31,21 @@ describe("form flows", () => {
     // is busywork, and a wall of fields on a phone is what this replaced.
     expect(flow).toContain("hidden flex-col gap-6 md:flex")
     expect(flow).toContain("md:hidden")
-    expect(flow).toContain("role=\"progressbar\"")
+    expect(flow).toContain('role="progressbar"')
     expect(flow).toContain("function Review(")
+  })
+
+  test("the card preview becomes a sticky side rail only when space allows", async () => {
+    const flow = await source("./form-flow.tsx")
+    const card = await source("../cards/card-form.tsx")
+
+    expect(card).toContain('asidePlacement="sticky-end"')
+    expect(flow).toContain('asidePlacement?: "top" | "sticky-end"')
+    expect(flow).toContain("@4xl/main:grid-cols-")
+    expect(flow).toContain("@4xl/main:sticky")
+    // Before the container reaches that threshold, the aside remains the
+    // ordinary in-flow block above the phone/tablet form.
+    expect(flow).toContain('"pb-5"')
   })
 
   test("the primary action clears both the tab bar and the keyboard", async () => {
@@ -50,9 +63,9 @@ describe("form flows", () => {
   test("a focused field is pulled clear of the keyboard", async () => {
     const flow = await source("./form-flow.tsx")
 
-    expect(flow).toContain("scrollIntoView({ block: \"center\"")
+    expect(flow).toContain('scrollIntoView({ block: "center"')
     // The document does not scroll; the shell scrolls a pane.
-    expect(flow).toContain("closest(\".scroll-pane\")")
+    expect(flow).toContain('closest(".scroll-pane")')
   })
 
   test("the keyboard inset is measured from the visual viewport", async () => {
@@ -68,7 +81,7 @@ describe("form flows", () => {
     const flow = await source("./form-flow.tsx")
 
     expect(flow).toContain("step?.validate && !step.validate()")
-    expect(flow).toContain("haptic(\"warning\")")
+    expect(flow).toContain('haptic("warning")')
   })
 
   test("choices take the whole screen on a phone", async () => {
@@ -119,7 +132,7 @@ describe("form flows", () => {
 
     // A day is a `<button>` inside a `<form>`. Without a type it defaults to
     // submit, and picking a date saved the grade.
-    expect(calendar).toContain("type=\"button\"")
+    expect(calendar).toContain('type="button"')
 
     // The optional last touches are asked for on the review screen, where the
     // only button is the one that saves.
@@ -140,9 +153,9 @@ describe("form flows", () => {
     const flow = await source("./form-flow.tsx")
     const controls = await source("./controls.tsx")
 
-    expect(flow).toContain("event.key !== \"Enter\" || wide")
+    expect(flow).toContain('event.key !== "Enter" || wide')
     expect(flow).toContain("if (onReview) submit()")
-    expect(controls).toContain("enterKeyHint=\"next\"")
+    expect(controls).toContain('enterKeyHint="next"')
   })
 
   test("a composite grade needs a part with a result in it", async () => {

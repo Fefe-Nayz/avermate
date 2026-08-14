@@ -41,7 +41,7 @@ import {
  * working while the network does not.
  */
 
-export type CardSurface = "overview" | "subject" | "grade"
+export type CardSurface = "overview" | "subject" | "grade" | "insights"
 
 export interface DashboardCardRow {
   id: string
@@ -56,6 +56,8 @@ export interface DashboardCardRow {
   accent: string | null
   sortOrder: number
   hidden: boolean
+  definitionVersion: number | null
+  definitionJson: unknown | null
 }
 
 export interface ResolvedAverageTarget {
@@ -93,8 +95,6 @@ export interface YearContextValue {
   setTimelineDate: (date: string | null) => void
 
   customAverages: CustomAverage[]
-  /** The custom average promoted to headline surfaces, when one exists. */
-  headlineAverage: CustomAverage | null
   goals: Goal[]
   cards: DashboardCardRow[]
 
@@ -103,8 +103,6 @@ export interface YearContextValue {
     kind: "general" | "subject" | "custom"
     referenceId: string | null
   }) => ResolvedAverageTarget | null
-  /** General by default, or the selected main custom average. */
-  resolveHeadline: () => ResolvedAverageTarget
 
   scale: number
   decimals: number
@@ -250,10 +248,6 @@ export function YearProvider({
     () => snapshot?.customAverages ?? [],
     [snapshot]
   )
-  const headlineAverage = useMemo(
-    () => customAverages.find((average) => average.isMain) ?? null,
-    [customAverages]
-  )
 
   const resolve = useCallback<YearContextValue["resolve"]>(
     (target) => {
@@ -274,18 +268,6 @@ export function YearProvider({
     [graph, customAverages]
   )
 
-  const resolveHeadline = useCallback<
-    YearContextValue["resolveHeadline"]
-  >(() => {
-    if (!headlineAverage) return { graph, scope: null, subjectId: null }
-    const resolved = resolveCustomAverage(graph, headlineAverage)
-    return {
-      graph: resolved.graph,
-      scope: resolved.scope,
-      subjectId: null,
-    }
-  }, [graph, headlineAverage])
-
   const value = useMemo<YearContextValue>(
     () => ({
       isLoading: yearsQuery.isLoading || snapshotQuery.isLoading,
@@ -303,11 +285,9 @@ export function YearProvider({
       timelineDate,
       setTimelineDate,
       customAverages,
-      headlineAverage,
       goals: snapshot?.goals ?? [],
       cards: snapshot?.cards ?? [],
       resolve,
-      resolveHeadline,
       scale: year?.scale ?? 20,
       decimals: year?.decimals ?? 2,
       passingRatio: year?.passingRatio ?? 0.5,
@@ -332,10 +312,8 @@ export function YearProvider({
       setTimelineDate,
       setStoredPeriodId,
       customAverages,
-      headlineAverage,
       snapshot,
       resolve,
-      resolveHeadline,
       now,
     ]
   )

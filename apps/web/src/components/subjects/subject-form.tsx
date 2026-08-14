@@ -229,7 +229,9 @@ export function SubjectForm({
     {
       id: "place",
       title: t("Where does it sit?"),
-      description: t("Leave it at the top level if it belongs to nothing else."),
+      description: t(
+        "Leave it at the top level if it belongs to nothing else."
+      ),
       summary: parentName ?? t("Top level"),
       content: (
         <PickerField
@@ -353,15 +355,30 @@ export function SubjectForm({
                 {t("Delete {name}?", { name })}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                {impact.data
-                  ? t(
-                      "This branch contains {subjects} child subjects and {grades} grades.",
-                      {
-                        subjects: String(impact.data.descendants),
-                        grades: String(impact.data.grades),
-                      }
-                    )
-                  : t("Checking what would be removed…")}
+                {impact.data ? (
+                  <span className="flex flex-col gap-2">
+                    <span>
+                      {t(
+                        "This branch contains {subjects} child subjects and {grades} grades.",
+                        {
+                          subjects: String(impact.data.descendants),
+                          grades: String(impact.data.grades),
+                        }
+                      )}
+                    </span>
+                    {impact.data.widgets > 0 ? (
+                      <span>
+                        {impact.data.widgets === 1
+                          ? t("One DataCard will be updated or removed.")
+                          : t("{count} DataCards will be updated or removed.", {
+                              count: String(impact.data.widgets),
+                            })}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : (
+                  t("Checking what would be removed…")
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

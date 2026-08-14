@@ -10,9 +10,9 @@ import {
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
+  averageEventDates,
   averageOverTime,
   consistency,
-  dayRange,
   gradeRatio,
   gradeRatios,
   passRate,
@@ -77,8 +77,8 @@ export default function SubjectPage({
 
   const subject = graph.byId(subjectId)
 
-  const dates = useMemo(() => {
-    if (!year || !subject) return []
+  const range = useMemo(() => {
+    if (!year || !subject) return null
     const from = new Date(
       Math.max(
         new Date(period.startAt).getTime(),
@@ -89,34 +89,41 @@ export default function SubjectPage({
       ? new Date(`${timelineDate}T23:59:59`).getTime()
       : now
     const to = new Date(Math.min(timelineEnd, new Date(period.endAt).getTime()))
-    if (to <= from) return []
-    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
-    return dayRange(from, to, Math.max(1, Math.ceil(span / 60)))
+    return to <= from ? null : { from, to }
   }, [period, timelineDate, year, subject, now])
 
   const averageSeries = useMemo<AverageSeries[]>(() => {
-    if (!subject || dates.length === 0) return []
+    if (!subject || !range) return []
     const children = preferences.chartSettings.showSubSubjects
       ? graph.childrenOf(subjectId)
       : []
+    // Each series samples its own grade days: a note in Chimie moves the
+    // Chimie line and only that one, so every line keeps its own event
+    // dates — and its own gaps — on the shared linear time axis.
+    const seriesFor = (target: string) =>
+      averageOverTime(
+        graph.subjects,
+        averageEventDates(graph.subjects, range.from, range.to, target),
+        target
+      )
     return [
       ...children.map((child, index) => ({
         id: child.id,
         label: child.name,
         color:
           AVERAGE_SERIES_COLORS[(index + 1) % AVERAGE_SERIES_COLORS.length],
-        points: averageOverTime(graph.subjects, dates, child.id),
+        points: seriesFor(child.id),
       })),
       {
         id: subject.id,
         label: subject.name,
         color: AVERAGE_SERIES_COLORS[0],
-        points: averageOverTime(graph.subjects, dates, subject.id),
+        points: seriesFor(subject.id),
         primary: true,
       },
     ]
   }, [
-    dates,
+    range,
     graph,
     preferences.chartSettings.showSubSubjects,
     subject,

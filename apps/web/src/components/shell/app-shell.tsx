@@ -90,9 +90,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div
           ref={scrollRef}
-          className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-6"
+          className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-[max(1.5rem,var(--spacing-safe-bottom))]"
         >
-          <div className="mx-auto w-full max-w-6xl px-4 pt-1 pb-6 md:px-6 md:pt-4">
+          <div className="mx-auto w-full max-w-6xl pt-1 pr-[max(1rem,var(--spacing-safe-right))] pb-6 pl-[max(1rem,var(--spacing-safe-left))] md:pt-4 md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
             <MobilePageTitle />
             {children}
           </div>

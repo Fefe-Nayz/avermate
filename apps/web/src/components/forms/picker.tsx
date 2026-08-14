@@ -14,6 +14,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { FullScreenLayer } from "./full-screen-layer"
+import { useFlowAdvance } from "./form-flow"
 
 /**
  * Choosing one item out of many.
@@ -48,6 +49,7 @@ export function PickerField({
   emptyHint,
   searchable = true,
   layout = "field",
+  advanceOnSelect = false,
 }: {
   label: string
   description?: string
@@ -66,11 +68,25 @@ export function PickerField({
    * arrangement that starts closed.
    */
   layout?: "field" | "page"
+  /**
+   * When choosing is all the step asks, the choice moves the flow on by
+   * itself — tapping a row and then "Continue" is the same tap twice. Only
+   * acts inside a phone flow; a laptop shows every step and stays put.
+   */
+  advanceOnSelect?: boolean
 }) {
   const t = useExtracted()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const wide = useMediaQuery("(min-width: 768px)")
+  const flowAdvance = useFlowAdvance()
+
+  // After the commit, not during the tap: the flow's validation reads the
+  // form's state, and the state this very tap sets has not landed yet.
+  const advanceSoon = () => {
+    if (!advanceOnSelect) return
+    window.setTimeout(flowAdvance, 0)
+  }
 
   const selected = options.find((option) => option.value === value)
 
@@ -91,6 +107,7 @@ export function PickerField({
     haptic("selection")
     onValueChange(option.value)
     close()
+    advanceSoon()
   }
 
   const list = (
@@ -145,6 +162,7 @@ export function PickerField({
             onChoose={(option) => {
               haptic("selection")
               onValueChange(option.value)
+              advanceSoon()
             }}
           />
         </div>

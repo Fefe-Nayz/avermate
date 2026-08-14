@@ -14,39 +14,37 @@ export default function SocialSharingPage() {
       </h1>
       <p>
         {t(
-          "This page summarizes how friends, circles and groups work. It is information, not a request to share anything. Social features stay unavailable until the eligibility checks for your account have completed."
+          "This page summarizes how friends and classes work. It is information, not a request to share anything."
         )}
       </p>
 
-      <h2>{t("Friends and circles")}</h2>
+      <h2>{t("Friends")}</h2>
       <p>
         {t(
-          "A friendship requires acceptance from both people. You decide which profile fields friends can see, and can give a circle a narrower or broader field grant. Removing a friend or revoking a grant stops future access. Blocking also prevents new requests and social discovery between the accounts."
+          "A friendship requires acceptance from both people. You decide which profile fields friends can see. Removing a friend stops future access. Blocking also prevents new requests and social discovery between the accounts."
         )}
       </p>
 
-      <h2>{t("Groups and classes")}</h2>
+      <h2>{t("Classes")}</h2>
       <p>
         {t(
-          "Before joining a group, you see its owner, purpose, requested fields, comparison settings and current policy version. Accepting only covers that version. Material policy changes require a new decision before additional data can be used."
+          "A class uses one shared academic model: its subjects, periods and grading scale. Before joining, you see that model and choose a compatible year or create a separate empty copy from it. Joining never replaces an existing year."
         )}
       </p>
 
       <h2>{t("What other members can see")}</h2>
       <p>
         {t(
-          "The profile preview shows the same allow-listed view the selected audience receives. Group members see only the fields and derived statistics authorized by the active policy. They do not receive your complete academic snapshot through the social interface."
+          "Friends see only the profile fields you enabled. Class members see a derived figure only when you turn sharing on for that class. They do not receive your grades or complete academic record."
         )}
       </p>
 
       <h2>{t("Your controls")}</h2>
       <ul>
-        <li>
-          {t("Preview your profile as a friend, circle or group member.")}
-        </li>
-        <li>{t("Change or revoke a field grant at any time.")}</li>
-        <li>{t("Opt into or out of each eligible ranking.")}</li>
-        <li>{t("Withdraw group consent or leave a group.")}</li>
+        <li>{t("Preview the academic information your friends can see.")}</li>
+        <li>{t("Change what friends can see at any time.")}</li>
+        <li>{t("Turn class comparison sharing on or off at any time.")}</li>
+        <li>{t("Leave a class without deleting the year connected to it.")}</li>
         <li>{t("Block an account and report behavior to moderators.")}</li>
       </ul>
 

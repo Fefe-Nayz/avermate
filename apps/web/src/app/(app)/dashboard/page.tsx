@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { CheckIcon, PencilRulerIcon, PlusIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
-import { averageOverTime, dayRange } from "@avermate/core"
+import { averageEventDates, averageOverTime } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
@@ -29,16 +29,7 @@ import { cn } from "@/lib/utils"
 export default function DashboardPage() {
   const t = useExtracted()
   const format = useFormatter()
-  const {
-    year,
-    graph,
-    period,
-    goals,
-    headlineAverage,
-    resolveHeadline,
-    timelineDate,
-    now,
-  } = useYear()
+  const { year, graph, period, goals, timelineDate, now } = useYear()
   const { plans } = useGoalPlans()
   const [editing, setEditing] = useState(false)
 
@@ -55,15 +46,16 @@ export default function DashboardPage() {
       : now
     const to = new Date(Math.min(timelineEnd, new Date(period.endAt).getTime()))
     if (to <= from) return []
-    const span = (to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)
-    const headline = resolveHeadline()
+    // A point per day that received a grade, never one in between: the
+    // average only moves when a note lands, and the linear time axis keeps
+    // the quiet weeks visibly quiet.
     return averageOverTime(
-      headline.graph.subjects,
-      dayRange(from, to, Math.max(1, Math.ceil(span / 60))),
-      headline.subjectId,
-      headline.scope
+      graph.subjects,
+      averageEventDates(graph.subjects, from, to),
+      null,
+      null
     )
-  }, [period, resolveHeadline, timelineDate, year, now])
+  }, [graph, period, timelineDate, year, now])
 
   const pinnedGoals = useMemo(
     () =>
@@ -161,11 +153,7 @@ export default function DashboardPage() {
         >
           {hasCurve ? (
             <AverageChart
-              title={
-                headlineAverage
-                  ? `${headlineAverage.name} · ${t("Over time")}`
-                  : t("How the year is going")
-              }
+              title={t("How the year is going")}
               series={series}
               emptyHint={t(
                 "Record a few grades and the curve will appear here."

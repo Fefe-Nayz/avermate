@@ -1,4 +1,10 @@
-import { angleGrid, polar, radialArea, radialGrid } from "@tanstack/charts/polar"
+import {
+  angleGrid,
+  polar,
+  radialArea,
+  radialGrid,
+  radialText,
+} from "@tanstack/charts/polar"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { scalePoint } from "@tanstack/charts/scales/point"
 import { curveLinearClosed } from "d3-shape"
@@ -17,11 +23,12 @@ export interface RadarPoint {
   value: number
 }
 
-export const LABEL_FONT_SIZE = 12
-/** Advance width of a character at that size. */
+/** Advance width of a character, as a fraction of the font size. */
 export const CHARACTER_WIDTH = 0.55
 /** How far past the ring the outer end of every name sits. */
 export const LABEL_OFFSET = 10
+/** Baseline-to-baseline distance between the lines of a folded name. */
+export const LINE_HEIGHT = 1.15
 
 /**
  * Lay a name along its own spoke, pointing at the centre.
@@ -76,27 +83,133 @@ export function radiusRatioFor(width: number): number {
   return width < 360 ? 0.64 : 0.72
 }
 
-/** How many characters of a name survive at this width. */
-export function maxLabelLengthFor(width: number): number {
-  return width < 300 ? 5 : width < 440 ? 9 : 12
+/** The ring's radius in pixels, as the library resolves it. */
+export function ringRadius(width: number, height: number): number {
+  return (Math.min(width, height) / 2) * radiusRatioFor(width)
+}
+
+/** Names shrink a step at a time as the card narrows, before they fold. */
+export function labelFontSizeFor(width: number): number {
+  return width < 340 ? 10 : width < 440 ? 11 : 12
+}
+
+/**
+ * How long a run of characters may lie along a spoke.
+ *
+ * The outer end is pinned just past the ring, so a name spends its length
+ * running inwards — and every spoke converges on the centre, so the last
+ * stretch before it is the one place where names can still meet. The budget
+ * stops them short of it.
+ */
+export function labelBudget(width: number, height: number): number {
+  const ring = ringRadius(width, height)
+  return ring + LABEL_OFFSET - Math.max(ring * 0.25, 22)
+}
+
+/**
+ * A name, folded to fit its spoke — never cut.
+ *
+ * "Sciences-Industrielles…" with the answer amputated was the truncation
+ * ladder this replaces. A name that overruns its budget breaks once, at a
+ * space or after a hyphen, into the two most even lines it can make. A single
+ * unbreakable word keeps its full length and simply runs deeper along its
+ * spoke: too rare to design around, and a shortened subject name is exactly
+ * what the subject's own `shortName` field is for.
+ */
+export function labelLines(
+  name: string,
+  width: number,
+  height: number
+): string[] {
+  const budget = labelBudget(width, height)
+  const advance = labelFontSizeFor(width) * CHARACTER_WIDTH
+  if (name.length * advance <= budget) return [name]
+
+  const tokens = name.match(/[^\s-]+-|[^\s]+/g) ?? [name]
+  if (tokens.length < 2) return [name]
+
+  const join = (parts: string[]) =>
+    parts.reduce(
+      (text, part) =>
+        text === "" ? part : text.endsWith("-") ? text + part : `${text} ${part}`,
+      ""
+    )
+
+  let best: [string, string] = [join(tokens.slice(0, 1)), join(tokens.slice(1))]
+  for (let split = 2; split < tokens.length; split += 1) {
+    const candidate: [string, string] = [
+      join(tokens.slice(0, split)),
+      join(tokens.slice(split)),
+    ]
+    if (
+      Math.max(candidate[0].length, candidate[1].length) <
+      Math.max(best[0].length, best[1].length)
+    ) {
+      best = candidate
+    }
+  }
+  return best
+}
+
+interface RadarLabel {
+  subject: string
+  value: number
+  key: string
+  text: string
+  rotation: number
+  anchor: "start" | "end"
+  dx: number
+  dy: number
 }
 
 export function radarSpec({
   points,
   scale,
   width,
+  height,
   formatValue,
 }: {
   points: readonly RadarPoint[]
   /** The year's own top mark; a year here is not always out of twenty. */
   scale: number
   width: number
+  height: number
   formatValue: (value: number) => string
 }) {
   const domain = points.map((point) => point.subject)
-  const maxLength = maxLabelLengthFor(width)
-  const shorten = (label: string) =>
-    label.length > maxLength ? `${label.slice(0, maxLength)}…` : label
+  const fontSize = labelFontSizeFor(width)
+  const lineHeight = fontSize * LINE_HEIGHT
+
+  /*
+   * The names are a mark of their own rather than the angle grid's labels,
+   * because a grid label is one run of text and a folded name is two. Each
+   * line is its own datum: same spoke, same rotation, same pinned outer end,
+   * offset across the spoke — `dx`/`dy` are added in world space after the
+   * polar projection, which is exactly the perpendicular this needs.
+   */
+  const labels: RadarLabel[] = points.flatMap((point, index) => {
+    const angle = (index * 2 * Math.PI) / points.length
+    const rotation = labelRotation(angle)
+    const anchor = labelAnchorFor(angle)
+    const radians = (rotation * Math.PI) / 180
+    // The descender side of the folded baseline: where a second line belongs.
+    const across = { x: -Math.sin(radians), y: Math.cos(radians) }
+    const lines = labelLines(point.subject, width, height)
+
+    return lines.map((text, line) => {
+      const offset = (line - (lines.length - 1) / 2) * lineHeight
+      return {
+        subject: point.subject,
+        value: point.value,
+        key: `${point.subject}#${line}`,
+        text,
+        rotation,
+        anchor,
+        dx: across.x * offset,
+        dy: across.y * offset,
+      }
+    })
+  })
 
   return {
     marks: [
@@ -126,18 +239,7 @@ export function radarSpec({
             labelClassName: "opacity-60",
           }),
           angleGrid({
-            labels: true,
-            format: (value) => shorten(String(value)),
-            labelFill: "currentColor",
-            labelFontSize: LABEL_FONT_SIZE,
-            // No `labelDx` here. It is added to the world x rather than run
-            // along the rotated baseline, so it drags every name sideways
-            // instead of down its spoke — and it is not needed: the renderer
-            // already anchors a name `start` on the right and `end` on the
-            // left, so each one grows away from the ring on its own.
-            labelOffset: LABEL_OFFSET,
-            labelRotate: ({ angle }) => labelRotation(angle),
-            labelAnchor: ({ angle }) => labelAnchorFor(angle),
+            labels: false,
             stroke: "currentColor",
             strokeOpacity: 0.2,
           }),
@@ -152,6 +254,20 @@ export function radarSpec({
             fillOpacity: 0.1,
             stroke: "var(--chart-1)",
             strokeWidth: 2,
+          }),
+          radialText(labels, {
+            angle: "subject",
+            radius: scale,
+            radiusOffset: LABEL_OFFSET,
+            key: "key",
+            text: "text",
+            fill: "currentColor",
+            fontSize,
+            anchor: (datum) => datum.anchor,
+            baseline: "middle",
+            rotate: (datum) => datum.rotation,
+            dx: (datum) => datum.dx,
+            dy: (datum) => datum.dy,
           }),
         ],
       }),

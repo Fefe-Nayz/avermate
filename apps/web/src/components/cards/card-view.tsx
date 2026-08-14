@@ -1,14 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo } from "react"
-import { areaY, barY, defineChart, lineY } from "@tanstack/charts"
+import NumberFlow, { type Format } from "@number-flow/react"
+import { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { areaY, barY, defineChart, dot, lineY } from "@tanstack/charts"
+import { tooltip } from "@tanstack/charts/tooltip"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import { scaleBand } from "@tanstack/charts/scales/band"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { curveMonotoneX } from "d3-shape"
 import { FlameIcon, TrendingUpIcon } from "lucide-react"
-import { useFormatter, useExtracted } from "next-intl"
+import { useFormatter, useExtracted, useLocale } from "next-intl"
 import {
   evaluateCard,
   type CardMetric,
@@ -16,10 +18,13 @@ import {
   type CardSpec,
 } from "@avermate/core"
 import { AverageValue, DeltaValue, ResultBadge } from "@/components/data/value"
+import { GradeResultBadge } from "@/components/grades/grade-result-badge"
 import { ResponsiveChart } from "@/components/charts/responsive-chart"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
+import { cardListCellLimit, cardListColumns, limitCardList } from "./card-list"
+import { FitSingleLine } from "./fit-single-line"
 
 /**
  * Rendering one dashboard card.
@@ -64,22 +69,13 @@ export function useMetricLabels(): Record<CardMetric, string> {
   }
 }
 
-export function useCardResult(spec: CardSpec): CardResult {
-  const {
-    graph,
-    subjects,
-    period,
-    year,
-    passingRatio,
-    goals,
-    headlineAverage,
-    resolve,
-    resolveHeadline,
-    now,
-  } = useYear()
+export function useCardResult(spec: CardSpec, enabled = true): CardResult {
+  const { graph, subjects, period, year, passingRatio, goals, resolve, now } =
+    useYear()
   const { remaining } = useGoalPlans()
 
   return useMemo(() => {
+    if (!enabled) return { kind: "empty" }
     const from = period.startAt
     const to = new Date(Math.min(now, new Date(period.endAt).getTime()))
 
@@ -92,10 +88,7 @@ export function useCardResult(spec: CardSpec): CardResult {
       passingRatio,
       goals,
       remaining,
-      // A card shows exactly what it is configured to show. The headline
-      // substitution (a custom average marked "main") belongs to the
-      // dashboard hero alone — leaking it here made every general-average
-      // card silently display the main custom average instead.
+      // A card shows exactly what it is configured to show.
       resolveTarget: (target) => {
         const resolved = resolve(target)
         if (!resolved) return null
@@ -103,6 +96,7 @@ export function useCardResult(spec: CardSpec): CardResult {
       },
     })
   }, [
+    enabled,
     spec,
     graph,
     subjects,
@@ -110,22 +104,104 @@ export function useCardResult(spec: CardSpec): CardResult {
     year,
     passingRatio,
     goals,
-    headlineAverage,
     resolve,
-    resolveHeadline,
     remaining,
     now,
   ])
 }
 
+/**
+ * Type that grows with the card — one step at a time.
+ *
+ * The grid hands a card anything from a third of a phone to half a desktop,
+ * and a number that suits one is lost in the other. Each card is its own query
+ * container, so these ladders read the width this card actually got — two
+ * neighbouring cards of different spans quite rightly set their figures at
+ * different sizes. Two steps and no more: a wide value card gets a bigger
+ * figure, not a poster.
+ */
+const VALUE_TEXT =
+  "text-3xl font-semibold @[16rem]/card:text-4xl @[26rem]/card:text-5xl"
+const NAME_TEXT =
+  "text-lg leading-tight font-semibold @[16rem]/card:text-xl @[26rem]/card:text-2xl"
+const SUPPORT_TEXT = "text-sm @[16rem]/card:text-base"
+const FOOTNOTE_TEXT = "text-xs @[16rem]/card:text-sm"
+
+/**
+ * Card-level dress.
+ *
+ * Most cards wear the neutral shell, but a live streak changes the whole
+ * card, not just its icon: a warm gradient rising from the flame's corner and
+ * a ring to match. The grid and the editor preview both apply it, so the card
+ * burns the same everywhere.
+ */
+export function cardSurface(result: {
+  kind: string
+  alive?: boolean
+}): string | undefined {
+  return result.kind === "streak" && result.alive === true
+    ? "bg-linear-to-tr from-band-weak/15 via-card to-band-fair/10 ring-band-weak/25"
+    : undefined
+}
+
+/**
+ * The entrance: a headline figure mounts at zero and rolls up to its value.
+ *
+ * NumberFlow only animates *changes*, so the entry is made of one — the first
+ * paint shows zero, and the real value lands a frame later on the reel. The
+ * same flag drives the gauge bars, whose width transition needs a zero to
+ * start from for the same reason.
+ */
+function useEntered(): boolean {
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+  return entered
+}
+
+/** A plain figure on the same reel the averages already use. */
+function TickNumber({
+  value,
+  className,
+  format,
+}: {
+  value: number
+  className?: string
+  format?: Format
+}) {
+  const locale = useLocale()
+  const entered = useEntered()
+  return (
+    <span className={cn("numeric", className)}>
+      {/* NumberFlow paints its digits into a shadow root, which assistive
+          technology and copy-paste cannot reach. The reel is decorative;
+          this is the value. */}
+      <span className="sr-only">{value.toLocaleString(locale, format)}</span>
+      <NumberFlow
+        aria-hidden
+        value={entered ? value : 0}
+        locales={locale}
+        format={format}
+      />
+    </span>
+  )
+}
+
 function Sparkline({
   points,
   positive,
+  label,
 }: {
   points: Array<{ date: Date; ratio: number | null }>
   positive: boolean
+  /** Names the value in the tooltip: the card's own metric. */
+  label: string
 }) {
   const t = useExtracted()
+  const format = useFormatter()
+  const { scale, decimals } = useYear()
   const data = points
     .filter((point) => point.ratio !== null)
     .map((point) => ({ x: point.date.getTime(), y: point.ratio as number }))
@@ -159,6 +235,19 @@ function Sparkline({
         stroke: color,
         strokeWidth: 2,
       }),
+      // The story does not end at the card's edge: the last reading gets a
+      // dot, the typographic "…" of a curve that is still being written.
+      // The pulse it breathes with is CSS, on the wrapper's `spark-live`.
+      dot(data.slice(-1), {
+        id: "card-spark-now",
+        x: "x",
+        y: "y",
+        key: "x",
+        r: 4.5,
+        fill: color,
+        stroke: "var(--card)",
+        strokeWidth: 2,
+      }),
     ],
     x: {
       scale: scaleLinear().domain(
@@ -187,18 +276,57 @@ function Sparkline({
         ],
       },
     ],
-    margin: { top: 4, right: 0, bottom: 0, left: 0 },
-    clip: true,
-    focus: false,
+    // Flush left and flush at the base, so the fill can pour to the card's
+    // bottom edge; on the right the curve pulls up short — the dot ends it
+    // with room to breathe, the way a sentence ends before the margin.
+    margin: { top: 4, right: 16, bottom: 0, left: 0 },
+    // No clip: the plot's clip rect ends exactly where the last point sits,
+    // which halved the dot. The curve cannot overdraw its own domain, so
+    // nothing else escapes.
+    clip: false,
+    focus: "nearest",
     keyboard: false,
-    pointer: false,
+    tooltip: {
+      use: tooltip,
+      placement: ["top", "bottom", "left", "right"],
+      content: (focused) => {
+        const point = focused[0]?.datum
+        return {
+          title: point
+            ? format.dateTime(new Date(point.x), {
+                day: "numeric",
+                month: "long",
+              })
+            : undefined,
+          rows: point
+            ? [
+                {
+                  color,
+                  label,
+                  value: format.number(point.y * scale, {
+                    maximumFractionDigits: decimals,
+                    minimumFractionDigits: decimals,
+                  }),
+                },
+              ]
+            : [],
+        }
+      },
+    },
   })
 
   return (
-    <div aria-hidden="true" className="pointer-events-none -mx-1 h-14">
+    // A floor of h-14, then every pixel the row happens to have spare: the
+    // curve is the one part of this card that gets better with more room,
+    // and letting it drink the surplus is what keeps a chart card from
+    // showing a strip of curve above a field of nothing. It bleeds through
+    // the card's padding on three sides — the fill pours to the bottom
+    // border — because the curve is scenery, and scenery runs to the edge.
+    <div className="spark-live -mx-4 mt-2 -mb-4 min-h-14 flex-1">
       <ResponsiveChart
         ariaLabel={t("Trend")}
         definition={definition}
+        fill
         height={56}
         initialWidth={180}
       />
@@ -208,11 +336,27 @@ function Sparkline({
 
 function MiniDistribution({
   ariaLabel,
-  data,
+  buckets,
+  scale,
 }: {
   ariaLabel: string
-  data: readonly { count: number; label: string }[]
+  buckets: readonly { from: number; to: number; count: number }[]
+  scale: number
 }) {
+  const t = useExtracted()
+  const format = useFormatter()
+  const data = useMemo(
+    () =>
+      buckets.map((bucket) => ({
+        label: `${Math.round(bucket.from * scale)}`,
+        // The axis shows each bucket's floor; the tooltip owes the full range.
+        range: `${format.number(bucket.from * scale, {
+          maximumFractionDigits: 0,
+        })} – ${format.number(bucket.to * scale, { maximumFractionDigits: 0 })}`,
+        count: bucket.count,
+      })),
+    [buckets, format, scale]
+  )
   const maximum = Math.max(1, ...data.map(({ count }) => count))
   const definition = defineChart({
     marks: [
@@ -242,22 +386,149 @@ function MiniDistribution({
       axis: false,
     },
     clip: true,
-    focus: false,
+    focus: "nearest",
     keyboard: false,
-    pointer: false,
+    tooltip: {
+      use: tooltip,
+      placement: ["top", "bottom", "left", "right"],
+      content: (focused) => {
+        const point = focused[0]?.datum
+        return {
+          title: point?.range,
+          rows: point
+            ? [
+                {
+                  color: "var(--chart-1)",
+                  label: t("Grades"),
+                  value: format.number(point.count),
+                },
+              ]
+            : [],
+        }
+      },
+    },
   })
 
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none h-24 text-muted-foreground"
-    >
+    // The histogram is the whole body of its card, so it takes the full
+    // height the row resolves to — h-24 is only the floor it insists on.
+    <div className="h-full min-h-24 text-muted-foreground">
       <ResponsiveChart
         ariaLabel={ariaLabel}
         definition={definition}
+        fill
         height={96}
         initialWidth={220}
       />
+    </div>
+  )
+}
+
+/**
+ * A ranking sized to its surface.
+ *
+ * Slicing every list to six rows hid the rest of the year without saying so,
+ * and stacked six rows into a column even when the card was half a desktop
+ * wide. This list measures the box it was actually given: columns come from
+ * the width, the cell count from the height. The card itself only ever asks
+ * the grid row for five rows — the ul is absolutely positioned, so revealing
+ * more entries into a taller neighbour's row can never inflate that row in
+ * return. What still doesn't fit is counted, out loud, by a cell that links
+ * to the full ranking. Names stay complete on one line, shrinking a touch
+ * when they must, rather than losing their ends to an ellipsis.
+ */
+const LIST_ROW_HEIGHT = 32
+const LIST_ROW_GAP = 4
+/** Rows the card asks the grid row for; taller neighbours reveal more. */
+const LIST_NATURAL_ROWS = 5
+
+function RankingList({
+  items,
+}: {
+  items: ReadonlyArray<{
+    id: string
+    label: string
+    ratio: number | null
+    delta: number | null
+  }>
+}) {
+  const t = useExtracted()
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    if (!node) return
+    const measure = () => {
+      const next = { width: node.clientWidth, height: node.clientHeight }
+      setViewport((current) =>
+        current.width === next.width && current.height === next.height
+          ? current
+          : next
+      )
+    }
+
+    measure()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [node])
+
+  const columns = cardListColumns(viewport.width)
+  const { visible, remaining } = limitCardList(
+    items,
+    cardListCellLimit(viewport)
+  )
+
+  const naturalRows = Math.min(items.length, LIST_NATURAL_ROWS)
+  return (
+    <div
+      ref={setNode}
+      className="relative h-full"
+      style={{
+        minHeight:
+          naturalRows * LIST_ROW_HEIGHT + (naturalRows - 1) * LIST_ROW_GAP,
+      }}
+    >
+      <ul
+        className="absolute inset-0 grid content-center overflow-hidden"
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gridAutoRows: LIST_ROW_HEIGHT,
+          columnGap: 20,
+          rowGap: LIST_ROW_GAP,
+        }}
+      >
+        {visible.map((item) => (
+          <li key={item.id} className="flex min-w-0 items-center gap-2 text-sm">
+            <Link href={`/subjects/${item.id}`} className="min-w-0 flex-1">
+              <FitSingleLine className="hover:underline">
+                {item.label}
+              </FitSingleLine>
+            </Link>
+            {item.ratio !== null ? (
+              <AverageValue
+                ratio={item.ratio}
+                animate={false}
+                decimals={1}
+                colored
+                className="shrink-0 text-sm"
+              />
+            ) : (
+              <DeltaValue delta={item.delta} className="shrink-0 text-sm" />
+            )}
+          </li>
+        ))}
+        {remaining > 0 ? (
+          <li className="flex min-w-0 items-center text-xs text-muted-foreground">
+            <Link href="/subjects" className="min-w-0 flex-1 hover:underline">
+              <FitSingleLine>
+                {t("+{count} more", { count: String(remaining) })}
+              </FitSingleLine>
+            </Link>
+          </li>
+        ) : null}
+      </ul>
     </div>
   )
 }
@@ -270,8 +541,13 @@ export function CardBody({
   result: CardResult
 }) {
   const t = useExtracted()
+  const { scale, yearGraph } = useYear()
   const format = useFormatter()
-  const { scale } = useYear()
+  const labels = useMetricLabels()
+  const entered = useEntered()
+  /** Zero on the first frame, so the reels and gauges have an entrance. */
+  const enter = (ratio: number | null) =>
+    entered ? ratio : ratio === null ? null : 0
 
   switch (result.kind) {
     case "empty":
@@ -283,43 +559,47 @@ export function CardBody({
 
     case "ratio":
       return (
-        <div>
-          <div className="flex items-baseline gap-2">
+        <div className="flex h-full flex-col">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <AverageValue
-              ratio={result.ratio}
+              ratio={enter(result.ratio)}
               showScale
-              className="text-3xl font-semibold"
+              className={VALUE_TEXT}
             />
             {result.delta !== null ? (
-              <DeltaValue delta={result.delta} className="text-sm" />
+              <DeltaValue delta={result.delta} className={SUPPORT_TEXT} />
             ) : null}
           </div>
           {result.series && spec.display !== "value" ? (
             <Sparkline
               points={result.series}
               positive={(result.delta ?? 0) >= 0}
+              label={spec.title ?? labels[spec.metric]}
             />
           ) : null}
         </div>
       )
 
     case "count":
-      return <p className="numeric text-3xl font-semibold">{result.count}</p>
+      return (
+        <TickNumber value={result.count} className={cn("block", VALUE_TEXT)} />
+      )
 
     case "percent":
       return (
         <div className="flex flex-col gap-2">
-          <p className="numeric text-3xl font-semibold">
-            {format.number(result.ratio ?? 0, {
-              style: "percent",
-              maximumFractionDigits: 0,
-            })}
-          </p>
+          <TickNumber
+            value={result.ratio ?? 0}
+            className={cn("block", VALUE_TEXT)}
+            format={{ style: "percent", maximumFractionDigits: 0 }}
+          />
           {spec.display === "gauge" ? (
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted @[20rem]/card:h-2">
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-500"
-                style={{ width: `${Math.round((result.ratio ?? 0) * 100)}%` }}
+                style={{
+                  width: `${Math.round((enter(result.ratio) ?? 0) * 100)}%`,
+                }}
               />
             </div>
           ) : null}
@@ -327,18 +607,14 @@ export function CardBody({
       )
 
     case "scalar":
-      return (
-        <p className="numeric text-3xl font-semibold">
-          {result.value === null
-            ? "—"
-            : format.number(
-                result.value * (result.unit === "ratio" ? scale : 1),
-                {
-                  maximumFractionDigits: 2,
-                  signDisplay: "exceptZero",
-                }
-              )}
-        </p>
+      return result.value === null ? (
+        <p className={cn("numeric", VALUE_TEXT)}>—</p>
+      ) : (
+        <TickNumber
+          value={result.value * (result.unit === "ratio" ? scale : 1)}
+          className={cn("block", VALUE_TEXT)}
+          format={{ maximumFractionDigits: 2, signDisplay: "exceptZero" }}
+        />
       )
 
     case "subject":
@@ -349,7 +625,7 @@ export function CardBody({
               nothing at all. */}
           <Link
             href={`/subjects/${result.subjectId}`}
-            className="line-clamp-2 text-lg leading-tight font-semibold break-words hover:underline"
+            className={cn(NAME_TEXT, "break-words hover:underline")}
           >
             {result.name}
           </Link>
@@ -358,82 +634,122 @@ export function CardBody({
               ratio={result.ratio}
               showScale
               colored
-              className="text-sm"
+              className={SUPPORT_TEXT}
             />
-            <DeltaValue delta={result.delta} className="text-xs" />
+            <DeltaValue delta={result.delta} className={FOOTNOTE_TEXT} />
           </div>
         </div>
       )
 
-    case "grade":
+    case "grade": {
+      const grade = yearGraph
+        .byId(result.subjectId)
+        ?.grades.find((item) => item.id === result.gradeId)
       return (
         <div className="flex flex-col gap-1">
           <Link
             href={`/grades/${result.gradeId}`}
-            className="line-clamp-2 text-lg leading-tight font-semibold break-words hover:underline"
+            className={cn(NAME_TEXT, "break-words hover:underline")}
           >
             {result.name}
           </Link>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-            <ResultBadge ratio={result.ratio} />
-            <span className="truncate">{result.subjectName}</span>
+            {grade ? (
+              <GradeResultBadge grade={grade} />
+            ) : (
+              <ResultBadge ratio={result.ratio} />
+            )}
+            {/* Wraps rather than truncating: the subject is half the answer. */}
+            <span className="min-w-0 break-words">{result.subjectName}</span>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className={cn(FOOTNOTE_TEXT, "text-muted-foreground")}>
             {format.dateTime(result.at, { day: "numeric", month: "long" })}
           </p>
         </div>
       )
-
-    case "list":
-      return (
-        <ul className="flex flex-col gap-1.5">
-          {result.items.slice(0, 6).map((item) => (
-            <li key={item.id} className="flex items-center gap-2 text-sm">
-              <Link
-                href={`/subjects/${item.id}`}
-                className="flex min-h-9 min-w-0 flex-1 items-center truncate hover:underline"
-              >
-                {item.label}
-              </Link>
-              {item.ratio !== null ? (
-                <AverageValue
-                  ratio={item.ratio}
-                  animate={false}
-                  decimals={1}
-                  colored
-                  className="text-sm"
-                />
-              ) : (
-                <DeltaValue delta={item.delta} className="text-sm" />
-              )}
-            </li>
-          ))}
-        </ul>
-      )
-
-    case "distribution": {
-      const data = result.buckets.map((bucket) => ({
-        label: `${Math.round(bucket.from * scale)}`,
-        count: bucket.count,
-      }))
-      return <MiniDistribution ariaLabel={t("Distribution")} data={data} />
     }
 
-    case "streak":
+    case "list":
+      return <RankingList items={result.items} />
+
+    case "distribution":
       return (
-        <div className="flex items-baseline gap-2">
-          <FlameIcon
-            className={cn(
-              "size-5 self-center",
-              result.alive ? "text-band-weak" : "text-muted-foreground"
-            )}
-          />
-          <span className="numeric text-3xl font-semibold">
-            {result.current}
+        <MiniDistribution
+          ariaLabel={t("Distribution")}
+          buckets={result.buckets}
+          scale={scale}
+        />
+      )
+
+    case "streak":
+      // The streak is the one card that celebrates. A live streak burns: a
+      // two-tone flame with a glow behind it, swaying over a warm wash, with
+      // embers drifting off the top. A broken one goes grey and holds still —
+      // the difference is the message.
+      return (
+        <div className="relative flex h-full items-center gap-4">
+          <span className="relative flex size-14 shrink-0 items-center justify-center @[16rem]/card:size-16">
+            {result.alive ? (
+              <>
+                <FlameIcon
+                  aria-hidden
+                  fill="currentColor"
+                  className="animate-flame absolute size-full text-band-weak opacity-50 blur-lg"
+                />
+                <span
+                  aria-hidden
+                  className="animate-ember absolute top-0 left-[30%] size-1 rounded-full bg-band-fair"
+                />
+                <span
+                  aria-hidden
+                  className="animate-ember absolute top-1 left-[64%] size-1 rounded-full bg-band-weak"
+                  style={{ animationDelay: "0.9s" }}
+                />
+                <span
+                  aria-hidden
+                  className="animate-ember absolute top-0 left-[48%] size-0.5 rounded-full bg-band-fair"
+                  style={{ animationDelay: "1.7s" }}
+                />
+              </>
+            ) : null}
+            <span className={cn("relative", result.alive && "animate-flame")}>
+              <FlameIcon
+                aria-hidden
+                fill="currentColor"
+                className={cn(
+                  "size-12 @[16rem]/card:size-14",
+                  result.alive ? "text-band-weak" : "text-muted-foreground/50"
+                )}
+              />
+              {result.alive ? (
+                <FlameIcon
+                  aria-hidden
+                  fill="currentColor"
+                  className="absolute bottom-[8%] left-1/2 size-5 -translate-x-1/2 text-band-fair @[16rem]/card:size-6"
+                />
+              ) : null}
+            </span>
           </span>
-          <span className="text-sm text-muted-foreground">
-            {t("best {count}", { count: String(result.longest) })}
-          </span>
+          <div className="relative flex min-w-0 flex-col gap-1.5">
+            <TickNumber
+              value={result.current}
+              className={cn(
+                VALUE_TEXT,
+                "leading-none",
+                result.alive && "text-band-weak"
+              )}
+            />
+            <span
+              className={cn(
+                "self-start rounded-full px-2 py-0.5 text-xs font-medium",
+                result.alive
+                  ? "bg-band-weak/15 text-band-weak"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {t("best {count}", { count: String(result.longest) })}
+            </span>
+          </div>
         </div>
       )
 
@@ -445,26 +761,30 @@ export function CardBody({
           : Math.min(1, plan.current / plan.target)
       return (
         <div className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-2">
-            <AverageValue
-              ratio={plan.current}
-              className="text-3xl font-semibold"
-            />
-            <span className="text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <AverageValue ratio={enter(plan.current)} className={VALUE_TEXT} />
+            <span className={cn(SUPPORT_TEXT, "text-muted-foreground")}>
               {t("of")}{" "}
               <AverageValue ratio={plan.target} animate={false} showScale />
             </span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted @[20rem]/card:h-2">
             <div
               className={cn(
                 "h-full rounded-full transition-[width] duration-500",
                 plan.status === "unreachable" ? "bg-negative" : "bg-primary"
               )}
-              style={{ width: `${Math.round(progress * 100)}%` }}
+              style={{
+                width: `${Math.round((entered ? progress : 0) * 100)}%`,
+              }}
             />
           </div>
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <p
+            className={cn(
+              FOOTNOTE_TEXT,
+              "flex items-center gap-1 text-muted-foreground"
+            )}
+          >
             <TrendingUpIcon className="size-3.5" />
             {plan.goal.name}
           </p>

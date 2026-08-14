@@ -2,7 +2,10 @@
 
 import NumberFlow from "@number-flow/react"
 import { useExtracted } from "next-intl"
-import { BackgroundDots, useOnScreen } from "@/components/landing/landing-chrome"
+import {
+  BackgroundDots,
+  useOnScreen,
+} from "@/components/landing/landing-chrome"
 
 /**
  * The counters.
@@ -36,7 +39,7 @@ export function LandingStatsStrip({
       className="relative overflow-hidden border-y border-border/60 bg-muted/25"
     >
       <BackgroundDots />
-      <dl className="relative mx-auto grid max-w-6xl grid-cols-3 divide-border/60 px-4 py-8 sm:px-6 lg:divide-x lg:py-10">
+      <dl className="relative mx-auto grid max-w-6xl grid-cols-3 divide-border/60 py-8 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:divide-x lg:py-10">
         {stats.map((stat, index) => (
           <div
             key={stat.label}

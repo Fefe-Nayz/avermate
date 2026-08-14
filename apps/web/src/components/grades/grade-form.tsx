@@ -354,6 +354,7 @@ export function GradeForm({
       content: (
         <PickerField
           layout="page"
+          advanceOnSelect
           label={t("Subject")}
           required
           options={options}

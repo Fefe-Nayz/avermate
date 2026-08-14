@@ -51,11 +51,7 @@ export function VersionBadge({
  * about to change.
  */
 export type PresetLinkState =
-  | "none"
-  | "current"
-  | "update_available"
-  | "customized"
-  | "action_required"
+  "none" | "current" | "update_available" | "customized" | "action_required"
 
 const STATE_STYLE: Record<
   PresetLinkState,
@@ -218,21 +214,23 @@ export function PresetCard({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "flex flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors",
+        "flex h-full w-full min-w-0 flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors",
         selected
           ? "border-primary bg-primary/6 ring-1 ring-primary/30"
           : "bg-card hover:bg-accent/50"
       )}
     >
-      <span className="flex items-center gap-2">
+      <span className="flex min-w-0 items-start gap-2">
         {featured ? (
           <SparklesIcon className="size-4 shrink-0 text-primary" />
         ) : null}
-        <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
+        <span className="min-w-0 flex-1 font-medium break-words whitespace-normal">
+          {name}
+        </span>
         <VersionBadge version={version} />
       </span>
       {description ? (
-        <span className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+        <span className="text-sm leading-relaxed break-words whitespace-normal text-muted-foreground">
           {description}
         </span>
       ) : null}

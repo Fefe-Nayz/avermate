@@ -8,8 +8,8 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-svh bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex h-14 w-full max-w-3xl items-center px-4">
+      <header className="pt-safe border-b">
+        <div className="mx-auto flex h-14 w-full max-w-3xl items-center pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))]">
           <Link
             href="/"
             className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -19,7 +19,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
           </Link>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-3xl px-4 py-10">
+      <main className="mx-auto w-full max-w-3xl pt-10 pr-[max(1rem,var(--spacing-safe-right))] pb-[max(2.5rem,var(--spacing-safe-bottom))] pl-[max(1rem,var(--spacing-safe-left))]">
         <article className="flex flex-col gap-6 text-sm leading-relaxed text-muted-foreground [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-medium [&_h2]:text-foreground [&_li]:ml-4 [&_li]:list-disc">
           {children}
         </article>

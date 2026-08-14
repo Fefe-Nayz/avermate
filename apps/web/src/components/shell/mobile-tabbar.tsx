@@ -40,7 +40,7 @@ export function MobileTabBar() {
       aria-label={t("Main")}
       className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/85 backdrop-blur-xl md:hidden"
     >
-      <ul className="mx-auto grid h-tabbar max-w-lg grid-cols-5 items-center">
+      <ul className="mx-auto grid h-tabbar max-w-lg grid-cols-5 items-center pr-[var(--spacing-safe-right)] pl-[var(--spacing-safe-left)]">
         {tabs.map((tab) => {
           if (!tab) {
             return (

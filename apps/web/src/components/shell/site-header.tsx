@@ -127,7 +127,7 @@ export function SiteHeader({ user }: { user: AuthenticatedUser }) {
   )
 
   return (
-    <header className="sticky top-0 z-30 hidden h-12 shrink-0 items-center gap-1 border-b bg-background/80 px-3 backdrop-blur-sm md:flex">
+    <header className="pt-safe sticky top-0 z-30 hidden h-[calc(3rem+var(--spacing-safe-top))] shrink-0 items-center gap-1 border-b bg-background/80 pr-[max(0.75rem,var(--spacing-safe-right))] pl-[max(0.75rem,var(--spacing-safe-left))] backdrop-blur-sm md:flex">
       <SidebarTrigger className="-ml-1" />
       <Separator
         orientation="vertical"

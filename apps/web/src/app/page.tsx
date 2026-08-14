@@ -101,7 +101,7 @@ export default function LandingPage() {
     <div className="min-h-svh overflow-x-hidden bg-background">
       <a
         href="#content"
-        className="sr-only z-50 rounded-md bg-background px-4 py-2 focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        className="sr-only z-50 rounded-md bg-background px-4 py-2 focus:not-sr-only focus:fixed focus:top-[calc(var(--spacing-safe-top)+0.75rem)] focus:left-[calc(var(--spacing-safe-left)+0.75rem)]"
       >
         {t("Skip to content")}
       </a>
@@ -113,7 +113,7 @@ export default function LandingPage() {
         <section className="relative isolate">
           <HeroBackdrop />
 
-          <div className="mx-auto flex max-w-6xl flex-col items-center px-4 pt-14 text-center sm:px-6 sm:pt-20">
+          <div className="mx-auto flex max-w-6xl flex-col items-center pt-14 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] text-center sm:pt-20 sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
             <Reveal>
               <span className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
                 <SparklesIcon className="size-3.5 text-primary" />
@@ -168,7 +168,7 @@ export default function LandingPage() {
           {/* The product itself, in a browser frame. Not a picture of one. */}
           <div
             id="preview"
-            className="mx-auto mt-14 max-w-6xl scroll-mt-24 px-2 pb-20 sm:mt-18 sm:px-6"
+            className="mx-auto mt-14 max-w-6xl scroll-mt-24 pr-[max(0.5rem,var(--spacing-safe-right))] pb-20 pl-[max(0.5rem,var(--spacing-safe-left))] sm:mt-18 sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]"
           >
             <Reveal delay={0.1}>
               <PreviewFrame>
@@ -216,7 +216,7 @@ export default function LandingPage() {
 
         {/* ------------------------------------------------------- why */}
         <section id="why" className="scroll-mt-20">
-          <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:py-28">
+          <div className="mx-auto grid max-w-6xl gap-12 py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:py-28">
             <div>
               <SectionHeading
                 align="left"
@@ -279,7 +279,7 @@ export default function LandingPage() {
 
         {/* -------------------------------------------------- features */}
         <section id="features" className="scroll-mt-20 bg-muted/25">
-          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto max-w-6xl py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
             <SectionHeading
               id="features-title"
               eyebrow={t("Built around a whole school year")}
@@ -380,7 +380,7 @@ export default function LandingPage() {
 
         {/* ------------------------------------------------ principles */}
         <section>
-          <div className="mx-auto grid max-w-6xl gap-4 px-4 py-16 sm:px-6 md:grid-cols-3">
+          <div className="mx-auto grid max-w-6xl gap-4 py-16 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] md:grid-cols-3">
             <Principle
               icon={<ZapIcon />}
               title={t("The maths is the product")}
@@ -396,7 +396,10 @@ export default function LandingPage() {
               body={t(
                 "School data is used to answer your own questions. It is not sold to advertisers, and you can export it or delete the account outright."
               )}
-              link={{ href: "/legal/privacy", label: t("Read the privacy policy") }}
+              link={{
+                href: "/legal/privacy",
+                label: t("Read the privacy policy"),
+              }}
             />
             <Principle
               delay={0.16}
@@ -412,7 +415,7 @@ export default function LandingPage() {
 
         {/* -------------------------------------------------- how it works */}
         <section id="how" className="scroll-mt-20 border-y bg-card">
-          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto max-w-6xl py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
             <SectionHeading
               id="how-title"
               eyebrow={t("From blank page to useful answer")}
@@ -447,7 +450,10 @@ export default function LandingPage() {
         </section>
 
         {/* --------------------------------------------------------- faq */}
-        <section id="faq" className="mx-auto max-w-4xl scroll-mt-20 px-4 py-20 sm:px-6 lg:py-28">
+        <section
+          id="faq"
+          className="mx-auto max-w-4xl scroll-mt-20 py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28"
+        >
           <SectionHeading
             id="faq-title"
             eyebrow={t("Questions, answered")}
@@ -473,7 +479,7 @@ export default function LandingPage() {
         <BeamDivider />
 
         {/* --------------------------------------------------- final cta */}
-        <section className="px-4 py-20 sm:px-6 lg:py-28">
+        <section className="py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
           <Reveal>
             <div className="relative mx-auto flex max-w-6xl flex-col items-center overflow-hidden rounded-3xl bg-primary px-6 py-16 text-center text-primary-foreground sm:px-12 sm:py-20">
               {/* Grain keeps a large flat fill from banding on wide gamuts. */}
@@ -481,7 +487,9 @@ export default function LandingPage() {
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,.18),transparent_32%),radial-gradient(circle_at_85%_85%,rgba(255,255,255,.12),transparent_34%)]" />
               <SparklesIcon className="relative size-7" />
               <h2 className="relative mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                {t("Your next result should answer a question, not create one.")}
+                {t(
+                  "Your next result should answer a question, not create one."
+                )}
               </h2>
               <p className="relative mt-4 max-w-xl text-sm leading-relaxed text-primary-foreground/75 sm:text-base">
                 {t(
@@ -624,7 +632,7 @@ function LandingFooter() {
 
   return (
     <footer className="border-t bg-muted/25">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+      <div className="mx-auto max-w-6xl py-14 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
         <div className="flex flex-col justify-between gap-12 md:flex-row">
           <div className="max-w-xs">
             <Link
