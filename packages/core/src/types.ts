@@ -111,6 +111,7 @@ export interface CustomAverage {
   id: string;
   name: string;
   entries: CustomAverageEntry[];
+  /** @deprecated Custom averages never replace the general average. */
   isMain: boolean;
   sortOrder: number;
 }

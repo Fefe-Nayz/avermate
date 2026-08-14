@@ -100,6 +100,35 @@ export function dayRange(from: Date, to: Date, step = 1): Date[] {
 }
 
 /**
+ * The days an average can actually move: one date per day that received a
+ * grade — clamped into the window, deduplicated — plus the window's two
+ * ends. An average is a step function of grade events, not a daily signal:
+ * sampling it on a calendar grid invented points between notes and merged
+ * the days that had several. The start anchors the time axis (its point
+ * stays null until something is graded, and inherits earlier grades when
+ * they exist), the end carries the line to "now". Each event sits at the
+ * end of its day so every grade of that day counts into its own point,
+ * which is also what keeps two same-day grades one single event.
+ */
+export function averageEventDates(
+  subjects: readonly Subject[],
+  from: Date,
+  to: Date,
+  target: string | null = null,
+): Date[] {
+  const graph = new SubjectGraph(subjects);
+  const start = from.getTime();
+  const end = to.getTime();
+  const days = new Set<number>([start, end]);
+  for (const grade of graph.allGrades(target ?? undefined)) {
+    const day = new Date(grade.passedAt);
+    day.setHours(23, 59, 59, 999);
+    days.add(Math.min(Math.max(day.getTime(), start), end));
+  }
+  return [...days].sort((a, b) => a - b).map((time) => new Date(time));
+}
+
+/**
  * The average as it stood on each date — grades taken later simply do not
  * exist yet. This is a running state of the year, not a moving window.
  */
@@ -481,14 +510,17 @@ export function rankGrades(
 }
 
 /** Subjects ranked by how far they moved between the two halves of the year. */
-export function rankByImprovement(graph: SubjectGraph): Array<{
+export function rankByImprovement(
+  graph: SubjectGraph,
+  options: { includeCategories?: boolean } = {},
+): Array<{
   subject: Subject;
   delta: number;
 }> {
   const results: Array<{ subject: Subject; delta: number }> = [];
 
   for (const subject of graph.subjects) {
-    if (subject.kind === "category") continue;
+    if (!options.includeCategories && subject.kind === "category") continue;
     const ratios = gradeRatios(graph, subject.id);
     const delta = improvement(ratios);
     if (delta === null) continue;
@@ -500,14 +532,17 @@ export function rankByImprovement(graph: SubjectGraph): Array<{
 }
 
 /** Subjects ranked by how tightly their results cluster, steadiest first. */
-export function rankByConsistency(graph: SubjectGraph): Array<{
+export function rankByConsistency(
+  graph: SubjectGraph,
+  options: { includeCategories?: boolean } = {},
+): Array<{
   subject: Subject;
   consistency: number;
 }> {
   const results: Array<{ subject: Subject; consistency: number }> = [];
 
   for (const subject of graph.subjects) {
-    if (subject.kind === "category") continue;
+    if (!options.includeCategories && subject.kind === "category") continue;
     const ratios = gradeRatios(graph, subject.id);
     if (ratios.length < 2) continue;
     const score = consistency(ratios);

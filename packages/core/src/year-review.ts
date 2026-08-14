@@ -1,10 +1,7 @@
 import {
-  activityByDay,
-  activityStreaks,
   averageOverTime,
   dayRange,
   gradeRatios,
-  improvement,
   rankSubjects,
   standardDeviation,
   type SeriesPoint,
@@ -30,7 +27,7 @@ export type AwardKind =
 
 export interface YearReview {
   gradeCount: number;
-  /** Sum of every result as a ratio — the raw "how much you were graded". */
+  /** Sum of every result as a ratio; multiply by the year's scale for points. */
   ratioSum: number;
   average: number | null;
   /** Grades per ISO day, for the heatmap. */
@@ -38,6 +35,11 @@ export interface YearReview {
   busiestMonth: { month: string; count: number } | null;
   busiestWeekday: { weekday: number; count: number } | null;
   longestStreak: number;
+  /**
+   * The real running average at each active day, reduced to a small set of
+   * renderable points while always retaining the first, last and peak values.
+   */
+  averageSeries: YearReviewSeriesPoint[];
   /** The day the running average peaked. */
   primeTime: { date: Date; ratio: number } | null;
   topSubjects: Array<{ subjectId: string; name: string; ratio: number }>;
@@ -50,8 +52,103 @@ export interface YearReview {
   lastGradeAt: Date | null;
 }
 
+export interface YearReviewSeriesPoint {
+  date: Date;
+  ratio: number;
+}
+
+const MAX_REVIEW_SERIES_POINTS = 64;
+
+/**
+ * Evenly samples a running-average series without losing its actual peak.
+ * Keeping this in core makes the SVG payload bounded on every client.
+ */
+export function decimateYearReviewSeries(
+  points: readonly YearReviewSeriesPoint[],
+  maximumPoints = MAX_REVIEW_SERIES_POINTS,
+): YearReviewSeriesPoint[] {
+  const limit = Math.max(3, Math.floor(maximumPoints));
+  if (points.length <= limit) return [...points];
+
+  let peakIndex = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    if (
+      (points[index]?.ratio ?? -Infinity) >
+      (points[peakIndex]?.ratio ?? -Infinity)
+    ) {
+      peakIndex = index;
+    }
+  }
+
+  const lastIndex = points.length - 1;
+  const sampledIndexes = Array.from({ length: limit }, (_, index) =>
+    Math.round((index * lastIndex) / (limit - 1)),
+  );
+
+  if (!sampledIndexes.includes(peakIndex)) {
+    let replacement = 1;
+    for (let index = 2; index < sampledIndexes.length - 1; index += 1) {
+      if (
+        Math.abs((sampledIndexes[index] ?? 0) - peakIndex) <
+        Math.abs((sampledIndexes[replacement] ?? 0) - peakIndex)
+      ) {
+        replacement = index;
+      }
+    }
+    sampledIndexes[replacement] = peakIndex;
+    sampledIndexes.sort((left, right) => left - right);
+  }
+
+  return sampledIndexes.map((index) => points[index] as YearReviewSeriesPoint);
+}
+
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function localDayKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function startOfLocalDay(date: Date): Date {
+  const boundary = new Date(date);
+  boundary.setHours(0, 0, 0, 0);
+  return boundary;
+}
+
+function endOfLocalDay(date: Date): Date {
+  const boundary = new Date(date);
+  boundary.setHours(23, 59, 59, 999);
+  return boundary;
+}
+
+function improvingAverageStreak(subjects: readonly Subject[]): number {
+  const grades = new SubjectGraph(subjects).allGrades();
+  let previousAverage: number | null = null;
+  let current = 0;
+  let longest = 0;
+  let weightedSum = 0;
+  let coefficientSum = 0;
+
+  for (const grade of grades) {
+    const ratio = gradeRatio(grade);
+    if (ratio === null || grade.coefficient <= 0) continue;
+    weightedSum += ratio * grade.coefficient;
+    coefficientSum += grade.coefficient;
+    const average = weightedSum / coefficientSum;
+    if (previousAverage === null) {
+      current = 1;
+      longest = 1;
+    } else if (average > previousAverage) {
+      current += 1;
+    } else if (average < previousAverage) {
+      current = Math.max(0, current - 1);
+    }
+    longest = Math.max(longest, current);
+    previousAverage = average;
+  }
+
+  return longest;
 }
 
 function pickBusiest<T extends string | number>(
@@ -137,7 +234,19 @@ export function buildYearReview(
   topPercentile: number,
   now: Date = new Date(),
 ): YearReview {
-  const graph = new SubjectGraph(subjects);
+  const horizon = new Date(
+    Math.min(endOfLocalDay(year.endsAt).getTime(), now.getTime()),
+  );
+  const startsAt = startOfLocalDay(year.startsAt).getTime();
+  const endsAt = horizon.getTime();
+  const reviewSubjects = subjects.map((subject) => ({
+    ...subject,
+    grades: subject.grades.filter((grade) => {
+      const passedAt = grade.passedAt.getTime();
+      return passedAt >= startsAt && passedAt <= endsAt;
+    }),
+  }));
+  const graph = new SubjectGraph(reviewSubjects);
   const grades = graph.allGrades();
 
   const ratioSum = grades.reduce((sum, grade) => {
@@ -145,9 +254,11 @@ export function buildYearReview(
     return ratio === null ? sum : sum + ratio;
   }, 0);
 
-  const heatmapMap = activityByDay(grades);
   const heatmap: Record<string, number> = {};
-  for (const [day, count] of heatmapMap) heatmap[day] = count;
+  for (const grade of grades) {
+    const day = localDayKey(grade.passedAt);
+    heatmap[day] = (heatmap[day] ?? 0) + 1;
+  }
 
   const monthCounts = new Map<string, number>();
   const weekdayCounts = new Map<number, number>();
@@ -161,11 +272,27 @@ export function buildYearReview(
   const busiestMonthEntry = pickBusiest(monthCounts);
   const busiestWeekdayEntry = pickBusiest(weekdayCounts);
 
-  const horizon = year.endsAt.getTime() > now.getTime() ? now : year.endsAt;
+  const activeDays = new Map<string, Date>();
+  for (const grade of grades) {
+    const day = new Date(grade.passedAt);
+    day.setHours(23, 59, 59, 999);
+    activeDays.set(localDayKey(day), day);
+  }
   const series: SeriesPoint[] =
-    grades.length > 0
-      ? averageOverTime(subjects, dayRange(year.startsAt, horizon), null)
+    activeDays.size > 0
+      ? averageOverTime(
+          reviewSubjects,
+          [...activeDays.values()].sort(
+            (left, right) => left.getTime() - right.getTime(),
+          ),
+          null,
+        )
       : [];
+  const averageSeries = decimateYearReviewSeries(
+    series.flatMap((point) =>
+      point.ratio === null ? [] : [{ date: point.date, ratio: point.ratio }],
+    ),
+  );
 
   let primeTime: { date: Date; ratio: number } | null = null;
   for (const point of series) {
@@ -176,6 +303,11 @@ export function buildYearReview(
   }
 
   const topSubjects = rankSubjects(graph)
+    .sort(
+      (left, right) =>
+        right.ratio - left.ratio ||
+        right.subject.coefficient - left.subject.coefficient,
+    )
     .slice(0, 3)
     .map((entry) => ({
       subjectId: entry.subject.id,
@@ -184,10 +316,19 @@ export function buildYearReview(
     }));
 
   let bestProgression: YearReview["bestProgression"] = null;
-  for (const subject of subjects) {
+  for (const subject of reviewSubjects) {
     if (subject.kind === "category") continue;
-    const delta = improvement(gradeRatios(graph, subject.id));
-    if (delta === null || delta <= 0) continue;
+    const chronological = [...subject.grades]
+      .sort((left, right) => left.passedAt.getTime() - right.passedAt.getTime())
+      .flatMap((grade) => {
+        const ratio = gradeRatio(grade);
+        return ratio === null ? [] : [ratio];
+      });
+    if (chronological.length < 2) continue;
+    const finalRatio = graph.ratio(subject.id);
+    if (finalRatio === null) continue;
+    const delta = finalRatio - (chronological[0] as number);
+    if (delta <= 0) continue;
     if (!bestProgression || delta > bestProgression.delta) {
       bestProgression = { subjectId: subject.id, name: subject.name, delta };
     }
@@ -208,14 +349,15 @@ export function buildYearReview(
     busiestWeekday: busiestWeekdayEntry
       ? { weekday: busiestWeekdayEntry.key, count: busiestWeekdayEntry.count }
       : null,
-    longestStreak: activityStreaks(grades).longest.length,
+    longestStreak: improvingAverageStreak(reviewSubjects),
+    averageSeries,
     primeTime,
     topSubjects,
     bestProgression,
     topPercentile,
     award: decideAward({
       graph,
-      subjects,
+      subjects: reviewSubjects,
       average,
       gradeCount: grades.length,
       firstGradeAt,
@@ -232,7 +374,7 @@ export function heatmapDays(
   until: Date = new Date(),
 ): Array<{ date: string; count: number }> {
   return dayRange(from, until).map((date) => {
-    const key = date.toISOString().slice(0, 10);
+    const key = localDayKey(date);
     return { date: key, count: heatmap[key] ?? 0 };
   });
 }
