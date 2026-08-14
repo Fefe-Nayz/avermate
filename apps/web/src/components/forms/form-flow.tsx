@@ -9,12 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react"
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  PencilIcon,
-  XIcon,
-} from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, PencilIcon, XIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -114,6 +109,10 @@ export function FormFlow({
     [steps]
   )
   const [index, setIndex] = useState(0)
+  // Editing from the phone's review is a short detour, not a restart of the
+  // flow. Once that answer is confirmed, take the user back to the read-back
+  // they intentionally left.
+  const [returnToReview, setReturnToReview] = useState(false)
 
   // A step can disappear under the cursor — turning off "made of several
   // parts" removes one — so the position is clamped at read time rather than
@@ -195,7 +194,17 @@ export function FormFlow({
       haptic("warning")
       return
     }
+    if (returnToReview) {
+      setReturnToReview(false)
+      goto(reviewIndex)
+      return
+    }
     goto(position + 1)
+  }
+
+  const editFromReview = (next: number) => {
+    setReturnToReview(true)
+    goto(next)
   }
 
   return (
@@ -265,7 +274,7 @@ export function FormFlow({
           />
 
           {onReview ? (
-            <Review steps={active} onEdit={goto} extra={beforeSave} />
+            <Review steps={active} onEdit={editFromReview} extra={beforeSave} />
           ) : step ? (
             <section className="flex flex-col gap-4">
               <div>

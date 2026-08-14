@@ -31,7 +31,7 @@ describe("form flows", () => {
     // is busywork, and a wall of fields on a phone is what this replaced.
     expect(flow).toContain("hidden flex-col gap-6 md:flex")
     expect(flow).toContain("md:hidden")
-    expect(flow).toContain("role=\"progressbar\"")
+    expect(flow).toContain('role="progressbar"')
     expect(flow).toContain("function Review(")
   })
 
@@ -50,9 +50,9 @@ describe("form flows", () => {
   test("a focused field is pulled clear of the keyboard", async () => {
     const flow = await source("./form-flow.tsx")
 
-    expect(flow).toContain("scrollIntoView({ block: \"center\"")
+    expect(flow).toContain('scrollIntoView({ block: "center"')
     // The document does not scroll; the shell scrolls a pane.
-    expect(flow).toContain("closest(\".scroll-pane\")")
+    expect(flow).toContain('closest(".scroll-pane")')
   })
 
   test("the keyboard inset is measured from the visual viewport", async () => {
@@ -68,7 +68,7 @@ describe("form flows", () => {
     const flow = await source("./form-flow.tsx")
 
     expect(flow).toContain("step?.validate && !step.validate()")
-    expect(flow).toContain("haptic(\"warning\")")
+    expect(flow).toContain('haptic("warning")')
   })
 
   test("choices take the whole screen on a phone", async () => {
@@ -114,12 +114,21 @@ describe("form flows", () => {
     expect(flow).toContain("if (!wide && !onReview) return")
   })
 
+  test("editing a phone review answer returns to the review on continue", async () => {
+    const flow = await source("./form-flow.tsx")
+
+    expect(flow).toContain("const [returnToReview, setReturnToReview]")
+    expect(flow).toContain("const editFromReview = (next: number)")
+    expect(flow).toContain("goto(reviewIndex)")
+    expect(flow).toContain("onEdit={editFromReview}")
+  })
+
   test("nothing saves before the last screen says so", async () => {
     const calendar = await source("../ui/calendar.tsx")
 
     // A day is a `<button>` inside a `<form>`. Without a type it defaults to
     // submit, and picking a date saved the grade.
-    expect(calendar).toContain("type=\"button\"")
+    expect(calendar).toContain('type="button"')
 
     // The optional last touches are asked for on the review screen, where the
     // only button is the one that saves.
@@ -140,9 +149,9 @@ describe("form flows", () => {
     const flow = await source("./form-flow.tsx")
     const controls = await source("./controls.tsx")
 
-    expect(flow).toContain("event.key !== \"Enter\" || wide")
+    expect(flow).toContain('event.key !== "Enter" || wide')
     expect(flow).toContain("if (onReview) submit()")
-    expect(controls).toContain("enterKeyHint=\"next\"")
+    expect(controls).toContain('enterKeyHint="next"')
   })
 
   test("a composite grade needs a part with a result in it", async () => {
