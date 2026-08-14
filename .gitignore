@@ -22,3 +22,4 @@ dist/
 
 # Agent scratch
 /.agents
+/.playwright-mcp
