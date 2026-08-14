@@ -1,0 +1,367 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avermate × Fichr — audit &amp; roadmap (2026-08-14)</title>
+<script type="module">
+  // Rend le diagramme de dépendances quand on ouvre le fichier hors de la
+  // plateforme d'artifacts. Hors ligne, le bloc reste en texte brut — voulu.
+  try {
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default",
+    });
+  } catch {}
+</script>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-2: #eef0f7;
+    --ink: #1b2233;
+    --ink-2: #4c5468;
+    --ink-3: #767e93;
+    --line: #d9dde9;
+    --accent: #2f4fd0;
+    --accent-soft: #e3e8fb;
+    --ok: #1f7a55;
+    --ok-soft: #e0f1e9;
+    --warn: #a3651a;
+    --warn-soft: #f6ecdc;
+    --risk: #b23a30;
+    --risk-soft: #f9e6e3;
+    --code-bg: #eceef6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10141f;
+      --surface: #171d2c;
+      --surface-2: #1e2536;
+      --ink: #e6eaf5;
+      --ink-2: #aeb6ca;
+      --ink-3: #7e8699;
+      --line: #2b3348;
+      --accent: #8ea4f4;
+      --accent-soft: #232c48;
+      --ok: #6fc9a2;
+      --ok-soft: #17332a;
+      --warn: #ddab62;
+      --warn-soft: #382b18;
+      --risk: #e08a80;
+      --risk-soft: #3b211e;
+      --code-bg: #232a3d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141f;
+    --surface: #171d2c;
+    --surface-2: #1e2536;
+    --ink: #e6eaf5;
+    --ink-2: #aeb6ca;
+    --ink-3: #7e8699;
+    --line: #2b3348;
+    --accent: #8ea4f4;
+    --accent-soft: #232c48;
+    --ok: #6fc9a2;
+    --ok-soft: #17332a;
+    --warn: #ddab62;
+    --warn-soft: #382b18;
+    --risk: #e08a80;
+    --risk-soft: #3b211e;
+    --code-bg: #232a3d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0 20px 80px;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  header.doc { padding: 52px 0 20px; border-bottom: 2px solid var(--ink); margin-bottom: 8px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 10px;
+  }
+  h1 {
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    font-size: clamp(30px, 5vw, 44px); line-height: 1.12; font-weight: 700;
+    letter-spacing: -0.015em; margin: 0 0 12px; text-wrap: balance;
+  }
+  .standfirst { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0 0 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  section { margin-top: 46px; }
+  h2 {
+    font-size: 13px; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 650; margin: 0 0 6px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  h2::after { content: ""; flex: 1; border-top: 1px solid var(--line); transform: translateY(-4px); }
+  h3.sec {
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    font-size: 24px; font-weight: 700; letter-spacing: -0.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  p { max-width: 72ch; margin: 0 0 14px; }
+  p.note { color: var(--ink-2); }
+  ul.tight { max-width: 74ch; margin: 0 0 14px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 7px; }
+  code, .mono {
+    font-family: "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+    font-size: 0.86em; background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+  }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 18px 0; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 15px; font-weight: 650; }
+  .card p { font-size: 14px; color: var(--ink-2); margin: 0; }
+  .card .tag { display: inline-block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 650; margin-bottom: 8px; }
+  .tag.blocker { color: var(--risk); }
+  .tag.atout { color: var(--ok); }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 650; padding: 10px 14px; border-bottom: 1px solid var(--line);
+    background: var(--surface-2); white-space: nowrap;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.nw { white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+  .pill {
+    display: inline-block; font-size: 11.5px; font-weight: 650; letter-spacing: 0.02em;
+    padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.risk { background: var(--risk-soft); color: var(--risk); }
+  .pill.plan { background: var(--accent-soft); color: var(--accent); }
+  .tldr {
+    background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 18px 22px; margin: 24px 0 0;
+  }
+  .tldr ul { margin: 0; padding-left: 18px; }
+  .tldr li { margin-bottom: 8px; max-width: 80ch; }
+  .tldr li:last-child { margin-bottom: 0; }
+  .callout {
+    background: var(--risk-soft); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 20px; margin: 18px 0; font-size: 14.5px;
+  }
+  .callout b { color: var(--risk); }
+  .callout p { margin: 0 0 8px; max-width: none; }
+  .callout p:last-child { margin: 0; }
+  .lineage {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; margin: 18px 0;
+  }
+  .lineage .node {
+    flex: 1 1 220px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px; position: relative;
+  }
+  .lineage .node .when { font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 650; }
+  .lineage .node h4 { margin: 4px 0 6px; font-size: 15px; }
+  .lineage .node p { font-size: 13.5px; color: var(--ink-2); margin: 0; }
+  .plans li { margin-bottom: 12px; }
+  .plans .pid { font-family: "Cascadia Code", Consolas, monospace; font-weight: 600; color: var(--accent); }
+  .mermaidwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 16px 0; }
+  footer { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) {
+    header.doc { animation: fade 0.5s ease-out; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+
+<div class="wrap">
+  <header class="doc">
+    <p class="eyebrow">Audit &amp; roadmap — 14 août 2026</p>
+    <h1>Avermate × Fichr</h1>
+    <p class="standfirst">La thèse produit : une alternative open source à NotebookLM fusionnée avec le suivi de notes, dans l'esprit agrégateur de Papillon — sources de cours multi-types (PDF, liens, texte, audio) synchronisées depuis Moodle et consorts, agenda/kanban, fiches, copies scannées, enregistrements — le tout lisible par n'importe quel agent IA via le MCP existant.</p>
+    <div class="meta">
+      <span><b>Repo</b> avermate, branche <span class="mono">rewrite</span> @ <span class="mono">46c966b</span></span>
+      <span><b>Sources auditées</b> avermate · Fichr · CoursePilot · «&nbsp;Math-M.&nbsp;Coutens&nbsp;»</span>
+      <span><b>Méthode</b> 4 audits parallèles, findings re-vérifiés en lecture directe</span>
+    </div>
+    <div class="tldr">
+      <ul>
+        <li><b>La vision est réalisable dans l'année, et le socle est meilleur que prévu</b> : l'architecture d'avermate rewrite est explicitement accueillante pour de nouveaux domaines (routeurs uniformes, ownership centralisé, MCP qui délègue à l'oRPC, primitives réutilisables).</li>
+        <li><b>Trois fondations manquent</b> et bloquent presque tout le reste : une entité fichier générique, une infra de tâches asynchrones, et un découpage du serveur MCP (2&nbsp;160 lignes) avant d'y ajouter ~40 outils.</li>
+        <li><b>Les trois «&nbsp;essais fishr&nbsp;» sont en réalité une seule lignée</b>, et l'essentiel de sa valeur est un prototype supprimé qui survit dans l'historique git de Fichr (commit <span class="mono">b8c5714</span>) : à miner pour le design, pas à porter.</li>
+        <li><b>Le «&nbsp;scraper&nbsp;» Moodle n'en est pas un</b> : c'est un client REST propre de l'API Web Services (~250 lignes à porter en TypeScript). La feature « plus jamais toucher au site de la prépa » est peu coûteuse.</li>
+        <li><b>20 plans d'implémentation exécutables</b> sont écrits dans <span class="mono">plans/</span> : fondations (000–003), premières features (004–006), vague 2 (007–013 : ADR IA, sync providers, OCR, fiches, autorage MCP, enregistrement, sources multi-types), transversaux TODO.md (014–016), et extensions (017 outputs studio — cartes mentales/slides/PPTX, 018 spike Pronote/EcoleDirecte, 019 modèle de soutenabilité BYOK/satellite/self-host). L'index contient une carte de couverture de la vision et une section «&nbsp;Future&nbsp;» explicite.</li>
+      </ul>
+    </div>
+  </header>
+
+  <section>
+    <h2>01 — L'existant</h2>
+    <h3 class="sec">Avermate rewrite&nbsp;: un socle rigoureux, trois angles morts</h3>
+    <p>La matrice de parité <span class="mono">main → rewrite</span> est entièrement «&nbsp;Implemented&nbsp;», les invariants de domaine sont documentés, la CI fait tourner format, lint, types, migrations, tests et builds. Côté extension, tout est en place&nbsp;: un domaine nouveau = 1 fichier de schéma + 1 routeur copié sur <span class="mono">goals.ts</span> + 1 ligne d'enregistrement + 1 scope MCP. Le MCP délègue intégralement aux procédures oRPC (une seule source de vérité pour ownership et validation), avec confirmation multi-tour + clé d'idempotence pour le destructif — un primitif directement réutilisable pour «&nbsp;supprimer un dossier de cours&nbsp;».</p>
+    <div class="cards">
+      <div class="card"><span class="tag atout">Atout</span><h4>Ledger d'idempotence prouvé</h4><p><span class="mono">yearSetupRequests</span> (unique <span class="mono">userId + idempotencyKey</span>) est le gabarit exact pour dédupliquer syncs Moodle et jobs OCR.</p></div>
+      <div class="card"><span class="tag atout">Atout</span><h4>Modèle de document déjà résolu</h4><p><span class="mono">dashboardCards</span>&nbsp;: JSON typé + version + table miroir relationnelle. C'est la réponse maison pour stocker fiches et transcripts proprement.</p></div>
+      <div class="card"><span class="tag atout">Atout</span><h4>Navigation déclarée une fois</h4><p><span class="mono">nav.ts</span> alimente sidebar, tab bar, breadcrumb et palette&nbsp;: un espace «&nbsp;Cours&nbsp;» ou «&nbsp;Agenda&nbsp;» apparaît partout en une entrée.</p></div>
+      <div class="card"><span class="tag blocker">Blocage</span><h4>Aucune tâche asynchrone</h4><p>Pas de queue, pas de cron, pas de worker. OCR et transcription (plusieurs minutes) n'ont nulle part où tourner. C'est LE chemin critique.</p></div>
+      <div class="card"><span class="tag blocker">Blocage</span><h4>Aucune entité fichier</h4><p>Deux colonnes URL ad hoc (avatar, screenshot de feedback), limite 2&nbsp;Mo, clé de stockage re-parsée par regex. Rien ne sait qu'un fichier existe.</p></div>
+      <div class="card"><span class="tag blocker">Blocage</span><h4>Aucune recherche</h4><p>Ni FTS5 ni vecteurs nulle part. «&nbsp;Browsable par les agents&nbsp;» et «&nbsp;retrouver un passage de cours&nbsp;» partent de zéro.</p></div>
+    </div>
+    <p class="note">Angles morts secondaires confirmés&nbsp;: deux vérifications admin divergentes (<span class="mono">isAdmin</span> vs <span class="mono">role.split(",")</span> dans le MCP), micro mobile explicitement désactivé (<span class="mono">app.json</span>), docs sociales décrivant un modèle de privacy supprimé, quick-add mobile jamais branché.</p>
+  </section>
+
+  <section>
+    <h2>02 — Les prototypes</h2>
+    <h3 class="sec">Trois dossiers, une seule lignée</h3>
+    <div class="lineage">
+      <div class="node"><span class="when">Jan. 2026 · 3 commits</span><h4>CoursePilot</h4><p>CLI Python d'origine&nbsp;: sync Moodle → OCR Mistral → fiches LaTeX. Propre, subsumé par la suite. À archiver.</p></div>
+      <div class="node"><span class="when">25–29 jan. · fork</span><h4>Fichr @ prototype = «&nbsp;Math-M. Coutens&nbsp;»</h4><p>Le pic produit&nbsp;: + cours locaux, + vidéos Manim/TTS, + webapp FastAPI/React avec chat agentique (12 outils, SDK Copilot). Utilisé sur de vraies données de prépa.</p></div>
+      <div class="node"><span class="when">29 jan. · reset</span><h4>Fichr @ main</h4><p>Arbre vidé (<span class="mono">659dbdb</span>) puis scaffold Better-T-Stack — même stack qu'avermate — resté vide&nbsp;: zéro schéma, deux procédures de démo.</p></div>
+    </div>
+    <p>Conclusion nette&nbsp;: <b>rien du TypeScript de Fichr n'est à reprendre</b> (avermate a la même stack, en mieux). La valeur est dans le prototype Python supprimé, récupérable via <span class="mono">git show b8c5714</span>&nbsp;: le modèle de données prouvé (<span class="mono">cours → fichiers sources → markdown OCR mirroré → projets de fiches</span>), le schéma de messages de chat <b>avec branches</b> (<span class="mono">parent_message_id, branch_index, client_message_id</span> — coûteux à retrofitter, gratuit à prévoir), le catalogue de 12 outils agent validé à l'usage, et les gabarits LaTeX de fiches CPGE (<span class="mono">BoxDef/BoxThm/BoxMeth/BoxPit</span>).</p>
+    <div class="callout">
+      <p><b>Trois points de sécurité à traiter côté prototypes</b> (hors repo avermate)&nbsp;:</p>
+      <p>① <span class="mono">webapp/data/chats.db</span> — 94&nbsp;Ko de vraies conversations — est <b>commité et poussé</b> sur <span class="mono">Fichr@prototype</span>&nbsp;: à purger avant toute publication du repo. ② Le dernier commit désactive la vérification TLS du client Moodle (<span class="mono">verify=False</span>)&nbsp;: le token a transité en clair vis-à-vis d'un attaquant actif — réactiver la vérification puis régénérer le token. ③ L'outil <span class="mono">execute_command</span> du chat exécutait <span class="mono">shell=True</span> avec une denylist de 4 chaînes et une «&nbsp;approbation&nbsp;» purement décorative&nbsp;: ne jamais porter tel quel (le plan de la roadmap l'exclut explicitement).</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>03 — Faisabilité</h2>
+    <h3 class="sec">Chaque feature de la vision, jugée contre le code</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Feature</th><th>Verdict</th><th>S'appuie sur</th><th>Ce qui manque</th><th class="nw">Effort</th></tr></thead>
+        <tbody>
+          <tr><td><b>Agenda / calendrier / todo</b></td><td><span class="pill ok">Quasi prêt</span></td><td>Schéma daté existant (periods, goals.dueAt, grades.passedAt), grille mensuelle extractible du calendrier de notes</td><td>1 table <span class="mono">planner_items</span> + routeur + UI</td><td class="nw num">M–L</td></tr>
+          <tr><td><b>Note ↔ copie scannée</b></td><td><span class="pill ok">Facile après fondations</span></td><td>Seam <span class="mono">grades.note</span>, entité fichiers (plan 001)</td><td>1 table de jointure + section UI</td><td class="nw num">S–M</td></tr>
+          <tr><td><b>Espace cours (upload manuel)</b></td><td><span class="pill ok">Faisable</span></td><td>Plomberie UploadThing, pattern routeur namespacé (social)</td><td>Entité fichiers, décision proxy vs presign (50&nbsp;Mo), domaine materials</td><td class="nw num">L</td></tr>
+          <tr><td><b>Sync Moodle</b></td><td><span class="pill ok">Peu coûteux</span></td><td>Client REST WS prouvé (~250 lignes TS), ledger d'idempotence</td><td>Jobs async, UI de handshake du token, table d'état (fix <span class="mono">timemodified</span>)</td><td class="nw num">L</td></tr>
+          <tr><td><b>OCR PDF → markdown</b></td><td><span class="pill warn">Après jobs</span></td><td>Pipeline Mistral prouvé (2 appels HTTP + retry)</td><td>Jobs async, état par hash de contenu, plafond de dépense, <span class="mono">skip_patterns</span> réel</td><td class="nw num">M–L</td></tr>
+          <tr><td><b>Rédaction fiches / documents</b></td><td><span class="pill warn">Greenfield</span></td><td>Convention JSON versionné + refs miroir, gabarits LaTeX CPGE du prototype</td><td>Éditeur (aucune dép. rich-text/markdown/PDF dans le repo), LaTeX en job conteneurisé</td><td class="nw num">L</td></tr>
+          <tr><td><b>Chat IA in-app</b></td><td><span class="pill warn">Design déjà résolu</span></td><td>MCP OAuth testé, catalogue d'outils + schéma à branches + ai-elements du prototype</td><td>Surface chat, approbation côté serveur, transport streaming</td><td class="nw num">L</td></tr>
+          <tr><td><b>Recherche (FTS, puis RAG)</b></td><td><span class="pill warn">De zéro</span></td><td>Corpus markdown à venir (OCR), libSQL supporte FTS5</td><td>Tables virtuelles FTS5, spike embeddings séparé</td><td class="nw num">M puis L</td></tr>
+          <tr><td><b>Enregistrement des cours + transcription</b></td><td><span class="pill risk">Le plus dur — en dernier</span></td><td>Fichiers + jobs + recherche une fois posés</td><td>Micro désactivé (config plugin + prebuild), uploads longs (presign), transcription en job, coût de stockage</td><td class="nw num">XL</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>04 — Findings vettés</h2>
+    <h3 class="sec">Ce qui a été vérifié en lecture directe</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th class="nw">#</th><th>Finding</th><th class="nw">Catégorie</th><th class="nw">Effort</th><th class="nw">Confiance</th><th>Preuve (extrait)</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td>Aucun substrat asynchrone — bloque OCR, transcription, sync</td><td>Architecture</td><td class="nw num">L</td><td><span class="pill ok">Haute</span></td><td><span class="mono">index.ts:107</span> (fetch handler unique), grep scheduler = 0</td></tr>
+          <tr><td class="num">2</td><td>Aucune entité fichier — chaque feature forkait l'upload</td><td>Architecture</td><td class="nw num">M</td><td><span class="pill ok">Haute</span></td><td><span class="mono">profile.ts:20-32</span>, <span class="mono">feedback.ts:113-117</span>, clé regexée</td></tr>
+          <tr><td class="num">3</td><td><span class="mono">mcp/server.ts</span> monolithe de 2&nbsp;160 lignes, if-chain codée en dur</td><td>Architecture</td><td class="nw num">M</td><td><span class="pill ok">Haute</span></td><td><span class="mono">server.ts:397-423</span>, wc -l vérifié</td></tr>
+          <tr><td class="num">4</td><td>Deux checks admin divergents (bootstrap admin invisible côté MCP)</td><td>Sécurité/cohérence</td><td class="nw num">S</td><td><span class="pill ok">Haute</span></td><td><span class="mono">admin.ts:17-19</span> vs <span class="mono">server.ts:414,420</span></td></tr>
+          <tr><td class="num">5</td><td>Docs sociales décrivent le modèle de consentement supprimé</td><td>Docs</td><td class="nw num">S</td><td><span class="pill ok">Haute</span></td><td><span class="mono">mcp.md:172-180</span> vs migration <span class="mono">0011</span> + <span class="mono">social-policy.ts:5-13</span></td></tr>
+          <tr><td class="num">6</td><td>Export sans import — la porte d'entrée des données prototypes manque</td><td>Direction</td><td class="nw num">M–L</td><td><span class="pill ok">Haute</span></td><td><span class="mono">preferences.ts:274</span>, grep importData = 0</td></tr>
+          <tr><td class="num">7</td><td>Quick-add + tab bar mobiles morts&nbsp;; micro désactivé</td><td>Tech debt</td><td class="nw num">S</td><td><span class="pill ok">Haute</span></td><td>grep tabBar= = 0&nbsp;; <span class="mono">app.json:57</span></td></tr>
+          <tr><td class="num">8</td><td>État sync/OCR en JSON à clés absolues, <span class="mono">timemodified</span> jamais comparé, <span class="mono">skip_patterns</span> jamais lu (protos)</td><td>Portage</td><td class="nw num">M</td><td><span class="pill ok">Haute</span></td><td><span class="mono">moodle_sync.py:69-94,211</span>&nbsp;; <span class="mono">pipeline.py:114,423</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Le registre de widgets volontairement «&nbsp;monde clos&nbsp;» et le snapshot client monolithique sont traités comme des contraintes de design à respecter (read models par feature, ouverture du registre différée), pas comme des bugs.</p>
+  </section>
+
+  <section>
+    <h2>05 — Plans écrits</h2>
+    <h3 class="sec">Vingt plans exécutables dans <span class="mono">plans/</span></h3>
+    <p>Chaque plan est auto-portant (contexte inliné, étapes vérifiables commande par commande, bornes strictes, conditions d'arrêt), pensé pour être exécuté par un agent sans aucun contexte de cette session. Ordre recommandé&nbsp;:</p>
+    <ol class="plans">
+      <li><span class="pid">000</span> — <b>Hygiène pré-fusion</b> <span class="pill plan">S</span> docs sociales/charts corrigées, switch mort supprimé, composants mobiles morts retirés.</li>
+      <li><span class="pid">001</span> — <b>Entité <span class="mono">files</span> + module storage partagé</b> <span class="pill plan">M</span> la fondation de cours, copies et audio&nbsp;; migre avatar et feedback.</li>
+      <li><span class="pid">002</span> — <b>Substrat de jobs durable</b> <span class="pill plan">L</span> table + runner in-process à bail + routeur de statut&nbsp;; premiers consommateurs&nbsp;: purge feedback, reaper MCP.</li>
+      <li><span class="pid">003</span> — <b>MCP modulaire + check admin unifié</b> <span class="pill plan">M</span> un module par surface, registre ordonné, harness de conformité comme filet.</li>
+      <li><span class="pid">004</span> — <b>Domaine agenda/todo/kanban</b> <span class="pill plan">L</span> <span class="mono">planner_items</span> avec statut <span class="mono">todo/doing/done</span>, flux agrégé (goals, notes, périodes), 3 vues (calendrier, liste, board dnd-kit) + scopes MCP.</li>
+      <li><span class="pid">005</span> — <b>Tranche verticale «&nbsp;cours&nbsp;»</b> <span class="pill plan">L</span> sources multi-types (fichier / lien / texte collé), spike proxy-vs-presign, arborescence sur <span class="mono">files</span>, outils MCP en lecture.</li>
+      <li><span class="pid">006</span> — <b>Copies attachées aux notes</b> <span class="pill plan">S–M</span> la première victoire visible de l'infra fichiers.</li>
+      <li><span class="pid">007</span> — <b>ADR architecture IA</b> <span class="pill plan">S–M</span> MCP-first (pas d'agent embarqué en vague 2), tools + prompts plutôt que «&nbsp;skills&nbsp;», clés opérateur puis BYOK, spec du schéma de chat à branches pour plus tard.</li>
+      <li><span class="pid">008</span> — <b>Framework sync providers + connecteur Moodle</b> <span class="pill plan">L</span> interface à capacités (files, puis devoirs/EDT/notes à la Pronote), port TS du client WS, credentials scellés AES-GCM, TLS vérifié.</li>
+      <li><span class="pid">009</span> — <b>Pipeline OCR Mistral</b> <span class="pill plan">M–L</span> artifacts markdown par document, job idempotent, plafond de pages, <span class="mono">skip_patterns</span> enfin honoré, dry-run chiffré.</li>
+      <li><span class="pid">010</span> — <b>Domaine fiches/documents + éditeur</b> <span class="pill plan">L</span> CodeMirror + preview KaTeX, callouts CPGE <span class="mono">[!DEF]/[!THM]/[!METH]/[!PIEGE]/[!CHECK]</span>, révisions optimistes, export impression A4.</li>
+      <li><span class="pid">011</span> — <b>Surface MCP d'autorage + prompts</b> <span class="pill plan">M</span> outils documents.* révision-fencés + prompts <span class="mono">fiche-methodology</span> et <span class="mono">fiche-from-chapter</span> — «&nbsp;rédiger via n'importe quel agent&nbsp;».</li>
+      <li><span class="pid">012</span> — <b>Enregistrement + transcription des cours</b> <span class="pill plan">XL</span> segmentation à la capture (10 min), vague permissions micro + prebuild, jobs de transcription derrière un seam provider (Mistral/OpenAI), transcript horodaté.</li>
+      <li><span class="pid">013</span> — <b>Ingestion des sources non-fichiers</b> <span class="pill plan">M</span> liens web → markdown lisible (Readability + turndown), garde SSRF stricte, branche PDF-en-ligne → OCR&nbsp;; YouTube en roadmap.</li>
+      <li><span class="pid">014</span> — <b>Typo fluide <span class="mono">tailwind-clamp</span></b> <span class="pill plan">S–M</span> le choix issu de TODO.md, appliqué aux surfaces expressives uniquement.</li>
+      <li><span class="pid">015</span> — <b>Galerie de cards préconfigurées</b> <span class="pill plan">M–L</span> catalogue admin-curé, preview LIVE sur ses propres données, installation via le <span class="mono">cards.create</span> existant.</li>
+      <li><span class="pid">016</span> — <b>Design system cross-platform</b> <span class="pill plan">L</span> tokens partagés dans <span class="mono">@avermate/core</span>, adaptateurs web/mobile, densité desktop via <span class="mono">pointer: fine</span>.</li>
+      <li><span class="pid">017</span> — <b>Outputs studio&nbsp;: cartes mentales + slides</b> <span class="pill plan">L</span> deux kinds structurés validés côté serveur, éditeur outline + canvas xyflow, mode présentation, export <span class="mono">.pptx</span> réel (pptxgenjs en job)&nbsp;; podcasts/vidéos réservés (coût = 019).</li>
+      <li><span class="pid">018</span> — <b>Spike connecteurs Pronote / EcoleDirecte / Skolengo</b> <span class="pill plan">M</span> évaluation sourcée de l'écosystème Papillon (pawnote…), verdicts par capacité (devoirs/EDT/notes), prototype lecture seule flag-gaté si GO.</li>
+      <li><span class="pid">019</span> — <b>Modèle de soutenabilité</b> <span class="pill plan">M</span> ADR gratuit + open source&nbsp;: cœur gratuit à vie, BYOK par utilisateur (clés scellées), protocole «&nbsp;satellite&nbsp;» self-host pour stockage/inférence (design), doc self-hosting complète, tier payant en dernier recours.</li>
+    </ol>
+    <div class="mermaidwrap">
+<pre class="mermaid">
+flowchart LR
+  P001["001 files"]
+  P002["002 jobs"]
+  P003["003 MCP modulaire"]
+  P004["004 agenda/kanban"]
+  P005["005 cours"]
+  P006["006 copies"]
+  P007["007 ADR IA"]
+  P008["008 sync providers"]
+  P009["009 OCR"]
+  P010["010 fiches"]
+  P011["011 autorage MCP"]
+  P012["012 enregistrement"]
+  P013["013 liens web"]
+  P017["017 studio: mindmap+slides"]
+  P018["018 spike Pronote/ED"]
+  P019["019 soutenabilité BYOK/satellite"]
+  R1["Recherche FTS"]
+  R3["Flashcards / quiz SRS"]
+  R4["Podcasts / vidéos"]
+  P003 --> P004
+  P001 --> P005
+  P003 --> P005
+  P001 --> P006
+  P001 --> P008
+  P002 --> P008
+  P002 --> P009
+  P005 --> P009
+  P005 --> P010
+  P003 --> P011
+  P010 --> P011
+  P001 --> P012
+  P002 --> P012
+  P007 --> P012
+  P009 --> P013
+  P010 --> P017
+  P002 --> P017
+  P008 --> P018
+  P007 --> P019
+  P009 --> R1
+  P010 --> R1
+  P012 --> R1
+  P010 --> R3
+  P011 --> R3
+  P017 --> R4
+  P019 --> R4
+</pre>
+    </div>
+    <p class="note">Les nœuds sans numéro sont la section «&nbsp;Future&nbsp;» de <span class="mono">plans/README.md</span> (14 paris connus&nbsp;: recherche FTS puis embeddings, import notes/devoirs/EDT selon les verdicts de 018, flashcards/quiz SRS, podcasts/vidéos une fois le coût réglé par 019, agent embarqué selon les déclencheurs de l'ADR, build du satellite, <span class="mono">importData</span>, licence open source — bloquante avant toute publication —, YouTube, quotas, etc.), à côté de la carte de couverture de la vision et de la liste «&nbsp;considéré et rejeté&nbsp;».</p>
+  </section>
+
+  <section>
+    <h2>06 — Séquencement proposé</h2>
+    <h3 class="sec">Une année réaliste</h3>
+    <ul class="tight">
+      <li><b>Rentrée → Toussaint&nbsp;:</b> fondations (000–003) en parallèle + l'ADR IA (007, une après-midi), puis l'agenda/kanban (004) comme premier incrément visible — il n'attend ni fichiers ni jobs.</li>
+      <li><b>Toussaint → Noël&nbsp;:</b> l'espace cours multi-sources (005) + copies (006), puis le connecteur Moodle (008) — à ce stade «&nbsp;plus jamais le site de la prépa&nbsp;» est tenu.</li>
+      <li><b>Hiver&nbsp;:</b> OCR (009) + liens web (013) puis la recherche FTS sur le corpus markdown&nbsp;; l'app devient interrogeable par les agents MCP sur le contenu des cours.</li>
+      <li><b>Printemps&nbsp;:</b> fiches + éditeur (010) puis la surface d'autorage MCP et ses prompts (011) — rédiger des fiches via n'importe quel agent, sans agent embarqué à héberger.</li>
+      <li><b>Été&nbsp;:</b> enregistrement + transcription (012, vague permissions/prebuild groupée avec le scan caméra), embeddings si le FTS ne suffit pas&nbsp;; les transversaux (014–016) se glissent dans les creux, indépendants de tout.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Généré le 14 août 2026 · audit multi-agents vetté en lecture directe · plans dans <span class="mono">plans/</span> du repo avermate (commit <span class="mono">46c966b</span>) · les trois findings sécurité des prototypes sont hors périmètre du repo et listés dans <span class="mono">plans/README.md</span>.
+  </footer>
+</div>
