@@ -1,195 +1,130 @@
 # Social sharing and privacy architecture
 
-This document defines the security and product invariants for Avermate's
-optional social features. It is an engineering contract, not legal advice.
-The production rollout, age-assurance method, retention schedule and DPIA must
-be reviewed for the jurisdictions where the service is offered.
+This document describes the social model implemented by Avermate. Social
+features remain optional and separate from the private grade tracker.
 
 ## Product boundary
 
-Social sharing is separate from the grade tracker. A user can decline or leave
-social features without losing access to years, subjects, grades, goals or
-analytics.
+Avermate has two distinct social relationships:
 
-There is no Internet-public academic profile. A profile is visible only through
-an accepted friendship or a private group, and only through explicit field
-grants or the current group policy. Classes are self-declared private groups;
-Avermate does not present them as institution-verified classes.
+- Friends let two people view the academic fields each person has enabled in
+  their sharing settings.
+- Classes are private groups whose members use one common academic template.
+  They compare a small set of derived figures from explicitly connected years.
 
-The social feature flag defaults to off. An account with unknown eligibility
-cannot activate social sharing. The initial policy is designed for France:
+There is no public academic profile. Leaving a friendship or class does not
+delete any year, subject, grade or goal.
 
-- users aged 15 or over need their own current consent;
-- users under 15 need both their own consent and verified guardian evidence;
-- the service stores an age band and opaque assurance reference, not a birth
-  date, identity document or guardian document;
-- expired or withdrawn evidence immediately disables social access.
+Classes are user-created and are not represented as institution-verified.
+There are no class challenges, leagues or teacher privileges.
 
-## Data boundary
+## Friend sharing
 
-The social API never returns grade, component, note, date, free-form subject,
-goal or full yearly snapshot rows. It derives a closed set of projections on
-the server:
+A social profile chooses one year, or falls back to the current active year,
+and independently controls:
 
-- display name, avatar, biography and broad education band;
-- normalized average and median;
-- trend, pass-rate and grade-count bands;
-- generic goal progress.
+- whether friends may see the general average;
+- whether friends may see all, selected or no subject averages.
 
-Every DTO is explicitly allow-listed. Database row types and object spreads
-from academic models must not cross the social boundary.
+Friend APIs return derived ratios, labels and counts only. They never return a
+grade row, note, component or assessment date.
 
-Authorization is evaluated in this order:
+Blocking takes precedence over friendship and invitation access.
 
-```text
-block
-  > feature and age eligibility
-  > friendship or active group membership
-  > current immutable policy version
-  > current consent for that exact version
-  > profile field grant or policy field
-  > allow-listed projection
-```
+## Class template
 
-Missing state always means denied. Owners, moderators and platform admins do
-not receive an academic-data bypass. Responses for an absent, blocked or
-unauthorized target are intentionally indistinguishable.
+Creating a class uses either one active year owned by the creator or the class
+template builder. The builder creates a complete new year for the owner in the
+same atomic write and connects it to the class. The server then stores an
+immutable snapshot containing:
 
-## Friends, circles and blocks
+- year dates and grading settings;
+- ordered periods, chosen from a quick template or entered explicitly;
+- subject hierarchy and stable subject keys;
+- custom-average definitions;
+- preset identity and version when the source year is still linked to one.
 
-A friend request uses one canonical unordered account pair, expires and must be
-accepted by the recipient. Friend circles are private audience lists owned by
-one user; members are not told which private circle contains them.
+Later edits to the source year do not mutate the class contract. An older group
+without a snapshot is preserved but marked `setupRequired`; its owner must
+select a source year once before invitations or comparisons can be used.
 
-Profile grants are explicit per field and audience (`friends`, one circle or
-one account). Revoking a grant stops future reads. Blocking takes precedence
-over all relationships: it removes direct friendship access, cancels pending
-requests and grants, hides both profiles from one another and invalidates
-affected query data.
+Builder templates may start from a curated preset and may be edited before
+creation. An unchanged current preset keeps its preset id and version;
+customized builder data becomes a custom immutable template. Neither path
+subscribes the class contract itself to later preset changes.
 
-## Groups and consent
+Custom periods are capped at 12, remain inside the academic year and are
+stored in the order supplied. Empty periods represent a year with no split;
+overlapping or reversed ranges are rejected before any class data is written.
 
-Each group has one authoritative owner and an immutable sequence of policy
-versions. A policy states its purpose, audience description, fixed time window,
-requested metrics, whether each field is required, and whether it is available
-only as an aggregate, as a member-visible projection or for an opt-in ranking.
+## Joining and connected years
 
-An invitation contains a random token; only its keyed hash and a short display
-prefix are stored. It is bound to a policy version, expires, is revocable and
-can be consumed once. Acceptance uses a transaction and compare-and-swap so a
-concurrent request or policy change cannot create an active membership under a
-policy the user did not see.
+Every class membership may reference one year owned by that member. A member
+can:
 
-Before joining, the user sees the owner, purpose, audience, required and
-optional fields, comparison modes, time window and withdrawal behavior. A
-material policy edit always creates a new immutable version and moves all
-members to `consent_required`. Until they accept that exact version, they can
-read the policy or leave but cannot contribute to or read social statistics.
+- connect an existing compatible year;
+- create a new independent year copied from the class template.
 
-Ownership transfer is atomic. Deleting an owner account requires transferring
-or explicitly deleting each group first. A moderator can manage allowed group
-operations but cannot inspect underlying academic rows.
+Joining requires one of those two choices. A membership is never activated
+without a compatible connected year.
 
-## Aggregates and rankings
+Copying never overwrites an existing year and never copies grades. The copy has
+its own ids and dashboard cards. A custom class accepts only its original source
+year and copies produced from its snapshot. A preset-backed class additionally
+accepts years with the same linked preset version, settings, periods and exact
+configuration.
 
-Group analytics use fixed windows, rounded values and a closed filter grammar.
-The initial privacy thresholds are:
+An archived year is not offered for a new connection. Deleting a connected year
+sets the membership reference to null and immediately removes that member's
+figures from the class.
 
-- at least 5 eligible, currently consenting contributors for an aggregate;
-- buckets below 3 are suppressed, with complementary suppression to prevent
-  subtraction attacks;
-- at least 7 eligible contributors for a named ranking;
-- group-level ranking enablement and member-level opt-in for every metric.
+## Class comparisons
 
-Non-participants never appear in a ranking. Equal scores share a rank. For
-younger users, the preferred presentation is a band or cohort percentile,
-not a named leaderboard. Changing a grade, membership, block, consent or policy
-increments the group revision so stale projections cannot be reused.
+New classes offer only:
 
-These thresholds reduce inference risk but do not make the results anonymous.
-They are configuration and DPIA inputs, not a legal guarantee.
+- general average;
+- one subject average selected from the class template.
 
-## Server rendering and caches
+Subject comparisons use stable template keys, not fuzzy name matching. Legacy
+comparison rows remain readable so migrations do not destroy existing data.
 
-Social pages follow the same SSR-first architecture as the rest of the web app:
+The server computes figures only from the year connected to that membership.
+It never falls back to the user's friend-sharing year. The response contains
+derived ratios, optional trend and grade count, never raw grade data.
 
-- personalized reads use the request-scoped server QueryClient;
-- the server calls oRPC directly over the private transport;
-- initial interactive data can be dehydrated into a narrow client island;
-- the browser reuses the exact shared query options and does not immediately
-  repeat the request;
-- personalized social reads and invitation previews use `no-store`;
-- no cross-request cache stores personalized projections in the first release.
+## Consent and authorization
 
-Query keys include the viewer identity, entity, policy version and group
-revision. Relationship, policy, consent, academic and moderation mutations use
-targeted invalidation. Logout, account rotation and 401 handling destroy the
-identity's cache before another account can render.
+Creating or joining a class sets `shareAverage` to false. Connecting or copying
+another year also resets it to false. A member must explicitly enable sharing,
+and cannot do so without a compatible connected year.
 
-Invitation pages use `Referrer-Policy: no-referrer` and must not send the raw
-token to analytics, logs, notifications or query keys.
+The owner may rename the class, choose comparisons, invite members and remove
+members. The owner does not receive access to raw academic records or any
+sharing bypass. Class invitations are owner-only, random, hashed at rest,
+expiring and revocable.
 
-## Expo and widgets
+Administrative moderation may freeze or delete a class and revoke unsafe
+access, but it does not expose underlying grades.
 
-Expo consumes the same oRPC contracts and authorization decisions. Local
-social state and queries are account-scoped. Invitation deep links never grant
-access by themselves; the authenticated server acceptance remains
-authoritative.
+## Data retention and account rights
 
-Configurable dashboard cards are available on iOS and Android. The optional
-iOS system widget is a separate device-level opt-in requiring a development or
-EAS build. Its App Group payload is a final allow-list containing at most two
-aggregates and labels; it contains no account id, friend, group, subject or
-grade row. Academic values are marked privacy-sensitive, no lock-screen widget
-family is registered, and sign-out writes a neutral disabled payload. Expo 57
-has no official Android AppWidget equivalent, so Android keeps the equivalent
-configurable in-app cards rather than adding an unverified native dependency.
+Account export includes the account owner's sharing settings, friendships,
+class memberships, blocks and reports. It does not include another member's
+private academic data or invitation secrets.
 
-## MCP
-
-Social operations require separate OAuth scopes:
-
-- `avermate:social.read` for authorized social projections;
-- `avermate:social.manage` for relationships, groups and consent;
-- `avermate:social.moderate` plus the backend admin role for moderation.
-
-Existing clients never receive these scopes implicitly. MCP tools call the
-same oRPC procedures as web and Expo. Sending or accepting a friend request,
-joining a group, accepting a policy, changing roles, blocking, leaving or
-deleting requires an explicit multi-round-trip confirmation bound to the user,
-OAuth client, arguments, policy version and expiry. OAuth consent never
-substitutes for the user's social or guardian consent.
-
-## Moderation and account rights
-
-Reports and automatic bug reports are stored and triaged in Avermate. The admin
-console groups automatic failures by a sanitized fingerprint and supports
-status, priority, assignment, labels, internal comments and an append-only
-event timeline. Discord is not a data sink.
-
-Social reports can target a profile, group or behavior. Administrative actions
-require a reason and create value-free audit events. Moderators can freeze a
-group, revoke invitations or remove unsafe presentation content without gaining
-access to members' academic rows.
-
-Export includes the account owner's social profile, grants, relationships,
-memberships and consent history without other users' private data or raw
-tokens. Social reset and account deletion revoke access immediately, invalidate
-group revisions and remove or pseudonymize records according to the reviewed
-retention policy.
+Deleting a class removes its memberships, comparisons and invitations through
+foreign-key cascades. It does not delete members' years. Deleting a year clears
+the membership link through `ON DELETE SET NULL`.
 
 ## Required tests
 
-- authorization matrix across two accounts, two groups, roles and blocks;
-- concurrent invitation acceptance and concurrent policy change;
-- withdrawal disappearing immediately from profile, aggregate, ranking, SSR,
-  hydrated cache and MCP;
-- aggregate thresholds at `k-1`, `k` and `k+1`, complementary suppression and
-  ties;
-- no academic row, email, assurance proof, token or internal id in social DTOs,
-  logs, exports or widget payloads;
-- account rotation on web and Expo without cache leakage;
-- SSR initial navigation without a duplicate browser read;
-- English/French, keyboard and screen-reader coverage;
-- MCP scopes, backend role, confirmation and revocation;
-- fresh database migration and rollback-safe multi-write operations.
+- ownership checks for class creation, configuration and invitations;
+- immutable templates and preservation of legacy groups;
+- compatibility for source years, preset-linked years and generated copies;
+- rejection of incompatible or foreign years;
+- sharing off on create, join, select and copy;
+- stable-key subject figures for both a custom source and its copy;
+- no raw grades, notes or assessment dates in social DTOs;
+- connected-year deletion immediately removing figures;
+- invitation expiry, revocation, blocking and administrative freeze;
+- fresh migration and atomic multi-table class/year writes.
