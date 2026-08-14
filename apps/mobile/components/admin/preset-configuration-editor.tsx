@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Text } from "react-native";
+import * as Crypto from "expo-crypto";
 import { ChoiceField, SwitchField, TextField } from "@/components/field";
 import { parseNumber } from "@/components/format";
 import { Button, Card, Note, Problem, Row, Section } from "@/components/ui";
@@ -21,12 +22,19 @@ function validKey(value: string): boolean {
   return /^[a-zA-Z0-9:._-]{1,128}$/.test(value);
 }
 
+function generatedKey(kind: "subject" | "average"): string {
+  return `${kind}:${Crypto.randomUUID()}`;
+}
+
 export function PresetConfigurationEditor({
   value,
   onChange,
+  technical = true,
 }: {
   value: ManagedPresetConfiguration;
   onChange: (value: ManagedPresetConfiguration) => void;
+  /** Admin screens expose stable identifiers and the raw configuration. */
+  technical?: boolean;
 }) {
   const palette = usePalette();
   const flat = useMemo(() => flattenPresetSubjects(value.subjects), [value]);
@@ -84,20 +92,22 @@ export function PresetConfigurationEditor({
       ...value,
       averages: value.averages.map((average) =>
         average.key === selectedAverage.key
-          ? { ...average, ...patch }
+          ? { ...average, ...patch, isMain: false }
           : average,
       ),
     });
   };
 
   const addSubject = () => {
-    const key = subjectKey.trim();
+    const key = technical ? subjectKey.trim() : generatedKey("subject");
     const name = subjectName.trim();
     if (!validKey(key) || !name || allKeys.has(key)) {
       setProblem(
-        allKeys.has(key)
-          ? t("That stable key is already used.")
-          : t("Use a valid stable key and subject name."),
+        technical
+          ? allKeys.has(key)
+            ? t("That stable key is already used.")
+            : t("Use a valid stable key and subject name.")
+          : t("Give the subject a name."),
       );
       return;
     }
@@ -120,7 +130,7 @@ export function PresetConfigurationEditor({
   };
 
   const addAverage = () => {
-    const key = averageKey.trim();
+    const key = technical ? averageKey.trim() : generatedKey("average");
     const name = averageName.trim();
     if (
       !validKey(key) ||
@@ -128,7 +138,11 @@ export function PresetConfigurationEditor({
       !allKeys.has(averageSubjectKey) ||
       value.averages.some((average) => average.key === key)
     ) {
-      setProblem(t("Use a unique stable key, a name and an initial subject."));
+      setProblem(
+        technical
+          ? t("Use a unique stable key, a name and an initial subject.")
+          : t("Choose a name and first subject."),
+      );
       return;
     }
     const average: ManagedPresetAverage = {
@@ -152,7 +166,7 @@ export function PresetConfigurationEditor({
 
   return (
     <>
-      <Section title={t("Subject tree")}>
+      <Section title={technical ? t("Subject tree") : t("Subjects")}>
         <Card padded={false}>
           {flat.map(({ subject, depth }, index) => (
             <Row
@@ -160,7 +174,13 @@ export function PresetConfigurationEditor({
               first={index === 0}
               indent={depth}
               title={subject.name}
-              subtitle={`${subject.key} · ${subject.kind}`}
+              subtitle={
+                technical
+                  ? `${subject.key} · ${subject.kind}`
+                  : subject.kind === "category"
+                    ? t("Category")
+                    : t("Subject")
+              }
               onPress={() => setSelectedSubjectKey(subject.key)}
               trailing={
                 <Text style={[type.footnote, { color: palette.textMuted }]}>
@@ -174,11 +194,13 @@ export function PresetConfigurationEditor({
 
       {selectedSubject ? (
         <Section title={t("Edit subject")}>
-          <Note>
-            {t("Stable key: {key}. Keep it unchanged across versions.", {
-              key: selectedSubject.key,
-            })}
-          </Note>
+          {technical ? (
+            <Note>
+              {t("Stable key: {key}. Keep it unchanged across versions.", {
+                key: selectedSubject.key,
+              })}
+            </Note>
+          ) : null}
           <TextField
             label={t("Name")}
             value={selectedSubject.name}
@@ -235,10 +257,16 @@ export function PresetConfigurationEditor({
             }
             onPress={() =>
               Alert.alert(
-                t("Remove this preset subject?"),
-                t(
-                  "Its descendants and matching average entries are removed from this draft.",
-                ),
+                technical
+                  ? t("Remove this preset subject?")
+                  : t("Remove this subject?"),
+                technical
+                  ? t(
+                      "Its descendants and matching average entries are removed from this draft.",
+                    )
+                  : t(
+                      "Its child subjects and matching average entries will also be removed.",
+                    ),
                 [
                   { text: t("Cancel"), style: "cancel" },
                   {
@@ -256,14 +284,16 @@ export function PresetConfigurationEditor({
         </Section>
       ) : null}
 
-      <Section title={t("Add a subject node")}>
-        <TextField
-          label={t("Stable key")}
-          value={subjectKey}
-          onChangeText={setSubjectKey}
-          autoCapitalize="none"
-          placeholder="mathematics"
-        />
+      <Section title={technical ? t("Add a subject node") : t("Add subject")}>
+        {technical ? (
+          <TextField
+            label={t("Stable key")}
+            value={subjectKey}
+            onChangeText={setSubjectKey}
+            autoCapitalize="none"
+            placeholder="mathematics"
+          />
+        ) : null}
         <TextField
           label={t("Name")}
           value={subjectName}
@@ -289,14 +319,14 @@ export function PresetConfigurationEditor({
               .map(({ subject }) => ({
                 value: subject.key,
                 label: subject.name,
-                hint: subject.key,
+                hint: technical ? subject.key : undefined,
               })),
           ]}
         />
         <Button
           label={t("Add subject")}
           variant="secondary"
-          disabled={!subjectKey.trim() || !subjectName.trim()}
+          disabled={(technical && !subjectKey.trim()) || !subjectName.trim()}
           onPress={addSubject}
         />
       </Section>
@@ -309,32 +339,39 @@ export function PresetConfigurationEditor({
                 key={average.key}
                 first={index === 0}
                 title={average.name}
-                subtitle={`${average.key} · ${average.entries.length} ${t("subjects")}`}
+                subtitle={
+                  technical
+                    ? `${average.key} · ${average.entries.length} ${t("subjects")}`
+                    : t("{count} subjects", {
+                        count: average.entries.length,
+                      })
+                }
                 onPress={() => setSelectedAverageKey(average.key)}
               />
             ))}
           </Card>
         ) : (
-          <Note>{t("No custom averages in this preset.")}</Note>
+          <Note>
+            {technical
+              ? t("No custom averages in this preset.")
+              : t("No custom averages yet.")}
+          </Note>
         )}
       </Section>
 
       {selectedAverage ? (
         <Section title={t("Edit custom average")}>
-          <Note>
-            {t("Stable key: {key}. Keep it unchanged across versions.", {
-              key: selectedAverage.key,
-            })}
-          </Note>
+          {technical ? (
+            <Note>
+              {t("Stable key: {key}. Keep it unchanged across versions.", {
+                key: selectedAverage.key,
+              })}
+            </Note>
+          ) : null}
           <TextField
             label={t("Name")}
             value={selectedAverage.name}
             onChangeText={(name) => patchAverage({ name })}
-          />
-          <SwitchField
-            label={t("Headline average")}
-            value={selectedAverage.isMain}
-            onValueChange={(isMain) => patchAverage({ isMain })}
           />
           {flat.map(({ subject }) => {
             const entry = selectedAverage.entries.find(
@@ -344,7 +381,7 @@ export function PresetConfigurationEditor({
               <Card key={subject.key} style={{ gap: 8 }}>
                 <SwitchField
                   label={subject.name}
-                  hint={subject.key}
+                  hint={technical ? subject.key : undefined}
                   value={Boolean(entry)}
                   onValueChange={(enabled) => {
                     const entries = enabled
@@ -422,13 +459,15 @@ export function PresetConfigurationEditor({
       ) : null}
 
       <Section title={t("Add a custom average")}>
-        <TextField
-          label={t("Stable key")}
-          value={averageKey}
-          onChangeText={setAverageKey}
-          autoCapitalize="none"
-          placeholder="scientific-average"
-        />
+        {technical ? (
+          <TextField
+            label={t("Stable key")}
+            value={averageKey}
+            onChangeText={setAverageKey}
+            autoCapitalize="none"
+            placeholder="scientific-average"
+          />
+        ) : null}
         <TextField
           label={t("Name")}
           value={averageName}
@@ -441,69 +480,81 @@ export function PresetConfigurationEditor({
           choices={flat.map(({ subject }) => ({
             value: subject.key,
             label: subject.name,
-            hint: subject.key,
+            hint: technical ? subject.key : undefined,
           }))}
         />
         <Button
           label={t("Add custom average")}
           variant="secondary"
           disabled={
-            !averageKey.trim() || !averageName.trim() || !averageSubjectKey
+            (technical && !averageKey.trim()) ||
+            !averageName.trim() ||
+            !averageSubjectKey
           }
           onPress={addAverage}
         />
       </Section>
 
       {problems.length > 0 ? (
-        <Section title={t("Draft problems")}>
-          <Problem>{problems.join("\n")}</Problem>
+        <Section
+          title={technical ? t("Draft problems") : t("Check the configuration")}
+        >
+          <Problem>
+            {technical
+              ? problems.join("\n")
+              : t(
+                  "Every subject and custom average needs a valid name and coefficient.",
+                )}
+          </Problem>
         </Section>
       ) : null}
       {problem ? <Problem>{problem}</Problem> : null}
 
-      <Section title={t("Advanced")}>
-        <SwitchField
-          label={t("Advanced JSON editor")}
-          hint={t(
-            "The structured editor is safer for stable keys and references.",
-          )}
-          value={advanced}
-          onValueChange={setAdvanced}
-        />
-        {advanced ? (
-          <>
-            <TextField
-              label={t("Raw configuration")}
-              value={raw}
-              onChangeText={setRaw}
-              multiline
-              autoCapitalize="none"
-            />
-            <Button
-              label={t("Apply JSON draft")}
-              variant="secondary"
-              onPress={() => {
-                try {
-                  const next = parseManagedPresetConfiguration(raw);
-                  onChange(next);
-                  setProblem(null);
-                } catch (error) {
-                  setProblem(
-                    error instanceof Error
-                      ? error.message
-                      : t("Invalid JSON configuration."),
-                  );
-                }
-              }}
-            />
-            <Note>
-              {t(
-                "The server validates unique keys, hierarchy, coefficients and average references again before publishing.",
-              )}
-            </Note>
-          </>
-        ) : null}
-      </Section>
+      {technical ? (
+        <Section title={t("Advanced")}>
+          <SwitchField
+            label={t("Advanced JSON editor")}
+            hint={t(
+              "The structured editor is safer for stable keys and references.",
+            )}
+            value={advanced}
+            onValueChange={setAdvanced}
+          />
+          {advanced ? (
+            <>
+              <TextField
+                label={t("Raw configuration")}
+                value={raw}
+                onChangeText={setRaw}
+                multiline
+                autoCapitalize="none"
+              />
+              <Button
+                label={t("Apply JSON draft")}
+                variant="secondary"
+                onPress={() => {
+                  try {
+                    const next = parseManagedPresetConfiguration(raw);
+                    onChange(next);
+                    setProblem(null);
+                  } catch (error) {
+                    setProblem(
+                      error instanceof Error
+                        ? error.message
+                        : t("Invalid JSON configuration."),
+                    );
+                  }
+                }}
+              />
+              <Note>
+                {t(
+                  "The server validates unique keys, hierarchy, coefficients and average references again before publishing.",
+                )}
+              </Note>
+            </>
+          ) : null}
+        </Section>
+      ) : null}
     </>
   );
 }

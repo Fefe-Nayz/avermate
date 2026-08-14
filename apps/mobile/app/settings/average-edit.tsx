@@ -35,16 +35,21 @@ export default function AverageEdit() {
   const existing = customAverages.find((average) => average.id === id);
 
   const [name, setName] = useState(existing?.name ?? "");
-  const [isMain, setIsMain] = useState(existing?.isMain ?? false);
+  const [addDashboardCard, setAddDashboardCard] = useState(false);
   const [entries, setEntries] = useState<CustomAverageEntry[]>(
     existing?.entries ?? [],
   );
   const [error, setError] = useState<string | null>(null);
 
   const flat = useMemo(() => {
-    const walk = (nodes: readonly Subject[], depth: number): Array<{ subject: Subject; depth: number }> =>
+    const walk = (
+      nodes: readonly Subject[],
+      depth: number,
+    ): Array<{ subject: Subject; depth: number }> =>
       [...nodes]
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+        )
         .flatMap((subject) => [
           { subject, depth },
           ...walk(yearGraph.childrenOf(subject.id), depth + 1),
@@ -91,7 +96,6 @@ export default function AverageEdit() {
     mutationFn: async () => {
       const payload = {
         name: name.trim(),
-        isMain,
         entries: entries.map((entry) => ({
           subjectId: entry.subjectId,
           coefficient: entry.coefficient,
@@ -100,7 +104,11 @@ export default function AverageEdit() {
       };
       return existing
         ? client.averages.update({ averageId: existing.id, ...payload })
-        : client.averages.create({ yearId: yearId ?? "", ...payload });
+        : client.averages.create({
+            yearId: yearId ?? "",
+            addDashboardCard,
+            ...payload,
+          });
     },
     onSuccess: () => {
       haptic("success");
@@ -149,11 +157,16 @@ export default function AverageEdit() {
             placeholder={t("Science average, mock exams…")}
             autoFocus
           />
-          <SwitchField
-            label={t("Show on the dashboard")}
-            value={isMain}
-            onValueChange={setIsMain}
-          />
+          {!existing ? (
+            <SwitchField
+              label={t("Add a DataCard to the dashboard")}
+              hint={t(
+                "Creates a separate card for this average. You can edit or remove it later.",
+              )}
+              value={addDashboardCard}
+              onValueChange={setAddDashboardCard}
+            />
+          ) : null}
         </Section>
 
         <Section title={t("What goes in")}>
@@ -170,7 +183,9 @@ export default function AverageEdit() {
                       ? t("Its own weight, ×{value}", {
                           value: subject.coefficient,
                         })
-                      : t("Weighted ×{value} here", { value: entry.coefficient })
+                      : t("Weighted ×{value} here", {
+                          value: entry.coefficient,
+                        })
                     : impliedParent
                       ? t("included with {name}", { name: impliedParent })
                       : undefined
@@ -191,18 +206,21 @@ export default function AverageEdit() {
               return (
                 <View key={entry.subjectId} style={{ gap: 12 }}>
                   <TextField
-                  key={entry.subjectId}
-                  label={subject.name}
-                  value={
-                    entry.coefficient === null ? "" : String(entry.coefficient)
-                  }
-                  placeholder={String(subject.coefficient)}
-                  onChangeText={(next) =>
-                    patchEntry(entry.subjectId, {
-                      coefficient: next.trim() === "" ? null : parseNumber(next),
-                    })
-                  }
-                  keyboardType="decimal-pad"
+                    key={entry.subjectId}
+                    label={subject.name}
+                    value={
+                      entry.coefficient === null
+                        ? ""
+                        : String(entry.coefficient)
+                    }
+                    placeholder={String(subject.coefficient)}
+                    onChangeText={(next) =>
+                      patchEntry(entry.subjectId, {
+                        coefficient:
+                          next.trim() === "" ? null : parseNumber(next),
+                      })
+                    }
+                    keyboardType="decimal-pad"
                   />
                   {yearGraph.childrenOf(subject.id).length > 0 ? (
                     <SwitchField
@@ -217,13 +235,15 @@ export default function AverageEdit() {
                 </View>
               );
             })}
-            <Note>{t("Leave one empty to keep the subject's own coefficient.")}</Note>
+            <Note>
+              {t("Leave one empty to keep the subject's own coefficient.")}
+            </Note>
           </Section>
         ) : null}
 
         {existing ? (
           <Section>
-          <Card padded={false}>
+            <Card padded={false}>
               <Row
                 title={t("Delete this average")}
                 destructive
@@ -243,8 +263,8 @@ export default function AverageEdit() {
                   )
                 }
               />
-          </Card>
-        </Section>
+            </Card>
+          </Section>
         ) : null}
 
         {error ? (

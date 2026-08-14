@@ -49,7 +49,7 @@ export default function SocialNotifications() {
           icon: "people-circle-outline" as const,
           label: params.groupName
             ? t("Someone joined {groupName}.", { groupName: params.groupName })
-            : t("Someone joined your group."),
+            : t("Someone joined your class."),
         };
       case "group_removed":
         return {
@@ -58,7 +58,7 @@ export default function SocialNotifications() {
             ? t("You were removed from {groupName}.", {
                 groupName: params.groupName,
               })
-            : t("You were removed from a group."),
+            : t("You were removed from a class."),
         };
       default:
         return {
@@ -68,8 +68,7 @@ export default function SocialNotifications() {
     }
   }
 
-  const unread =
-    notifications.data?.filter((item) => !item.readAt).length ?? 0;
+  const unread = notifications.data?.filter((item) => !item.readAt).length ?? 0;
 
   return (
     <>
@@ -109,9 +108,7 @@ export default function SocialNotifications() {
                       <Icon
                         name={icon}
                         size={18}
-                        color={
-                          item.readAt ? palette.textFaint : palette.accent
-                        }
+                        color={item.readAt ? palette.textFaint : palette.accent}
                       />
                     }
                     onPress={
@@ -127,9 +124,7 @@ export default function SocialNotifications() {
             <Empty
               icon="notifications-outline"
               title={t("Nothing yet")}
-              body={t(
-                "Friend requests and group activity will appear here.",
-              )}
+              body={t("Friend requests and class activity will appear here.")}
             />
           )}
         </Section>

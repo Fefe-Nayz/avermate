@@ -142,23 +142,7 @@ export default function AverageDetail() {
       />
       <Screen>
         <View style={{ gap: space.sm, paddingTop: space.sm }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: space.sm,
-            }}
-          >
-            <Text style={[type.title, { color: palette.text }]}>{title}</Text>
-            {analytics.custom?.isMain ? (
-              <Icon name="star" size={19} color={palette.accent} />
-            ) : null}
-          </View>
-          {analytics.custom?.isMain ? (
-            <Text style={[type.footnote, { color: palette.textMuted }]}>
-              {t("Headline average")}
-            </Text>
-          ) : null}
+          <Text style={[type.title, { color: palette.text }]}>{title}</Text>
         </View>
 
         <Card>

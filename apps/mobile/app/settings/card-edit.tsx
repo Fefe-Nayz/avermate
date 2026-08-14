@@ -1,109 +1,216 @@
-import { useMemo, useState } from "react";
-import { Alert } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import {
   CARD_METRICS,
-  allowedDisplays,
-  type CardDisplay,
+  FULL_YEAR_PERIOD_ID,
+  WIDGET_DEFINITION_VERSION,
+  compileWidgetDefinition,
+  createWidgetDefinition,
+  resolveWidgetFlow,
   type CardMetric,
-  type Subject,
+  type WidgetDefinitionV1,
+  type WidgetSurface,
 } from "@avermate/core";
+import { ChoiceField, TextField } from "@/components/field";
 import {
   Button,
   Card,
+  Loading,
   Note,
   Problem,
   Row,
   Screen,
   Section,
 } from "@/components/ui";
-import { ChoiceField, PickerField, TextField, type Choice } from "@/components/field";
-import { metricHint, metricLabel, useCards } from "@/components/use-cards";
-import { widgetCatalogEntry } from "@/components/widget-catalog";
+import { useCards } from "@/components/use-cards";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { WidgetFlowEditor } from "@/components/widgets/widget-flow-editor";
+import { useWidgetFlowContext } from "@/components/widgets/use-widget-options";
+import { widgetCardTitle } from "@/components/widgets/widget-renderer";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { space, type, usePalette } from "@/lib/theme";
 
-/**
- * One card, configured.
- *
- * The order of the questions is the order they constrain each other: the
- * metric decides which displays make sense, and only some metrics can point at
- * a single subject. Offering a nonsense combination and then rejecting it
- * would be worse than not offering it.
- */
+function widgetSurface(value: string | undefined): WidgetSurface {
+  return value === "subject" || value === "grade" || value === "insights"
+    ? value
+    : "overview";
+}
+
+function initialDefinition(
+  surface: WidgetSurface,
+  requestedMetric: string | undefined,
+): WidgetDefinitionV1 {
+  const definition = createWidgetDefinition(surface);
+  if (requestedMetric && CARD_METRICS.includes(requestedMetric as CardMetric)) {
+    definition.analysis.measure = {
+      kind: "metric",
+      metric: requestedMetric as CardMetric,
+      goalId: null,
+    };
+  }
+  return resolveWidgetFlow(definition, { surface }).prunedDefinition;
+}
+
+function AccentPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const palette = usePalette();
+  const choices = [
+    { value: "", label: t("No accent"), color: palette.surface },
+    { value: "#2563EB", label: t("Blue"), color: "#2563EB" },
+    { value: "#16A34A", label: t("Green"), color: "#16A34A" },
+    { value: "#D97706", label: t("Amber"), color: "#D97706" },
+    { value: "#DC2626", label: t("Red"), color: "#DC2626" },
+    { value: "#7C3AED", label: t("Violet"), color: "#7C3AED" },
+    { value: "#0891B2", label: t("Cyan"), color: "#0891B2" },
+  ];
+  return (
+    <View style={{ gap: space.sm }}>
+      <Text style={[type.label, { color: palette.textFaint }]}>
+        {t("Accent color")}
+      </Text>
+      <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+        {choices.map((choice) => {
+          const selected = value === choice.value;
+          return (
+            <Pressable
+              key={choice.value || "none"}
+              accessibilityRole="radio"
+              accessibilityLabel={choice.label}
+              accessibilityState={{ selected }}
+              onPress={() => onChange(choice.value)}
+              style={{ alignItems: "center", gap: space.xs, width: 48 }}
+            >
+              <View
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                  backgroundColor: choice.color,
+                  borderWidth: selected ? 3 : StyleSheet.hairlineWidth,
+                  borderColor: selected ? palette.text : palette.border,
+                }}
+              >
+                {choice.value === "" ? (
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: 4,
+                      right: 4,
+                      top: 17,
+                      height: 2,
+                      backgroundColor: palette.negative,
+                      transform: [{ rotate: "-45deg" }],
+                    }}
+                  />
+                ) : null}
+              </View>
+              <Text numberOfLines={1} style={[type.label, { color: palette.textMuted }]}>
+                {choice.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function CardEdit() {
   const router = useRouter();
-  const { id, metric: requestedMetric } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id?: string;
     metric?: string;
+    surface?: string;
   }>();
-  const { yearId, yearGraph, customAverages, goals } = useYear();
-  const { specs, hidden } = useCards("overview");
-
-  const existing = [...specs, ...hidden].find((spec) => spec.id === id);
-
-  const initialMetric: CardMetric =
-    requestedMetric && CARD_METRICS.includes(requestedMetric as CardMetric)
-      ? (requestedMetric as CardMetric)
-      : "average";
-  const recommendation = widgetCatalogEntry(initialMetric);
-  const [metric, setMetric] = useState<CardMetric>(
-    existing?.metric ?? initialMetric,
+  const surface = widgetSurface(params.surface);
+  const yearState = useYear();
+  const widgets = useCards(surface);
+  const flowContext = useWidgetFlowContext(surface);
+  const existing = widgets.all.find((card) => card.id === params.id);
+  const [definition, setDefinition] = useState(() =>
+    initialDefinition(surface, params.metric),
   );
-  const [display, setDisplay] = useState<CardDisplay>(
-    existing?.display ?? recommendation.recommendedDisplay,
-  );
-  const [targetKind, setTargetKind] = useState(existing?.target.kind ?? "general");
-  const [referenceId, setReferenceId] = useState<string | null>(
-    existing?.target.referenceId ?? null,
-  );
-  const [goalId, setGoalId] = useState<string | null>(existing?.goalId ?? null);
-  const [title, setTitle] = useState(existing?.title ?? "");
+  const [title, setTitle] = useState("");
   const [span, setSpan] = useState<1 | 2 | 3 | 4>(
-    existing?.span ?? recommendation.recommendedSpan,
+    surface === "insights" ? 4 : 1,
   );
+  const [accent, setAccent] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const loadedId = useRef<string | null>(null);
 
-  const displays = useMemo(() => allowedDisplays(metric), [metric]);
-  const effectiveDisplay = displays.includes(display)
-    ? display
-    : (displays[0] ?? "value");
+  useEffect(() => {
+    if (!existing || loadedId.current === existing.id) return;
+    loadedId.current = existing.id;
+    setDefinition(existing.definition);
+    setTitle(existing.title ?? "");
+    setSpan(existing.span);
+    setAccent(existing.accent ?? "");
+  }, [existing]);
 
-  const subjectChoices = useMemo<Choice[]>(() => {
-    const walk = (nodes: readonly Subject[], depth: number): Choice[] =>
-      [...nodes]
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-        .flatMap((subject) => [
-          { value: subject.id, label: subject.name, depth },
-          ...walk(yearGraph.childrenOf(subject.id), depth + 1),
-        ]);
-    return walk(yearGraph.roots, 0);
-  }, [yearGraph]);
-
+  const flow = useMemo(
+    () => resolveWidgetFlow(definition, flowContext),
+    [definition, flowContext],
+  );
+  const compiled = useMemo(
+    () =>
+      compileWidgetDefinition(definition, {
+        surface,
+        references: {
+          subjectIds: new Set(yearState.subjects.map((item) => item.id)),
+          customAverageIds: new Set(
+            yearState.customAverages.map((item) => item.id),
+          ),
+          goalIds: new Set(yearState.goals.map((item) => item.id)),
+          periodIds: new Set(
+            yearState.periods
+              .filter((item) => item.id !== FULL_YEAR_PERIOD_ID)
+              .map((item) => item.id),
+          ),
+        },
+      }),
+    [definition, surface, yearState],
+  );
+  const listKey = orpc.cards.list.queryKey({
+    input: { yearId: yearState.yearId ?? "", surface },
+  });
   const save = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        surface: "overview" as const,
-        metric,
-        targetKind: targetKind as "general" | "subject" | "custom",
-        targetId: targetKind === "general" ? null : referenceId,
-        goalId: metric === "goalProgress" ? goalId : null,
-        display: effectiveDisplay,
+    mutationFn: () => {
+      if (!yearState.yearId || !compiled.plan) {
+        throw new Error("Invalid widget definition");
+      }
+      const presentation = {
         span,
         title: title.trim() || null,
-        accent: null,
-        hidden: false,
+        accent: accent.trim() || null,
+        hidden: existing?.hidden ?? false,
       };
       return existing
-        ? client.cards.update({ cardId: existing.id, ...payload })
-        : client.cards.create({ yearId: yearId ?? "", ...payload });
+        ? client.cards.update({
+            cardId: existing.id,
+            definitionVersion: WIDGET_DEFINITION_VERSION,
+            definitionJson: compiled.plan.definition,
+            ...presentation,
+          })
+        : client.cards.create({
+            yearId: yearState.yearId,
+            surface,
+            definitionVersion: WIDGET_DEFINITION_VERSION,
+            definitionJson: compiled.plan.definition,
+            ...presentation,
+          });
     },
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      void queryClient.invalidateQueries({ queryKey: listKey });
       router.back();
     },
     onError: () => {
@@ -111,178 +218,116 @@ export default function CardEdit() {
       setError(t("That could not be saved."));
     },
   });
-
   const remove = useMutation({
-    mutationFn: (input: Parameters<typeof client.cards.delete>[0]) =>
-      client.cards.delete(input),
+    mutationFn: () => {
+      if (!existing) throw new Error("No widget selected");
+      return client.cards.delete({ cardId: existing.id });
+    },
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      void queryClient.invalidateQueries({ queryKey: listKey });
       router.back();
     },
   });
 
-  const needsGoal = metric === "goalProgress";
-  const ready =
-    (targetKind === "general" || referenceId !== null) &&
-    (!needsGoal || goalId !== null);
+  if (params.id && widgets.isLoading && !existing) return <Loading />;
+  if (params.id && !widgets.isLoading && !existing) {
+    return (
+      <Screen>
+        <Problem>{t("This widget no longer exists.")}</Problem>
+      </Screen>
+    );
+  }
 
   return (
     <>
       <Stack.Screen
-        options={{ title: existing ? t("Edit card") : t("New card") }}
+        options={{ title: existing ? t("Edit widget") : t("New widget") }}
       />
       <Screen
         footer={
           <Button
             label={t("Save")}
+            loading={save.isPending}
+            disabled={!compiled.valid || save.isPending}
             onPress={() => save.mutate()}
-            disabled={!ready || save.isPending}
           />
         }
       >
-        <Section title={t("What it measures")}>
-          <PickerField
-            label={t("Metric")}
-            value={metric}
-            onChange={(next) => setMetric(next as CardMetric)}
-            choices={CARD_METRICS.map((item) => ({
-              value: item,
-              label: metricLabel(item),
-            }))}
-          />
-          {metricHint(metric) ? (
-            <Note>{metricHint(metric) ?? ""}</Note>
-          ) : null}
+        <Section>
+          <Note>
+            {surface === "insights"
+              ? t("This widget belongs to Insights. Its definition and chart stay editable together.")
+              : t("This widget belongs to the Dashboard. Its definition and chart stay editable together.")}
+          </Note>
         </Section>
 
-        <Section title={t("What it looks at")}>
-          <PickerField
-            label={t("Scope")}
-            value={targetKind}
-            onChange={(next) => {
-              setTargetKind(next as "general" | "subject" | "custom");
-              setReferenceId(null);
-            }}
-            choices={[
-              { value: "general", label: t("The whole year") },
-              { value: "subject", label: t("One subject") },
-              ...(customAverages.length > 0
-                ? [{ value: "custom", label: t("A custom average") }]
-                : []),
-            ]}
-          />
-          {targetKind === "subject" ? (
-            <PickerField
-              label={t("Subject")}
-              value={referenceId}
-              onChange={setReferenceId}
-              choices={subjectChoices}
-            />
-          ) : null}
-          {targetKind === "custom" ? (
-            <PickerField
-              label={t("Custom average")}
-              value={referenceId}
-              onChange={setReferenceId}
-              choices={customAverages.map((average) => ({
-                value: average.id,
-                label: average.name,
-              }))}
-            />
-          ) : null}
-          {needsGoal ? (
-            <PickerField
-              label={t("Goal")}
-              value={goalId}
-              onChange={setGoalId}
-              choices={goals.map((goal) => ({
-                value: goal.id,
-                label: goal.name,
-              }))}
-            />
-          ) : null}
-        </Section>
+        <WidgetFlowEditor
+          definition={definition}
+          surface={surface}
+          onChange={setDefinition}
+        />
 
-        {displays.length > 1 ? (
-          <Section title={t("How it looks")}>
-            <PickerField
-              label={t("Display")}
-              value={effectiveDisplay}
-              onChange={(next) => setDisplay(next as CardDisplay)}
-              choices={displays.map((item) => ({
-                value: item,
-                label: displayLabel(item),
-              }))}
-            />
-          </Section>
-        ) : null}
-
-        <Section title={t("Width")}>
-          <ChoiceField
-            value={String(span)}
-            onChange={(value) => setSpan(Number(value) as 1 | 2 | 3 | 4)}
-            columns={2}
-            choices={[
-              { value: "1", label: t("Quarter") },
-              { value: "2", label: t("Half") },
-              { value: "4", label: t("Full") },
-            ]}
-          />
-        </Section>
-
-        <Section title={t("Title")}>
+        <Section title={t("Card")}>
           <TextField
             label={t("Title")}
             value={title}
             onChangeText={setTitle}
-            placeholder={metricLabel(metric)}
+            placeholder={widgetCardTitle({ title: null, definition })}
+            maxLength={48}
           />
-          <Note>{t("Leave it empty to use the metric's own name.")}</Note>
+          <ChoiceField
+            label={t("Width")}
+            value={String(span)}
+            onChange={(value) => setSpan(Number(value) as 1 | 2 | 3 | 4)}
+            columns={2}
+            choices={[
+              { value: "1", label: t("Compact") },
+              { value: "2", label: t("Half") },
+              { value: "3", label: t("Wide") },
+              { value: "4", label: t("Full") },
+            ]}
+          />
+          <AccentPicker value={accent} onChange={setAccent} />
         </Section>
 
-        {existing ? (
+        {!compiled.valid ? (
           <Section>
-          <Card padded={false}>
-              <Row
-                title={t("Delete this card")}
-                destructive
-                onPress={() =>
-                  Alert.alert(t("Delete this card?"), t("This cannot be undone."), [
-                    { text: t("Cancel"), style: "cancel" },
-                    {
-                      text: t("Delete"),
-                      style: "destructive",
-                      onPress: () => remove.mutate({ cardId: existing.id }),
-                    },
-                  ])
-                }
-              />
-          </Card>
-        </Section>
+            <Problem>
+              {t("Complete the highlighted widget fields before saving.")}
+            </Problem>
+          </Section>
         ) : null}
-
         {error ? (
           <Section>
             <Problem>{error}</Problem>
           </Section>
         ) : null}
+        {existing ? (
+          <Section>
+            <Card padded={false}>
+              <Row
+                title={t("Delete this widget")}
+                destructive
+                onPress={() =>
+                  Alert.alert(
+                    t("Delete this widget?"),
+                    t("This cannot be undone."),
+                    [
+                      { text: t("Cancel"), style: "cancel" },
+                      {
+                        text: t("Delete"),
+                        style: "destructive",
+                        onPress: () => remove.mutate(),
+                      },
+                    ],
+                  )
+                }
+              />
+            </Card>
+          </Section>
+        ) : null}
       </Screen>
     </>
   );
-}
-
-function displayLabel(display: CardDisplay): string {
-  switch (display) {
-    case "value":
-      return t("Just the number");
-    case "sparkline":
-      return t("Number and a line");
-    case "chart":
-      return t("A chart");
-    case "list":
-      return t("A list");
-    case "gauge":
-      return t("A bar");
-  }
 }

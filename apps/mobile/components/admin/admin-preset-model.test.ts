@@ -76,4 +76,44 @@ describe("native managed preset editor model", () => {
     );
     expect(problems.some((problem) => problem.includes("missing"))).toBe(true);
   });
+
+  test("matches server coefficient and average-entry constraints", () => {
+    const problems = presetConfigurationProblems({
+      subjects: [
+        {
+          ...EMPTY_PRESET_CONFIGURATION.subjects[0]!,
+          coefficient: 1001,
+        },
+      ],
+      averages: [
+        {
+          key: "headline",
+          name: "Headline",
+          isMain: true,
+          entries: [
+            {
+              subjectKey: "first-subject",
+              coefficient: null,
+              includeChildren: false,
+            },
+            {
+              subjectKey: "first-subject",
+              coefficient: null,
+              includeChildren: false,
+            },
+          ],
+        },
+      ],
+    });
+    expect(problems.some((problem) => problem.includes("coefficient"))).toBe(
+      true,
+    );
+    expect(problems.some((problem) => problem.includes("repeats"))).toBe(true);
+  });
+
+  test("rejects an empty scratch configuration", () => {
+    expect(
+      presetConfigurationProblems({ subjects: [], averages: [] }),
+    ).toContain("At least one subject is required");
+  });
 });

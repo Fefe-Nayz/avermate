@@ -159,8 +159,7 @@ export default function Social() {
                       {
                         text: t("Cancel request"),
                         style: "destructive",
-                        onPress: () =>
-                          cancel.mutate({ requestId: request.id }),
+                        onPress: () => cancel.mutate({ requestId: request.id }),
                       },
                     ])
                   }
@@ -194,7 +193,9 @@ export default function Social() {
                           ? "eye-outline"
                           : "eye-off-outline"
                       }
-                      toneColor={friend.sharesSomething ? "positive" : "neutral"}
+                      toneColor={
+                        friend.sharesSomething ? "positive" : "neutral"
+                      }
                     />
                   }
                   onPress={() =>
@@ -218,7 +219,7 @@ export default function Social() {
           <Card padded={false}>
             <Row
               first
-              title={t("Groups")}
+              title={t("Classes")}
               leading={
                 <Icon
                   name="people-circle-outline"
@@ -254,11 +255,7 @@ export default function Social() {
             <Row
               title={t("Blocked accounts")}
               leading={
-                <Icon
-                  name="ban-outline"
-                  size={19}
-                  color={palette.textMuted}
-                />
+                <Icon name="ban-outline" size={19} color={palette.textMuted} />
               }
               onPress={() => router.push("/social/blocks")}
             />

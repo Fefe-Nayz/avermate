@@ -1,6 +1,10 @@
 import { Alert, Text } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+import {
+  WIDGET_DEFINITION_VERSION,
+  type WidgetSurface,
+} from "@avermate/core";
 import {
   Button,
   Card,
@@ -11,70 +15,64 @@ import {
   Screen,
   Section,
 } from "@/components/ui";
-import { metricLabel, useCards } from "@/components/use-cards";
+import { useCards } from "@/components/use-cards";
 import { useYear } from "@/components/year-provider";
+import { widgetCardTitle } from "@/components/widgets/widget-renderer";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { type, usePalette } from "@/lib/theme";
 
-/**
- * The dashboard, as a list of choices.
- *
- * Reordering is up and down rather than drag-and-drop: a drag inside a
- * scrolling list is a fight on a phone, and there are rarely more than eight
- * cards. Hidden cards stay listed so turning one back on is one tap, not a
- * rebuild.
- */
+function widgetSurface(value: string | undefined): WidgetSurface {
+  return value === "subject" || value === "grade" || value === "insights"
+    ? value
+    : "overview";
+}
+
 export default function Cards() {
   const router = useRouter();
   const palette = usePalette();
+  const params = useLocalSearchParams<{ surface?: string }>();
+  const surface = widgetSurface(params.surface);
   const { yearId } = useYear();
-  const { isLoading, specs, hidden } = useCards("overview");
+  const widgets = useCards(surface);
   const listKey = orpc.cards.list.queryKey({
-    input: { yearId: yearId ?? "", surface: "overview" },
+    input: { yearId: yearId ?? "", surface },
   });
-
-  const refresh = () =>
-    yearId
-      ? queryClient.invalidateQueries({ queryKey: listKey })
-      : Promise.resolve();
-
+  const refresh = () => queryClient.invalidateQueries({ queryKey: listKey });
   const reorder = useMutation({
     mutationFn: (input: Parameters<typeof client.cards.reorder>[0]) =>
       client.cards.reorder(input),
     onSuccess: () => void refresh(),
   });
-
   const update = useMutation({
     mutationFn: (input: Parameters<typeof client.cards.update>[0]) =>
       client.cards.update(input),
     onSuccess: () => void refresh(),
   });
-
   const reset = useMutation({
-    mutationFn: (input: Parameters<typeof client.cards.reset>[0]) =>
-      client.cards.reset(input),
+    mutationFn: () => {
+      if (!yearId) throw new Error("No year selected");
+      return client.cards.reset({ yearId, surface });
+    },
     onSuccess: () => {
       haptic("success");
       void refresh();
     },
   });
-
   const duplicate = useMutation({
-    mutationFn: (spec: (typeof specs)[number]) => {
+    mutationFn: (card: (typeof widgets.cards)[number]) => {
       if (!yearId) throw new Error("No year selected");
       return client.cards.create({
         yearId,
-        surface: "overview",
-        metric: spec.metric,
-        targetKind: spec.target.kind,
-        targetId: spec.target.referenceId,
-        goalId: spec.goalId,
-        display: spec.display,
-        span: spec.span,
-        title: spec.title ? `${spec.title} · ${t("Copy")}`.slice(0, 48) : null,
-        accent: spec.accent,
+        surface,
+        definitionVersion: WIDGET_DEFINITION_VERSION,
+        definitionJson: card.definition,
+        span: card.span,
+        title: card.title
+          ? `${card.title} · ${t("Copy")}`.slice(0, 48)
+          : null,
+        accent: card.accent,
         hidden: false,
       });
     },
@@ -84,26 +82,34 @@ export default function Cards() {
     },
   });
 
-  if (isLoading) return <Loading />;
-
+  if (widgets.isLoading) return <Loading />;
   const move = (index: number, direction: -1 | 1) => {
-    const next = [...specs];
+    const next = [...widgets.cards];
     const target = index + direction;
     if (target < 0 || target >= next.length) return;
     haptic("selection");
     const [moved] = next.splice(index, 1);
     if (moved) next.splice(target, 0, moved);
-    reorder.mutate({ cardIds: next.map((spec) => spec.id) });
+    reorder.mutate({ cardIds: next.map((card) => card.id) });
   };
+  const route = (id?: string) =>
+    `/settings/card-edit?surface=${surface}${id ? `&id=${encodeURIComponent(id)}` : ""}` as const;
 
   return (
     <>
-      <Stack.Screen options={{ title: t("Dashboard cards") }} />
+      <Stack.Screen
+        options={{
+          title: surface === "insights"
+            ? t("Insights widgets")
+            : t("Dashboard widgets"),
+        }}
+      />
       <Screen
         footer={
           <Button
-            label={t("Browse widget library")}
-            onPress={() => router.push("/settings/widget-library")}
+            label={t("Create widget")}
+            icon="add-circle"
+            onPress={() => router.push(route())}
           />
         }
       >
@@ -111,93 +117,78 @@ export default function Cards() {
           <Card>
             <Text selectable style={[type.heading, { color: palette.text }]}>
               {t("{visible} visible · {hidden} hidden", {
-                visible: specs.length,
-                hidden: hidden.length,
+                visible: widgets.cards.length,
+                hidden: widgets.hidden.length,
               })}
             </Text>
             <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
-              {t("Build this year’s dashboard from 21 reusable analytics widgets.")}
+              {t("Each widget keeps its definition, chart and width together.")}
             </Text>
           </Card>
         </Section>
-        {specs.length === 0 && hidden.length === 0 ? (
+
+        {widgets.all.length === 0 ? (
           <Section>
             <Empty
-              icon="cube-outline"
-              title={t("No cards")}
-              body={t("Add one, or restore the ones the app starts with.")}
+              icon="analytics-outline"
+              title={t("No widgets")}
+              body={t("Create one or restore the recommended layout.")}
             />
           </Section>
         ) : null}
 
-        {specs.map((spec, index) => (
-          <Section key={spec.id}>
-          <Card padded={false}>
+        {widgets.cards.map((card, index) => (
+          <Section key={card.id}>
+            <Card padded={false}>
               <Row
-                title={spec.title ?? metricLabel(spec.metric)}
-                subtitle={metricLabel(spec.metric)}
-                onPress={() => router.push(`/settings/card-edit?id=${spec.id}`)}
+                title={widgetCardTitle(card)}
+                subtitle={t("Span {count} of 4", { count: card.span })}
+                onPress={() => router.push(route(card.id))}
               />
-              <Row
-                title={t("Move up")}
-                onPress={() => move(index, -1)}
-              />
-              <Row
-                title={t("Move down")}
-                onPress={() => move(index, 1)}
-              />
+              <Row title={t("Move up")} onPress={() => move(index, -1)} />
+              <Row title={t("Move down")} onPress={() => move(index, 1)} />
               <Row
                 title={t("Hide")}
-                onPress={() => {
-                  haptic("light");
-                  update.mutate({ cardId: spec.id, hidden: true });
-                }}
+                onPress={() => update.mutate({ cardId: card.id, hidden: true })}
               />
-              <Row
-                title={t("Duplicate")}
-                onPress={() => duplicate.mutate(spec)}
-              />
-          </Card>
-        </Section>
+              <Row title={t("Duplicate")} onPress={() => duplicate.mutate(card)} />
+            </Card>
+          </Section>
         ))}
 
-        {hidden.length > 0 ? (
+        {widgets.hidden.length > 0 ? (
           <Section title={t("Hidden")}>
-          <Card padded={false}>
-              {hidden.map((spec) => (
+            <Card padded={false}>
+              {widgets.hidden.map((card) => (
                 <Row
-                  key={spec.id}
-                  title={spec.title ?? metricLabel(spec.metric)}
-                  onPress={() => {
-                    haptic("light");
-                    update.mutate({ cardId: spec.id, hidden: false });
-                  }}
+                  key={card.id}
+                  title={widgetCardTitle(card)}
+                  onPress={() => update.mutate({ cardId: card.id, hidden: false })}
                 />
               ))}
-          </Card>
-        </Section>
+            </Card>
+          </Section>
         ) : null}
 
         <Section>
           <Card padded={false}>
             <Row
-              title={t("Restore the default cards")}
+              title={t("Restore the recommended layout")}
               onPress={() =>
                 Alert.alert(
-                  t("Restore the defaults?"),
-                  t("Your current cards are replaced. Nothing else changes."),
+                  t("Restore the recommended layout?"),
+                  t("Your current widgets are replaced. Nothing else changes."),
                   [
                     { text: t("Cancel"), style: "cancel" },
                     {
                       text: t("Restore"),
-                      onPress: () =>
-                        yearId && reset.mutate({ yearId, surface: "overview" }),
+                      onPress: () => reset.mutate(),
                     },
                   ],
                 )
               }
             />
-            <Note>{t("Cards are per year, so a new year starts from the defaults.")}</Note>
+            <Note>{t("Layouts are stored separately for each year and surface.")}</Note>
           </Card>
         </Section>
       </Screen>

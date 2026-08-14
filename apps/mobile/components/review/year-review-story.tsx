@@ -422,7 +422,7 @@ export function YearReviewStory({
               />
               <GlassStat
                 label={t("Results added up")}
-                value={formatNumber(review.ratioSum, 1)}
+                value={formatNumber(review.ratioSum * scale, 0)}
               />
             </View>
             {review.firstGradeAt && review.lastGradeAt ? (

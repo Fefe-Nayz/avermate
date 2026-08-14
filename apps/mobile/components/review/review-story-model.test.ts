@@ -11,6 +11,7 @@ const base: YearReview = {
   busiestMonth: null,
   busiestWeekday: null,
   longestStreak: 2,
+  averageSeries: [],
   primeTime: null,
   topSubjects: [],
   bestProgression: null,

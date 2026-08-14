@@ -1,10 +1,8 @@
 import { Alert, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
-import { Heading,
-  Card, Loading, Row, Section } from "@/components/ui";
+import { Heading, Card, Loading, Row, Section } from "@/components/ui";
 import { useYear } from "@/components/year-provider";
 import { signOut, useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
@@ -22,7 +20,6 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  */
 export default function Settings() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { data: session, isPending } = useSession();
   const { year, years, periods } = useYear();
@@ -68,10 +65,10 @@ export default function Settings() {
 
   return (
     <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + space.md,
+        paddingTop: space.md,
         paddingHorizontal: space.lg,
         paddingBottom: space.xxxl,
         gap: space.xl,
@@ -199,7 +196,7 @@ export default function Settings() {
             onPress={() => router.push("/settings/integrations")}
           />
           <Row
-            title={t("Social, friends and groups")}
+            title={t("Social, friends and classes")}
             subtitle={t("Private by default; sharing is always explicit")}
             onPress={() => router.push("/social")}
           />

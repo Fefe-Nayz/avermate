@@ -49,6 +49,23 @@ function usedKeys(): Map<string, string> {
       }
     }
   }
+
+  // Declarative widget labels are core message-key mappings passed to `t`
+  // dynamically, so include the literal catalogue values in this source map.
+  const widgetMessages = join(
+    root,
+    "components",
+    "widgets",
+    "widget-messages.ts",
+  );
+  const text = readFileSync(widgetMessages, "utf8");
+  const start = text.indexOf("export const WIDGET_MESSAGE_LABELS");
+  const end = text.indexOf("\n};", start);
+  const body = text.slice(start, end);
+  for (const match of body.matchAll(/:\s*"((?:\\.|[^"\\])*)"/g)) {
+    const key = (match[1] as string).replaceAll('\\"', '"');
+    if (!found.has(key)) found.set(key, widgetMessages);
+  }
   return found;
 }
 

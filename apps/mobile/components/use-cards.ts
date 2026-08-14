@@ -3,102 +3,109 @@ import { useQuery } from "@tanstack/react-query";
 import {
   estimateRemaining,
   evaluateCard,
-  type CardMetric,
+  evaluateWidgetDefinition,
   type CardResult,
   type CardSpec,
+  type CardMetric,
+  type WidgetDefinitionV1,
+  type WidgetEvaluationContext,
+  type WidgetEvaluationResult,
+  type WidgetSurface,
+  type WidgetValidationIssue,
 } from "@avermate/core";
 import { useYear } from "@/components/year-provider";
 import { orpc } from "@/lib/orpc";
 import { t } from "@/lib/i18n";
+import { timelineCutoffTimestamp } from "@/lib/timeline";
+import {
+  resolveWidgetRow,
+  type StoredWidgetRow,
+} from "@/components/widgets/widget-row";
 
-/**
- * A stored card row, as the database holds it.
- *
- * The table is flat — `targetKind` and `targetId` are columns — while the
- * engine takes a nested `target`. Converting here rather than casting is the
- * whole point: a cast claims the two shapes match, and they do not.
- */
-interface CardRow {
+export interface WidgetCardModel {
   id: string;
-  metric: string;
-  targetKind: string;
-  targetId: string | null;
-  display: string;
-  span: number;
+  surface: WidgetSurface;
+  definition: WidgetDefinitionV1;
+  legacySpec: CardSpec | null;
+  source: "v1" | "legacy";
+  issues: WidgetValidationIssue[];
+  span: 1 | 2 | 3 | 4;
   title: string | null;
   accent: string | null;
-  goalId: string | null;
   sortOrder: number;
   hidden: boolean;
 }
 
-function toSpec(row: CardRow): CardSpec {
-  return {
-    id: row.id,
-    metric: row.metric as CardSpec["metric"],
-    target: {
-      kind: row.targetKind as CardSpec["target"]["kind"],
-      referenceId: row.targetId,
-    },
-    display: row.display as CardSpec["display"],
-    span: Math.min(4, Math.max(1, row.span)) as CardSpec["span"],
-    title: row.title,
-    accent: row.accent,
-    goalId: row.goalId,
-    sortOrder: row.sortOrder,
-    hidden: row.hidden,
-  };
+function span(value: number): 1 | 2 | 3 | 4 {
+  return Math.min(4, Math.max(1, Math.round(value))) as 1 | 2 | 3 | 4;
 }
 
 /**
- * The dashboard's cards, computed.
- *
- * A card is data — a metric, something to point it at, and how it should look —
- * so this hook is the whole feature: fetch the specs, hand each one the year
- * already in memory, and get back a small tagged value the UI knows how to
- * draw. Adding a metric never means adding a screen.
+ * Dual-read every stored card and evaluate the canonical V1 definition.
+ * Legacy columns remain a deterministic fallback for old or invalid rows.
  */
-export function useCards(surface: "overview" | "subject" | "grade" = "overview") {
-  const {
-    yearId,
-    graph,
-    subjects,
-    period,
-    year,
-    goals,
-    passingRatio,
-    resolve,
-  } = useYear();
-
+export function useCards(surface: WidgetSurface = "overview") {
+  const yearState = useYear();
   const query = useQuery({
     ...orpc.cards.list.queryOptions({
-      input: { yearId: yearId ?? "", surface },
+      input: { yearId: yearState.yearId ?? "", surface },
     }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(yearState.yearId),
   });
 
-  const specs = useMemo(
-    () => (query.data ?? []).map(toSpec),
-    [query.data],
+  const all = useMemo<WidgetCardModel[]>(
+    () =>
+      ((query.data ?? []) as unknown as StoredWidgetRow[]).map((row) => {
+        const resolved = resolveWidgetRow(row, surface);
+        return {
+          id: row.id,
+          surface,
+          definition: resolved.definition,
+          legacySpec: resolved.legacySpec,
+          source: resolved.source,
+          issues: resolved.issues,
+          span: span(row.span),
+          title: row.title,
+          accent: row.accent,
+          sortOrder: row.sortOrder,
+          hidden: row.hidden,
+        };
+      }),
+    [query.data, surface],
   );
 
   const results = useMemo(() => {
-    if (!year) return new Map<string, CardResult>();
+    const computed = new Map<string, WidgetEvaluationResult | CardResult>();
+    const { year, period } = yearState;
+    if (!year) return computed;
 
+    const cutoff =
+      timelineCutoffTimestamp(yearState.timelineDate) ?? yearState.now;
     const from = period.startAt;
-    const to = new Date(Math.min(Date.now(), period.endAt.getTime()));
-
-    const context = {
-      graph,
-      subjects,
+    const boundedTo = new Date(Math.min(cutoff, period.endAt.getTime()));
+    const to =
+      boundedTo > from ? boundedTo : new Date(from.getTime() + 1);
+    const context: WidgetEvaluationContext = {
+      surface,
+      graph: yearState.graph,
+      subjects: yearState.graph.subjects,
+      yearSubjects: yearState.yearGraph.subjects,
       scope: null,
       from,
-      to: to > from ? to : new Date(from.getTime() + 1),
-      passingRatio,
-      goals,
-      remaining: estimateRemaining(graph, from, period.endAt),
-      resolveTarget: (target: { kind: "general" | "subject" | "custom"; referenceId: string | null }) => {
-        const resolved = resolve(target);
+      to,
+      passingRatio: yearState.passingRatio,
+      goals: yearState.goals,
+      periods: yearState.periods,
+      customAverages: yearState.customAverages,
+      year: {
+        startsAt: year.startsAt,
+        endsAt: year.endsAt,
+        scale: year.scale,
+      },
+      now: new Date(cutoff),
+      remaining: estimateRemaining(yearState.graph, from, period.endAt),
+      resolveTarget: (target) => {
+        const resolved = yearState.resolve(target);
         if (!resolved) return null;
         return {
           graph: resolved.graph,
@@ -109,27 +116,25 @@ export function useCards(surface: "overview" | "subject" | "grade" = "overview")
       },
     };
 
-    const computed = new Map<string, CardResult>();
-    for (const spec of specs) {
-      computed.set(spec.id, evaluateCard(spec, context));
+    for (const card of all) {
+      computed.set(card.id, card.legacySpec
+        ? evaluateCard(card.legacySpec, context)
+        : evaluateWidgetDefinition(card.definition, context));
     }
     return computed;
-  }, [specs, graph, subjects, period, year, goals, passingRatio, resolve]);
+  }, [all, surface, yearState]);
 
   return {
     isLoading: query.isLoading,
-    specs: specs.filter((spec) => !spec.hidden),
-    hidden: specs.filter((spec) => spec.hidden),
+    error: query.error,
+    cards: all.filter((card) => !card.hidden),
+    hidden: all.filter((card) => card.hidden),
+    all,
     results,
   };
 }
 
-/**
- * Metric names, written out.
- *
- * A function rather than a map so the strings are read at call time and follow
- * a language change — the same reason `t()` is not a hook here.
- */
+/** Metric names are resolved at call time so locale changes are immediate. */
 export function metricLabel(metric: CardMetric): string {
   switch (metric) {
     case "average":
@@ -177,7 +182,6 @@ export function metricLabel(metric: CardMetric): string {
   }
 }
 
-/** What each metric actually measures, for the editor. */
 export function metricHint(metric: CardMetric): string | undefined {
   switch (metric) {
     case "averageTrend":

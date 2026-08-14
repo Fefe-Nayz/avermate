@@ -7,7 +7,6 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/icon";
 import { resolveCustomAverage, type Subject } from "@avermate/core";
 import { Heading,
@@ -30,7 +29,6 @@ import { yearSetupHref } from "@/lib/year-setup";
  */
 export default function Subjects() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { customAverages, isLoading, graph, yearId, refresh } = useYear();
 
@@ -61,9 +59,10 @@ export default function Subjects() {
 
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + space.md,
+        paddingTop: space.md,
         paddingHorizontal: space.lg,
         paddingBottom: space.xxxl,
         gap: space.lg,
@@ -159,15 +158,11 @@ export default function Subjects() {
                     })
               }
               leading={
-                average.isMain ? (
-                  <Icon name="star" size={18} color={palette.accent} />
-                ) : (
-                  <Icon
-                    name="calculator-outline"
-                    size={18}
-                    color={palette.textFaint}
-                  />
-                )
+                <Icon
+                  name="calculator-outline"
+                  size={18}
+                  color={palette.textFaint}
+                />
               }
               onPress={() => router.push(`/average/${average.id}`)}
               trailing={

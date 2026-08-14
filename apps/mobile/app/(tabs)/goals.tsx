@@ -1,6 +1,5 @@
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/icon";
 import { Heading,
   Button, Card, Empty, Loading, ProgressBar } from "@/components/ui";
@@ -20,7 +19,6 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  */
 export default function Goals() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoading, refresh } = useYear();
   const plans = useGoalPlans();
@@ -29,9 +27,10 @@ export default function Goals() {
 
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + space.md,
+        paddingTop: space.md,
         paddingHorizontal: space.lg,
         paddingBottom: space.xxxl,
         gap: space.lg,

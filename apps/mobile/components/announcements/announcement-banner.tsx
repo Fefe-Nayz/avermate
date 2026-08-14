@@ -1,7 +1,6 @@
 import { Pressable, Text, View } from "react-native";
 import { Icon } from "@/components/icon";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { space, type, usePalette } from "@/lib/theme";
@@ -10,7 +9,6 @@ import { useYear } from "@/components/year-provider";
 /** The newest unread announcement, kept outside route content. */
 export function AnnouncementBanner() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const { yearId } = useYear();
   const active = useQuery({
     ...orpc.announcements.active.queryOptions({
@@ -46,7 +44,7 @@ export function AnnouncementBanner() {
     <View
       accessibilityRole="alert"
       style={{
-        paddingTop: insets.top + space.sm,
+        paddingTop: space.sm,
         paddingHorizontal: space.lg,
         paddingBottom: space.sm,
         backgroundColor: palette.surface,

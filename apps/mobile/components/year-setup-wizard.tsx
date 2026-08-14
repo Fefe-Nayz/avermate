@@ -47,9 +47,11 @@ import {
   type YearSetupStep,
 } from "@/lib/year-setup-draft";
 import {
+  initialYearSetupPlan,
   isValidYearSetup,
   nativeSchoolYearSuggestion,
   periodDraftsForTemplate,
+  periodNamesForTemplate,
   validPeriodDrafts,
   yearSetupHref,
   type PeriodTemplateChoice,
@@ -84,6 +86,7 @@ function newDraft(
     version: YEAR_SETUP_DRAFT_VERSION,
     idempotencyKey: createIdempotencyKey(),
     yearId: null,
+    presetId: null,
     step: "year",
     year: {
       name: suggestion.name,
@@ -104,6 +107,7 @@ function draftFromSnapshot(
     version: YEAR_SETUP_DRAFT_VERSION,
     idempotencyKey: createIdempotencyKey(),
     yearId: snapshot.year.id,
+    presetId: null,
     step,
     year: {
       name: snapshot.year.name,
@@ -168,7 +172,10 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
   });
   const presets = useQuery({
     ...orpc.presets.list.queryOptions(),
-    enabled: Boolean(yearId && draft?.step === "subjects"),
+    enabled: Boolean(
+      (!yearId && draft?.step === "year") ||
+      (yearId && draft?.step === "subjects"),
+    ),
   });
   const configurationStatus = useQuery({
     ...orpc.years.configurationStatus.queryOptions({
@@ -208,6 +215,14 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
           }
           if (!alive) return;
           if (recovered) {
+            mergeYearIntoList(recovered.year);
+            selectYearRef.current(recovered.year.id);
+            if (recovered.year.presetId) {
+              await clearYearSetupDraft(userId, saved.idempotencyKey);
+              haptic("success");
+              router.dismissTo("/(tabs)");
+              return;
+            }
             const next = {
               ...saved,
               yearId: recovered.year.id,
@@ -215,8 +230,6 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
               updatedAt: Date.now(),
             };
             await persistYearSetupDraft(userId, next);
-            mergeYearIntoList(recovered.year);
-            selectYearRef.current(recovered.year.id);
             router.replace(yearSetupHref(recovered.year.id));
             return;
           }
@@ -299,12 +312,13 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
       if (current.yearId) {
         return client.years.update({ yearId: current.yearId, ...year });
       }
+      const plan = initialYearSetupPlan(current.presetId);
       return client.presets.setupYear({
         idempotencyKey: current.idempotencyKey,
         year,
-        presetId: null,
-        periodTemplateId: "none",
-        periodNames: [],
+        presetId: current.presetId,
+        periodTemplateId: plan.periodTemplate,
+        periodNames: periodNamesForTemplate(plan.periodTemplate),
       });
     },
   });
@@ -314,8 +328,17 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
     setError(null);
     await persistYearSetupDraft(userId, draft);
     try {
+      const plan = initialYearSetupPlan(draft.presetId);
+      const completeAfterCreation = !draft.yearId && plan.completeAfterCreation;
       const year = await saveYear.mutateAsync(draft);
       mergeYearIntoList(year);
+      selectYearRef.current(year.id);
+      if (completeAfterCreation) {
+        await clearYearSetupDraft(userId, draft.idempotencyKey);
+        haptic("success");
+        router.dismissTo("/(tabs)");
+        return;
+      }
       const next = {
         ...draft,
         yearId: year.id,
@@ -323,7 +346,6 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
         updatedAt: Date.now(),
       };
       await persistYearSetupDraft(userId, next);
-      selectYearRef.current(year.id);
       haptic("success");
       if (!yearId) router.replace(yearSetupHref(year.id));
       else setDraft(next);
@@ -635,7 +657,9 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
                   step === "periods"
                     ? t("Finish setup")
                     : step === "year" && !draft.yearId
-                      ? t("Create and continue")
+                      ? draft.presetId
+                        ? t("Finish setup")
+                        : t("Create and continue")
                       : t("Continue")
                 }
                 onPress={() => {
@@ -674,12 +698,17 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
             </View>
           }
         >
-          <WizardProgress active={setupStepIndex(step)} />
+          <WizardProgress
+            active={setupStepIndex(step)}
+            presetSetup={!draft.yearId && Boolean(draft.presetId)}
+          />
 
           {step === "year" ? (
             <YearStep
               draft={draft}
               onChange={(year) => patchDraft({ year })}
+              onPresetChange={(presetId) => patchDraft({ presetId })}
+              presets={presets.data ?? []}
               existing={Boolean(draft.yearId)}
             />
           ) : null}
@@ -726,9 +755,17 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
   );
 }
 
-function WizardProgress({ active }: { active: number }) {
+function WizardProgress({
+  active,
+  presetSetup,
+}: {
+  active: number;
+  presetSetup: boolean;
+}) {
   const palette = usePalette();
-  const labels = [t("Year"), t("Subjects"), t("Periods")];
+  const labels = presetSetup
+    ? [t("Year")]
+    : [t("Year"), t("Subjects"), t("Periods")];
   return (
     <View style={{ gap: space.sm, paddingTop: space.sm }}>
       <View style={{ flexDirection: "row", gap: space.xs }}>
@@ -760,10 +797,14 @@ function YearStep({
   draft,
   existing,
   onChange,
+  onPresetChange,
+  presets,
 }: {
   draft: YearSetupDraft;
   existing: boolean;
   onChange: (year: YearSetupDraft["year"]) => void;
+  onPresetChange: (presetId: string | null) => void;
+  presets: Awaited<ReturnType<typeof client.presets.list>>;
 }) {
   const patch = (values: Partial<YearSetupDraft["year"]>) =>
     onChange({ ...draft.year, ...values });
@@ -778,7 +819,7 @@ function YearStep({
       >
         {existing ? t("The year itself") : t("Set up your year")}
       </Title>
-      {!existing ? (
+      {!existing && !draft.presetId ? (
         <Note>
           {t("The year is created now, so the rest of setup can be resumed.")}
         </Note>
@@ -813,6 +854,29 @@ function YearStep({
             { value: "4", label: "4", hint: t("GPA") },
           ]}
         />
+        {!existing && presets.length > 0 ? (
+          <ChoiceField
+            label={t("What do you study?")}
+            value={draft.presetId ?? "__manual__"}
+            onChange={(value) =>
+              onPresetChange(value === "__manual__" ? null : value)
+            }
+            choices={[
+              {
+                value: "__manual__",
+                label: t("Start from scratch"),
+                hint: t("Add your own subjects"),
+              },
+              ...presets.map((preset) => ({
+                value: preset.id,
+                label: preset.name,
+                hint: t("{count} subjects", {
+                  count: preset.subjectCount,
+                }),
+              })),
+            ]}
+          />
+        ) : null}
       </FieldGroup>
     </>
   );
@@ -1087,11 +1151,7 @@ function PeriodsStep({
                   )
                 }
               >
-                <Icon
-                  name="trash-outline"
-                  size={19}
-                  color={palette.negative}
-                />
+                <Icon name="trash-outline" size={19} color={palette.negative} />
               </Pressable>
             }
           >

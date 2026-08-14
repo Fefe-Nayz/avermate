@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { Text } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { NavigationBar } from "expo-navigation-bar";
+import { StatusBar } from "expo-status-bar";
 import { useQuery } from "@tanstack/react-query";
 import {
   buildYearReview,
@@ -103,6 +105,8 @@ export default function Review() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="light" />
+        <NavigationBar style="light" />
         <YearReviewStory
           decimals={selectedYear.decimals}
           onClose={() => router.replace("/review")}

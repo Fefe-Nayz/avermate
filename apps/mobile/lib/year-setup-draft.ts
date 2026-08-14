@@ -18,6 +18,7 @@ export interface YearSetupDraft {
   version: typeof YEAR_SETUP_DRAFT_VERSION;
   idempotencyKey: string;
   yearId: string | null;
+  presetId: string | null;
   step: YearSetupStep;
   year: {
     name: string;
@@ -69,6 +70,11 @@ export function parseYearSetupDraft(
       draft.version !== YEAR_SETUP_DRAFT_VERSION ||
       !isString(draft.idempotencyKey) ||
       !(draft.yearId === null || isString(draft.yearId)) ||
+      !(
+        draft.presetId === undefined ||
+        draft.presetId === null ||
+        isString(draft.presetId)
+      ) ||
       !(["year", "subjects", "periods"] as const).includes(
         draft.step as YearSetupStep,
       ) ||
@@ -85,7 +91,10 @@ export function parseYearSetupDraft(
     ) {
       return null;
     }
-    return draft as YearSetupDraft;
+    return {
+      ...(draft as Omit<YearSetupDraft, "presetId">),
+      presetId: draft.presetId ?? null,
+    };
   } catch {
     return null;
   }

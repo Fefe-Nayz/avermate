@@ -39,7 +39,7 @@ export interface AverageAnalytics {
 }
 
 /**
- * Resolve one headline average from the already-hydrated yearly snapshot.
+ * Resolve the selected general or custom average from the hydrated snapshot.
  * Keeping this pure makes the overview, detail screen and tests agree on
  * custom coefficients without introducing a second mobile request.
  */

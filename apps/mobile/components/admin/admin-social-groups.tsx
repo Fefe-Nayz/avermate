@@ -48,14 +48,14 @@ export function AdminSocialGroupsScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: t("Groups") }} />
+      <Stack.Screen options={{ title: t("Classes") }} />
       <Screen>
-        <Note>{t("Hold a reported group, or delete it outright.")}</Note>
-        <Section title={t("All groups")}>
+        <Note>{t("Hold a reported class, or delete it outright.")}</Note>
+        <Section title={t("All classes")}>
           {groups.isLoading ? (
             <Loading />
           ) : groups.isError ? (
-            <Problem>{t("Groups could not be refreshed.")}</Problem>
+            <Problem>{t("Classes could not be refreshed.")}</Problem>
           ) : groups.data?.length ? (
             <Card padded={false}>
               {groups.data.map((group, index) => (
@@ -111,18 +111,18 @@ export function AdminSocialGroupsScreen() {
                           }),
                       },
                       {
-                        text: t("Delete group"),
+                        text: t("Delete class"),
                         style: "destructive",
                         onPress: () =>
                           Alert.alert(
-                            t("Delete this group?"),
+                            t("Delete this class?"),
                             t(
                               "It disappears for every member. Nobody's grades are affected.",
                             ),
                             [
                               { text: t("Cancel"), style: "cancel" },
                               {
-                                text: t("Delete group"),
+                                text: t("Delete class"),
                                 style: "destructive",
                                 onPress: () =>
                                   remove.mutate({ groupId: group.id }),
@@ -138,7 +138,7 @@ export function AdminSocialGroupsScreen() {
           ) : (
             <Empty
               icon="people-circle-outline"
-              title={t("No groups")}
+              title={t("No classes")}
               body={t("Nothing has been created yet.")}
             />
           )}

@@ -99,10 +99,12 @@ export default function SystemWidgetSettings() {
     <>
       <Stack.Screen options={{ title: t("Home screen widget") }} />
       <Screen>
-        <Section title={t("On this device") }>
+        <Section title={t("On this device")}>
           <SwitchField
             label={t("Allow the Avermate widget")}
-            hint={t("This choice is stored only for this account on this device.")}
+            hint={t(
+              "This choice is stored only for this account on this device.",
+            )}
             value={preference.enabled}
             disabled={support !== "available"}
             onValueChange={(enabled) => {
@@ -112,20 +114,30 @@ export default function SystemWidgetSettings() {
           />
           {support === "development-build-required" ? (
             <Problem>
-              {t("System widgets require an Avermate development or EAS build; they are not available in Expo Go.")}
+              {t(
+                "System widgets require an Avermate development or EAS build; they are not available in Expo Go.",
+              )}
             </Problem>
           ) : support === "unsupported" ? (
             <Note>
-              {t("System widgets are currently supported on iOS. The same configurable cards remain available inside Avermate on this device.")}
+              {t(
+                "System widgets are currently supported on iOS. The same configurable cards remain available inside Avermate on this device.",
+              )}
             </Note>
           ) : preference.enabled ? (
-            <Confirmation>{t("The widget is enabled for this device.")}</Confirmation>
+            <Confirmation>
+              {t("The widget is enabled for this device.")}
+            </Confirmation>
           ) : (
-            <Note>{t("Nothing is shared with the operating-system widget until you enable it.")}</Note>
+            <Note>
+              {t(
+                "Nothing is shared with the operating-system widget until you enable it.",
+              )}
+            </Note>
           )}
         </Section>
 
-        <Section title={t("Widget focus") }>
+        <Section title={t("Widget focus")}>
           <ChoiceField<SystemWidgetMode>
             value={preference.mode}
             onChange={(mode) => void persist({ ...preference, mode })}
@@ -149,16 +161,18 @@ export default function SystemWidgetSettings() {
           />
         </Section>
 
-        <Section title={t("Privacy by design") }>
+        <Section title={t("Privacy by design")}>
           <Card padded={false}>
             <Row
               first
               title={t("Aggregate-only payload")}
-              subtitle={t("No account, friend, group, class or subject names")}
+              subtitle={t("No account, friend, class or subject names")}
             />
             <Row
               title={t("Lock-screen redaction")}
-              subtitle={t("Academic values are always marked privacy-sensitive")}
+              subtitle={t(
+                "Academic values are always marked privacy-sensitive",
+              )}
             />
             <Row
               title={t("No background sign-in")}
@@ -166,7 +180,9 @@ export default function SystemWidgetSettings() {
             />
           </Card>
           <Note>
-            {t("Removing the widget preference or signing out replaces its snapshot with a neutral Avermate message.")}
+            {t(
+              "Removing the widget preference or signing out replaces its snapshot with a neutral Avermate message.",
+            )}
           </Note>
         </Section>
 

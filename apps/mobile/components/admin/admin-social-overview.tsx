@@ -25,7 +25,7 @@ export function AdminSocialOverviewScreen() {
       <Stack.Screen options={{ title: t("Social moderation") }} />
       <Screen>
         <Note>
-          {t("Reports and group holds. Academic figures never appear here.")}
+          {t("Reports and class holds. Academic figures never appear here.")}
         </Note>
         {overview.isLoading ? (
           <Loading />
@@ -41,7 +41,7 @@ export function AdminSocialOverviewScreen() {
                 subtitle={String(overview.data?.friendships ?? 0)}
               />
               <Row
-                title={t("Groups")}
+                title={t("Classes")}
                 subtitle={String(overview.data?.groups ?? 0)}
               />
               <Row
@@ -61,16 +61,12 @@ export function AdminSocialOverviewScreen() {
               first
               title={t("Reports")}
               leading={
-                <Icon
-                  name="flag-outline"
-                  size={19}
-                  color={palette.textMuted}
-                />
+                <Icon name="flag-outline" size={19} color={palette.textMuted} />
               }
               onPress={() => router.push("/admin/social/reports")}
             />
             <Row
-              title={t("Groups")}
+              title={t("Classes")}
               leading={
                 <Icon
                   name="people-circle-outline"

@@ -27,6 +27,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false,
+          "hidden": false
+        }
+      ],
       "expo-secure-store",
       "expo-localization",
       [

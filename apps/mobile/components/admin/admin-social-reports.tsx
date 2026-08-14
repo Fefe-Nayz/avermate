@@ -79,10 +79,7 @@ export function AdminSocialReportsScreen() {
                   {categoryLabel(report.category)} ·{" "}
                   {statusLabel(report.status)}
                 </Text>
-                <Text
-                  selectable
-                  style={[type.body, { color: palette.text }]}
-                >
+                <Text selectable style={[type.body, { color: palette.text }]}>
                   {report.message}
                 </Text>
                 <Text style={[type.footnote, { color: palette.textMuted }]}>
@@ -91,7 +88,7 @@ export function AdminSocialReportsScreen() {
                     ? ` · ${t("about {name}", { name: report.target })}`
                     : ""}
                   {report.groupName
-                    ? ` · ${t("group {name}", { name: report.groupName })}`
+                    ? ` · ${t("class {name}", { name: report.groupName })}`
                     : ""}
                 </Text>
                 <Button

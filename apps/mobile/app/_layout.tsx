@@ -9,6 +9,7 @@ import {
   ThemeProvider,
 } from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
+import { NavigationBar } from "expo-navigation-bar";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import { Pressable, Text, View } from "react-native";
@@ -240,6 +241,7 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
       <SafeAreaProvider>
         <ThemeProvider value={navigationTheme}>
           <StatusBar style={isDark ? "light" : "dark"} />
+          <NavigationBar style={isDark ? "light" : "dark"} />
           <GestureHandlerRootView style={{ flex: 1 }}>
             {/* Keying on language rebuilds every screen, including tab labels. */}
             <YearProvider key={language}>
@@ -260,7 +262,11 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 <Stack.Screen name="forgot-password" options={{ title: "" }} />
                 <Stack.Screen
                   name="onboarding"
-                  options={{ headerShown: false }}
+                  options={{
+                    title: t("Set up school year"),
+                    headerBackVisible: false,
+                    gestureEnabled: false,
+                  }}
                 />
                 {/*
                  * Pushed, never presented as a modal. A form on a phone is a
@@ -302,8 +308,20 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   options={{ title: t("Home screen widget") }}
                 />
                 <Stack.Screen
+                  name="settings/cards"
+                  options={{ title: t("Widgets") }}
+                />
+                <Stack.Screen
+                  name="settings/card-edit"
+                  options={{ title: t("Widget") }}
+                />
+                <Stack.Screen
                   name="settings/widget-library"
                   options={{ title: t("Widget library") }}
+                />
+                <Stack.Screen
+                  name="insights"
+                  options={{ title: t("Insights") }}
                 />
                 <Stack.Screen
                   name="social/index"
@@ -327,15 +345,19 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 />
                 <Stack.Screen
                   name="social/groups/index"
-                  options={{ title: t("Groups") }}
+                  options={{ title: t("Classes") }}
+                />
+                <Stack.Screen
+                  name="social/groups/new"
+                  options={{ title: t("New class") }}
                 />
                 <Stack.Screen
                   name="social/groups/[groupId]/index"
-                  options={{ title: t("Group") }}
+                  options={{ title: t("Class") }}
                 />
                 <Stack.Screen
                   name="social/invitations/[token]"
-                  options={{ title: t("Group invitation") }}
+                  options={{ title: t("Class invitation") }}
                 />
                 <Stack.Screen
                   name="social/notifications"
@@ -379,7 +401,7 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 />
                 <Stack.Screen
                   name="admin/social/groups"
-                  options={{ title: t("Social groups") }}
+                  options={{ title: t("Social classes") }}
                 />
                 <Stack.Screen
                   name="admin/presets"

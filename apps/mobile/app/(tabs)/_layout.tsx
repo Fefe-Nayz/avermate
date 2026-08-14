@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/icon";
 import { Loading } from "@/components/ui";
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
@@ -30,7 +31,10 @@ export default function TabsLayout() {
   if (years.length === 0) return <Redirect href="/onboarding" />;
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView
+      edges={["top"]}
+      style={{ flex: 1, backgroundColor: palette.background }}
+    >
       <AnnouncementBanner />
       <Tabs
       screenOptions={{
@@ -93,6 +97,6 @@ export default function TabsLayout() {
         }}
       />
       </Tabs>
-    </View>
+    </SafeAreaView>
   );
 }

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/icon";
 import {
   averageOverTime,
@@ -30,8 +29,7 @@ import { ScopeBar } from "@/components/scope-bar";
 import { formatDay } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
 import { useGoalPlans } from "@/components/use-goal-plans";
-import { useCards } from "@/components/use-cards";
-import { CardView } from "@/components/card-view";
+import { WidgetSurfaceContent } from "@/components/widgets/widget-surface";
 import { SeasonalReviewInvitation } from "@/components/review/seasonal-review-invitation";
 import { useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
@@ -50,7 +48,6 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  */
 export default function Dashboard() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { data: session } = useSession();
 
@@ -66,7 +63,6 @@ export default function Dashboard() {
     now,
   } = useYear();
   const plans = useGoalPlans();
-  const cards = useCards("overview");
 
   const general = graph.ratio(null);
 
@@ -114,9 +110,10 @@ export default function Dashboard() {
 
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + space.md,
+        paddingTop: space.md,
         paddingHorizontal: space.lg,
         paddingBottom: space.xxxl,
         gap: space.xl,
@@ -199,9 +196,20 @@ export default function Dashboard() {
 
       <SeasonalReviewInvitation />
 
-      {cards.specs.map((spec) => (
-        <CardView key={spec.id} spec={spec} result={cards.results.get(spec.id)} />
-      ))}
+      <Section
+        title={t("Dashboard widgets")}
+        action={
+          <Button
+            label={t("Customize")}
+            icon="options-outline"
+            size="sm"
+            variant="ghost"
+            onPress={() => router.push("/settings/cards?surface=overview")}
+          />
+        }
+      >
+        <WidgetSurfaceContent surface="overview" />
+      </Section>
 
       {pinned.length > 0 ? (
         <Section title={t("Goals")}>

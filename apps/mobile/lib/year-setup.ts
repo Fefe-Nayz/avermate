@@ -5,6 +5,15 @@ import { t } from "./i18n";
 export type PeriodTemplateChoice =
   "none" | "trimesters" | "semesters" | "semesters-cumulative" | "quarters";
 
+export function initialYearSetupPlan(presetId: string | null): {
+  completeAfterCreation: boolean;
+  periodTemplate: "none";
+} {
+  return presetId
+    ? { completeAfterCreation: true, periodTemplate: "none" }
+    : { completeAfterCreation: false, periodTemplate: "none" };
+}
+
 export function periodNamesForTemplate(
   template: PeriodTemplateChoice,
 ): string[] {

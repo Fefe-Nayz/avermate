@@ -5,13 +5,12 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import {
   SharedAverageText,
-  SocialIdentity,
   comparisonLabel,
   comparisonUnit,
-  groupKindLabel,
 } from "@/components/social/social-ui";
 import { ChoiceField, SwitchField, TextField } from "@/components/field";
 import {
+  Badge,
   Button,
   Card,
   ChipRail,
@@ -29,22 +28,22 @@ import { t } from "@/lib/i18n";
 import { orpc, queryClient } from "@/lib/orpc";
 import { numeric, space, type, usePalette } from "@/lib/theme";
 
-type ComparisonKind =
-  | "general"
-  | "subject"
-  | "median"
-  | "passRate"
-  | "goalProgress";
+type ComparisonKind = "general" | "subject";
 
 /**
- * One group: several boards side by side. The chip rail picks the active
- * comparison and the leaderboard, stats and trends follow it. The owner
- * composes the boards; every member's only lock is their own switch.
+ * One class: the common template and the viewer's linked year are explicit
+ * before any figures can be shared or compared.
  */
 export default function GroupDetail() {
   const palette = usePalette();
   const router = useRouter();
-  const { years, refresh: refreshYears } = useYear();
+  const {
+    years,
+    allYears,
+    year: activeYear,
+    selectYear: selectActiveYear,
+    refresh: refreshYears,
+  } = useYear();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const detail = useQuery({
     ...orpc.social.groups.get.queryOptions({
@@ -93,8 +92,8 @@ export default function GroupDetail() {
     },
     onError: () =>
       Alert.alert(
-        t("You still own this group"),
-        t("Transfer or remove the other members first, or delete the group."),
+        t("You still own this class"),
+        t("Remove the other members first, or delete the class."),
       ),
   });
   const destroy = useMutation({
@@ -109,23 +108,38 @@ export default function GroupDetail() {
   });
   const adopt = useMutation({
     ...orpc.social.groups.adoptSetup.mutationOptions(),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       haptic("success");
       refreshYears();
+      selectActiveYear(result.yearId);
       await queryClient.invalidateQueries({
         queryKey: orpc.years.list.queryKey(),
       });
+      await refresh();
       Alert.alert(
         t("Year created"),
-        t("Find it in your year picker. It is fully yours from here."),
+        t("The new year is now connected to this class."),
       );
+    },
+  });
+  const selectYear = useMutation({
+    ...orpc.social.groups.selectYear.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      await refresh();
+    },
+  });
+  const configureClass = useMutation({
+    ...orpc.social.groups.configureClass.mutationOptions(),
+    onSuccess: async () => {
+      haptic("success");
+      await refresh();
     },
   });
   const update = useMutation({
     ...orpc.social.groups.update.mutationOptions(),
     onSuccess: async () => {
       haptic("success");
-      setEditing(false);
       await refresh();
     },
   });
@@ -136,8 +150,7 @@ export default function GroupDetail() {
       setAddSubject("");
       await refresh();
     },
-    onError: () =>
-      Alert.alert(t("That comparison already exists."), undefined),
+    onError: () => Alert.alert(t("That comparison already exists."), undefined),
   });
   const removeComparison = useMutation({
     ...orpc.social.groups.comparisons.remove.mutationOptions(),
@@ -147,17 +160,20 @@ export default function GroupDetail() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [kind, setKind] = useState<"friends" | "study" | "class">("friends");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<ComparisonKind>("subject");
   const [addSubject, setAddSubject] = useState("");
+  const [yearChoice, setYearChoice] = useState<string | null>(null);
+  const [templateYearChoice, setTemplateYearChoice] = useState<string | null>(
+    null,
+  );
 
   const group = detail.data;
 
   if (detail.isLoading) {
     return (
       <>
-        <Stack.Screen options={{ title: t("Group") }} />
+        <Stack.Screen options={{ title: t("Class") }} />
         <Loading />
       </>
     );
@@ -165,11 +181,11 @@ export default function GroupDetail() {
   if (detail.isError || !group) {
     return (
       <>
-        <Stack.Screen options={{ title: t("Group") }} />
+        <Stack.Screen options={{ title: t("Class") }} />
         <Screen>
           <Empty
             icon="people-circle-outline"
-            title={t("This group could not be found")}
+            title={t("This class could not be found")}
             body={t("It may have been deleted, or you were removed.")}
           />
         </Screen>
@@ -214,30 +230,202 @@ export default function GroupDetail() {
           2;
   const statScale = sharers[0]?.scale ?? null;
   const statDecimals = sharers[0]?.decimals ?? null;
+  const viewerYear = allYears.find((year) => year.id === group.viewer.yearId);
+  const selectedCompatibleYearId =
+    yearChoice ?? group.compatibleYears[0]?.id ?? null;
+  const selectedTemplateYearId =
+    templateYearChoice ?? activeYear?.id ?? years[0]?.id ?? null;
 
   return (
     <>
       <Stack.Screen options={{ title: group.name }} />
       <Screen>
-        <Note>
-          {groupKindLabel(group.kind) +
-            (group.description ? ` · ${group.description}` : "")}
-        </Note>
+        {group.description ? <Note>{group.description}</Note> : null}
+
+        <Section title={t("Class template")}>
+          {group.classTemplate ? (
+            <Card padded={false}>
+              <Row
+                first
+                title={group.classTemplate.yearName}
+                subtitle={t("{start} to {end}", {
+                  start: new Intl.DateTimeFormat(undefined, {
+                    month: "short",
+                    year: "numeric",
+                  }).format(new Date(group.classTemplate.startsAt)),
+                  end: new Intl.DateTimeFormat(undefined, {
+                    month: "short",
+                    year: "numeric",
+                  }).format(new Date(group.classTemplate.endsAt)),
+                })}
+                trailing={
+                  <Badge
+                    label={t("Grades out of {scale}", {
+                      scale: group.classTemplate.scale,
+                    })}
+                    toneColor="accent"
+                  />
+                }
+              />
+              <Row
+                title={t("Academic structure")}
+                subtitle={t(
+                  "{subjects} subjects · {averages} custom averages · {periods} periods",
+                  {
+                    subjects: group.classTemplate.subjectCount,
+                    averages: group.classTemplate.averageCount,
+                    periods: group.classTemplate.periodCount,
+                  },
+                )}
+              />
+            </Card>
+          ) : isOwner && !frozen ? (
+            <Card style={{ gap: space.md }}>
+              <Note>
+                {t(
+                  "Choose one of your years once to define this class template.",
+                )}
+              </Note>
+              {years.length > 0 ? (
+                <>
+                  <ChoiceField
+                    label={t("Class template")}
+                    value={selectedTemplateYearId}
+                    onChange={setTemplateYearChoice}
+                    choices={years.map((year) => ({
+                      value: year.id,
+                      label: year.name,
+                    }))}
+                  />
+                  <Button
+                    label={t("Set class template")}
+                    disabled={!selectedTemplateYearId}
+                    loading={configureClass.isPending}
+                    onPress={() =>
+                      selectedTemplateYearId &&
+                      configureClass.mutate({
+                        groupId: groupId ?? "",
+                        templateYearId: selectedTemplateYearId,
+                      })
+                    }
+                  />
+                </>
+              ) : (
+                <Button
+                  label={t("Create a year")}
+                  variant="secondary"
+                  onPress={() => router.push("/year/new")}
+                />
+              )}
+            </Card>
+          ) : (
+            <Note>
+              {t("The owner still needs to choose the class template.")}
+            </Note>
+          )}
+        </Section>
+
+        {!group.setupRequired ? (
+          <Section title={t("Your class year")}>
+            {group.viewer.yearStatus === "connected" ? (
+              <Card padded={false}>
+                <Row
+                  first
+                  title={viewerYear?.name ?? t("Connected year")}
+                  subtitle={t(
+                    "Only figures from this year can appear in the class.",
+                  )}
+                  trailing={
+                    <Badge
+                      label={t("Connected")}
+                      icon="checkmark-circle-outline"
+                      toneColor="positive"
+                    />
+                  }
+                />
+              </Card>
+            ) : (
+              <Card style={{ gap: space.md }}>
+                {group.viewer.yearStatus === "incompatible" ? (
+                  <Note>
+                    {t(
+                      "Your previously selected year no longer matches this class. Nothing in it was changed.",
+                    )}
+                  </Note>
+                ) : null}
+                {group.compatibleYears.length > 0 ? (
+                  <>
+                    <ChoiceField
+                      label={t("Use an existing year")}
+                      value={selectedCompatibleYearId}
+                      onChange={setYearChoice}
+                      choices={group.compatibleYears.map((year) => ({
+                        value: year.id,
+                        label: year.name,
+                      }))}
+                    />
+                    <Button
+                      label={t("Connect this year")}
+                      disabled={!selectedCompatibleYearId}
+                      loading={selectYear.isPending}
+                      onPress={() =>
+                        selectedCompatibleYearId &&
+                        selectYear.mutate({
+                          groupId: groupId ?? "",
+                          yearId: selectedCompatibleYearId,
+                        })
+                      }
+                    />
+                  </>
+                ) : (
+                  <Note>
+                    {t(
+                      "None of your existing years matches this class template.",
+                    )}
+                  </Note>
+                )}
+                <Button
+                  label={t("Create a new year from the template")}
+                  variant={
+                    group.compatibleYears.length > 0 ? "secondary" : "primary"
+                  }
+                  loading={adopt.isPending}
+                  onPress={() =>
+                    Alert.alert(
+                      t("Create a separate year?"),
+                      t(
+                        "Subjects, periods and custom averages are copied. None of your existing years or grades will be changed.",
+                      ),
+                      [
+                        { text: t("Cancel"), style: "cancel" },
+                        {
+                          text: t("Create my year"),
+                          onPress: () =>
+                            adopt.mutate({ groupId: groupId ?? "" }),
+                        },
+                      ],
+                    )
+                  }
+                />
+              </Card>
+            )}
+          </Section>
+        ) : null}
 
         {frozen ? (
           <Card>
             <Note>
               {t(
-                "A moderator paused this group after a report. Figures are hidden until the hold is lifted; nothing has been deleted.",
+                "A moderator paused this class after a report. Figures are hidden until the hold is lifted; nothing has been deleted.",
               )}
             </Note>
           </Card>
-        ) : (
+        ) : group.viewer.yearStatus === "connected" ? (
           <Card style={{ gap: space.md }}>
             <SwitchField
-              label={t("Share my figures with this group")}
+              label={t("Share my figures with this class")}
               hint={t(
-                "Off means the others see you in the list without figures.",
+                "Sharing is off by default. Only figures from your connected year can appear.",
               )}
               value={group.viewer.shareAverage}
               disabled={setSharing.isPending}
@@ -249,106 +437,101 @@ export default function GroupDetail() {
               }
             />
           </Card>
-        )}
+        ) : null}
 
-        <Section title={t("Boards")}>
-          <ChipRail
-            items={comparisons.map((entry) => ({
-              id: entry.id,
-              label: comparisonLabel(entry.kind, entry.subjectName),
-            }))}
-            activeId={active?.id ?? ""}
-            onSelect={setActiveId}
-          />
-          {isOwner && !frozen ? (
-            <Card style={{ gap: space.md }}>
-              <ChoiceField
-                label={t("Add a board")}
-                value={addKind}
-                onChange={setAddKind}
-                columns={2}
-                choices={[
-                  { value: "subject", label: t("A subject") },
-                  { value: "general", label: t("General average") },
-                  { value: "median", label: t("Median grade") },
-                  { value: "passRate", label: t("Pass rate") },
-                  { value: "goalProgress", label: t("Goals achieved") },
-                ]}
-              />
-              {addKind === "subject" ? (
-                group.availableSubjects.length > 0 ? (
-                  <ChoiceField
-                    label={t("Subject")}
-                    value={addSubject || null}
-                    onChange={setAddSubject}
-                    columns={2}
-                    choices={group.availableSubjects.map((name) => ({
-                      value: name,
-                      label: name,
-                    }))}
-                  />
-                ) : (
-                  <Note>
-                    {t(
-                      "The picker lists the template year's subjects, or yours. Offer a common configuration below to widen it.",
-                    )}
-                  </Note>
-                )
-              ) : null}
-              <Button
-                label={t("Add")}
-                variant="secondary"
-                icon="add"
-                disabled={addKind === "subject" && !addSubject}
-                loading={addComparison.isPending}
-                onPress={() =>
-                  addComparison.mutate({
-                    groupId: groupId ?? "",
-                    kind: addKind,
-                    subjectName:
-                      addKind === "subject" ? addSubject : undefined,
-                  })
-                }
-              />
-              {comparisons.length > 1 && active ? (
+        {!group.setupRequired ? (
+          <Section title={t("Boards")}>
+            <ChipRail
+              items={comparisons.map((entry) => ({
+                id: entry.id,
+                label: comparisonLabel(entry.kind, entry.subjectName),
+              }))}
+              activeId={active?.id ?? ""}
+              onSelect={setActiveId}
+            />
+            {isOwner && !frozen ? (
+              <Card style={{ gap: space.md }}>
+                <ChoiceField
+                  label={t("Add a board")}
+                  value={addKind}
+                  onChange={setAddKind}
+                  columns={2}
+                  choices={[
+                    { value: "subject", label: t("A subject") },
+                    { value: "general", label: t("General average") },
+                  ]}
+                />
+                {addKind === "subject" ? (
+                  group.availableSubjectOptions.length > 0 ? (
+                    <ChoiceField
+                      label={t("Subject")}
+                      value={addSubject || null}
+                      onChange={setAddSubject}
+                      columns={2}
+                      choices={group.availableSubjectOptions.map((subject) => ({
+                        value: subject.key,
+                        label: subject.name,
+                      }))}
+                    />
+                  ) : (
+                    <Note>
+                      {t("Subject boards come from the common class template.")}
+                    </Note>
+                  )
+                ) : null}
                 <Button
-                  label={t("Remove this board")}
-                  variant="ghost"
-                  disabled={removeComparison.isPending}
+                  label={t("Add")}
+                  variant="secondary"
+                  icon="add"
+                  disabled={addKind === "subject" && !addSubject}
+                  loading={addComparison.isPending}
                   onPress={() =>
-                    Alert.alert(
-                      comparisonLabel(active.kind, active.subjectName),
-                      undefined,
-                      [
-                        { text: t("Cancel"), style: "cancel" },
-                        {
-                          text: t("Remove this board"),
-                          style: "destructive",
-                          onPress: () => {
-                            setActiveId(null);
-                            removeComparison.mutate({
-                              groupId: groupId ?? "",
-                              comparisonId: active.id,
-                            });
-                          },
-                        },
-                      ],
-                    )
+                    addComparison.mutate({
+                      groupId: groupId ?? "",
+                      kind: addKind,
+                      subjectKey:
+                        addKind === "subject" ? addSubject : undefined,
+                    })
                   }
                 />
-              ) : null}
-            </Card>
-          ) : null}
-        </Section>
+                {comparisons.length > 1 && active ? (
+                  <Button
+                    label={t("Remove this board")}
+                    variant="ghost"
+                    disabled={removeComparison.isPending}
+                    onPress={() =>
+                      Alert.alert(
+                        comparisonLabel(active.kind, active.subjectName),
+                        undefined,
+                        [
+                          { text: t("Cancel"), style: "cancel" },
+                          {
+                            text: t("Remove this board"),
+                            style: "destructive",
+                            onPress: () => {
+                              setActiveId(null);
+                              removeComparison.mutate({
+                                groupId: groupId ?? "",
+                                comparisonId: active.id,
+                              });
+                            },
+                          },
+                        ],
+                      )
+                    }
+                  />
+                ) : null}
+              </Card>
+            ) : null}
+          </Section>
+        ) : null}
 
-        {!frozen && active && ratios.length > 0 ? (
-          <Section
-            title={comparisonLabel(active.kind, active.subjectName)}
-          >
+        {!group.setupRequired && !frozen && active && ratios.length > 0 ? (
+          <Section title={comparisonLabel(active.kind, active.subjectName)}>
             <Card padded={false}>
               <Row
                 first
-                title={t("Group average")}
+                title={t("Class average")}
                 trailing={
                   <SharedAverageText
                     ratio={mean}
@@ -401,186 +584,114 @@ export default function GroupDetail() {
           </Section>
         ) : null}
 
-        <Section title={t("Leaderboard")}>
-          <Card padded={false}>
-            {[...sharers, ...silent].map((member, index) => {
-              const figure = figureOf(member);
-              return (
-                <Row
-                  key={member.membershipId}
-                  first={index === 0}
-                  title={member.name}
-                  subtitle={
-                    [
-                      member.role === "owner" ? t("Owner") : null,
-                      figure?.gradeCount != null
-                        ? figure.gradeCount === 1
-                          ? t("1 grade")
-                          : t("{count} grades", { count: figure.gradeCount })
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || undefined
-                  }
-                  leading={
-                    figure?.average != null ? (
-                      <Text
-                        style={[
-                          type.callout,
-                          numeric,
-                          {
-                            color: palette.textFaint,
-                            width: 22,
-                            textAlign: "center",
-                          },
-                        ]}
-                      >
-                        {index + 1}
-                      </Text>
-                    ) : (
-                      <View style={{ width: 22 }} />
-                    )
-                  }
-                  trailing={
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: space.sm,
-                      }}
-                    >
-                      {figure?.trend ? (
-                        <Icon
-                          name={
-                            figure.trend === "up"
-                              ? "trending-up-outline"
-                              : figure.trend === "down"
-                                ? "trending-down-outline"
-                                : "remove-outline"
-                          }
-                          size={16}
-                          color={
-                            figure.trend === "up"
-                              ? palette.positive
-                              : figure.trend === "down"
-                                ? palette.negative
-                                : palette.textFaint
-                          }
-                        />
-                      ) : null}
-                      <SharedAverageText
-                        ratio={figure?.average ?? null}
-                        scale={member.scale}
-                        decimals={member.decimals}
-                        unit={activeUnit}
-                      />
-                    </View>
-                  }
-                  onPress={
-                    isOwner && member.role !== "owner" && !frozen
-                      ? () =>
-                          Alert.alert(member.name, undefined, [
-                            { text: t("Cancel"), style: "cancel" },
+        {!group.setupRequired ? (
+          <Section title={t("Class ranking")}>
+            <Card padded={false}>
+              {[...sharers, ...silent].map((member, index) => {
+                const figure = figureOf(member);
+                return (
+                  <Row
+                    key={member.membershipId}
+                    first={index === 0}
+                    title={member.name}
+                    subtitle={
+                      [
+                        member.role === "owner" ? t("Owner") : null,
+                        figure?.gradeCount != null
+                          ? figure.gradeCount === 1
+                            ? t("1 grade")
+                            : t("{count} grades", { count: figure.gradeCount })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || undefined
+                    }
+                    leading={
+                      figure?.average != null ? (
+                        <Text
+                          style={[
+                            type.callout,
+                            numeric,
                             {
-                              text: t("Remove from group"),
-                              style: "destructive",
-                              onPress: () =>
-                                removeMember.mutate({
-                                  groupId: groupId ?? "",
-                                  membershipId: member.membershipId,
-                                }),
+                              color: palette.textFaint,
+                              width: 22,
+                              textAlign: "center",
                             },
-                          ])
-                      : undefined
-                  }
-                />
-              );
-            })}
-          </Card>
-          {!frozen && silent.length > 0 ? (
-            <Note>
-              {t(
-                "Members without a figure keep their switch off, or have no year to share.",
-              )}
-            </Note>
-          ) : null}
-        </Section>
-
-        {!frozen ? (
-          <Section title={t("Common configuration")}>
-            <Card style={{ gap: space.md }}>
-              {group.sharedSetup ? (
-                <>
-                  <Note>
-                    {group.sharedSetup.yearName +
-                      " — " +
-                      t(
-                        "{subjects} subjects · {averages} custom averages · {periods} periods",
-                        {
-                          subjects: group.sharedSetup.subjectCount,
-                          averages: group.sharedSetup.averageCount,
-                          periods: group.sharedSetup.periodCount,
-                        },
-                      )}
-                  </Note>
-                  <Button
-                    label={t("Adopt this configuration")}
-                    variant="secondary"
-                    icon="copy-outline"
-                    loading={adopt.isPending}
-                    onPress={() =>
-                      Alert.alert(
-                        t("Adopt this configuration?"),
-                        t(
-                          "This copies the subjects, periods and custom averages into a fresh year of your own. Never any grades — and it is a copy, not a subscription.",
-                        ),
-                        [
-                          { text: t("Cancel"), style: "cancel" },
-                          {
-                            text: t("Create my year"),
-                            onPress: () =>
-                              adopt.mutate({ groupId: groupId ?? "" }),
-                          },
-                        ],
+                          ]}
+                        >
+                          {index + 1}
+                        </Text>
+                      ) : (
+                        <View style={{ width: 22 }} />
                       )
                     }
+                    trailing={
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: space.sm,
+                        }}
+                      >
+                        {figure?.trend ? (
+                          <Icon
+                            name={
+                              figure.trend === "up"
+                                ? "trending-up-outline"
+                                : figure.trend === "down"
+                                  ? "trending-down-outline"
+                                  : "remove-outline"
+                            }
+                            size={16}
+                            color={
+                              figure.trend === "up"
+                                ? palette.positive
+                                : figure.trend === "down"
+                                  ? palette.negative
+                                  : palette.textFaint
+                            }
+                          />
+                        ) : null}
+                        <SharedAverageText
+                          ratio={figure?.average ?? null}
+                          scale={member.scale}
+                          decimals={member.decimals}
+                          unit={activeUnit}
+                        />
+                      </View>
+                    }
+                    onPress={
+                      isOwner && member.role !== "owner" && !frozen
+                        ? () =>
+                            Alert.alert(member.name, undefined, [
+                              { text: t("Cancel"), style: "cancel" },
+                              {
+                                text: t("Remove from class"),
+                                style: "destructive",
+                                onPress: () =>
+                                  removeMember.mutate({
+                                    groupId: groupId ?? "",
+                                    membershipId: member.membershipId,
+                                  }),
+                              },
+                            ])
+                        : undefined
+                    }
                   />
-                </>
-              ) : (
-                <Note>{t("This group has no common configuration yet.")}</Note>
-              )}
-              {isOwner ? (
-                <Button
-                  label={t("Offer one of your years as the template")}
-                  variant="ghost"
-                  onPress={() =>
-                    Alert.alert(t("Common configuration"), undefined, [
-                      { text: t("Cancel"), style: "cancel" },
-                      {
-                        text: t("No common configuration"),
-                        onPress: () =>
-                          update.mutate({
-                            groupId: groupId ?? "",
-                            sharedSetupYearId: null,
-                          }),
-                      },
-                      ...years.map((year) => ({
-                        text: year.name,
-                        onPress: () =>
-                          update.mutate({
-                            groupId: groupId ?? "",
-                            sharedSetupYearId: year.id,
-                          }),
-                      })),
-                    ])
-                  }
-                />
-              ) : null}
+                );
+              })}
             </Card>
+            {!frozen && silent.length > 0 ? (
+              <Note>
+                {t(
+                  "Members without a figure have not connected a compatible year or shared their figures yet.",
+                )}
+              </Note>
+            ) : null}
           </Section>
         ) : null}
 
-        {!frozen ? (
+        {isOwner && !frozen && !group.setupRequired ? (
           <Section title={t("Invite people")}>
             <Card style={{ gap: space.md }}>
               <Button
@@ -592,7 +703,7 @@ export default function GroupDetail() {
               />
               <Note>
                 {t(
-                  "Anyone with the link joins directly. It works for a month or until revoked.",
+                  "The link works for a month or until revoked. Each person must connect a compatible year before joining.",
                 )}
               </Note>
             </Card>
@@ -600,11 +711,11 @@ export default function GroupDetail() {
         ) : null}
 
         {isOwner && !frozen ? (
-          <Section title={t("Group settings")}>
+          <Section title={t("Class settings")}>
             {editing ? (
               <Card style={{ gap: space.md }}>
                 <TextField
-                  label={t("Group name")}
+                  label={t("Class name")}
                   value={name}
                   onChangeText={setName}
                   maxLength={100}
@@ -615,16 +726,6 @@ export default function GroupDetail() {
                   onChangeText={setDescription}
                   multiline
                   maxLength={500}
-                />
-                <ChoiceField
-                  label={t("Group type")}
-                  value={kind}
-                  onChange={setKind}
-                  choices={[
-                    { value: "friends", label: t("Friends group") },
-                    { value: "study", label: t("Study group") },
-                    { value: "class", label: t("Class") },
-                  ]}
                 />
                 <SwitchField
                   label={t("Show each member's 30-day trend")}
@@ -650,12 +751,14 @@ export default function GroupDetail() {
                   disabled={name.trim().length < 2}
                   loading={update.isPending}
                   onPress={() =>
-                    update.mutate({
-                      groupId: groupId ?? "",
-                      name: name.trim(),
-                      description: description.trim(),
-                      kind,
-                    })
+                    update.mutate(
+                      {
+                        groupId: groupId ?? "",
+                        name: name.trim(),
+                        description: description.trim(),
+                      },
+                      { onSuccess: () => setEditing(false) },
+                    )
                   }
                 />
                 <Button
@@ -671,7 +774,6 @@ export default function GroupDetail() {
                 onPress={() => {
                   setName(group.name);
                   setDescription(group.description);
-                  setKind(group.kind);
                   setEditing(true);
                 }}
               />
@@ -683,19 +785,19 @@ export default function GroupDetail() {
           <Card style={{ gap: space.sm }}>
             {isOwner ? (
               <Button
-                label={t("Delete group")}
+                label={t("Delete class")}
                 variant="destructive"
                 disabled={destroy.isPending}
                 onPress={() =>
                   Alert.alert(
-                    t("Delete this group?"),
+                    t("Delete this class?"),
                     t(
-                      "The group and its memberships disappear for everyone. Nobody's grades are affected.",
+                      "The class and its memberships disappear for everyone. Nobody's grades are affected.",
                     ),
                     [
                       { text: t("Cancel"), style: "cancel" },
                       {
-                        text: t("Delete group"),
+                        text: t("Delete class"),
                         style: "destructive",
                         onPress: () =>
                           destroy.mutate({ groupId: groupId ?? "" }),
@@ -706,7 +808,7 @@ export default function GroupDetail() {
               />
             ) : (
               <Button
-                label={t("Leave group")}
+                label={t("Leave class")}
                 variant="secondary"
                 disabled={leave.isPending}
                 onPress={() => leave.mutate({ groupId: groupId ?? "" })}

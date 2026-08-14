@@ -1,9 +1,6 @@
-import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
-import { ChoiceField, TextField } from "@/components/field";
-import { groupKindLabel } from "@/components/social/social-ui";
 import {
   Badge,
   Button,
@@ -16,104 +13,37 @@ import {
   Screen,
   Section,
 } from "@/components/ui";
-import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { orpc, queryClient } from "@/lib/orpc";
-import { space, usePalette } from "@/lib/theme";
+import { orpc } from "@/lib/orpc";
+import { usePalette } from "@/lib/theme";
 
-/**
- * Groups: rooms whose members compare general averages. Creating one asks
- * for a name, nothing else.
- */
+/** Classes share one academic structure; friendships remain the generic social link. */
 export default function Groups() {
   const palette = usePalette();
   const router = useRouter();
   const groups = useQuery(orpc.social.groups.list.queryOptions());
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [kind, setKind] = useState<"friends" | "study" | "class">("friends");
-
-  const create = useMutation({
-    ...orpc.social.groups.create.mutationOptions(),
-    onSuccess: async (result) => {
-      haptic("success");
-      setName("");
-      setCreating(false);
-      await queryClient.invalidateQueries({
-        queryKey: orpc.social.groups.list.queryKey(),
-      });
-      router.push(`/social/groups/${result.id}`);
-    },
-  });
 
   return (
     <>
-      <Stack.Screen options={{ title: t("Groups") }} />
+      <Stack.Screen options={{ title: t("Classes") }} />
       <Screen>
         <Note>
           {t(
-            "Compare general averages with a class or a group of friends. Each member decides whether their own figure appears.",
+            "A class brings together people who use the same subjects, periods and grading scale.",
           )}
         </Note>
 
-        {creating ? (
-          <Card style={{ gap: space.md }}>
-            <TextField
-              label={t("Group name")}
-              value={name}
-              onChangeText={setName}
-              maxLength={100}
-              autoFocus
-            />
-            <TextField
-              label={t("Description (optional)")}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              maxLength={500}
-            />
-            <ChoiceField
-              label={t("Group type")}
-              value={kind}
-              onChange={setKind}
-              choices={[
-                { value: "friends", label: t("Friends group") },
-                { value: "study", label: t("Study group") },
-                { value: "class", label: t("Class") },
-              ]}
-            />
-            <Button
-              label={t("Create group")}
-              disabled={name.trim().length < 2}
-              loading={create.isPending}
-              onPress={() =>
-                create.mutate({
-                  name: name.trim(),
-                  description: description.trim(),
-                  kind,
-                })
-              }
-            />
-            <Button
-              label={t("Cancel")}
-              variant="ghost"
-              onPress={() => setCreating(false)}
-            />
-          </Card>
-        ) : (
-          <Button
-            label={t("New group")}
-            icon="add"
-            onPress={() => setCreating(true)}
-          />
-        )}
+        <Button
+          label={t("New class")}
+          icon="add"
+          onPress={() => router.push("/social/groups/new")}
+        />
 
-        <Section title={t("Your groups")}>
+        <Section title={t("Your classes")}>
           {groups.isLoading ? (
             <Loading />
           ) : groups.isError ? (
-            <Problem>{t("Groups could not be refreshed.")}</Problem>
+            <Problem>{t("Classes could not be refreshed.")}</Problem>
           ) : groups.data?.length ? (
             <Card padded={false}>
               {groups.data.map((group, index) => (
@@ -122,17 +52,25 @@ export default function Groups() {
                   first={index === 0}
                   title={group.name}
                   subtitle={
-                    groupKindLabel(group.kind) +
-                    " · " +
                     (group.memberCount === 1
                       ? t("1 member")
-                      : t("{count} members", { count: group.memberCount }))
+                      : t("{count} members", { count: group.memberCount })) +
+                    (group.linkedYearName
+                      ? ` · ${group.linkedYearName}`
+                      : group.setupRequired
+                        ? ` · ${t("Setup required")}`
+                        : ` · ${t("Choose a class year")}`)
                   }
                   trailing={
                     group.state === "frozen" ? (
                       <Badge
                         label={t("On hold")}
                         icon="snow-outline"
+                        toneColor="negative"
+                      />
+                    ) : group.yearStatus === "incompatible" ? (
+                      <Badge
+                        label={t("Incompatible year")}
                         toneColor="negative"
                       />
                     ) : group.role === "owner" ? (
@@ -161,9 +99,9 @@ export default function Groups() {
           ) : (
             <Empty
               icon="people-circle-outline"
-              title={t("No groups yet")}
+              title={t("No classes yet")}
               body={t(
-                "Create one and send the link, or open an invitation someone sent you.",
+                "Create a class from one of your school years, build a new model, or open an invitation.",
               )}
             />
           )}

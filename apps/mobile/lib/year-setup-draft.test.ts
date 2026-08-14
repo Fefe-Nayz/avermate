@@ -22,6 +22,7 @@ const draft = {
   version: 1 as const,
   idempotencyKey: "setup-test-1234",
   yearId: null,
+  presetId: null,
   step: "year" as const,
   year: {
     name: "2026–2027",
@@ -52,6 +53,12 @@ describe("year setup draft persistence", () => {
         JSON.stringify({ ...draft, year: { ...draft.year, startsAt: null } }),
       ),
     ).toBeNull();
+  });
+
+  test("migrates drafts saved before preset selection was persisted", () => {
+    const { presetId: _presetId, ...legacyDraft } = draft;
+
+    expect(parseYearSetupDraft(JSON.stringify(legacyDraft))).toEqual(draft);
   });
 
   test("only a matching completed flow can clear the saved draft", async () => {

@@ -5,6 +5,7 @@ mock.module("expo-localization", () => ({
 }));
 
 const {
+  initialYearSetupPlan,
   isValidYearSetup,
   nativeSchoolYearSuggestion,
   periodDraftsForTemplate,
@@ -14,6 +15,17 @@ const {
 } = await import("./year-setup");
 
 describe("native year setup", () => {
+  test("a preset completes onboarding without inventing periods while scratch opens detailed setup", () => {
+    expect(initialYearSetupPlan("preset-id")).toEqual({
+      completeAfterCreation: true,
+      periodTemplate: "none",
+    });
+    expect(initialYearSetupPlan(null)).toEqual({
+      completeAfterCreation: false,
+      periodTemplate: "none",
+    });
+  });
+
   test("uses the same cumulative period meaning as the web wizard", () => {
     expect(periodNamesForTemplate("semesters-cumulative")).toEqual([
       "Semester 1",

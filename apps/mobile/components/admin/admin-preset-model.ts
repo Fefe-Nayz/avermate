@@ -142,29 +142,74 @@ export function presetConfigurationProblems(
 ): string[] {
   const problems: string[] = [];
   const keys = new Set<string>();
+  if (configuration.subjects.length === 0) {
+    problems.push("At least one subject is required");
+  }
+  if (configuration.subjects.length > 300) {
+    problems.push("Too many top-level subjects");
+  }
   for (const { subject } of flattenPresetSubjects(configuration.subjects)) {
-    if (!subject.key.trim()) problems.push("A subject key is empty");
+    if (!/^[a-zA-Z0-9:._-]{1,128}$/.test(subject.key)) {
+      problems.push(`Invalid subject key: ${subject.key}`);
+    }
     if (keys.has(subject.key))
       problems.push(`Duplicate subject key: ${subject.key}`);
     keys.add(subject.key);
-    if (!subject.name.trim())
+    if (!subject.name.trim() || subject.name.trim().length > 96)
       problems.push(`Subject ${subject.key} has no name`);
+    if ((subject.shortName?.trim().length ?? 0) > 24) {
+      problems.push(`Subject ${subject.key} has an invalid short name`);
+    }
+    if (
+      !Number.isFinite(subject.coefficient) ||
+      subject.coefficient < 0 ||
+      subject.coefficient > 1000
+    ) {
+      problems.push(`Subject ${subject.key} has an invalid coefficient`);
+    }
+    if (subject.children.length > 200) {
+      problems.push(`Subject ${subject.key} has too many children`);
+    }
     if (subject.kind === "subject" && subject.children.length > 0) {
       problems.push(`Plain subject ${subject.key} cannot have children`);
     }
   }
   const averageKeys = new Set<string>();
+  if (configuration.averages.length > 100) {
+    problems.push("Too many custom averages");
+  }
   for (const average of configuration.averages) {
+    if (!/^[a-zA-Z0-9:._-]{1,128}$/.test(average.key)) {
+      problems.push(`Invalid average key: ${average.key}`);
+    }
     if (averageKeys.has(average.key)) {
       problems.push(`Duplicate average key: ${average.key}`);
     }
     averageKeys.add(average.key);
-    if (average.entries.length === 0) {
+    if (!average.name.trim() || average.name.trim().length > 64) {
+      problems.push(`Average ${average.key} has no name`);
+    }
+    if (average.entries.length === 0 || average.entries.length > 200) {
       problems.push(`Average ${average.key} needs a subject`);
     }
+    const entryKeys = new Set<string>();
     for (const entry of average.entries) {
       if (!keys.has(entry.subjectKey)) {
         problems.push(`Average ${average.key} references ${entry.subjectKey}`);
+      }
+      if (entryKeys.has(entry.subjectKey)) {
+        problems.push(
+          `Average ${average.key} repeats subject ${entry.subjectKey}`,
+        );
+      }
+      entryKeys.add(entry.subjectKey);
+      if (
+        entry.coefficient !== null &&
+        (!Number.isFinite(entry.coefficient) ||
+          entry.coefficient < 0 ||
+          entry.coefficient > 1000)
+      ) {
+        problems.push(`Average ${average.key} has an invalid coefficient`);
       }
     }
   }

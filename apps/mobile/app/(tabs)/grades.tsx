@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/icon";
 import { gradeRatio, type Grade } from "@avermate/core";
 import { Heading,
@@ -25,7 +24,6 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  */
 export default function Grades() {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isLoading, graph, refresh } = useYear();
   const [query, setQuery] = useState("");
@@ -67,9 +65,10 @@ export default function Grades() {
 
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
-        paddingTop: insets.top + space.md,
+        paddingTop: space.md,
         paddingHorizontal: space.lg,
         paddingBottom: space.xxxl,
         gap: space.lg,

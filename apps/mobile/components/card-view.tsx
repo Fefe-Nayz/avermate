@@ -46,13 +46,13 @@ export function CardView({
   return (
     <Section title={title}>
       <Card padded={!listy}>
-        <Body spec={spec} result={result} onPress={onPress} />
+        <CardResultBody spec={spec} result={result} onPress={onPress} />
       </Card>
     </Section>
   );
 }
 
-function Body({
+export function CardResultBody({
   spec,
   result,
   onPress,
