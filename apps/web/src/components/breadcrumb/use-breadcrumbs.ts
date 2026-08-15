@@ -45,8 +45,18 @@ export function useBreadcrumbs(): Crumb[] {
       })) ?? []
 
     switch (root) {
-      case "dashboard":
+      case "dashboard": {
+        if (segments[1] === "cards") {
+          return [
+            { key: "dashboard", label: t("Dashboard"), href: "/dashboard" },
+            {
+              key: "card",
+              label: segments[2] === "new" ? t("New card") : t("Edit card"),
+            },
+          ]
+        }
         return [{ key: "dashboard", label: t("Dashboard") }]
+      }
 
       case "subjects": {
         const crumbs: Crumb[] = [
@@ -165,11 +175,27 @@ export function useBreadcrumbs(): Crumb[] {
         return crumbs
       }
 
-      case "insights":
+      case "insights": {
+        if (segments[1] === "cards") {
+          return [
+            { key: "insights", label: t("Insights"), href: "/insights" },
+            {
+              key: "card",
+              label: segments[2] === "new" ? t("New card") : t("Edit card"),
+            },
+          ]
+        }
         return [{ key: "insights", label: t("Insights") }]
+      }
 
       case "review":
         return [{ key: "review", label: t("Year in review") }]
+
+      case "announcements":
+        return [{ key: "announcements", label: t("Announcements") }]
+
+      case "more":
+        return [{ key: "more", label: t("More") }]
 
       case "social": {
         const crumbs: Crumb[] = [
@@ -198,10 +224,14 @@ export function useBreadcrumbs(): Crumb[] {
         const section = segments[1]
         const labels: Record<string, string> = {
           appearance: t("Appearance"),
+          navigation: t("Navigation"),
           year: t("Year & periods"),
+          preset: t("Year preset"),
           averages: t("Custom averages"),
           account: t("Account"),
+          integrations: t("Integrations"),
           social: t("Social & sharing"),
+          cards: t("Cards"),
           about: t("About"),
         }
         if (section && labels[section]) {
@@ -219,6 +249,8 @@ export function useBreadcrumbs(): Crumb[] {
           users: t("Users"),
           announcements: t("Announcements"),
           feedback: t("Feedback"),
+          presets: t("Curriculum presets"),
+          "card-templates": t("Card gallery"),
           social: t("Social moderation"),
         }
         if (section && labels[section]) {

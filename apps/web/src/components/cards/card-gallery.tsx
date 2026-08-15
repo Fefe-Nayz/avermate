@@ -10,15 +10,9 @@ import {
   type WidgetDefinitionV1,
   type WidgetSurface,
 } from "@avermate/core"
+import { SelectControl } from "@/components/forms/controls"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
@@ -245,7 +239,9 @@ function GalleryTile({
             <span className="w-32 shrink-0 text-xs text-muted-foreground">
               {slotLabels[slot.kind]}
             </span>
-            <Select
+            <SelectControl
+              aria-label={slotLabels[slot.kind]}
+              className="h-8 flex-1 md:h-8"
               value={mapping.get(slot.placeholderId) ?? ""}
               onValueChange={(value) => {
                 if (!value) return
@@ -255,18 +251,8 @@ function GalleryTile({
                   return next
                 })
               }}
-            >
-              <SelectTrigger className="h-8 flex-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {slotOptions[slot.kind].map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={slotOptions[slot.kind]}
+            />
           </div>
         ))}
         {unfillable ? (

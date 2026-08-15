@@ -227,6 +227,7 @@ export default function AverageAnalyticsPage({
           series={series}
           emptyHint={t("Record a few grades and the curve will appear here.")}
           height={320}
+          zoomPresets
         />
 
         {composition.length > 0 ? (

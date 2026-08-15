@@ -7,7 +7,7 @@ import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/toolt
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
 import { useExtracted, useFormatter } from "next-intl"
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, type ReactNode } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
@@ -111,11 +111,14 @@ export function MultiSeriesAverageChart({
   series,
   emptyHint,
   height = 320,
+  headerActions,
 }: {
   title: string
   series: readonly AverageSeries[]
   emptyHint?: string
   height?: number
+  /** Extra controls seated right of the zoom presets in the header row. */
+  headerActions?: ReactNode
 }) {
   const t = useExtracted()
   const format = useFormatter()
@@ -458,7 +461,10 @@ export function MultiSeriesAverageChart({
   if (prepared.rows.length < 2) {
     return (
       <section className="flex flex-col gap-2">
-        <h3 className="px-1 text-sm font-medium">{title}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <h3 className="text-sm font-medium">{title}</h3>
+          {headerActions}
+        </div>
         <Card>
           <CardContent>
             <p className="py-8 text-center text-sm text-muted-foreground">
@@ -482,7 +488,10 @@ export function MultiSeriesAverageChart({
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <h3 className="text-sm font-medium">{title}</h3>
-        <ZoomPresetGroup control={presets} domain={prepared.domain} />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <ZoomPresetGroup control={presets} domain={prepared.domain} />
+          {headerActions}
+        </div>
       </div>
       <Card className="gap-3 py-4">
         <CardHeader className="gap-3 px-4">

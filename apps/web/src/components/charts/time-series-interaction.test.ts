@@ -11,6 +11,7 @@ import {
   resolveChartKeyboardCommand,
   resolveNearestSeriesPoints,
   shouldHandleChartWheel,
+  viewportValues,
   zoomDomainAt,
 } from "./time-series-interaction"
 
@@ -291,6 +292,39 @@ describe("interaction event arbitration", () => {
         focusedWithin: true,
       }),
       true
+    )
+  })
+
+  it("frames the visible window plus each series' crossing endpoints", () => {
+    const rows = [
+      { seriesId: "a", timestamp: 0, value: 2 },
+      { seriesId: "a", timestamp: 40, value: 8 },
+      { seriesId: "a", timestamp: 60, value: 9 },
+      { seriesId: "a", timestamp: 100, value: 30 },
+      { seriesId: "b", timestamp: 10, value: 1 },
+      { seriesId: "b", timestamp: 90, value: 20 },
+    ]
+
+    // In-window samples plus, per series, the off-screen endpoints of the
+    // segments that cross the edges — never the far tails beyond those.
+    const framed = viewportValues(rows, [35, 65]).toSorted((l, r) => l - r)
+    assert.deepEqual(framed, [1, 2, 8, 9, 20, 30])
+
+    // A window between two samples still frames the crossing segment.
+    const between = viewportValues(
+      [
+        { seriesId: "a", timestamp: 0, value: 5 },
+        { seriesId: "a", timestamp: 100, value: 15 },
+      ],
+      [40, 60]
+    ).toSorted((l, r) => l - r)
+    assert.deepEqual(between, [5, 15])
+
+    // A window entirely past a series' data frames nothing from it: there is
+    // no crossing segment, so the caller falls back to the full domain.
+    assert.deepEqual(
+      viewportValues([{ seriesId: "a", timestamp: 0, value: 5 }], [40, 60]),
+      []
     )
   })
 

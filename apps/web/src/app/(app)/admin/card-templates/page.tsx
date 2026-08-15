@@ -19,17 +19,11 @@ import { useWidgetResult } from "@/components/cards/use-widget-result"
 import { WidgetBody } from "@/components/cards/widget-view"
 import { resolveWidgetRow } from "@/components/cards/widget-row"
 import { PageMeta } from "@/components/shell/page-chrome"
+import { SelectControl } from "@/components/forms/controls"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
@@ -123,22 +117,19 @@ export default function AdminCardTemplatesPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select
+          <SelectControl
+            aria-label={t("Pick one of your cards…")}
+            className="w-72 md:w-72"
+            placeholder={t("Pick one of your cards…")}
             value={sourceCardId}
             onValueChange={(value) => setSourceCardId(value ?? "")}
-          >
-            <SelectTrigger className="w-72">
-              <SelectValue placeholder={t("Pick one of your cards…")} />
-            </SelectTrigger>
-            <SelectContent>
-              {sources.map((card) => (
-                <SelectItem key={card.id} value={card.id}>
-                  {(card.title?.trim() || card.metric) +
-                    (card.surface === "insights" ? " · Insights" : "")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={sources.map((card) => ({
+              value: card.id,
+              label:
+                (card.title?.trim() || card.metric) +
+                (card.surface === "insights" ? " · Insights" : ""),
+            }))}
+          />
           <Button
             disabled={!sourceCardId || create.isPending}
             onClick={createFromCard}

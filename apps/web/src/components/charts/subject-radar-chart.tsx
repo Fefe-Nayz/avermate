@@ -6,7 +6,7 @@ import { useExtracted, useFormatter } from "next-intl"
 import { useMemo } from "react"
 import { ResponsiveChart } from "./responsive-chart"
 import { radarSpec, type RadarPoint } from "./subject-radar-spec"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 
 /** The headline subjects on one comparable radial scale. */
@@ -78,24 +78,24 @@ export function SubjectRadarChart({ title }: { title: string }) {
   if (points.length < 3) return null
 
   return (
-    <Card className="gap-2 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      </CardHeader>
-      {/* The ring is bound by the shorter side of its box, so height buys
-          label room as directly as width does. */}
-      <CardContent className="h-[340px] px-2 text-muted-foreground">
-        <ResponsiveChart
-          ariaDescription={t(
-            "Comparison of the current averages for your main subjects."
-          )}
-          ariaLabel={title}
-          definition={definition}
-          entrance="rise"
-          height={340}
-          initialWidth={360}
-        />
-      </CardContent>
-    </Card>
+    <section className="flex min-h-0 flex-col gap-2">
+      <h3 className="px-1 text-sm font-medium">{title}</h3>
+      <Card className="min-h-0 flex-1 gap-2 py-4">
+        {/* The ring is bound by the shorter side of its box, so height buys
+            label room as directly as width does. */}
+        <CardContent className="h-[340px] px-2 text-muted-foreground">
+          <ResponsiveChart
+            ariaDescription={t(
+              "Comparison of the current averages for your main subjects."
+            )}
+            ariaLabel={title}
+            definition={definition}
+            entrance="rise"
+            height={340}
+            initialWidth={360}
+          />
+        </CardContent>
+      </Card>
+    </section>
   )
 }

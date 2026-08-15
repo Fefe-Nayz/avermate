@@ -319,34 +319,45 @@ export default function SubjectPage({
             : null}
         </div>
 
-        {children.length > 0 ? (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-pressed={preferences.chartSettings.showSubSubjects}
-              onClick={() =>
-                updatePreferences({
-                  chartSettings: {
-                    ...preferences.chartSettings,
-                    showSubSubjects: !preferences.chartSettings.showSubSubjects,
-                  },
-                })
-              }
-            >
-              <LayersIcon className="size-4" />
-              {preferences.chartSettings.showSubSubjects
-                ? t("Hide child series")
-                : t("Show child series")}
-            </Button>
-          </div>
-        ) : null}
-
         <MultiSeriesAverageChart
           title={t("Average over time")}
           series={averageSeries}
           height={340}
           emptyHint={t("Record a few grades and the curve will appear here.")}
+          headerActions={
+            children.length > 0 ? (
+              <Button
+                variant={
+                  preferences.chartSettings.showSubSubjects
+                    ? "secondary"
+                    : "ghost"
+                }
+                size="sm"
+                aria-pressed={preferences.chartSettings.showSubSubjects}
+                aria-label={
+                  preferences.chartSettings.showSubSubjects
+                    ? t("Hide child series")
+                    : t("Show child series")
+                }
+                onClick={() =>
+                  updatePreferences({
+                    chartSettings: {
+                      ...preferences.chartSettings,
+                      showSubSubjects:
+                        !preferences.chartSettings.showSubSubjects,
+                    },
+                  })
+                }
+              >
+                <LayersIcon className="size-4" />
+                <span className="hidden sm:inline">
+                  {preferences.chartSettings.showSubSubjects
+                    ? t("Hide child series")
+                    : t("Show child series")}
+                </span>
+              </Button>
+            ) : undefined
+          }
         />
 
         <GradeResultsChart
@@ -358,94 +369,95 @@ export default function SubjectPage({
         <ImpactGrid readings={impacts} title={t("Impact on averages")} />
 
         {children.length > 0 ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm font-medium">
-                {t("Inside this one")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-2">
-              <ul>
-                {children.map((child) => (
-                  <li key={child.id}>
-                    <Link
-                      href={`/subjects/${child.id}`}
-                      className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {child.name}
-                      </span>
-                      <CoefficientBadge coefficient={child.coefficient} />
-                      <AverageValue
-                        ratio={graph.ratio(child.id)}
-                        colored
-                        animate={false}
-                        className="text-sm font-medium"
-                      />
-                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <section className="flex flex-col gap-2">
+            <h3 className="px-1 text-sm font-medium">{t("Inside this one")}</h3>
+            <Card className="gap-2 py-4">
+              <CardContent className="px-2">
+                <ul>
+                  {children.map((child) => (
+                    <li key={child.id}>
+                      <Link
+                        href={`/subjects/${child.id}`}
+                        className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          {child.name}
+                        </span>
+                        <CoefficientBadge coefficient={child.coefficient} />
+                        <AverageValue
+                          ratio={graph.ratio(child.id)}
+                          colored
+                          animate={false}
+                          className="text-sm font-medium"
+                        />
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
         ) : null}
 
-        <Card className="gap-2 py-4">
-          <CardHeader className="flex items-center px-4">
-            <CardTitle className="flex-1 text-sm font-medium">
-              {t("Grades")}
-            </CardTitle>
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <h3 className="text-sm font-medium">{t("Grades")}</h3>
             <Button
               variant="ghost"
               size="sm"
-              className="-mr-2 h-7 text-xs"
+              className="h-7 text-xs"
               render={<Link href={`/grades/new?subject=${subjectId}`} />}
             >
               <PlusIcon className="size-3.5" />
               {t("Add")}
             </Button>
-          </CardHeader>
-          <CardContent className="px-2">
-            {grades.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {t("No grade recorded here yet.")}
-              </p>
-            ) : (
-              <ul>
-                {grades.map((grade) => (
-                  <li key={grade.id}>
-                    <Link
-                      href={`/grades/${grade.id}`}
-                      className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {grade.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {format.dateTime(grade.passedAt, {
-                            day: "numeric",
-                            month: "short",
-                          })}
-                          {grade.subjectId !== subjectId ? (
-                            <span
-                              className={cn("ms-1", "text-muted-foreground/80")}
-                            >
-                              · {graph.byId(grade.subjectId)?.name}
-                            </span>
-                          ) : null}
-                        </p>
-                      </div>
-                      <CoefficientBadge coefficient={grade.coefficient} />
-                      <ResultBadge ratio={gradeRatio(grade)} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+          <Card className="gap-2 py-4">
+            <CardContent className="px-2">
+              {grades.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {t("No grade recorded here yet.")}
+                </p>
+              ) : (
+                <ul>
+                  {grades.map((grade) => (
+                    <li key={grade.id}>
+                      <Link
+                        href={`/grades/${grade.id}`}
+                        className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {grade.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {format.dateTime(grade.passedAt, {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                            {grade.subjectId !== subjectId ? (
+                              <span
+                                className={cn(
+                                  "ms-1",
+                                  "text-muted-foreground/80"
+                                )}
+                              >
+                                · {graph.byId(grade.subjectId)?.name}
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+                        <CoefficientBadge coefficient={grade.coefficient} />
+                        <ResultBadge ratio={gradeRatio(grade)} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
       </div>
     </>
   )

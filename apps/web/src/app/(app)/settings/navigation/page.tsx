@@ -9,14 +9,8 @@ import {
 } from "lucide-react"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
+import { SelectControl } from "@/components/forms/controls"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { usePreferences } from "@/hooks/use-preferences"
 import {
@@ -103,7 +97,9 @@ export default function NavigationSettingsPage() {
                 <span className="w-24 shrink-0 text-sm text-muted-foreground">
                   {t("Slot {number}", { number: String(slot + 1) })}
                 </span>
-                <Select
+                <SelectControl
+                  aria-label={t("Slot {number}", { number: String(slot + 1) })}
+                  className="flex-1"
                   value={href}
                   onValueChange={(value) => {
                     if (!value) return
@@ -115,18 +111,11 @@ export default function NavigationSettingsPage() {
                     next[slot] = value
                     saveTabs(next)
                   }}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CUSTOMIZABLE_NAV_HREFS.map((candidate) => (
-                      <SelectItem key={candidate} value={candidate}>
-                        {labels[candidate] ?? candidate}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={CUSTOMIZABLE_NAV_HREFS.map((candidate) => ({
+                    value: candidate,
+                    label: labels[candidate] ?? candidate,
+                  }))}
+                />
               </div>
             ))}
           </div>

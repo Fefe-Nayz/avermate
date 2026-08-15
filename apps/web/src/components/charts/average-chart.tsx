@@ -7,9 +7,10 @@ import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
+import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
 import { lineStyleCurve } from "./line-style"
 import {
@@ -60,11 +61,17 @@ export function AverageChart({
   series,
   emptyHint,
   height = 220,
+  zoomPresets = false,
 }: {
   title: string
   series: SeriesPoint[]
   emptyHint?: string
   height?: number
+  /**
+   * Named zoom windows in the header. Analytical pages opt in; the
+   * dashboard keeps its glanceable chart free of controls.
+   */
+  zoomPresets?: boolean
 }) {
   const t = useExtracted()
   const format = useFormatter()
@@ -357,18 +364,20 @@ export function AverageChart({
     ]
   )
 
+  const presets = useViewportPresets(prepared.domain)
+
   if (series.length < 2) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {emptyHint ?? t("Not enough data yet")}
-          </p>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-2">
+        <h3 className="px-1 text-sm font-medium">{title}</h3>
+        <Card>
+          <CardContent>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {emptyHint ?? t("Not enough data yet")}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
     )
   }
 
@@ -381,33 +390,42 @@ export function AverageChart({
   )
 
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 text-muted-foreground">
-        <InteractiveTimeSeriesChart
-          ariaLabel={title}
-          buildDefinition={buildDefinition}
-          domain={prepared.domain}
-          formatDomain={(domain) =>
-            t("Visible from {start} to {end}", {
-              start: format.dateTime(new Date(domain[0]), {
-                day: "numeric",
-                month: "short",
-              }),
-              end: format.dateTime(new Date(domain[1]), {
-                day: "numeric",
-                month: "short",
-              }),
-            })
-          }
-          height={height}
-          interactionHint={interactionHint}
-          maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
-          resetLabel={t("Reset chart view")}
-        />
-      </CardContent>
-    </Card>
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h3 className="text-sm font-medium">{title}</h3>
+        {zoomPresets ? (
+          <ZoomPresetGroup control={presets} domain={prepared.domain} />
+        ) : null}
+      </div>
+      <Card className="gap-3 py-4">
+        <CardContent className="px-2 text-muted-foreground">
+          <InteractiveTimeSeriesChart
+            ariaLabel={title}
+            buildDefinition={buildDefinition}
+            domain={prepared.domain}
+            formatDomain={(domain) =>
+              t("Visible from {start} to {end}", {
+                start: format.dateTime(new Date(domain[0]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+                end: format.dateTime(new Date(domain[1]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+              })
+            }
+            height={height}
+            interactionHint={interactionHint}
+            maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
+            onViewportChange={
+              zoomPresets ? presets.onViewportChange : undefined
+            }
+            resetLabel={t("Reset chart view")}
+            viewportRequest={zoomPresets ? presets.request : null}
+          />
+        </CardContent>
+      </Card>
+    </section>
   )
 }

@@ -61,6 +61,16 @@
     );
   }
 
+  /* While the rewind pill floats above the tab bar, the pane digs matching
+     clearance so the last content can still scroll above it. */
+  @media (max-width: 767px) {
+    :root[data-rewind] .pane-inset {
+      padding-bottom: calc(
+        var(--spacing-tabbar) + var(--spacing-safe-bottom) + 1rem + 4.5rem
+      );
+    }
+  }
+
   /* Horizontal rails: period pickers, subject chips, story cards.
      `--rail-inset` is the page gutter the rail has to reproduce for itself,
      because a rail bleeds past that gutter to show that it scrolls. */

@@ -3,6 +3,7 @@
 import {
   useCallback,
   useRef,
+  useState,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -41,8 +42,14 @@ export function DayScrubber({
   className?: string
 }) {
   const stripRef = useRef<HTMLDivElement>(null)
-  const draggingRef = useRef(false)
+  // Touch drags preview without committing: every committed day re-filters
+  // the whole app, and doing that at finger speed janks a phone. The day
+  // under the finger is highlighted live, and committed once on release; a
+  // mouse commits continuously, since a desktop absorbs it.
+  const draggingRef = useRef<{ touch: boolean } | null>(null)
+  const [previewDay, setPreviewDay] = useState<number | null>(null)
   const months = new Set(monthStarts)
+  const shownDay = previewDay ?? selectedDay
 
   const dayAt = useCallback(
     (clientX: number) => {
@@ -77,10 +84,18 @@ export function DayScrubber({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (disabled) return
       if (event.pointerType === "mouse" && event.button !== 0) return
-      event.currentTarget.setPointerCapture(event.pointerId)
-      draggingRef.current = true
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        // A capture refusal (exotic input, synthetic events) only costs the
+        // capture; the drag still tracks while the pointer stays over us.
+      }
+      const touch = event.pointerType !== "mouse"
+      draggingRef.current = { touch }
       followCursor(event.clientX)
-      onSelectDay(dayAt(event.clientX))
+      const day = dayAt(event.clientX)
+      if (touch) setPreviewDay(day)
+      else onSelectDay(day)
     },
     [dayAt, disabled, followCursor, onSelectDay]
   )
@@ -89,22 +104,35 @@ export function DayScrubber({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (disabled) return
       followCursor(event.clientX)
-      if (draggingRef.current) onSelectDay(dayAt(event.clientX))
+      const dragging = draggingRef.current
+      if (!dragging) return
+      const day = dayAt(event.clientX)
+      if (dragging.touch) setPreviewDay(day)
+      else onSelectDay(day)
     },
     [dayAt, disabled, followCursor, onSelectDay]
   )
 
   const finishPointer = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      draggingRef.current = false
+      const dragging = draggingRef.current
+      draggingRef.current = null
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      if (dragging?.touch) {
+        setPreviewDay((preview: number | null) => {
+          if (preview !== null && event.type !== "pointercancel") {
+            onSelectDay(preview)
+          }
+          return null
+        })
       }
       if (event.type === "pointercancel" || event.pointerType !== "mouse") {
         restCursor()
       }
     },
-    [restCursor]
+    [onSelectDay, restCursor]
   )
 
   const handleKeyDown = useCallback(
@@ -143,7 +171,7 @@ export function DayScrubber({
       aria-orientation="horizontal"
       aria-valuemax={totalDays}
       aria-valuemin={0}
-      aria-valuenow={selectedDay}
+      aria-valuenow={shownDay}
       aria-valuetext={ariaValueText}
       className={cn(
         "scrubber flex h-9 touch-none items-end justify-between overflow-hidden rounded-md px-0.5 pb-0.5",
@@ -161,7 +189,7 @@ export function DayScrubber({
       tabIndex={disabled ? -1 : 0}
     >
       {Array.from({ length: totalDays + 1 }, (_, day) => {
-        const isSelected = day === selectedDay
+        const isSelected = day === shownDay
         const isMonthStart = months.has(day)
         return (
           <span
@@ -173,7 +201,7 @@ export function DayScrubber({
                 : isMonthStart
                   ? "h-4 bg-muted-foreground/70"
                   : "h-3 bg-muted-foreground/45",
-              !isSelected && day > selectedDay && "opacity-40"
+              !isSelected && day > shownDay && "opacity-40"
             )}
             key={day}
             style={{ "--i": day } as CSSProperties}

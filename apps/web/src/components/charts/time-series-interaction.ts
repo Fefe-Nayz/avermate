@@ -74,21 +74,47 @@ export function createIndependentSeriesFocus<TDatum>(
 }
 
 /**
- * The sample values inside the visible window, with a small margin on each
- * side so a segment entering the plot keeps its immediate neighbor framed.
- * Feeding these to the y-domain instead of the whole series is what makes
- * zooming reveal detail: the vertical scale follows what is on screen.
+ * The values the y-domain must cover for the visible window: every sample
+ * inside it, plus — per series — the nearest sample on each side whenever a
+ * segment crosses the window's edge. None of the line styles (linear,
+ * monotone, step) ever leaves the range of a segment's two endpoints, so
+ * framing those off-screen endpoints guarantees the drawn curve only ever
+ * exits through the left and right of the plot, never the top or bottom.
  */
 export function viewportValues(
-  rows: readonly { timestamp: number; value: number }[],
+  rows: readonly { timestamp: number; value: number; seriesId?: string }[],
   viewport: NumericDomain
 ): number[] {
-  const span = Math.abs(viewport[1] - viewport[0])
-  const start = Math.min(viewport[0], viewport[1]) - span * 0.05
-  const end = Math.max(viewport[0], viewport[1]) + span * 0.05
-  return rows
-    .filter((row) => row.timestamp >= start && row.timestamp <= end)
-    .map((row) => row.value)
+  const start = Math.min(viewport[0], viewport[1])
+  const end = Math.max(viewport[0], viewport[1])
+
+  const bySeries = new Map<string, { timestamp: number; value: number }[]>()
+  for (const row of rows) {
+    const key = row.seriesId ?? ""
+    const list = bySeries.get(key)
+    if (list) list.push(row)
+    else bySeries.set(key, [row])
+  }
+
+  const values: number[] = []
+  for (const series of bySeries.values()) {
+    series.sort((left, right) => left.timestamp - right.timestamp)
+    let before: { value: number } | null = null
+    let after: { value: number } | null = null
+    let inside = false
+    for (const point of series) {
+      if (point.timestamp < start) before = point
+      else if (point.timestamp > end) {
+        after ??= point
+      } else {
+        values.push(point.value)
+        inside = true
+      }
+    }
+    if (before && (inside || after)) values.push(before.value)
+    if (after && (inside || before)) values.push(after.value)
+  }
+  return values
 }
 
 /** Chart zoom needs an explicitly active listener so wheel can be cancelled. */
