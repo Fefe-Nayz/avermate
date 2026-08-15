@@ -37,6 +37,7 @@ import {
   classTemplateSummary,
   classYearInsertStatements,
   classYearStatus,
+  classYearStatuses,
   compatibleClassYears,
   parseClassTemplate,
   serializeClassTemplate,
@@ -402,43 +403,64 @@ export const socialGroupsRouter = {
       .innerJoin(socialGroups, eq(socialGroups.id, groupMemberships.groupId))
       .where(eq(groupMemberships.userId, userId))
       .orderBy(desc(socialGroups.createdAt));
-    return Promise.all(
-      rows.map(async (row) => {
-        const template = parseClassTemplate(row.group.classTemplate);
-        const status = await classYearStatus(
-          userId,
-          row.membership.yearId,
-          template,
-        );
-        const linkedYear = row.membership.yearId
-          ? await db
-              .select({ name: years.name })
-              .from(years)
-              .where(
-                and(
-                  eq(years.id, row.membership.yearId),
-                  eq(years.userId, userId),
-                ),
-              )
-              .limit(1)
-              .then((items) => items[0] ?? null)
-          : null;
-        return {
-          id: row.group.id,
-          name: row.group.name,
-          description: row.group.description,
-          kind: row.group.kind,
-          state: row.group.state,
-          role: row.membership.role,
-          shareAverage: row.membership.shareAverage,
-          setupRequired: !template,
-          yearStatus: status,
-          linkedYearName: linkedYear?.name ?? null,
-          memberCount: await memberCountOf(row.group.id),
-          createdAt: row.group.createdAt,
-        };
-      }),
+    // One batched status pass, one year-name lookup and one grouped count
+    // for the whole list — this handler used to fan out per group.
+    const templates = rows.map((row) =>
+      parseClassTemplate(row.group.classTemplate),
     );
+    const statuses = await classYearStatuses(
+      rows.map((row, index) => ({
+        userId,
+        yearId: row.membership.yearId,
+        template: templates[index] ?? null,
+      })),
+    );
+    const linkedYearIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.membership.yearId ? [row.membership.yearId] : [],
+        ),
+      ),
+    ];
+    const yearNameRows =
+      linkedYearIds.length === 0
+        ? []
+        : await db
+            .select({ id: years.id, name: years.name })
+            .from(years)
+            .where(
+              and(inArray(years.id, linkedYearIds), eq(years.userId, userId)),
+            );
+    const yearNames = new Map(yearNameRows.map((row) => [row.id, row.name]));
+    const groupIds = rows.map((row) => row.group.id);
+    const countRows =
+      groupIds.length === 0
+        ? []
+        : await db
+            .select({ groupId: groupMemberships.groupId, value: count() })
+            .from(groupMemberships)
+            .where(inArray(groupMemberships.groupId, groupIds))
+            .groupBy(groupMemberships.groupId);
+    const memberCounts = new Map(
+      countRows.map((row) => [row.groupId, row.value]),
+    );
+
+    return rows.map((row, index) => ({
+      id: row.group.id,
+      name: row.group.name,
+      description: row.group.description,
+      kind: row.group.kind,
+      state: row.group.state,
+      role: row.membership.role,
+      shareAverage: row.membership.shareAverage,
+      setupRequired: !templates[index],
+      yearStatus: statuses[index] as NonNullable<(typeof statuses)[number]>,
+      linkedYearName: row.membership.yearId
+        ? (yearNames.get(row.membership.yearId) ?? null)
+        : null,
+      memberCount: memberCounts.get(row.group.id) ?? 0,
+      createdAt: row.group.createdAt,
+    }));
   }),
 
   get: protectedProcedure
@@ -476,14 +498,21 @@ export const socialGroupsRouter = {
         includeTrend: access.group.showTrend,
         includeGradeCount: access.group.showGradeCount,
       };
+      // One batched status pass for every member instead of a five-query
+      // fan-out per member.
+      const memberStatuses = await classYearStatuses(
+        memberships.map((row) => ({
+          userId: row.userId,
+          yearId: row.yearId,
+          template: classTemplate,
+        })),
+      );
       const members = await Promise.all(
-        memberships.map(async (row) => {
+        memberships.map(async (row, index) => {
           const who = named.get(row.userId);
-          const yearStatus = await classYearStatus(
-            row.userId,
-            row.yearId,
-            classTemplate,
-          );
+          const yearStatus = memberStatuses[index] as NonNullable<
+            (typeof memberStatuses)[number]
+          >;
           const shares =
             !frozen && row.shareAverage && yearStatus === "connected";
           const academic =
@@ -834,6 +863,9 @@ export const socialGroupsRouter = {
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
       assertOwner(access);
+      // A frozen group is an administrative hold: the reported owner must
+      // not be able to destroy the evidence while moderation looks at it.
+      assertActive(access.group);
       await db.delete(socialGroups).where(eq(socialGroups.id, input.groupId));
       return { deleted: true };
     }),
@@ -844,10 +876,11 @@ export const socialGroupsRouter = {
       const access = await groupAccess(input.groupId, context.session.user.id);
       if (access.membership.role === "owner") {
         if ((await memberCountOf(input.groupId)) > 1) {
-          badRequest(
-            "Transfer or remove the other members first, or delete the group",
-          );
+          badRequest("Remove the other members first, or delete the group");
         }
+        // Owner-leave of an empty group deletes it, so the moderation hold
+        // applies here exactly as it does to delete.
+        assertActive(access.group);
         await db.delete(socialGroups).where(eq(socialGroups.id, input.groupId));
         return { left: true };
       }
@@ -940,9 +973,18 @@ export const socialGroupsRouter = {
           8,
           1,
         );
-        const [created] = await db
-          .insert(years)
-          .values({
+        // The year id is drawn up front so the whole adoption — year,
+        // subjects, averages, entries and the membership repoint — commits
+        // as one batch instead of a trail of partial writes.
+        const yearId = newId("y");
+        const materialized = materializePresetConfiguration(
+          builderConfig,
+          yearId,
+          userId,
+        );
+        const statements = [
+          db.insert(years).values({
+            id: yearId,
             name: input.name?.trim() || access.group.name,
             startsAt: own?.startsAt ?? septemberFirst,
             endsAt:
@@ -952,24 +994,28 @@ export const socialGroupsRouter = {
             passingRatio: own?.passingRatio ?? 0.5,
             decimals: own?.decimals ?? 2,
             userId,
-          })
-          .returning();
-        if (!created) badRequest("The year could not be created");
-        const materialized = materializePresetConfiguration(
-          builderConfig,
-          created.id,
-          userId,
+          }),
+          ...(materialized.subjectRows.length > 0
+            ? [db.insert(subjects).values(materialized.subjectRows)]
+            : []),
+          ...(materialized.averageRows.length > 0
+            ? [db.insert(customAverages).values(materialized.averageRows)]
+            : []),
+          ...(materialized.entryRows.length > 0
+            ? [db.insert(customAverageEntries).values(materialized.entryRows)]
+            : []),
+          db
+            .update(groupMemberships)
+            .set({ yearId, shareAverage: false, updatedAt: new Date() })
+            .where(eq(groupMemberships.id, access.membership.id)),
+        ];
+        await db.batch(
+          statements as [
+            (typeof statements)[number],
+            ...(typeof statements)[number][],
+          ],
         );
-        if (materialized.subjectRows.length > 0) {
-          await db.insert(subjects).values(materialized.subjectRows);
-        }
-        if (materialized.averageRows.length > 0) {
-          await db.insert(customAverages).values(materialized.averageRows);
-        }
-        if (materialized.entryRows.length > 0) {
-          await db.insert(customAverageEntries).values(materialized.entryRows);
-        }
-        return { yearId: created.id };
+        return { yearId };
       }
 
       const [reference] = await db
@@ -1000,9 +1046,33 @@ export const socialGroupsRouter = {
                 ),
               );
 
-      const [created] = await db
-        .insert(years)
-        .values({
+      // Ids are drawn up front so parent links and average entries can be
+      // remapped in one pass — the schema deliberately has no subject FK —
+      // and so the whole copy plus the membership repoint commits as one
+      // batch instead of a trail of partial writes.
+      const yearId = newId("y");
+      const subjectIds = new Map(
+        subjectRows.map((row) => [row.id, newId("sub")]),
+      );
+      const averageIds = new Map(
+        averageRows.map((row) => [row.id, newId("avg")]),
+      );
+      const copiedEntryRows = entryRows.flatMap((entry) => {
+        const averageId = averageIds.get(entry.averageId);
+        const subjectId = subjectIds.get(entry.subjectId);
+        if (!averageId || !subjectId) return [];
+        return [
+          {
+            averageId,
+            subjectId,
+            coefficient: entry.coefficient,
+            includeChildren: entry.includeChildren,
+          },
+        ];
+      });
+      const statements = [
+        db.insert(years).values({
+          id: yearId,
           name: input.name?.trim() || reference.name,
           startsAt: reference.startsAt,
           endsAt: reference.endsAt,
@@ -1011,74 +1081,71 @@ export const socialGroupsRouter = {
           passingRatio: reference.passingRatio,
           decimals: reference.decimals,
           userId,
-        })
-        .returning();
-      if (!created) badRequest("The year could not be created");
-
-      // Ids are drawn up front so parent links and average entries can be
-      // remapped in one pass — the schema deliberately has no subject FK.
-      const subjectIds = new Map(
-        subjectRows.map((row) => [row.id, newId("sub")]),
+        }),
+        ...(subjectRows.length > 0
+          ? [
+              db.insert(subjects).values(
+                subjectRows.map((row) => ({
+                  id: subjectIds.get(row.id),
+                  name: row.name,
+                  shortName: row.shortName,
+                  parentId: row.parentId
+                    ? (subjectIds.get(row.parentId) ?? null)
+                    : null,
+                  coefficient: row.coefficient,
+                  kind: row.kind,
+                  isMain: row.isMain,
+                  sortOrder: row.sortOrder,
+                  yearId,
+                  userId,
+                })),
+              ),
+            ]
+          : []),
+        ...(periodRows.length > 0
+          ? [
+              db.insert(periods).values(
+                periodRows.map((row) => ({
+                  name: row.name,
+                  startAt: row.startAt,
+                  endAt: row.endAt,
+                  isCumulative: row.isCumulative,
+                  sortOrder: row.sortOrder,
+                  yearId,
+                  userId,
+                })),
+              ),
+            ]
+          : []),
+        ...(averageRows.length > 0
+          ? [
+              db.insert(customAverages).values(
+                averageRows.map((row) => ({
+                  id: averageIds.get(row.id),
+                  name: row.name,
+                  isMain: false,
+                  sortOrder: row.sortOrder,
+                  yearId,
+                  userId,
+                })),
+              ),
+            ]
+          : []),
+        ...(copiedEntryRows.length > 0
+          ? [db.insert(customAverageEntries).values(copiedEntryRows)]
+          : []),
+        db
+          .update(groupMemberships)
+          .set({ yearId, shareAverage: false, updatedAt: new Date() })
+          .where(eq(groupMemberships.id, access.membership.id)),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
       );
-      if (subjectRows.length > 0) {
-        await db.insert(subjects).values(
-          subjectRows.map((row) => ({
-            id: subjectIds.get(row.id),
-            name: row.name,
-            shortName: row.shortName,
-            parentId: row.parentId
-              ? (subjectIds.get(row.parentId) ?? null)
-              : null,
-            coefficient: row.coefficient,
-            kind: row.kind,
-            isMain: row.isMain,
-            sortOrder: row.sortOrder,
-            yearId: created.id,
-            userId,
-          })),
-        );
-      }
-      if (periodRows.length > 0) {
-        await db.insert(periods).values(
-          periodRows.map((row) => ({
-            name: row.name,
-            startAt: row.startAt,
-            endAt: row.endAt,
-            isCumulative: row.isCumulative,
-            sortOrder: row.sortOrder,
-            yearId: created.id,
-            userId,
-          })),
-        );
-      }
-      for (const average of averageRows) {
-        const [copied] = await db
-          .insert(customAverages)
-          .values({
-            name: average.name,
-            isMain: false,
-            sortOrder: average.sortOrder,
-            yearId: created.id,
-            userId,
-          })
-          .returning({ id: customAverages.id });
-        if (!copied) continue;
-        const entries = entryRows.filter(
-          (entry) =>
-            entry.averageId === average.id && subjectIds.has(entry.subjectId),
-        );
-        if (entries.length > 0) {
-          await db.insert(customAverageEntries).values(
-            entries.map((entry) => ({
-              averageId: copied.id,
-              subjectId: subjectIds.get(entry.subjectId) as string,
-              coefficient: entry.coefficient,
-              includeChildren: entry.includeChildren,
-            })),
-          );
-        }
-      }
-      return { yearId: created.id };
+      return { yearId };
     }),
 
   removeMember: protectedProcedure
@@ -1088,6 +1155,9 @@ export const socialGroupsRouter = {
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
       assertOwner(access);
+      // Members are part of what moderation is looking at; a frozen group
+      // keeps them. Each member remains free to leave on their own.
+      assertActive(access.group);
       if (input.membershipId === access.membership.id) {
         badRequest("Use leave or delete for your own membership");
       }

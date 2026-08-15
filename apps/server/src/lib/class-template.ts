@@ -278,14 +278,14 @@ export async function snapshotClassTemplate(
   });
 }
 
-export async function classYearStatus(
-  userId: string,
+/** The pure half of the status check, shared by the single and batch paths. */
+function evaluateClassYearStatus(
   yearId: string | null,
   template: ClassTemplate | null,
-): Promise<ClassYearStatus> {
+  rows: NonNullable<AcademicRows> | null,
+): ClassYearStatus {
   if (!yearId) return "not_connected";
   if (!template) return "incompatible";
-  const rows = await loadAcademicRows(userId, yearId);
   if (!rows || rows.year.archivedAt || !sameAcademicSettings(template, rows)) {
     return "incompatible";
   }
@@ -322,6 +322,132 @@ export async function classYearStatus(
   return "incompatible";
 }
 
+export interface ClassYearStatusRequest {
+  userId: string;
+  yearId: string | null;
+  template: ClassTemplate | null;
+}
+
+function byAcademicOrder(
+  left: { sortOrder: number; createdAt: Date; id: string },
+  right: { sortOrder: number; createdAt: Date; id: string },
+): number {
+  return (
+    left.sortOrder - right.sortOrder ||
+    left.createdAt.getTime() - right.createdAt.getTime() ||
+    (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+  );
+}
+
+/**
+ * Status for many (member, year) pairs in six grouped queries instead of up
+ * to six PER pair — the class page checks every member and every candidate
+ * year of the viewer, which multiplied into the hundreds on a real class.
+ * Results align with the requests by index. In-memory sorting mirrors the
+ * single loader's ORDER BY exactly: the configuration comparison serialises
+ * rows in order, so ordering is part of correctness here.
+ */
+export async function classYearStatuses(
+  requests: readonly ClassYearStatusRequest[],
+): Promise<ClassYearStatus[]> {
+  const pairs = new Map<string, { userId: string; yearId: string }>();
+  for (const request of requests) {
+    if (request.yearId && request.template) {
+      pairs.set(`${request.userId}:${request.yearId}`, {
+        userId: request.userId,
+        yearId: request.yearId,
+      });
+    }
+  }
+
+  const loaded = new Map<string, NonNullable<AcademicRows>>();
+  if (pairs.size > 0) {
+    const yearIds = [...new Set([...pairs.values()].map((p) => p.yearId))];
+    const [yearRows, subjectRowsAll, periodRowsAll, averageRowsAll, presetAll] =
+      await Promise.all([
+        db.select().from(years).where(inArray(years.id, yearIds)),
+        db.select().from(subjects).where(inArray(subjects.yearId, yearIds)),
+        db.select().from(periods).where(inArray(periods.yearId, yearIds)),
+        db
+          .select()
+          .from(customAverages)
+          .where(inArray(customAverages.yearId, yearIds)),
+        db
+          .select()
+          .from(yearPresetMemberships)
+          .where(inArray(yearPresetMemberships.yearId, yearIds)),
+      ]);
+    const averageIds = averageRowsAll.map((row) => row.id);
+    const entryRowsAll =
+      averageIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(customAverageEntries)
+            .where(inArray(customAverageEntries.averageId, averageIds));
+
+    for (const { userId, yearId } of pairs.values()) {
+      const year = yearRows.find(
+        (row) => row.id === yearId && row.userId === userId,
+      );
+      if (!year) continue;
+      const averageRows = averageRowsAll
+        .filter((row) => row.yearId === yearId && row.userId === userId)
+        .sort(byAcademicOrder);
+      const ownedAverages = new Set(averageRows.map((row) => row.id));
+      loaded.set(`${userId}:${yearId}`, {
+        year,
+        subjectRows: subjectRowsAll
+          .filter((row) => row.yearId === yearId && row.userId === userId)
+          .sort(byAcademicOrder),
+        periodRows: periodRowsAll
+          .filter((row) => row.yearId === yearId && row.userId === userId)
+          .sort(byAcademicOrder),
+        averageRows,
+        entryRows: entryRowsAll
+          .filter((row) => ownedAverages.has(row.averageId))
+          .sort(
+            (left, right) =>
+              (left.averageId < right.averageId
+                ? -1
+                : left.averageId > right.averageId
+                  ? 1
+                  : 0) ||
+              (left.subjectId < right.subjectId
+                ? -1
+                : left.subjectId > right.subjectId
+                  ? 1
+                  : 0),
+          ),
+        // Same runtime shape as the single loader (`rows[0] ?? null`);
+        // its inferred type just never widened to include the null.
+        presetMembership: (presetAll.find(
+          (row) => row.yearId === yearId && row.userId === userId,
+        ) ?? null) as NonNullable<AcademicRows>["presetMembership"],
+      });
+    }
+  }
+
+  return requests.map((request) =>
+    evaluateClassYearStatus(
+      request.yearId,
+      request.template,
+      request.yearId
+        ? (loaded.get(`${request.userId}:${request.yearId}`) ?? null)
+        : null,
+    ),
+  );
+}
+
+export async function classYearStatus(
+  userId: string,
+  yearId: string | null,
+  template: ClassTemplate | null,
+): Promise<ClassYearStatus> {
+  const [status] = await classYearStatuses([{ userId, yearId, template }]);
+  return status as ClassYearStatus;
+}
+
 export async function compatibleClassYears(
   userId: string,
   template: ClassTemplate | null,
@@ -337,15 +463,10 @@ export async function compatibleClassYears(
     .from(years)
     .where(and(eq(years.userId, userId), isNull(years.archivedAt)))
     .orderBy(asc(years.sortOrder), asc(years.startsAt));
-  const statuses = await Promise.all(
-    candidates.map(async (year) => ({
-      year,
-      status: await classYearStatus(userId, year.id, template),
-    })),
+  const statuses = await classYearStatuses(
+    candidates.map((year) => ({ userId, yearId: year.id, template })),
   );
-  return statuses
-    .filter((row) => row.status === "connected")
-    .map((row) => row.year);
+  return candidates.filter((_, index) => statuses[index] === "connected");
 }
 
 /** Statements for a fresh, independent year. Callers append membership work. */

@@ -201,7 +201,7 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
     },
     onError: () =>
       toast.error(
-        t("Transfer or remove the other members first, or delete the class.")
+        t("Remove the other members first, or delete the class.")
       ),
   })
   const destroy = useMutation({
