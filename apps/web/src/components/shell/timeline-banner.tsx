@@ -66,48 +66,72 @@ export function TimelineBanner() {
     (value, index, values) => values.indexOf(value) === index
   )
   const visibleGrades = yearGraph.allGrades().length
+  const isAtLatest = selectedDay === totalDays
+
+  const jumpToLatest = () => {
+    haptic("light")
+    setTimelineDate(isoDay(maximum))
+  }
 
   return (
     <section className="shrink-0 border-b border-band-fair/40 bg-band-fair/12 py-2.5 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 text-sm">
-        <HistoryIcon className="size-4 shrink-0 opacity-70" />
-        <div className="min-w-0 flex-1">
-          <p className="font-medium">
-            {t("Showing the year as it stood on {date}.", {
-              date: format.dateTime(new Date(`${timelineDate}T12:00:00`), {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }),
-            })}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t("{count} grades visible", { count: String(visibleGrades) })}
-          </p>
+      <div className="mx-auto flex max-w-6xl flex-col gap-2 text-sm">
+        <div className="relative flex items-start gap-2 md:items-center">
+          <HistoryIcon className="mt-0.5 hidden size-4 shrink-0 opacity-70 md:mt-0 md:block" />
+
+          <div className="min-w-0 flex-1 pr-10 md:pr-0">
+            <p className="font-medium">
+              {t("Showing the year as it stood on {date}.", {
+                date: format.dateTime(new Date(`${timelineDate}T12:00:00`), {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                }),
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("{count} grades visible", { count: String(visibleGrades) })}
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={t("Back to today")}
+            className="absolute top-0 right-0 shrink-0 md:static md:order-4"
+            onClick={() => {
+              haptic("light")
+              setTimelineDate(null)
+            }}
+          >
+            <XIcon className="size-4" />
+          </Button>
+
+          <div className="hidden md:contents">
+            <DatePicker
+              value={timelineDate}
+              min={isoDay(minimum)}
+              max={isoDay(maximum)}
+              onValueChange={(value) => setTimelineDate(value || null)}
+              format="short"
+              className="h-9 w-44 md:order-3 md:flex-none"
+            />
+          </div>
         </div>
+
         <DatePicker
           value={timelineDate}
           min={isoDay(minimum)}
           max={isoDay(maximum)}
           onValueChange={(value) => setTimelineDate(value || null)}
           format="short"
-          className="h-9 w-44"
+          className="h-11 w-full md:hidden"
         />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("Back to today")}
-          onClick={() => {
-            haptic("light")
-            setTimelineDate(null)
-          }}
-        >
-          <XIcon className="size-4" />
-        </Button>
 
-        <div className="order-last w-full pt-1 md:grid md:grid-cols-[1fr_auto] md:items-center md:gap-3">
-          <div>
+        {/* Slider row */}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
             <Slider
               min={0}
               max={Math.max(1, totalDays)}
@@ -121,9 +145,9 @@ export function TimelineBanner() {
                 setTimelineDate(isoDay(minimum + day * DAY_IN_MS))
               }}
             />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+            <div className="mt-1 flex justify-between gap-2 text-[10px] text-muted-foreground">
               {marks.map((day) => (
-                <span key={day}>
+                <span key={day} className="whitespace-nowrap">
                   {format.dateTime(new Date(minimum + day * DAY_IN_MS), {
                     day: "numeric",
                     month: "short",
@@ -132,16 +156,16 @@ export function TimelineBanner() {
               ))}
             </div>
           </div>
-          <Button
+          {/*<Button
             variant="ghost"
             size="sm"
-            disabled={selectedDay === totalDays}
-            onClick={() => setTimelineDate(isoDay(maximum))}
-            className="mt-1 hidden md:inline-flex"
+            disabled={isAtLatest}
+            onClick={jumpToLatest}
+            className="hidden shrink-0 md:inline-flex"
           >
             <RotateCcwIcon className="size-4" />
             {t("Latest")}
-          </Button>
+          </Button>*/}
         </div>
       </div>
     </section>
