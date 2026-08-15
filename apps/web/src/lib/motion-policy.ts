@@ -40,15 +40,19 @@ export function createReducedMotionStore(
   }
 }
 
+interface ActivationEventFields {
+  readonly detail?: number
+  readonly key?: string
+  readonly pointerType?: string
+}
+
 export function getEventActivationSource(
-  event: object | null | undefined
+  event: Event | null | undefined
 ): ActivationSource {
   if (!event) return "unknown"
-  const eventLike = event as {
-    readonly detail?: number
-    readonly key?: string
-    readonly pointerType?: string
-  }
+  // SAFETY: reads optional discriminating fields off the DOM event; a field
+  // absent on this event type stays undefined and falls through to "unknown".
+  const eventLike = event as ActivationEventFields
   if (typeof eventLike.key === "string") return "keyboard"
   if (typeof eventLike.pointerType === "string") return "pointer"
   if (typeof eventLike.detail !== "number") return "unknown"

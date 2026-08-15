@@ -59,6 +59,9 @@ export function setQueryIdentity(identity: string): QueryScope {
  */
 export const queryClient = new Proxy({} as QueryClient, {
   get(_target, property) {
+    // Proxy get-trap forwarding: Reflect.get is the canonical dynamic read
+    // here — the property name only exists at runtime.
+    // oxlint-disable-next-line anti-slop/no-reflect-get
     const value = Reflect.get(scope.client, property, scope.client) as unknown;
     return typeof value === "function"
       ? (value as (...args: unknown[]) => unknown).bind(scope.client)
