@@ -2,11 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const source = readFileSync(join(import.meta.dir, "average-edit.tsx"), "utf8");
+const source = readFileSync(join(import.meta.dir, "..", "app", "settings", "average-edit.tsx"), "utf8");
 const presetEditor = readFileSync(
   join(
     import.meta.dir,
-    "..",
     "..",
     "components",
     "admin",

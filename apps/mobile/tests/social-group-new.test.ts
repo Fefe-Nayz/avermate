@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const source = readFileSync(join(import.meta.dir, "new.tsx"), "utf8");
-const indexSource = readFileSync(join(import.meta.dir, "index.tsx"), "utf8");
+const source = readFileSync(join(import.meta.dir, "..", "app", "social", "groups", "new.tsx"), "utf8");
+const indexSource = readFileSync(join(import.meta.dir, "..", "app", "social", "groups", "index.tsx"), "utf8");
 const layoutSource = readFileSync(
-  join(import.meta.dir, "..", "..", "_layout.tsx"),
+  join(import.meta.dir, "..", "app", "_layout.tsx"),
   "utf8",
 );
 
