@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import {
-  ArrowDownUpIcon,
   CalendarDaysIcon,
   ListIcon,
   PlusIcon,
@@ -14,19 +13,11 @@ import { useFormatter, useExtracted } from "next-intl"
 import { gradeRatio } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { CoefficientBadge, ResultBadge } from "@/components/data/value"
+import { SortMenu } from "@/components/data/sort-menu"
 import { useYear } from "@/components/year/year-provider"
-import { haptic } from "@/lib/haptics"
 import { HierarchicalGradeTable } from "@/components/grades/hierarchical-grade-table"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
 import { GradeCalendar } from "@/components/grades/grade-calendar"
@@ -156,42 +147,16 @@ export default function GradesPage() {
               className="h-11 pl-9 md:h-9"
             />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label={t("Sort")}
-                  className="h-11 md:h-9 md:w-9"
-                />
-              }
-            >
-              <ArrowDownUpIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuRadioGroup
-                value={sort}
-                onValueChange={(value) => {
-                  haptic("selection")
-                  setSort(value as SortKey)
-                }}
-              >
-                {/* Inside the radio group, so it labels it rather than
-                    floating above as a heading with nothing attached. */}
-                <DropdownMenuLabel>{t("Sort by")}</DropdownMenuLabel>
-                <DropdownMenuRadioItem value="date">
-                  {t("Most recent")}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="result">
-                  {t("Best result")}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="subject">
-                  {t("Subject")}
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <SortMenu
+            value={sort}
+            onValueChange={setSort}
+            className="h-11 md:h-9 md:w-9"
+            options={[
+              { value: "date", label: t("Most recent") },
+              { value: "result", label: t("Best result") },
+              { value: "subject", label: t("Subject") },
+            ]}
+          />
           <div
             className="hidden items-center rounded-lg border p-0.5 md:flex"
             role="group"

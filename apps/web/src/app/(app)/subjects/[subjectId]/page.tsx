@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { use, useMemo } from "react"
+import { use, useMemo, useState } from "react"
 import {
   ChevronRightIcon,
   LayersIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
@@ -22,6 +23,7 @@ import {
 } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Empty,
   EmptyDescription,
@@ -43,6 +45,14 @@ import {
 } from "@/components/charts/multi-series-average-chart"
 import { GradeResultsChart } from "@/components/charts/grade-results-chart"
 import { ImpactGrid } from "@/components/analytics/impact-grid"
+import { SortMenu } from "@/components/data/sort-menu"
+import {
+  filterGrades,
+  sortChildren,
+  sortGrades,
+  type ChildSortKey,
+  type GradeSortKey,
+} from "@/components/grades/grade-sorting"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
 import { cn } from "@/lib/utils"
@@ -74,6 +84,9 @@ export default function SubjectPage({
     now,
   } = useYear()
   const { preferences, update: updatePreferences } = usePreferences()
+  const [gradeQuery, setGradeQuery] = useState("")
+  const [gradeSort, setGradeSort] = useState<GradeSortKey>("date")
+  const [childSort, setChildSort] = useState<ChildSortKey>("custom")
 
   const subject = graph.byId(subjectId)
 
@@ -149,8 +162,15 @@ export default function SubjectPage({
   const ratio = graph.ratio(subjectId)
   const general = graph.ratio(null)
   const children = graph.childrenOf(subjectId)
+  const visibleChildren = sortChildren(children, childSort, (id) =>
+    graph.ratio(id)
+  )
   const ratios = gradeRatios(graph, subjectId)
-  const grades = [...graph.allGrades(subjectId)].reverse()
+  const allGrades = [...graph.allGrades(subjectId)].reverse()
+  const grades = sortGrades(
+    filterGrades(allGrades, gradeQuery, (id) => graph.byId(id)?.name),
+    gradeSort
+  )
   const isCategory = subject.kind === "category"
 
   const impacts = [
@@ -370,11 +390,27 @@ export default function SubjectPage({
 
         {children.length > 0 ? (
           <section className="flex flex-col gap-2">
-            <h3 className="px-1 text-sm font-medium">{t("Inside this one")}</h3>
+            <div className="flex items-center justify-between gap-2 px-1">
+              <h3 className="text-sm font-medium">{t("Inside this one")}</h3>
+              {children.length > 1 ? (
+                <SortMenu
+                  value={childSort}
+                  onValueChange={setChildSort}
+                  variant="ghost"
+                  size="icon-sm"
+                  options={[
+                    { value: "custom", label: t("Custom order") },
+                    { value: "name", label: t("Name") },
+                    { value: "best", label: t("Best average") },
+                    { value: "coefficient", label: t("Highest coefficient") },
+                  ]}
+                />
+              ) : null}
+            </div>
             <Card className="gap-2 py-4">
               <CardContent className="px-2">
                 <ul>
-                  {children.map((child) => (
+                  {visibleChildren.map((child) => (
                     <li key={child.id}>
                       <Link
                         href={`/subjects/${child.id}`}
@@ -413,11 +449,38 @@ export default function SubjectPage({
               {t("Add")}
             </Button>
           </div>
+          {allGrades.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={gradeQuery}
+                  onChange={(event) => setGradeQuery(event.target.value)}
+                  placeholder={t("Search grades…")}
+                  className="h-11 pl-9 md:h-9"
+                />
+              </div>
+              <SortMenu
+                value={gradeSort}
+                onValueChange={setGradeSort}
+                className="h-11 md:h-9 md:w-9"
+                options={[
+                  { value: "date", label: t("Most recent") },
+                  { value: "oldest", label: t("Oldest first") },
+                  { value: "best", label: t("Best result") },
+                  { value: "worst", label: t("Worst result") },
+                  { value: "coefficient", label: t("Highest coefficient") },
+                ]}
+              />
+            </div>
+          ) : null}
           <Card className="gap-2 py-4">
             <CardContent className="px-2">
               {grades.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t("No grade recorded here yet.")}
+                  {gradeQuery.trim()
+                    ? t("No grade matches.")
+                    : t("No grade recorded here yet.")}
                 </p>
               ) : (
                 <ul>
