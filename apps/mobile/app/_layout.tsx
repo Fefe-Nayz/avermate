@@ -311,6 +311,10 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   options={{ title: t("Appearance") }}
                 />
                 <Stack.Screen
+                  name="settings/navigation"
+                  options={{ title: t("Navigation") }}
+                />
+                <Stack.Screen
                   name="settings/integrations"
                   options={{ title: t("Integrations") }}
                 />
@@ -325,6 +329,10 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 <Stack.Screen
                   name="settings/card-edit"
                   options={{ title: t("Widget") }}
+                />
+                <Stack.Screen
+                  name="settings/card-gallery"
+                  options={{ title: t("Card gallery") }}
                 />
                 <Stack.Screen
                   name="settings/widget-library"

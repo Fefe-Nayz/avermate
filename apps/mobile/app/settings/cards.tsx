@@ -110,6 +110,18 @@ export default function Cards() {
         }
       >
         <Section>
+          <Card padded={false}>
+            <Row
+              first
+              title={t("Browse the gallery")}
+              subtitle={t("Curated cards you can install in one tap")}
+              onPress={() =>
+                router.push(`/settings/card-gallery?surface=${surface}`)
+              }
+            />
+          </Card>
+        </Section>
+        <Section>
           <Card>
             <Text selectable style={[type.heading, { color: palette.text }]}>
               {t("{visible} visible · {hidden} hidden", {

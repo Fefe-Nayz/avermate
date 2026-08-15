@@ -1,19 +1,14 @@
 import { useMemo, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
 import { gradeRatio, type Grade } from "@avermate/core";
 import {
-  Heading,
   Button,
   Card,
+  ChipRail,
   Empty,
+  Heading,
   Label,
   Loading,
   Row,
@@ -21,56 +16,78 @@ import {
 import { PointsValue, ResultBadge } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { TextField } from "@/components/field";
-import { formatDay } from "@/components/date-field";
+import { formatDay, formatMonth } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
-import { locale, t } from "@/lib/i18n";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { t } from "@/lib/i18n";
+import { radius, space, usePalette } from "@/lib/theme";
+
+type SortKey = "date" | "best" | "subject";
 
 /**
- * Every result, newest first.
+ * Every result — newest first, best first, or gathered by subject.
  *
  * Grouped by month rather than paginated: a school year has months, not pages,
- * and "October was rough" is a thing people actually think. Search is plain
- * substring matching over the name and the subject — enough for a list this
- * size, and it never surprises anyone.
+ * and "October was rough" is a thing people actually think. The month headers
+ * only appear in date order — sorted any other way they would interleave and
+ * the labels would lie. Search is plain substring matching over the name and
+ * the subject — enough for a list this size, and it never surprises anyone.
  */
 export default function Grades() {
   const palette = usePalette();
   const router = useRouter();
   const { isLoading, graph, refresh } = useYear();
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("date");
 
-  const groups = useMemo(() => {
+  const grades = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matching = graph.allGrades().filter((grade) => {
-      if (!needle) return true;
-      const subject = graph.byId(grade.subjectId);
-      return (
-        grade.name.toLowerCase().includes(needle) ||
-        (subject?.name.toLowerCase().includes(needle) ?? false)
+    let matching = graph.allGrades();
+
+    if (needle) {
+      matching = matching.filter((grade) =>
+        `${grade.name} ${graph.byId(grade.subjectId)?.name ?? ""}`
+          .toLowerCase()
+          .includes(needle),
       );
-    });
+    }
 
-    matching.sort((a, b) => b.passedAt.getTime() - a.passedAt.getTime());
+    if (sort === "best") {
+      return [...matching].sort(
+        (a, b) => (gradeRatio(b) ?? -1) - (gradeRatio(a) ?? -1),
+      );
+    }
+    if (sort === "subject") {
+      return [...matching].sort((a, b) =>
+        (graph.byId(a.subjectId)?.name ?? "").localeCompare(
+          graph.byId(b.subjectId)?.name ?? "",
+        ),
+      );
+    }
+    return [...matching].sort(
+      (a, b) => b.passedAt.getTime() - a.passedAt.getTime(),
+    );
+  }, [graph, query, sort]);
 
-    const buckets = new Map<string, { label: string; grades: Grade[] }>();
-    for (const grade of matching) {
+  const groups = useMemo<
+    Array<{ key: string; label: string | null; grades: Grade[] }>
+  >(() => {
+    if (sort !== "date") return [{ key: "all", label: null, grades }];
+
+    const buckets = new Map<string, Grade[]>();
+    for (const grade of grades) {
       const key = `${grade.passedAt.getFullYear()}-${grade.passedAt.getMonth()}`;
       const bucket = buckets.get(key);
-      if (bucket) bucket.grades.push(grade);
-      else {
-        buckets.set(key, {
-          label: grade.passedAt.toLocaleDateString(
-            locale() === "fr" ? "fr-FR" : "en-GB",
-            { month: "long", year: "numeric" },
-          ),
-          grades: [grade],
-        });
-      }
+      if (bucket) bucket.push(grade);
+      else buckets.set(key, [grade]);
     }
-    return [...buckets.values()];
-  }, [graph, query]);
+
+    return [...buckets.entries()].map(([key, list]) => ({
+      key,
+      label: formatMonth(list[0]?.passedAt ?? new Date()),
+      grades: list,
+    }));
+  }, [grades, sort]);
 
   if (isLoading) return <Loading />;
 
@@ -123,20 +140,34 @@ export default function Grades() {
       <ScopeBar />
 
       {total > 6 ? (
-        <TextField
-          label={t("Search")}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t("Name or subject")}
-          autoCapitalize="none"
-        />
+        <View style={{ gap: space.md }}>
+          <TextField
+            label={t("Search")}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t("Name or subject")}
+            autoCapitalize="none"
+          />
+          <View style={{ gap: space.sm }}>
+            <Label>{t("Sort")}</Label>
+            <ChipRail
+              items={[
+                { id: "date", label: t("Most recent") },
+                { id: "best", label: t("Best result") },
+                { id: "subject", label: t("Subject") },
+              ]}
+              activeId={sort}
+              onSelect={(id) => setSort(id as SortKey)}
+            />
+          </View>
+        </View>
       ) : null}
 
-      {groups.length === 0 ? (
+      {grades.length === 0 ? (
         <Empty
-          icon="document-text-outline"
+          icon={total === 0 ? "document-text-outline" : "search-outline"}
           title={
-            total === 0 ? t("Nothing recorded yet.") : t("Nothing matches.")
+            total === 0 ? t("Nothing recorded yet.") : t("No grade matches.")
           }
           body={
             total === 0
@@ -155,10 +186,12 @@ export default function Grades() {
         />
       ) : (
         groups.map((group) => (
-          <View key={group.label} style={{ gap: space.sm }}>
-            <View style={{ paddingHorizontal: space.xs }}>
-              <Label>{group.label}</Label>
-            </View>
+          <View key={group.key} style={{ gap: space.sm }}>
+            {group.label ? (
+              <View style={{ paddingHorizontal: space.xs }}>
+                <Label>{group.label}</Label>
+              </View>
+            ) : null}
             <Card padded={false}>
               {group.grades.map((grade, index) => {
                 const subject = graph.byId(grade.subjectId);

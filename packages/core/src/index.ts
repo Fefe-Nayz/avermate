@@ -13,5 +13,6 @@ export * from "./widget-formula";
 export * from "./widget-definition";
 export * from "./widget-flow";
 export * from "./widget-evaluator";
+export * from "./template-slots";
 export * from "./chart-interaction";
 export * from "./year-setup";

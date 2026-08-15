@@ -1294,6 +1294,41 @@ const fr: Record<string, string> = {
   "Connect the grade dots": "Relier les notes entre elles",
   "A faint line between results": "Un trait léger entre les résultats",
   "3 months": "3 mois",
+
+  // ----------------------------------------------------------- shell & lists
+  Navigation: "Navigation",
+  "Choose the three tabs you reach for":
+    "Choisissez les trois onglets que vous utilisez le plus",
+  "Tab bar": "Barre d'onglets",
+  "Pick three. The order you pick is the order they sit in; the rest waits behind More.":
+    "Choisissez-en trois. L'ordre de sélection est leur ordre d'affichage ; le reste attend derrière Plus.",
+  "{count} of {total} picked": "{count} sur {total} choisis",
+  "That did not save. Try again.": "L'enregistrement a échoué. Réessayez.",
+  "Most recent": "Plus récentes",
+  "Oldest first": "Plus anciennes d'abord",
+  "Custom order": "Ordre personnalisé",
+  "Best average": "Meilleure moyenne",
+  "Highest coefficient": "Plus gros coefficient",
+  "No grade matches.": "Aucune note ne correspond.",
+  "Search grades…": "Rechercher des notes…",
+
+  // ------------------------------------------------------------ card gallery
+  "Card gallery": "Galerie de cartes",
+  "Browse the gallery": "Parcourir la galerie",
+  "Curated cards you can install in one tap":
+    "Des cartes prêtes à installer en un geste",
+  Install: "Installer",
+  "No templates published yet.": "Aucun modèle publié pour l'instant.",
+  "Curated cards will appear here once the catalog opens.":
+    "Les cartes du catalogue apparaîtront ici dès son ouverture.",
+  "Nothing of this kind exists in this year yet.":
+    "Rien de ce type n'existe encore dans cette année.",
+
+  // ------------------------------------------------------------- formula v2
+  "Built-in metric": "Métrique intégrée",
+  "Same as the card": "Comme la carte",
+  "Selected subjects": "Matières sélectionnées",
+  "Choose a valid metric.": "Choisissez une métrique valide.",
   "Preferences saved.": "Préférences enregistrées.",
   Colour: "Couleur",
   Default: "Par défaut",

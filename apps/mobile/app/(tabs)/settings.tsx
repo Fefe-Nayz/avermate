@@ -169,6 +169,11 @@ export default function Settings() {
             subtitle={t("Shared with the web app")}
             onPress={() => router.push("/settings/appearance")}
           />
+          <Row
+            title={t("Navigation")}
+            subtitle={t("Choose the three tabs you reach for")}
+            onPress={() => router.push("/settings/navigation")}
+          />
         </Card>
       </Section>
 

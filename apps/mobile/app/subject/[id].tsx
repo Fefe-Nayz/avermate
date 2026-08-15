@@ -1,5 +1,12 @@
-import { useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
 import {
@@ -13,7 +20,22 @@ import {
   subjectImpact,
   trend,
 } from "@avermate/core";
-import { Card, Empty, Label, Loading, Row, Section } from "@/components/ui";
+import {
+  Card,
+  ChipRail,
+  Empty,
+  Label,
+  Loading,
+  Row,
+  Section,
+} from "@/components/ui";
+import {
+  filterGrades,
+  sortChildren,
+  sortGrades,
+  type ChildSortKey,
+  type GradeSortKey,
+} from "@/components/grade-sorting";
 import {
   AverageValue,
   CoefficientTag,
@@ -39,6 +61,14 @@ import { timelineCutoffTimestamp } from "@/lib/timeline";
 import { radius, space, type, usePalette } from "@/lib/theme";
 import { chartChildren, useChartSettings } from "@/lib/chart-settings";
 
+/** The child-sort options, in the order the header control cycles through. */
+const CHILD_SORTS: readonly ChildSortKey[] = [
+  "custom",
+  "name",
+  "best",
+  "coefficient",
+];
+
 /**
  * One subject, in full.
  *
@@ -52,6 +82,10 @@ export default function SubjectDetail() {
   const router = useRouter();
   const chartSettings = useChartSettings();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [gradeQuery, setGradeQuery] = useState("");
+  const [gradeSort, setGradeSort] = useState<GradeSortKey>("date");
+  const [childSort, setChildSort] = useState<ChildSortKey>("custom");
+  const [searchFocused, setSearchFocused] = useState(false);
   const {
     isLoading,
     graph,
@@ -188,6 +222,26 @@ export default function SubjectDetail() {
   const progress = improvement(ratios);
   const pass = passRate(ratios, passingRatio);
 
+  // The list controls reorder copies; the memos above keep feeding the charts
+  // their newest-first rows untouched.
+  const visibleChildren = sortChildren(children, childSort, (childId) =>
+    graph.ratio(childId),
+  );
+  const visibleGrades = sortGrades(
+    filterGrades(
+      grades,
+      gradeQuery,
+      (subjectId) => graph.byId(subjectId)?.name,
+    ),
+    gradeSort,
+  );
+  const childSortLabels: Record<ChildSortKey, string> = {
+    custom: t("Custom order"),
+    name: t("Name"),
+    best: t("Best average"),
+    coefficient: t("Highest coefficient"),
+  };
+
   return (
     <>
       <Stack.Screen
@@ -218,6 +272,8 @@ export default function SubjectDetail() {
           gap: space.xl,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
       >
         <View style={{ gap: space.md, paddingTop: space.sm }}>
           <View style={{ gap: space.xs }}>
@@ -336,9 +392,41 @@ export default function SubjectDetail() {
         </Section>
 
         {children.length > 0 ? (
-          <Section title={t("Inside this one")}>
+          <Section
+            title={t("Inside this one")}
+            action={
+              children.length > 1 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Sort")}
+                  hitSlop={8}
+                  onPress={() => {
+                    haptic("selection");
+                    const index = CHILD_SORTS.indexOf(childSort);
+                    setChildSort(
+                      CHILD_SORTS[(index + 1) % CHILD_SORTS.length] ?? "custom",
+                    );
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: space.xs,
+                  }}
+                >
+                  <Icon
+                    name="arrow-down-outline"
+                    size={13}
+                    color={palette.textMuted}
+                  />
+                  <Text style={[type.footnote, { color: palette.textMuted }]}>
+                    {childSortLabels[childSort]}
+                  </Text>
+                </Pressable>
+              ) : undefined
+            }
+          >
             <Card padded={false}>
-              {children.map((child, index) => (
+              {visibleChildren.map((child, index) => (
                 <Row
                   key={child.id}
                   first={index === 0}
@@ -368,14 +456,63 @@ export default function SubjectDetail() {
         ) : null}
 
         <Section title={t("Grades")}>
+          {grades.length > 1 ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.sm,
+                minHeight: 44,
+                paddingHorizontal: space.md,
+                borderRadius: radius.md,
+                borderCurve: "continuous",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: searchFocused ? palette.accent : palette.border,
+                backgroundColor: palette.surface,
+              }}
+            >
+              <Icon name="search-outline" size={15} color={palette.textFaint} />
+              <TextInput
+                value={gradeQuery}
+                onChangeText={setGradeQuery}
+                placeholder={t("Search grades…")}
+                placeholderTextColor={palette.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                style={[
+                  type.body,
+                  { flex: 1, color: palette.text, paddingVertical: space.sm },
+                ]}
+              />
+            </View>
+          ) : null}
+          {grades.length > 1 ? (
+            <ChipRail
+              items={[
+                { id: "date", label: t("Most recent") },
+                { id: "oldest", label: t("Oldest first") },
+                { id: "best", label: t("Best result") },
+                { id: "worst", label: t("Worst result") },
+                { id: "coefficient", label: t("Highest coefficient") },
+              ]}
+              activeId={gradeSort}
+              onSelect={(next) => setGradeSort(next as GradeSortKey)}
+            />
+          ) : null}
           <Card padded={false}>
-            {grades.length === 0 ? (
+            {visibleGrades.length === 0 ? (
               <Empty
                 icon="document-text-outline"
-                title={t("No grade recorded here yet.")}
+                title={
+                  gradeQuery.trim()
+                    ? t("No grade matches.")
+                    : t("No grade recorded here yet.")
+                }
               />
             ) : (
-              grades.map((grade, index) => (
+              visibleGrades.map((grade, index) => (
                 <Row
                   key={grade.id}
                   first={index === 0}

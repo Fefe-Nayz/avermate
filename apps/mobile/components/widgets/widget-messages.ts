@@ -17,6 +17,7 @@ export const WIDGET_MESSAGE_LABELS: Record<string, string> = {
     "The minimum must be less than or equal to the maximum.",
   "widget.error.goal-owns-window": "The goal controls its own time window",
   "widget.error.goal-owns-filters": "The goal controls its own filters",
+  "widget.error.formula-metric": "Choose a valid metric.",
   "widget.error.generic": "Check this value",
   "widget.section.data": "Data",
   "widget.section.window": "Time window",
@@ -53,6 +54,7 @@ export const WIDGET_MESSAGE_LABELS: Record<string, string> = {
   "widget.formula.literal": "Number",
   "widget.formula.parameter": "Year parameter",
   "widget.formula.aggregate": "Aggregate",
+  "widget.formula.metric": "Built-in metric",
   "widget.formula.unary": "Unary operation",
   "widget.formula.binary": "Calculation",
   "widget.formula.compare": "Comparison",
@@ -100,6 +102,7 @@ export const WIDGET_MESSAGE_LABELS: Record<string, string> = {
   "widget.option.gt": "Greater than",
   "widget.option.gte": "Greater or equal",
   "widget.option.horizontal": "Horizontal",
+  "widget.option.inherit": "Same as the card",
   "widget.option.last-grades": "Last grades",
   "widget.option.linear": "Linear",
   "widget.option.lt": "Less than",
@@ -236,6 +239,11 @@ export const WIDGET_MESSAGE_LABELS: Record<string, string> = {
   "widget.field.formula-condition": "Condition",
   "widget.field.formula-when-true": "When true",
   "widget.field.formula-when-false": "When false",
+  "widget.field.formula-metric": "Metric",
+  "widget.field.formula-metric-scope": "Scope",
+  "widget.field.formula-metric-subjects": "Selected subjects",
+  "widget.field.formula-metric-average": "Custom average",
+  "widget.field.formula-metric-window": "Window",
 };
 
 function titleCase(value: string): string {
