@@ -122,13 +122,13 @@ export default function LandingPage() {
             </Reveal>
 
             <Reveal delay={0.06}>
-              <h1 className="mt-7 max-w-4xl text-4xl leading-[1.05] font-semibold tracking-[-0.045em] text-balance sm:text-6xl lg:text-7xl">
+              <h1 className="mt-7 max-w-4xl clamp-[text,4xl,7xl] leading-[1.05] font-semibold tracking-[-0.045em] text-balance">
                 {t("Know where you stand — and what to do next.")}
               </h1>
             </Reveal>
 
             <Reveal delay={0.12}>
-              <p className="mt-6 max-w-2xl text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">
+              <p className="mt-6 max-w-2xl clamp-[text,base,lg] leading-relaxed text-pretty text-muted-foreground">
                 {t(
                   "Avermate follows your school's real weighting, explains every movement in your average, and turns the result you want into a practical plan."
                 )}
@@ -486,12 +486,12 @@ export default function LandingPage() {
               <NoiseTexture noiseOpacity={0.35} className="opacity-30" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,.18),transparent_32%),radial-gradient(circle_at_85%_85%,rgba(255,255,255,.12),transparent_34%)]" />
               <SparklesIcon className="relative size-7" />
-              <h2 className="relative mt-5 max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+              <h2 className="relative mt-5 max-w-2xl clamp-[text,3xl,4xl] font-semibold tracking-tight text-balance">
                 {t(
                   "Your next result should answer a question, not create one."
                 )}
               </h2>
-              <p className="relative mt-4 max-w-xl text-sm leading-relaxed text-primary-foreground/75 sm:text-base">
+              <p className="relative mt-4 max-w-xl clamp-[text,sm,base] leading-relaxed text-primary-foreground/75">
                 {t(
                   "Create your year, enter the grades you already have, and see where you really stand."
                 )}
