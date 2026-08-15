@@ -5,6 +5,7 @@ import { defineChart, dot, lineY, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
+import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { curveMonotoneX } from "d3-shape"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
@@ -96,6 +97,51 @@ export function MultiSeriesAverageChart({
   const { scale, passingRatio } = useYear()
   const { preferences } = usePreferences()
   const settings = preferences.chartSettings
+
+  const renderTooltipBody = useCallback(
+    ({
+      content,
+      points,
+    }: ChartTooltipBodyRenderContext<Datum, number, number>) => {
+      if (typeof content === "string") return content
+
+      return (
+        <div aria-hidden="true" className="space-y-1">
+          {content.rows.map((row, index) => {
+            const timestamp = points[index]?.datum.timestamp
+            return (
+              <div
+                className="grid grid-cols-[0.55rem_minmax(0,1fr)_auto] items-center gap-x-1.5"
+                key={`${row.label}\0${index}`}
+              >
+                <span
+                  className="size-2 rounded-[2px]"
+                  style={{ background: row.color }}
+                />
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {row.label}
+                </span>
+                <span className="flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="font-bold text-popover-foreground tabular-nums">
+                    {row.value}
+                  </span>
+                  {typeof timestamp === "number" ? (
+                    <span className="text-muted-foreground">
+                      · {format.dateTime(new Date(timestamp), {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )
+    },
+    [format]
+  )
 
   const prepared = useMemo(() => {
     const enabled = series.filter((item) => item.points.length > 0)
@@ -319,21 +365,12 @@ export function MultiSeriesAverageChart({
           anchor: "pointer",
           placement: ["top", "right", "left", "bottom"],
           content: (points) => ({
-            title: points[0]
-              ? format.dateTime(new Date(points[0].datum.timestamp), {
-                  day: "numeric",
-                  month: "long",
-                })
-              : undefined,
             rows: points.map((point) => ({
               color: point.datum.color,
               label: point.datum.label,
-              value: `${format.number(point.datum.value, {
+              value: format.number(point.datum.value, {
                 maximumFractionDigits: 2,
-              })} · ${format.dateTime(new Date(point.datum.timestamp), {
-                day: "numeric",
-                month: "short",
-              })}`,
+              }),
             })),
           }),
         },
@@ -401,6 +438,7 @@ export function MultiSeriesAverageChart({
         <InteractiveTimeSeriesChart
           ariaLabel={title}
           buildDefinition={buildDefinition}
+          renderTooltipBody={renderTooltipBody}
           domain={prepared.domain}
           formatDomain={(domain) =>
             t("Visible from {start} to {end}", {

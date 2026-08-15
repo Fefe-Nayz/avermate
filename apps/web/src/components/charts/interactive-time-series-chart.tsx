@@ -5,10 +5,12 @@ import type {
   DomChartDefinition,
   ResolvedScale,
 } from "@tanstack/charts"
+import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { RotateCcw } from "lucide-react"
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -42,6 +44,9 @@ interface InteractiveTimeSeriesChartProps<TDatum> {
   interactionHint: string
   maximumZoom?: number
   resetLabel: string
+  renderTooltipBody?: (
+    context: ChartTooltipBodyRenderContext<TDatum, number, number>
+  ) => ReactNode
   style?: CSSProperties
 }
 
@@ -95,6 +100,7 @@ export function InteractiveTimeSeriesChart<TDatum>({
   interactionHint,
   maximumZoom = 64,
   resetLabel,
+  renderTooltipBody,
   style,
 }: InteractiveTimeSeriesChartProps<TDatum>) {
   const [viewport, setViewport] = useState<NumericDomain>(domain)
@@ -511,6 +517,7 @@ export function InteractiveTimeSeriesChart<TDatum>({
           onRender={(context) => {
             renderContextRef.current = context
           }}
+          renderTooltipBody={renderTooltipBody}
         />
         {zoomed ? (
           <button

@@ -46,6 +46,24 @@
 }
 
 @layer components {
+  /* TanStack mounts chart tooltips in a document portal, so this shared
+     styling cannot live on the individual chart cards. Semantic Shadcn tokens
+     continue to resolve when the application theme changes. */
+  .ts-chart-tooltip {
+    --ts-chart-tooltip-background: var(--popover);
+    --ts-chart-tooltip-border: 1px solid var(--border);
+    --ts-chart-tooltip-color: var(--popover-foreground);
+  }
+
+  .ts-chart-tooltip__row > span:nth-child(2) {
+    color: var(--muted-foreground);
+  }
+
+  .ts-chart-tooltip__row > span:nth-child(3) {
+    color: var(--popover-foreground);
+    font-weight: 700;
+  }
+
   /* A scroll region that behaves on touch: momentum, no rubber-banding into
      the page behind it, and room for the tab bar at the bottom. */
   .scroll-pane {
