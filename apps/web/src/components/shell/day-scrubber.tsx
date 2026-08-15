@@ -174,7 +174,7 @@ export function DayScrubber({
       aria-valuenow={shownDay}
       aria-valuetext={ariaValueText}
       className={cn(
-        "scrubber flex h-9 touch-none items-end justify-between overflow-hidden rounded-md px-0.5 pb-0.5",
+        "scrubber flex h-9 touch-none items-end justify-between overflow-hidden px-0.5 pb-0.5",
         disabled ? "opacity-50" : "cursor-pointer",
         className
       )}
@@ -195,7 +195,7 @@ export function DayScrubber({
           <span
             aria-hidden="true"
             className={cn(
-              "scrub-tick pointer-events-none w-px shrink-0 rounded-full sm:w-0.5",
+              "scrub-tick pointer-events-none w-px shrink-0 sm:w-0.5",
               isSelected
                 ? "h-6 bg-primary"
                 : isMonthStart

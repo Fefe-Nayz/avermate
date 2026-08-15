@@ -257,8 +257,16 @@ export function useBreadcrumbs(): Crumb[] {
           crumbs.push({
             key: section,
             label: labels[section] as string,
-            href: section === "social" ? "/admin/social" : undefined,
+            href:
+              section === "social"
+                ? "/admin/social"
+                : section === "card-templates" && segments[2]
+                  ? "/admin/card-templates"
+                  : undefined,
           })
+        }
+        if (section === "card-templates" && segments[2] === "new") {
+          crumbs.push({ key: "card-templates-new", label: t("New template") })
         }
         if (section === "social") {
           const socialSection = segments[2]

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useExtracted } from "next-intl"
@@ -111,12 +112,15 @@ export default function AdminCardTemplatesPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
-              "Curated card templates every account can browse and install. Build the card with the full editor on your own dashboard or insights, then lift it into the catalog — references to your entities become the installer's choices."
+              "Curated card templates every account can browse and install. Build one from scratch with the full editor, or lift one of your existing cards — references to your entities become the installer's choices."
             )}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button render={<Link href="/admin/card-templates/new" />}>
+            {t("Build a new template")}
+          </Button>
           <SelectControl
             aria-label={t("Pick one of your cards…")}
             className="w-72 md:w-72"
@@ -134,6 +138,7 @@ export default function AdminCardTemplatesPage() {
             disabled={!sourceCardId || create.isPending}
             onClick={createFromCard}
             type="button"
+            variant="outline"
           >
             {create.isPending ? <Spinner className="size-4" /> : null}
             {t("Create a draft from it")}
@@ -146,7 +151,9 @@ export default function AdminCardTemplatesPage() {
           </div>
         ) : (templates.data ?? []).length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            {t("No templates yet. Create a draft from one of your cards.")}
+            {t(
+              "No templates yet. Build one from scratch or lift one of your cards."
+            )}
           </p>
         ) : (
           <div className="grid gap-4 @2xl/main:grid-cols-2">

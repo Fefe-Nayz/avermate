@@ -72,14 +72,34 @@ const REFINEMENT_SECTIONS = new Set([
   "thresholds",
 ])
 
+/**
+ * Repoints the editor at a different destination — the card gallery's
+ * template drafts. The flow, preview and validation stay exactly the card
+ * editor's; only the chrome and the save change hands. Width and colour
+ * disappear because installers choose those, not templates.
+ */
+export interface WidgetFormSubmission {
+  title: string
+  description: string
+  backHref: string
+  submitLabel: string
+  pending: boolean
+  /** Receives the compiled definition and a non-empty title. */
+  submit: (definition: WidgetDefinitionV1, title: string) => void
+  /** An extra opening step, e.g. the template's surface choice. */
+  leadStep?: FlowStep
+}
+
 export function WidgetForm({
   mode,
   surface,
   initial,
+  submission,
 }: {
   mode: "create" | "edit"
   surface: WidgetSurface
   initial?: DashboardCardRow
+  submission?: WidgetFormSubmission
 }) {
   const t = useExtracted()
   const message = useWidgetMessages()
@@ -200,6 +220,10 @@ export function WidgetForm({
       toast.error(message("widget.error.definition"))
       return
     }
+    if (submission) {
+      submission.submit(compiled.plan.definition, title.trim() || defaultTitle)
+      return
+    }
     const payload = {
       span,
       title: title.trim() || null,
@@ -260,6 +284,7 @@ export function WidgetForm({
   )
 
   const steps: FlowStep[] = [
+    ...(submission?.leadStep ? [submission.leadStep] : []),
     editorStep("definition", t("Data and analysis"), flow.definition),
     editorStep("visualization", t("Visualisation"), flow.visualization),
   ]
@@ -340,37 +365,51 @@ export function WidgetForm({
 
   return (
     <FormFlow
-      title={mode === "create" ? t("New card") : t("Edit card")}
+      title={
+        submission?.title ??
+        (mode === "create" ? t("New card") : t("Edit card"))
+      }
       description={
-        surface === "insights"
+        submission?.description ??
+        (surface === "insights"
           ? t(
               "Build the analysis and chart around the question you want to answer."
             )
           : t(
               "Choose the data, calculation and presentation for this DataCard."
-            )
+            ))
       }
-      backHref={returnHref}
+      backHref={submission?.backHref ?? returnHref}
       steps={steps}
       aside={preview}
       asidePlacement="sticky-end"
       beforeSave={
         <div className="flex flex-col gap-5">
-          <ChoiceField
-            label={t("Width")}
-            choices={widths.map((width) => ({
-              value: String(width.columns),
-              label: widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
-            }))}
-            value={String(drawn)}
-            onValueChange={(value) =>
-              setSpan(
-                spanForColumns(span, Number.parseInt(value, 10), shape, columns)
-              )
-            }
-            columns={widths.length > 2 ? 4 : 2}
-          />
-          <WidgetAccentField value={accent} onValueChange={setAccent} />
+          {submission ? null : (
+            <>
+              <ChoiceField
+                label={t("Width")}
+                choices={widths.map((width) => ({
+                  value: String(width.columns),
+                  label:
+                    widthLabels[`${width.columns}/${columns}`] ?? t("Full"),
+                }))}
+                value={String(drawn)}
+                onValueChange={(value) =>
+                  setSpan(
+                    spanForColumns(
+                      span,
+                      Number.parseInt(value, 10),
+                      shape,
+                      columns
+                    )
+                  )
+                }
+                columns={widths.length > 2 ? 4 : 2}
+              />
+              <WidgetAccentField value={accent} onValueChange={setAccent} />
+            </>
+          )}
           <TextField
             label={t("Title")}
             description={t("Leave blank to use the metric's own name.")}
@@ -383,16 +422,19 @@ export function WidgetForm({
       }
       onSubmit={submit}
       submitLabel={
-        mode === "create"
+        submission?.submitLabel ??
+        (mode === "create"
           ? surface === "insights"
             ? t("Add to Insights")
             : t("Add to dashboard")
-          : t("Save changes")
+          : t("Save changes"))
       }
-      submitting={create.isPending || update.isPending}
-      disabled={!draftCompilation.valid || !yearId}
+      submitting={
+        submission ? submission.pending : create.isPending || update.isPending
+      }
+      disabled={!draftCompilation.valid || (!submission && !yearId)}
       destructive={
-        mode === "edit" && initial
+        mode === "edit" && initial && !submission
           ? {
               label: t("Remove"),
               onClick: () => remove.mutate({ cardId: initial.id }),
