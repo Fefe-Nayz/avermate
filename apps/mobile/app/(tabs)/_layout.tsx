@@ -1,21 +1,23 @@
 import { Redirect, Tabs } from "expo-router";
-import { StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Icon } from "@/components/icon";
 import { Loading } from "@/components/ui";
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner";
+import { QuickAddProvider } from "@/components/quick-add";
+import { TabBar } from "@/components/tab-bar";
 import { useYear } from "@/components/year-provider";
 import { useSession } from "@/lib/auth-client";
-import { haptic } from "@/lib/haptics";
-import { t } from "@/lib/i18n";
 import { usePalette } from "@/lib/theme";
 
 /**
- * Five destinations, and every screen in the app hangs off one of them.
+ * The shell: three destinations of the account's choosing, the raised "+"
+ * that records a grade, and "More" holding everything else — the same
+ * arrangement as the web's phone chrome. Every route in the group stays
+ * registered whether or not it is pinned, so a deep link or a More row can
+ * always land.
  *
- * Each screen draws its own large title in content rather than in a navigation
- * bar: the header then scrolls away with the page, which is what gives a phone
- * back the vertical space a fixed bar would eat.
+ * Each screen draws its own large title in content rather than in a
+ * navigation bar: the header then scrolls away with the page, which is what
+ * gives a phone back the vertical space a fixed bar would eat.
  */
 export default function TabsLayout() {
   const palette = usePalette();
@@ -36,67 +38,21 @@ export default function TabsLayout() {
       style={{ flex: 1, backgroundColor: palette.background }}
     >
       <AnnouncementBanner />
-      <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: palette.accent,
-        tabBarInactiveTintColor: palette.textFaint,
-        tabBarStyle: {
-          backgroundColor: palette.background,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: palette.hairline,
-          elevation: 0,
-        },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "500" },
-      }}
-      screenListeners={{ tabPress: () => haptic("selection") }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t("Home"),
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="layout-dashboard" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="subjects"
-        options={{
-          title: t("Subjects"),
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="book-marked" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="grades"
-        options={{
-          title: t("Grades"),
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="list-checks" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="goals"
-        options={{
-          title: t("Goals"),
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="target" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: t("Settings"),
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="settings" size={size} color={color} />
-          ),
-        }}
-      />
-      </Tabs>
+      <QuickAddProvider>
+        <Tabs
+          screenOptions={{ headerShown: false }}
+          tabBar={(props) => <TabBar {...props} />}
+        >
+          <Tabs.Screen name="index" />
+          <Tabs.Screen name="subjects" />
+          <Tabs.Screen name="grades" />
+          <Tabs.Screen name="goals" />
+          <Tabs.Screen name="insights" />
+          <Tabs.Screen name="social" />
+          <Tabs.Screen name="more" />
+          <Tabs.Screen name="settings" />
+        </Tabs>
+      </QuickAddProvider>
     </SafeAreaView>
   );
 }

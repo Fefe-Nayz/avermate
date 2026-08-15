@@ -2,7 +2,16 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Icon, type IconName } from "@/components/icon";
-import { Button, Card, Empty, Label, Loading, ProgressBar, Row, Section } from "@/components/ui";
+import {
+  Button,
+  Card,
+  Empty,
+  Label,
+  Loading,
+  ProgressBar,
+  Row,
+  Section,
+} from "@/components/ui";
 import { AverageValue } from "@/components/value";
 import { StatusPill } from "@/components/goal-status";
 import { adviceText } from "@/components/goal-advice";
@@ -70,9 +79,7 @@ export default function GoalDetail() {
 
   const advice = plan.advice
     .map((item) => adviceText(item, { graph, scale, decimals }))
-    .filter(
-      (item): item is { icon: IconName; text: string } => item !== null,
-    );
+    .filter((item): item is { icon: IconName; text: string } => item !== null);
 
   const nextResults = plan.nextResults
     .filter((entry) => entry.achievable && !entry.alreadySecured)
@@ -82,7 +89,9 @@ export default function GoalDetail() {
     .filter((entry) => entry.achievable && !entry.alreadySecured)
     .slice(0, 3);
 
-  const levers = plan.levers.filter((lever) => lever.leverage > 0.001).slice(0, 5);
+  const levers = plan.levers
+    .filter((lever) => lever.leverage > 0.001)
+    .slice(0, 5);
   const done = plan.status === "achieved" || plan.status === "secured";
 
   return (
@@ -118,7 +127,11 @@ export default function GoalDetail() {
       >
         <View style={{ gap: space.md, paddingTop: space.sm }}>
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.sm,
+            }}
           >
             <Text style={[type.title, { flex: 1, color: palette.text }]}>
               {plan.goal.name}
@@ -127,7 +140,11 @@ export default function GoalDetail() {
           </View>
 
           <View
-            style={{ flexDirection: "row", alignItems: "flex-end", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: space.sm,
+            }}
           >
             <AverageValue ratio={plan.current} size="hero" colored />
             <View style={{ paddingBottom: space.md }}>
@@ -148,7 +165,11 @@ export default function GoalDetail() {
 
           {plan.gap !== null && plan.gap > 0 ? (
             <View
-              style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: space.xs,
+              }}
             >
               <Text style={[type.footnote, { color: palette.textMuted }]}>
                 {t("Still to go")}
@@ -174,9 +195,7 @@ export default function GoalDetail() {
                         color={palette.textFaint}
                       />
                     </View>
-                    <Text
-                      style={[type.body, { flex: 1, color: palette.text }]}
-                    >
+                    <Text style={[type.body, { flex: 1, color: palette.text }]}>
                       {item.text}
                     </Text>
                   </View>

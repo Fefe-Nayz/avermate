@@ -71,9 +71,7 @@ export default function FriendInvitation() {
                 avatar={data.inviter.avatar}
               />
               <Note>
-                {t(
-                  "Becoming friends shares only what each of you unlocked.",
-                )}
+                {t("Becoming friends shares only what each of you unlocked.")}
               </Note>
               {data.self ? (
                 <Note>

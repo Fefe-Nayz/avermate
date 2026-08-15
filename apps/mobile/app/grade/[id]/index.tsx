@@ -1,11 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
-import {
-  gradeImpact,
-  gradeRatio,
-  resolveCustomAverage,
-} from "@avermate/core";
+import { gradeImpact, gradeRatio, resolveCustomAverage } from "@avermate/core";
 import { formatDate, formatNumber } from "@/components/format";
 import {
   CoefficientTag,
@@ -86,12 +82,7 @@ export default function GradeDetail() {
           id: `custom:${average.id}`,
           label: average.name,
           href: `/average/${average.id}`,
-          impact: gradeImpact(
-            resolved.graph,
-            grade.id,
-            null,
-            resolved.scope,
-          ),
+          impact: gradeImpact(resolved.graph, grade.id, null, resolved.scope),
         },
       ];
     }),
@@ -123,11 +114,7 @@ export default function GradeDetail() {
                 backgroundColor: palette.accentSoft,
               }}
             >
-              <Icon
-                name="pencil-outline"
-                size={17}
-                color={palette.accent}
-              />
+              <Icon name="pencil-outline" size={17} color={palette.accent} />
             </Pressable>
           ),
         }}
@@ -175,7 +162,9 @@ export default function GradeDetail() {
                       }
                     : undefined
                 }
-                trailing={<DeltaValue delta={entry.impact.delta} size="callout" />}
+                trailing={
+                  <DeltaValue delta={entry.impact.delta} size="callout" />
+                }
               />
             ))}
           </Card>

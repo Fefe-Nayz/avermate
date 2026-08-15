@@ -77,7 +77,10 @@ function AccentPicker({
       <Text style={[type.label, { color: palette.textFaint }]}>
         {t("Accent color")}
       </Text>
-      <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
+      <View
+        accessibilityRole="radiogroup"
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}
+      >
         {choices.map((choice) => {
           const selected = value === choice.value;
           return (
@@ -113,7 +116,10 @@ function AccentPicker({
                   />
                 ) : null}
               </View>
-              <Text numberOfLines={1} style={[type.label, { color: palette.textMuted }]}>
+              <Text
+                numberOfLines={1}
+                style={[type.label, { color: palette.textMuted }]}
+              >
                 {choice.label}
               </Text>
             </Pressable>
@@ -257,8 +263,12 @@ export default function CardEdit() {
         <Section>
           <Note>
             {surface === "insights"
-              ? t("This widget belongs to Insights. Its definition and chart stay editable together.")
-              : t("This widget belongs to the Dashboard. Its definition and chart stay editable together.")}
+              ? t(
+                  "This widget belongs to Insights. Its definition and chart stay editable together.",
+                )
+              : t(
+                  "This widget belongs to the Dashboard. Its definition and chart stay editable together.",
+                )}
           </Note>
         </Section>
 

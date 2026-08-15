@@ -9,7 +9,8 @@ export function setInteractionPreferences(value: {
   compactMode: boolean;
   reduceMotion: boolean;
 }): void {
-  if (compact === value.compactMode && reduceMotion === value.reduceMotion) return;
+  if (compact === value.compactMode && reduceMotion === value.reduceMotion)
+    return;
   compact = value.compactMode;
   reduceMotion = value.reduceMotion;
   revision += 1;
@@ -22,6 +23,10 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function useInteractionPreferences() {
-  useSyncExternalStore(subscribe, () => revision, () => 0);
+  useSyncExternalStore(
+    subscribe,
+    () => revision,
+    () => 0,
+  );
   return { compactMode: compact, reduceMotion } as const;
 }

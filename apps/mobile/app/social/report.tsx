@@ -9,11 +9,7 @@ import { orpc } from "@/lib/orpc";
 import { space } from "@/lib/theme";
 
 type Category =
-  | "harassment"
-  | "privacy"
-  | "impersonation"
-  | "unsafe_content"
-  | "other";
+  "harassment" | "privacy" | "impersonation" | "unsafe_content" | "other";
 
 /**
  * Reporting a person or a group. The one instruction that matters — keep

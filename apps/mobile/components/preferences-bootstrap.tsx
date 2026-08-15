@@ -14,6 +14,7 @@ import {
   setThemePreference,
 } from "@/lib/theme";
 import { setChartSettings } from "@/lib/chart-settings";
+import { setNavigationSettings } from "@/lib/navigation-settings";
 
 /** Applies the server copy after authentication; SecureStore covers first paint. */
 export function PreferencesBootstrap() {
@@ -41,6 +42,7 @@ export function PreferencesBootstrap() {
       reduceMotion: value.reduceMotion,
     });
     setChartSettings(value.chartSettings);
+    setNavigationSettings(value.navigation ?? {});
     void Promise.all([
       SecureStore.setItemAsync(localUserKey(userId, "locale"), language),
       SecureStore.setItemAsync(localUserKey(userId, "theme"), value.theme),

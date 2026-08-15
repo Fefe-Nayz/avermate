@@ -76,7 +76,9 @@ describe("system widget privacy boundary", () => {
       enabled: false,
       mode: "balanced",
     });
-    expect(parseSystemWidgetPreference('{"enabled":true,"mode":"weird"}')).toEqual({
+    expect(
+      parseSystemWidgetPreference('{"enabled":true,"mode":"weird"}'),
+    ).toEqual({
       enabled: true,
       mode: "balanced",
     });

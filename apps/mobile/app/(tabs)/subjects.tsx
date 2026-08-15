@@ -9,8 +9,15 @@ import {
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
 import { resolveCustomAverage, type Subject } from "@avermate/core";
-import { Heading,
-  Button, Card, Empty, Loading, Row, Section } from "@/components/ui";
+import {
+  Heading,
+  Button,
+  Card,
+  Empty,
+  Loading,
+  Row,
+  Section,
+} from "@/components/ui";
 import { AverageValue, CoefficientTag } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { useYear } from "@/components/year-provider";
@@ -43,8 +50,7 @@ export default function Subjects() {
     const list = Array.isArray(customAverages) ? customAverages.slice() : [];
     list.sort(
       (left, right) =>
-        left.sortOrder - right.sortOrder ||
-        left.name.localeCompare(right.name),
+        left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
     );
     return list.map((average) => {
       const resolved = resolveCustomAverage(graph, average);
@@ -116,11 +122,7 @@ export default function Subjects() {
               router.push("/settings/averages");
             }}
           >
-            <Icon
-              name="options-outline"
-              size={18}
-              color={palette.textMuted}
-            />
+            <Icon name="options-outline" size={18} color={palette.textMuted} />
           </Pressable>
         }
       >

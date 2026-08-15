@@ -39,14 +39,14 @@ import { reviewStorySlides, type ReviewSlideKey } from "./review-story-model";
  * build, Expo Go, a platform that does not have it — must degrade to sharing
  * rather than crash. So it is required on demand and its absence is a `null`.
  */
-type MediaLibraryModule = typeof import("expo-media-library")
+type MediaLibraryModule = typeof import("expo-media-library");
 
 function loadMediaLibrary(): MediaLibraryModule | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("expo-media-library") as MediaLibraryModule
+    return require("expo-media-library") as MediaLibraryModule;
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -56,14 +56,14 @@ function loadMediaLibrary(): MediaLibraryModule | null {
  * fails while the route is being evaluated, and expo-router then reports the
  * whole screen as missing its default export.
  */
-type ViewShotModule = typeof import("react-native-view-shot")
+type ViewShotModule = typeof import("react-native-view-shot");
 
 function loadViewShot(): ViewShotModule | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("react-native-view-shot") as ViewShotModule
+    return require("react-native-view-shot") as ViewShotModule;
   } catch {
-    return null
+    return null;
   }
 }
 

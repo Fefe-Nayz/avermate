@@ -91,7 +91,9 @@ export default function WidgetLibrary() {
         ) : null}
 
         {CATEGORIES.map((category) => {
-          const entries = visible.filter((entry) => entry.category === category);
+          const entries = visible.filter(
+            (entry) => entry.category === category,
+          );
           if (entries.length === 0) return null;
           return (
             <Section key={category} title={categoryLabel(category)}>
@@ -115,9 +117,12 @@ export default function WidgetLibrary() {
 
         <Section>
           <Note>
-            {t("All {count} widgets use the same audited analytics engine as the web app.", {
-              count: CARD_METRICS.length,
-            })}
+            {t(
+              "All {count} widgets use the same audited analytics engine as the web app.",
+              {
+                count: CARD_METRICS.length,
+              },
+            )}
           </Note>
         </Section>
       </Screen>

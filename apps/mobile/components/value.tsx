@@ -28,7 +28,8 @@ export function AverageValue({
   style,
 }: {
   ratio: Ratio;
-  size?: "hero" | "display" | "title" | "heading" | "body" | "callout" | "footnote";
+  size?:
+    "hero" | "display" | "title" | "heading" | "body" | "callout" | "footnote";
   showScale?: boolean;
   colored?: boolean;
   decimals?: number;
@@ -176,7 +177,8 @@ export function PercentValue({
   size = "body",
 }: {
   ratio: number | null;
-  size?: "hero" | "display" | "title" | "heading" | "body" | "callout" | "footnote";
+  size?:
+    "hero" | "display" | "title" | "heading" | "body" | "callout" | "footnote";
 }) {
   const palette = usePalette();
 

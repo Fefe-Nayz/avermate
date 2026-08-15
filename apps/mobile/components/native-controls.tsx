@@ -35,11 +35,7 @@ export function NativeSwitch({
       seedColor={palette.band.excellent}
       style={{ width: 56, height: 34 }}
     >
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-      />
+      <Switch value={value} onValueChange={onValueChange} disabled={disabled} />
     </Host>
   );
 }

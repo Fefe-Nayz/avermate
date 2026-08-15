@@ -67,11 +67,13 @@ export function sessionCookie(): string | null {
 }
 
 interface SessionAtomState {
-  data: (typeof authClient.$Infer.Session) | null;
+  data: typeof authClient.$Infer.Session | null;
   error: unknown;
   isPending: boolean;
   isRefetching: boolean;
-  refetch: (query?: { query?: { disableCookieCache?: boolean } }) => Promise<void>;
+  refetch: (query?: {
+    query?: { disableCookieCache?: boolean };
+  }) => Promise<void>;
 }
 
 /** Force a server check and let Better Auth update the same atom useSession reads. */

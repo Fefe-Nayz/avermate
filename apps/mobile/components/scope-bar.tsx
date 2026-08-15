@@ -51,9 +51,8 @@ export function ScopeBar() {
     ? offsetForTimelineDay(timelineDate, year, now)
     : bounds.totalDays;
   const selectedDate = new Date(
-    calendarDayTimestamp(
-      timelineDate ?? isoCalendarDay(bounds.maximum),
-    ) ?? bounds.maximum,
+    calendarDayTimestamp(timelineDate ?? isoCalendarDay(bounds.maximum)) ??
+      bounds.maximum,
   );
 
   return (
@@ -131,7 +130,9 @@ export function ScopeBar() {
                   <Text
                     style={[
                       type.callout,
-                      { color: active ? palette.accentText : palette.textMuted },
+                      {
+                        color: active ? palette.accentText : palette.textMuted,
+                      },
                     ]}
                   >
                     {item.name}
@@ -156,7 +157,10 @@ export function ScopeBar() {
             timelineDate ? t("Adjust time travel date") : t("Time travel")
           }
           accessibilityRole="button"
-          accessibilityState={{ expanded: timelineOpen, selected: Boolean(timelineDate) }}
+          accessibilityState={{
+            expanded: timelineOpen,
+            selected: Boolean(timelineDate),
+          }}
           onPress={() => {
             haptic("selection");
             if (!timelineDate) {
@@ -187,7 +191,9 @@ export function ScopeBar() {
               { color: timelineDate ? palette.accentText : palette.textMuted },
             ]}
           >
-            {timelineDate ? formatDate(selectedDate, "short") : t("Time travel")}
+            {timelineDate
+              ? formatDate(selectedDate, "short")
+              : t("Time travel")}
           </Text>
         </Pressable>
       </ScrollView>
@@ -303,7 +309,11 @@ export function ScopeBar() {
           </View>
 
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.sm,
+            }}
           >
             <Pressable
               accessibilityLabel={t("Previous day")}
@@ -313,7 +323,10 @@ export function ScopeBar() {
               onPress={() =>
                 setTimelineDate(dayAtOffset(year, now, selectedDay - 1))
               }
-              style={{ opacity: selectedDay <= 0 ? 0.35 : 1, padding: space.xs }}
+              style={{
+                opacity: selectedDay <= 0 ? 0.35 : 1,
+                padding: space.xs,
+              }}
             >
               <Icon name="remove" size={18} color={palette.textMuted} />
             </Pressable>
@@ -345,7 +358,9 @@ export function ScopeBar() {
             </Pressable>
           </View>
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View
+            style={{ flexDirection: "row", justifyContent: "space-between" }}
+          >
             <Text style={[type.footnote, { color: palette.textFaint }]}>
               {formatDate(new Date(bounds.minimum), "short")}
             </Text>

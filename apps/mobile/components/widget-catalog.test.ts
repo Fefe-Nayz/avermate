@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CARD_METRICS } from "@avermate/core";
-import {
-  WIDGET_CATALOG,
-  isRecommendedDisplayValid,
-} from "./widget-catalog";
+import { WIDGET_CATALOG, isRecommendedDisplayValid } from "./widget-catalog";
 
 describe("mobile widget catalog", () => {
   test("covers every core metric exactly once", () => {
@@ -21,7 +18,10 @@ describe("mobile widget catalog", () => {
 
   test("keeps list and chart widgets out of quarter-width cards", () => {
     for (const entry of WIDGET_CATALOG) {
-      if (entry.recommendedDisplay === "list" || entry.recommendedDisplay === "chart") {
+      if (
+        entry.recommendedDisplay === "list" ||
+        entry.recommendedDisplay === "chart"
+      ) {
         expect(entry.recommendedSpan).toBeGreaterThanOrEqual(2);
       }
     }

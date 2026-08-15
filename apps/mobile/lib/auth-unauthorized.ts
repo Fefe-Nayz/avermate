@@ -1,7 +1,5 @@
 export type UnauthorizedOutcome =
-  | "active-session"
-  | "expired-session"
-  | "ignored";
+  "active-session" | "expired-session" | "ignored";
 
 export interface UnauthorizedSessionDependencies {
   clearExpiredIdentity: (userId: string) => Promise<void>;

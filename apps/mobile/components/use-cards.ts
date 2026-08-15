@@ -83,8 +83,7 @@ export function useCards(surface: WidgetSurface = "overview") {
       timelineCutoffTimestamp(yearState.timelineDate) ?? yearState.now;
     const from = period.startAt;
     const boundedTo = new Date(Math.min(cutoff, period.endAt.getTime()));
-    const to =
-      boundedTo > from ? boundedTo : new Date(from.getTime() + 1);
+    const to = boundedTo > from ? boundedTo : new Date(from.getTime() + 1);
     const context: WidgetEvaluationContext = {
       surface,
       graph: yearState.graph,
@@ -117,9 +116,12 @@ export function useCards(surface: WidgetSurface = "overview") {
     };
 
     for (const card of all) {
-      computed.set(card.id, card.legacySpec
-        ? evaluateCard(card.legacySpec, context)
-        : evaluateWidgetDefinition(card.definition, context));
+      computed.set(
+        card.id,
+        card.legacySpec
+          ? evaluateCard(card.legacySpec, context)
+          : evaluateWidgetDefinition(card.definition, context),
+      );
     }
     return computed;
   }, [all, surface, yearState]);

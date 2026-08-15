@@ -109,7 +109,12 @@ export default function SignIn() {
           />
           <Link href="/forgot-password" asChild>
             <Pressable hitSlop={8} style={{ alignSelf: "flex-end" }}>
-              <Text style={[type.footnote, { color: palette.text, fontWeight: "600" }]}>
+              <Text
+                style={[
+                  type.footnote,
+                  { color: palette.text, fontWeight: "600" },
+                ]}
+              >
                 {t("Forgot password?")}
               </Text>
             </Pressable>

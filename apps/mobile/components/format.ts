@@ -13,7 +13,10 @@ function tag(): string {
 }
 
 /** "5 August 2026" — for a headline or a detail line. */
-export function formatDate(date: Date, style: "long" | "short" = "long"): string {
+export function formatDate(
+  date: Date,
+  style: "long" | "short" = "long",
+): string {
   return date.toLocaleDateString(tag(), {
     day: "numeric",
     month: style === "long" ? "long" : "short",

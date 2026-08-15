@@ -13,7 +13,9 @@ export default function EditGrade() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const grade = useQuery(orpc.grades.get.queryOptions({ input: { gradeId: id } }));
+  const grade = useQuery(
+    orpc.grades.get.queryOptions({ input: { gradeId: id } }),
+  );
   const [draft, setDraft] = useState<GradeDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
 

@@ -7,6 +7,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { useQuickAdd } from "@/components/quick-add";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
+import { useNavigationTabs } from "@/lib/navigation-settings";
 import { radius, space, type, usePalette } from "@/lib/theme";
 
 /**
@@ -15,29 +16,49 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  * Four destinations and one action, which is as many targets as a thumb can
  * reach without looking. The action sits in the middle and is raised, because
  * "record a grade" is the thing this app is opened to do and it should not
- * take a scroll to reach.
+ * take a scroll to reach. The three destinations are the account's own
+ * choice — the same choice the web stores — and "More" holds the rest.
  */
 
-const TABS: Array<{ name: string; label: string; icon: IconName }> = [
-  { name: "index", label: t("Home"), icon: "layout-dashboard" },
-  { name: "subjects", label: t("Subjects"), icon: "book-marked" },
-  { name: "grades", label: t("Grades"), icon: "list-checks" },
-  { name: "more", label: t("More"), icon: "ellipsis" },
-];
+interface TabCell {
+  name: string;
+  label: string;
+  icon: IconName;
+}
+
+/** Literal keys so the catalogue scan sees them; resolved at render time. */
+const TAB_LABELS: Record<string, () => string> = {
+  "/dashboard": () => t("Home"),
+  "/subjects": () => t("Subjects"),
+  "/grades": () => t("Grades"),
+  "/goals": () => t("Goals"),
+  "/insights": () => t("Insights"),
+  "/social": () => t("Social"),
+};
 
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
   const quickAdd = useQuickAdd();
+  const chosen = useNavigationTabs();
+
+  const tabs: TabCell[] = [
+    ...chosen.map((entry) => ({
+      name: entry.route,
+      label: TAB_LABELS[entry.href]?.() ?? t(entry.label),
+      icon: entry.icon,
+    })),
+    { name: "more", label: t("More"), icon: "ellipsis" },
+  ];
 
   const current = state.routes[state.index]?.name;
   // The action splits the row in two, exactly as the web's grid does.
-  const cells: Array<(typeof TABS)[number] | null> = [
-    TABS[0] as (typeof TABS)[number],
-    TABS[1] as (typeof TABS)[number],
+  const cells: Array<TabCell | null> = [
+    tabs[0] as TabCell,
+    tabs[1] as TabCell,
     null,
-    TABS[2] as (typeof TABS)[number],
-    TABS[3] as (typeof TABS)[number],
+    tabs[2] as TabCell,
+    tabs[3] as TabCell,
   ];
 
   return (
@@ -92,7 +113,12 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           );
         }
 
-        const active = current === tab.name;
+        // "More" also owns the routes that live behind it (settings, …), the
+        // way an iOS More tab stays lit while you are inside it.
+        const active =
+          current === tab.name ||
+          (tab.name === "more" &&
+            !tabs.some((entry) => entry.name === current));
         return (
           <Pressable
             key={tab.name}

@@ -74,7 +74,8 @@ function formatAverage(
 }
 
 function updatedLabel(date: Date, locale: "fr" | "en"): string {
-  if (!Number.isFinite(date.getTime())) return locale === "fr" ? "À jour" : "Up to date";
+  if (!Number.isFinite(date.getTime()))
+    return locale === "fr" ? "À jour" : "Up to date";
   return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",

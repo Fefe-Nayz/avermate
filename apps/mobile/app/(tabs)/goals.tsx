@@ -1,8 +1,20 @@
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
-import { Heading,
-  Button, Card, Empty, Loading, ProgressBar } from "@/components/ui";
+import {
+  Heading,
+  Button,
+  Card,
+  Empty,
+  Loading,
+  ProgressBar,
+} from "@/components/ui";
 import { AverageValue } from "@/components/value";
 import { StatusPill } from "@/components/goal-status";
 import { ScopeBar } from "@/components/scope-bar";

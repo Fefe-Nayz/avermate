@@ -1,11 +1,22 @@
 import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { Icon } from "@/components/icon";
 import type { Grade, Subject } from "@avermate/core";
 import { FULL_YEAR_PERIOD_ID } from "@avermate/core";
 import { Button, Card, Label, Screen } from "@/components/ui";
 import { AverageValue, DeltaValue } from "@/components/value";
-import { FieldGroup, PickerField, TextField, type Choice } from "@/components/field";
+import {
+  FieldGroup,
+  PickerField,
+  TextField,
+  type Choice,
+} from "@/components/field";
 import { DateField } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
@@ -84,7 +95,10 @@ function rollUp(components: ComponentDraft[], outOf: number): number | null {
   return (weighted / total) * outOf;
 }
 
-export function emptyDraft(defaultOutOf: number, subjectId?: string): GradeDraft {
+export function emptyDraft(
+  defaultOutOf: number,
+  subjectId?: string,
+): GradeDraft {
   return {
     name: "",
     value: "",
@@ -295,9 +309,7 @@ export function GradeForm({
       style={{ flex: 1 }}
     >
       <Screen
-        footer={
-          <Button label={submitLabel} onPress={submit} loading={busy} />
-        }
+        footer={<Button label={submitLabel} onPress={submit} loading={busy} />}
       >
         <FieldGroup>
           <TextField
@@ -598,9 +610,7 @@ function PreviewRow({
   const delta = before === null || after === null ? null : after - before;
 
   return (
-    <View
-      style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
-    >
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
       <Text
         numberOfLines={1}
         style={[type.body, { flex: 1, color: palette.textMuted }]}

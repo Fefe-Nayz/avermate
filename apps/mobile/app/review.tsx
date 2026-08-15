@@ -12,7 +12,15 @@ import {
   type Subject,
   type Year,
 } from "@avermate/core";
-import { Empty, Loading, Row, Card, Screen, Section, Title } from "@/components/ui";
+import {
+  Empty,
+  Loading,
+  Row,
+  Card,
+  Screen,
+  Section,
+  Title,
+} from "@/components/ui";
 import { YearReviewStory } from "@/components/review/year-review-story";
 import { useYear } from "@/components/year-provider";
 import { useSession } from "@/lib/auth-client";
@@ -41,7 +49,8 @@ export default function Review() {
   const eligible = useQuery(orpc.review.eligibleYears.queryOptions());
   const eligibleYears = eligible.data ?? [];
   const selectedYearId =
-    (params.yearId && eligibleYears.some((item) => item.yearId === params.yearId)
+    (params.yearId &&
+    eligibleYears.some((item) => item.yearId === params.yearId)
       ? params.yearId
       : eligibleYears.find((item) => item.yearId === active.yearId)?.yearId) ??
     eligibleYears[0]?.yearId ??
@@ -126,7 +135,9 @@ export default function Review() {
     <>
       <Stack.Screen options={{ title: t("Year in review") }} />
       <Screen>
-        <Title subtitle={t("Replay the years that already have enough to tell.") }>
+        <Title
+          subtitle={t("Replay the years that already have enough to tell.")}
+        >
           {t("Your recap library")}
         </Title>
         {eligibleYears.length === 0 ? (

@@ -100,7 +100,9 @@ export function SubjectForm({
 
     const walk = (nodes: readonly Subject[], depth: number): Choice[] =>
       [...nodes]
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+        )
         .filter((subject) => !banned.has(subject.id))
         .flatMap((subject) => [
           { value: subject.id, label: subject.name, depth },
@@ -173,7 +175,9 @@ export function SubjectForm({
               {
                 value: "category",
                 label: t("Category"),
-                hint: t("Just a grouping — its children are weighed one by one"),
+                hint: t(
+                  "Just a grouping — its children are weighed one by one",
+                ),
               },
             ]}
           />

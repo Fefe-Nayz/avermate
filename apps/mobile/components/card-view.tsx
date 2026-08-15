@@ -68,9 +68,18 @@ export function CardResultBody({
       return (
         <View style={{ gap: space.sm }}>
           <View
-            style={{ flexDirection: "row", alignItems: "flex-end", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: space.sm,
+            }}
           >
-            <AverageValue ratio={result.ratio} size="display" showScale colored />
+            <AverageValue
+              ratio={result.ratio}
+              size="display"
+              showScale
+              colored
+            />
             <View style={{ paddingBottom: 4 }}>
               <DeltaValue delta={result.delta} size="callout" />
             </View>
@@ -139,7 +148,11 @@ export function CardResultBody({
       return (
         <View style={{ gap: space.xs }}>
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.sm,
+            }}
           >
             <Text
               numberOfLines={1}
@@ -205,7 +218,11 @@ export function CardResultBody({
       return (
         <View style={{ gap: space.xs }}>
           <View
-            style={{ flexDirection: "row", alignItems: "flex-end", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: space.sm,
+            }}
           >
             <Text style={[type.display, { color: palette.text }]}>
               {String(result.current)}
@@ -229,7 +246,11 @@ export function CardResultBody({
       return (
         <View style={{ gap: space.sm }}>
           <View
-            style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space.sm,
+            }}
           >
             <AverageValue ratio={result.plan.current} size="display" colored />
             <Text style={[type.footnote, { color: palette.textFaint }]}>

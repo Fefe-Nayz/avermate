@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
 import {
@@ -137,7 +143,9 @@ export default function Dashboard() {
         >
           <Text style={[type.footnote, { color: palette.textMuted }]}>
             {session?.user.name
-              ? t("Hello, {name}", { name: session.user.name.split(" ")[0] ?? "" })
+              ? t("Hello, {name}", {
+                  name: session.user.name.split(" ")[0] ?? "",
+                })
               : t("Hello")}
           </Text>
           <Pressable
@@ -157,7 +165,12 @@ export default function Dashboard() {
             }}
           >
             <Icon name="add" size={16} color={palette.accentText} />
-            <Text style={[type.footnote, { color: palette.accentText, fontWeight: "600" }]}>
+            <Text
+              style={[
+                type.footnote,
+                { color: palette.accentText, fontWeight: "600" },
+              ]}
+            >
               {t("Add grade")}
             </Text>
           </Pressable>
@@ -238,7 +251,9 @@ export default function Dashboard() {
                         {plan.goal.name}
                       </Text>
                       <AverageValue ratio={plan.current} size="callout" />
-                      <Text style={[type.footnote, { color: palette.textFaint }]}>
+                      <Text
+                        style={[type.footnote, { color: palette.textFaint }]}
+                      >
                         /
                       </Text>
                       <AverageValue ratio={plan.target} size="callout" />
@@ -249,7 +264,9 @@ export default function Dashboard() {
                           ? 0
                           : plan.current / plan.target
                       }
-                      done={plan.status === "achieved" || plan.status === "secured"}
+                      done={
+                        plan.status === "achieved" || plan.status === "secured"
+                      }
                     />
                   </View>
                 </Card>
@@ -261,7 +278,9 @@ export default function Dashboard() {
 
       {mainSubjects.length > 0 ? (
         <Section title={t("Watching")}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+          <View
+            style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}
+          >
             {mainSubjects.map((subject) => (
               <Pressable
                 key={subject.id}
@@ -315,7 +334,9 @@ export default function Dashboard() {
             <Empty
               icon="document-text-outline"
               title={t("Nothing recorded yet.")}
-              body={t("Add your first grade and the year starts drawing itself.")}
+              body={t(
+                "Add your first grade and the year starts drawing itself.",
+              )}
             />
           ) : (
             recent.map((grade, index) => {
@@ -362,7 +383,9 @@ export default function Dashboard() {
                 title={t("Strongest subject")}
                 subtitle={best.subject.name}
                 onPress={() => router.push(`/subject/${best.subject.id}`)}
-                trailing={<AverageValue ratio={best.ratio} size="callout" colored />}
+                trailing={
+                  <AverageValue ratio={best.ratio} size="callout" colored />
+                }
               />
             ) : null}
             {worst && worst.subject.id !== best?.subject.id ? (
@@ -371,7 +394,9 @@ export default function Dashboard() {
                 title={t("Weakest subject")}
                 subtitle={worst.subject.name}
                 onPress={() => router.push(`/subject/${worst.subject.id}`)}
-                trailing={<AverageValue ratio={worst.ratio} size="callout" colored />}
+                trailing={
+                  <AverageValue ratio={worst.ratio} size="callout" colored />
+                }
               />
             ) : null}
             <Row

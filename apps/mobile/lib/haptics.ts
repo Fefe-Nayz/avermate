@@ -6,13 +6,7 @@ import { Platform } from "react-native";
  * blunt vibrate(). Silently inert on hardware that has none.
  */
 export type Tone =
-  | "selection"
-  | "light"
-  | "medium"
-  | "heavy"
-  | "success"
-  | "warning"
-  | "error";
+  "selection" | "light" | "medium" | "heavy" | "success" | "warning" | "error";
 
 let enabled = true;
 

@@ -80,11 +80,7 @@ export function AnnouncementsScreen() {
                           backgroundColor: palette.accentSoft,
                         }}
                       >
-                        <Icon
-                          name="megaphone-outline"
-                          size={18}
-                          color={tone}
-                        />
+                        <Icon name="megaphone-outline" size={18} color={tone} />
                       </View>
                       <View style={{ flex: 1, gap: space.sm }}>
                         <View style={{ gap: 2 }}>

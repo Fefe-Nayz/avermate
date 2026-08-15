@@ -2,7 +2,13 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Icon } from "@/components/icon";
 import { haptic } from "@/lib/haptics";
-import { formatDate, formatDay, formatMonth, formatNumber, parseNumber } from "@/components/format";
+import {
+  formatDate,
+  formatDay,
+  formatMonth,
+  formatNumber,
+  parseNumber,
+} from "@/components/format";
 import { locale, t } from "@/lib/i18n";
 
 export { formatDate, formatDay, formatMonth, formatNumber, parseNumber };
@@ -154,7 +160,11 @@ export function DateField({
                 justifyContent: "space-between",
               }}
             >
-              <Pressable onPress={() => shift(-1)} hitSlop={12} style={{ padding: space.xs }}>
+              <Pressable
+                onPress={() => shift(-1)}
+                hitSlop={12}
+                style={{ padding: space.xs }}
+              >
                 <Icon name="chevron-back" size={18} color={palette.textMuted} />
               </Pressable>
               <Text style={[type.callout, { color: palette.text }]}>
@@ -163,7 +173,11 @@ export function DateField({
                   year: "numeric",
                 })}
               </Text>
-              <Pressable onPress={() => shift(1)} hitSlop={12} style={{ padding: space.xs }}>
+              <Pressable
+                onPress={() => shift(1)}
+                hitSlop={12}
+                style={{ padding: space.xs }}
+              >
                 <Icon
                   name="chevron-forward"
                   size={18}

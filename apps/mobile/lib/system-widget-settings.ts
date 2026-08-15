@@ -17,7 +17,9 @@ export function systemWidgetSettingsRevision(): number {
   return revision;
 }
 
-export function subscribeSystemWidgetSettings(listener: () => void): () => void {
+export function subscribeSystemWidgetSettings(
+  listener: () => void,
+): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
@@ -38,11 +40,16 @@ export async function saveSystemWidgetPreference(
   userId: string,
   preference: SystemWidgetPreference,
 ): Promise<void> {
-  await SecureStore.setItemAsync(storageKey(userId), JSON.stringify(preference));
+  await SecureStore.setItemAsync(
+    storageKey(userId),
+    JSON.stringify(preference),
+  );
   changed();
 }
 
-export async function clearSystemWidgetPreference(userId: string): Promise<void> {
+export async function clearSystemWidgetPreference(
+  userId: string,
+): Promise<void> {
   await SecureStore.deleteItemAsync(storageKey(userId));
   changed();
 }

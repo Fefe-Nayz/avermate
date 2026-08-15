@@ -6,11 +6,7 @@ import {
 } from "@avermate/core";
 
 export type WidgetCategory =
-  | "essentials"
-  | "momentum"
-  | "results"
-  | "consistency"
-  | "goals";
+  "essentials" | "momentum" | "results" | "consistency" | "goals";
 
 export interface WidgetCatalogEntry {
   metric: CardMetric;
@@ -45,7 +41,11 @@ const CATEGORY_BY_METRIC: Record<CardMetric, WidgetCategory> = {
 
 function recommendedDisplay(metric: CardMetric): CardDisplay {
   if (metric === "average" || metric === "projection") return "sparkline";
-  if (metric === "passRate" || metric === "consistency" || metric === "goalProgress") {
+  if (
+    metric === "passRate" ||
+    metric === "consistency" ||
+    metric === "goalProgress"
+  ) {
     return "gauge";
   }
   if (
@@ -77,7 +77,9 @@ export const WIDGET_CATALOG: readonly WidgetCatalogEntry[] = CARD_METRICS.map(
 );
 
 export function widgetCatalogEntry(metric: CardMetric): WidgetCatalogEntry {
-  return WIDGET_CATALOG.find((entry) => entry.metric === metric) as WidgetCatalogEntry;
+  return WIDGET_CATALOG.find(
+    (entry) => entry.metric === metric,
+  ) as WidgetCatalogEntry;
 }
 
 export function isRecommendedDisplayValid(entry: WidgetCatalogEntry): boolean {

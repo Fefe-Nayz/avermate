@@ -42,22 +42,24 @@ export interface Palette {
 export type ResultBand = "excellent" | "good" | "fair" | "weak" | "poor";
 
 const light: Palette = {
-  background: "#FBFBFA",
+  // The web's exact base tokens (globals.css :root, oklch → sRGB): pure
+  // neutral, white paper, near-black ink.
+  background: "#FFFFFF",
   surface: "#FFFFFF",
   surfaceRaised: "#FFFFFF",
-  border: "#E7E6E3",
-  hairline: "#EFEEEB",
+  border: "#E5E5E5",
+  hairline: "#EDEDED",
 
-  text: "#121211",
-  textMuted: "#6B6A66",
-  textFaint: "#A3A29D",
+  text: "#0A0A0A",
+  textMuted: "#737373",
+  textFaint: "#A1A1A1",
 
-  accent: "#121211",
-  accentText: "#FFFFFF",
-  accentSoft: "#F1F0EE",
+  accent: "#171717",
+  accentText: "#FAFAFA",
+  accentSoft: "#F5F5F5",
 
   positive: "#2F855A",
-  negative: "#C0392B",
+  negative: "#DC2626",
 
   band: {
     excellent: "#1E7A4E",
@@ -76,22 +78,23 @@ const light: Palette = {
 };
 
 const dark: Palette = {
-  background: "#0B0B0A",
-  surface: "#141413",
-  surfaceRaised: "#1B1B19",
-  border: "#2A2A27",
-  hairline: "#232322",
+  // globals.css .dark: raised cards on a darker ground, translucent borders.
+  background: "#0A0A0A",
+  surface: "#171717",
+  surfaceRaised: "#171717",
+  border: "rgba(255, 255, 255, 0.10)",
+  hairline: "rgba(255, 255, 255, 0.08)",
 
-  text: "#F5F4F1",
-  textMuted: "#A1A09B",
-  textFaint: "#6E6D69",
+  text: "#FAFAFA",
+  textMuted: "#A1A1A1",
+  textFaint: "#737373",
 
-  accent: "#F5F4F1",
-  accentText: "#121211",
-  accentSoft: "#232322",
+  accent: "#E5E5E5",
+  accentText: "#171717",
+  accentSoft: "#262626",
 
   positive: "#5BBE8A",
-  negative: "#E3796B",
+  negative: "#F87171",
 
   band: {
     excellent: "#5BBE8A",
@@ -129,10 +132,7 @@ export function setThemePreference(value: ThemePreference): void {
   for (const listener of themeListeners) listener();
 }
 
-export function setThemePalette(
-  id: string,
-  customTheme: unknown,
-): void {
+export function setThemePalette(id: string, customTheme: unknown): void {
   paletteOverrides = nativeThemeOverrides(id, customTheme);
   appearanceRevision += 1;
   for (const listener of themeListeners) listener();
@@ -159,7 +159,11 @@ export function useThemePreference(): ThemePreference {
 
 export function usePalette(): Palette {
   const isDark = useIsDark();
-  useSyncExternalStore(subscribeTheme, () => appearanceRevision, () => 0);
+  useSyncExternalStore(
+    subscribeTheme,
+    () => appearanceRevision,
+    () => 0,
+  );
   return isDark
     ? { ...dark, ...paletteOverrides.dark, ...seasonOverrides.dark }
     : { ...light, ...paletteOverrides.light, ...seasonOverrides.light };
@@ -182,31 +186,39 @@ export const space = {
   xxxl: 48,
 } as const;
 
+/**
+ * The web's --radius is 10px: buttons sit at radius−2, cards at radius+4,
+ * exactly Tailwind's rounded-md / rounded-lg / rounded-xl ladder.
+ */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 24,
+  sm: 6,
+  md: 8,
+  lg: 10,
+  xl: 14,
   pill: 999,
 } as const;
 
 /**
- * Type scale. Numbers get their own entries because they carry the meaning
- * here and need tabular figures to stop the layout jittering as they change.
+ * Type scale, matched to the web app chrome: 24/600 page titles
+ * (text-2xl semibold), 14/500 section titles (text-sm font-medium),
+ * 12-uppercase card labels (text-xs tracking-wide), 15 body text. Numbers
+ * get tabular figures to stop the layout jittering as they change.
  */
 export const type = {
   hero: { fontSize: 56, lineHeight: 60, fontWeight: "700" as const },
   display: { fontSize: 34, lineHeight: 38, fontWeight: "700" as const },
-  title: { fontSize: 22, lineHeight: 28, fontWeight: "600" as const },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: "600" as const },
   heading: { fontSize: 17, lineHeight: 22, fontWeight: "600" as const },
-  body: { fontSize: 16, lineHeight: 22, fontWeight: "400" as const },
-  callout: { fontSize: 15, lineHeight: 20, fontWeight: "500" as const },
+  section: { fontSize: 14, lineHeight: 19, fontWeight: "500" as const },
+  body: { fontSize: 15, lineHeight: 21, fontWeight: "400" as const },
+  callout: { fontSize: 14, lineHeight: 19, fontWeight: "500" as const },
   footnote: { fontSize: 13, lineHeight: 18, fontWeight: "400" as const },
+  caption: { fontSize: 12, lineHeight: 16, fontWeight: "400" as const },
   label: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "600" as const,
-    letterSpacing: 0.8,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500" as const,
+    letterSpacing: 0.6,
     textTransform: "uppercase" as const,
   },
 } as const;

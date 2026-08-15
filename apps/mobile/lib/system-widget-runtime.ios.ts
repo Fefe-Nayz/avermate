@@ -11,9 +11,8 @@ export async function updateSystemWidget(
   if (Constants.expoGoConfig) return "development-build-required";
 
   try {
-    const { default: widget } = await import(
-      "@/widgets/avermate-summary-widget"
-    );
+    const { default: widget } =
+      await import("@/widgets/avermate-summary-widget");
     widget.updateSnapshot(payload);
     return "updated";
   } catch {

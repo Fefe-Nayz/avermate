@@ -49,7 +49,7 @@ export default function Averages() {
           </Section>
         ) : (
           <Section title={t("Yours")}>
-          <Card padded={false}>
+            <Card padded={false}>
               {customAverages.map((average) => {
                 const resolved = resolveCustomAverage(graph, average);
                 return (
@@ -59,7 +59,9 @@ export default function Averages() {
                     subtitle={
                       average.entries.length === 1
                         ? t("1 subject")
-                        : t("{count} subjects", { count: average.entries.length })
+                        : t("{count} subjects", {
+                            count: average.entries.length,
+                          })
                     }
                     onPress={() =>
                       router.push(`/settings/average-edit?id=${average.id}`)
@@ -74,14 +76,16 @@ export default function Averages() {
                   />
                 );
               })}
-          </Card>
-        </Section>
+            </Card>
+          </Section>
         )}
 
         <Section>
-          <Note>{t(
+          <Note>
+            {t(
               "A custom average can be the target of a goal, so this is also how you track something the school does not compute.",
-            )}</Note>
+            )}
+          </Note>
         </Section>
       </Screen>
     </>

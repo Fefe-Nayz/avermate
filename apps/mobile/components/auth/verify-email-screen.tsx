@@ -88,7 +88,9 @@ export function VerifyEmailScreen() {
           <TextField
             label={t("Code")}
             value={code}
-            onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+            onChangeText={(value) =>
+              setCode(value.replace(/\D/g, "").slice(0, 6))
+            }
             keyboardType="number-pad"
             autoFocus
           />

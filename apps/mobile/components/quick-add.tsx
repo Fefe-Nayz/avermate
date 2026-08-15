@@ -1,4 +1,10 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon, type IconName } from "@/components/icon";
@@ -127,10 +133,7 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
             </View>
             <View style={{ flex: 1, gap: 1 }}>
               <Text
-                style={[
-                  type.body,
-                  { color: palette.text, fontWeight: "500" },
-                ]}
+                style={[type.body, { color: palette.text, fontWeight: "500" }]}
               >
                 {action.label}
               </Text>

@@ -147,17 +147,11 @@ export function SharedAverageText({
 }) {
   const palette = usePalette();
   if (ratio === null || scale === null) {
-    return (
-      <Text style={[type.footnote, { color: palette.textFaint }]}>—</Text>
-    );
+    return <Text style={[type.footnote, { color: palette.textFaint }]}>—</Text>;
   }
   return (
     <Text
-      style={[
-        type[size],
-        numeric,
-        { color: palette.text, fontWeight: "600" },
-      ]}
+      style={[type[size], numeric, { color: palette.text, fontWeight: "600" }]}
     >
       {formatSharedAverage(ratio, scale, decimals ?? 2, unit)}
     </Text>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Share, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { SocialIdentity } from "@/components/social/social-ui";
@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   Empty,
+  Heading,
   Loading,
   Note,
   Problem,
@@ -75,8 +76,8 @@ export default function Social() {
 
   return (
     <>
-      <Stack.Screen options={{ title: t("Friends") }} />
       <Screen>
+        <Heading icon="people-outline" title={t("Friends")} />
         <Section title={t("Add a friend")}>
           <Card style={{ gap: space.md }}>
             <TextField

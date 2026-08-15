@@ -92,7 +92,9 @@ export default function Periods() {
             <Empty
               icon="cube-outline"
               title={t("No split")}
-              body={t("One average for the whole year. Add a period to change that.")}
+              body={t(
+                "One average for the whole year. Add a period to change that.",
+              )}
             />
           </Section>
         ) : (
@@ -103,7 +105,9 @@ export default function Periods() {
                 period={period}
                 busy={update.isPending}
                 onCancel={() => setEditing(null)}
-                onSave={(patch) => update.mutate({ periodId: period.id, ...patch })}
+                onSave={(patch) =>
+                  update.mutate({ periodId: period.id, ...patch })
+                }
                 onDelete={() =>
                   Alert.alert(
                     t("Delete {name}?", { name: period.name }),
@@ -121,7 +125,7 @@ export default function Periods() {
               />
             ) : (
               <Section key={period.id}>
-          <Card padded={false}>
+                <Card padded={false}>
                   <Row
                     title={period.name}
                     subtitle={`${formatDate(period.startAt, "short")} → ${formatDate(period.endAt, "short")}`}
@@ -132,18 +136,15 @@ export default function Periods() {
                       ) : undefined
                     }
                   />
-          </Card>
-        </Section>
+                </Card>
+              </Section>
             ),
           )
         )}
 
         <Section>
           <Card padded={false}>
-            <Row
-              title={t("Back to the year")}
-              onPress={() => router.back()}
-            />
+            <Row title={t("Back to the year")} onPress={() => router.back()} />
           </Card>
         </Section>
       </Screen>
@@ -158,7 +159,13 @@ function PeriodEditor({
   onCancel,
   onDelete,
 }: {
-  period: { id: string; name: string; startAt: Date; endAt: Date; isCumulative: boolean };
+  period: {
+    id: string;
+    name: string;
+    startAt: Date;
+    endAt: Date;
+    isCumulative: boolean;
+  };
   busy: boolean;
   onSave: (patch: {
     name: string;
@@ -176,8 +183,13 @@ function PeriodEditor({
 
   return (
     <Section title={t("Editing")}>
-          <Card padded={false}>
-        <TextField label={t("Name")} value={name} onChangeText={setName} autoFocus />
+      <Card padded={false}>
+        <TextField
+          label={t("Name")}
+          value={name}
+          onChangeText={setName}
+          autoFocus
+        />
         <DateField label={t("Starts")} value={startAt} onChange={setStartAt} />
         <DateField
           label={t("Ends")}
@@ -187,23 +199,26 @@ function PeriodEditor({
         />
         <SwitchField
           label={t("Cumulative")}
-          hint={t("Counts everything since the start of the year, not just this span.")}
+          hint={t(
+            "Counts everything since the start of the year, not just this span.",
+          )}
           value={cumulative}
           onValueChange={setCumulative}
         />
         <Row
           title={busy ? t("Saving…") : t("Save")}
           onPress={() =>
-            onSave({ name: name.trim(), startAt, endAt, isCumulative: cumulative })
+            onSave({
+              name: name.trim(),
+              startAt,
+              endAt,
+              isCumulative: cumulative,
+            })
           }
         />
         <Row leading="close" title={t("Cancel")} onPress={onCancel} />
-        <Row
-          title={t("Delete this period")}
-          destructive
-          onPress={onDelete}
-        />
-          </Card>
-        </Section>
+        <Row title={t("Delete this period")} destructive onPress={onDelete} />
+      </Card>
+    </Section>
   );
 }

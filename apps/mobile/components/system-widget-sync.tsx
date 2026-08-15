@@ -18,14 +18,8 @@ import {
 /** Keeps the extension snapshot local and in step with the active account. */
 export function SystemWidgetSync() {
   const session = useSession();
-  const {
-    year,
-    yearGraph,
-    scale,
-    decimals,
-    timelineDate,
-    isLoading,
-  } = useYear();
+  const { year, yearGraph, scale, decimals, timelineDate, isLoading } =
+    useYear();
   const settingsRevision = useSyncExternalStore(
     subscribeSystemWidgetSettings,
     systemWidgetSettingsRevision,

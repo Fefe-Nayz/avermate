@@ -26,10 +26,7 @@ import { orpc } from "@/lib/orpc";
 import { useSession } from "@/lib/auth-client";
 import { t } from "@/lib/i18n";
 import { localUserKey } from "@/lib/local-settings";
-import {
-  clampTimelineDay,
-  subjectsAtTimelineDay,
-} from "@/lib/timeline";
+import { clampTimelineDay, subjectsAtTimelineDay } from "@/lib/timeline";
 
 /**
  * The year in scope, and everything derived from it.
@@ -68,7 +65,11 @@ interface YearContextValue {
   resolve: (target: {
     kind: "general" | "subject" | "custom";
     referenceId: string | null;
-  }) => { graph: SubjectGraph; scope: Scope | null; subjectId: string | null } | null;
+  }) => {
+    graph: SubjectGraph;
+    scope: Scope | null;
+    subjectId: string | null;
+  } | null;
 
   scale: number;
   decimals: number;

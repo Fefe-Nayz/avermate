@@ -43,9 +43,7 @@ export function SocialAuthButtons({ mode }: { mode: "sign-in" | "link" }) {
   return (
     <>
       <Button
-        label={
-          mode === "link" ? t("Link Google") : t("Continue with Google")
-        }
+        label={mode === "link" ? t("Link Google") : t("Continue with Google")}
         icon="logo-google"
         variant="secondary"
         disabled={pending !== null}
@@ -54,9 +52,7 @@ export function SocialAuthButtons({ mode }: { mode: "sign-in" | "link" }) {
       />
       <Button
         label={
-          mode === "link"
-            ? t("Link Microsoft")
-            : t("Continue with Microsoft")
+          mode === "link" ? t("Link Microsoft") : t("Continue with Microsoft")
         }
         icon="logo-windows"
         variant="secondary"

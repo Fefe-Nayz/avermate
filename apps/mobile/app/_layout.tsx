@@ -26,7 +26,10 @@ import {
   type QueryScope,
 } from "@/lib/query-client";
 import { setHapticsEnabled } from "@/lib/haptics";
-import { setInteractionPreferences } from "@/lib/interaction-preferences";
+import {
+  setInteractionPreferences,
+  useInteractionPreferences,
+} from "@/lib/interaction-preferences";
 import {
   clearLocalUserSettings,
   LEGACY_LOCAL_KEYS,
@@ -220,6 +223,7 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
   const isDark = useIsDark();
   const palette = usePalette();
   const language = useSyncExternalStore(subscribeToLocale, localeRevision);
+  const { reduceMotion } = useInteractionPreferences();
 
   // The navigation theme drives the header and card backgrounds React
   // Navigation draws itself, so it has to read from the same palette as
@@ -253,6 +257,13 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   headerTitleStyle: { fontSize: 17, fontWeight: "600" },
                   headerBackButtonDisplayMode: "minimal",
                   contentStyle: { backgroundColor: palette.background },
+                  // One push animation on both platforms. Android otherwise
+                  // falls back to whatever the OEM ships, which is where the
+                  // "every screen slides differently" feeling came from.
+                  animation: reduceMotion ? "none" : "slide_from_right",
+                  // iOS: swipe back from anywhere on the screen, not only
+                  // the left edge.
+                  fullScreenGestureEnabled: true,
                 }}
               >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -318,14 +329,6 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                 <Stack.Screen
                   name="settings/widget-library"
                   options={{ title: t("Widget library") }}
-                />
-                <Stack.Screen
-                  name="insights"
-                  options={{ title: t("Insights") }}
-                />
-                <Stack.Screen
-                  name="social/index"
-                  options={{ title: t("Friends") }}
                 />
                 <Stack.Screen
                   name="social/sharing"

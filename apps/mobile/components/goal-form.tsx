@@ -48,7 +48,10 @@ export interface GoalPayload {
   isPinned: boolean;
 }
 
-export function emptyGoalDraft(scale: number, current: number | null): GoalDraft {
+export function emptyGoalDraft(
+  scale: number,
+  current: number | null,
+): GoalDraft {
   // Half a point above where you already are: an opening bid, not a fantasy.
   const suggested =
     current === null
@@ -101,9 +104,14 @@ export function GoalForm({
   const [touched, setTouched] = useState(false);
 
   const subjectChoices = useMemo<Choice[]>(() => {
-    const walk = (ids: readonly { id: string; name: string; sortOrder: number }[], depth: number): Choice[] =>
+    const walk = (
+      ids: readonly { id: string; name: string; sortOrder: number }[],
+      depth: number,
+    ): Choice[] =>
       [...ids]
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+        )
         .flatMap((subject) => [
           { value: subject.id, label: subject.name, depth },
           ...walk(yearGraph.childrenOf(subject.id), depth + 1),
@@ -153,8 +161,7 @@ export function GoalForm({
       kind: draft.kind,
       referenceId: draft.kind === "general" ? null : draft.referenceId,
       targetRatio: Math.min(1, Math.max(0, draft.target / scale)),
-      periodId:
-        draft.periodId === FULL_YEAR_PERIOD_ID ? null : draft.periodId,
+      periodId: draft.periodId === FULL_YEAR_PERIOD_ID ? null : draft.periodId,
       dueAt: draft.dueAt,
       isPinned: draft.isPinned,
     });
@@ -234,13 +241,23 @@ export function GoalForm({
               >
                 <Label>{t("Target")}</Label>
                 <View
-                  style={{ flexDirection: "row", alignItems: "baseline", gap: 2 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "baseline",
+                    gap: 2,
+                  }}
                 >
-                  <Text style={[type.display, numeric, { color: palette.text }]}>
+                  <Text
+                    style={[type.display, numeric, { color: palette.text }]}
+                  >
                     {show(draft.target)}
                   </Text>
                   <Text
-                    style={[type.callout, numeric, { color: palette.textFaint }]}
+                    style={[
+                      type.callout,
+                      numeric,
+                      { color: palette.textFaint },
+                    ]}
                   >
                     /{show(scale)}
                   </Text>

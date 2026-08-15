@@ -1,10 +1,7 @@
 import { Alert, Text } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import {
-  WIDGET_DEFINITION_VERSION,
-  type WidgetSurface,
-} from "@avermate/core";
+import { WIDGET_DEFINITION_VERSION, type WidgetSurface } from "@avermate/core";
 import {
   Button,
   Card,
@@ -69,9 +66,7 @@ export default function Cards() {
         definitionVersion: WIDGET_DEFINITION_VERSION,
         definitionJson: card.definition,
         span: card.span,
-        title: card.title
-          ? `${card.title} · ${t("Copy")}`.slice(0, 48)
-          : null,
+        title: card.title ? `${card.title} · ${t("Copy")}`.slice(0, 48) : null,
         accent: card.accent,
         hidden: false,
       });
@@ -99,9 +94,10 @@ export default function Cards() {
     <>
       <Stack.Screen
         options={{
-          title: surface === "insights"
-            ? t("Insights widgets")
-            : t("Dashboard widgets"),
+          title:
+            surface === "insights"
+              ? t("Insights widgets")
+              : t("Dashboard widgets"),
         }}
       />
       <Screen
@@ -121,7 +117,10 @@ export default function Cards() {
                 hidden: widgets.hidden.length,
               })}
             </Text>
-            <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
+            <Text
+              selectable
+              style={[type.footnote, { color: palette.textMuted }]}
+            >
               {t("Each widget keeps its definition, chart and width together.")}
             </Text>
           </Card>
@@ -151,7 +150,10 @@ export default function Cards() {
                 title={t("Hide")}
                 onPress={() => update.mutate({ cardId: card.id, hidden: true })}
               />
-              <Row title={t("Duplicate")} onPress={() => duplicate.mutate(card)} />
+              <Row
+                title={t("Duplicate")}
+                onPress={() => duplicate.mutate(card)}
+              />
             </Card>
           </Section>
         ))}
@@ -163,7 +165,9 @@ export default function Cards() {
                 <Row
                   key={card.id}
                   title={widgetCardTitle(card)}
-                  onPress={() => update.mutate({ cardId: card.id, hidden: false })}
+                  onPress={() =>
+                    update.mutate({ cardId: card.id, hidden: false })
+                  }
                 />
               ))}
             </Card>
@@ -188,7 +192,9 @@ export default function Cards() {
                 )
               }
             />
-            <Note>{t("Layouts are stored separately for each year and surface.")}</Note>
+            <Note>
+              {t("Layouts are stored separately for each year and surface.")}
+            </Note>
           </Card>
         </Section>
       </Screen>

@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { ScopeBar } from "@/components/scope-bar";
 import { Button, Heading, Screen, Section } from "@/components/ui";
 import { WidgetSurfaceContent } from "@/components/widgets/widget-surface";
@@ -9,12 +9,13 @@ export default function Insights() {
   const router = useRouter();
   return (
     <>
-      <Stack.Screen options={{ title: t("Insights") }} />
       <Screen>
         <Heading
           icon="analytics-outline"
           title={t("Insights")}
-          description={t("Build the analysis view that answers your questions.")}
+          description={t(
+            "Build the analysis view that answers your questions.",
+          )}
           action={
             <Button
               label={t("Customize")}

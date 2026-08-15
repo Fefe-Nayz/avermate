@@ -210,7 +210,7 @@ export function AccountScreen() {
           ? t("Choose an image smaller than 2 MB.")
           : cause instanceof ImageSelectionError && cause.code === "permission"
             ? t("Allow photo access to choose an image.")
-          : t("Choose a PNG, JPEG or WebP image."),
+            : t("Choose a PNG, JPEG or WebP image."),
       );
     }
   };
@@ -225,7 +225,7 @@ export function AccountScreen() {
     <>
       <Stack.Screen options={{ title: t("Account") }} />
       <Screen>
-        <Section title={t("Profile") }>
+        <Section title={t("Profile")}>
           <Card>
             <View style={{ alignItems: "center", gap: space.md }}>
               {user.image ? (
@@ -286,7 +286,7 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={t("Email address") }>
+        <Section title={t("Email address")}>
           <TextField
             label={t("Email")}
             value={email}
@@ -298,7 +298,10 @@ export function AccountScreen() {
           <Button
             label={t("Change email")}
             variant="secondary"
-            disabled={!email.includes("@") || email.toLowerCase() === user.email.toLowerCase()}
+            disabled={
+              !email.includes("@") ||
+              email.toLowerCase() === user.email.toLowerCase()
+            }
             loading={action === "email"}
             onPress={() => void changeEmail()}
           />
@@ -331,35 +334,51 @@ export function AccountScreen() {
           <Button
             label={hasPassword ? t("Change password") : t("Add password")}
             variant="secondary"
-            disabled={newPassword.length < 8 || (hasPassword && !currentPassword)}
+            disabled={
+              newPassword.length < 8 || (hasPassword && !currentPassword)
+            }
             loading={action === "password" || setPassword.isPending}
             onPress={() => void savePassword()}
           />
         </Section>
 
-        <Section title={t("Linked sign-ins") }>
+        <Section title={t("Linked sign-ins")}>
           <Card padded={false}>
             {(["google", "microsoft"] as const).map((provider, index) => {
               const linked = accounts.data?.find(
                 (account) => account.providerId === provider,
               );
               const pending =
-                action === `link:${provider}` || action === `unlink:${provider}`;
+                action === `link:${provider}` ||
+                action === `unlink:${provider}`;
               return (
                 <Row
                   key={provider}
                   first={index === 0}
                   title={provider === "google" ? "Google" : "Microsoft"}
-                  subtitle={linked ? t("Linked to this account") : t("Not linked")}
+                  subtitle={
+                    linked ? t("Linked to this account") : t("Not linked")
+                  }
                   leading={
                     <Icon
-                      name={linked ? "shield-checkmark-outline" : "link-outline"}
+                      name={
+                        linked ? "shield-checkmark-outline" : "link-outline"
+                      }
                       size={19}
                       color={palette.textMuted}
                     />
                   }
                   trailing={
-                    <Text style={[type.footnote, { color: pending ? palette.textFaint : palette.textMuted }]}>
+                    <Text
+                      style={[
+                        type.footnote,
+                        {
+                          color: pending
+                            ? palette.textFaint
+                            : palette.textMuted,
+                        },
+                      ]}
+                    >
                       {pending
                         ? t("Working…")
                         : linked
@@ -370,7 +389,9 @@ export function AccountScreen() {
                     </Text>
                   }
                   onPress={() =>
-                    linked ? void unlink(linked.providerId) : void link(provider)
+                    linked
+                      ? void unlink(linked.providerId)
+                      : void link(provider)
                   }
                 />
               );
@@ -378,7 +399,7 @@ export function AccountScreen() {
           </Card>
         </Section>
 
-        <Section title={t("Where you are signed in") }>
+        <Section title={t("Where you are signed in")}>
           <Card padded={false}>
             {(sessions.data ?? []).map((item, index) => {
               const current = item.token === session.data?.session.token;
@@ -397,7 +418,9 @@ export function AccountScreen() {
                   }
                   trailing={
                     !current ? (
-                      <Text style={[type.footnote, { color: palette.negative }]}>
+                      <Text
+                        style={[type.footnote, { color: palette.negative }]}
+                      >
                         {t("Sign out")}
                       </Text>
                     ) : undefined
@@ -421,18 +444,23 @@ export function AccountScreen() {
               loading={action === "sessions"}
               onPress={() => {
                 setAction("sessions");
-                void authClient.revokeOtherSessions().then(async ({ error: failure }) => {
-                  setAction(null);
-                  if (failure) return complain(t("Other sessions could not be signed out."));
-                  await sessions.refetch();
-                  say(t("Other devices have been signed out."));
-                });
+                void authClient
+                  .revokeOtherSessions()
+                  .then(async ({ error: failure }) => {
+                    setAction(null);
+                    if (failure)
+                      return complain(
+                        t("Other sessions could not be signed out."),
+                      );
+                    await sessions.refetch();
+                    say(t("Other devices have been signed out."));
+                  });
               }}
             />
           ) : null}
         </Section>
 
-        <Section title={t("Your data") }>
+        <Section title={t("Your data")}>
           <Card padded={false}>
             <Row
               first
@@ -443,7 +471,7 @@ export function AccountScreen() {
           </Card>
         </Section>
 
-        <Section title={t("Start over") }>
+        <Section title={t("Start over")}>
           <TextField
             label={t("Type RESET to confirm")}
             value={resetPhrase}
@@ -459,7 +487,7 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={t("Delete this account") }>
+        <Section title={t("Delete this account")}>
           <TextField
             label={t("Type DELETE to confirm")}
             value={deletePhrase}

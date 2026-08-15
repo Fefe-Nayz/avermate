@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  SharedAverageText,
-} from "@/components/social/social-ui";
+import { SharedAverageText } from "@/components/social/social-ui";
 import { ChoiceField, SwitchField, TextField } from "@/components/field";
 import {
   Button,
@@ -125,9 +123,7 @@ export default function Sharing() {
             <ChoiceField
               label={t("Subject averages")}
               value={settings.shareSubjectsMode}
-              onChange={(value) =>
-                update.mutate({ shareSubjectsMode: value })
-              }
+              onChange={(value) => update.mutate({ shareSubjectsMode: value })}
               choices={[
                 { value: "all", label: t("All subjects") },
                 { value: "selected", label: t("Only subjects I pick") },
@@ -200,9 +196,7 @@ export default function Sharing() {
                   ) : undefined
                 }
                 subtitle={
-                  settings.preview.shareGeneralAverage
-                    ? undefined
-                    : t("Locked")
+                  settings.preview.shareGeneralAverage ? undefined : t("Locked")
                 }
               />
               {settings.preview.subjects.map((subject) => (

@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
-import {
-  Button,
-  Problem,
-  Screen,
-  Section,
-  Title,
-} from "@/components/ui";
+import { Button, Problem, Screen, Section, Title } from "@/components/ui";
 import { TextField } from "@/components/field";
 import { authClient } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";

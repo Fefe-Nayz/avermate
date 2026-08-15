@@ -461,23 +461,28 @@ export function AdminPresetDetailScreen() {
 
           <Section title={t("Version history")}>
             <Card padded={false}>
-              {detail.data.versions.slice().reverse().map((version, index) => (
-                <Row
-                  key={version.id}
-                  first={index === 0}
-                  title={t("Version {version}", { version: version.version })}
-                  subtitle={`${version.changeNote} · ${new Date(
-                    version.createdAt,
-                  ).toLocaleDateString()}`}
-                  trailing={
-                    <Text style={[type.footnote, { color: palette.textMuted }]}>
-                      {version.version === detail.data.currentVersion
-                        ? t("Current")
-                        : ""}
-                    </Text>
-                  }
-                />
-              ))}
+              {detail.data.versions
+                .slice()
+                .reverse()
+                .map((version, index) => (
+                  <Row
+                    key={version.id}
+                    first={index === 0}
+                    title={t("Version {version}", { version: version.version })}
+                    subtitle={`${version.changeNote} · ${new Date(
+                      version.createdAt,
+                    ).toLocaleDateString()}`}
+                    trailing={
+                      <Text
+                        style={[type.footnote, { color: palette.textMuted }]}
+                      >
+                        {version.version === detail.data.currentVersion
+                          ? t("Current")
+                          : ""}
+                      </Text>
+                    }
+                  />
+                ))}
             </Card>
           </Section>
 

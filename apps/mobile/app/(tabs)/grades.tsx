@@ -1,10 +1,23 @@
 import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
 import { gradeRatio, type Grade } from "@avermate/core";
-import { Heading,
-  Button, Card, Empty, Label, Loading, Row } from "@/components/ui";
+import {
+  Heading,
+  Button,
+  Card,
+  Empty,
+  Label,
+  Loading,
+  Row,
+} from "@/components/ui";
 import { PointsValue, ResultBadge } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { TextField } from "@/components/field";

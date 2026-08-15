@@ -1,14 +1,7 @@
 import { Linking, View } from "react-native";
 import { Stack } from "expo-router";
 import Constants from "expo-constants";
-import {
-  Card,
-  Label,
-  Note,
-  Row,
-  Screen,
-  Section,
-} from "@/components/ui";
+import { Card, Label, Note, Row, Screen, Section } from "@/components/ui";
 import { Wordmark } from "@/components/wordmark";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
@@ -32,16 +25,20 @@ export default function About() {
       <Screen>
         <View style={{ gap: space.md, paddingTop: space.sm }}>
           <Wordmark />
-          <Note>{t(
+          <Note>
+            {t(
               "Track your grades, understand what moves your average, and get a plan for the result you are aiming at.",
-            )}</Note>
+            )}
+          </Note>
         </View>
 
         <Section title={t("Your data")}>
           <Card>
-            <Note>{t(
+            <Note>
+              {t(
                 "Your grades are yours. Averages are computed on this device, not on a server, and nothing identifying you is ever compared against anybody else.",
-              )}</Note>
+              )}
+            </Note>
           </Card>
         </Section>
 

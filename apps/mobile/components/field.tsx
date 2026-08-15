@@ -105,11 +105,15 @@ export function TextField({
           ]}
         />
         {suffix ? (
-          <Text style={[type.body, { color: palette.textFaint }]}>{suffix}</Text>
+          <Text style={[type.body, { color: palette.textFaint }]}>
+            {suffix}
+          </Text>
         ) : null}
       </View>
       {error ? (
-        <Text style={[type.footnote, { color: palette.negative }]}>{error}</Text>
+        <Text style={[type.footnote, { color: palette.negative }]}>
+          {error}
+        </Text>
       ) : null}
     </View>
   );
@@ -198,7 +202,9 @@ export function ChoiceField<TValue extends string = string>({
         })}
       </View>
       {error ? (
-        <Text style={[type.footnote, { color: palette.negative }]}>{error}</Text>
+        <Text style={[type.footnote, { color: palette.negative }]}>
+          {error}
+        </Text>
       ) : null}
     </View>
   );
@@ -334,11 +340,7 @@ export function PickerField({
                       </Text>
                     ) : null}
                     {active ? (
-                      <Icon
-                        name="checkmark"
-                        size={18}
-                        color={palette.accent}
-                      />
+                      <Icon name="checkmark" size={18} color={palette.accent} />
                     ) : null}
                   </Pressable>
                 );
@@ -348,7 +350,9 @@ export function PickerField({
         ) : null}
       </View>
       {error ? (
-        <Text style={[type.footnote, { color: palette.negative }]}>{error}</Text>
+        <Text style={[type.footnote, { color: palette.negative }]}>
+          {error}
+        </Text>
       ) : null}
     </View>
   );

@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import * as Crypto from "expo-crypto";
@@ -68,7 +63,9 @@ function blankConfiguration(): ManagedPresetConfiguration {
 function copyConfiguration(
   configuration: ManagedPresetConfiguration,
 ): ManagedPresetConfiguration {
-  return JSON.parse(JSON.stringify(configuration)) as ManagedPresetConfiguration;
+  return JSON.parse(
+    JSON.stringify(configuration),
+  ) as ManagedPresetConfiguration;
 }
 
 function shortMonth(date: Date): string {
@@ -590,9 +587,7 @@ function CustomPeriodsEditor({
                   hitSlop={10}
                   onPress={() =>
                     onChange(
-                      periods.filter(
-                        (item) => item.localId !== period.localId,
-                      ),
+                      periods.filter((item) => item.localId !== period.localId),
                     )
                   }
                 >

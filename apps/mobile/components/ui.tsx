@@ -89,7 +89,13 @@ export function Screen({
   );
 }
 
-export function Title({ children, subtitle }: { children: string; subtitle?: string }) {
+export function Title({
+  children,
+  subtitle,
+}: {
+  children: string;
+  subtitle?: string;
+}) {
   const palette = usePalette();
   return (
     <View style={{ gap: space.xs, paddingTop: space.sm }}>
@@ -151,12 +157,8 @@ export function Section({
             ) : null}
             <View style={{ flex: 1, gap: 2 }}>
               {title ? (
-                <Text
-                  style={[
-                    type.callout,
-                    { color: palette.text, fontWeight: "600" },
-                  ]}
-                >
+                // The web's lifted section titles: text-sm font-medium.
+                <Text style={[type.section, { color: palette.text }]}>
                   {title}
                 </Text>
               ) : null}
@@ -191,7 +193,9 @@ export function Card({
       style={[
         {
           backgroundColor: palette.surface,
-          borderRadius: radius.lg,
+          // The web card: rounded-xl with a one-pixel border.
+          borderRadius: radius.xl,
+          borderCurve: "continuous",
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: palette.border,
           padding: padded ? (compactMode ? space.md : space.lg) : 0,
@@ -238,7 +242,7 @@ export function Row({
         flexDirection: "row",
         alignItems: "center",
         gap: space.md,
-        minHeight: compactMode ? 46 : 52,
+        minHeight: compactMode ? 44 : 48,
         paddingVertical: space.sm,
         paddingRight: space.lg,
         paddingLeft: space.lg + indent * 14,
@@ -251,7 +255,8 @@ export function Row({
         <Text
           numberOfLines={1}
           style={[
-            muted ? type.label : type.body,
+            // The web row: text-sm font-medium titles.
+            muted ? type.label : type.callout,
             {
               color: destructive
                 ? palette.negative
@@ -274,11 +279,7 @@ export function Row({
       </View>
       {trailing}
       {onPress || href ? (
-        <Icon
-          name="chevron-forward"
-          size={16}
-          color={palette.textFaint}
-        />
+        <Icon name="chevron-forward" size={16} color={palette.textFaint} />
       ) : null}
     </View>
   );
@@ -348,9 +349,10 @@ export function Button({
         alignItems: "center",
         justifyContent: "center",
         gap: space.sm,
-        minHeight: size === "sm" ? 38 : 46,
+        // The web's touch heights (h-11 / h-9) on the web's rounded-md.
+        minHeight: size === "sm" ? 36 : 44,
         paddingHorizontal: size === "sm" ? space.md : space.lg,
-        borderRadius: 10,
+        borderRadius: radius.md,
         borderCurve: "continuous" as const,
         backgroundColor: background,
         borderWidth: variant === "outline" ? StyleSheet.hairlineWidth : 0,
@@ -361,12 +363,12 @@ export function Button({
       {loading ? (
         <ActivityIndicator size="small" color={foreground} />
       ) : icon ? (
-        <Icon name={icon} size={size === "sm" ? 15 : 17} color={foreground} />
+        <Icon name={icon} size={size === "sm" ? 15 : 16} color={foreground} />
       ) : null}
       <Text
         style={[
-          size === "sm" ? type.callout : type.heading,
-          { color: foreground, fontWeight: "600" },
+          size === "sm" ? type.callout : type.body,
+          { color: foreground, fontWeight: "500" },
         ]}
       >
         {label}
@@ -402,7 +404,9 @@ export function Empty({
       }}
     >
       <Icon name={icon} size={26} color={palette.textFaint} />
-      <Text style={[type.heading, { color: palette.text, textAlign: "center" }]}>
+      <Text
+        style={[type.heading, { color: palette.text, textAlign: "center" }]}
+      >
         {title}
       </Text>
       {body ? (
@@ -421,17 +425,18 @@ export function Empty({
 }
 
 /**
- * A screen heading the way the web draws one: a soft accent square holding
- * the icon, the title beside it, a supporting line underneath, and room for
- * one action on the right.
+ * A screen heading the way the web draws one: the page title in plain
+ * text-2xl semibold with a muted supporting line, and room for one action on
+ * the right. The web puts no icon on its titles, so neither does this —
+ * `icon` is still accepted while call sites migrate, and simply not drawn.
  */
 export function Heading({
-  icon,
+  icon: _icon,
   title,
   description,
   action,
 }: {
-  icon: IconName;
+  icon?: IconName;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -447,35 +452,13 @@ export function Heading({
         paddingTop: space.sm,
       }}
     >
-      <View
-        style={{
-          flex: 1,
-          flexDirection: "row",
-          alignItems: "flex-start",
-          gap: space.md,
-        }}
-      >
-        <View
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            borderCurve: "continuous",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: palette.accentSoft,
-          }}
-        >
-          <Icon name={icon} size={19} color={palette.accent} />
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[type.title, { color: palette.text }]}>{title}</Text>
-          {description ? (
-            <Text style={[type.footnote, { color: palette.textMuted }]}>
-              {description}
-            </Text>
-          ) : null}
-        </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[type.title, { color: palette.text }]}>{title}</Text>
+        {description ? (
+          <Text style={[type.footnote, { color: palette.textMuted }]}>
+            {description}
+          </Text>
+        ) : null}
       </View>
       {action}
     </View>
@@ -516,7 +499,9 @@ export function Badge({
         alignSelf: "flex-start",
         paddingHorizontal: space.sm,
         paddingVertical: 3,
-        borderRadius: radius.pill,
+        // The web badge: rounded-md, text-xs medium.
+        borderRadius: radius.sm,
+        borderCurve: "continuous",
         backgroundColor: background,
         borderWidth: toneColor === "neutral" ? StyleSheet.hairlineWidth : 0,
         borderColor: palette.border,
@@ -547,7 +532,7 @@ export function StatTile({
         flex: 1,
         gap: 4,
         padding: space.md,
-        borderRadius: radius.lg,
+        borderRadius: radius.xl,
         borderCurve: "continuous",
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: palette.border,
@@ -556,7 +541,11 @@ export function StatTile({
     >
       <Text style={[type.label, { color: palette.textFaint }]}>{label}</Text>
       <Text
-        style={[type.title, numeric, { color: palette.text }]}
+        style={[
+          type.heading,
+          numeric,
+          { fontSize: 18, lineHeight: 24, color: palette.text },
+        ]}
         numberOfLines={1}
         adjustsFontSizeToFit
       >
@@ -601,7 +590,7 @@ export function ProgressBar({
   return (
     <View
       style={{
-        height: 6,
+        height: 8,
         borderRadius: radius.pill,
         backgroundColor: palette.accentSoft,
         overflow: "hidden",
@@ -664,26 +653,26 @@ export function ChipRail({
               flexDirection: "row",
               alignItems: "center",
               gap: space.xs,
-              minHeight: 38,
+              minHeight: 32,
               paddingHorizontal: space.md,
               borderRadius: radius.pill,
               backgroundColor: active ? palette.accentSoft : palette.surface,
               borderWidth: StyleSheet.hairlineWidth,
-              borderColor: active ? palette.accent : palette.border,
+              borderColor: palette.border,
             }}
           >
             {item.icon ? (
               <Icon
                 name={item.icon}
-                size={14}
-                color={active ? palette.accent : palette.textMuted}
+                size={13}
+                color={active ? palette.text : palette.textMuted}
               />
             ) : null}
             <Text
               style={[
-                type.callout,
+                type.footnote,
                 {
-                  color: active ? palette.accent : palette.textMuted,
+                  color: active ? palette.text : palette.textMuted,
                   fontWeight: active ? "600" : "500",
                 },
               ]}

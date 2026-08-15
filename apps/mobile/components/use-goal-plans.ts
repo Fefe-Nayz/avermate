@@ -59,18 +59,24 @@ export function useGoalPlans(): GoalPlan[] {
             )
           : [];
 
-      return planGoal(goal, resolved.graph, resolved.subjectId, resolved.scope, {
-        // Project to the end of the window rather than a fixed horizon: a goal
-        // due in a fortnight and one due in June are not the same bet.
-        projection: projectedRatio(
-          series,
-          Math.max(
-            0,
-            Math.round((to.getTime() - until.getTime()) / (7 * 86_400_000)),
+      return planGoal(
+        goal,
+        resolved.graph,
+        resolved.subjectId,
+        resolved.scope,
+        {
+          // Project to the end of the window rather than a fixed horizon: a goal
+          // due in a fortnight and one due in June are not the same bet.
+          projection: projectedRatio(
+            series,
+            Math.max(
+              0,
+              Math.round((to.getTime() - until.getTime()) / (7 * 86_400_000)),
+            ),
           ),
-        ),
-        remaining: estimateRemaining(resolved.graph, from, to),
-      });
+          remaining: estimateRemaining(resolved.graph, from, to),
+        },
+      );
     }
 
     /** `resolve` works on the viewed graph; a period-scoped goal needs its own. */

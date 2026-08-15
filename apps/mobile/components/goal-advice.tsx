@@ -80,9 +80,12 @@ export function adviceText(
     case "protect":
       return {
         icon: "shield-checkmark",
-        text: t("{subject} carries the most weight — a slip there costs you the most.", {
-          subject: nameOf(advice.subjectId),
-        }),
+        text: t(
+          "{subject} carries the most weight — a slip there costs you the most.",
+          {
+            subject: nameOf(advice.subjectId),
+          },
+        ),
       };
     case "declining":
       return {
