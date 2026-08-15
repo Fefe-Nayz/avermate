@@ -20,6 +20,8 @@ export const WIDGET_LIMITS = Object.freeze({
   subjectReferences: 12,
   formulaDepth: 12,
   formulaNodes: 64,
+  /** Each metric operand is a full data pass; bounded separately. */
+  formulaMetricNodes: 8,
   series: 8,
   resultPoints: 500,
 });
@@ -63,6 +65,25 @@ export interface WidgetQueryV1 {
 
 export type WidgetFormulaField = "ratio" | "value" | "outOf" | "coefficient";
 
+/**
+ * The metrics a formula may use as an operand: the ones whose card result
+ * is a plain number. Rankings, best/worst labels, streaks, distributions
+ * and goal plans stay out — their value is the structure, not a scalar.
+ */
+export const WIDGET_FORMULA_METRICS = [
+  "average",
+  "averageTrend",
+  "projection",
+  "gradeCount",
+  "passRate",
+  "median",
+  "spread",
+  "consistency",
+  "improvement",
+] as const;
+
+export type WidgetFormulaMetric = (typeof WIDGET_FORMULA_METRICS)[number];
+
 export type WidgetFormulaAggregate =
   "count" | "sum" | "mean" | "median" | "min" | "max" | "standard-deviation";
 
@@ -77,6 +98,17 @@ export type WidgetFormula =
       kind: "aggregate";
       operation: WidgetFormulaAggregate;
       field: WidgetFormulaField;
+    }
+  | {
+      /**
+       * A built-in metric as an operand, evaluated with the card's own
+       * scope and window unless the node overrides them — which is what
+       * makes "average of subject X minus the general average" a formula.
+       */
+      kind: "metric";
+      metric: WidgetFormulaMetric;
+      scope?: WidgetScope;
+      window?: WidgetWindow;
     }
   | {
       kind: "unary";
@@ -545,6 +577,14 @@ export interface WidgetFormulaContext {
   }>;
   passingRatio: number;
   yearScale: number;
+  /**
+   * Evaluates a metric operand against the card's data (or the node's own
+   * scope/window). Supplied by the widget evaluator; a context without it
+   * resolves metric nodes to null.
+   */
+  resolveMetric?: (
+    node: Extract<WidgetFormula, { kind: "metric" }>,
+  ) => number | null;
 }
 
 export interface WidgetMetricEvaluation {

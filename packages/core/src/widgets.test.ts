@@ -17,6 +17,7 @@ import { evaluateWidgetDefinition } from "./widget-evaluator";
 import { evaluateWidgetFormula, parseWidgetFormula } from "./widget-formula";
 import { resolveWidgetFlow } from "./widget-flow";
 import { WIDGET_CAPABILITIES, widgetCompatibleMarks } from "./widget-registry";
+import { WIDGET_LIMITS } from "./widget-types";
 import type {
   WidgetDefinitionV1,
   WidgetEvaluationContext,
@@ -1309,5 +1310,144 @@ describe("widget evaluator", () => {
     expect(
       rebinned.kind === "distribution" ? rebinned.buckets : [],
     ).toHaveLength(12);
+  });
+});
+
+describe("formula metric operands", () => {
+  function formulaDefinition(formula: WidgetFormula): WidgetDefinitionV1 {
+    const definition = createWidgetDefinition("insights");
+    definition.analysis.groupBy = { kind: "none" };
+    definition.visualization.mark = "value";
+    definition.analysis.measure = {
+      kind: "formula",
+      formula,
+      valueType: "ratio",
+    };
+    return definition;
+  }
+
+  test("a metric operand equals the standalone metric", () => {
+    const viaFormula = evaluateWidgetDefinition(
+      formulaDefinition({ kind: "metric", metric: "average" }),
+      context(),
+    );
+
+    const standalone = createWidgetDefinition("insights");
+    standalone.analysis.groupBy = { kind: "none" };
+    standalone.visualization.mark = "value";
+    standalone.analysis.measure = {
+      kind: "metric",
+      metric: "average",
+      goalId: null,
+    };
+    const viaMetric = evaluateWidgetDefinition(standalone, context());
+
+    expect(viaFormula.kind).toBe("scalar");
+    expect(viaMetric.kind).toBe("scalar");
+    const formulaValue = viaFormula.kind === "scalar" ? viaFormula.value : null;
+    const metricValue = viaMetric.kind === "scalar" ? viaMetric.value : null;
+    expect(formulaValue).not.toBeNull();
+    expect(formulaValue).toBeCloseTo(metricValue as number, 10);
+  });
+
+  test("cross-scope subtraction: one subject against the whole selection", () => {
+    const definition = formulaDefinition({
+      kind: "binary",
+      operation: "subtract",
+      left: {
+        kind: "metric",
+        metric: "average",
+        scope: {
+          kind: "subjects",
+          subjectIds: ["math"],
+          includeDescendants: true,
+        },
+        window: { kind: "whole-year" },
+      },
+      right: {
+        kind: "metric",
+        metric: "average",
+        window: { kind: "whole-year" },
+      },
+    });
+    definition.query.window = { kind: "whole-year" };
+
+    const result = evaluateWidgetDefinition(definition, context());
+    expect(result.kind).toBe("scalar");
+    // Math averages 0.7; the whole selection averages 0.775.
+    expect(result.kind === "scalar" ? result.value : null).toBeCloseTo(
+      -0.075,
+      10,
+    );
+  });
+
+  test("references flow through metric operand overrides", () => {
+    const definition = formulaDefinition({
+      kind: "binary",
+      operation: "add",
+      left: {
+        kind: "metric",
+        metric: "average",
+        scope: {
+          kind: "subjects",
+          subjectIds: ["math"],
+          includeDescendants: true,
+        },
+        window: { kind: "period", periodId: "p1" },
+      },
+      right: {
+        kind: "metric",
+        metric: "median",
+        scope: { kind: "custom-average", averageId: "stem" },
+      },
+    });
+
+    const references = collectWidgetReferences(definition);
+    expect(references.subjectIds).toContain("math");
+    expect(references.customAverageIds).toContain("stem");
+    expect(references.periodIds).toContain("p1");
+    expect(
+      compileWidgetDefinition(definition, { surface: "insights" }).valid,
+    ).toBe(true);
+  });
+
+  test("non-scalar metrics are rejected as operands", () => {
+    const parsed = parseWidgetFormula({
+      kind: "metric",
+      metric: "subjectRanking",
+    });
+    expect(parsed.formula).toBeNull();
+    expect(parsed.issues).toContainEqual(
+      expect.objectContaining({
+        messageKey: "widget.error.formula-metric",
+      }),
+    );
+  });
+
+  test("the editor's inherit choice is stripped from the stored node", () => {
+    const parsed = parseWidgetFormula({
+      kind: "metric",
+      metric: "average",
+      scope: { kind: "inherit" },
+      window: { kind: "inherit" },
+    });
+    expect(parsed.issues).toHaveLength(0);
+    expect(parsed.formula).toEqual({ kind: "metric", metric: "average" });
+  });
+
+  test("the metric-operand budget is enforced", () => {
+    let formula: WidgetFormula = { kind: "metric", metric: "average" };
+    for (let index = 0; index < WIDGET_LIMITS.formulaMetricNodes; index += 1) {
+      formula = {
+        kind: "binary",
+        operation: "add",
+        left: formula,
+        right: { kind: "metric", metric: "average" },
+      };
+    }
+    const parsed = parseWidgetFormula(formula);
+    expect(parsed.issues).toContainEqual(
+      expect.objectContaining({ code: "complexity-limit" }),
+    );
   });
 });

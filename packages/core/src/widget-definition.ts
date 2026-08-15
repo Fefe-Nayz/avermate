@@ -18,9 +18,11 @@ import type {
   WidgetDefinitionV1,
   WidgetEncoding,
   WidgetFilter,
+  WidgetFormula,
   WidgetMarkOptions,
   WidgetNumericOperator,
   WidgetReferences,
+  WidgetScope,
   WidgetTransform,
   WidgetValidationIssue,
   WidgetValidationResult,
@@ -935,18 +937,108 @@ export function canonicalizeWidgetDefinition(
   return normalizeDefinition(input, options).definition;
 }
 
+function collectScopeReferences(
+  scope: WidgetScope | undefined,
+  subjectIds: Set<string>,
+  customAverageIds: Set<string>,
+): void {
+  if (!scope) return;
+  if (scope.kind === "subjects") {
+    for (const id of scope.subjectIds) subjectIds.add(id);
+  } else if (scope.kind === "custom-average") {
+    customAverageIds.add(scope.averageId);
+  }
+}
+
+function collectFormulaReferences(
+  formula: WidgetFormula,
+  subjectIds: Set<string>,
+  customAverageIds: Set<string>,
+  periodIds: Set<string>,
+): void {
+  switch (formula.kind) {
+    case "metric":
+      collectScopeReferences(formula.scope, subjectIds, customAverageIds);
+      if (formula.window?.kind === "period") {
+        periodIds.add(formula.window.periodId);
+      }
+      return;
+    case "unary":
+      collectFormulaReferences(
+        formula.operand,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      return;
+    case "binary":
+    case "compare":
+      collectFormulaReferences(
+        formula.left,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      collectFormulaReferences(
+        formula.right,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      return;
+    case "conditional":
+      collectFormulaReferences(
+        formula.condition,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      collectFormulaReferences(
+        formula.whenTrue,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      collectFormulaReferences(
+        formula.whenFalse,
+        subjectIds,
+        customAverageIds,
+        periodIds,
+      );
+      return;
+    default:
+      return;
+  }
+}
+
 export function collectWidgetReferences(
   definition: WidgetDefinitionV1,
 ): WidgetReferences {
   const scope = definition.query.scope;
   const measure = definition.analysis.measure;
   const window = definition.query.window;
+  const subjectIds = new Set<string>();
+  const customAverageIds = new Set<string>();
+  const periodIds = new Set<string>();
+  collectScopeReferences(scope, subjectIds, customAverageIds);
+  if (window.kind === "period") periodIds.add(window.periodId);
+  // Metric operands can point at their own subject, average or period; a
+  // template slot or an ownership check that missed those would let a
+  // definition smuggle references past validation.
+  if (measure.kind === "formula") {
+    collectFormulaReferences(
+      measure.formula,
+      subjectIds,
+      customAverageIds,
+      periodIds,
+    );
+  }
   return {
-    subjectIds: scope.kind === "subjects" ? [...new Set(scope.subjectIds)] : [],
-    customAverageIds: scope.kind === "custom-average" ? [scope.averageId] : [],
+    subjectIds: [...subjectIds],
+    customAverageIds: [...customAverageIds],
     goalIds:
       measure.kind === "metric" && measure.goalId ? [measure.goalId] : [],
-    periodIds: window.kind === "period" ? [window.periodId] : [],
+    periodIds: [...periodIds],
   };
 }
 

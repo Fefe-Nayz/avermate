@@ -284,6 +284,7 @@ function cardSpec(definition: WidgetDefinitionV1): CardSpec {
 }
 
 function formulaContext(
+  definition: WidgetDefinitionV1,
   data: PreparedWidgetData,
   context: WidgetEvaluationContext,
 ): WidgetFormulaContext {
@@ -303,6 +304,35 @@ function formulaContext(
     }),
     passingRatio: context.passingRatio,
     yearScale: context.year.scale,
+    // A metric operand is the real evaluator run on a derived definition:
+    // the card's query with the node's scope/window overrides, measured by
+    // the node's metric. No override means the card's own prepared data is
+    // reused as-is.
+    resolveMetric: (node) => {
+      const subDefinition: WidgetDefinitionV1 = {
+        ...definition,
+        query: {
+          ...definition.query,
+          scope: node.scope ?? definition.query.scope,
+          window: node.window ?? definition.query.window,
+        },
+        analysis: {
+          measure: { kind: "metric", metric: node.metric, goalId: null },
+          groupBy: { kind: "none" },
+          comparison: { kind: "none" },
+          transforms: [],
+        },
+      };
+      const subData =
+        node.scope || node.window
+          ? prepareWidgetData(subDefinition, context)
+          : data;
+      const result = evaluateCard(
+        cardSpec(subDefinition),
+        cardContext(subData, context),
+      );
+      return scalarFromCardResult(result);
+    },
   };
 }
 
@@ -323,7 +353,7 @@ function evaluateScalar(
     return {
       value: evaluateWidgetFormula(
         definition.analysis.measure.formula,
-        formulaContext(data, context),
+        formulaContext(definition, data, context),
       ),
       legacy: null,
     };

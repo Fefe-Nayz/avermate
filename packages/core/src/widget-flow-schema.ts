@@ -249,6 +249,50 @@ export const WIDGET_FORMULA_SCHEMA: WidgetCollectionSchema = {
       ],
     },
     {
+      value: "metric",
+      messageKey: "widget.formula.metric",
+      fields: [
+        collectionField("formula-metric", "metric", "choice", {
+          // Labelled with the measure keys the metric dropdown already uses.
+          options: [
+            "average",
+            "averageTrend",
+            "projection",
+            "gradeCount",
+            "passRate",
+            "median",
+            "spread",
+            "consistency",
+            "improvement",
+          ].map((value) => ({
+            value,
+            messageKey: `widget.measure.${value}`,
+          })),
+        }),
+        collectionField("formula-metric-scope", "scope.kind", "choice", {
+          options: options("inherit", "general", "subjects", "custom-average"),
+          required: false,
+        }),
+        collectionField(
+          "formula-metric-subjects",
+          "scope.subjectIds",
+          "multi-choice",
+          {
+            optionProvider: "subjects",
+            visibleWhen: equals("scope.kind", "subjects"),
+          },
+        ),
+        collectionField("formula-metric-average", "scope.averageId", "choice", {
+          optionProvider: "custom-averages",
+          visibleWhen: equals("scope.kind", "custom-average"),
+        }),
+        collectionField("formula-metric-window", "window.kind", "choice", {
+          options: options("inherit", "active-period", "whole-year"),
+          required: false,
+        }),
+      ],
+    },
+    {
       value: "unary",
       messageKey: "widget.formula.unary",
       fields: [

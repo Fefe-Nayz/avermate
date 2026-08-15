@@ -3,9 +3,11 @@ import type {
   WidgetFormula,
   WidgetFormulaContext,
   WidgetFormulaField,
+  WidgetScope,
   WidgetValidationIssue,
+  WidgetWindow,
 } from "./widget-types";
-import { WIDGET_LIMITS } from "./widget-types";
+import { WIDGET_FORMULA_METRICS, WIDGET_LIMITS } from "./widget-types";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -47,7 +49,126 @@ function member<T extends readonly string[]>(
 
 interface FormulaParseState {
   nodes: number;
+  metricNodes: number;
   issues: WidgetValidationIssue[];
+}
+
+/**
+ * The scope/window overrides a metric operand may carry. Same rules as the
+ * card-level validator in widget-definition, restated here because that
+ * module already depends on this one.
+ */
+function parseNodeScope(
+  value: unknown,
+  path: string,
+  state: FormulaParseState,
+): WidgetScope | null | undefined {
+  if (value === undefined) return undefined;
+  const raw = record(value);
+  // The editor writes an explicit "inherit" choice; the stored node simply
+  // omits the override.
+  if (raw?.kind === "inherit") return undefined;
+  if (raw?.kind === "general") return { kind: "general" };
+  if (raw?.kind === "subjects") {
+    const subjectIds = Array.isArray(raw.subjectIds)
+      ? [
+          ...new Set(
+            raw.subjectIds.filter(
+              (id): id is string => typeof id === "string" && id.length > 0,
+            ),
+          ),
+        ].slice(0, WIDGET_LIMITS.subjectReferences)
+      : [];
+    if (subjectIds.length === 0) {
+      state.issues.push(
+        issue(`${path}.subjectIds`, "widget.error.subject-required"),
+      );
+      return null;
+    }
+    return {
+      kind: "subjects",
+      subjectIds,
+      includeDescendants:
+        typeof raw.includeDescendants === "boolean"
+          ? raw.includeDescendants
+          : true,
+    };
+  }
+  if (raw?.kind === "custom-average") {
+    if (typeof raw.averageId !== "string" || raw.averageId.length === 0) {
+      state.issues.push(
+        issue(`${path}.averageId`, "widget.error.average-required"),
+      );
+      return null;
+    }
+    return { kind: "custom-average", averageId: raw.averageId };
+  }
+  state.issues.push(issue(`${path}.kind`, "widget.error.scope-kind"));
+  return null;
+}
+
+function boundedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.round(value)
+      : fallback;
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function parseNodeWindow(
+  value: unknown,
+  path: string,
+  state: FormulaParseState,
+): WidgetWindow | null | undefined {
+  if (value === undefined) return undefined;
+  const raw = record(value);
+  if (raw?.kind === "inherit") return undefined;
+  if (raw?.kind === "active-period" || raw?.kind === "whole-year") {
+    return { kind: raw.kind };
+  }
+  if (raw?.kind === "period") {
+    if (typeof raw.periodId !== "string" || raw.periodId.length === 0) {
+      state.issues.push(
+        issue(`${path}.periodId`, "widget.error.period-required"),
+      );
+      return null;
+    }
+    return { kind: "period", periodId: raw.periodId };
+  }
+  if (raw?.kind === "rolling-days") {
+    return {
+      kind: "rolling-days",
+      days: boundedInteger(raw.days, 30, 1, 3_650),
+    };
+  }
+  if (raw?.kind === "last-grades") {
+    return {
+      kind: "last-grades",
+      count: boundedInteger(raw.count, 10, 1, 500),
+    };
+  }
+  if (raw?.kind === "date-range") {
+    const from = typeof raw.from === "string" ? raw.from : "";
+    const to = typeof raw.to === "string" ? raw.to : "";
+    const fromTime = Date.parse(from);
+    const toTime = Date.parse(to);
+    if (
+      !Number.isFinite(fromTime) ||
+      !Number.isFinite(toTime) ||
+      fromTime > toTime
+    ) {
+      state.issues.push(issue(path, "widget.error.date-range"));
+      return null;
+    }
+    return { kind: "date-range", from, to };
+  }
+  state.issues.push(issue(`${path}.kind`, "widget.error.window-kind"));
+  return null;
 }
 
 function parseNode(
@@ -104,6 +225,33 @@ function parseNode(
         operation: node.operation,
         field: node.field,
       };
+    case "metric": {
+      state.metricNodes += 1;
+      if (state.metricNodes > WIDGET_LIMITS.formulaMetricNodes) {
+        state.issues.push({
+          path,
+          code: "complexity-limit",
+          messageKey: "widget.error.formula-complexity",
+        });
+        return null;
+      }
+      if (!member(WIDGET_FORMULA_METRICS, node.metric)) {
+        state.issues.push(
+          issue(`${path}.metric`, "widget.error.formula-metric"),
+        );
+        return null;
+      }
+      const scope = parseNodeScope(node.scope, `${path}.scope`, state);
+      if (scope === null) return null;
+      const window = parseNodeWindow(node.window, `${path}.window`, state);
+      if (window === null) return null;
+      return {
+        kind: "metric",
+        metric: node.metric,
+        ...(scope !== undefined ? { scope } : {}),
+        ...(window !== undefined ? { window } : {}),
+      };
+    }
     case "unary": {
       if (!member(UNARY, node.operation)) {
         state.issues.push(
@@ -180,7 +328,7 @@ export function parseWidgetFormula(value: unknown): {
   formula: WidgetFormula | null;
   issues: WidgetValidationIssue[];
 } {
-  const state: FormulaParseState = { nodes: 0, issues: [] };
+  const state: FormulaParseState = { nodes: 0, metricNodes: 0, issues: [] };
   const formula = parseNode(value, "analysis.measure.formula", 1, state);
   return { formula, issues: state.issues };
 }
@@ -223,6 +371,8 @@ export function evaluateWidgetFormula(
           : context.yearScale;
       case "aggregate":
         return aggregate(node.operation, valuesFor(node.field, context));
+      case "metric":
+        return context.resolveMetric?.(node) ?? Number.NaN;
       case "unary": {
         const value = evaluate(node.operand, depth + 1);
         if (node.operation === "absolute") return Math.abs(value);
