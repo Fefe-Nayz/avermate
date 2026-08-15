@@ -1,4 +1,7 @@
-import type { NumericDomain, NumericScaleLike } from "@avermate/core/chart-interaction";
+import type {
+  NumericDomain,
+  NumericScaleLike,
+} from "@avermate/core/chart-interaction";
 import type { SerializableChartSeries } from "./time-series-model";
 
 /**
@@ -41,6 +44,7 @@ export interface ProjectedPoint {
 export interface ProjectedSeries {
   color: string;
   id: string;
+  line: "full" | "faint" | "none";
   path: string;
 }
 
@@ -60,7 +64,8 @@ export function createXScale(
 ): NumericScaleLike {
   const span = viewport[1] - viewport[0] || 1;
   return {
-    invert: (position) => viewport[0] + ((position - plot.x) / plot.width) * span,
+    invert: (position) =>
+      viewport[0] + ((position - plot.x) / plot.width) * span,
     map: (value) => plot.x + ((value - viewport[0]) / span) * plot.width,
   };
 }
@@ -111,24 +116,139 @@ export function timeTicks(viewport: NumericDomain, count: number): number[] {
   );
 }
 
+export type LinePathStyle = "smooth" | "straight" | "step";
+
+function sign(value: number): number {
+  return value < 0 ? -1 : 1;
+}
+
 /**
- * Project every visible sample once, producing both the polyline for each
- * series and the flat point list the nearest-point search consumes.
+ * Monotone cubic tangents (Fritsch–Carlson, as d3's curveMonotoneX): the
+ * curve passes through every sample and never overshoots between two of
+ * them, so a smoothed average can still be read as the truth.
+ */
+function monotonePath(
+  coords: ReadonlyArray<readonly [number, number]>,
+): string {
+  const n = coords.length;
+  if (n < 3) return straightPath(coords);
+
+  const secants: number[] = [];
+  for (let index = 0; index < n - 1; index += 1) {
+    const [x0, y0] = coords[index]!;
+    const [x1, y1] = coords[index + 1]!;
+    const dx = x1 - x0;
+    secants.push(dx === 0 ? 0 : (y1 - y0) / dx);
+  }
+
+  const tangents: number[] = new Array(n).fill(0);
+  for (let index = 1; index < n - 1; index += 1) {
+    const before = secants[index - 1]!;
+    const after = secants[index]!;
+    if (before * after <= 0) {
+      tangents[index] = 0;
+      continue;
+    }
+    const [xPrev] = coords[index - 1]!;
+    const [xHere] = coords[index]!;
+    const [xNext] = coords[index + 1]!;
+    const h0 = xHere - xPrev;
+    const h1 = xNext - xHere;
+    const weighted =
+      (3 * (h0 + h1)) / ((2 * h1 + h0) / before + (h1 + 2 * h0) / after);
+    tangents[index] =
+      (sign(before) + sign(after)) *
+      Math.min(Math.abs(before), Math.abs(after), 0.5 * Math.abs(weighted));
+  }
+  // Endpoint tangents keep the first and last segments monotone too.
+  tangents[0] = endpointTangent(coords[0]!, coords[1]!, tangents[1]!);
+  tangents[n - 1] = endpointTangent(
+    coords[n - 1]!,
+    coords[n - 2]!,
+    tangents[n - 2]!,
+  );
+
+  let path = `M ${coords[0]![0].toFixed(2)} ${coords[0]![1].toFixed(2)}`;
+  for (let index = 0; index < n - 1; index += 1) {
+    const [x0, y0] = coords[index]!;
+    const [x1, y1] = coords[index + 1]!;
+    const dx = (x1 - x0) / 3;
+    path +=
+      ` C ${(x0 + dx).toFixed(2)} ${(y0 + dx * tangents[index]!).toFixed(2)}` +
+      ` ${(x1 - dx).toFixed(2)} ${(y1 - dx * tangents[index + 1]!).toFixed(2)}` +
+      ` ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  }
+  return path;
+}
+
+function endpointTangent(
+  end: readonly [number, number],
+  inner: readonly [number, number],
+  innerTangent: number,
+): number {
+  const h = inner[0] - end[0];
+  if (h === 0) return 0;
+  const secant = (inner[1] - end[1]) / h;
+  const candidate = (3 * secant - innerTangent) / 2;
+  return secant * candidate <= 0
+    ? 0
+    : Math.min(Math.abs(candidate), 3 * Math.abs(secant)) * sign(candidate);
+}
+
+function straightPath(
+  coords: ReadonlyArray<readonly [number, number]>,
+): string {
+  return coords
+    .map(
+      ([x, y], index) =>
+        `${index === 0 ? "M" : " L"} ${x.toFixed(2)} ${y.toFixed(2)}`,
+    )
+    .join("");
+}
+
+/** Step-after: the value holds until the next sample lands. */
+function stepPath(coords: ReadonlyArray<readonly [number, number]>): string {
+  let path = "";
+  coords.forEach(([x, y], index) => {
+    if (index === 0) {
+      path = `M ${x.toFixed(2)} ${y.toFixed(2)}`;
+      return;
+    }
+    const [, previousY] = coords[index - 1]!;
+    path += ` L ${x.toFixed(2)} ${previousY.toFixed(2)} L ${x.toFixed(2)} ${y.toFixed(2)}`;
+  });
+  return path;
+}
+
+export function linePath(
+  coords: ReadonlyArray<readonly [number, number]>,
+  style: LinePathStyle,
+): string {
+  if (coords.length === 0) return "";
+  if (style === "smooth") return monotonePath(coords);
+  if (style === "step") return stepPath(coords);
+  return straightPath(coords);
+}
+
+/**
+ * Project every visible sample once, producing both the path for each series
+ * and the flat point list the nearest-point search consumes.
  */
 export function projectSeries(
   series: readonly SerializableChartSeries[],
   scaleX: NumericScaleLike,
   scaleY: (value: number) => number,
+  lineStyle: LinePathStyle = "straight",
 ): { paths: ProjectedSeries[]; points: ProjectedPoint[] } {
   const points: ProjectedPoint[] = [];
   const paths: ProjectedSeries[] = [];
 
   for (const item of series) {
-    let path = "";
+    const coords: Array<readonly [number, number]> = [];
     item.points.forEach((point, index) => {
       const x = scaleX.map(point.timestamp);
       const y = scaleY(point.value);
-      path += `${index === 0 ? "M" : " L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      coords.push([x, y]);
       points.push({
         datum: {
           color: item.color,
@@ -144,8 +264,61 @@ export function projectSeries(
         y,
       });
     });
-    paths.push({ color: item.color, id: item.id, path });
+    paths.push({
+      color: item.color,
+      id: item.id,
+      line: item.line ?? "full",
+      path: linePath(coords, lineStyle),
+    });
   }
 
   return { paths, points };
+}
+
+/**
+ * The y-window that keeps every visible run inside the plot: values inside
+ * the viewport plus, per series, the nearest sample just outside each edge —
+ * an interpolated line may leave through the sides but never through the top
+ * or bottom.
+ */
+export function viewportYDomain(
+  series: readonly SerializableChartSeries[],
+  viewport: NumericDomain,
+  maximumScale: number,
+  fallback: NumericDomain,
+): NumericDomain {
+  const values: number[] = [];
+  for (const item of series) {
+    const points = item.points;
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index]!;
+      if (point.timestamp >= viewport[0] && point.timestamp <= viewport[1]) {
+        values.push(point.value);
+      }
+    }
+    // Off-screen neighbours whose segments cross into the frame.
+    let before: number | null = null;
+    let after: number | null = null;
+    for (const point of points) {
+      if (point.timestamp < viewport[0]) before = point.value;
+      if (point.timestamp > viewport[1]) {
+        after = point.value;
+        break;
+      }
+    }
+    if (before !== null) values.push(before);
+    if (after !== null) values.push(after);
+  }
+  if (values.length === 0) return fallback;
+
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const padding = Math.max((maximum - minimum) * 0.12, maximumScale * 0.025);
+  const start = Math.max(0, minimum - padding);
+  const end = Math.min(maximumScale, maximum + padding);
+  if (start !== end) return [start, end];
+  return [
+    Math.max(0, start - maximumScale * 0.025),
+    Math.min(maximumScale, end + maximumScale * 0.025),
+  ];
 }

@@ -155,12 +155,19 @@ export default function SubjectDetail() {
         maximumScale: scale,
         series: gradeSeriesInputs({
           colors: TIME_SERIES_COLORS,
+          connect: chartSettings.connectGrades,
           grades,
           scale,
           subjects: graph.subjects,
         }),
       }),
-    [chartSettings.autoZoom, grades, graph.subjects, scale],
+    [
+      chartSettings.autoZoom,
+      chartSettings.connectGrades,
+      grades,
+      graph.subjects,
+      scale,
+    ],
   );
 
   if (isLoading) return <Loading />;
@@ -314,6 +321,7 @@ export default function SubjectDetail() {
             )}
             model={averageModel}
             passingValue={passingRatio * scale}
+            zoomPresets
           />
         </Section>
 
@@ -323,6 +331,7 @@ export default function SubjectDetail() {
             description={t("Drag to pan, pinch or use the wheel to zoom.")}
             model={gradeModel}
             passingValue={passingRatio * scale}
+            zoomPresets
           />
         </Section>
 

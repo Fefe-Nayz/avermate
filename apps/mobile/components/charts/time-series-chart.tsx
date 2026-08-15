@@ -30,6 +30,8 @@ import {
   projectSeries,
   sameDomain,
   timeTicks,
+  viewportYDomain,
+  type LinePathStyle,
 } from "./time-series-geometry";
 
 /**
@@ -50,6 +52,8 @@ import {
 /** Beyond this many samples the dots merge into a smear and only cost frames. */
 const MAX_VISIBLE_DOTS = 140;
 
+const DAY_IN_MS = 86_400_000;
+
 /**
  * `useId` is not usable here: React 19 returns ids containing guillemets, and
  * they end up inside an SVG `url(#…)` reference.
@@ -62,8 +66,15 @@ interface Baseline {
   scale: NumericScaleLike;
 }
 
+export interface ZoomPresetString {
+  /** Number of days the preset shows, or null for the whole domain. */
+  days: number | null;
+  label: string;
+}
+
 export interface TimeSeriesChartProps {
   height: number;
+  lineStyle?: LinePathStyle;
   locale: "en" | "fr";
   model: SerializableTimeSeriesModel;
   passingValue?: number;
@@ -83,6 +94,7 @@ export interface TimeSeriesChartProps {
     text: string;
     tooltip: string;
   };
+  zoomPresets?: readonly ZoomPresetString[];
 }
 
 function templateName(template: string, name: string): string {
@@ -91,12 +103,14 @@ function templateName(template: string, name: string): string {
 
 export function TimeSeriesChart({
   height,
+  lineStyle = "smooth",
   locale,
   model,
   passingValue,
   showPoints,
   strings,
   theme,
+  zoomPresets,
 }: TimeSeriesChartProps) {
   // Lazy, so the counter advances once per chart rather than once per render.
   const [clipId] = useState(() => `chart-plot-${(clipCounter += 1)}`);
@@ -129,12 +143,26 @@ export function TimeSeriesChart({
   const hidden = new Set(hiddenIds);
   const visibleSeries = model.series.filter((series) => !hidden.has(series.id));
 
+  const zoomed = !sameDomain(viewport, domain);
+  // While zoomed, the y-window follows what is visible so a run can leave
+  // the frame through the sides but never through the top or bottom.
+  const yDomain =
+    model.autoZoom && zoomed
+      ? viewportYDomain(
+          visibleSeries,
+          viewport,
+          model.maximumScale,
+          model.yDomain,
+        )
+      : model.yDomain;
+
   const scaleX: NumericScaleLike = createXScale(viewport, plot);
-  const scaleY = createYScale(model.yDomain, plot);
+  const scaleY = createYScale(yDomain, plot);
   const { paths, points: projected } = projectSeries(
     visibleSeries,
     scaleX,
     scaleY,
+    lineStyle,
   );
 
   const inspected =
@@ -144,8 +172,6 @@ export function TimeSeriesChart({
           getTimestamp: (point) => point.datum.timestamp,
         })
       : [];
-
-  const zoomed = !sameDomain(viewport, domain);
 
   function changeViewport(next: NumericDomain) {
     setViewport(next);
@@ -235,13 +261,57 @@ export function TimeSeriesChart({
 
   const gesture = Gesture.Simultaneous(pinch, Gesture.Race(drag, scrub, tap));
 
-  const yTicks = niceTicks(model.yDomain[0], model.yDomain[1], 5);
+  // Presets whose span would show the whole domain anyway add nothing.
+  const domainSpan = domain[1] - domain[0];
+  const presets = (zoomPresets ?? []).filter(
+    (preset) => preset.days === null || preset.days * DAY_IN_MS < domainSpan,
+  );
+  const presetActive = (preset: ZoomPresetString): boolean => {
+    if (preset.days === null) return !zoomed;
+    const span = preset.days * DAY_IN_MS;
+    const start = Math.max(domain[0], domain[1] - span);
+    const tolerance = Math.max(domainSpan, 1) * 1e-3;
+    return (
+      Math.abs(viewport[1] - domain[1]) <= tolerance &&
+      Math.abs(viewport[0] - start) <= tolerance
+    );
+  };
+  const applyPreset = (preset: ZoomPresetString) => {
+    if (preset.days === null) {
+      changeViewport(domain);
+      return;
+    }
+    const span = preset.days * DAY_IN_MS;
+    changeViewport([Math.max(domain[0], domain[1] - span), domain[1]]);
+  };
+
+  const yTicks = niceTicks(yDomain[0], yDomain[1], 5);
   const xTicks = width > 0 ? timeTicks(viewport, 4) : [];
 
-  const dots =
-    showPoints && projected.length <= MAX_VISIBLE_DOTS ? projected : [];
+  // Series drawn without a run keep their dots no matter what: dots are the
+  // whole mark there, not an ornament.
+  const dotOnlySeries = new Set(
+    visibleSeries
+      .filter((series) => (series.line ?? "full") === "none")
+      .map((series) => series.id),
+  );
+  const dots = projected.filter(
+    (point) =>
+      dotOnlySeries.has(point.datum.seriesId) ||
+      (showPoints && projected.length <= MAX_VISIBLE_DOTS),
+  );
   const primary = inspected[0];
   const tooltipRight = primary ? primary.x > plot.x + plot.width / 2 : false;
+
+  // One shared day reads once under the rows; mixed days label every row so
+  // no value is ever shown against a date that is not its own.
+  const sharedDay =
+    inspected.length > 0 &&
+    inspected.every(
+      (point) =>
+        new Date(point.datum.timestamp).toDateString() ===
+        new Date(inspected[0]!.datum.timestamp).toDateString(),
+    );
 
   return (
     <View>
@@ -313,6 +383,47 @@ export function TimeSeriesChart({
           );
         })}
       </View>
+
+      {presets.length > 1 ? (
+        <View
+          style={{
+            flexDirection: "row",
+            gap: space.xs,
+            paddingHorizontal: space.lg,
+            paddingTop: space.sm,
+          }}
+        >
+          {presets.map((preset) => {
+            const active = presetActive(preset);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                key={preset.label}
+                onPress={() => applyPreset(preset)}
+                style={{
+                  backgroundColor: active ? `${theme.text}14` : "transparent",
+                  borderColor: active ? theme.text : theme.border,
+                  borderRadius: radius.pill,
+                  borderWidth: 1,
+                  minHeight: 28,
+                  justifyContent: "center",
+                  paddingHorizontal: 10,
+                }}
+              >
+                <Text
+                  style={[
+                    type.footnote,
+                    { color: active ? theme.text : theme.muted },
+                  ]}
+                >
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <GestureDetector gesture={gesture}>
         <View
@@ -401,17 +512,20 @@ export function TimeSeriesChart({
                   />
                 ) : null}
 
-                {paths.map((series) => (
-                  <Path
-                    d={series.path}
-                    fill="none"
-                    key={series.id}
-                    stroke={series.color}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.25}
-                  />
-                ))}
+                {paths
+                  .filter((series) => series.line !== "none")
+                  .map((series) => (
+                    <Path
+                      d={series.path}
+                      fill="none"
+                      key={series.id}
+                      stroke={series.color}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeOpacity={series.line === "faint" ? 0.35 : 1}
+                      strokeWidth={series.line === "faint" ? 1.25 : 2.25}
+                    />
+                  ))}
 
                 {dots.map((point) => (
                   <Circle
@@ -419,7 +533,7 @@ export function TimeSeriesChart({
                     cy={point.y}
                     fill={point.datum.color}
                     key={point.datum.id}
-                    r={2.5}
+                    r={dotOnlySeries.has(point.datum.seriesId) ? 3.5 : 2.5}
                     stroke={theme.background}
                     strokeWidth={1}
                   />
@@ -475,17 +589,25 @@ export function TimeSeriesChart({
                   />
                   <Text
                     numberOfLines={1}
-                    style={[type.footnote, { color: theme.text, flexShrink: 1 }]}
+                    style={[
+                      type.footnote,
+                      { color: theme.text, flexShrink: 1 },
+                    ]}
                   >
-                    {point.datum.detail
+                    {(point.datum.detail
                       ? `${number.format(point.datum.value)} · ${point.datum.detail}`
-                      : `${point.datum.label} · ${number.format(point.datum.value)}`}
+                      : `${point.datum.label} · ${number.format(point.datum.value)}`) +
+                      (sharedDay
+                        ? ""
+                        : ` · ${shortDate.format(new Date(point.datum.timestamp))}`)}
                   </Text>
                 </View>
               ))}
-              <Text style={[type.footnote, { color: theme.muted }]}>
-                {shortDate.format(new Date(primary.datum.timestamp))}
-              </Text>
+              {sharedDay ? (
+                <Text style={[type.footnote, { color: theme.muted }]}>
+                  {shortDate.format(new Date(primary.datum.timestamp))}
+                </Text>
+              ) : null}
             </View>
           ) : null}
 

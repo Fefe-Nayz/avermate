@@ -8,17 +8,23 @@ import {
 import {
   createXScale,
   createYScale,
+  linePath,
   niceTicks,
   plotRect,
   projectSeries,
   sameDomain,
   timeTicks,
+  viewportYDomain,
 } from "./time-series-geometry";
 import type { SerializableChartSeries } from "./time-series-model";
 
 const DAY = 86_400_000;
 
-function series(id: string, color: string, values: number[]): SerializableChartSeries {
+function series(
+  id: string,
+  color: string,
+  values: number[],
+): SerializableChartSeries {
   return {
     color,
     id,
@@ -163,5 +169,72 @@ describe("native time-series geometry", () => {
     for (const point of picked) expect(point.datumIndex).toBe(2);
     // The primary datum leads, and it is the one nearest in two dimensions.
     expect(picked[0]?.datum.seriesId).toBe("a");
+  });
+});
+
+describe("line paths and viewport framing", () => {
+  const coords: Array<readonly [number, number]> = [
+    [0, 100],
+    [50, 20],
+    [100, 60],
+    [150, 60],
+  ];
+
+  test("straight and step paths visit every sample", () => {
+    const straight = linePath(coords, "straight");
+    expect(straight).toBe(
+      "M 0.00 100.00 L 50.00 20.00 L 100.00 60.00 L 150.00 60.00",
+    );
+    const step = linePath(coords, "step");
+    expect(step).toContain("L 50.00 100.00 L 50.00 20.00");
+    expect(step.endsWith("L 150.00 60.00 L 150.00 60.00")).toBe(true);
+  });
+
+  test("smooth paths pass through the samples and never overshoot", () => {
+    const smooth = linePath(coords, "smooth");
+    expect(smooth.startsWith("M 0.00 100.00")).toBe(true);
+    expect(smooth.endsWith("150.00 60.00")).toBe(true);
+    // Every cubic control ordinate stays inside the data's y-range: monotone
+    // interpolation may flatten, never bulge past a sample.
+    const ordinates = [
+      ...smooth.matchAll(/C ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/g),
+    ].flatMap((match) => [Number(match[2]), Number(match[4])]);
+    for (const y of ordinates) {
+      expect(y).toBeGreaterThanOrEqual(20 - 1e-6);
+      expect(y).toBeLessThanOrEqual(100 + 1e-6);
+    }
+  });
+
+  test("projectSeries tags each path with its line treatment", () => {
+    const plot = plotRect(360, 240);
+    const { paths } = projectSeries(
+      [
+        { ...series("dots", "#111", [10, 12]), line: "none" },
+        series("run", "#222", [8, 9]),
+      ],
+      createXScale([0, DAY], plot),
+      createYScale([0, 20], plot),
+      "straight",
+    );
+    expect(paths.find((path) => path.id === "dots")?.line).toBe("none");
+    expect(paths.find((path) => path.id === "run")?.line).toBe("full");
+  });
+
+  test("viewport y-domain frames visible values plus crossing neighbours", () => {
+    const item = series("a", "#111", [2, 18, 10, 4]);
+    // Viewport covers only the middle two samples; the outer ones (2 and 4)
+    // still count because their segments enter the frame.
+    const framed = viewportYDomain([item], [0.5 * DAY, 2.5 * DAY], 20, [0, 20]);
+    expect(framed[0]).toBeLessThanOrEqual(2);
+    expect(framed[1]).toBeGreaterThanOrEqual(18);
+
+    // A viewport past every sample falls back to the resting domain.
+    const empty = viewportYDomain(
+      [{ ...item, points: [] }],
+      [0, DAY],
+      20,
+      [0, 20],
+    );
+    expect(empty).toEqual([0, 20]);
   });
 });

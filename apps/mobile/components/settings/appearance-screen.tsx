@@ -3,7 +3,13 @@ import { getLocales } from "expo-localization";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChoiceField, SwitchField } from "@/components/field";
-import { Confirmation, Loading, Problem, Screen, Section } from "@/components/ui";
+import {
+  Confirmation,
+  Loading,
+  Problem,
+  Screen,
+  Section,
+} from "@/components/ui";
 import { haptic, setHapticsEnabled } from "@/lib/haptics";
 import { setLocale, t, type Locale } from "@/lib/i18n";
 import { client, orpc, queryClient } from "@/lib/orpc";
@@ -61,7 +67,9 @@ export function AppearanceScreen() {
 
   const patch = (value: Parameters<typeof update.mutate>[0]) => {
     setSaved(false);
-    setDraft((current) => (current ? ({ ...current, ...value } as Preferences) : current));
+    setDraft((current) =>
+      current ? ({ ...current, ...value } as Preferences) : current,
+    );
     if (value.chartSettings) {
       setChartSettings({ ...draft.chartSettings, ...value.chartSettings });
     }
@@ -105,7 +113,7 @@ export function AppearanceScreen() {
     <>
       <Stack.Screen options={{ title: t("Appearance") }} />
       <Screen>
-        <Section title={t("Theme") }>
+        <Section title={t("Theme")}>
           <ChoiceField
             value={draft.theme ?? themePreference()}
             onChange={pickTheme}
@@ -147,7 +155,7 @@ export function AppearanceScreen() {
           ) : null}
         </Section>
 
-        <Section title={t("Colour") }>
+        <Section title={t("Colour")}>
           <ChoiceField
             value={draft.themePreset}
             onChange={pickPalette}
@@ -167,7 +175,7 @@ export function AppearanceScreen() {
           />
         </Section>
 
-        <Section title={t("Theme studio") }>
+        <Section title={t("Theme studio")}>
           <ChoiceField
             value={draft.themePreset}
             onChange={pickPalette}
@@ -182,7 +190,7 @@ export function AppearanceScreen() {
           />
         </Section>
 
-        <Section title={t("Language") }>
+        <Section title={t("Language")}>
           <ChoiceField
             value={draft.language}
             onChange={pickLanguage}
@@ -194,7 +202,7 @@ export function AppearanceScreen() {
           />
         </Section>
 
-        <Section title={t("Interaction") }>
+        <Section title={t("Interaction")}>
           <SwitchField
             label={t("Haptic feedback")}
             hint={t("Small taps as you move through the app")}
@@ -227,34 +235,73 @@ export function AppearanceScreen() {
           />
         </Section>
 
-        <Section title={t("Charts") }>
+        <Section title={t("Charts")}>
           <SwitchField
             label={t("Automatic zoom")}
             value={draft.chartSettings.autoZoom}
             onValueChange={(value) =>
-              patch({ chartSettings: { ...draft.chartSettings, autoZoom: value } })
+              patch({
+                chartSettings: { ...draft.chartSettings, autoZoom: value },
+              })
             }
           />
           <SwitchField
             label={t("Show trend")}
             value={draft.chartSettings.showTrend}
             onValueChange={(value) =>
-              patch({ chartSettings: { ...draft.chartSettings, showTrend: value } })
+              patch({
+                chartSettings: { ...draft.chartSettings, showTrend: value },
+              })
             }
           />
           <SwitchField
             label={t("Show data points")}
             value={draft.chartSettings.showPoints}
             onValueChange={(value) =>
-              patch({ chartSettings: { ...draft.chartSettings, showPoints: value } })
+              patch({
+                chartSettings: { ...draft.chartSettings, showPoints: value },
+              })
+            }
+          />
+          <SwitchField
+            label={t("Connect the grade dots")}
+            hint={t("A faint line between results")}
+            value={draft.chartSettings.connectGrades ?? false}
+            onValueChange={(value) =>
+              patch({
+                chartSettings: { ...draft.chartSettings, connectGrades: value },
+              })
             }
           />
           <SwitchField
             label={t("Show sub-subjects")}
             value={draft.chartSettings.showSubSubjects}
             onValueChange={(value) =>
-              patch({ chartSettings: { ...draft.chartSettings, showSubSubjects: value } })
+              patch({
+                chartSettings: {
+                  ...draft.chartSettings,
+                  showSubSubjects: value,
+                },
+              })
             }
+          />
+          <ChoiceField
+            label={t("Line style")}
+            value={draft.chartSettings.lineStyle ?? "smooth"}
+            onChange={(value) =>
+              patch({
+                chartSettings: {
+                  ...draft.chartSettings,
+                  lineStyle: value as "smooth" | "straight" | "step",
+                },
+              })
+            }
+            columns={2}
+            choices={[
+              { value: "smooth", label: t("Smooth") },
+              { value: "straight", label: t("Linear") },
+              { value: "step", label: t("Stepped") },
+            ]}
           />
           <ChoiceField
             label={t("Trend detail")}

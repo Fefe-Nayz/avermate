@@ -165,6 +165,7 @@ export default function AverageDetail() {
             description={t("Drag to pan, pinch or use the wheel to zoom.")}
             model={chartModel}
             passingValue={passingRatio * scale}
+            zoomPresets
           />
         </Section>
 

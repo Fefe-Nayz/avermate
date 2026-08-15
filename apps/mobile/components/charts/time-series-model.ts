@@ -15,11 +15,15 @@ export interface SerializableChartSeries {
   hidden?: boolean;
   id: string;
   label: string;
+  /** How the run between samples is drawn. Dots always render for "none". */
+  line?: "full" | "faint" | "none";
   points: SerializableChartPoint[];
 }
 
 export interface SerializableTimeSeriesModel {
+  autoZoom: boolean;
   domain: readonly [number, number];
+  maximumScale: number;
   maximumZoom: number;
   series: SerializableChartSeries[];
   yDomain: readonly [number, number];
@@ -30,6 +34,7 @@ export interface TimeSeriesInput {
   hidden?: boolean;
   id: string;
   label: string;
+  line?: "full" | "faint" | "none";
   points: ReadonlyArray<{
     date: Date;
     detail?: string;
@@ -62,6 +67,7 @@ export function createSerializableTimeSeriesModel(input: {
     hidden: item.hidden,
     id: item.id,
     label: item.label,
+    line: item.line,
     points: item.points.flatMap((point, index): SerializableChartPoint[] => {
       const timestamp = point.date.getTime();
       if (
@@ -103,7 +109,9 @@ export function createSerializableTimeSeriesModel(input: {
   const periodDays = Math.max(1, (domain[1] - domain[0]) / DAY_IN_MS);
 
   return {
+    autoZoom: input.autoZoom ?? false,
     domain,
+    maximumScale: input.maximumScale,
     maximumZoom: Math.max(1, Math.min(64, periodDays / 2)),
     series,
     yDomain,
@@ -132,6 +140,8 @@ export function averageSeriesInput(input: {
 /** Actual assessments grouped into irregular, independently focused series. */
 export function gradeSeriesInputs(input: {
   colors: readonly string[];
+  /** Draw a faint run between results instead of dots alone. */
+  connect?: boolean;
   grades: readonly Grade[];
   scale: number;
   subjects: readonly Subject[];
@@ -156,6 +166,7 @@ export function gradeSeriesInputs(input: {
       color: input.colors[seriesIndex % input.colors.length] ?? "#5B8FF9",
       id: subjectId,
       label: subjectNames.get(subjectId) ?? subjectId,
+      line: (input.connect ? "faint" : "none") as "faint" | "none",
       points: grades
         .slice()
         .sort(

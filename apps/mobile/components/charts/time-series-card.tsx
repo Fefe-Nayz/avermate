@@ -23,6 +23,7 @@ export function TimeSeriesCard({
   model,
   passingValue,
   title,
+  zoomPresets = false,
 }: {
   description?: string;
   /** Plot height. The series legend is drawn above it and adds its own. */
@@ -30,9 +31,11 @@ export function TimeSeriesCard({
   model: SerializableTimeSeriesModel;
   passingValue?: number;
   title: string;
+  /** Offer the one-tap ranges (all, 3 months, 30 days, 7 days). */
+  zoomPresets?: boolean;
 }) {
   const palette = usePalette();
-  const { showPoints } = useChartSettings();
+  const { lineStyle, showPoints } = useChartSettings();
   const points = model.series.reduce(
     (total, series) => total + series.points.length,
     0,
@@ -71,6 +74,7 @@ export function TimeSeriesCard({
       ) : (
         <TimeSeriesChart
           height={height}
+          lineStyle={lineStyle}
           locale={locale()}
           model={model}
           passingValue={passingValue}
@@ -82,6 +86,16 @@ export function TimeSeriesCard({
             values: t("Relevant values"),
             visibleRange: t("Visible chart range"),
           }}
+          zoomPresets={
+            zoomPresets
+              ? [
+                  { days: null, label: t("All") },
+                  { days: 90, label: t("3 months") },
+                  { days: 30, label: t("30 days") },
+                  { days: 7, label: t("7 days") },
+                ]
+              : undefined
+          }
           theme={{
             background: palette.surface,
             border: palette.border,

@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+// expo-router vendors react-navigation; the props type must come from the
+// same copy as the navigator that renders this bar.
+import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, type IconName } from "@/components/icon";
 import { useQuickAdd } from "@/components/quick-add";
@@ -55,7 +57,11 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           return (
             <View
               key="action"
-              style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               <Pressable
                 accessibilityRole="button"
