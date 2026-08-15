@@ -3,6 +3,9 @@
 import * as React from "react"
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes"
 
+/** Fired with the chosen theme so the account layer can persist the hotkey. */
+export const THEME_HOTKEY_EVENT = "avermate:theme-hotkey"
+
 function ThemeProvider({
   children,
   ...props
@@ -58,7 +61,11 @@ function ThemeHotkey() {
         return
       }
 
-      setTheme(resolvedTheme === "dark" ? "light" : "dark")
+      const next = resolvedTheme === "dark" ? "light" : "dark"
+      setTheme(next)
+      window.dispatchEvent(
+        new CustomEvent(THEME_HOTKEY_EVENT, { detail: next })
+      )
     }
 
     window.addEventListener("keydown", onKeyDown)

@@ -11,6 +11,7 @@ import {
   writeAppearanceCookie,
   type Appearance,
 } from "@/lib/appearance"
+import type { ChartLineStyle } from "@/components/charts/line-style"
 import {
   customThemeCss,
   fontStack,
@@ -41,6 +42,12 @@ export interface Preferences {
     trendSubdivisions: number
     showPoints: boolean
     showSubSubjects: boolean
+    lineStyle: ChartLineStyle
+    connectGrades: boolean
+  }
+  navigation: {
+    tabs?: string[]
+    sidebar?: string[]
   }
   unlockedThemes: string[]
   seenCelebrations: string[]
@@ -63,7 +70,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
     trendSubdivisions: 1,
     showPoints: true,
     showSubSubjects: true,
+    lineStyle: "smooth",
+    connectGrades: false,
   },
+  navigation: {},
   unlockedThemes: [],
   seenCelebrations: [],
 }

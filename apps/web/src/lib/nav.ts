@@ -29,7 +29,8 @@ export interface NavEntry {
   /** Shown in the mobile tab bar. */
   tab?: boolean
   adminOnly?: boolean
-  /** Hidden until the request-prefetched eligibility projection is active. */}
+  /** Hidden until the request-prefetched eligibility projection is active. */
+}
 
 export const NAV_ENTRIES: NavEntry[] = [
   {
@@ -86,6 +87,7 @@ export const NAV_ENTRIES: NavEntry[] = [
 export const SETTINGS_SECTIONS = [
   { href: "/settings", label: "Profile", exact: true },
   { href: "/settings/appearance", label: "Appearance" },
+  { href: "/settings/navigation", label: "Navigation" },
   { href: "/settings/year", label: "Year & periods" },
   { href: "/settings/averages", label: "Custom averages" },
   { href: "/settings/account", label: "Account" },
@@ -97,4 +99,50 @@ export function isActivePath(pathname: string, entry: NavEntry): boolean {
   return candidates.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   )
+}
+
+/**
+ * The destinations an account may pin to its navigation: the six primary
+ * screens. Settings, review and admin stay where they are — the first is
+ * chrome, the others are conditional.
+ */
+export const CUSTOMIZABLE_NAV_HREFS = [
+  "/dashboard",
+  "/subjects",
+  "/grades",
+  "/goals",
+  "/insights",
+  "/social",
+] as const
+
+/** The mobile tab bar's free slots (the fourth tab is always "More"). */
+export const TAB_SLOT_COUNT = 3
+
+export const DEFAULT_TAB_HREFS = ["/dashboard", "/subjects", "/grades"]
+
+export const DEFAULT_SIDEBAR_HREFS = [...CUSTOMIZABLE_NAV_HREFS]
+
+/**
+ * A stored navigation choice survives renames and bad writes by being
+ * sanitized at read time: unknown hrefs drop, duplicates collapse, and when
+ * a fixed count is asked for, missing slots refill from the fallback.
+ */
+export function sanitizeNavSelection(
+  stored: readonly string[] | undefined,
+  fallback: readonly string[],
+  count?: number
+): string[] {
+  const allowed = new Set<string>(CUSTOMIZABLE_NAV_HREFS)
+  const chosen: string[] = []
+  for (const href of stored ?? []) {
+    if (allowed.has(href) && !chosen.includes(href)) chosen.push(href)
+  }
+  if (count === undefined) {
+    return chosen.length > 0 ? chosen : [...fallback]
+  }
+  for (const href of fallback) {
+    if (chosen.length >= count) break
+    if (!chosen.includes(href)) chosen.push(href)
+  }
+  return chosen.slice(0, count)
 }

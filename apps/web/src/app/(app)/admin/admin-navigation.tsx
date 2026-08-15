@@ -6,6 +6,7 @@ import { useExtracted } from "next-intl"
 import {
   FlagIcon,
   LayersIcon,
+  LayoutGridIcon,
   MegaphoneIcon,
   MessageSquareIcon,
   ScrollTextIcon,
@@ -57,6 +58,11 @@ export function AdminNavigation() {
           href: "/admin/presets",
           label: t("Curriculum presets"),
           icon: ScrollTextIcon,
+        },
+        {
+          href: "/admin/card-templates",
+          label: t("Card gallery"),
+          icon: LayoutGridIcon,
         },
       ],
     },

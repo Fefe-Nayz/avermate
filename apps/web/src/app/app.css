@@ -160,6 +160,27 @@
     animation: chart-rise 500ms cubic-bezier(0.25, 1, 0.4, 1) both;
   }
 
+  /* Time-travel scrubber: ticks near the pointer swell with a gaussian
+     falloff computed in CSS, so pointer moves cost two custom-property
+     writes and zero per-tick JavaScript. Browsers without exp()/pow()
+     simply skip the swell — the strip stays a plain row of ticks. */
+  .scrubber .scrub-tick {
+    transform-origin: bottom center;
+    transform: scaleY(
+      calc(
+        1 + var(--scrub-boost, 0) * 0.9 *
+          exp(-1 * pow((var(--i, 0) - var(--cursor, -9999)) / 3.5, 2))
+      )
+    );
+    transition:
+      transform 140ms ease-out,
+      opacity 200ms ease-out;
+  }
+  :root[data-motion="reduced"] .scrubber .scrub-tick {
+    transform: none;
+    transition: none;
+  }
+
   /* A paused story is paused everywhere: every CSS animation inside the
      frame holds its current frame until play. The shader and the music
      stop through their own props; this catches the rest. */

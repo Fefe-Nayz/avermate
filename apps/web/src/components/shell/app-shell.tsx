@@ -1,7 +1,13 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "./app-sidebar"
@@ -35,8 +41,22 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // A new screen starts at the top. Restoring position across routes reads as
   // a bug on a phone, where the header would come back already collapsed.
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 })
+  // Layout-phase, and the clipped shell ancestors are zeroed too: the router's
+  // own focus/scrollIntoView on the incoming segment can programmatically
+  // scroll any ancestor, and one that owns no scrollbar can never be brought
+  // back by the user — the page then sits under the sticky header with its
+  // bottom cropped, which is exactly the navigation bug this guards against.
+  useLayoutEffect(() => {
+    const pane = scrollRef.current
+    if (!pane) return
+    pane.scrollTo({ top: 0 })
+    for (
+      let ancestor = pane.parentElement;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      if (ancestor.scrollTop !== 0) ancestor.scrollTop = 0
+    }
   }, [pathname])
 
   useEffect(() => {
@@ -78,11 +98,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider
-      className="h-svh min-h-0 overflow-hidden"
+      // `overflow-clip`, not `overflow-hidden`: hidden boxes are still
+      // programmatically scrollable, and the router's scrollIntoView/focus on
+      // navigation could shove the whole shell up with no way to scroll back.
+      // Clip clips without ever becoming a scroll container.
+      className="h-svh min-h-0 overflow-clip"
       style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
     >
       <AppSidebar user={user} />
-      <SidebarInset className="min-w-0 overflow-hidden">
+      <SidebarInset className="min-w-0 overflow-clip">
         <SiteHeader user={user} />
         <MobileHeader user={user} condensed={condensed} />
         <TimelineBanner />

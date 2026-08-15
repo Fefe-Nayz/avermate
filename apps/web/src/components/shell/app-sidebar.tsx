@@ -16,7 +16,13 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { NAV_ENTRIES, isActivePath } from "@/lib/nav"
+import {
+  DEFAULT_SIDEBAR_HREFS,
+  isActivePath,
+  NAV_ENTRIES,
+  sanitizeNavSelection,
+} from "@/lib/nav"
+import { usePreferences } from "@/hooks/use-preferences"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
 import { NavUser } from "./nav-user"
 import { YearSwitcher } from "./year-switcher"
@@ -31,20 +37,21 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
   // role column saying so, so the server is the one that answers this.
   const { isAdmin } = useIsAdmin()
 
+  const { preferences } = usePreferences()
+
   // Two groups rather than one long list: the first is the year you are
-  // living in, the second is everything you occasionally reach for.
-  const primary = NAV_ENTRIES.filter(
-    (entry) =>
-      !entry.adminOnly &&
-      [
-        "/dashboard",
-        "/subjects",
-        "/grades",
-        "/goals",
-        "/insights",
-        "/social",
-      ].includes(entry.href)
-  )
+  // living in — in the order (and selection) the account chose in
+  // Settings → Navigation — the second is everything you occasionally
+  // reach for.
+  const primary = sanitizeNavSelection(
+    preferences.navigation.sidebar,
+    DEFAULT_SIDEBAR_HREFS
+  ).flatMap((href) => {
+    const entry = NAV_ENTRIES.find(
+      (candidate) => candidate.href === href && !candidate.adminOnly
+    )
+    return entry ? [entry] : []
+  })
   const secondary = NAV_ENTRIES.filter(
     (entry) =>
       (!entry.adminOnly || isAdmin) &&

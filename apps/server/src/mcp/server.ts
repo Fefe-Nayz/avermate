@@ -1340,6 +1340,15 @@ function registerWriteSurface(server: McpServer, api: Api): void {
             trendSubdivisions: z.number().int().min(1).max(12),
             showPoints: z.boolean(),
             showSubSubjects: z.boolean(),
+            lineStyle: z.enum(["smooth", "straight", "step"]),
+            connectGrades: z.boolean(),
+          })
+          .partial()
+          .optional(),
+        navigation: z
+          .object({
+            tabs: z.array(z.string().max(64)).max(4),
+            sidebar: z.array(z.string().max(64)).max(12),
           })
           .partial()
           .optional(),

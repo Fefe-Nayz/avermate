@@ -1,6 +1,7 @@
 import { adminRouter } from "./admin";
 import { announcementsRouter } from "./announcements";
 import { averagesRouter } from "./averages";
+import { cardTemplatesRouter } from "./card-templates";
 import { cardsRouter } from "./cards";
 import { feedbackRouter } from "./feedback";
 import { goalsRouter } from "./goals";
@@ -26,6 +27,7 @@ export const appRouter = {
   averages: averagesRouter,
   goals: goalsRouter,
   cards: cardsRouter,
+  cardTemplates: cardTemplatesRouter,
   preferences: preferencesRouter,
   profile: profileRouter,
   presets: presetsRouter,

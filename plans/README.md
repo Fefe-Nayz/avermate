@@ -43,7 +43,7 @@ your row when done.
 | 012  | Lecture recording + transcription (segment-at-capture) | P3 | XL | 001, 002, 005, 007 | TODO |
 | 013  | Multi-type source ingestion: web links → markdown | P2 | M | 002, 005, 009 | TODO |
 | 014  | Fluid type via `tailwind-clamp` (expressive surfaces) | P3 | S-M | — | TODO |
-| 015  | Card gallery — store of preconfigured dashboard/insight cards | P3 | M-L | — | TODO |
+| 015  | Card gallery — store of preconfigured dashboard/insight cards | P3 | M-L | — | IN PROGRESS (web+server landed: `card_templates` schema/migration 0018, router + 7 tests, gallery tab on both add-card flows, admin authoring screen; mobile gallery + optional MCP tool pending) |
 | 016  | Cross-platform design system (shared tokens, desktop density) | P3 | L | — | TODO |
 | 017  | Studio outputs: mind maps + slides kinds, PPTX export job | P3 | L | 010, 002 (011 soft) | TODO |
 | 018  | Pronote / EcoleDirecte / Skolengo connector spike (report + optional flag-gated prototype) | P3 | M | 008 | TODO |

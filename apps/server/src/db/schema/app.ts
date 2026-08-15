@@ -66,6 +66,9 @@ export const preferences = sqliteTable("preferences", {
   /** JSON: `{ autoZoom, showTrend, trendSubdivisions, showPoints }`. */
   chartSettings: text().notNull().default("{}"),
 
+  /** JSON: `{ tabs, sidebar }` — the account's navigation layout. */
+  navigation: text().notNull().default("{}"),
+
   /** Unlockable easter-egg themes the account has earned. */
   unlockedThemes: text().notNull().default("[]"),
   /** JSON: celebration keys already shown, so they fire once. */

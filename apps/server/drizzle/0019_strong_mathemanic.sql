@@ -1,0 +1,1 @@
+ALTER TABLE `preferences` ADD `navigation` text DEFAULT '{}' NOT NULL;

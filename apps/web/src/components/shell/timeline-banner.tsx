@@ -3,8 +3,8 @@
 import { HistoryIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import { DatePicker } from "@/components/forms/controls"
+import { DayScrubber } from "@/components/shell/day-scrubber"
 import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
 import { useYear } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 
@@ -65,6 +65,12 @@ export function TimelineBanner() {
   const marks = [0, Math.round(totalDays / 2), totalDays].filter(
     (value, index, values) => values.indexOf(value) === index
   )
+  const monthStarts: number[] = []
+  for (let day = 1; day < totalDays; day += 1) {
+    if (new Date(minimum + day * DAY_IN_MS).getDate() === 1) {
+      monthStarts.push(day)
+    }
+  }
   const visibleGrades = yearGraph.allGrades().length
 
   return (
@@ -108,16 +114,19 @@ export function TimelineBanner() {
 
         <div className="order-last w-full pt-1 md:grid md:grid-cols-[1fr_auto] md:items-center md:gap-3">
           <div>
-            <Slider
-              min={0}
-              max={Math.max(1, totalDays)}
-              step={1}
-              value={[selectedDay]}
+            <DayScrubber
+              totalDays={Math.max(1, totalDays)}
+              selectedDay={selectedDay}
               disabled={totalDays === 0}
-              aria-label={t("Date in the school year")}
-              onValueChange={(values) => {
-                const day =
-                  typeof values === "number" ? values : (values[0] ?? totalDays)
+              monthStarts={monthStarts}
+              ariaLabel={t("Date in the school year")}
+              ariaValueText={format.dateTime(
+                new Date(minimum + selectedDay * DAY_IN_MS),
+                { day: "numeric", month: "long", year: "numeric" }
+              )}
+              onSelectDay={(day) => {
+                if (day === selectedDay) return
+                haptic("light")
                 setTimelineDate(isoDay(minimum + day * DAY_IN_MS))
               }}
             />

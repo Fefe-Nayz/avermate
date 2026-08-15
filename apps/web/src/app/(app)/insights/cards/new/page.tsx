@@ -1,5 +1,5 @@
-import { WidgetForm } from "@/components/cards/widget-form"
+import { NewCardScreen } from "@/components/cards/new-card-screen"
 
 export default function NewInsightPage() {
-  return <WidgetForm mode="create" surface="insights" />
+  return <NewCardScreen surface="insights" />
 }

@@ -265,12 +265,18 @@
 
 /* Dark seasons keep the same hue while defining complete surface/foreground
    pairs. A light-season accent over the dark theme used to leave white text
-   on an almost-white background in navigation hover and selected states. */
+   on an almost-white background in navigation hover and selected states.
+   Chart tokens are restated too — the light-season blocks cannot reach dark
+   mode, so without these the series kept the base grays and the seasonal
+   palette silently vanished from every chart at night. Same hue as the light
+   step, lightness raised for the dark surface. */
 :root.dark[data-season="newYear"] {
   --primary: oklch(0.74 0.13 265);
   --primary-foreground: oklch(0.18 0.04 265);
   --accent: oklch(0.3 0.05 265);
   --accent-foreground: oklch(0.95 0.02 265);
+  --chart-1: oklch(0.74 0.14 265);
+  --chart-2: oklch(0.82 0.1 250);
 }
 
 :root.dark[data-season="spring"] {
@@ -278,6 +284,8 @@
   --primary-foreground: oklch(0.18 0.04 145);
   --accent: oklch(0.3 0.05 145);
   --accent-foreground: oklch(0.95 0.02 145);
+  --chart-1: oklch(0.74 0.13 145);
+  --chart-2: oklch(0.84 0.11 120);
 }
 
 :root.dark[data-season="summer"] {
@@ -285,6 +293,8 @@
   --primary-foreground: oklch(0.18 0.04 205);
   --accent: oklch(0.3 0.05 205);
   --accent-foreground: oklch(0.95 0.02 205);
+  --chart-1: oklch(0.76 0.13 205);
+  --chart-2: oklch(0.86 0.1 190);
 }
 
 :root.dark[data-season="autumn"] {
@@ -292,6 +302,8 @@
   --primary-foreground: oklch(0.2 0.04 55);
   --accent: oklch(0.31 0.05 55);
   --accent-foreground: oklch(0.95 0.03 55);
+  --chart-1: oklch(0.74 0.14 55);
+  --chart-2: oklch(0.82 0.12 75);
 }
 
 :root.dark[data-season="halloween"] {
@@ -299,6 +311,8 @@
   --primary-foreground: oklch(0.2 0.04 45);
   --accent: oklch(0.31 0.06 300);
   --accent-foreground: oklch(0.95 0.03 300);
+  --chart-1: oklch(0.74 0.17 45);
+  --chart-2: oklch(0.64 0.14 300);
 }
 
 :root.dark[data-season="winter"] {
@@ -306,6 +320,8 @@
   --primary-foreground: oklch(0.18 0.04 230);
   --accent: oklch(0.3 0.04 230);
   --accent-foreground: oklch(0.95 0.02 230);
+  --chart-1: oklch(0.76 0.11 230);
+  --chart-2: oklch(0.86 0.07 215);
 }
 
 /* Ambient seasonal light: decorative, motionless and never mixed into grade

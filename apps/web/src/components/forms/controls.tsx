@@ -1,7 +1,13 @@
 "use client"
 
 import { useId, useState, type ReactNode } from "react"
-import { CalendarIcon, CheckIcon, MinusIcon, PlusIcon } from "lucide-react"
+import {
+  CalendarIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  MinusIcon,
+  PlusIcon,
+} from "lucide-react"
 import { useExtracted, useLocale } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -824,25 +830,80 @@ export function FormSection({
   description,
   children,
   className,
+  collapsible = false,
+  summary,
+  forceOpen = false,
 }: {
   title?: string
   description?: string
   children: ReactNode
   className?: string
+  /**
+   * A refinement section folds to a single line until asked for, so a long
+   * form reads as a handful of decisions rather than a wall. Every control
+   * stays one click away and none is removed.
+   */
+  collapsible?: boolean
+  /** One-line readout of the folded section's current state. */
+  summary?: string
+  /** Keeps the section open — e.g. while a field inside it has an error. */
+  forceOpen?: boolean
 }) {
+  const [opened, setOpened] = useState(false)
+
+  if (!collapsible) {
+    return (
+      <section className={cn("flex flex-col gap-4", className)}>
+        {title ? (
+          <div>
+            <h2 className="text-sm font-medium">{title}</h2>
+            {description ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {children}
+      </section>
+    )
+  }
+
+  const expanded = opened || forceOpen
   return (
-    <section className={cn("flex flex-col gap-4", className)}>
-      {title ? (
-        <div>
+    <section className={cn("flex flex-col", className)}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        disabled={forceOpen}
+        onClick={() => setOpened(!expanded)}
+        className="-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <span className="min-w-0">
           <h2 className="text-sm font-medium">{title}</h2>
-          {description ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {description}
+          {expanded ? (
+            description ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {description}
+              </p>
+            ) : null
+          ) : (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {summary?.trim() ? summary : "—"}
             </p>
-          ) : null}
-        </div>
+          )}
+        </span>
+        <ChevronDownIcon
+          aria-hidden="true"
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            expanded && "rotate-180"
+          )}
+        />
+      </button>
+      {expanded ? (
+        <div className="flex flex-col gap-4 pt-3">{children}</div>
       ) : null}
-      {children}
     </section>
   )
 }

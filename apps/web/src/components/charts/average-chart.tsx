@@ -5,15 +5,16 @@ import { areaY, defineChart, dot, lineY, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
-import { curveMonotoneX } from "d3-shape"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
+import { lineStyleCurve } from "./line-style"
 import {
   createIndependentSeriesFocus,
+  viewportValues,
   type NumericDomain,
 } from "./time-series-interaction"
 
@@ -36,6 +37,21 @@ function safeDomain(values: readonly number[]): NumericDomain {
   return start === end
     ? [start - DAY_IN_MS / 2, end + DAY_IN_MS / 2]
     : [start, end]
+}
+
+function frameDomain(
+  values: readonly number[],
+  scale: number,
+  autoZoom: boolean
+): NumericDomain {
+  if (!autoZoom || values.length === 0) return [0, scale]
+  const minimum = Math.min(...values)
+  const maximum = Math.max(...values)
+  const padding = Math.max((maximum - minimum) * 0.2, scale * 0.02)
+  return [
+    Math.max(0, Number((minimum - padding).toFixed(2))),
+    Math.min(scale, Number((maximum + padding).toFixed(2))),
+  ]
 }
 
 /** The average over time, with a semantic time viewport and native marks. */
@@ -102,18 +118,11 @@ export function AverageChart({
             },
           ]
     )
-    const yDomain: NumericDomain = (() => {
-      if (!settings.autoZoom) return [0, scale]
-      const values = averagePoints.map(({ value }) => value)
-      if (values.length === 0) return [0, scale]
-      const minimum = Math.min(...values)
-      const maximum = Math.max(...values)
-      const padding = Math.max((maximum - minimum) * 0.2, scale * 0.02)
-      return [
-        Math.max(0, Number((minimum - padding).toFixed(2))),
-        Math.min(scale, Number((maximum + padding).toFixed(2))),
-      ]
-    })()
+    const yDomain = frameDomain(
+      averagePoints.map(({ value }) => value),
+      scale,
+      settings.autoZoom
+    )
 
     return {
       averagePoints,
@@ -141,6 +150,17 @@ export function AverageChart({
   )
   const buildDefinition = useCallback(
     (viewport: NumericDomain) => {
+      // The vertical frame follows the visible window so zooming in
+      // magnifies the visible stretch instead of keeping the year's extent.
+      const visible = viewportValues(
+        [...prepared.averagePoints, ...prepared.trendPoints],
+        viewport
+      )
+      const frame =
+        visible.length > 0
+          ? frameDomain(visible, scale, settings.autoZoom)
+          : prepared.yDomain
+
       const thresholdPoints: readonly AveragePoint[] = [
         {
           id: "passing-threshold",
@@ -157,10 +177,10 @@ export function AverageChart({
           areaY(prepared.averagePoints, {
             id: "average-area",
             x: "timestamp",
-            y1: prepared.yDomain[0],
+            y1: frame[0],
             y2: "value",
             key: "id",
-            curve: d3Curve(curveMonotoneX),
+            curve: d3Curve(lineStyleCurve(settings.lineStyle)),
             fill: "url(#average-fill)",
           }),
           ruleY(thresholdPoints, {
@@ -176,7 +196,7 @@ export function AverageChart({
             y: "value",
             z: "seriesId",
             key: "id",
-            curve: d3Curve(curveMonotoneX),
+            curve: d3Curve(lineStyleCurve(settings.lineStyle)),
             stroke: "var(--chart-1)",
             strokeWidth: 2,
           }),
@@ -253,7 +273,7 @@ export function AverageChart({
           },
         },
         y: {
-          scale: scaleLinear().domain(prepared.yDomain),
+          scale: scaleLinear().domain(frame),
           grid: true,
           axis: {
             line: false,
@@ -329,6 +349,8 @@ export function AverageChart({
       prepared,
       scale,
       series.length,
+      settings.autoZoom,
+      settings.lineStyle,
       settings.showPoints,
       settings.showTrend,
       t,

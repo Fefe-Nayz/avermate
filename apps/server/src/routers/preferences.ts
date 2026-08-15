@@ -37,6 +37,20 @@ const chartSettings = z.object({
   trendSubdivisions: z.number().int().min(1).max(12).default(1),
   showPoints: z.boolean().default(true),
   showSubSubjects: z.boolean().default(true),
+  // Optional rather than defaulted: clients that predate the field send the
+  // object without it, and a default here would silently reset the stored
+  // choice on their next unrelated chart-settings write.
+  lineStyle: z.enum(["smooth", "straight", "step"]).optional(),
+  connectGrades: z.boolean().optional(),
+});
+
+/**
+ * Navigation layout. Hrefs rather than ids: the client sanitizes against its
+ * own route registry, so an entry that no longer exists simply drops out.
+ */
+const navigationSettings = z.object({
+  tabs: z.array(z.string().max(64)).max(4).optional(),
+  sidebar: z.array(z.string().max(64)).max(12).optional(),
 });
 
 const themeShape = z.object({
@@ -83,6 +97,7 @@ const preferencesInput = z.object({
   reduceMotion: z.boolean(),
   compactMode: z.boolean(),
   chartSettings,
+  navigation: navigationSettings,
   unlockedThemes: z.array(z.string().max(32)),
   seenCelebrations: z.array(z.string().max(48)),
 });
@@ -107,7 +122,10 @@ const DEFAULTS: Preferences = {
     trendSubdivisions: 1,
     showPoints: true,
     showSubSubjects: true,
+    lineStyle: "smooth",
+    connectGrades: false,
   },
+  navigation: {},
   unlockedThemes: [],
   seenCelebrations: [],
 };
@@ -140,6 +158,7 @@ function hydrate(row: typeof preferences.$inferSelect): Preferences {
       ...DEFAULTS.chartSettings,
       ...parse(row.chartSettings, {}),
     },
+    navigation: { ...DEFAULTS.navigation, ...parse(row.navigation, {}) },
     unlockedThemes: parse(row.unlockedThemes, DEFAULTS.unlockedThemes),
     seenCelebrations: parse(row.seenCelebrations, DEFAULTS.seenCelebrations),
   };
@@ -170,7 +189,7 @@ export const preferencesRouter = {
     .input(preferencesInput.partial())
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await load(userId);
+      const current = await load(userId);
 
       await db
         .update(preferences)
@@ -202,7 +221,22 @@ export const preferencesRouter = {
             ? { compactMode: input.compactMode }
             : {}),
           ...(input.chartSettings !== undefined
-            ? { chartSettings: JSON.stringify(input.chartSettings) }
+            ? {
+                // Merged over the stored value so a client built before a
+                // field existed cannot erase it by writing its older shape.
+                chartSettings: JSON.stringify({
+                  ...current.chartSettings,
+                  ...input.chartSettings,
+                }),
+              }
+            : {}),
+          ...(input.navigation !== undefined
+            ? {
+                navigation: JSON.stringify({
+                  ...current.navigation,
+                  ...input.navigation,
+                }),
+              }
             : {}),
           ...(input.unlockedThemes !== undefined
             ? { unlockedThemes: JSON.stringify(input.unlockedThemes) }

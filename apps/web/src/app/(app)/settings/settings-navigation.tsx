@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useExtracted } from "next-intl"
 import {
   CalendarRangeIcon,
+  CompassIcon,
   FunctionSquareIcon,
   InfoIcon,
   PaletteIcon,
@@ -12,7 +13,6 @@ import {
   ScrollTextIcon,
   ShieldCheckIcon,
   UserRoundIcon,
-  UsersRoundIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -35,6 +35,11 @@ export function SettingsNavigation() {
       exact: true,
     },
     { href: "/settings/appearance", label: t("Appearance"), icon: PaletteIcon },
+    {
+      href: "/settings/navigation",
+      label: t("Navigation"),
+      icon: CompassIcon,
+    },
     {
       href: "/settings/year",
       label: t("Year & periods"),

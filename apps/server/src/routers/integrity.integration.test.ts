@@ -36,7 +36,14 @@ let schema: typeof import("../db/schema");
 
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
-  await database.$client.executeMultiple(migration);
+  // Every router test file shares the one in-memory database behind the db
+  // module, so whichever bootstrap runs first migrates for all of them.
+  const migrated = await database.$client.execute(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
+  );
+  if (migrated.rows.length === 0) {
+    await database.$client.executeMultiple(migration);
+  }
   const { appRouter } = await import("./index");
 
   const now = new Date("2026-08-01T00:00:00.000Z");
@@ -1048,10 +1055,7 @@ describe("router year invariants", () => {
     const multiDefinition = createWidgetDefinition("insights");
     multiDefinition.query.scope = {
       kind: "subjects",
-      subjectIds: [
-        "subject-widget-removed-child",
-        "subject-widget-retained",
-      ],
+      subjectIds: ["subject-widget-removed-child", "subject-widget-retained"],
       includeDescendants: false,
     };
     const multiCard = await api.cards.create({
@@ -1112,12 +1116,8 @@ describe("router year invariants", () => {
           referenceId: schema.dashboardCardReferences.referenceId,
         })
         .from(schema.dashboardCardReferences)
-        .where(
-          eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? ""),
-        ),
-    ).toEqual([
-      { kind: "subject", referenceId: "subject-widget-retained" },
-    ]);
+        .where(eq(schema.dashboardCardReferences.cardId, multiCard?.id ?? "")),
+    ).toEqual([{ kind: "subject", referenceId: "subject-widget-retained" }]);
 
     const overviewCards = await api.cards.list({ yearId });
     expect(overviewCards).not.toContainEqual(

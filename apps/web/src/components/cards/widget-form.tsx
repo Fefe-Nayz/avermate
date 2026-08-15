@@ -56,6 +56,22 @@ const PREVIEW_SPAN: Record<number, string> = {
   4: "col-span-4",
 }
 
+/**
+ * Refinements, not decisions: these sections fold to a one-line readout of
+ * their state so the form presents a handful of choices instead of a wall.
+ * The primary sections — what data, what measure, what chart — stay open.
+ */
+const REFINEMENT_SECTIONS = new Set([
+  "filters",
+  "comparison",
+  "transforms",
+  "scale",
+  "axes",
+  "legend",
+  "format",
+  "thresholds",
+])
+
 export function WidgetForm({
   mode,
   surface,
@@ -259,35 +275,52 @@ export function WidgetForm({
       summary: summarize(sections, flow.prunedDefinition, message),
       content: (
         <div className="flex flex-col gap-8">
-          {sections.map((section) => (
-            <FormSection
-              key={section.id}
-              title={message(section.messageKey)}
-              description={
-                section.descriptionKey
-                  ? message(section.descriptionKey)
-                  : undefined
-              }
-            >
-              {section.fields
-                .filter((field) => field.active)
-                .map((field) => (
-                  <WidgetFieldRenderer
-                    key={field.id}
-                    field={{
-                      ...field,
-                      error:
-                        widgetIssueForPath(draftCompilation.issues, field.path)
-                          ?.messageKey ?? null,
-                    }}
-                    draft={definition as unknown as WidgetDraftValue}
-                    message={message}
-                    optionSets={optionSets}
-                    onChange={updateDraft}
-                  />
-                ))}
-            </FormSection>
-          ))}
+          {sections.map((section) => {
+            const refinement = REFINEMENT_SECTIONS.has(section.id)
+            const sectionHasIssue = section.fields.some(
+              (field) =>
+                field.active &&
+                widgetIssueForPath(draftCompilation.issues, field.path)
+            )
+            return (
+              <FormSection
+                key={section.id}
+                title={message(section.messageKey)}
+                description={
+                  section.descriptionKey
+                    ? message(section.descriptionKey)
+                    : undefined
+                }
+                collapsible={refinement}
+                forceOpen={refinement && sectionHasIssue}
+                summary={
+                  refinement
+                    ? summarize([section], flow.prunedDefinition, message)
+                    : undefined
+                }
+              >
+                {section.fields
+                  .filter((field) => field.active)
+                  .map((field) => (
+                    <WidgetFieldRenderer
+                      key={field.id}
+                      field={{
+                        ...field,
+                        error:
+                          widgetIssueForPath(
+                            draftCompilation.issues,
+                            field.path
+                          )?.messageKey ?? null,
+                      }}
+                      draft={definition as unknown as WidgetDraftValue}
+                      message={message}
+                      optionSets={optionSets}
+                      onChange={updateDraft}
+                    />
+                  ))}
+              </FormSection>
+            )
+          })}
         </div>
       ),
     }

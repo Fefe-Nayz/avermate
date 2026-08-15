@@ -1,7 +1,7 @@
 "use client"
 
 import type { ChartRendererRenderContext, ChartValue } from "@tanstack/charts"
-import { motion } from "@tanstack/charts/motion"
+import { motion, type ChartMotionTransition } from "@tanstack/charts/motion"
 import {
   RendererChart,
   type RendererChartProps,
@@ -51,6 +51,7 @@ export function ResponsiveChart<
   onRender,
   fill = false,
   entrance = "wipe",
+  updateTransition,
   ...props
 }: Omit<RendererChartProps<TDatum, TXValue, TYValue>, "renderer"> & {
   fill?: boolean
@@ -62,6 +63,12 @@ export function ResponsiveChart<
    * mount because the class arrives with the first measured render.
    */
   entrance?: "wipe" | "rise" | "none"
+  /**
+   * Default transition for renderer updates. Gesture-driven charts pass a
+   * zero-duration tween so panning and zooming track the pointer with no
+   * chase; marks with their own state transitions still animate those.
+   */
+  updateTransition?: ChartMotionTransition
 }) {
   const isClient = useSyncExternalStore(
     subscribeToClient,
@@ -69,9 +76,7 @@ export function ResponsiveChart<
     getServerSnapshot
   )
   const [hasMeasuredLayout, setHasMeasuredLayout] = useState(false)
-  const [box, setBox] = useState<{ width: number; height: number } | null>(
-    null
-  )
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null)
   const boxRef = useRef<HTMLDivElement | null>(null)
 
   // The motion renderer animates the first client render — marks grow, draw
@@ -82,8 +87,9 @@ export function ResponsiveChart<
         initial: true,
         respectReducedMotion: true,
         resize: false,
+        transition: updateTransition,
       }),
-    []
+    [updateTransition]
   )
 
   useEffect(() => {

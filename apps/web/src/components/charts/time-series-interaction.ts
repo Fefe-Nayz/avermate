@@ -73,6 +73,24 @@ export function createIndependentSeriesFocus<TDatum>(
   }
 }
 
+/**
+ * The sample values inside the visible window, with a small margin on each
+ * side so a segment entering the plot keeps its immediate neighbor framed.
+ * Feeding these to the y-domain instead of the whole series is what makes
+ * zooming reveal detail: the vertical scale follows what is on screen.
+ */
+export function viewportValues(
+  rows: readonly { timestamp: number; value: number }[],
+  viewport: NumericDomain
+): number[] {
+  const span = Math.abs(viewport[1] - viewport[0])
+  const start = Math.min(viewport[0], viewport[1]) - span * 0.05
+  const end = Math.max(viewport[0], viewport[1]) + span * 0.05
+  return rows
+    .filter((row) => row.timestamp >= start && row.timestamp <= end)
+    .map((row) => row.value)
+}
+
 /** Chart zoom needs an explicitly active listener so wheel can be cancelled. */
 export function installNonPassiveWheelListener(
   target: HTMLElement,

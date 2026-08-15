@@ -1,8 +1,13 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useTheme } from "next-themes"
-import { applyPreferences, usePreferences } from "@/hooks/use-preferences"
+import { THEME_HOTKEY_EVENT } from "@/components/theme-provider"
+import {
+  applyPreferences,
+  usePreferences,
+  type Preferences,
+} from "@/hooks/use-preferences"
 import { LOCALE_COOKIE, isAppLocale } from "@/i18n/config"
 
 /**
@@ -13,18 +18,38 @@ import { LOCALE_COOKIE, isAppLocale } from "@/i18n/config"
  * something actually differs so a normal navigation costs nothing.
  */
 export function AppearanceSync() {
-  const { preferences, isLoading } = usePreferences()
-  const { setTheme, theme } = useTheme()
+  const { preferences, isLoading, update } = usePreferences()
+  const { setTheme } = useTheme()
 
   useEffect(() => {
     if (isLoading) return
     applyPreferences(preferences)
   }, [isLoading, preferences])
 
+  // Asserts the stored theme only when the stored value itself changes —
+  // never because the live theme moved. Reconciling on divergence looked
+  // equivalent, but next-themes mirrors the live theme across tabs, and a
+  // sibling tab whose preference cache was still stale would shove the old
+  // theme back, this tab would shove the new one, and the app blinked
+  // between light and dark until a tab closed.
+  const appliedTheme = useRef<Preferences["theme"] | null>(null)
   useEffect(() => {
     if (isLoading) return
-    if (preferences.theme !== theme) setTheme(preferences.theme)
-  }, [isLoading, preferences.theme, theme, setTheme])
+    if (appliedTheme.current === preferences.theme) return
+    appliedTheme.current = preferences.theme
+    setTheme(preferences.theme)
+  }, [isLoading, preferences.theme, setTheme])
+
+  // The global "d" hotkey lives above the session providers, so it cannot
+  // store its choice itself; it announces the flip and the account keeps it.
+  useEffect(() => {
+    const persist = (event: Event) => {
+      const next = (event as CustomEvent<unknown>).detail
+      if (next === "light" || next === "dark") update({ theme: next })
+    }
+    window.addEventListener(THEME_HOTKEY_EVENT, persist)
+    return () => window.removeEventListener(THEME_HOTKEY_EVENT, persist)
+  }, [update])
 
   useEffect(() => {
     if (isLoading) return

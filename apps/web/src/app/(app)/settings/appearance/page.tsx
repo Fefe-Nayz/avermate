@@ -611,6 +611,45 @@ export default function AppearanceSettingsPage() {
               }
             />
           </SettingsRow>
+          <SettingsRow
+            label={t("Join the grade dots")}
+            description={t(
+              "A thin, quiet line guides the eye through the grade chart without claiming the grades are related."
+            )}
+          >
+            <Switch
+              checked={preferences.chartSettings.connectGrades}
+              onCheckedChange={(checked) =>
+                update({
+                  chartSettings: {
+                    ...preferences.chartSettings,
+                    connectGrades: checked,
+                  },
+                })
+              }
+            />
+          </SettingsRow>
+          <ChoiceField
+            label={t("Line style")}
+            description={t(
+              "How average lines connect their points. Smooth eases between them, linear joins them directly, steps hold each value until the next one."
+            )}
+            choices={[
+              { value: "smooth", label: t("Smooth") },
+              { value: "straight", label: t("Linear") },
+              { value: "step", label: t("Steps") },
+            ]}
+            value={preferences.chartSettings.lineStyle}
+            onValueChange={(lineStyle) =>
+              update({
+                chartSettings: {
+                  ...preferences.chartSettings,
+                  lineStyle,
+                },
+              })
+            }
+            columns={3}
+          />
         </SettingsSection>
 
         <SettingsSection title={t("Feel")}>

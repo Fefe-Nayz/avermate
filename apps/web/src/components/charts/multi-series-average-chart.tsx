@@ -3,17 +3,20 @@
 import { segmentedTrendLine, type SeriesPoint } from "@avermate/core"
 import { defineChart, dot, lineY, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
+import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
-import { curveMonotoneX } from "d3-shape"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
+import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
+import { lineStyleCurve } from "./line-style"
 import {
   createIndependentSeriesFocus,
+  viewportValues,
   type NumericDomain,
 } from "./time-series-interaction"
 
@@ -46,6 +49,29 @@ interface Datum {
   seriesId: string
   timestamp: number
   value: number
+}
+
+/**
+ * Focus resolves one nearest sample per series, so the focused rows can sit on
+ * different dates. A single tooltip date is only truthful when every row
+ * shares it; otherwise each row must carry its own.
+ */
+function sharedDayTimestamp(
+  points: readonly { datum: { timestamp: number } }[]
+): number | null {
+  const first = points[0]
+  if (!first) return null
+  const reference = new Date(first.datum.timestamp)
+  return points.every((point) => {
+    const date = new Date(point.datum.timestamp)
+    return (
+      date.getFullYear() === reference.getFullYear() &&
+      date.getMonth() === reference.getMonth() &&
+      date.getDate() === reference.getDate()
+    )
+  })
+    ? first.datum.timestamp
+    : null
 }
 
 function safeDomain(values: readonly number[]): NumericDomain {
@@ -189,6 +215,19 @@ export function MultiSeriesAverageChart({
 
   const buildDefinition = useCallback(
     (viewport: NumericDomain) => {
+      // The vertical frame follows the visible window, so zooming into a
+      // quiet stretch reveals its detail instead of keeping the whole
+      // year's extent. Falls back to the full-series domain when the
+      // window holds no sample.
+      const visible = viewportValues(
+        [...prepared.rows, ...prepared.trendRows],
+        viewport
+      )
+      const frame =
+        visible.length > 0
+          ? yDomain(visible, scale, settings.autoZoom)
+          : prepared.yDomain
+
       const threshold: readonly Datum[] = [
         {
           color: "var(--muted-foreground)",
@@ -216,7 +255,7 @@ export function MultiSeriesAverageChart({
             z: "seriesId",
             color: "seriesId",
             key: "id",
-            curve: d3Curve(curveMonotoneX),
+            curve: d3Curve(lineStyleCurve(settings.lineStyle)),
             strokeWidth: 2.25,
           }),
           ...(settings.showTrend
@@ -293,7 +332,7 @@ export function MultiSeriesAverageChart({
           },
         },
         y: {
-          scale: scaleLinear().domain(prepared.yDomain),
+          scale: scaleLinear().domain(frame),
           grid: true,
           axis: {
             line: false,
@@ -318,24 +357,34 @@ export function MultiSeriesAverageChart({
           use: tooltip,
           anchor: "pointer",
           placement: ["top", "right", "left", "bottom"],
-          content: (points) => ({
-            title: points[0]
-              ? format.dateTime(new Date(points[0].datum.timestamp), {
-                  day: "numeric",
-                  month: "long",
-                })
-              : undefined,
-            rows: points.map((point) => ({
-              color: point.datum.color,
-              label: point.datum.label,
-              value: `${format.number(point.datum.value, {
-                maximumFractionDigits: 2,
-              })} · ${format.dateTime(new Date(point.datum.timestamp), {
-                day: "numeric",
-                month: "short",
-              })}`,
-            })),
-          }),
+          // Screen readers get this structured mirror of the custom body.
+          content: (points) => {
+            const sharedDay = sharedDayTimestamp(points)
+            return {
+              title:
+                sharedDay !== null
+                  ? format.dateTime(new Date(sharedDay), {
+                      day: "numeric",
+                      month: "long",
+                    })
+                  : undefined,
+              rows: points.map((point) => ({
+                color: point.datum.color,
+                label: point.datum.label,
+                value:
+                  sharedDay !== null
+                    ? format.number(point.datum.value, {
+                        maximumFractionDigits: 2,
+                      })
+                    : `${format.number(point.datum.value, {
+                        maximumFractionDigits: 2,
+                      })} · ${format.dateTime(new Date(point.datum.timestamp), {
+                        day: "numeric",
+                        month: "short",
+                      })}`,
+              })),
+            }
+          },
         },
       })
     },
@@ -345,23 +394,79 @@ export function MultiSeriesAverageChart({
       passingRatio,
       prepared,
       scale,
+      settings.autoZoom,
+      settings.lineStyle,
       settings.showPoints,
       settings.showTrend,
     ]
   )
 
+  // The tooltip element already carries the structured content as its
+  // accessible label, so the visual body stays aria-hidden. Values keep the
+  // strongest weight, series names stay primary, and dates read as quiet
+  // metadata — one shared line when every row sits on the same day, otherwise
+  // one line under each row so no row is ever labeled with a wrong date.
+  const renderTooltipBody = useCallback(
+    ({ points }: ChartTooltipBodyRenderContext<Datum, number, number>) => {
+      const sharedDay = sharedDayTimestamp(points)
+      return (
+        <div aria-hidden="true" className="flex flex-col gap-y-1.5">
+          {sharedDay !== null ? (
+            <span className="text-[0.6875rem] leading-none opacity-65">
+              {format.dateTime(new Date(sharedDay), {
+                day: "numeric",
+                month: "long",
+              })}
+            </span>
+          ) : null}
+          {points.map((point) => (
+            <div
+              className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5"
+              key={point.datum.id}
+            >
+              <span
+                className="size-2 rounded-[0.15rem]"
+                style={{
+                  background: point.datum.color,
+                  boxShadow: "inset 0 0 0 1px rgb(0 0 0 / 0.12)",
+                }}
+              />
+              <span className="pr-1.5 font-normal">{point.datum.label}</span>
+              <span className="text-right font-semibold whitespace-nowrap tabular-nums">
+                {format.number(point.datum.value, {
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+              {sharedDay === null ? (
+                <span className="col-span-2 col-start-2 mt-0.5 text-[0.6875rem] leading-none opacity-65">
+                  {format.dateTime(new Date(point.datum.timestamp), {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )
+    },
+    [format]
+  )
+
+  const presets = useViewportPresets(prepared.domain)
+
   if (prepared.rows.length < 2) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {emptyHint ?? t("Not enough data yet")}
-          </p>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-2">
+        <h3 className="px-1 text-sm font-medium">{title}</h3>
+        <Card>
+          <CardContent>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {emptyHint ?? t("Not enough data yet")}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
     )
   }
 
@@ -374,52 +479,65 @@ export function MultiSeriesAverageChart({
   )
 
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="gap-3 px-4">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <ul className="flex flex-wrap gap-x-3 gap-y-1" aria-label={t("Series")}>
-          {series.map((item, index) => (
-            <li
-              key={item.id}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground"
-            >
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full"
-                style={{
-                  background:
-                    item.color ??
-                    AVERAGE_SERIES_COLORS[index % AVERAGE_SERIES_COLORS.length],
-                }}
-              />
-              {item.label}
-            </li>
-          ))}
-        </ul>
-      </CardHeader>
-      <CardContent className="px-2 text-muted-foreground">
-        <InteractiveTimeSeriesChart
-          ariaLabel={title}
-          buildDefinition={buildDefinition}
-          domain={prepared.domain}
-          formatDomain={(domain) =>
-            t("Visible from {start} to {end}", {
-              start: format.dateTime(new Date(domain[0]), {
-                day: "numeric",
-                month: "short",
-              }),
-              end: format.dateTime(new Date(domain[1]), {
-                day: "numeric",
-                month: "short",
-              }),
-            })
-          }
-          height={height}
-          interactionHint={interactionHint}
-          maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
-          resetLabel={t("Reset chart view")}
-        />
-      </CardContent>
-    </Card>
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <ZoomPresetGroup control={presets} domain={prepared.domain} />
+      </div>
+      <Card className="gap-3 py-4">
+        <CardHeader className="gap-3 px-4">
+          <ul
+            className="flex flex-wrap gap-x-3 gap-y-1"
+            aria-label={t("Series")}
+          >
+            {series.map((item, index) => (
+              <li
+                key={item.id}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full"
+                  style={{
+                    background:
+                      item.color ??
+                      AVERAGE_SERIES_COLORS[
+                        index % AVERAGE_SERIES_COLORS.length
+                      ],
+                  }}
+                />
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </CardHeader>
+        <CardContent className="px-2 text-muted-foreground">
+          <InteractiveTimeSeriesChart
+            ariaLabel={title}
+            buildDefinition={buildDefinition}
+            domain={prepared.domain}
+            formatDomain={(domain) =>
+              t("Visible from {start} to {end}", {
+                start: format.dateTime(new Date(domain[0]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+                end: format.dateTime(new Date(domain[1]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+              })
+            }
+            height={height}
+            interactionHint={interactionHint}
+            maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
+            onViewportChange={presets.onViewportChange}
+            renderTooltipBody={renderTooltipBody}
+            resetLabel={t("Reset chart view")}
+            viewportRequest={presets.request}
+          />
+        </CardContent>
+      </Card>
+    </section>
   )
 }

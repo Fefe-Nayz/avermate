@@ -5,10 +5,12 @@ import type {
   DomChartDefinition,
   ResolvedScale,
 } from "@tanstack/charts"
+import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { RotateCcw } from "lucide-react"
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -28,6 +30,14 @@ import {
 } from "./time-series-interaction"
 import { ResponsiveChart } from "./responsive-chart"
 
+/**
+ * Gesture-driven charts must track the pointer, not chase it: a zoom or pan
+ * re-renders every frame, and any tween between frames reads as lag. The
+ * entrance wipe is CSS and the focus markers carry their own transitions,
+ * so both survive this.
+ */
+const INSTANT_UPDATES = { type: "tween", duration: 0 } as const
+
 interface InteractiveTimeSeriesChartProps<TDatum> {
   ariaDescription?: string
   ariaLabel: string
@@ -41,8 +51,18 @@ interface InteractiveTimeSeriesChartProps<TDatum> {
   initialWidth?: number
   interactionHint: string
   maximumZoom?: number
+  /** The chart reports every viewport move, including gestures and resets. */
+  onViewportChange?: (viewport: NumericDomain) => void
+  renderTooltipBody?: (
+    context: ChartTooltipBodyRenderContext<TDatum, number, number>
+  ) => ReactNode
   resetLabel: string
   style?: CSSProperties
+  /**
+   * An imperative jump (zoom presets): applied once whenever the stamp
+   * changes, then gestures take over again.
+   */
+  viewportRequest?: { domain: NumericDomain; stamp: number } | null
 }
 
 interface PointerPosition {
@@ -94,8 +114,11 @@ export function InteractiveTimeSeriesChart<TDatum>({
   initialWidth = 640,
   interactionHint,
   maximumZoom = 64,
+  onViewportChange,
+  renderTooltipBody,
   resetLabel,
   style,
+  viewportRequest,
 }: InteractiveTimeSeriesChartProps<TDatum>) {
   const [viewport, setViewport] = useState<NumericDomain>(domain)
   const viewportRef = useRef(viewport)
@@ -115,6 +138,12 @@ export function InteractiveTimeSeriesChart<TDatum>({
     viewportRef.current = viewport
   }, [viewport])
 
+  // Keyed on the domain's VALUES, not the array identity: callers rebuild
+  // their rows (and therefore this array) on unrelated re-renders, and a
+  // reset that fired on identity would wipe the viewport — and anything
+  // notified about it — every time the page breathed.
+  const domainStart = domain[0]
+  const domainEnd = domain[1]
   useEffect(() => {
     if (frameRef.current !== undefined) {
       cancelAnimationFrame(frameRef.current)
@@ -127,9 +156,11 @@ export function InteractiveTimeSeriesChart<TDatum>({
     dragOriginRef.current = null
     draggedRef.current = false
     renderContextRef.current?.interaction.setControlledFocus(null)
-    viewportRef.current = domain
-    setViewport(domain)
-  }, [domain])
+    const next: NumericDomain = [domainStart, domainEnd]
+    viewportRef.current = next
+    setViewport(next)
+    onViewportChangeRef.current?.(next)
+  }, [domainStart, domainEnd])
 
   useEffect(
     () => () => {
@@ -138,9 +169,15 @@ export function InteractiveTimeSeriesChart<TDatum>({
     []
   )
 
+  const onViewportChangeRef = useRef(onViewportChange)
+  useEffect(() => {
+    onViewportChangeRef.current = onViewportChange
+  }, [onViewportChange])
+
   const commitViewport = useCallback((next: NumericDomain) => {
     viewportRef.current = next
     pendingViewportRef.current = next
+    onViewportChangeRef.current?.(next)
     if (frameRef.current !== undefined) return
 
     frameRef.current = requestAnimationFrame(() => {
@@ -150,6 +187,17 @@ export function InteractiveTimeSeriesChart<TDatum>({
       if (pending) setViewport(pending)
     })
   }, [])
+
+  // Preset jumps arrive from outside; each stamp applies exactly once so a
+  // later gesture is never fought by a stale request replaying.
+  const appliedRequestRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!viewportRequest) return
+    if (appliedRequestRef.current === viewportRequest.stamp) return
+    appliedRequestRef.current = viewportRequest.stamp
+    renderContextRef.current?.interaction.setControlledFocus(null)
+    commitViewport(viewportRequest.domain)
+  }, [commitViewport, viewportRequest])
 
   const reset = useCallback(() => {
     renderContextRef.current?.interaction.setControlledFocus(null)
@@ -511,6 +559,8 @@ export function InteractiveTimeSeriesChart<TDatum>({
           onRender={(context) => {
             renderContextRef.current = context
           }}
+          renderTooltipBody={renderTooltipBody}
+          updateTransition={INSTANT_UPDATES}
         />
         {zoomed ? (
           <button

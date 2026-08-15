@@ -8,20 +8,32 @@ import {
   type Subject,
 } from "@avermate/core"
 import { defineChart, dot, lineY, ruleY } from "@tanstack/charts"
-import { d3Curve } from "@tanstack/charts/d3/shape"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
 import { tooltip } from "@tanstack/charts/tooltip"
-import { curveMonotoneX } from "d3-shape"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
+import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
 import {
   createIndependentSeriesFocus,
+  viewportValues,
   type NumericDomain,
 } from "./time-series-interaction"
+
+function frameDomain(
+  values: readonly number[],
+  scale: number,
+  autoZoom: boolean
+): NumericDomain {
+  if (!autoZoom || values.length === 0) return [0, scale]
+  const minimum = Math.min(...values)
+  const maximum = Math.max(...values)
+  const padding = Math.max((maximum - minimum) * 0.12, scale * 0.025)
+  return [Math.max(0, minimum - padding), Math.min(scale, maximum + padding)]
+}
 
 const DAY_IN_MS = 86_400_000
 const GRADE_MARK_ID = "grade-result-series"
@@ -122,16 +134,7 @@ export function GradeResultsChart({
       ...rows.map((row) => row.value),
       ...trendRows.map((row) => row.value),
     ]
-    const yDomain: NumericDomain = (() => {
-      if (!settings.autoZoom || values.length === 0) return [0, scale]
-      const minimum = Math.min(...values)
-      const maximum = Math.max(...values)
-      const padding = Math.max((maximum - minimum) * 0.12, scale * 0.025)
-      return [
-        Math.max(0, minimum - padding),
-        Math.min(scale, maximum + padding),
-      ]
-    })()
+    const yDomain = frameDomain(values, scale, settings.autoZoom)
 
     return {
       domain: domainOf(rows.map((row) => row.timestamp)),
@@ -161,6 +164,17 @@ export function GradeResultsChart({
 
   const buildDefinition = useCallback(
     (viewport: NumericDomain) => {
+      // The vertical frame follows the visible window so a zoomed-in
+      // stretch spreads its grades instead of staying at the year's extent.
+      const visible = viewportValues(
+        [...prepared.rows, ...prepared.trendRows],
+        viewport
+      )
+      const frame =
+        visible.length > 0
+          ? frameDomain(visible, scale, settings.autoZoom)
+          : prepared.yDomain
+
       const threshold: readonly GradeDatum[] = prepared.rows.length
         ? [
             {
@@ -181,16 +195,24 @@ export function GradeResultsChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
-          lineY(prepared.rows, {
-            id: GRADE_MARK_ID,
-            x: "timestamp",
-            y: "value",
-            z: "seriesId",
-            key: "id",
-            curve: d3Curve(curveMonotoneX),
-            stroke: "var(--chart-1)",
-            strokeWidth: 2,
-          }),
+          // Opt-in reading aid: a straight, recessive thread between the
+          // dots for readers who want their eye guided through the cloud.
+          // It stays out of the line-style preference — a smooth or stepped
+          // sweep between unrelated assessments would claim a relationship.
+          ...(settings.connectGrades
+            ? [
+                lineY(prepared.rows, {
+                  id: "grade-connector",
+                  x: "timestamp",
+                  y: "value",
+                  z: "seriesId",
+                  key: "id",
+                  stroke: "var(--chart-1)",
+                  strokeWidth: 1.5,
+                  strokeOpacity: 0.45,
+                }),
+              ]
+            : []),
           ...(settings.showTrend
             ? [
                 lineY(prepared.trendRows, {
@@ -204,16 +226,21 @@ export function GradeResultsChart({
                 }),
               ]
             : []),
+          // Grades are discrete, unrelated events, so the dots ARE the chart:
+          // no connector joins them — a line between two assessments would
+          // draw a relationship that does not exist — and they stay visible
+          // whatever the mark-each-point preference says, because hiding them
+          // here would empty the plot. Trend and threshold carry structure.
           dot(prepared.rows, {
-            id: "grade-points",
+            id: GRADE_MARK_ID,
             x: "timestamp",
             y: "value",
             z: "seriesId",
             key: "id",
-            r: settings.showPoints ? 4 : 0,
+            r: 4,
             fill: "var(--chart-1)",
             stroke: "var(--background)",
-            strokeWidth: settings.showPoints ? 1.5 : 0,
+            strokeWidth: 1.5,
             states: [
               {
                 when: { focus: "key" },
@@ -246,7 +273,7 @@ export function GradeResultsChart({
           },
         },
         y: {
-          scale: scaleLinear().domain(prepared.yDomain),
+          scale: scaleLinear().domain(frame),
           grid: true,
           axis: {
             line: false,
@@ -300,23 +327,26 @@ export function GradeResultsChart({
       passingRatio,
       prepared,
       scale,
-      settings.showPoints,
+      settings.autoZoom,
+      settings.connectGrades,
       settings.showTrend,
     ]
   )
 
+  const presets = useViewportPresets(prepared.domain)
+
   if (prepared.rows.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {t("No grade recorded here yet.")}
-          </p>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-2">
+        <h3 className="px-1 text-sm font-medium">{title}</h3>
+        <Card>
+          <CardContent>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {t("No grade recorded here yet.")}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
     )
   }
 
@@ -326,35 +356,40 @@ export function GradeResultsChart({
   )
 
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-2 text-muted-foreground">
-        <InteractiveTimeSeriesChart
-          ariaLabel={title}
-          buildDefinition={buildDefinition}
-          domain={prepared.domain}
-          formatDomain={(domain) =>
-            t("Visible from {start} to {end}", {
-              start: format.dateTime(new Date(domain[0]), {
-                day: "numeric",
-                month: "short",
-              }),
-              end: format.dateTime(new Date(domain[1]), {
-                day: "numeric",
-                month: "short",
-              }),
-            })
-          }
-          height={height}
-          interactionHint={t(
-            "Use a wheel, trackpad, drag, or pinch to zoom and pan. Use plus, minus, or Alt with the arrow keys from the keyboard; press 0 to reset."
-          )}
-          maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
-          resetLabel={t("Reset chart view")}
-        />
-      </CardContent>
-    </Card>
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <h3 className="text-sm font-medium">{title}</h3>
+        <ZoomPresetGroup control={presets} domain={prepared.domain} />
+      </div>
+      <Card className="gap-3 py-4">
+        <CardContent className="px-2 text-muted-foreground">
+          <InteractiveTimeSeriesChart
+            ariaLabel={title}
+            buildDefinition={buildDefinition}
+            domain={prepared.domain}
+            formatDomain={(domain) =>
+              t("Visible from {start} to {end}", {
+                start: format.dateTime(new Date(domain[0]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+                end: format.dateTime(new Date(domain[1]), {
+                  day: "numeric",
+                  month: "short",
+                }),
+              })
+            }
+            height={height}
+            interactionHint={t(
+              "Use a wheel, trackpad, drag, or pinch to zoom and pan. Use plus, minus, or Alt with the arrow keys from the keyboard; press 0 to reset."
+            )}
+            maximumZoom={Math.max(1, Math.min(64, periodDays / 2))}
+            onViewportChange={presets.onViewportChange}
+            resetLabel={t("Reset chart view")}
+            viewportRequest={presets.request}
+          />
+        </CardContent>
+      </Card>
+    </section>
   )
 }
