@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
+  ArrowRightIcon,
   CheckIcon,
   ChevronRightIcon,
   ListOrderedIcon,
@@ -233,22 +234,24 @@ export default function SubjectsPage() {
             </Link>
 
             {averageRows.length > 0 ? (
-              <section aria-labelledby="custom-averages-heading">
-                <div className="mb-2 flex items-center justify-between px-1">
+              <section
+                aria-labelledby="custom-averages-heading"
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center justify-between">
                   <h2
                     id="custom-averages-heading"
-                    className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    className="text-sm font-medium"
                   >
                     {t("Custom averages")}
                   </h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    render={<Link href="/settings/averages" />}
+                  <Link
+                    href="/settings/averages"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   >
                     {t("Edit")}
-                  </Button>
+                    <ArrowRightIcon className="size-3" />
+                  </Link>
                 </div>
                 <ul className="overflow-hidden rounded-xl border bg-card">
                   {averageRows.map((average, index) => (

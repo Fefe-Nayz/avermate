@@ -405,10 +405,11 @@ export function MultiSeriesAverageChart({
   )
 
   // The tooltip element already carries the structured content as its
-  // accessible label, so the visual body stays aria-hidden. Values keep the
-  // strongest weight, series names stay primary, and dates read as quiet
-  // metadata — one shared line when every row sits on the same day, otherwise
-  // one line under each row so no row is ever labeled with a wrong date.
+  // accessible label, so the visual body stays aria-hidden. Muted series
+  // names and bold values mirror the default tooltip rows the other charts
+  // render, and dates read as quiet metadata — one shared line when every
+  // row sits on the same day, otherwise one line under each row so no row
+  // is ever labeled with a wrong date.
   const renderTooltipBody = useCallback(
     ({ points }: ChartTooltipBodyRenderContext<Datum, number, number>) => {
       const sharedDay = sharedDayTimestamp(points)
@@ -434,8 +435,10 @@ export function MultiSeriesAverageChart({
                   boxShadow: "inset 0 0 0 1px rgb(0 0 0 / 0.12)",
                 }}
               />
-              <span className="pr-1.5 font-normal">{point.datum.label}</span>
-              <span className="text-right font-semibold whitespace-nowrap tabular-nums">
+              <span className="min-w-0 truncate pr-1.5 text-muted-foreground">
+                {point.datum.label}
+              </span>
+              <span className="text-right font-bold whitespace-nowrap tabular-nums">
                 {format.number(point.datum.value, {
                   maximumFractionDigits: 2,
                 })}
