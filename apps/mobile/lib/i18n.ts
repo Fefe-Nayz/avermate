@@ -36,6 +36,7 @@ const fr: Record<string, string> = {
   Subjects: "Matières",
   Grades: "Notes",
   Goals: "Objectifs",
+  Social: "Social",
   Settings: "Réglages",
   Back: "Retour",
   Cancel: "Annuler",
