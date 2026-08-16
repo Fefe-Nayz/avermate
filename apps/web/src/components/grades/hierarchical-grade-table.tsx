@@ -156,7 +156,13 @@ function SubjectRow({
                 (left, right) =>
                   right.passedAt.getTime() - left.passedAt.getTime()
               )
-              .map((grade) => <GradeResultBadge key={grade.id} grade={grade} />)
+              .map((grade) => (
+                <GradeResultBadge
+                  key={grade.id}
+                  grade={grade}
+                  showResultSummary={false}
+                />
+              ))
           )}
         </div>
       </TableCell>

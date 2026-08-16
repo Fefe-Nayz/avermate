@@ -34,6 +34,7 @@ import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import {
   AverageValue,
   CoefficientBadge,
+  ResultBadge,
   DeltaValue,
 } from "@/components/data/value"
 import {
@@ -51,7 +52,10 @@ import {
   type ChildSortKey,
   type GradeSortKey,
 } from "@/components/grades/grade-sorting"
-import { GradeList } from "@/components/grades/grade-list"
+import {
+  GradeList,
+  gradeListItemClassName,
+} from "@/components/grades/grade-list"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
 import { cn } from "@/lib/utils"
@@ -316,6 +320,7 @@ export default function SubjectPage({
                 showScale
                 colored
                 className="text-3xl font-semibold"
+                animateFromZero
               />
               {ratio !== null && general !== null ? (
                 <DeltaValue delta={ratio - general} className="text-sm" />
@@ -406,25 +411,20 @@ export default function SubjectPage({
                 />
               ) : null}
             </div>
-            <Card className="gap-2 py-4">
-              <CardContent className="px-2">
-                <ul>
+            <Card className="gap-2 py-0">
+              <CardContent className="p-0">
+                <ul className="divide-y">
                   {visibleChildren.map((child) => (
                     <li key={child.id}>
                       <Link
                         href={`/subjects/${child.id}`}
-                        className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                        className={gradeListItemClassName}
                       >
                         <span className="min-w-0 flex-1 truncate text-sm">
                           {child.name}
                         </span>
                         <CoefficientBadge coefficient={child.coefficient} />
-                        <AverageValue
-                          ratio={graph.ratio(child.id)}
-                          colored
-                          animate={false}
-                          className="text-sm font-medium"
-                        />
+                        <ResultBadge ratio={graph.ratio(child.id)} />
                         <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
                       </Link>
                     </li>

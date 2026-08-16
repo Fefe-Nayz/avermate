@@ -133,7 +133,12 @@ export default function GradePage({
 
         <Card className="items-center gap-2 py-6 text-center">
           <CardContent className="flex flex-col items-center gap-2">
-            <ResultBadge ratio={ratio} className="px-3 py-1.5 text-3xl" />
+            <ResultBadge
+              ratio={ratio}
+              className="px-3 py-1.5 text-3xl"
+              animate
+              animateFromZero
+            />
             <p className="text-sm text-muted-foreground">
               <PointsValue value={grade.value} outOf={grade.outOf} />
               {grade.coefficient !== 1 ? (

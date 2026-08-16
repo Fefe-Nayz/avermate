@@ -1,6 +1,7 @@
 "use client"
 
 import NumberFlow from "@number-flow/react"
+import { useEffect, useState } from "react"
 import { useLocale } from "next-intl"
 import { bandOf, type Ratio, type ResultBand } from "@avermate/core"
 import { cn } from "@/lib/utils"
@@ -45,6 +46,7 @@ interface AverageProps {
   animate?: boolean
   decimals?: number
   placeholder?: string
+  animateFromZero?: boolean
 }
 
 export function AverageValue({
@@ -55,10 +57,18 @@ export function AverageValue({
   animate = true,
   decimals,
   placeholder = "—",
+  animateFromZero = false,
 }: AverageProps) {
   const locale = useLocale()
   const { scale, decimals: defaultDecimals, passingRatio } = useScale()
   const digits = decimals ?? defaultDecimals
+  const [entered, setEntered] = useState(!animateFromZero)
+
+  useEffect(() => {
+    if (!animateFromZero) return
+    const frame = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(frame)
+  }, [animateFromZero])
 
   if (ratio === null) {
     return (
@@ -95,12 +105,20 @@ export function AverageValue({
           </span>
           <NumberFlow
             aria-hidden
-            value={value}
+            value={entered ? value : 0}
             locales={locale}
             format={{
               minimumFractionDigits: digits,
               maximumFractionDigits: digits,
             }}
+            {...(animateFromZero
+              ? {
+                  transformTiming: {
+                    easing: "ease-out",
+                    duration: 900,
+                  },
+                }
+              : {})}
           />
         </>
       ) : (
@@ -122,10 +140,14 @@ export function ResultBadge({
   ratio,
   className,
   showScale = true,
+  animateFromZero = false,
+  animate = false,
 }: {
   ratio: Ratio
   className?: string
   showScale?: boolean
+  animate?: boolean
+  animateFromZero?: boolean
 }) {
   const { passingRatio } = useScale()
   const band = bandOf(ratio, passingRatio)
@@ -141,7 +163,8 @@ export function ResultBadge({
       <AverageValue
         ratio={ratio}
         showScale={showScale}
-        animate={false}
+        animate={animate}
+        animateFromZero={animateFromZero}
         className="gap-0.5"
       />
     </span>
@@ -218,12 +241,14 @@ export function PointsValue({
 export function CoefficientBadge({
   coefficient,
   className,
+  showWhenOne = false,
 }: {
   coefficient: number
   className?: string
+  showWhenOne?: boolean
 }) {
   const locale = useLocale()
-  if (coefficient === 1) return null
+  if (coefficient === 1 && !showWhenOne) return null
 
   return (
     <span

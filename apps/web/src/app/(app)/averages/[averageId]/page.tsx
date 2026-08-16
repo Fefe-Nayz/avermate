@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { use, useMemo } from "react"
-import { ChevronRightIcon, PencilIcon } from "lucide-react"
+import { ChevronRightIcon, LayersIcon, PencilIcon } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import {
   averageEventDates,
@@ -16,9 +16,17 @@ import {
   type ResolvedCustomAverage,
 } from "@avermate/core"
 import { ImpactGrid } from "@/components/analytics/impact-grid"
-import { AverageChart } from "@/components/charts/average-chart"
+import {
+  AVERAGE_SERIES_COLORS,
+  MultiSeriesAverageChart,
+  type AverageSeries,
+} from "@/components/charts/multi-series-average-chart"
+import { GradeResultsChart } from "@/components/charts/grade-results-chart"
 import { AverageValue, CoefficientBadge } from "@/components/data/value"
-import { GradeList } from "@/components/grades/grade-list"
+import {
+  GradeList,
+  gradeListItemClassName,
+} from "@/components/grades/grade-list"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { Button } from "@/components/ui/button"
@@ -30,6 +38,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { useYear } from "@/components/year/year-provider"
+import { usePreferences } from "@/hooks/use-preferences"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
 
 /** Analytical destination for the general average and every custom average. */
@@ -51,6 +60,7 @@ export default function AverageAnalyticsPage({
     timelineDate,
     year,
   } = useYear()
+  const { preferences, update: updatePreferences } = usePreferences()
   const custom = customAverages.find((average) => average.id === averageId)
   const isGeneral = averageId === "general"
 
@@ -58,9 +68,10 @@ export default function AverageAnalyticsPage({
     if (isGeneral) return { graph, scope: {} }
     return custom ? resolveCustomAverage(graph, custom) : null
   }, [custom, graph, isGeneral])
+  const title = isGeneral ? t("General average") : (custom?.name ?? "")
 
-  const series = useMemo(() => {
-    if (!resolved || !year) return []
+  const range = useMemo(() => {
+    if (!resolved || !year) return null
     const from = new Date(
       Math.max(period.startAt.getTime(), year.startsAt.getTime())
     )
@@ -70,14 +81,51 @@ export default function AverageAnalyticsPage({
     const to = new Date(
       Math.min(timelineEnd, period.endAt.getTime(), year.endsAt.getTime())
     )
-    if (to <= from) return []
-    return averageOverTime(
-      resolved.graph.subjects,
-      averageEventDates(resolved.graph.subjects, from, to),
-      null,
-      resolved.scope
-    )
+    if (to <= from) return null
+    return { from, to }
   }, [now, period, resolved, timelineDate, year])
+
+  const averageSeries = useMemo<AverageSeries[]>(() => {
+    if (!resolved || !range) return []
+    const children = preferences.chartSettings.showSubSubjects
+      ? resolved.graph.childrenOf(null)
+      : []
+    const seriesFor = (target: string | null) =>
+      averageOverTime(
+        resolved.graph.subjects,
+        averageEventDates(
+          resolved.graph.subjects,
+          range.from,
+          range.to,
+          target
+        ),
+        target,
+        resolved.scope
+      )
+
+    return [
+      ...children.map((child, index) => ({
+        id: child.id,
+        label: child.name,
+        color: AVERAGE_SERIES_COLORS[(index + 1) % AVERAGE_SERIES_COLORS.length],
+        points: seriesFor(child.id),
+      })),
+      {
+        id: "average",
+        label: title,
+        color: AVERAGE_SERIES_COLORS[0],
+        points: seriesFor(null),
+        primary: true,
+      },
+    ]
+  }, [
+    preferences.chartSettings.showSubSubjects,
+    range,
+    resolved,
+    title,
+  ])
+
+  const children = resolved?.graph.childrenOf(null) ?? []
 
   if (!resolved || (!isGeneral && !custom)) {
     return (
@@ -95,7 +143,6 @@ export default function AverageAnalyticsPage({
     )
   }
 
-  const title = isGeneral ? t("General average") : (custom?.name ?? "")
   const ratio = resolved.graph.ratio(null, resolved.scope)
   const ratios = gradeRatios(resolved.graph)
   const grades = [...resolved.graph.allGrades()].reverse()
@@ -214,50 +261,90 @@ export default function AverageAnalyticsPage({
               showScale
               colored
               className="text-4xl font-semibold"
+              animateFromZero
             />
           </CardContent>
         </Card>
 
-        <AverageChart
+        <MultiSeriesAverageChart
           title={t("Over time")}
-          series={series}
+          series={averageSeries}
           emptyHint={t("Record a few grades and the curve will appear here.")}
           height={320}
-          zoomPresets
+          headerActions={
+            children.length > 0 ? (
+              <Button
+                variant={
+                  preferences.chartSettings.showSubSubjects
+                    ? "secondary"
+                    : "ghost"
+                }
+                size="sm"
+                aria-pressed={preferences.chartSettings.showSubSubjects}
+                aria-label={
+                  preferences.chartSettings.showSubSubjects
+                    ? t("Hide child series")
+                    : t("Show child series")
+                }
+                onClick={() =>
+                  updatePreferences({
+                    chartSettings: {
+                      ...preferences.chartSettings,
+                      showSubSubjects:
+                        !preferences.chartSettings.showSubSubjects,
+                    },
+                  })
+                }
+              >
+                <LayersIcon className="size-4" />
+                <span className="hidden sm:inline">
+                  {preferences.chartSettings.showSubSubjects
+                    ? t("Hide child series")
+                    : t("Show child series")}
+                </span>
+              </Button>
+            ) : undefined
+          }
+        />
+
+        <GradeResultsChart
+          grades={resolved.graph.allGrades()}
+          subjects={resolved.graph.subjects}
+          title={t("Grade results")}
         />
 
         {composition.length > 0 ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm font-medium">
-                {t("Subjects")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-2">
-              <ul>
-                {composition.map(({ coefficient, ratio, subject }) => (
-                  <li key={subject.id}>
-                    <Link
-                      href={`/subjects/${subject.id}`}
-                      className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {subject.name}
-                      </span>
-                      <CoefficientBadge coefficient={coefficient} />
-                      <AverageValue
-                        ratio={ratio}
-                        colored
-                        animate={false}
-                        className="text-sm font-medium"
-                      />
-                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <section className="flex flex-col gap-2">
+            <div className="px-1">
+              <h3 className="text-sm font-medium">{t("Subjects")}</h3>
+            </div>
+            <Card className="gap-2 py-0">
+              <CardContent className="p-0">
+                <ul className="divide-y">
+                  {composition.map(({ coefficient, ratio, subject }) => (
+                    <li key={subject.id}>
+                      <Link
+                        href={`/subjects/${subject.id}`}
+                        className={gradeListItemClassName}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {subject.name}
+                        </span>
+                        <CoefficientBadge coefficient={coefficient} />
+                        <AverageValue
+                          ratio={ratio}
+                          colored
+                          animateFromZero
+                          className="text-sm font-medium"
+                        />
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
         ) : null}
 
         <div className="grid grid-cols-4 gap-2">
@@ -279,8 +366,8 @@ export default function AverageAnalyticsPage({
         <section className="flex flex-col gap-2">
           <h3 className="px-1 text-sm font-medium">{t("Grades")}</h3>
           {grades.length === 0 ? (
-            <Card className="gap-2 py-4">
-              <CardContent className="px-2">
+            <Card className="gap-2 py-0">
+              <CardContent className="p-0">
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   {t("No grade recorded here yet.")}
                 </p>

@@ -227,6 +227,7 @@ export default function SubjectsPage() {
                 showScale
                 colored
                 className="text-4xl font-semibold tracking-tight"
+                animateFromZero
               />
               <span className="text-xs text-muted-foreground">
                 {t("{count} subjects", { count: String(subjects.length) })}

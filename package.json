@@ -20,7 +20,9 @@
     "db:seed": "bun run --cwd apps/server scripts/seed-demo.ts",
     "db:migrate-legacy": "bun run --cwd apps/server scripts/migrate-legacy.ts",
     "admin:set": "bun run --cwd apps/server scripts/set-admin.ts",
-    "lint:slop": "bun --bun oxlint"
+    "lint:slop": "bun --bun oxlint",
+    "doctor": "react-doctor",
+    "doctor:changed": "react-doctor --scope changed"
   },
   "workspaces": [
     "apps/*",
@@ -29,6 +31,8 @@
   "devDependencies": {
     "@oxlint/plugins": "^1.78.0",
     "oxlint": "^1.78.0",
+    "oxlint-plugin-react-doctor": "^0.9.12",
+    "react-doctor": "^0.9.12",
     "turbo": "2.10.10"
   },
   "overrides": {

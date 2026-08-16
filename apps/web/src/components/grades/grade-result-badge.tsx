@@ -11,7 +11,12 @@ import {
   type Grade,
   type Period,
 } from "@avermate/core"
-import { DeltaValue, PointsValue, ResultBadge } from "@/components/data/value"
+import {
+  CoefficientBadge,
+  DeltaValue,
+  PointsValue,
+  ResultBadge,
+} from "@/components/data/value"
 import {
   HoverCard,
   HoverCardContent,
@@ -34,9 +39,11 @@ export function gradePeriod(
 export function GradeResultBadge({
   grade,
   className,
+  showResultSummary = true,
 }: {
   grade: Grade
   className?: string
+  showResultSummary?: boolean
 }) {
   const t = useExtracted()
   const locale = useLocale()
@@ -105,34 +112,41 @@ export function GradeResultBadge({
             <ResultBadge ratio={ratio} className="shrink-0 text-base" />
           </div>
 
-          <dl
-            className={cn(
-              "grid gap-2 rounded-md bg-muted/45 p-2.5",
-              grade.coefficient !== 1 && "grid-cols-2"
-            )}
-          >
-            <div className="min-w-0">
-              <dt className="text-[11px] text-muted-foreground">
-                {t("Result")}
-              </dt>
-              <dd className="mt-0.5 text-sm font-medium">
-                <PointsValue value={grade.value} outOf={grade.outOf} />
-              </dd>
-            </div>
-            {grade.coefficient !== 1 ? (
+          {showResultSummary ? (
+            <dl
+              className={cn(
+                "grid gap-2 rounded-md bg-muted/45 p-2.5",
+                "grid-cols-2"
+              )}
+            >
+              <div className="min-w-0">
+                <dt className="text-[11px] text-muted-foreground">
+                  {t("Result")}
+                </dt>
+                <dd className="mt-0.5 text-sm font-medium">
+                  <PointsValue value={grade.value} outOf={grade.outOf} />
+                </dd>
+              </div>
               <div className="min-w-0">
                 <dt className="text-[11px] text-muted-foreground">
                   {t("Weight")}
                 </dt>
-                <dd className="numeric mt-0.5 text-sm font-medium">
-                  ×
-                  {format.number(grade.coefficient, {
-                    maximumFractionDigits: 2,
-                  })}
+                <dd className="mt-0.5">
+                  <CoefficientBadge
+                    coefficient={grade.coefficient}
+                    showWhenOne
+                  />
                 </dd>
               </div>
-            ) : null}
-          </dl>
+            </dl>
+          ) : (
+            <div className="flex min-h-7 items-center justify-between gap-2 rounded-md bg-muted/45 p-2.5 text-xs">
+              <span className="text-muted-foreground">{t("Weight")}</span>
+              <span className="min-w-0">
+                <CoefficientBadge coefficient={grade.coefficient} showWhenOne />
+              </span>
+            </div>
+          )}
 
           {impacts &&
           (impacts.subject.delta !== null || impacts.general.delta !== null) ? (

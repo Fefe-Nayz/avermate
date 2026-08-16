@@ -8,6 +8,9 @@ import { CoefficientBadge, ResultBadge } from "@/components/data/value"
 import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 
+export const gradeListItemClassName =
+  "flex min-h-12 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
+
 /**
  * The shared grade list used on the dashboard and the grades timeline.
  * Keeping the complete card here prevents the two high-traffic lists from
@@ -18,8 +21,8 @@ export function GradeList({ grades }: { grades: readonly Grade[] }) {
   const { graph } = useYear()
 
   return (
-    <Card className="py-2">
-      <CardContent className="px-2">
+    <Card className="py-0">
+      <CardContent className="p-0">
         <ul className="divide-y">
           {grades.map((grade) => {
             const subject = graph.byId(grade.subjectId)
@@ -28,7 +31,7 @@ export function GradeList({ grades }: { grades: readonly Grade[] }) {
               <li key={grade.id}>
                 <Link
                   href={`/grades/${grade.id}`}
-                  className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
+                  className={gradeListItemClassName}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{grade.name}</p>
