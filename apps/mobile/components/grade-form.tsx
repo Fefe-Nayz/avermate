@@ -3,17 +3,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { Icon } from "@/components/icon";
 import type { Grade, Subject } from "@avermate/core";
-import { FULL_YEAR_PERIOD_ID } from "@avermate/core";
-import { Button, Card, Label, Screen } from "@/components/ui";
+import { FULL_YEAR_PERIOD_ID, gradeRatio } from "@avermate/core";
+import { Button, Card, Label, Note, Problem, Screen } from "@/components/ui";
 import { AverageValue, DeltaValue } from "@/components/value";
 import {
   FieldGroup,
   PickerField,
+  SwitchField,
   TextField,
   type Choice,
 } from "@/components/field";
@@ -21,7 +23,7 @@ import { DateField } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { numeric, radius, space, type, usePalette } from "@/lib/theme";
 
 /**
  * The screen the app lives or dies on.
@@ -29,7 +31,8 @@ import { radius, space, type, usePalette } from "@/lib/theme";
  * Somebody types here a few times a week for a year, so it is a screen, not a
  * sheet: full height, a pinned save button, real keyboards, and a preview that
  * answers the only question anyone actually has while typing — "what does this
- * do to my average?" — before they commit to it.
+ * do to my average?" — before they commit to it. The order of decisions is the
+ * web form's: which subject, what result, when.
  */
 
 export interface ComponentDraft {
@@ -78,7 +81,11 @@ export function parseNumber(input: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** Weighted roll-up of the parts, mirroring what the server will store. */
+/**
+ * Weighted roll-up of the parts, mirroring what the server will store. A part
+ * that is not filled in yet is skipped rather than blocking the whole figure,
+ * exactly as on the web — typing the first result shows a total immediately.
+ */
 function rollUp(components: ComponentDraft[], outOf: number): number | null {
   let weighted = 0;
   let total = 0;
@@ -86,7 +93,7 @@ function rollUp(components: ComponentDraft[], outOf: number): number | null {
     const value = parseNumber(part.value);
     const partOutOf = parseNumber(part.outOf);
     const coefficient = parseNumber(part.coefficient) ?? 1;
-    if (value === null || partOutOf === null || partOutOf <= 0) return null;
+    if (value === null || partOutOf === null || partOutOf <= 0) continue;
     if (coefficient <= 0) continue;
     weighted += (value / partOutOf) * coefficient;
     total += coefficient;
@@ -146,6 +153,7 @@ export function subjectChoices(
         label: subject.name,
         depth,
         // A category is a grouping, not a place results live.
+        hint: subject.kind === "category" ? t("group") : undefined,
         disabled: subject.kind === "category",
       },
       ...subjectChoices(childrenOf(subject.id), childrenOf, depth + 1),
@@ -160,6 +168,7 @@ export function GradeForm({
   busy,
   error,
   excludeGradeId,
+  intro,
   extra,
 }: {
   draft: GradeDraft;
@@ -170,11 +179,17 @@ export function GradeForm({
   error?: string | null;
   /** In edit mode, the grade being replaced must leave the baseline. */
   excludeGradeId?: string;
+  /** The line the web shows under the title, e.g. where the grade will land. */
+  intro?: string;
   extra?: React.ReactNode;
 }) {
   const palette = usePalette();
-  const { yearGraph, graph, year, periods } = useYear();
+  const { graph, year, periods } = useYear();
   const [touched, setTouched] = useState(false);
+  // "Made of several parts" is a mode, not just a list: switching it off keeps
+  // the parts around (the web does the same), so an accidental toggle loses
+  // nothing.
+  const [composite, setComposite] = useState(draft.components.length > 0);
 
   const choices = useMemo(
     () => subjectChoices(graph.roots, (id) => graph.childrenOf(id)),
@@ -193,45 +208,70 @@ export function GradeForm({
     [periods],
   );
 
-  const composite = draft.components.length > 0;
   const outOf = parseNumber(draft.outOf);
-  const value = composite
+  const effectiveValue = composite
     ? outOf === null
       ? null
       : rollUp(draft.components, outOf)
     : parseNumber(draft.value);
   const coefficient = parseNumber(draft.coefficient) ?? 1;
 
+  // The web form's validation, message for message.
   const problems = {
     name: draft.name.trim().length === 0 ? t("Give this grade a name.") : null,
     subject: !draft.subjectId ? t("Pick the subject it belongs to.") : null,
+    outOf:
+      outOf === null || outOf <= 0
+        ? t("The maximum must be above zero.")
+        : null,
     value:
-      value === null
+      !composite && effectiveValue === null
         ? t("Enter the result you were given.")
-        : outOf !== null && value > outOf
+        : effectiveValue !== null && outOf !== null && effectiveValue > outOf
           ? t("A grade cannot be worth more than its maximum.")
+          : null,
+    components: !composite
+      ? null
+      : draft.components.length === 0
+        ? t("Add at least one part.")
+        : effectiveValue === null
+          ? t("Fill in the result of at least one part.")
           : null,
   };
   const valid =
-    !problems.name && !problems.subject && !problems.value && outOf !== null;
+    !problems.name &&
+    !problems.subject &&
+    !problems.outOf &&
+    !problems.value &&
+    !problems.components;
 
-  // The whole point of the screen: the answer before the commitment.
+  // The whole point of the screen: the answer before the commitment. Like the
+  // web, it appears as soon as subject and result exist — a name is required
+  // to save, not to wonder.
   const preview = useMemo(() => {
-    if (!valid || !draft.subjectId || value === null || outOf === null) {
+    if (
+      !draft.subjectId ||
+      effectiveValue === null ||
+      outOf === null ||
+      outOf <= 0
+    ) {
       return null;
     }
 
+    // When editing, the grade being changed must not count twice — drop it
+    // wherever it currently sits, then add the edited version to the subject
+    // now selected, which may not be the one it came from.
     const base = excludeGradeId
-      ? yearGraph.withSubjects((subject) => ({
+      ? graph.withSubjects((subject) => ({
           ...subject,
           grades: subject.grades.filter((grade) => grade.id !== excludeGradeId),
         }))
-      : yearGraph;
+      : graph;
 
     const hypothetical: Grade = {
       id: "__draft__",
       name: draft.name,
-      value,
+      value: effectiveValue,
       outOf,
       coefficient,
       passedAt: draft.passedAt,
@@ -254,7 +294,16 @@ export function GradeForm({
         after: next.ratio(draft.subjectId),
       },
     };
-  }, [valid, draft, value, outOf, coefficient, yearGraph, excludeGradeId]);
+  }, [draft, effectiveValue, outOf, coefficient, graph, excludeGradeId]);
+
+  const previewRatio =
+    effectiveValue !== null && outOf !== null && outOf > 0
+      ? gradeRatio({ value: effectiveValue, outOf })
+      : null;
+  const generalDelta =
+    preview && preview.general.before !== null && preview.general.after !== null
+      ? preview.general.after - preview.general.before
+      : null;
 
   const subjectName = draft.subjectId
     ? (graph.byId(draft.subjectId)?.name ?? "")
@@ -262,30 +311,44 @@ export function GradeForm({
 
   const submit = () => {
     setTouched(true);
-    if (!valid || value === null || outOf === null || !draft.subjectId) {
-      haptic("error");
+    if (
+      !valid ||
+      effectiveValue === null ||
+      outOf === null ||
+      !draft.subjectId
+    ) {
+      haptic("warning");
       return;
     }
     onSubmit({
       name: draft.name.trim(),
-      value,
+      value: effectiveValue,
       outOf,
       coefficient,
       subjectId: draft.subjectId,
       periodId: draft.periodId,
       passedAt: draft.passedAt,
       note: draft.note.trim() || null,
-      components: draft.components.map((part) => ({
-        name: part.name.trim() || t("Part"),
-        value: parseNumber(part.value) ?? 0,
-        outOf: parseNumber(part.outOf) ?? 1,
-        coefficient: parseNumber(part.coefficient) ?? 1,
-      })),
+      components: composite
+        ? draft.components.map((part) => ({
+            name: part.name.trim() || t("Part"),
+            value: parseNumber(part.value) ?? 0,
+            outOf: parseNumber(part.outOf) ?? 20,
+            coefficient: parseNumber(part.coefficient) ?? 1,
+          }))
+        : [],
     });
   };
 
   const patch = (values: Partial<GradeDraft>) =>
     onChange({ ...draft, ...values });
+
+  const patchPart = (index: number, values: Partial<ComponentDraft>) =>
+    patch({
+      components: draft.components.map((item, at) =>
+        at === index ? { ...item, ...values } : item,
+      ),
+    });
 
   const addComponent = () => {
     haptic("light");
@@ -303,6 +366,15 @@ export function GradeForm({
     });
   };
 
+  const toggleComposite = (next: boolean) => {
+    haptic("selection");
+    setComposite(next);
+    if (next && draft.components.length === 0) addComponent();
+  };
+
+  // One tap to the scales every French school uses.
+  const quickScales = [10, 20, 100].filter((candidate) => candidate !== outOf);
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -311,16 +383,9 @@ export function GradeForm({
       <Screen
         footer={<Button label={submitLabel} onPress={submit} loading={busy} />}
       >
-        <FieldGroup>
-          <TextField
-            label={t("Name")}
-            value={draft.name}
-            onChangeText={(name) => patch({ name })}
-            placeholder={t("Mock exam, chapter 4, oral…")}
-            error={touched ? (problems.name ?? undefined) : undefined}
-            autoFocus={!draft.subjectId}
-          />
+        {intro ? <Note>{intro}</Note> : null}
 
+        <FieldGroup>
           <PickerField
             label={t("Which subject is this for?")}
             choices={choices}
@@ -331,213 +396,311 @@ export function GradeForm({
             error={touched ? (problems.subject ?? undefined) : undefined}
           />
 
-          {composite ? (
-            <View style={{ gap: space.sm }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <Label>{t("Parts")}</Label>
+          <TextField
+            label={t("Name")}
+            value={draft.name}
+            onChangeText={(name) => patch({ name })}
+            placeholder={t("Mock exam, chapter 4, oral…")}
+            error={touched ? (problems.name ?? undefined) : undefined}
+          />
+
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <View style={{ flex: 1 }}>
+              {composite ? (
+                // Stands in for the result field at the same height, so the
+                // row it shares with "Out of" comes out even.
+                <View style={{ gap: space.sm }}>
+                  <Text style={[type.label, { color: palette.textFaint }]}>
+                    {t("Result")}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: space.sm,
+                      minHeight: 52,
+                      paddingHorizontal: space.md,
+                      borderRadius: radius.md,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor:
+                        touched && problems.value
+                          ? palette.negative
+                          : palette.border,
+                      backgroundColor: palette.accentSoft,
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        type.footnote,
+                        { flexShrink: 1, color: palette.textMuted },
+                      ]}
+                    >
+                      {t("Rolls up to")}
+                    </Text>
+                    <Text
+                      style={[
+                        type.body,
+                        numeric,
+                        { color: palette.text, fontWeight: "500" },
+                      ]}
+                    >
+                      {effectiveValue === null
+                        ? "—"
+                        : effectiveValue.toFixed(2).replace(/\.00$/, "")}
+                    </Text>
+                  </View>
+                  {touched && problems.value ? (
+                    <Text style={[type.footnote, { color: palette.negative }]}>
+                      {problems.value}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <TextField
+                  label={t("Result")}
+                  value={draft.value}
+                  onChangeText={(next) => patch({ value: next })}
+                  keyboardType="decimal-pad"
+                  align="right"
+                  placeholder="14"
+                  error={touched ? (problems.value ?? undefined) : undefined}
+                />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <TextField
+                label={t("Out of")}
+                value={draft.outOf}
+                onChangeText={(next) => patch({ outOf: next })}
+                keyboardType="decimal-pad"
+                align="right"
+                error={touched ? (problems.outOf ?? undefined) : undefined}
+              />
+            </View>
+          </View>
+
+          {quickScales.length > 0 ? (
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: space.sm,
+                marginTop: -space.xs,
+              }}
+            >
+              {quickScales.map((candidate) => (
                 <Pressable
+                  key={candidate}
+                  accessibilityRole="button"
                   onPress={() => {
-                    haptic("light");
-                    patch({ components: [] });
+                    haptic("selection");
+                    patch({ outOf: String(candidate) });
                   }}
-                  hitSlop={8}
+                  style={({ pressed }) => ({
+                    minHeight: 36,
+                    justifyContent: "center",
+                    paddingHorizontal: space.md,
+                    borderRadius: radius.pill,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: palette.border,
+                    backgroundColor: pressed
+                      ? palette.accentSoft
+                      : "transparent",
+                  })}
                 >
-                  <Text style={[type.footnote, { color: palette.textMuted }]}>
-                    {t("Use a single result")}
+                  <Text
+                    style={[
+                      type.footnote,
+                      numeric,
+                      { color: palette.textMuted },
+                    ]}
+                  >
+                    {t("/ {scale}", { scale: candidate })}
                   </Text>
                 </Pressable>
-              </View>
-
-              {draft.components.map((part, index) => (
-                <Card key={part.key}>
-                  <View style={{ gap: space.md }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: space.sm,
-                      }}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label={t("Part {number}", { number: index + 1 })}
-                          value={part.name}
-                          onChangeText={(name) =>
-                            patch({
-                              components: draft.components.map((item, at) =>
-                                at === index ? { ...item, name } : item,
-                              ),
-                            })
-                          }
-                          placeholder={t("Written, oral…")}
-                        />
-                      </View>
-                      <Pressable
-                        onPress={() => {
-                          haptic("light");
-                          patch({
-                            components: draft.components.filter(
-                              (_, at) => at !== index,
-                            ),
-                          });
-                        }}
-                        hitSlop={10}
-                        style={{ paddingTop: space.lg }}
-                      >
-                        <Icon
-                          name="close-circle"
-                          size={22}
-                          color={palette.textFaint}
-                        />
-                      </Pressable>
-                    </View>
-
-                    <View style={{ flexDirection: "row", gap: space.sm }}>
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label={t("Result")}
-                          value={part.value}
-                          onChangeText={(next) =>
-                            patch({
-                              components: draft.components.map((item, at) =>
-                                at === index ? { ...item, value: next } : item,
-                              ),
-                            })
-                          }
-                          keyboardType="decimal-pad"
-                          align="right"
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label={t("Out of")}
-                          value={part.outOf}
-                          onChangeText={(next) =>
-                            patch({
-                              components: draft.components.map((item, at) =>
-                                at === index ? { ...item, outOf: next } : item,
-                              ),
-                            })
-                          }
-                          keyboardType="decimal-pad"
-                          align="right"
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <TextField
-                          label={t("Weight")}
-                          value={part.coefficient}
-                          onChangeText={(next) =>
-                            patch({
-                              components: draft.components.map((item, at) =>
-                                at === index
-                                  ? { ...item, coefficient: next }
-                                  : item,
-                              ),
-                            })
-                          }
-                          keyboardType="decimal-pad"
-                          align="right"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </Card>
               ))}
-
-              <Button
-                label={t("Add a part")}
-                onPress={addComponent}
-                variant="ghost"
-                icon="add"
-              />
-
-              <View style={{ flexDirection: "row", gap: space.sm }}>
-                <View style={{ flex: 1 }}>
-                  <TextField
-                    label={t("Out of")}
-                    value={draft.outOf}
-                    onChangeText={(next) => patch({ outOf: next })}
-                    keyboardType="decimal-pad"
-                    align="right"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextField
-                    label={t("Weight")}
-                    value={draft.coefficient}
-                    onChangeText={(next) => patch({ coefficient: next })}
-                    keyboardType="decimal-pad"
-                    align="right"
-                  />
-                </View>
-              </View>
-
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingHorizontal: space.xs,
-                }}
-              >
-                <Label>{t("Rolls up to")}</Label>
-                <Text style={[type.heading, { color: palette.text }]}>
-                  {value === null || outOf === null
-                    ? "—"
-                    : `${value.toFixed(2)} / ${outOf}`}
-                </Text>
-              </View>
             </View>
-          ) : (
-            <>
-              <View style={{ flexDirection: "row", gap: space.sm }}>
-                <View style={{ flex: 1.2 }}>
-                  <TextField
-                    label={t("Result")}
-                    value={draft.value}
-                    onChangeText={(next) => patch({ value: next })}
-                    keyboardType="decimal-pad"
-                    align="right"
-                    error={touched ? (problems.value ?? undefined) : undefined}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextField
-                    label={t("Out of")}
-                    value={draft.outOf}
-                    onChangeText={(next) => patch({ outOf: next })}
-                    keyboardType="decimal-pad"
-                    align="right"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <TextField
-                    label={t("Weight")}
-                    value={draft.coefficient}
-                    onChangeText={(next) => patch({ coefficient: next })}
-                    keyboardType="decimal-pad"
-                    align="right"
-                  />
-                </View>
-              </View>
+          ) : null}
 
-              <Pressable
-                onPress={addComponent}
-                style={{ paddingVertical: space.xs }}
-              >
-                <Text style={[type.footnote, { color: palette.textMuted }]}>
-                  {t("This grade is made of several parts")}
-                </Text>
-              </Pressable>
-            </>
-          )}
+          <View style={{ gap: space.sm }}>
+            <TextField
+              label={t("Weight")}
+              value={draft.coefficient}
+              onChangeText={(next) => patch({ coefficient: next })}
+              keyboardType="decimal-pad"
+              align="right"
+            />
+            <Note>
+              {t(
+                "How much this counts inside the subject. 1 is a normal result.",
+              )}
+            </Note>
+          </View>
+
+          {preview && previewRatio !== null ? (
+            <Card
+              style={
+                generalDelta !== null && generalDelta > 0
+                  ? { borderColor: palette.positive + "66" }
+                  : generalDelta !== null && generalDelta < 0
+                    ? { borderColor: palette.negative + "66" }
+                    : undefined
+              }
+            >
+              <View style={{ gap: space.md }}>
+                <Label>{t("If you save this")}</Label>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    alignItems: "baseline",
+                    columnGap: space.md,
+                    rowGap: space.xs,
+                  }}
+                >
+                  <AverageValue
+                    ratio={previewRatio}
+                    size="title"
+                    showScale
+                    colored
+                  />
+                  <Text style={[type.footnote, { color: palette.textMuted }]}>
+                    {t("general average")}
+                  </Text>
+                  <AverageValue ratio={preview.general.after} size="callout" />
+                  <DeltaValue delta={generalDelta} size="callout" />
+                </View>
+                {subjectName ? (
+                  <PreviewRow
+                    label={subjectName}
+                    before={preview.subject.before}
+                    after={preview.subject.after}
+                  />
+                ) : null}
+              </View>
+            </Card>
+          ) : null}
+
+          {/* Below everything and behind a rule: most grades are one mark, so
+              this is a departure from the normal shape rather than part of it. */}
+          <View
+            style={{
+              marginTop: space.xs,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: palette.hairline,
+              paddingTop: space.lg,
+              gap: space.md,
+            }}
+          >
+            <SwitchField
+              label={t("This grade is made of several parts")}
+              hint={
+                composite
+                  ? t("Use a single result")
+                  : t(
+                      "Written and oral, or several exercises with their own weights",
+                    )
+              }
+              value={composite}
+              onValueChange={toggleComposite}
+            />
+
+            {composite ? (
+              <>
+                {draft.components.map((part, index) => (
+                  <Card key={part.key}>
+                    <View style={{ gap: space.md }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: space.sm,
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <TextField
+                            label={t("Part {number}", { number: index + 1 })}
+                            value={part.name}
+                            onChangeText={(name) => patchPart(index, { name })}
+                            placeholder={t("Written, oral…")}
+                          />
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t("Delete")}
+                          onPress={() => {
+                            haptic("light");
+                            patch({
+                              components: draft.components.filter(
+                                (_, at) => at !== index,
+                              ),
+                            });
+                          }}
+                          hitSlop={10}
+                          style={{ paddingTop: space.lg }}
+                        >
+                          <Icon
+                            name="trash-outline"
+                            size={20}
+                            color={palette.textFaint}
+                          />
+                        </Pressable>
+                      </View>
+
+                      {/* Three number fields side by side leaves each one
+                          about forty pixels wide on a phone. Two, then one. */}
+                      <View style={{ flexDirection: "row", gap: space.sm }}>
+                        <View style={{ flex: 1 }}>
+                          <TextField
+                            label={t("Result")}
+                            value={part.value}
+                            onChangeText={(next) =>
+                              patchPart(index, { value: next })
+                            }
+                            keyboardType="decimal-pad"
+                            align="right"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <TextField
+                            label={t("Out of")}
+                            value={part.outOf}
+                            onChangeText={(next) =>
+                              patchPart(index, { outOf: next })
+                            }
+                            keyboardType="decimal-pad"
+                            align="right"
+                          />
+                        </View>
+                      </View>
+                      <TextField
+                        label={t("Weight")}
+                        value={part.coefficient}
+                        onChangeText={(next) =>
+                          patchPart(index, { coefficient: next })
+                        }
+                        keyboardType="decimal-pad"
+                        align="right"
+                      />
+                    </View>
+                  </Card>
+                ))}
+
+                <Button
+                  label={t("Add a part")}
+                  onPress={addComponent}
+                  variant="outline"
+                  icon="add"
+                />
+
+                {touched && problems.components ? (
+                  <Problem>{problems.components}</Problem>
+                ) : null}
+              </>
+            ) : null}
+          </View>
 
           <DateField
             label={t("Date")}
@@ -556,40 +719,16 @@ export function GradeForm({
           ) : null}
 
           <TextField
-            label={t("Note")}
+            label={t("Anything to remember?")}
             value={draft.note}
             onChangeText={(note) => patch({ note })}
             placeholder={t("Careless mistakes, missed the last question…")}
             multiline
+            maxLength={500}
           />
         </FieldGroup>
 
-        {preview ? (
-          <Card>
-            <View style={{ gap: space.md }}>
-              <Label>{t("If you save this")}</Label>
-
-              <PreviewRow
-                label={t("general average")}
-                before={preview.general.before}
-                after={preview.general.after}
-              />
-              {subjectName ? (
-                <PreviewRow
-                  label={subjectName}
-                  before={preview.subject.before}
-                  after={preview.subject.after}
-                />
-              ) : null}
-            </View>
-          </Card>
-        ) : null}
-
-        {error ? (
-          <Text style={[type.footnote, { color: palette.negative }]}>
-            {error}
-          </Text>
-        ) : null}
+        {error ? <Problem>{error}</Problem> : null}
 
         {extra}
       </Screen>

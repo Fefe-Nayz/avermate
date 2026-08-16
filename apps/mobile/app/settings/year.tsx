@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   Button,
   Card,
+  Confirmation,
   Note,
   Problem,
   Row,
@@ -66,12 +67,11 @@ function YearIconButton({
 }
 
 /**
- * How this year counts.
+ * The year itself: its dates, its scale, and how it is split.
  *
- * Four settings, and every one of them changes every number in the app — so
- * each says what it does in its own line rather than relying on a label. The
- * passing mark is a slider because it is a judgement about where "good enough"
- * sits, and it drives the colour of every result on every screen.
+ * Every setting here changes every number in the app. The passing mark is a
+ * slider because it is a judgement about where "good enough" sits, and it
+ * drives the colour of every result on every screen.
  */
 export default function YearSettings() {
   const palette = usePalette();
@@ -91,6 +91,7 @@ export default function YearSettings() {
   );
   const [decimals, setDecimals] = useState(String(year?.decimals ?? 2));
   const [passing, setPassing] = useState(year?.passingRatio ?? 0.5);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeYearCount = allYears.filter((item) => !item.archivedAt).length;
   const refreshYears = () =>
@@ -101,14 +102,16 @@ export default function YearSettings() {
       client.years.update(input),
     onSuccess: async () => {
       haptic("success");
+      setError(null);
+      setStatus(t("Year updated."));
       await Promise.all([
         refreshYears(),
         queryClient.invalidateQueries({ queryKey: orpc.snapshot.get.key() }),
       ]);
-      router.back();
     },
     onError: () => {
       haptic("error");
+      setStatus(null);
       setError(t("That could not be saved."));
     },
   });
@@ -119,7 +122,9 @@ export default function YearSettings() {
     onSuccess: async (_result, input) => {
       haptic("success");
       if (input.yearId === year?.id) {
-        const fallback = years.find((item) => item.id !== input.yearId);
+        const fallback =
+          years.find((item) => item.id !== input.yearId) ??
+          allYears.find((item) => item.id !== input.yearId);
         if (fallback) selectYear(fallback.id);
       }
       queryClient.removeQueries({
@@ -129,6 +134,10 @@ export default function YearSettings() {
       });
       await refreshYears();
       if (input.yearId === year?.id) router.dismissTo("/(tabs)");
+    },
+    onError: () => {
+      haptic("error");
+      setError(t("The year could not be deleted."));
     },
   });
 
@@ -165,6 +174,15 @@ export default function YearSettings() {
     reorder.mutate({ yearIds: ids });
   };
 
+  const rangeOf = (item: (typeof allYears)[number]) => {
+    const options = {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    } as const;
+    return `${new Date(item.startsAt).toLocaleDateString(undefined, options)} → ${new Date(item.endsAt).toLocaleDateString(undefined, options)}`;
+  };
+
   const confirmDelete = async (item: (typeof allYears)[number]) => {
     let contents: Awaited<ReturnType<typeof client.years.contents>>;
     try {
@@ -176,13 +194,13 @@ export default function YearSettings() {
     Alert.alert(
       t("Delete {name}?", { name: item.name }),
       t(
-        "This permanently deletes {subjects} subjects, {grades} grades and {periods} periods. This cannot be undone.",
+        "This permanently deletes {subjects} subjects, {grades} grades, {periods} periods, {averages} custom averages, {goals} goals, {cards} cards and {recaps} recap records. This cannot be undone.",
         contents,
       ),
       [
         { text: t("Cancel"), style: "cancel" },
         {
-          text: t("Delete"),
+          text: t("Delete permanently"),
           style: "destructive",
           onPress: () => {
             haptic("warning");
@@ -195,7 +213,7 @@ export default function YearSettings() {
 
   return (
     <>
-      <Stack.Screen options={{ title: t("School year") }} />
+      <Stack.Screen options={{ title: t("Year & periods") }} />
       <Screen
         footer={
           <Button
@@ -216,12 +234,8 @@ export default function YearSettings() {
           />
         }
       >
-        <Section title={t("The year itself")}>
-          <TextField
-            label={t("Year name")}
-            value={name}
-            onChangeText={setName}
-          />
+        <Section title={t("This year")}>
+          <TextField label={t("Name")} value={name} onChangeText={setName} />
           <DateField
             label={t("Starts")}
             value={startsAt}
@@ -233,17 +247,14 @@ export default function YearSettings() {
             onChange={setEndsAt}
             min={startsAt}
           />
-        </Section>
-
-        <Section title={t("How grades are written")}>
           <TextField
-            label={t("Grades are out of")}
+            label={t("Averages out of")}
             value={scale}
             onChangeText={setScale}
             keyboardType="decimal-pad"
           />
           <TextField
-            label={t("Default maximum")}
+            label={t("New grades out of")}
             value={defaultOutOf}
             onChangeText={setDefaultOutOf}
             keyboardType="decimal-pad"
@@ -254,9 +265,6 @@ export default function YearSettings() {
             onChangeText={setDecimals}
             keyboardType="number-pad"
           />
-        </Section>
-
-        <Section title={t("What counts as a pass")}>
           <SliderField
             label={t("Passing mark")}
             value={passing}
@@ -268,39 +276,36 @@ export default function YearSettings() {
               `${formatNumber(value * numericScale, 1)} / ${formatNumber(numericScale)}`
             }
           />
-          <Note>
-            {t("This drives the colour of every result and the pass rate.")}
-          </Note>
+          <Note>{t("Used for pass rates and colour bands.")}</Note>
         </Section>
 
-        <Section title={t("Structure")}>
+        <Section
+          title={t("Periods")}
+          description={t(
+            "A grade with no period of its own is filed by its date. Deleting a period never deletes grades.",
+          )}
+        >
           <Card padded={false}>
             <Row
+              first
               title={t("Periods")}
               onPress={() => router.push("/settings/periods")}
             />
           </Card>
         </Section>
 
-        <Section title={t("School years")}>
-          <Note>
-            {t(
-              "Reorder the picker, archive old years, or permanently delete one.",
-            )}
-          </Note>
-          <Button
-            label={t("Add a year")}
-            icon="add"
-            variant="secondary"
-            onPress={() => router.push("/year/new")}
-          />
+        <Section
+          title={t("School years")}
+          description={t(
+            "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents.",
+          )}
+        >
           <Card padded={false}>
             {allYears.map((item, index) => {
               const isArchived = Boolean(item.archivedAt);
               const isCurrent = item.id === year.id;
               const canArchive = isArchived || activeYearCount > 1;
-              const canDelete =
-                allYears.length > 1 && (isArchived || activeYearCount > 1);
+              const canDelete = allYears.length > 1;
               return (
                 <View
                   key={item.id}
@@ -316,21 +321,40 @@ export default function YearSettings() {
                   }}
                 >
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text
-                      numberOfLines={1}
-                      style={[type.body, { color: palette.text }]}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "baseline",
+                        gap: space.sm,
+                      }}
                     >
-                      {item.name}
-                    </Text>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          type.body,
+                          { color: palette.text, flexShrink: 1 },
+                        ]}
+                      >
+                        {item.name}
+                      </Text>
+                      {isCurrent ? (
+                        <Text style={[type.label, { color: palette.accent }]}>
+                          {t("Current")}
+                        </Text>
+                      ) : null}
+                      {isArchived ? (
+                        <Text
+                          style={[type.label, { color: palette.textMuted }]}
+                        >
+                          {t("Archived")}
+                        </Text>
+                      ) : null}
+                    </View>
                     <Text
                       numberOfLines={1}
                       style={[type.footnote, { color: palette.textMuted }]}
                     >
-                      {isCurrent
-                        ? t("Current")
-                        : isArchived
-                          ? t("Archived")
-                          : `${new Date(item.startsAt).toLocaleDateString()} → ${new Date(item.endsAt).toLocaleDateString()}`}
+                      {rangeOf(item)}
                     </Text>
                   </View>
                   <YearIconButton
@@ -367,17 +391,25 @@ export default function YearSettings() {
                       archive.mutate({ yearId: item.id, archived: !isArchived })
                     }
                   />
-                  <YearIconButton
-                    icon="trash-outline"
-                    label={t("Delete {name}", { name: item.name })}
-                    disabled={!canDelete || remove.isPending}
-                    destructive
-                    onPress={() => void confirmDelete(item)}
-                  />
+                  {canDelete ? (
+                    <YearIconButton
+                      icon="trash-outline"
+                      label={t("Delete {name}", { name: item.name })}
+                      disabled={remove.isPending}
+                      destructive
+                      onPress={() => void confirmDelete(item)}
+                    />
+                  ) : null}
                 </View>
               );
             })}
           </Card>
+          <Button
+            label={t("Add a year")}
+            icon="add"
+            variant="secondary"
+            onPress={() => router.push("/year/new")}
+          />
           {activeYearCount === 1 ? (
             <Note>
               {t(
@@ -387,6 +419,11 @@ export default function YearSettings() {
           ) : null}
         </Section>
 
+        {status ? (
+          <Section>
+            <Confirmation>{status}</Confirmation>
+          </Section>
+        ) : null}
         {error ? (
           <Section>
             <Problem>{error}</Problem>

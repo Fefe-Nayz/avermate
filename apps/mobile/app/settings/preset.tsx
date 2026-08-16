@@ -1,22 +1,118 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Button, Card, Loading, Note, Screen, Section } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  Confirmation,
+  Loading,
+  Note,
+  Screen,
+  Section,
+} from "@/components/ui";
 import { useYear } from "@/components/year-provider";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 import { radius, space, type, usePalette } from "@/lib/theme";
 
+type PresetLinkState =
+  "none" | "current" | "update_available" | "customized" | "action_required";
+
+interface ChangeCount {
+  label: string;
+  value: number;
+  /** `add` and `remove` are signed and coloured; `edit` is neutral. */
+  kind: "add" | "edit" | "remove";
+}
+
+/**
+ * What a version does to a year. Only the non-zero lines survive, so the
+ * summary is a sentence about the update rather than a scoreboard of zeros.
+ */
+function ChangeSummary({
+  counts,
+  emptyLabel,
+}: {
+  counts: readonly ChangeCount[];
+  emptyLabel: string;
+}) {
+  const palette = usePalette();
+  const meaningful = counts.filter((count) => count.value !== 0);
+
+  if (meaningful.length === 0) {
+    return (
+      <Text style={[type.footnote, { color: palette.textMuted }]}>
+        {emptyLabel}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+      {meaningful.map((count) => {
+        const color =
+          count.kind === "add"
+            ? palette.positive
+            : count.kind === "remove"
+              ? palette.negative
+              : palette.text;
+        return (
+          <View
+            key={`${count.kind}:${count.label}`}
+            style={{
+              flexDirection: "row",
+              alignItems: "baseline",
+              gap: space.xs,
+              borderRadius: radius.md,
+              borderCurve: "continuous",
+              backgroundColor:
+                count.kind === "edit" ? palette.accentSoft : `${color}18`,
+              paddingHorizontal: space.sm,
+              paddingVertical: space.xs,
+            }}
+          >
+            <Text
+              selectable
+              style={[
+                type.callout,
+                {
+                  color,
+                  fontWeight: "600",
+                  fontVariant: ["tabular-nums"],
+                },
+              ]}
+            >
+              {count.kind === "add" ? "+" : count.kind === "remove" ? "−" : ""}
+              {Math.abs(count.value)}
+            </Text>
+            <Text style={[type.label, { color, textTransform: "none" }]}>
+              {count.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Whether this year still follows an official curriculum.
+ *
+ * The state comes first — the page answers "is anything about to change under
+ * me" — and choosing a preset second, because it is the rarer act.
+ */
 export default function PresetSettings() {
   const palette = usePalette();
   const { year } = useYear();
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const yearId = year?.id ?? "";
-  const status = useQuery({
+  const presetStatus = useQuery({
     ...orpc.presets.status.queryOptions({ input: { yearId } }),
     enabled: Boolean(year),
   });
@@ -45,15 +141,21 @@ export default function PresetSettings() {
       }),
     ]);
 
+  const say = (message: string) => {
+    setError(null);
+    setStatus(message);
+  };
+
   const synchronize = useMutation({
     mutationFn: () => client.presets.synchronize({ yearId }),
     onSuccess: async () => {
       haptic("success");
-      setError(null);
+      say(t("Preset updated."));
       await refresh();
     },
     onError: (cause: Error) => {
       haptic("error");
+      setStatus(null);
       setError(cause.message);
     },
   });
@@ -61,10 +163,13 @@ export default function PresetSettings() {
     mutationFn: () => client.presets.detach({ yearId }),
     onSuccess: async () => {
       haptic("warning");
-      setError(null);
+      say(t("This year is now customized."));
       await refresh();
     },
-    onError: (cause: Error) => setError(cause.message),
+    onError: (cause: Error) => {
+      setStatus(null);
+      setError(cause.message);
+    },
   });
   const apply = useMutation({
     mutationFn: async () => {
@@ -86,66 +191,71 @@ export default function PresetSettings() {
     },
     onSuccess: async () => {
       haptic("success");
-      setError(null);
+      say(t("Preset applied."));
       setSelectedPresetId(null);
       await refresh();
     },
     onError: (cause: Error) => {
       haptic("error");
+      setStatus(null);
       setError(cause.message);
     },
   });
 
-  if (!year || status.isLoading) return <Loading />;
-  const data = status.data;
-  const state = data?.state ?? "none";
-  const statePresentation = {
+  if (!year || presetStatus.isLoading) return <Loading />;
+  const data = presetStatus.data;
+  const state: PresetLinkState = data?.state ?? "none";
+  const linked = state !== "none" && data?.preset ? data.preset : null;
+
+  // The web's stateCopy, verbatim: the state first, in plain words.
+  const statePresentation: Record<
+    PresetLinkState,
+    { icon: IconName; color: string; title: string; body: string }
+  > = {
+    none: {
+      icon: "sparkles",
+      color: palette.textMuted,
+      title: t("This year follows no preset"),
+      body: t(
+        "Its subjects are entirely your own. Linking one brings a ready-made structure and keeps it updated.",
+      ),
+    },
     current: {
-      icon: "checkmark-circle" as const,
+      icon: "checkmark-circle",
       color: palette.positive,
-      title: t("Preset up to date"),
-      body: t("This year follows version {version} of {name}.", {
-        version: data?.membership?.appliedVersion ?? "",
-        name: data?.preset?.name ?? "",
-      }),
+      title: t("Up to date"),
+      body: t("Nothing will change unless you choose to change it."),
     },
     update_available: {
-      icon: "refresh-circle" as const,
+      icon: "refresh-circle",
       color: palette.accent,
-      title: t("Preset update available"),
-      body: t("Review the official changes before updating."),
+      title: t("An update is ready"),
+      body: t("Read what it does below, then apply it when you want to."),
     },
     customized: {
-      icon: "unlink" as const,
+      icon: "unlink",
       color: palette.accent,
-      title: t("Customized year"),
+      title: t("This year is yours"),
       body: t(
-        "Your configuration is protected. Official preset updates will not overwrite it.",
+        "Your subjects and averages differ from the preset. Official updates will never overwrite them.",
       ),
     },
     action_required: {
-      icon: "warning" as const,
+      icon: "warning",
       color: palette.negative,
-      title: t("Update needs your decision"),
+      title: t("This update needs a decision"),
       body: t(
-        "The update would remove subjects that already contain grades, so nothing was changed.",
+        "It removes subjects that already hold grades, so nothing has been changed.",
       ),
     },
-    none: {
-      icon: "sparkles" as const,
-      color: palette.textMuted,
-      title: t("No linked preset"),
-      body: t(
-        "Choose a curriculum below, or keep managing this year yourself.",
-      ),
-    },
-  }[state];
+  };
+  const presentation = statePresentation[state];
 
   const confirmDetach = () =>
     Alert.alert(
       t("Customize this year?"),
       t(
-        "Nothing is deleted. This year simply stops receiving official preset updates until you reapply one.",
+        "Nothing is deleted. This year simply stops receiving official preset updates until you explicitly reapply one.",
       ),
       [
         { text: t("Cancel"), style: "cancel" },
@@ -156,16 +266,17 @@ export default function PresetSettings() {
       ],
     );
 
+  const replacing =
+    (preview.data?.existing.subjects ?? 0) > 0 ||
+    (preview.data?.existing.averages ?? 0) > 0;
+
   const confirmApply = () => {
     if (!preview.data) return;
-    const empty =
-      preview.data.existing.subjects === 0 &&
-      preview.data.existing.averages === 0;
-    if (empty) return apply.mutate();
+    if (!replacing) return apply.mutate();
     Alert.alert(
       t("Replace this configuration?"),
       t(
-        "This replaces {subjects} subjects and {averages} averages. Avermate blocks the operation if any grade could be deleted.",
+        "This replaces {subjects} subjects and {averages} averages. The operation is blocked if any grade could be deleted.",
         {
           subjects: preview.data.existing.subjects,
           averages: preview.data.existing.averages,
@@ -188,105 +299,114 @@ export default function PresetSettings() {
       <Screen>
         <Card
           style={{
-            borderColor: statePresentation.color,
-            backgroundColor: `${statePresentation.color}10`,
+            borderColor: presentation.color,
+            backgroundColor: `${presentation.color}10`,
           }}
         >
           <View style={{ flexDirection: "row", gap: space.md }}>
             <Icon
-              name={statePresentation.icon}
+              name={presentation.icon}
               size={24}
-              color={statePresentation.color}
+              color={presentation.color}
             />
             <View style={{ flex: 1, gap: space.xs }}>
-              <Text selectable style={[type.heading, { color: palette.text }]}>
-                {statePresentation.title}
-              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: space.sm,
+                }}
+              >
+                <Text
+                  selectable
+                  style={[type.heading, { color: palette.text }]}
+                >
+                  {presentation.title}
+                </Text>
+                {linked ? (
+                  <Badge
+                    label={`${linked.name} · v${data?.membership?.appliedVersion ?? ""}`}
+                  />
+                ) : null}
+              </View>
               <Text
                 selectable
                 style={[type.footnote, { color: palette.textMuted }]}
               >
-                {statePresentation.body}
+                {presentation.body}
               </Text>
-              {data?.preset ? (
-                <Text
-                  selectable
-                  style={[type.label, { color: palette.textFaint }]}
-                >
-                  {data.preset.name} · v{data.membership?.appliedVersion}
-                </Text>
-              ) : null}
             </View>
           </View>
 
           {data?.changes ? (
-            <View
-              style={{
-                marginTop: space.md,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: space.sm,
-              }}
-            >
-              {[
-                [
-                  t("Added"),
-                  data.changes.subjectsAdded + data.changes.averagesAdded,
-                ],
-                [
-                  t("Changed"),
-                  data.changes.subjectsChanged + data.changes.averagesChanged,
-                ],
-                [
-                  t("Removed"),
-                  data.changes.subjectsRemoved + data.changes.averagesRemoved,
-                ],
-              ].map(([label, count]) => (
-                <View
-                  key={String(label)}
-                  style={{
-                    flexGrow: 1,
-                    minWidth: 80,
-                    borderRadius: radius.md,
-                    backgroundColor: palette.background,
-                    padding: space.sm,
-                  }}
-                >
-                  <Text
-                    selectable
-                    style={[
-                      type.heading,
-                      { color: palette.text, fontVariant: ["tabular-nums"] },
-                    ]}
-                  >
-                    {count}
-                  </Text>
-                  <Text
-                    selectable
-                    style={[type.footnote, { color: palette.textMuted }]}
-                  >
-                    {label}
-                  </Text>
-                </View>
-              ))}
+            <View style={{ marginTop: space.md }}>
+              <ChangeSummary
+                emptyLabel={t("This update changes nothing in your year.")}
+                counts={[
+                  {
+                    label: t("subjects"),
+                    value: data.changes.subjectsAdded,
+                    kind: "add",
+                  },
+                  {
+                    label: t("subjects changed"),
+                    value: data.changes.subjectsChanged,
+                    kind: "edit",
+                  },
+                  {
+                    label: t("subjects"),
+                    value: data.changes.subjectsRemoved,
+                    kind: "remove",
+                  },
+                  {
+                    label: t("averages"),
+                    value: data.changes.averagesAdded,
+                    kind: "add",
+                  },
+                  {
+                    label: t("averages changed"),
+                    value: data.changes.averagesChanged,
+                    kind: "edit",
+                  },
+                  {
+                    label: t("averages"),
+                    value: data.changes.averagesRemoved,
+                    kind: "remove",
+                  },
+                ]}
+              />
             </View>
           ) : null}
 
-          {data?.blockers.map((blocker) => (
-            <Text
-              key={blocker.subjectId}
-              selectable
-              style={[
-                type.footnote,
-                { color: palette.negative, paddingTop: space.sm },
-              ]}
+          {data?.blockers.length ? (
+            <View
+              style={{
+                marginTop: space.md,
+                gap: space.xs,
+                borderRadius: radius.md,
+                borderCurve: "continuous",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: `${palette.negative}40`,
+                backgroundColor: palette.background,
+                paddingHorizontal: space.md,
+                paddingVertical: space.sm,
+              }}
             >
-              {t("{name}: {count} grades would be affected", {
-                name: blocker.subjectName,
-                count: blocker.gradeCount,
-              })}
-            </Text>
-          ))}
+              {data.blockers.map((blocker) => (
+                <Text
+                  key={blocker.subjectId}
+                  selectable
+                  style={[type.footnote, { color: palette.text }]}
+                >
+                  {t("{name}: {count} grades would be affected", {
+                    name: blocker.subjectName,
+                    count: blocker.gradeCount,
+                  })}
+                </Text>
+              ))}
+            </View>
+          ) : null}
 
           {state === "update_available" ? (
             <View style={{ paddingTop: space.md }}>
@@ -300,10 +420,12 @@ export default function PresetSettings() {
               />
             </View>
           ) : null}
-          {state === "current" ||
-          state === "update_available" ||
-          state === "action_required" ? (
-            <View style={{ paddingTop: space.sm }}>
+          {state !== "customized" && state !== "none" ? (
+            <View
+              style={{
+                paddingTop: state === "update_available" ? space.sm : space.md,
+              }}
+            >
               <Button
                 label={t("Customize this year")}
                 variant="secondary"
@@ -316,9 +438,11 @@ export default function PresetSettings() {
         </Card>
 
         <Section
-          title={
-            data?.preset ? t("Choose another preset") : t("Choose a preset")
-          }
+          icon="sparkles"
+          title={linked ? t("Switch to another preset") : t("Choose a preset")}
+          description={t(
+            "A preset brings subjects, coefficients, hierarchy and useful custom averages.",
+          )}
         >
           <View style={{ gap: space.sm }}>
             {presets.data?.map((preset) => {
@@ -330,7 +454,9 @@ export default function PresetSettings() {
                   accessibilityState={{ checked: selected }}
                   onPress={() => {
                     haptic("selection");
-                    setSelectedPresetId(preset.id);
+                    setSelectedPresetId((current) =>
+                      current === preset.id ? null : preset.id,
+                    );
                   }}
                   style={({ pressed }) => ({
                     padding: space.md,
@@ -353,6 +479,9 @@ export default function PresetSettings() {
                       gap: space.sm,
                     }}
                   >
+                    {preset.featured ? (
+                      <Icon name="sparkles" size={15} color={palette.accent} />
+                    ) : null}
                     <Text
                       selectable
                       style={[type.heading, { color: palette.text, flex: 1 }]}
@@ -373,21 +502,35 @@ export default function PresetSettings() {
                       />
                     ) : null}
                   </View>
-                  <Text
-                    selectable
-                    style={[type.footnote, { color: palette.textMuted }]}
+                  {preset.description ? (
+                    <Text
+                      selectable
+                      style={[type.footnote, { color: palette.textMuted }]}
+                    >
+                      {preset.description}
+                    </Text>
+                  ) : null}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: space.xs,
+                    }}
                   >
-                    {preset.description}
-                  </Text>
-                  <Text
-                    selectable
-                    style={[type.label, { color: palette.textFaint }]}
-                  >
-                    {t("{subjects} subjects · {averages} averages", {
-                      subjects: preset.subjectCount,
-                      averages: preset.averageCount,
-                    })}
-                  </Text>
+                    {preset.tags?.map((tag) => (
+                      <Badge key={tag} label={tag} />
+                    ))}
+                    <Text
+                      selectable
+                      style={[type.label, { color: palette.textFaint }]}
+                    >
+                      {t("{subjects} subjects · {averages} averages", {
+                        subjects: preset.subjectCount,
+                        averages: preset.averageCount,
+                      })}
+                    </Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -400,8 +543,7 @@ export default function PresetSettings() {
               selectable
               style={[type.footnote, { color: palette.textMuted }]}
             >
-              {preview.data.existing.subjects > 0 ||
-              preview.data.existing.averages > 0
+              {replacing
                 ? t(
                     "This replaces {subjects} current subjects and {averages} current averages.",
                     {
@@ -409,11 +551,11 @@ export default function PresetSettings() {
                       averages: preview.data.existing.averages,
                     },
                   )
-                : t("This year is empty, so the preset can be linked safely.")}
+                : t("This year is empty, so nothing can be lost.")}
             </Text>
             <View style={{ paddingTop: space.md }}>
               <Button
-                label={data?.preset ? t("Reapply preset") : t("Apply preset")}
+                label={linked ? t("Reapply preset") : t("Apply preset")}
                 icon="sparkles"
                 loading={apply.isPending}
                 disabled={!preview.data.canReplace}
@@ -433,6 +575,7 @@ export default function PresetSettings() {
           </Card>
         ) : null}
 
+        {status ? <Confirmation>{status}</Confirmation> : null}
         {error ? (
           <Card style={{ borderColor: palette.negative }}>
             <Text

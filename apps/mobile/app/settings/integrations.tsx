@@ -6,10 +6,14 @@ import * as Clipboard from "expo-clipboard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TextField } from "@/components/field";
 import {
+  Badge,
   Button,
   Card,
+  Confirmation,
   Empty,
   Loading,
+  Note,
+  Problem,
   Screen,
   Section,
   Title,
@@ -70,27 +74,22 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function Pill({ children }: { children: string }) {
-  const palette = usePalette();
-  return (
-    <View
-      style={{
-        borderRadius: radius.pill,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: palette.border,
-        backgroundColor: palette.accentSoft,
-        paddingHorizontal: space.sm,
-        paddingVertical: space.xs,
-      }}
-    >
-      <Text selectable style={[type.footnote, { color: palette.textMuted }]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function CopyValue({ label, value }: { label: string; value: string }) {
+/**
+ * A value whose only purpose is to be copied.
+ *
+ * The address is the whole product of this page — it is what someone pastes
+ * into their assistant — so it is drawn as something pressable, not as a grey
+ * caption.
+ */
+function CopyValue({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   const palette = usePalette();
   const [copied, setCopied] = useState(false);
 
@@ -112,19 +111,24 @@ function CopyValue({ label, value }: { label: string; value: string }) {
         alignItems: "center",
         gap: space.sm,
         borderRadius: radius.md,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: palette.border,
         backgroundColor: pressed ? palette.accentSoft : palette.background,
         paddingHorizontal: space.md,
         opacity: pressed ? 0.84 : 1,
       })}
     >
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 2, paddingVertical: space.sm }}>
         <Text style={[type.label, { color: palette.textFaint }]}>{label}</Text>
         <Text
           selectable
           numberOfLines={1}
           style={[
             type.footnote,
-            { color: palette.text, fontFamily: "monospace" },
+            {
+              color: muted ? palette.textMuted : palette.text,
+              fontFamily: "monospace",
+            },
           ]}
         >
           {value}
@@ -181,7 +185,12 @@ function ScopeChoice({
         color={selected ? palette.text : palette.textFaint}
       />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.body, { color: palette.text }]}>{label}</Text>
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+        >
+          <Text style={[type.body, { color: palette.text }]}>{label}</Text>
+          {disabled ? <Badge label={t("Always")} /> : null}
+        </View>
         <Text style={[type.footnote, { color: palette.textMuted }]}>
           {description}
         </Text>
@@ -190,6 +199,46 @@ function ScopeChoice({
   );
 }
 
+/** A quiet inline destructive action, the web's ghost text button. */
+function DangerAction({
+  label,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const palette = usePalette();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={() => {
+        haptic("warning");
+        onPress();
+      }}
+      style={({ pressed }) => ({
+        paddingHorizontal: space.sm,
+        paddingVertical: space.xs,
+        opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
+      })}
+    >
+      <Text style={[type.callout, { color: palette.negative }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Integrations.
+ *
+ * Written for someone connecting an assistant, not someone implementing
+ * OAuth: the address to paste comes first, grants are named and described in
+ * plain permissions, and the registration form is folded away because most
+ * assistants never need it.
+ */
 export default function Integrations() {
   const palette = usePalette();
   const queryClient = useQueryClient();
@@ -202,6 +251,22 @@ export default function Integrations() {
   const [scopes, setScopes] = useState<Set<string>>(
     new Set(["avermate:read", "avermate:write"]),
   );
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [registerChoice, setRegisterChoice] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const say = (message: string) => {
+    haptic("success");
+    setProblem(null);
+    setStatus(message);
+  };
+  const complain = (message: string) => {
+    haptic("error");
+    setStatus(null);
+    setProblem(message);
+  };
+
   const scopeCopy = {
     "avermate:read": {
       label: t("Read"),
@@ -225,6 +290,16 @@ export default function Integrations() {
     (typeof SCOPE_OPTIONS)[number]["scope"],
     { label: string; description: string }
   >;
+
+  /** `avermate:write` means nothing to a reader; "Write" does. */
+  const scopeLabel = (scope: string) => {
+    if (scope in scopeCopy) {
+      return scopeCopy[scope as keyof typeof scopeCopy].label;
+    }
+    if (scope === "openid" || scope === "profile") return t("Identity");
+    if (scope === "offline_access") return t("Stay signed in");
+    return scope;
+  };
 
   const baseUrl = env.apiUrl.replace(/\/$/, "");
   const mcpUrl = useMemo(() => `${baseUrl}/mcp`, [baseUrl]);
@@ -258,6 +333,18 @@ export default function Integrations() {
     staleTime: 30_000,
   });
 
+  /** A grant is about an assistant, so show the assistant, not its id. */
+  const clientNames = useMemo(
+    () =>
+      new Map(
+        (clients.data ?? []).map((client) => [
+          client.client_id,
+          client.client_name ?? "",
+        ]),
+      ),
+    [clients.data],
+  );
+
   const createClient = useMutation({
     mutationFn: async () => {
       const result = await authClient.oauth2.createClient(
@@ -279,14 +366,11 @@ export default function Integrations() {
       );
       setName("");
       setRedirectUri("");
-      haptic("success");
-      Alert.alert(t("Integration client created."));
+      setRegisterChoice(false);
+      say(t("Integration client created."));
     },
     onError: (error) =>
-      Alert.alert(
-        t("The client could not be created."),
-        errorMessage(error, t("Please try again.")),
-      ),
+      complain(errorMessage(error, t("The client could not be created."))),
   });
 
   const revokeClient = useMutation({
@@ -308,13 +392,9 @@ export default function Integrations() {
         (current = []) =>
           current.filter((consent) => consent.clientId !== clientId),
       );
-      haptic("success");
+      say(t("Client revoked."));
     },
-    onError: (error) =>
-      Alert.alert(
-        t("Revocation failed."),
-        errorMessage(error, t("Please try again.")),
-      ),
+    onError: (error) => complain(errorMessage(error, t("Revocation failed."))),
   });
 
   const revokeConsent = useMutation({
@@ -328,13 +408,9 @@ export default function Integrations() {
         consentsKey,
         (current = []) => current.filter((consent) => consent.id !== consentId),
       );
-      haptic("success");
+      say(t("Access grant revoked."));
     },
-    onError: (error) =>
-      Alert.alert(
-        t("Revocation failed."),
-        errorMessage(error, t("Please try again.")),
-      ),
+    onError: (error) => complain(errorMessage(error, t("Revocation failed."))),
   });
 
   const busy =
@@ -364,258 +440,337 @@ export default function Integrations() {
     );
   }
 
+  const clientList = clients.data ?? [];
+  const consentList = consents.data ?? [];
+  // The form starts open only when nothing is registered — the common case is
+  // an assistant that registers itself and never needs this section.
+  const registerOpen = registerChoice ?? clientList.length === 0;
+
+  const confirmRemoveClient = (client: OAuthClientSummary) =>
+    Alert.alert(
+      t("Remove this client?"),
+      t(
+        "Its saved grants and refresh access will be removed. Short-lived access tokens already issued expire on their own.",
+      ),
+      [
+        { text: t("Cancel"), style: "cancel" },
+        {
+          text: t("Remove client"),
+          style: "destructive",
+          onPress: () => revokeClient.mutate(client.client_id),
+        },
+      ],
+    );
+
   return (
     <Screen>
       <Stack.Screen options={{ title: t("Integrations") }} />
       <Title
-        subtitle={t("Connect AI assistants without sharing your password.")}
+        subtitle={t(
+          "Let an AI assistant read or update your Avermate data, without ever giving it your password.",
+        )}
       >
         {t("Integrations")}
       </Title>
 
-      <Section title={t("Avermate MCP")}>
+      <Section
+        icon="sparkles"
+        title={t("Connect an assistant")}
+        description={t(
+          "Paste this address into an assistant that speaks MCP. It will ask you to sign in, then to approve exactly what it may do.",
+        )}
+      >
         <Card style={{ gap: space.md }}>
-          <View
-            style={{
+          <CopyValue label={t("Avermate MCP server")} value={mcpUrl} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: discoveryOpen }}
+            onPress={() => {
+              haptic("selection");
+              setDiscoveryOpen((current) => !current);
+            }}
+            style={({ pressed }) => ({
               flexDirection: "row",
               alignItems: "center",
-              gap: space.sm,
-            }}
-          >
-            <Icon name="sparkles" size={19} color={palette.accent} />
-            <Text style={[type.heading, { flex: 1, color: palette.text }]}>
-              MCP 2026-07-28 · Streamable HTTP
-            </Text>
-          </View>
-          <Text style={[type.footnote, { color: palette.textMuted }]}>
-            {t(
-              "Assistants authenticate with OAuth 2.1 and only receive the permissions you approve.",
-            )}
-          </Text>
-          <CopyValue label={t("MCP endpoint")} value={mcpUrl} />
-          <CopyValue label={t("OAuth metadata")} value={metadataUrl} />
-          <Text style={[type.label, { color: palette.textFaint }]}>
-            {t("Available scopes")}
-          </Text>
-          {AVERMATE_OAUTH_SCOPES.map((scope) => (
-            <CopyValue key={scope} label={t("OAuth scope")} value={scope} />
-          ))}
-        </Card>
-      </Section>
-
-      <Section title={t("Register a public client")}>
-        <Card style={{ gap: space.lg }}>
-          <Text style={[type.footnote, { color: palette.textMuted }]}>
-            {t(
-              "Use this when an assistant cannot publish a Client ID Metadata Document yet.",
-            )}
-          </Text>
-          <TextField
-            label={t("Client name")}
-            value={name}
-            onChangeText={setName}
-            placeholder="Claude Desktop"
-            autoCapitalize="words"
-          />
-          <TextField
-            label={t("Redirect URI")}
-            value={redirectUri}
-            onChangeText={setRedirectUri}
-            placeholder="http://127.0.0.1:8765/callback"
-            keyboardType="url"
-            autoCapitalize="none"
-          />
-          <View style={{ gap: space.sm }}>
-            <Text style={[type.label, { color: palette.textFaint }]}>
-              {t("Maximum permissions")}
-            </Text>
-            {SCOPE_OPTIONS.map((option) => {
-              const selected = scopes.has(option.scope);
-              const copy = scopeCopy[option.scope];
-              return (
-                <ScopeChoice
-                  key={option.scope}
-                  selected={selected}
-                  disabled={"required" in option && option.required}
-                  label={`${copy.label} · ${option.scope}`}
-                  description={copy.description}
-                  toggle={() =>
-                    setScopes((current) => {
-                      const next = new Set(current);
-                      if (selected) next.delete(option.scope);
-                      else next.add(option.scope);
-                      return next;
-                    })
-                  }
-                />
-              );
+              gap: space.xs,
+              alignSelf: "flex-start",
+              opacity: pressed ? 0.6 : 1,
             })}
-          </View>
-          <View
-            style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}
           >
-            <Pill>PKCE S256</Pill>
-            <Pill>client auth: none</Pill>
-          </View>
-          <Text style={[type.footnote, { color: palette.textMuted }]}>
-            {t("No client secret is created.")}
-          </Text>
-          <Button
-            label={t("Create client")}
-            icon="add"
-            loading={createClient.isPending}
-            disabled={!canCreate || busy}
-            onPress={() => createClient.mutate()}
-          />
+            <Icon
+              name={discoveryOpen ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={palette.textMuted}
+            />
+            <Text style={[type.footnote, { color: palette.textMuted }]}>
+              {t("My assistant asks for a discovery URL")}
+            </Text>
+          </Pressable>
+          {discoveryOpen ? (
+            <CopyValue
+              muted
+              label={t("Protected-resource metadata")}
+              value={metadataUrl}
+            />
+          ) : null}
         </Card>
       </Section>
 
-      <Section title={t("Registered clients")}>
-        {(clients.data ?? []).length === 0 ? (
+      <Section
+        icon="shield-checkmark-outline"
+        title={t("What has access")}
+        description={t(
+          "Revoking blocks any further use straight away. A token already handed out stops working within minutes.",
+        )}
+      >
+        {consentList.length === 0 ? (
           <Card>
             <Text style={[type.body, { color: palette.textMuted }]}>
-              {t("No integration client has been registered yet.")}
+              {t("Nothing has access to your account right now.")}
             </Text>
           </Card>
         ) : (
-          (clients.data ?? []).map((client) => {
-            const issuedAt = displayDate(client.client_id_issued_at);
-            return (
-              <Card key={client.client_id} style={{ gap: space.md }}>
+          <Card padded={false}>
+            {consentList.map((consent, index) => {
+              const label =
+                clientNames.get(consent.clientId) || t("Unnamed assistant");
+              return (
                 <View
+                  key={consent.id}
                   style={{
                     flexDirection: "row",
                     alignItems: "flex-start",
                     gap: space.md,
+                    padding: space.md,
+                    borderTopWidth: index === 0 ? 0 : StyleSheet.hairlineWidth,
+                    borderTopColor: palette.hairline,
                   }}
                 >
-                  <View style={{ flex: 1, gap: space.xs }}>
-                    <Text style={[type.heading, { color: palette.text }]}>
-                      {client.client_name || t("Unnamed client")}
-                    </Text>
-                    <CopyValue
-                      label={t("Client ID")}
-                      value={client.client_id}
-                    />
-                  </View>
-                  <Pressable
-                    accessibilityLabel={t("Revoke client")}
-                    accessibilityRole="button"
-                    disabled={busy}
-                    onPress={() =>
-                      Alert.alert(
-                        t("Revoke this client?"),
-                        t(
-                          "Its saved grants and refresh access will be removed. Short-lived access tokens already issued expire on their own.",
-                        ),
-                        [
-                          { text: t("Cancel"), style: "cancel" },
-                          {
-                            text: t("Revoke client"),
-                            style: "destructive",
-                            onPress: () =>
-                              revokeClient.mutate(client.client_id),
-                          },
-                        ],
-                      )
-                    }
-                    style={{ padding: space.sm, opacity: busy ? 0.4 : 1 }}
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: radius.md,
+                      borderCurve: "continuous",
+                      backgroundColor: palette.accentSoft,
+                    }}
                   >
-                    <Icon
-                      name="trash-outline"
-                      size={21}
-                      color={palette.negative}
-                    />
-                  </Pressable>
+                    <Icon name="sparkles" size={18} color={palette.accent} />
+                  </View>
+                  <View style={{ flex: 1, gap: space.sm }}>
+                    <Text
+                      selectable
+                      style={[type.callout, { color: palette.text }]}
+                    >
+                      {label}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: space.xs,
+                      }}
+                    >
+                      {consent.scopes.map((scope) => (
+                        <Badge key={scope} label={scopeLabel(scope)} />
+                      ))}
+                    </View>
+                  </View>
+                  <DangerAction
+                    label={t("Revoke access")}
+                    disabled={busy}
+                    onPress={() => revokeConsent.mutate(consent.id)}
+                  />
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    gap: space.sm,
-                  }}
-                >
-                  <Pill>PKCE S256</Pill>
-                  <Pill>{client.token_endpoint_auth_method ?? "none"}</Pill>
-                  {issuedAt ? <Pill>{issuedAt}</Pill> : null}
-                </View>
-                {client.redirect_uris?.map((uri) => (
-                  <CopyValue key={uri} label={t("Redirect URI")} value={uri} />
-                ))}
-              </Card>
-            );
-          })
+              );
+            })}
+          </Card>
         )}
       </Section>
 
-      <Section title={t("Authorized connections")}>
-        {(consents.data ?? []).length === 0 ? (
+      <Section
+        icon="lock-closed-outline"
+        title={t("Registered clients")}
+        description={t(
+          "Only needed for assistants that cannot register themselves. A client ID is a public identifier — there is no secret to protect.",
+        )}
+      >
+        {clientList.length === 0 && !registerOpen ? (
           <Card>
             <Text style={[type.body, { color: palette.textMuted }]}>
-              {t("No assistant currently has an active grant.")}
+              {t("No client registered. Most assistants do not need one.")}
             </Text>
           </Card>
-        ) : (
-          (consents.data ?? []).map((consent) => (
-            <Card key={consent.id} style={{ gap: space.md }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "flex-start",
-                  gap: space.md,
-                }}
-              >
-                <View style={{ flex: 1, gap: space.sm }}>
-                  <CopyValue label={t("Client ID")} value={consent.clientId} />
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: space.sm,
-                    }}
-                  >
-                    {consent.scopes.map((scope) => (
-                      <Pill key={scope}>{scope}</Pill>
-                    ))}
-                  </View>
-                </View>
-                <Pressable
-                  accessibilityLabel={t("Revoke access grant")}
-                  accessibilityRole="button"
-                  disabled={busy}
-                  onPress={() =>
-                    Alert.alert(t("Revoke this access grant?"), undefined, [
-                      { text: t("Cancel"), style: "cancel" },
-                      {
-                        text: t("Revoke access"),
-                        style: "destructive",
-                        onPress: () => revokeConsent.mutate(consent.id),
-                      },
-                    ])
-                  }
-                  style={{ padding: space.sm, opacity: busy ? 0.4 : 1 }}
+        ) : null}
+
+        {clientList.length > 0 ? (
+          <Card padded={false}>
+            {clientList.map((client, index) => {
+              const issuedAt = displayDate(client.client_id_issued_at);
+              return (
+                <View
+                  key={client.client_id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "flex-start",
+                    gap: space.md,
+                    padding: space.md,
+                    borderTopWidth: index === 0 ? 0 : StyleSheet.hairlineWidth,
+                    borderTopColor: palette.hairline,
+                  }}
                 >
-                  <Icon
-                    name="trash-outline"
-                    size={21}
-                    color={palette.negative}
+                  <View style={{ flex: 1, gap: space.xs }}>
+                    <Text
+                      selectable
+                      style={[type.callout, { color: palette.text }]}
+                    >
+                      {client.client_name || t("Unnamed client")}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t("Copy {label}", {
+                        label: client.client_id,
+                      })}
+                      onPress={() => {
+                        haptic("success");
+                        void Clipboard.setStringAsync(client.client_id);
+                        say(t("Copied."));
+                      }}
+                      style={({ pressed }) => ({
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: space.xs,
+                        opacity: pressed ? 0.6 : 1,
+                      })}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          type.footnote,
+                          {
+                            color: palette.textMuted,
+                            fontFamily: "monospace",
+                            flexShrink: 1,
+                          },
+                        ]}
+                      >
+                        {client.client_id}
+                      </Text>
+                      <Icon
+                        name="copy-outline"
+                        size={12}
+                        color={palette.textMuted}
+                      />
+                    </Pressable>
+                    {client.redirect_uris?.map((uri) => (
+                      <Text
+                        key={uri}
+                        numberOfLines={1}
+                        style={[type.footnote, { color: palette.textMuted }]}
+                      >
+                        {t("Returns to")} {uri}
+                      </Text>
+                    ))}
+                    {issuedAt ? (
+                      <Text
+                        style={[type.footnote, { color: palette.textMuted }]}
+                      >
+                        {t("Registered {date}", { date: issuedAt })}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <DangerAction
+                    label={t("Remove")}
+                    disabled={busy}
+                    onPress={() => confirmRemoveClient(client)}
                   />
-                </Pressable>
-              </View>
-            </Card>
-          ))
+                </View>
+              );
+            })}
+          </Card>
+        ) : null}
+
+        {registerOpen ? (
+          <Card style={{ gap: space.lg }}>
+            <TextField
+              label={t("Client name")}
+              value={name}
+              onChangeText={setName}
+              placeholder="Claude Desktop"
+              maxLength={120}
+              autoCapitalize="words"
+            />
+            <TextField
+              label={t("Redirect URI")}
+              value={redirectUri}
+              onChangeText={setRedirectUri}
+              placeholder="https://assistant.example/oauth/callback"
+              keyboardType="url"
+              autoCapitalize="none"
+            />
+            <View style={{ gap: space.sm }}>
+              <Text style={[type.label, { color: palette.textFaint }]}>
+                {t("The most this client may ever ask for")}
+              </Text>
+              {SCOPE_OPTIONS.map((option) => {
+                const selected = scopes.has(option.scope);
+                const copy = scopeCopy[option.scope];
+                return (
+                  <ScopeChoice
+                    key={option.scope}
+                    selected={selected}
+                    disabled={"required" in option && option.required}
+                    label={copy.label}
+                    description={copy.description}
+                    toggle={() =>
+                      setScopes((current) => {
+                        const next = new Set(current);
+                        if (selected) next.delete(option.scope);
+                        else next.add(option.scope);
+                        return next;
+                      })
+                    }
+                  />
+                );
+              })}
+              <Note>
+                {t(
+                  "This is a ceiling, not a grant. You still approve each connection, and can approve less than this.",
+                )}
+              </Note>
+            </View>
+            <View style={{ gap: space.sm }}>
+              <Button
+                label={t("Create client")}
+                icon="add"
+                loading={createClient.isPending}
+                disabled={!canCreate || busy}
+                onPress={() => createClient.mutate()}
+              />
+              {clientList.length > 0 ? (
+                <Button
+                  label={t("Cancel")}
+                  variant="ghost"
+                  onPress={() => setRegisterChoice(false)}
+                />
+              ) : null}
+              <Note>{t("No password or secret is created.")}</Note>
+            </View>
+          </Card>
+        ) : (
+          <Button
+            label={t("Register a client")}
+            icon="add"
+            variant="secondary"
+            onPress={() => setRegisterChoice(true)}
+          />
         )}
-        <Text
-          style={[
-            type.footnote,
-            { color: palette.textMuted, paddingHorizontal: space.xs },
-          ]}
-        >
-          {t(
-            "Better Auth does not expose a stable token-list API. Access tokens are therefore never serialized into this page.",
-          )}
-        </Text>
       </Section>
+
+      {status ? <Confirmation>{status}</Confirmation> : null}
+      {problem ? <Problem>{problem}</Problem> : null}
     </Screen>
   );
 }

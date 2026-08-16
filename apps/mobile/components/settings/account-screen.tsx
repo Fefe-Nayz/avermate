@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Share, Text, View } from "react-native";
+import { Alert, Pressable, Share, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Stack, useRouter } from "expo-router";
+import { Laptop } from "lucide-react-native";
 import { Icon } from "@/components/icon";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -21,6 +22,52 @@ import { t } from "@/lib/i18n";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { ImageSelectionError, selectImage } from "@/lib/image-file";
 import { radius, space, type, usePalette } from "@/lib/theme";
+
+/**
+ * What a session's user agent means to a person: the browser and the system,
+ * not the whole header. The native apps report no browser, so they read as
+ * their platform alone.
+ */
+function deviceOf(userAgent: string | null | undefined): {
+  label: string;
+  mobile: boolean;
+} {
+  if (!userAgent) return { label: t("Unknown device"), mobile: false };
+
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /OPR\//.test(userAgent)
+      ? "Opera"
+      : /Firefox\//.test(userAgent)
+        ? "Firefox"
+        : /Chrome\//.test(userAgent)
+          ? "Chrome"
+          : /Safari\//.test(userAgent) && /Version\//.test(userAgent)
+            ? "Safari"
+            : null;
+  const os = /Windows/.test(userAgent)
+    ? "Windows"
+    : /iPhone|iPad|iPod/.test(userAgent)
+      ? "iOS"
+      : /Android/.test(userAgent)
+        ? "Android"
+        : /Mac OS X|Macintosh|Darwin/.test(userAgent)
+          ? "macOS"
+          : /CrOS/.test(userAgent)
+            ? "ChromeOS"
+            : /Linux/.test(userAgent)
+              ? "Linux"
+              : /okhttp/.test(userAgent)
+                ? "Android"
+                : null;
+  const mobile = /Mobile|Android|iPhone|iPad|iPod|okhttp/.test(userAgent);
+
+  const parts = [browser, os].filter(Boolean) as string[];
+  return {
+    label: parts.length > 0 ? parts.join(" · ") : t("Unknown device"),
+    mobile,
+  };
+}
 
 /** Account identity, credentials, linked providers and request-safe sessions. */
 export function AccountScreen() {
@@ -286,7 +333,12 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={t("Email address")}>
+        <Section
+          title={t("Email address")}
+          description={t(
+            "We confirm the new address before replacing the one on your account.",
+          )}
+        >
           <TextField
             label={t("Email")}
             value={email}
@@ -307,7 +359,16 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={hasPassword ? t("Password") : t("Add a password")}>
+        <Section
+          title={hasPassword ? t("Password") : t("Add a password")}
+          description={
+            hasPassword
+              ? t("Changing it signs out your other devices.")
+              : t(
+                  "Add an email-and-password sign-in without removing your linked provider.",
+                )
+          }
+        >
           {hasPassword ? (
             <TextField
               label={t("Current password")}
@@ -342,7 +403,102 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={t("Linked sign-ins")}>
+        <Section
+          title={t("Where you are signed in")}
+          description={t("Sign out anywhere you do not recognise.")}
+        >
+          <Card padded={false}>
+            {(sessions.data ?? []).map((item, index) => {
+              const device = deviceOf(item.userAgent);
+              const current = item.token === session.data?.session.token;
+              return (
+                <Row
+                  key={item.id}
+                  first={index === 0}
+                  title={
+                    current
+                      ? `${device.label} · ${t("this device")}`
+                      : device.label
+                  }
+                  subtitle={new Date(item.updatedAt).toLocaleString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                    hour: "numeric",
+                    minute: "numeric",
+                  })}
+                  leading={
+                    device.mobile ? (
+                      <Icon
+                        name="phone-portrait-outline"
+                        size={19}
+                        color={palette.textMuted}
+                      />
+                    ) : (
+                      <Laptop size={19} color={palette.textMuted as string} />
+                    )
+                  }
+                  trailing={
+                    !current ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t("Sign out")}
+                        hitSlop={8}
+                        onPress={() => {
+                          haptic("light");
+                          void authClient
+                            .revokeSession({ token: item.token })
+                            .then(() => sessions.refetch());
+                        }}
+                        style={({ pressed }) => ({
+                          width: 32,
+                          height: 32,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: radius.sm,
+                          opacity: pressed ? 0.6 : 1,
+                        })}
+                      >
+                        <Icon
+                          name="log-out"
+                          size={17}
+                          color={palette.textMuted}
+                        />
+                      </Pressable>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </Card>
+          {(sessions.data?.length ?? 0) > 1 ? (
+            <Button
+              label={t("Sign out other devices")}
+              variant="secondary"
+              loading={action === "sessions"}
+              onPress={() => {
+                setAction("sessions");
+                void authClient
+                  .revokeOtherSessions()
+                  .then(async ({ error: failure }) => {
+                    setAction(null);
+                    if (failure)
+                      return complain(
+                        t("Other sessions could not be signed out."),
+                      );
+                    await sessions.refetch();
+                    say(t("Other devices have been signed out."));
+                  });
+              }}
+            />
+          ) : null}
+        </Section>
+
+        <Section
+          title={t("Linked sign-ins")}
+          description={t(
+            "Keep at least one way to sign in. Linking never changes your grades or preferences.",
+          )}
+        >
           <Card padded={false}>
             {(["google", "microsoft"] as const).map((provider, index) => {
               const linked = accounts.data?.find(
@@ -399,83 +555,29 @@ export function AccountScreen() {
           </Card>
         </Section>
 
-        <Section title={t("Where you are signed in")}>
-          <Card padded={false}>
-            {(sessions.data ?? []).map((item, index) => {
-              const current = item.token === session.data?.session.token;
-              return (
-                <Row
-                  key={item.id}
-                  first={index === 0}
-                  title={item.userAgent?.slice(0, 72) || t("Unknown device")}
-                  subtitle={`${new Date(item.updatedAt).toLocaleString()}${current ? ` · ${t("this device")}` : ""}`}
-                  leading={
-                    <Icon
-                      name="phone-portrait-outline"
-                      size={19}
-                      color={palette.textMuted}
-                    />
-                  }
-                  trailing={
-                    !current ? (
-                      <Text
-                        style={[type.footnote, { color: palette.negative }]}
-                      >
-                        {t("Sign out")}
-                      </Text>
-                    ) : undefined
-                  }
-                  onPress={
-                    current
-                      ? undefined
-                      : () =>
-                          void authClient
-                            .revokeSession({ token: item.token })
-                            .then(() => sessions.refetch())
-                  }
-                />
-              );
-            })}
-          </Card>
-          {(sessions.data?.length ?? 0) > 1 ? (
-            <Button
-              label={t("Sign out other devices")}
-              variant="secondary"
-              loading={action === "sessions"}
-              onPress={() => {
-                setAction("sessions");
-                void authClient
-                  .revokeOtherSessions()
-                  .then(async ({ error: failure }) => {
-                    setAction(null);
-                    if (failure)
-                      return complain(
-                        t("Other sessions could not be signed out."),
-                      );
-                    await sessions.refetch();
-                    say(t("Other devices have been signed out."));
-                  });
-              }}
-            />
-          ) : null}
+        <Section
+          title={t("Your data")}
+          description={t("Everything you have entered, as one JSON file.")}
+        >
+          <Button
+            label={t("Download my data")}
+            variant="secondary"
+            loading={exportData.isPending}
+            onPress={() => exportData.mutate()}
+          />
         </Section>
 
-        <Section title={t("Your data")}>
-          <Card padded={false}>
-            <Row
-              first
-              title={t("Export everything")}
-              subtitle={t("Every year, subject and grade, as JSON.")}
-              onPress={() => exportData.mutate()}
-            />
-          </Card>
-        </Section>
-
-        <Section title={t("Start over")}>
+        <Section
+          title={t("Start over")}
+          description={t(
+            "Deletes every year, subject, grade and goal. Your account and preferences stay.",
+          )}
+        >
           <TextField
             label={t("Type RESET to confirm")}
             value={resetPhrase}
             onChangeText={setResetPhrase}
+            placeholder="RESET"
             autoCapitalize="none"
           />
           <Button
@@ -487,11 +589,17 @@ export function AccountScreen() {
           />
         </Section>
 
-        <Section title={t("Delete this account")}>
+        <Section
+          title={t("Delete this account")}
+          description={t(
+            "Permanent. We email you a link to confirm before anything is removed.",
+          )}
+        >
           <TextField
             label={t("Type DELETE to confirm")}
             value={deletePhrase}
             onChangeText={setDeletePhrase}
+            placeholder="DELETE"
             autoCapitalize="none"
           />
           <Button

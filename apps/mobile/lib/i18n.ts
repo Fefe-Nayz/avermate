@@ -784,7 +784,6 @@ const fr: Record<string, string> = {
   Cumulative: "Cumulative",
   "Current password": "Mot de passe actuel",
   "Decimal places": "Décimales",
-  "Default maximum": "Maximum par défaut",
   "Delete this average": "Supprimer cette moyenne",
   "Delete this period": "Supprimer cette période",
   Done: "Terminé",
@@ -797,11 +796,7 @@ const fr: Record<string, string> = {
   "That year could not be archived.": "Impossible d'archiver cette année.",
   "The contents of that year could not be checked.":
     "Impossible de vérifier le contenu de cette année.",
-  "This permanently deletes {subjects} subjects, {grades} grades and {periods} periods. This cannot be undone.":
-    "Cette action supprime définitivement {subjects} matières, {grades} notes et {periods} périodes. C'est définitif.",
   "School years": "Années scolaires",
-  "Reorder the picker, archive old years, or permanently delete one.":
-    "Réordonnez le sélecteur, archivez les anciennes années ou supprimez-en une définitivement.",
   Current: "En cours",
   Archived: "Archivée",
   "Move {name} up": "Monter {name}",
@@ -811,9 +806,6 @@ const fr: Record<string, string> = {
   "Delete {name}": "Supprimer {name}",
   "Restore another year before archiving or deleting the active one.":
     "Restaurez une autre année avant d'archiver ou de supprimer l'année active.",
-  "Every year, subject and grade, as JSON.":
-    "Toutes vos années, matières et notes, en JSON.",
-  "Export everything": "Tout exporter",
   Feedback: "Retour",
   "Fine tuning": "Ajustements",
   Friday: "Vendredi",
@@ -828,7 +820,6 @@ const fr: Record<string, string> = {
     "L'écart habituel entre un résultat et votre moyenne",
   "How far the average has moved across the period":
     "De combien la moyenne a bougé sur la période",
-  "How grades are written": "Comment s'écrivent les notes",
   Idea: "Idée",
   Improvement: "Progression",
   Insights: "Statistiques",
@@ -892,7 +883,6 @@ const fr: Record<string, string> = {
   "Spread of results": "Répartition des notes",
   "Steadiest subjects": "Matières les plus régulières",
   Strong: "Fort",
-  Structure: "Structure",
   "Subjects ranked": "Classement des matières",
   Sunday: "Dimanche",
   Terms: "Conditions d'utilisation",
@@ -927,8 +917,6 @@ const fr: Record<string, string> = {
     "Les matières ne sont pas touchées. C'est définitif.",
   "The turnaround": "Le redressement",
   "The year itself": "L'année elle-même",
-  "This drives the colour of every result and the pass rate.":
-    "C'est ce qui détermine la couleur de chaque note et le taux de réussite.",
   Thursday: "Jeudi",
   Title: "Titre",
   "Track your grades, understand what moves your average, and get a plan for the result you are aiming at.":
@@ -943,7 +931,6 @@ const fr: Record<string, string> = {
   "Weighted ×{value} here": "Pondérée ×{value} ici",
   "What are you trying to do that the app makes hard?":
     "Qu'essayez-vous de faire que l'application rend compliqué ?",
-  "What counts as a pass": "Ce qui compte comme réussite",
   "What did you do, and what happened instead?":
     "Qu'avez-vous fait, et que s'est-il passé à la place ?",
   "What goes in": "Ce qu'elle contient",
@@ -1054,7 +1041,6 @@ const fr: Record<string, string> = {
 
   "Choose a subject": "Choisissez une matière",
   "No account yet?": "Pas encore de compte ?",
-  Parts: "Parties",
   "Theme, language and interaction": "Thème, langue et interactions",
   "Shared with the web app": "Synchronisé avec l'application web",
   Announcements: "Annonces",
@@ -1154,20 +1140,10 @@ const fr: Record<string, string> = {
   "That connection could not be started.":
     "Impossible de démarrer cette connexion.",
   Admin: "Administration",
-  "Assistants authenticate with OAuth 2.1 and only receive the permissions you approve.":
-    "Les assistants s'authentifient avec OAuth 2.1 et ne reçoivent que les autorisations que vous approuvez.",
-  "Authorized connections": "Connexions autorisées",
-  "Available scopes": "Permissions disponibles",
-  "Avermate MCP": "MCP Avermate",
-  "Better Auth does not expose a stable token-list API. Access tokens are therefore never serialized into this page.":
-    "Better Auth ne fournit pas d'API stable pour lister les jetons. Les jetons d'accès ne sont donc jamais chargés dans cette page.",
   "Check your connection and try again.":
     "Vérifiez votre connexion et réessayez.",
-  "Client ID": "Identifiant client",
   "Client name": "Nom du client",
   "Connect AI assistants with OAuth": "Connecter des assistants IA avec OAuth",
-  "Connect AI assistants without sharing your password.":
-    "Connectez des assistants IA sans partager votre mot de passe.",
   "Copied.": "Copié.",
   "Copy {label}": "Copier {label}",
   "Create and update academic data and preferences.":
@@ -1183,29 +1159,13 @@ const fr: Record<string, string> = {
     "Impossible de charger les intégrations.",
   "Its saved grants and refresh access will be removed. Short-lived access tokens already issued expire on their own.":
     "Ses autorisations enregistrées et son accès de renouvellement seront supprimés. Les jetons à courte durée de vie déjà émis expireront d'eux-mêmes.",
-  "Maximum permissions": "Autorisations maximales",
-  "MCP endpoint": "Point d'accès MCP",
-  "No assistant currently has an active grant.":
-    "Aucun assistant ne dispose actuellement d'une autorisation active.",
-  "No client secret is created.": "Aucun secret client n'est créé.",
-  "No integration client has been registered yet.":
-    "Aucun client d'intégration n'a encore été enregistré.",
-  "OAuth metadata": "Métadonnées OAuth",
-  "OAuth scope": "Permission OAuth",
   "Redirect URI": "URI de redirection",
-  "Register a public client": "Enregistrer un client public",
   "Registered clients": "Clients enregistrés",
   "Revoke access": "Révoquer l'accès",
-  "Revoke access grant": "Révoquer l'autorisation d'accès",
-  "Revoke client": "Révoquer le client",
-  "Revoke this access grant?": "Révoquer cette autorisation d'accès ?",
-  "Revoke this client?": "Révoquer ce client ?",
   "Revocation failed.": "La révocation a échoué.",
   "The client could not be created.": "Impossible de créer le client.",
   "The OAuth client was not created.": "Le client OAuth n'a pas été créé.",
   "Unnamed client": "Client sans nom",
-  "Use this when an assistant cannot publish a Client ID Metadata Document yet.":
-    "Utilisez ceci lorsqu'un assistant ne peut pas encore publier de document de métadonnées d'identifiant client.",
   Write: "Écriture",
   "Years, subjects, grades, averages, goals and analytics.":
     "Années, matières, notes, moyennes, objectifs et analyses.",
@@ -1321,6 +1281,117 @@ const fr: Record<string, string> = {
     "Les périodes n'ont pas pu être réordonnées.",
   "Nested subject": "Matière imbriquée",
 
+  // -------------------------------------------- settings parity rewrite
+  Always: "Toujours",
+  "Stay signed in": "Rester connecté",
+  "Client revoked.": "Client révoqué.",
+  "Access grant revoked.": "Accès révoqué.",
+  "Remove this client?": "Supprimer ce client ?",
+  "Remove client": "Supprimer le client",
+  "Let an AI assistant read or update your Avermate data, without ever giving it your password.":
+    "Laissez un assistant IA lire ou mettre à jour vos données Avermate, sans jamais lui donner votre mot de passe.",
+  "Connect an assistant": "Connecter un assistant",
+  "Paste this address into an assistant that speaks MCP. It will ask you to sign in, then to approve exactly what it may do.":
+    "Collez cette adresse dans un assistant qui parle MCP. Il vous demandera de vous connecter, puis d'approuver précisément ce qu'il peut faire.",
+  "Avermate MCP server": "Serveur MCP Avermate",
+  "My assistant asks for a discovery URL":
+    "Mon assistant demande une URL de découverte",
+  "Protected-resource metadata": "Métadonnées de la ressource protégée",
+  "What has access": "Qui a accès",
+  "Revoking blocks any further use straight away. A token already handed out stops working within minutes.":
+    "Révoquer bloque immédiatement tout nouvel usage. Un jeton déjà délivré cesse de fonctionner en quelques minutes.",
+  "Nothing has access to your account right now.":
+    "Rien n'a accès à votre compte pour le moment.",
+  "Unnamed assistant": "Assistant sans nom",
+  "Only needed for assistants that cannot register themselves. A client ID is a public identifier — there is no secret to protect.":
+    "Utile seulement pour les assistants incapables de s'enregistrer eux-mêmes. Un identifiant client est public — il n'y a aucun secret à protéger.",
+  "No client registered. Most assistants do not need one.":
+    "Aucun client enregistré. La plupart des assistants n'en ont pas besoin.",
+  "Returns to": "Renvoie vers",
+  "Registered {date}": "Enregistré le {date}",
+  "The most this client may ever ask for":
+    "Le maximum que ce client pourra jamais demander",
+  "This is a ceiling, not a grant. You still approve each connection, and can approve less than this.":
+    "C'est un plafond, pas une autorisation. Vous approuvez toujours chaque connexion, et pouvez accorder moins.",
+  "No password or secret is created.":
+    "Aucun mot de passe ni secret n'est créé.",
+  "Register a client": "Enregistrer un client",
+  "Preset updated.": "Preset mis à jour.",
+  "This year is now customized.": "Cette année est désormais personnalisée.",
+  "Preset applied.": "Preset appliqué.",
+  "This year follows no preset": "Cette année ne suit aucun preset",
+  "Its subjects are entirely your own. Linking one brings a ready-made structure and keeps it updated.":
+    "Ses matières sont entièrement les vôtres. En lier un apporte une structure prête à l'emploi et la maintient à jour.",
+  "Up to date": "À jour",
+  "Nothing will change unless you choose to change it.":
+    "Rien ne changera sans votre décision.",
+  "An update is ready": "Une mise à jour est prête",
+  "Read what it does below, then apply it when you want to.":
+    "Lisez ce qu'elle fait ci-dessous, puis appliquez-la quand vous voulez.",
+  "This year is yours": "Cette année est la vôtre",
+  "Your subjects and averages differ from the preset. Official updates will never overwrite them.":
+    "Vos matières et moyennes diffèrent du preset. Les mises à jour officielles ne les écraseront jamais.",
+  "This update needs a decision": "Cette mise à jour demande une décision",
+  "It removes subjects that already hold grades, so nothing has been changed.":
+    "Elle supprime des matières qui contiennent déjà des notes ; rien n'a donc été modifié.",
+  "Nothing is deleted. This year simply stops receiving official preset updates until you explicitly reapply one.":
+    "Rien n'est supprimé. Cette année cesse simplement de recevoir les mises à jour officielles du preset jusqu'à ce que vous en réappliquiez un.",
+  "This replaces {subjects} subjects and {averages} averages. The operation is blocked if any grade could be deleted.":
+    "Ceci remplace {subjects} matières et {averages} moyennes. L'opération est bloquée si une note risquait d'être supprimée.",
+  "This update changes nothing in your year.":
+    "Cette mise à jour ne change rien dans votre année.",
+  "subjects changed": "matières modifiées",
+  averages: "moyennes",
+  "averages changed": "moyennes modifiées",
+  "Switch to another preset": "Passer à un autre preset",
+  "A preset brings subjects, coefficients, hierarchy and useful custom averages.":
+    "Un preset apporte matières, coefficients, hiérarchie et moyennes personnalisées utiles.",
+  "This year is empty, so nothing can be lost.":
+    "Cette année est vide, rien ne peut donc être perdu.",
+  "Year updated.": "Année mise à jour.",
+  "The year could not be deleted.": "L'année n'a pas pu être supprimée.",
+  "This permanently deletes {subjects} subjects, {grades} grades, {periods} periods, {averages} custom averages, {goals} goals, {cards} cards and {recaps} recap records. This cannot be undone.":
+    "Ceci supprime définitivement {subjects} matières, {grades} notes, {periods} périodes, {averages} moyennes personnalisées, {goals} objectifs, {cards} cartes et {recaps} rétrospectives. C'est irréversible.",
+  "Delete permanently": "Supprimer définitivement",
+  "Year & periods": "Année et périodes",
+  "This year": "Cette année",
+  "Averages out of": "Moyennes sur",
+  "New grades out of": "Nouvelles notes sur",
+  "Used for pass rates and colour bands.":
+    "Utilisé pour les taux de réussite et les couleurs.",
+  "A grade with no period of its own is filed by its date. Deleting a period never deletes grades.":
+    "Une note sans période propre est classée par sa date. Supprimer une période ne supprime jamais de notes.",
+  "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents.":
+    "Réordonnez le sélecteur, archivez les années que vous n'utilisez plus, ou supprimez-en une définitivement après avoir vérifié son contenu.",
+  group: "groupe",
+  "The maximum must be above zero.": "Le maximum doit être supérieur à zéro.",
+  "Add at least one part.": "Ajoutez au moins une partie.",
+  "Fill in the result of at least one part.":
+    "Renseignez le résultat d'au moins une partie.",
+  "/ {scale}": "/ {scale}",
+  "How much this counts inside the subject. 1 is a normal result.":
+    "Le poids de cette note dans la matière. 1 est un résultat normal.",
+  "Written and oral, or several exercises with their own weights":
+    "Écrit et oral, ou plusieurs exercices avec leurs propres poids",
+  "Anything to remember?": "Quelque chose à retenir ?",
+  "We confirm the new address before replacing the one on your account.":
+    "Nous confirmons la nouvelle adresse avant de remplacer celle du compte.",
+  "Changing it signs out your other devices.":
+    "Le changer déconnecte vos autres appareils.",
+  "Add an email-and-password sign-in without removing your linked provider.":
+    "Ajoutez une connexion e-mail et mot de passe sans retirer votre fournisseur lié.",
+  "Sign out anywhere you do not recognise.":
+    "Déconnectez-vous partout où vous ne vous reconnaissez pas.",
+  "Keep at least one way to sign in. Linking never changes your grades or preferences.":
+    "Gardez au moins un moyen de connexion. Lier ne change jamais vos notes ni vos préférences.",
+  "Everything you have entered, as one JSON file.":
+    "Tout ce que vous avez saisi, en un fichier JSON.",
+  "Download my data": "Télécharger mes données",
+  "Deletes every year, subject, grade and goal. Your account and preferences stay.":
+    "Supprime chaque année, matière, note et objectif. Votre compte et vos préférences restent.",
+  "Permanent. We email you a link to confirm before anything is removed.":
+    "Définitif. Nous vous envoyons un lien de confirmation avant toute suppression.",
+
   // ------------------------------------------------------------- grade views
   Timeline: "Chronologie",
   Calendar: "Calendrier",
@@ -1399,44 +1470,19 @@ const fr: Record<string, string> = {
   "Which subject is this for?": "Pour quelle matière ?",
   "Year preset": "Modèle de l’année",
   "Official curriculum and updates": "Programme officiel et mises à jour",
-  "Preset up to date": "Modèle à jour",
-  "This year follows version {version} of {name}.":
-    "Cette année suit la version {version} de {name}.",
-  "Preset update available": "Mise à jour du modèle disponible",
-  "Review the official changes before updating.":
-    "Consultez les changements officiels avant la mise à jour.",
-  "Customized year": "Année personnalisée",
-  "Your configuration is protected. Official preset updates will not overwrite it.":
-    "Votre configuration est protégée. Les mises à jour officielles du modèle ne l’écraseront pas.",
-  "Update needs your decision": "La mise à jour nécessite votre décision",
-  "The update would remove subjects that already contain grades, so nothing was changed.":
-    "La mise à jour supprimerait des matières qui contiennent déjà des notes : rien n’a donc été modifié.",
-  "No linked preset": "Aucun modèle lié",
-  "Choose a curriculum below, or keep managing this year yourself.":
-    "Choisissez un programme ci-dessous ou continuez à gérer cette année vous-même.",
   "Customize this year?": "Personnaliser cette année ?",
-  "Nothing is deleted. This year simply stops receiving official preset updates until you reapply one.":
-    "Rien n’est supprimé. Cette année cesse simplement de recevoir les mises à jour officielles jusqu’à ce que vous réappliquiez un modèle.",
   Customize: "Personnaliser",
   "Replace this configuration?": "Remplacer cette configuration ?",
-  "This replaces {subjects} subjects and {averages} averages. Avermate blocks the operation if any grade could be deleted.":
-    "Cela remplace {subjects} matières et {averages} moyennes. Avermate bloque l’opération si une note risque d’être supprimée.",
   "Replace and link": "Remplacer et lier",
-  Added: "Ajoutés",
-  Changed: "Modifiés",
-  Removed: "Supprimés",
   "{name}: {count} grades would be affected":
     "{name} : {count} notes seraient affectées",
   "Update to version {version}": "Mettre à jour vers la version {version}",
   "Customize this year": "Personnaliser cette année",
-  "Choose another preset": "Choisir un autre modèle",
   "Choose a preset": "Choisir un modèle",
   "{subjects} subjects · {averages} averages":
     "{subjects} matières · {averages} moyennes",
   "This replaces {subjects} current subjects and {averages} current averages.":
     "Cela remplace les {subjects} matières et {averages} moyennes actuelles.",
-  "This year is empty, so the preset can be linked safely.":
-    "Cette année est vide : le modèle peut être lié sans risque.",
   "Reapply preset": "Réappliquer le modèle",
   "Apply preset": "Appliquer le modèle",
   "This year contains {count} grades. Avermate will not replace subjects that carry student data.":
