@@ -14,7 +14,6 @@ import {
   averageEventDates,
   averageOverTime,
   consistency,
-  gradeRatio,
   gradeRatios,
   passRate,
   resolveCustomAverage,
@@ -36,7 +35,6 @@ import {
   AverageValue,
   CoefficientBadge,
   DeltaValue,
-  ResultBadge,
 } from "@/components/data/value"
 import {
   AVERAGE_SERIES_COLORS,
@@ -53,6 +51,7 @@ import {
   type ChildSortKey,
   type GradeSortKey,
 } from "@/components/grades/grade-sorting"
+import { GradeList } from "@/components/grades/grade-list"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
 import { cn } from "@/lib/utils"
@@ -474,52 +473,19 @@ export default function SubjectPage({
               />
             </div>
           ) : null}
-          <Card className="gap-2 py-4">
-            <CardContent className="px-2">
-              {grades.length === 0 ? (
+          {grades.length === 0 ? (
+            <Card className="gap-2 py-4">
+              <CardContent className="px-2">
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   {gradeQuery.trim()
                     ? t("No grade matches.")
                     : t("No grade recorded here yet.")}
                 </p>
-              ) : (
-                <ul>
-                  {grades.map((grade) => (
-                    <li key={grade.id}>
-                      <Link
-                        href={`/grades/${grade.id}`}
-                        className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {grade.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format.dateTime(grade.passedAt, {
-                              day: "numeric",
-                              month: "short",
-                            })}
-                            {grade.subjectId !== subjectId ? (
-                              <span
-                                className={cn(
-                                  "ms-1",
-                                  "text-muted-foreground/80"
-                                )}
-                              >
-                                · {graph.byId(grade.subjectId)?.name}
-                              </span>
-                            ) : null}
-                          </p>
-                        </div>
-                        <CoefficientBadge coefficient={grade.coefficient} />
-                        <ResultBadge ratio={gradeRatio(grade)} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <GradeList grades={grades} />
+          )}
         </section>
       </div>
     </>
