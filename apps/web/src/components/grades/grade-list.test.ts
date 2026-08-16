@@ -2,18 +2,35 @@ import { describe, expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
 
 describe("shared grade list", () => {
-  test("keeps the dashboard and grades timeline on the same card", async () => {
-    const [component, dashboard, gradesPage] = await Promise.all([
-      readFile(new URL("./grade-list.tsx", import.meta.url), "utf8"),
-      readFile(new URL("./recent-grades.tsx", import.meta.url), "utf8"),
-      readFile(
-        new URL("../../app/(app)/grades/page.tsx", import.meta.url),
-        "utf8"
-      ),
-    ])
+  test("keeps every standard grade list on the same card", async () => {
+    const [component, dashboard, gradesPage, subjectPage, averagePage] =
+      await Promise.all([
+        readFile(new URL("./grade-list.tsx", import.meta.url), "utf8"),
+        readFile(new URL("./recent-grades.tsx", import.meta.url), "utf8"),
+        readFile(
+          new URL("../../app/(app)/grades/page.tsx", import.meta.url),
+          "utf8"
+        ),
+        readFile(
+          new URL(
+            "../../app/(app)/subjects/[subjectId]/page.tsx",
+            import.meta.url
+          ),
+          "utf8"
+        ),
+        readFile(
+          new URL(
+            "../../app/(app)/averages/[averageId]/page.tsx",
+            import.meta.url
+          ),
+          "utf8"
+        ),
+      ])
 
     expect(dashboard).toContain("<GradeList grades={grades} />")
     expect(gradesPage).toContain("<GradeList grades={group.grades} />")
+    expect(subjectPage).toContain("<GradeList grades={grades} />")
+    expect(averagePage).toContain("<GradeList grades={grades} />")
     expect(component).toContain('className="flex min-h-12')
     expect(component).toContain("<ChevronRightIcon")
   })

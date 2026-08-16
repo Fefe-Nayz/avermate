@@ -8,7 +8,6 @@ import {
   averageEventDates,
   averageOverTime,
   consistency,
-  gradeRatio,
   gradeRatios,
   median,
   passRate,
@@ -18,11 +17,8 @@ import {
 } from "@avermate/core"
 import { ImpactGrid } from "@/components/analytics/impact-grid"
 import { AverageChart } from "@/components/charts/average-chart"
-import {
-  AverageValue,
-  CoefficientBadge,
-  ResultBadge,
-} from "@/components/data/value"
+import { AverageValue, CoefficientBadge } from "@/components/data/value"
+import { GradeList } from "@/components/grades/grade-list"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { Button } from "@/components/ui/button"
@@ -280,45 +276,20 @@ export default function AverageAnalyticsPage({
 
         <ImpactGrid readings={impacts} title={t("Impact by subject")} />
 
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm font-medium">{t("Grades")}</CardTitle>
-          </CardHeader>
-          <CardContent className="px-2">
-            {grades.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {t("No grade recorded here yet.")}
-              </p>
-            ) : (
-              <ul>
-                {grades.map((grade) => (
-                  <li key={grade.id}>
-                    <Link
-                      href={`/grades/${grade.id}`}
-                      className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-accent active:bg-accent"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {grade.name}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {resolved.graph.byId(grade.subjectId)?.name}
-                          {" · "}
-                          {format.dateTime(grade.passedAt, {
-                            day: "numeric",
-                            month: "short",
-                          })}
-                        </p>
-                      </div>
-                      <CoefficientBadge coefficient={grade.coefficient} />
-                      <ResultBadge ratio={gradeRatio(grade)} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <section className="flex flex-col gap-2">
+          <h3 className="px-1 text-sm font-medium">{t("Grades")}</h3>
+          {grades.length === 0 ? (
+            <Card className="gap-2 py-4">
+              <CardContent className="px-2">
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  {t("No grade recorded here yet.")}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <GradeList grades={grades} />
+          )}
+        </section>
       </div>
     </>
   )
