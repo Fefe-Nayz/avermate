@@ -1312,6 +1312,20 @@ const fr: Record<string, string> = {
   "No grade matches.": "Aucune note ne correspond.",
   "Search grades…": "Rechercher des notes…",
 
+  Reorder: "Réorganiser",
+  "The averages could not be reordered.":
+    "Les moyennes n'ont pas pu être réorganisées.",
+
+  // ------------------------------------------------------------- grade views
+  Timeline: "Chronologie",
+  Calendar: "Calendrier",
+  "1 day with results": "1 jour avec des résultats",
+  "{count} days with results": "{count} jours avec des résultats",
+  "Previous month": "Mois précédent",
+  "Next month": "Mois suivant",
+  "Select a day to see its results.":
+    "Sélectionnez un jour pour voir ses résultats.",
+
   // ------------------------------------------------------- admin card gallery
   Draft: "Brouillon",
   "{count} installer choices": "{count} choix d'installation",

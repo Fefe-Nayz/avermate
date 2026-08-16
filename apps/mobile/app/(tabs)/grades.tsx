@@ -1,7 +1,15 @@
-import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
-import { Icon } from "@/components/icon";
+import * as SecureStore from "expo-secure-store";
+import { Icon, type IconName } from "@/components/icon";
 import { gradeRatio, type Grade } from "@avermate/core";
 import {
   Button,
@@ -17,12 +25,50 @@ import { PointsValue, ResultBadge } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { TextField } from "@/components/field";
 import { formatDay, formatMonth } from "@/components/date-field";
+import { GradeCalendar } from "@/components/grades/grade-calendar";
+import { GradeTable } from "@/components/grades/grade-table";
+import { asGradesView, type GradesView } from "@/components/grades/grade-views";
 import { useYear } from "@/components/year-provider";
+import { useSession } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { radius, space, usePalette } from "@/lib/theme";
+import { localUserKey } from "@/lib/local-settings";
+import { radius, space, type, usePalette } from "@/lib/theme";
 
 type SortKey = "date" | "best" | "subject";
+
+/**
+ * The chosen view, remembered per account the way the web remembers it in
+ * localStorage ("avermate:grades-view"). Same SecureStore idiom as the year
+ * and period choices in the year provider: async, so a stored choice arrives
+ * one render after mount.
+ */
+function useStoredView(): [GradesView, (view: GradesView) => void] {
+  const session = useSession();
+  const key = localUserKey(session.data?.user.id ?? "anonymous", "grades-view");
+  const [view, setView] = useState<GradesView>("timeline");
+
+  useEffect(() => {
+    let alive = true;
+    setView("timeline");
+    void SecureStore.getItemAsync(key).then((stored) => {
+      if (alive && stored) setView(asGradesView(stored));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+
+  const update = useCallback(
+    (next: GradesView) => {
+      setView(next);
+      void SecureStore.setItemAsync(key, next);
+    },
+    [key],
+  );
+
+  return [view, update];
+}
 
 /**
  * Every result — newest first, best first, or gathered by subject.
@@ -39,6 +85,7 @@ export default function Grades() {
   const { isLoading, graph, refresh } = useYear();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("date");
+  const [view, setView] = useStoredView();
 
   const grades = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -92,6 +139,15 @@ export default function Grades() {
   if (isLoading) return <Loading />;
 
   const total = graph.allGrades().length;
+  // With nothing recorded, only the timeline's empty state makes sense — a
+  // remembered table or calendar choice would strand the "add" invitation.
+  const activeView: GradesView = total === 0 ? "timeline" : view;
+  const viewOptions: Array<{ id: GradesView; label: string; icon: IconName }> =
+    [
+      { id: "timeline", label: t("Timeline"), icon: "list-outline" },
+      { id: "table", label: t("Table"), icon: "layout-dashboard" },
+      { id: "calendar", label: t("Calendar"), icon: "calendar-outline" },
+    ];
 
   return (
     <ScrollView
@@ -163,7 +219,65 @@ export default function Grades() {
         </View>
       ) : null}
 
-      {grades.length === 0 ? (
+      {total > 0 ? (
+        // The web's three-way switcher at phone width: icon and label each,
+        // secondary when active, outline otherwise.
+        <View
+          accessibilityRole="tablist"
+          style={{ flexDirection: "row", gap: space.sm }}
+        >
+          {viewOptions.map((option) => {
+            const active = option.id === activeView;
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  haptic("selection");
+                  setView(option.id);
+                }}
+                style={{
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: space.xs,
+                  minHeight: 36,
+                  borderRadius: radius.md,
+                  borderCurve: "continuous",
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: palette.border,
+                  backgroundColor: active ? palette.accentSoft : "transparent",
+                }}
+              >
+                <Icon
+                  name={option.icon}
+                  size={15}
+                  color={active ? palette.text : palette.textMuted}
+                />
+                <Text
+                  style={[
+                    type.footnote,
+                    {
+                      color: active ? palette.text : palette.textMuted,
+                      fontWeight: active ? "600" : "500",
+                    },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {activeView === "calendar" ? (
+        <GradeCalendar grades={grades} />
+      ) : activeView === "table" ? (
+        <GradeTable query={query} />
+      ) : grades.length === 0 ? (
         <Empty
           icon={total === 0 ? "document-text-outline" : "search-outline"}
           title={
