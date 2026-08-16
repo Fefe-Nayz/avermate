@@ -105,8 +105,8 @@ export default function Review() {
           <Stack.Screen options={{ title: t("Year in review") }} />
           <Empty
             icon="sparkles-outline"
-            title={t("The story is still being written.")}
-            body={t("Record a few more grades and your year gets its recap.")}
+            title={t("Not yet")}
+            body={t("Record at least five grades and your recap unlocks.")}
           />
         </>
       );
@@ -143,8 +143,8 @@ export default function Review() {
         {eligibleYears.length === 0 ? (
           <Empty
             icon="sparkles-outline"
-            title={t("The story is still being written.")}
-            body={t("Five grades in a year unlock its recap.")}
+            title={t("Not yet")}
+            body={t("Record at least five grades and your recap unlocks.")}
           />
         ) : (
           <Section title={t("Eligible years")}>

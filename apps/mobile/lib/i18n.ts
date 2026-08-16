@@ -773,8 +773,6 @@ const fr: Record<string, string> = {
   Done: "Terminé",
   "Edit custom average": "Modifier la moyenne",
   Editing: "Modification",
-  "Enter the code, then pick something new.":
-    "Saisissez le code, puis choisissez un nouveau mot de passe.",
   "The school years could not be reordered.":
     "Impossible de réordonner les années scolaires.",
   "That year could not be archived.": "Impossible d'archiver cette année.",
@@ -846,8 +844,6 @@ const fr: Record<string, string> = {
     "Choisissez quelques matières et pondérez-les à votre façon — utile quand la moyenne officielle n'est pas celle qui vous intéresse.",
   Privacy: "Confidentialité",
   Question: "Question",
-  "Record a few more grades and your year gets its recap.":
-    "Saisissez encore quelques notes et votre année aura sa rétrospective.",
   "Reopen this goal": "Rouvrir cet objectif",
   "Reset your password": "Réinitialiser votre mot de passe",
   Restore: "Rétablir",
@@ -859,8 +855,6 @@ const fr: Record<string, string> = {
   "Second half of the period against the first":
     "Seconde moitié de la période contre la première",
   Send: "Envoyer",
-  "Send me a code": "Envoyez-moi un code",
-  "Set the new password": "Définir le mot de passe",
   "Something else": "Autre chose",
   "Something is broken": "Quelque chose ne marche pas",
   Spread: "Dispersion",
@@ -874,8 +868,6 @@ const fr: Record<string, string> = {
   "That address could not be used.": "Cette adresse n'a pas pu être utilisée.",
   "That code could not be sent. Check the address.":
     "Le code n'a pas pu être envoyé. Vérifiez l'adresse.",
-  "That code did not work. It may have expired.":
-    "Ce code n'a pas fonctionné. Il a peut-être expiré.",
   "That could not be saved.": "Impossible d'enregistrer.",
   "That could not be sent. Try again in a moment.":
     "L'envoi a échoué. Réessayez dans un instant.",
@@ -896,7 +888,6 @@ const fr: Record<string, string> = {
   "The long version": "La version longue",
   "The same result, again and again. Uncanny.":
     "Le même résultat, encore et encore. Troublant.",
-  "The story is still being written.": "L'histoire s'écrit encore.",
   "The subjects are untouched. This cannot be undone.":
     "Les matières ne sont pas touchées. C'est définitif.",
   "The turnaround": "Le redressement",
@@ -908,8 +899,6 @@ const fr: Record<string, string> = {
   Trend: "Tendance",
   Tuesday: "Mardi",
   "Version {version}": "Version {version}",
-  "We will send a six-digit code to your address.":
-    "Nous enverrons un code à six chiffres à votre adresse.",
   Weak: "Faible",
   Wednesday: "Mercredi",
   "Weighted ×{value} here": "Pondérée ×{value} ici",
@@ -972,8 +961,6 @@ const fr: Record<string, string> = {
   "Every square is a day you showed up":
     "Chaque case représente un jour où vous étiez là",
   "Favorite day": "Jour préféré",
-  "Five grades in a year unlock its recap.":
-    "Cinq notes dans une année débloquent sa rétrospective.",
   "Last slide": "Dernière page",
   "Longest streak": "Plus longue série",
   "Mute music": "Couper la musique",
@@ -1015,8 +1002,6 @@ const fr: Record<string, string> = {
   "Your strongest subjects": "Vos matières les plus fortes",
   "Your year in Avermate": "Votre année dans Avermate",
   "Your {year} recap is ready": "Votre rétrospective {year} est prête",
-  "active day": "jour actif",
-  "active days in a row": "jours actifs d'affilée",
   "{count} grades, your strongest subjects, your best run and the title you earned.":
     "{count} notes, vos matières les plus fortes, votre meilleure série et le titre obtenu.",
   "{date}: {count} grades": "{date} : {count} notes",
@@ -1116,9 +1101,6 @@ const fr: Record<string, string> = {
   Close: "Fermer",
   Reopen: "Rouvrir",
   "No announcements": "Aucune annonce",
-  "Important product messages will appear here.":
-    "Les messages importants concernant le produit apparaîtront ici.",
-  Inbox: "Boîte de réception",
   "Mark as read": "Marquer comme lue",
   Read: "Lecture",
   "That connection could not be started.":
@@ -1161,10 +1143,7 @@ const fr: Record<string, string> = {
     "Ce code est incorrect ou a expiré.",
   "Checking…": "Vérification…",
   "Confirm email": "Confirmer l'e-mail",
-  "Enter the six-digit code sent to your inbox.":
-    "Saisissez le code à six chiffres envoyé dans votre boîte mail.",
   "Check your email": "Consultez votre boîte mail",
-  "No email address was provided.": "Aucune adresse e-mail n'a été fournie.",
   "Send again in {seconds}s": "Renvoyer dans {seconds} s",
   "Send the code again": "Renvoyer le code",
   "Profile photo updated.": "Photo de profil mise à jour.",
@@ -1534,6 +1513,26 @@ const fr: Record<string, string> = {
     "Cet aperçu est exactement la réponse que le serveur leur donne.",
   "No subject averages are shared.":
     "Aucune moyenne de matière n'est partagée.",
+
+  // --------------------------------- onboarding, review & announcements
+  "Send the code": "Envoyer le code",
+  "Enter the email on your account. We will send a short-lived six-digit code.":
+    "Saisissez l'e-mail de votre compte. Nous enverrons un code à six chiffres à durée limitée.",
+  "Enter the code we sent to {email}.": "Saisissez le code envoyé à {email}.",
+  "Choose a new password": "Choisissez un nouveau mot de passe",
+  "A new code is on its way.": "Un nouveau code est en route.",
+  "Not yet": "Pas encore",
+  "Record at least five grades and your recap unlocks.":
+    "Saisissez au moins cinq notes et votre rétrospective se débloque.",
+  "Product updates and important notices will appear here.":
+    "Les nouveautés du produit et les messages importants apparaîtront ici.",
+  New: "Nouveau",
+  "We sent a six-digit code to {email}.":
+    "Nous avons envoyé un code à six chiffres à {email}.",
+  "Create an account first so we know where to send the code.":
+    "Créez d'abord un compte pour que nous sachions où envoyer le code.",
+  "Consecutive grades that increased your average":
+    "Notes consécutives ayant fait monter votre moyenne",
 
   // ------------------------------------------------------------- grade views
   Timeline: "Chronologie",

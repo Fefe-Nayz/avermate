@@ -518,11 +518,12 @@ export function YearReviewStory({
             </Text>
             <Text
               selectable
-              style={[type.title, { color: "rgba(255,255,255,.74)" }]}
+              style={[
+                type.title,
+                { color: "rgba(255,255,255,.74)", textAlign: "center" },
+              ]}
             >
-              {review.longestStreak === 1
-                ? t("active day")
-                : t("active days in a row")}
+              {t("Consecutive grades that increased your average")}
             </Text>
           </View>
         );
