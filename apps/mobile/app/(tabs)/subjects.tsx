@@ -1,12 +1,8 @@
-import { useMemo } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useRouter } from "expo-router";
+import { useMutation } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import { resolveCustomAverage, type Subject } from "@avermate/core";
 import {
@@ -15,15 +11,23 @@ import {
   Card,
   Empty,
   Loading,
+  Problem,
   Row,
   Section,
 } from "@/components/ui";
+import {
+  SortableHandle,
+  SortableList,
+  useSortableScroll,
+  type SortableScroll,
+} from "@/components/sortable-list";
 import { AverageValue, CoefficientTag } from "@/components/value";
 import { ScopeBar } from "@/components/scope-bar";
 import { useYear } from "@/components/year-provider";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { radius, space, type, usePalette } from "@/lib/theme";
+import { radius, space, usePalette } from "@/lib/theme";
 import { yearSetupHref } from "@/lib/year-setup";
 
 /**
@@ -33,13 +37,86 @@ import { yearSetupHref } from "@/lib/year-setup";
  * card inside a card is unreadable at 375pt, and the useful information — the
  * average and the weight — has to stay on one line to be comparable down the
  * column.
+ *
+ * The order is the account's own, arranged the way the web does it: a
+ * "Reorder" toggle swaps the list for one with grips, and each level of the
+ * tree is its own sortable group, because an order is only meaningful among
+ * siblings — dropping Maths between two of English's children would be asking
+ * to change the hierarchy, which is what the edit screen is for.
  */
 export default function Subjects() {
   const palette = usePalette();
   const router = useRouter();
-  const { customAverages, isLoading, graph, yearId, refresh } = useYear();
+  const { customAverages, isLoading, graph, subjects, yearId, refresh } =
+    useYear();
+  const scroll = useSortableScroll();
+  const [reordering, setReordering] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [orderOverrides, setOrderOverrides] = useState<
+    Record<string, string[]>
+  >({});
+  const [orderError, setOrderError] = useState<string | null>(null);
 
-  const rows = useMemo(() => flatten(graph.roots, graph, 0), [graph]);
+  // A fresh snapshot is authoritative: the optimistic order has either been
+  // written and comes back identical, or it failed and this discards it.
+  useEffect(() => setOrderOverrides({}), [subjects]);
+
+  const move = useMutation({
+    mutationFn: (input: Parameters<typeof client.subjects.move>[0]) =>
+      client.subjects.move(input),
+    onSuccess: () => {
+      haptic("success");
+      if (yearId) {
+        void queryClient.invalidateQueries({
+          queryKey: orpc.snapshot.get.queryKey({ input: { yearId } }),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: orpc.presets.status.queryKey({ input: { yearId } }),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: orpc.years.configurationStatus.queryKey({
+            input: { yearId },
+          }),
+        });
+      }
+      // A move detaches the year from its preset, so keep every year-scoped
+      // announcement projection honest immediately, the way the web does.
+      void queryClient.invalidateQueries({
+        queryKey: orpc.announcements.active.key(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: orpc.announcements.history.key(),
+      });
+    },
+    onError: () => {
+      haptic("error");
+      setOrderOverrides({});
+      setOrderError(t("The subject could not be saved."));
+    },
+  });
+
+  /** One sibling group, ordered: the server's order, then any optimistic one. */
+  const siblingsOf = useCallback(
+    (parentId: string | null): readonly Subject[] => {
+      const siblings = graph.childrenOf(parentId);
+      const override = orderOverrides[parentId ?? ""];
+      if (!override) return siblings;
+      const byId = new Map(siblings.map((subject) => [subject.id, subject]));
+      const known = new Set(override);
+      return [
+        ...override
+          .map((id) => byId.get(id))
+          .filter((subject): subject is Subject => Boolean(subject)),
+        ...siblings.filter((subject) => !known.has(subject.id)),
+      ];
+    },
+    [graph, orderOverrides],
+  );
+
+  const rows = useMemo(
+    () => flatten(null, siblingsOf, graph, 0),
+    [siblingsOf, graph],
+  );
   const averageRows = useMemo(() => {
     // `slice()` rather than `[...customAverages]`: the spread goes through the
     // iterator protocol, so anything that is not a real array fails with
@@ -63,8 +140,35 @@ export default function Subjects() {
 
   if (isLoading) return <Loading />;
 
+  /**
+   * Subjects are a tree, so a drag can never leave its sibling group; the
+   * primitive already guarantees that because each level is its own list.
+   * `subjectId` is the subject the server reparents; the rest of the list only
+   * gets a new sort order. Since a reorder never changes the parent, passing
+   * any sibling would work — but naming the one that actually moved is what
+   * makes the request readable in a log.
+   */
+  const reorderSiblings = (
+    parentId: string | null,
+    previous: readonly string[],
+    siblingIds: string[],
+  ) => {
+    if (move.isPending) return;
+    const subjectId = movedId(previous, siblingIds);
+    if (!subjectId) return;
+    setOrderError(null);
+    setOrderOverrides((current) => ({
+      ...current,
+      [parentId ?? ""]: siblingIds,
+    }));
+    move.mutate({ subjectId, parentId, siblingIds });
+  };
+
   return (
-    <ScrollView
+    <Animated.ScrollView
+      ref={scroll.ref}
+      onContentSizeChange={scroll.onContentSizeChange}
+      scrollEnabled={!dragging}
       contentInsetAdjustmentBehavior="never"
       style={{ flex: 1, backgroundColor: palette.background }}
       contentContainerStyle={{
@@ -175,6 +279,18 @@ export default function Subjects() {
         </Card>
       </Section>
 
+      {subjects.length > 1 ? (
+        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+          <Button
+            label={reordering ? t("Done") : t("Reorder")}
+            icon={reordering ? "checkmark" : "list-outline"}
+            variant="ghost"
+            size="sm"
+            onPress={() => setReordering((current) => !current)}
+          />
+        </View>
+      ) : null}
+
       {rows.length === 0 ? (
         <Empty
           icon="albums-outline"
@@ -198,6 +314,21 @@ export default function Subjects() {
             </View>
           }
         />
+      ) : reordering ? (
+        <View style={{ gap: space.sm }}>
+          <Card padded={false}>
+            <SubjectOrderLevel
+              parentId={null}
+              depth={0}
+              siblingsOf={siblingsOf}
+              pending={move.isPending}
+              scroll={scroll}
+              onDragStateChange={setDragging}
+              onReorder={reorderSiblings}
+            />
+          </Card>
+          {orderError ? <Problem>{orderError}</Problem> : null}
+        </View>
       ) : (
         <Card padded={false}>
           {rows.map((entry, index) => (
@@ -237,7 +368,94 @@ export default function Subjects() {
           ))}
         </Card>
       )}
-    </ScrollView>
+    </Animated.ScrollView>
+  );
+}
+
+/**
+ * One level of the tree, draggable.
+ *
+ * Rendered recursively so a subject's children stay inside their own sortable
+ * group: dragging within a level reorders it, and there is no way to express
+ * "move this under a different parent" by accident. That change belongs to the
+ * edit screen, where it is a deliberate choice rather than a slip of the wrist.
+ */
+function SubjectOrderLevel({
+  parentId,
+  depth,
+  siblingsOf,
+  pending,
+  scroll,
+  onDragStateChange,
+  onReorder,
+}: {
+  parentId: string | null;
+  depth: number;
+  siblingsOf: (parentId: string | null) => readonly Subject[];
+  pending: boolean;
+  scroll: SortableScroll;
+  onDragStateChange: (dragging: boolean) => void;
+  onReorder: (
+    parentId: string | null,
+    previous: readonly string[],
+    siblingIds: string[],
+  ) => void;
+}) {
+  const palette = usePalette();
+  const siblings = siblingsOf(parentId);
+  if (siblings.length === 0) return null;
+  const ids = siblings.map((subject) => subject.id);
+
+  return (
+    <SortableList
+      ids={ids}
+      disabled={pending}
+      scroll={scroll}
+      onDragStateChange={onDragStateChange}
+      onReorder={(next) => onReorder(parentId, ids, next)}
+      renderItem={(_id, index) => {
+        const subject = siblings[index];
+        if (!subject) return null;
+        return (
+          <>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                // The separator belongs to the row so it travels with it
+                // during a drag, like the web's border-b.
+                borderTopWidth:
+                  depth === 0 && index === 0 ? 0 : StyleSheet.hairlineWidth,
+                borderTopColor: palette.hairline,
+                // Indentation carries the hierarchy, on the same scale as the
+                // resting list.
+                paddingLeft: depth * 14,
+              }}
+            >
+              <SortableHandle style={{ marginLeft: space.xs }} />
+              <View style={{ flex: 1 }}>
+                <Row
+                  first
+                  title={subject.name}
+                  subtitle={
+                    subject.parentId ? t("Nested subject") : t("Top level")
+                  }
+                />
+              </View>
+            </View>
+            <SubjectOrderLevel
+              parentId={subject.id}
+              depth={depth + 1}
+              siblingsOf={siblingsOf}
+              pending={pending}
+              scroll={scroll}
+              onDragStateChange={onDragStateChange}
+              onReorder={onReorder}
+            />
+          </>
+        );
+      }}
+    />
   );
 }
 
@@ -248,17 +466,35 @@ interface FlatEntry {
 }
 
 function flatten(
-  subjects: readonly Subject[],
-  graph: {
-    childrenOf: (id: string) => readonly Subject[];
-    allGrades: (id?: string) => unknown[];
-  },
+  parentId: string | null,
+  siblingsOf: (parentId: string | null) => readonly Subject[],
+  graph: { allGrades: (id?: string) => unknown[] },
   depth: number,
 ): FlatEntry[] {
-  return [...subjects]
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-    .flatMap((subject) => [
-      { subject, depth, count: graph.allGrades(subject.id).length },
-      ...flatten(graph.childrenOf(subject.id), graph, depth + 1),
-    ]);
+  return siblingsOf(parentId).flatMap((subject) => [
+    { subject, depth, count: graph.allGrades(subject.id).length },
+    ...flatten(subject.id, siblingsOf, graph, depth + 1),
+  ]);
+}
+
+/**
+ * The row whose position changed between two orders of the same ids — the
+ * dragged one. The primitive hands back only the finished order, so the moved
+ * row is recovered from the first point of difference: if the old leader is
+ * next in the new order, the old leader was dragged away; otherwise the new
+ * leader was dragged in.
+ */
+function movedId(
+  previous: readonly string[],
+  next: readonly string[],
+): string | null {
+  let first = 0;
+  while (first < previous.length && previous[first] === next[first]) {
+    first += 1;
+  }
+  if (first >= previous.length) return null;
+  return (
+    (next[first] === previous[first + 1] ? previous[first] : next[first]) ??
+    null
+  );
 }

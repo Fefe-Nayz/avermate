@@ -1315,6 +1315,11 @@ const fr: Record<string, string> = {
   Reorder: "Réorganiser",
   "The averages could not be reordered.":
     "Les moyennes n'ont pas pu être réorganisées.",
+  "The widgets could not be reordered.":
+    "Les widgets n'ont pas pu être réorganisés.",
+  "The periods could not be reordered.":
+    "Les périodes n'ont pas pu être réordonnées.",
+  "Nested subject": "Matière imbriquée",
 
   // ------------------------------------------------------------- grade views
   Timeline: "Chronologie",
