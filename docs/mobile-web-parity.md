@@ -22,12 +22,12 @@ interactions, states and data flow.
 | `/` landing | — | ➖ | Marketing page; app opens to auth/dashboard. |
 | `/auth/sign-in` | `/sign-in` | ✅ | Structure verified side-by-side (expo-web vs web @393px): title 30/600, OAuth Google+Microsoft, email/password, forgot + create links. |
 | `/auth/sign-up` | `/sign-up` | ✅ | Verified: name/email/password + OAuth + submit, FR copy. |
-| `/auth/forgot-password` | `/forgot-password` | 🟡 | Reset link lands on web (`/auth/reset-password`) — document deep-link story. |
+| `/auth/forgot-password` | `/forgot-password` | ✅ | Web's six-digit-code flow copy (send, enter, choose new password, resend). |
 | `/auth/reset-password` | — | ➖ | Email links target the web app; acceptable, verify copy mentions it. |
-| `/auth/verify` | `/verify-email` | 🟡 | |
+| `/auth/verify` | `/verify-email` | ✅ | Code destination + resend copy aligned. |
 | `/auth/consent` | — | ➖ | OAuth consent renders in browser. |
 | `/legal/*` | About links out | ➖ | External links in Settings → About. |
-| `/onboarding` (+`/new-year`, `/year/*`) | `/onboarding`, `/year/new`, `/year/[id]/setup` | 🟡 | Flow works; visual/state pass pending. |
+| `/onboarding` (+`/new-year`, `/year/*`) | `/onboarding`, `/year/new`, `/year/[id]/setup` | ✅ | Step copy aligned with web. |
 | `/dashboard` | `/(tabs)/index` | ✅ | Web sections incl. the radar; card management (order by drag) lives in settings/cards on mobile. |
 | `/dashboard/cards/new` (gallery+builder) | `/settings/cards` → gallery + card-edit | ✅ | Gallery + slots shipped; IA differs (settings entry) — acceptable, note. |
 | `/dashboard/cards/[cardId]` | `/settings/card-edit?id` | ✅ | |
@@ -39,10 +39,10 @@ interactions, states and data flow.
 | `/subjects/new`, `[id]/edit` | `/subject/new`, `/subject/edit` | ✅ | Web field order/copy/validation, ?kind=category honoured, delete decided on the server impact (keep children vs whole branch). |
 | `/averages/[averageId]` | `/average/[id]` | ✅ | Web section order (scope bar, hero, event-sampled chart, Subjects, stat tiles, impact grid, grades), honest empty states, pencil edit. |
 | `/goals` (+new/[id]/edit) | `/(tabs)/goals`, `/goal/*` | ✅ | Reorder mode with overlay grips, web persistence. |
-| `/review` | `/review` | 🟡 | Story exists; recent web refinements unaudited. |
-| `/announcements` | `/announcements` | 🟡 | |
+| `/review` | `/review` | ✅ | Host + unlock/streak copy aligned; story audited (structural refinements deferred to the native pass). |
+| `/announcements` | `/announcements` | ✅ | Empty-state promise + New badge, banner parity. |
 | `/more` | `/(tabs)/more` | ✅ | Mirrors web More + admin gating. |
-| `/settings` | `/(tabs)/settings` | 🟡 | |
+| `/settings` | `/(tabs)/settings` | ✅ | Hub rows incl. Navigation; subpages all aligned. |
 | `/settings/appearance` | `/settings/appearance` | ✅ | Incl. lineStyle + connectGrades. |
 | `/settings/navigation` | `/settings/navigation` | ✅ | 3 tab slots, shared preference. |
 | `/settings/year` | `/settings/year` (+`/settings/periods`) | ✅ | Web field set + truthful destructive copy; periods drag with always-on grips. |
@@ -52,13 +52,13 @@ interactions, states and data flow.
 | `/settings/preset` | `/settings/preset` | ✅ | Web decision states (up to date / update ready / customized / blocked) with change summaries. |
 | `/settings/about` | `/settings/about` | ✅ | Legal links out. |
 | `/social/*` (friends, groups, sharing, notifications, invitations) | `/(tabs)/social`, `/social/*` | ✅ | Full alignment: invitation management + revocation, year-state badges, named-year adopt flow, always-visible sharing with disabled reason, comparisons vocabulary, leaderboard reasons, notification filter, server sentences surfaced. |
-| `/admin` | `/admin` | 🟡 | |
-| `/admin/users` (+[userId]) | `/admin/users`, `/admin/user/[id]` | 🟡 | |
-| `/admin/announcements` | `/admin/announcements` | 🟡 | |
-| `/admin/feedback` | `/admin/feedback` (+[id]) | 🟡 | |
+| `/admin` | `/admin` | ✅ | Web overview: 8 metrics with hints, range selector, activity strips, distributions, most-active lists. |
+| `/admin/users` (+[userId]) | `/admin/users`, `/admin/user/[id]` | ✅ | Debounced search, pagination, create panel; detail with suspension (reason required), Mokattam, type-the-id delete, sessions, stats. |
+| `/admin/announcements` | `/admin/announcements` | ✅ | Web tones, audience targeting, independent start/end scheduling, state badges. |
+| `/admin/feedback` | `/admin/feedback` (+[id]) | ✅ | Triage queue with label filter, bulk apply, conflict reload; detail with reporter, sanitized route, redacted context, screenshot. |
 | `/admin/presets` (+editor) | `/admin/presets`, `/admin/preset/*` | 🟡 | Web visual editor uses drag — port after sortable primitive lands. |
 | `/admin/card-templates` | `/admin/card-templates` | ✅ | Curation screen: draft-from-card, live previews (WidgetResultRenderer + slot substitution), metadata editing, publish/archive — web payload parity. From-scratch builder (web `/new`) intentionally deferred: mobile builder-with-submission-override is a follow-up; no dead button shipped. |
-| `/admin/social/*` | `/admin/social/*` | 🟡 | |
+| `/admin/social/*` | `/admin/social/*` | ✅ | Gated; reports with status/priority/assignment, groups with search + state filter and web copy. |
 | — | `/settings/system-widget`, `/settings/widget-library`, `/settings/feedback`, `/social/blocks`, `/social/report` | ➖ | Legitimate mobile-only capabilities (§17) — preserve. |
 
 ## Cross-cutting
