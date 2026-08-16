@@ -33,11 +33,11 @@ interactions, states and data flow.
 | `/dashboard/cards/[cardId]` | `/settings/card-edit?id` | ✅ | |
 | `/insights` (+cards) | `/(tabs)/insights` | ✅ | Widget surface + editor + gallery. |
 | `/grades` | `/(tabs)/grades` | ✅ | Search/sort/month groups + the web's three views: result-band calendar (day detail below grid, latest month first) and hierarchical table (horizontal scroll in card, general + custom average footer). View persisted per account. |
-| `/grades/new`, `[id]`, `[id]/edit` | `/grade/*` | 🟡 | Flows exist; visual pass pending. |
+| `/grades/new`, `[id]`, `[id]/edit` | `/grade/*` | ✅ | Detail: loading gate, subject link, weight phrasing, full dates, filtered impact grid, single edit affordance; hosts read the year graph with the web's snapshot invalidation; ?subjectId prefill and period intro line. |
 | `/subjects` | `/(tabs)/subjects` | 🟡 | List exists; web drag reorder ❌; custom-averages header restyle parity check. |
 | `/subjects/[subjectId]` | `/subject/[id]` | ✅ | Charts, search+5 sorts, child sort, impact, patterns. |
-| `/subjects/new`, `[id]/edit` | `/subject/new`, `/subject/edit` | 🟡 | |
-| `/averages/[averageId]` | `/average/[id]` | 🟡 | Chart presets ✅; section parity pass pending. |
+| `/subjects/new`, `[id]/edit` | `/subject/new`, `/subject/edit` | ✅ | Web field order/copy/validation, ?kind=category honoured, delete decided on the server impact (keep children vs whole branch). |
+| `/averages/[averageId]` | `/average/[id]` | ✅ | Web section order (scope bar, hero, event-sampled chart, Subjects, stat tiles, impact grid, grades), honest empty states, pencil edit. |
 | `/goals` (+new/[id]/edit) | `/(tabs)/goals`, `/goal/*` | 🟡 | Web drag reorder in flight (agent). |
 | `/review` | `/review` | 🟡 | Story exists; recent web refinements unaudited. |
 | `/announcements` | `/announcements` | 🟡 | |
@@ -45,13 +45,13 @@ interactions, states and data flow.
 | `/settings` | `/(tabs)/settings` | 🟡 | |
 | `/settings/appearance` | `/settings/appearance` | ✅ | Incl. lineStyle + connectGrades. |
 | `/settings/navigation` | `/settings/navigation` | ✅ | 3 tab slots, shared preference. |
-| `/settings/year` | `/settings/year` (+`/settings/periods`) | 🟡 | Web period drag reorder ❌ on mobile. |
+| `/settings/year` | `/settings/year` (+`/settings/periods`) | ✅ | Web field set + truthful destructive copy; periods drag with always-on grips. |
 | `/settings/averages` (+new/[id]) | `/settings/averages`, `/settings/average-edit` | 🟡 | Drag reorder in flight (agent). |
-| `/settings/account` | `/settings/account` | 🟡 | |
-| `/settings/integrations` | `/settings/integrations` | 🟡 | |
-| `/settings/preset` | `/settings/preset` | 🟡 | |
+| `/settings/account` | `/settings/account` | ✅ | Email change, credential linking, session sign-out, export/delete framing. |
+| `/settings/integrations` | `/settings/integrations` | ✅ | Full MCP story: server address, discovery metadata, grants with revocation, optional public client. |
+| `/settings/preset` | `/settings/preset` | ✅ | Web decision states (up to date / update ready / customized / blocked) with change summaries. |
 | `/settings/about` | `/settings/about` | ✅ | Legal links out. |
-| `/social/*` (friends, groups, sharing, notifications, invitations) | `/(tabs)/social`, `/social/*` | 🟡 | Routes map 1:1; classes freeze copy + visual pass pending. |
+| `/social/*` (friends, groups, sharing, notifications, invitations) | `/(tabs)/social`, `/social/*` | ✅ | Full alignment: invitation management + revocation, year-state badges, named-year adopt flow, always-visible sharing with disabled reason, comparisons vocabulary, leaderboard reasons, notification filter, server sentences surfaced. |
 | `/admin` | `/admin` | 🟡 | |
 | `/admin/users` (+[userId]) | `/admin/users`, `/admin/user/[id]` | 🟡 | |
 | `/admin/announcements` | `/admin/announcements` | 🟡 | |
