@@ -28,17 +28,17 @@ interactions, states and data flow.
 | `/auth/consent` | — | ➖ | OAuth consent renders in browser. |
 | `/legal/*` | About links out | ➖ | External links in Settings → About. |
 | `/onboarding` (+`/new-year`, `/year/*`) | `/onboarding`, `/year/new`, `/year/[id]/setup` | 🟡 | Flow works; visual/state pass pending. |
-| `/dashboard` | `/(tabs)/index` | 🟡 | Sections present; card grid reorder = Move rows (needs drag), radar chart missing. |
+| `/dashboard` | `/(tabs)/index` | ✅ | Web sections incl. the radar; card management (order by drag) lives in settings/cards on mobile. |
 | `/dashboard/cards/new` (gallery+builder) | `/settings/cards` → gallery + card-edit | ✅ | Gallery + slots shipped; IA differs (settings entry) — acceptable, note. |
 | `/dashboard/cards/[cardId]` | `/settings/card-edit?id` | ✅ | |
 | `/insights` (+cards) | `/(tabs)/insights` | ✅ | Widget surface + editor + gallery. |
 | `/grades` | `/(tabs)/grades` | ✅ | Search/sort/month groups + the web's three views: result-band calendar (day detail below grid, latest month first) and hierarchical table (horizontal scroll in card, general + custom average footer). View persisted per account. |
 | `/grades/new`, `[id]`, `[id]/edit` | `/grade/*` | ✅ | Detail: loading gate, subject link, weight phrasing, full dates, filtered impact grid, single edit affordance; hosts read the year graph with the web's snapshot invalidation; ?subjectId prefill and period intro line. |
-| `/subjects` | `/(tabs)/subjects` | 🟡 | List exists; web drag reorder ❌; custom-averages header restyle parity check. |
+| `/subjects` | `/(tabs)/subjects` | ✅ | Hierarchy + per-sibling-level drag reorder (web payload), custom-averages section aligned. |
 | `/subjects/[subjectId]` | `/subject/[id]` | ✅ | Charts, search+5 sorts, child sort, impact, patterns. |
 | `/subjects/new`, `[id]/edit` | `/subject/new`, `/subject/edit` | ✅ | Web field order/copy/validation, ?kind=category honoured, delete decided on the server impact (keep children vs whole branch). |
 | `/averages/[averageId]` | `/average/[id]` | ✅ | Web section order (scope bar, hero, event-sampled chart, Subjects, stat tiles, impact grid, grades), honest empty states, pencil edit. |
-| `/goals` (+new/[id]/edit) | `/(tabs)/goals`, `/goal/*` | 🟡 | Web drag reorder in flight (agent). |
+| `/goals` (+new/[id]/edit) | `/(tabs)/goals`, `/goal/*` | ✅ | Reorder mode with overlay grips, web persistence. |
 | `/review` | `/review` | 🟡 | Story exists; recent web refinements unaudited. |
 | `/announcements` | `/announcements` | 🟡 | |
 | `/more` | `/(tabs)/more` | ✅ | Mirrors web More + admin gating. |
@@ -46,7 +46,7 @@ interactions, states and data flow.
 | `/settings/appearance` | `/settings/appearance` | ✅ | Incl. lineStyle + connectGrades. |
 | `/settings/navigation` | `/settings/navigation` | ✅ | 3 tab slots, shared preference. |
 | `/settings/year` | `/settings/year` (+`/settings/periods`) | ✅ | Web field set + truthful destructive copy; periods drag with always-on grips. |
-| `/settings/averages` (+new/[id]) | `/settings/averages`, `/settings/average-edit` | 🟡 | Drag reorder in flight (agent). |
+| `/settings/averages` (+new/[id]) | `/settings/averages`, `/settings/average-edit` | ✅ | Always-on grips, web persistence and error copy. |
 | `/settings/account` | `/settings/account` | ✅ | Email change, credential linking, session sign-out, export/delete framing. |
 | `/settings/integrations` | `/settings/integrations` | ✅ | Full MCP story: server address, discovery metadata, grants with revocation, optional public client. |
 | `/settings/preset` | `/settings/preset` | ✅ | Web decision states (up to date / update ready / customized / blocked) with change summaries. |
