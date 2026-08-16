@@ -20,7 +20,7 @@ export function GradeList({ grades }: { grades: readonly Grade[] }) {
   return (
     <Card className="py-2">
       <CardContent className="px-2">
-        <ul>
+        <ul className="divide-y">
           {grades.map((grade) => {
             const subject = graph.byId(grade.subjectId)
 
