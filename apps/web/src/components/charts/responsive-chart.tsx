@@ -13,7 +13,13 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type PointerEvent as ReactPointerEvent,
 } from "react"
+import {
+  resolveChartDragIntent,
+  shouldPinChartInspection,
+  type ChartDragIntent,
+} from "./time-series-interaction"
 
 const MEASUREMENT_TOLERANCE = 0.5
 const subscribeToClient = () => () => undefined
@@ -51,6 +57,7 @@ export function ResponsiveChart<
   onRender,
   fill = false,
   entrance = "wipe",
+  touchInspection = false,
   updateTransition,
   ...props
 }: Omit<RendererChartProps<TDatum, TXValue, TYValue>, "renderer"> & {
@@ -69,6 +76,11 @@ export function ResponsiveChart<
    * chase; marks with their own state transitions still animate those.
    */
   updateTransition?: ChartMotionTransition
+  /**
+   * Lets a touch drag inspect the tooltip while preserving vertical page
+   * scrolling. Intended for compact, non-zoomable charts such as sparklines.
+   */
+  touchInspection?: boolean
 }) {
   const isClient = useSyncExternalStore(
     subscribeToClient,
@@ -78,6 +90,19 @@ export function ResponsiveChart<
   const [hasMeasuredLayout, setHasMeasuredLayout] = useState(false)
   const [box, setBox] = useState<{ width: number; height: number } | null>(null)
   const boxRef = useRef<HTMLDivElement | null>(null)
+  const renderContextRef = useRef<
+    ChartRendererRenderContext<TDatum, TXValue, TYValue> | undefined
+  >(undefined)
+  const touchPointersRef = useRef(new Set<number>())
+  const touchGestureRef = useRef<{
+    dragged: boolean
+    inspecting: boolean
+    intent: ChartDragIntent | null
+    originX: number
+    originY: number
+    pointerId: number
+  } | null>(null)
+  const focusFrameRef = useRef<number | undefined>(undefined)
 
   // The motion renderer animates the first client render — marks grow, draw
   // and stagger in — where the plain SVG renderer only animates updates.
@@ -90,6 +115,15 @@ export function ResponsiveChart<
         transition: updateTransition,
       }),
     [updateTransition]
+  )
+
+  useEffect(
+    () => () => {
+      if (focusFrameRef.current !== undefined) {
+        cancelAnimationFrame(focusFrameRef.current)
+      }
+    },
+    []
   )
 
   useEffect(() => {
@@ -120,6 +154,7 @@ export function ResponsiveChart<
 
   const handleRender = useCallback(
     (context: ChartRendererRenderContext<TDatum, TXValue, TYValue>) => {
+      renderContextRef.current = context
       onRender?.(context)
 
       const containerWidth = context.container.getBoundingClientRect().width
@@ -133,13 +168,135 @@ export function ResponsiveChart<
     [onRender]
   )
 
+  const pinTouchPointer = useCallback((clientX: number, clientY: number) => {
+    if (focusFrameRef.current !== undefined) {
+      cancelAnimationFrame(focusFrameRef.current)
+    }
+    focusFrameRef.current = requestAnimationFrame(() => {
+      focusFrameRef.current = undefined
+      const interaction = renderContextRef.current?.interaction
+      const resolution = interaction?.resolvePointer(clientX, clientY)
+      interaction?.setControlledFocus(resolution ?? null, {
+        pinned: true,
+        source: "pointer",
+      })
+    })
+  }, [])
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!touchInspection || event.pointerType === "mouse") return
+      touchPointersRef.current.add(event.pointerId)
+      if (touchPointersRef.current.size > 1) {
+        touchGestureRef.current = null
+        return
+      }
+
+      const context = renderContextRef.current
+      const position = context?.interaction.clientToScene(
+        event.clientX,
+        event.clientY
+      )
+      const chart = context?.scene.chart
+      if (
+        !context ||
+        !position ||
+        !chart ||
+        position.x < chart.x ||
+        position.x > chart.x + chart.width ||
+        position.y < chart.y ||
+        position.y > chart.y + chart.height
+      ) {
+        return
+      }
+
+      if (focusFrameRef.current !== undefined) {
+        cancelAnimationFrame(focusFrameRef.current)
+        focusFrameRef.current = undefined
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      touchGestureRef.current = {
+        dragged: false,
+        inspecting: false,
+        intent: null,
+        originX: event.clientX,
+        originY: event.clientY,
+        pointerId: event.pointerId,
+      }
+    },
+    [touchInspection]
+  )
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!touchInspection) return
+      const gesture = touchGestureRef.current
+      if (!gesture || gesture.pointerId !== event.pointerId) return
+
+      if (!gesture.intent) {
+        gesture.intent = resolveChartDragIntent(
+          event.clientX - gesture.originX,
+          event.clientY - gesture.originY
+        )
+        if (!gesture.intent) return
+        gesture.dragged = true
+      }
+      if (gesture.intent === "vertical") return
+
+      gesture.inspecting = true
+      const interaction = renderContextRef.current?.interaction
+      interaction?.setControlledFocus(
+        interaction.resolvePointer(event.clientX, event.clientY),
+        { source: "pointer" }
+      )
+    },
+    [touchInspection]
+  )
+
+  const finishPointer = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
+      if (!touchInspection || event.pointerType === "mouse") return
+      touchPointersRef.current.delete(event.pointerId)
+      const gesture = touchGestureRef.current
+      const wasTracked = gesture?.pointerId === event.pointerId
+      if (wasTracked) touchGestureRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+
+      if (
+        shouldPinChartInspection({
+          activePointers: touchPointersRef.current.size,
+          cancelled,
+          dragged: gesture?.dragged ?? false,
+          inspecting: gesture?.inspecting ?? false,
+          wasTracked,
+        })
+      ) {
+        pinTouchPointer(event.clientX, event.clientY)
+      }
+    },
+    [pinTouchPointer, touchInspection]
+  )
+
   return (
     <div
       ref={boxRef}
       aria-busy={hasMeasuredLayout ? undefined : true}
-      className={fill ? "relative h-full" : "relative"}
+      className={
+        (fill ? "relative h-full" : "relative") +
+        (touchInspection ? " select-none" : "")
+      }
       data-chart-layout={hasMeasuredLayout ? "measured" : "pending"}
-      style={fill ? undefined : { height: props.height }}
+      onLostPointerCapture={(event) => finishPointer(event, true)}
+      onPointerCancel={(event) => finishPointer(event, true)}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointer}
+      style={{
+        ...(fill ? undefined : { height: props.height }),
+        ...(touchInspection ? { touchAction: "pan-y pinch-zoom" } : undefined),
+      }}
     >
       <div
         aria-hidden="true"

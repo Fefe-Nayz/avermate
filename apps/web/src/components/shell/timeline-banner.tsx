@@ -139,10 +139,13 @@ export function TimelineBanner() {
                 disabled={totalDays === 0}
                 monthStarts={monthStarts}
                 ariaLabel={t("Date in the school year")}
-                ariaValueText={format.dateTime(
-                  new Date(minimum + selectedDay * DAY_IN_MS),
-                  { day: "numeric", month: "long", year: "numeric" }
-                )}
+                formatDayAction={(day) =>
+                  format.dateTime(new Date(minimum + day * DAY_IN_MS), {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                }
                 onSelectDay={(day) => {
                   if (day === selectedDay) return
                   haptic("light")
@@ -324,10 +327,13 @@ function TimelineMiniBar() {
                 disabled={totalDays === 0}
                 monthStarts={monthStarts}
                 ariaLabel={t("Date in the school year")}
-                ariaValueText={format.dateTime(
-                  new Date(minimum + selectedDay * DAY_IN_MS),
-                  { day: "numeric", month: "long", year: "numeric" }
-                )}
+                formatDayAction={(day) =>
+                  format.dateTime(new Date(minimum + day * DAY_IN_MS), {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                }
                 onSelectDay={(day) => {
                   if (day === selectedDay) return
                   haptic("light")

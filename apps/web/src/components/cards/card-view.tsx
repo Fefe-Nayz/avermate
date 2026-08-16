@@ -329,6 +329,7 @@ function Sparkline({
         fill
         height={56}
         initialWidth={180}
+        touchInspection
       />
     </div>
   )

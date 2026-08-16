@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -40,6 +41,7 @@ export default function AccountSettingsPage() {
   const t = useExtracted()
   const format = useFormatter()
   const queryClient = useQueryClient()
+  const router = useRouter()
   const { data: session } = useSession()
   const user = useAuthenticatedUser()
 
@@ -86,7 +88,7 @@ export default function AccountSettingsPage() {
       haptic("success")
       toast.success(t("Everything has been cleared."))
       await queryClient.invalidateQueries()
-      window.location.href = "/onboarding"
+      router.replace("/onboarding")
     },
   })
 

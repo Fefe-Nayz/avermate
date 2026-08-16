@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import {
   motion,
   AnimatePresence,
@@ -466,18 +467,23 @@ function IntroSlide({ year, userName, userAvatar }: SlideProps) {
 
           {userAvatar ? (
             <div className="h-20 w-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-              <img
+              <Image
+                unoptimized
                 src={userAvatar}
                 alt={userName || t("User")}
+                width={80}
+                height={80}
                 className="h-full w-full rounded-[10px] object-cover"
               />
             </div>
           ) : (
             <div className="h-20 w-20 rounded-xl p-1 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
               <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[calc(theme(borderRadius.xl)-2px)] bg-[#0a0a0a]">
-                <img
+                <Image
                   src="/logo.svg"
                   alt="Avermate"
+                  width={80}
+                  height={80}
                   className="h-full w-full object-contain"
                 />
               </div>
@@ -935,9 +941,12 @@ function HeatmapSlide({
       >
         <div className="flex items-center justify-center gap-3">
           {userAvatar ? (
-            <img
+            <Image
+              unoptimized
               src={userAvatar}
               alt={userName || ""}
+              width={40}
+              height={40}
               className="h-10 w-10 rounded-full object-cover"
               style={{ boxShadow: "inset 0 0 0 2px rgba(255, 255, 255, 0.2)" }}
             />
@@ -2725,11 +2734,14 @@ function OutroSlide({
         {/* Header - sized for canonical viewport */}
         <div className="mb-3 flex w-full shrink-0 items-center gap-2">
           {userAvatar ? (
-            <img
+            <Image
+              unoptimized
               src={userAvatar}
               alt={userName || ""}
+              width={40}
+              height={40}
               className="h-10 w-10 rounded-full object-cover"
-              style={{ boxShadow: "inset 0 0 0 2px rgba(255, 255, 255, 0.2)" }}
+              style={{ boxShadow: "inset 0 0 0 2px rgba(255, 255,255, 0.2)" }}
             />
           ) : (
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-base font-bold">

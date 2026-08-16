@@ -7,10 +7,13 @@ import {
   installNonPassiveWheelListener,
   normalizeWheelDelta,
   panDomainBy,
+  panLinearDomainByPixels,
   pinchDomainFromGesture,
+  resolveChartDragIntent,
   resolveChartKeyboardCommand,
   resolveNearestSeriesPoints,
   shouldHandleChartWheel,
+  shouldPinChartInspection,
   viewportValues,
   zoomDomainAt,
 } from "./time-series-interaction"
@@ -181,6 +184,21 @@ describe("semantic viewport", () => {
     )
   })
 
+  it("pans touch gestures from one fixed pixel baseline", () => {
+    assert.deepEqual(
+      panLinearDomainByPixels([20, 60], [0, 100], -25, 100),
+      [30, 70]
+    )
+    assert.deepEqual(
+      panLinearDomainByPixels([20, 60], [0, 100], -50, 100),
+      [40, 80]
+    )
+    assert.deepEqual(
+      panLinearDomainByPixels([0, 40], [0, 100], 50, 100),
+      [0, 40]
+    )
+  })
+
   it("resolves pinch zoom and translation from one fixed baseline", () => {
     const scale = scaleFor([20, 80])
     assert.deepEqual(
@@ -195,6 +213,37 @@ describe("semantic viewport", () => {
 })
 
 describe("interaction event arbitration", () => {
+  it("locks touch drags to an axis after a short hysteresis", () => {
+    assert.equal(resolveChartDragIntent(6, 4), null)
+    assert.equal(resolveChartDragIntent(9, 3), "horizontal")
+    assert.equal(resolveChartDragIntent(3, 9), "vertical")
+    assert.equal(resolveChartDragIntent(8, 8), "vertical")
+  })
+
+  it("pins taps and inspection drags, but not pans or cancelled gestures", () => {
+    const gesture = {
+      activePointers: 0,
+      cancelled: false,
+      dragged: false,
+      inspecting: false,
+      wasTracked: true,
+    }
+    assert.equal(shouldPinChartInspection(gesture), true)
+    assert.equal(
+      shouldPinChartInspection({ ...gesture, dragged: true, inspecting: true }),
+      true
+    )
+    assert.equal(shouldPinChartInspection({ ...gesture, dragged: true }), false)
+    assert.equal(
+      shouldPinChartInspection({ ...gesture, cancelled: true }),
+      false
+    )
+    assert.equal(
+      shouldPinChartInspection({ ...gesture, activePointers: 1 }),
+      false
+    )
+  })
+
   it("routes rapid pointer movement and clears on leave", () => {
     const moves: Array<readonly [number, number]> = []
     let clearCount = 0

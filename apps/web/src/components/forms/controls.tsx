@@ -595,13 +595,13 @@ export function DatePicker({
           type="button"
           id={id}
           disabled={disabled}
-          aria-invalid={invalid ? true : undefined}
+          data-invalid={invalid ? "" : undefined}
           onClick={() => {
             haptic("selection")
             setOpen(true)
           }}
           className={cn(
-            "flex min-h-12 w-full items-center gap-2 rounded-md border bg-transparent px-3 text-left text-sm shadow-xs disabled:opacity-50 aria-invalid:border-destructive",
+            "flex min-h-12 w-full items-center gap-2 rounded-md border bg-transparent px-3 text-left text-sm shadow-xs disabled:opacity-50 data-invalid:border-destructive",
             !selected && "text-muted-foreground",
             className
           )}

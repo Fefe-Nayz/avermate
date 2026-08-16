@@ -2,21 +2,52 @@
 
 import {
   useCallback,
+  useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react"
+import { useMotionValue, useSpring } from "motion/react"
 import { cn } from "@/lib/utils"
+
+const FALLBACK_TICK_TARGET = 96
+const MIN_TICK_GAP_PX = 4
+
+/** Keeps minor timeline ticks legible at every scrubber width. */
+export function resolveScrubberTickStep(totalDays: number, width: number) {
+  if (totalDays <= 0) return 1
+  if (width <= 0) {
+    return Math.max(1, Math.ceil((totalDays + 1) / FALLBACK_TICK_TARGET))
+  }
+  const visibleCapacity = Math.max(2, Math.floor(width / MIN_TICK_GAP_PX))
+  return Math.max(1, Math.ceil((totalDays + 1) / visibleCapacity))
+}
+
+/** Mount only ticks that can actually be seen; month anchors are never dropped. */
+export function resolveVisibleScrubberDays(
+  totalDays: number,
+  tickStep: number,
+  monthStarts: readonly number[]
+) {
+  const days = new Set<number>([0, totalDays])
+  for (let day = 0; day <= totalDays; day += Math.max(1, tickStep))
+    days.add(day)
+  for (const day of monthStarts) {
+    if (day >= 0 && day <= totalDays) days.add(day)
+  }
+  return [...days].sort((left, right) => left - right)
+}
 
 /**
  * A day-per-tick scrubber for time travel.
  *
  * Every day of the school year is one thin vertical tick, so the strip reads
  * as the year itself rather than an abstract slider track. Ticks near the
- * pointer swell (pure CSS, one custom property per frame), dragging or
- * clicking selects the day under the pointer, and days after the selection
+ * pointer spread apart (pure CSS custom properties), dragging or clicking
+ * selects the day under the pointer, and days after the selection
  * fade — they are the part of the year the rewind is hiding.
  */
 export function DayScrubber({
@@ -26,7 +57,7 @@ export function DayScrubber({
   monthStarts = [],
   disabled = false,
   ariaLabel,
-  ariaValueText,
+  formatDayAction,
   className,
 }: {
   /** Highest selectable day index; day 0 is the first day of the year. */
@@ -37,48 +68,161 @@ export function DayScrubber({
   monthStarts?: readonly number[]
   disabled?: boolean
   ariaLabel: string
-  /** Localized readout of the selected date for assistive tech. */
-  ariaValueText: string
+  /** Localized date for the live tooltip and assistive technology. */
+  formatDayAction: (day: number) => string
   className?: string
 }) {
   const stripRef = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLSpanElement>(null)
+  const geometryRef = useRef<{ left: number; width: number } | null>(null)
   // Touch drags preview without committing: every committed day re-filters
-  // the whole app, and doing that at finger speed janks a phone. The day
-  // under the finger is highlighted live, and committed once on release; a
-  // mouse commits continuously, since a desktop absorbs it.
+  // the whole app. Preview presentation therefore stays entirely outside
+  // React's render loop and commits only once on release.
   const draggingRef = useRef<{ touch: boolean } | null>(null)
-  const [previewDay, setPreviewDay] = useState<number | null>(null)
-  const months = new Set(monthStarts)
-  const shownDay = previewDay ?? selectedDay
+  const previewDayRef = useRef<number | null>(null)
+  const pendingMouseDayRef = useRef<number | null>(null)
+  const mouseCommitFrameRef = useRef<number | null>(null)
+  const [stripWidth, setStripWidth] = useState(0)
+  const months = useMemo(() => new Set(monthStarts), [monthStarts])
+  const visibleTickStep = resolveScrubberTickStep(totalDays, stripWidth)
+  const visibleDays = useMemo(
+    () => resolveVisibleScrubberDays(totalDays, visibleTickStep, monthStarts),
+    [monthStarts, totalDays, visibleTickStep]
+  )
 
-  const dayAt = useCallback(
+  // One spring drives the whole Dock-style magnification. Motion updates the
+  // CSS variable imperatively, so no React render occurs during enter/leave.
+  const boostTarget = useMotionValue(0)
+  const boostSpring = useSpring(boostTarget, {
+    stiffness: 520,
+    damping: 24,
+    mass: 0.55,
+  })
+
+  const measureStrip = useCallback(() => {
+    const strip = stripRef.current
+    if (!strip) return null
+    const rect = strip.getBoundingClientRect()
+    if (rect.width <= 0) return null
+    const geometry = { left: rect.left, width: rect.width }
+    geometryRef.current = geometry
+    strip.style.setProperty(
+      "--scrub-day-width",
+      `${rect.width / Math.max(1, totalDays)}px`
+    )
+    const width = Math.round(rect.width)
+    setStripWidth((current) => (current === width ? current : width))
+    return geometry
+  }, [totalDays])
+
+  useEffect(() => {
+    measureStrip()
+    const strip = stripRef.current
+    if (!strip || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measureStrip)
+    observer.observe(strip)
+    return () => observer.disconnect()
+  }, [measureStrip])
+
+  useEffect(
+    () =>
+      boostSpring.on("change", (value) => {
+        stripRef.current?.style.setProperty(
+          "--scrub-boost",
+          String(Math.min(1.12, Math.max(-0.12, value)))
+        )
+      }),
+    [boostSpring]
+  )
+
+  const pointAt = useCallback(
     (clientX: number) => {
-      const strip = stripRef.current
-      if (!strip || totalDays <= 0) return 0
-      const rect = strip.getBoundingClientRect()
-      if (rect.width <= 0) return 0
-      const ratio = (clientX - rect.left) / rect.width
-      return Math.min(totalDays, Math.max(0, Math.round(ratio * totalDays)))
+      const geometry = geometryRef.current ?? measureStrip()
+      if (!geometry || totalDays <= 0) return { cursorDay: 0, day: 0 }
+      const ratio = Math.min(
+        1,
+        Math.max(0, (clientX - geometry.left) / geometry.width)
+      )
+      const cursorDay = ratio * totalDays
+      return { cursorDay, day: Math.round(cursorDay) }
     },
-    [totalDays]
+    [measureStrip, totalDays]
   )
 
   const followCursor = useCallback(
-    (clientX: number) => {
+    (cursorDay: number) => {
+      stripRef.current?.style.setProperty("--cursor", String(cursorDay))
+      if (boostTarget.get() !== 1) boostTarget.set(1)
+    },
+    [boostTarget]
+  )
+
+  const positionSelection = useCallback(
+    (day: number) => {
       const strip = stripRef.current
-      if (!strip || totalDays <= 0) return
-      const rect = strip.getBoundingClientRect()
-      if (rect.width <= 0) return
-      const ratio = (clientX - rect.left) / rect.width
-      strip.style.setProperty("--cursor", String(ratio * totalDays))
-      strip.style.setProperty("--scrub-boost", "1")
+      if (!strip) return
+      strip.style.setProperty(
+        "--selection-position",
+        `${(day / Math.max(1, totalDays)) * 100}%`
+      )
+      strip.style.setProperty("--selection-day", String(day))
     },
     [totalDays]
   )
 
+  const updateTouchPreview = useCallback(
+    (day: number) => {
+      if (previewDayRef.current === day) return
+      previewDayRef.current = day
+      const label = formatDayAction(day)
+      const strip = stripRef.current
+      strip?.setAttribute("aria-valuenow", String(day))
+      strip?.setAttribute("aria-valuetext", label)
+      const tooltip = tooltipRef.current
+      if (tooltip) {
+        tooltip.classList.remove("invisible")
+        tooltip.textContent = label
+      }
+    },
+    [formatDayAction]
+  )
+
+  const commitMouseDay = useCallback(
+    (day: number) => {
+      if (pendingMouseDayRef.current === day) return
+      pendingMouseDayRef.current = day
+      if (mouseCommitFrameRef.current !== null) return
+      mouseCommitFrameRef.current = window.requestAnimationFrame(() => {
+        mouseCommitFrameRef.current = null
+        const next = pendingMouseDayRef.current
+        pendingMouseDayRef.current = null
+        if (next !== null) onSelectDay(next)
+      })
+    },
+    [onSelectDay]
+  )
+
+  useEffect(
+    () => () => {
+      if (mouseCommitFrameRef.current !== null) {
+        window.cancelAnimationFrame(mouseCommitFrameRef.current)
+      }
+    },
+    []
+  )
+
   const restCursor = useCallback(() => {
-    stripRef.current?.style.setProperty("--scrub-boost", "0")
-  }, [])
+    if (boostTarget.get() !== 0) boostTarget.set(0)
+  }, [boostTarget])
+
+  const handlePointerEnter = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (disabled) return
+      measureStrip()
+      followCursor(pointAt(event.clientX).cursorDay)
+    },
+    [disabled, followCursor, measureStrip, pointAt]
+  )
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -90,27 +234,45 @@ export function DayScrubber({
         // A capture refusal (exotic input, synthetic events) only costs the
         // capture; the drag still tracks while the pointer stays over us.
       }
+      measureStrip()
       const touch = event.pointerType !== "mouse"
       draggingRef.current = { touch }
-      followCursor(event.clientX)
-      const day = dayAt(event.clientX)
-      if (touch) setPreviewDay(day)
-      else onSelectDay(day)
+      const { cursorDay, day } = pointAt(event.clientX)
+      followCursor(cursorDay)
+      positionSelection(day)
+      if (touch) updateTouchPreview(day)
+      else commitMouseDay(day)
     },
-    [dayAt, disabled, followCursor, onSelectDay]
+    [
+      commitMouseDay,
+      disabled,
+      followCursor,
+      measureStrip,
+      pointAt,
+      positionSelection,
+      updateTouchPreview,
+    ]
   )
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (disabled) return
-      followCursor(event.clientX)
+      const { cursorDay, day } = pointAt(event.clientX)
+      followCursor(cursorDay)
       const dragging = draggingRef.current
       if (!dragging) return
-      const day = dayAt(event.clientX)
-      if (dragging.touch) setPreviewDay(day)
-      else onSelectDay(day)
+      positionSelection(day)
+      if (dragging.touch) updateTouchPreview(day)
+      else commitMouseDay(day)
     },
-    [dayAt, disabled, followCursor, onSelectDay]
+    [
+      commitMouseDay,
+      disabled,
+      followCursor,
+      pointAt,
+      positionSelection,
+      updateTouchPreview,
+    ]
   )
 
   const finishPointer = useCallback(
@@ -121,18 +283,34 @@ export function DayScrubber({
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
       if (dragging?.touch) {
-        setPreviewDay((preview: number | null) => {
-          if (preview !== null && event.type !== "pointercancel") {
-            onSelectDay(preview)
-          }
-          return null
-        })
+        const preview = previewDayRef.current
+        previewDayRef.current = null
+        tooltipRef.current?.classList.add("invisible")
+        if (event.type === "pointercancel") {
+          positionSelection(selectedDay)
+          const label = formatDayAction(selectedDay)
+          stripRef.current?.setAttribute("aria-valuenow", String(selectedDay))
+          stripRef.current?.setAttribute("aria-valuetext", label)
+        } else if (preview !== null) {
+          positionSelection(preview)
+          onSelectDay(preview)
+        }
+      } else if (dragging) {
+        if (mouseCommitFrameRef.current !== null) {
+          window.cancelAnimationFrame(mouseCommitFrameRef.current)
+          mouseCommitFrameRef.current = null
+        }
+        const pending = pendingMouseDayRef.current
+        pendingMouseDayRef.current = null
+        if (pending !== null && event.type !== "pointercancel") {
+          onSelectDay(pending)
+        }
       }
       if (event.type === "pointercancel" || event.pointerType !== "mouse") {
         restCursor()
       }
     },
-    [onSelectDay, restCursor]
+    [formatDayAction, onSelectDay, positionSelection, restCursor, selectedDay]
   )
 
   const handleKeyDown = useCallback(
@@ -171,40 +349,65 @@ export function DayScrubber({
       aria-orientation="horizontal"
       aria-valuemax={totalDays}
       aria-valuemin={0}
-      aria-valuenow={shownDay}
-      aria-valuetext={ariaValueText}
+      aria-valuenow={selectedDay}
+      aria-valuetext={formatDayAction(selectedDay)}
       className={cn(
-        "scrubber flex h-9 touch-none items-end justify-between overflow-hidden px-0.5 pb-0.5",
+        "scrubber relative h-16 touch-none overflow-hidden px-0.5 pb-0.5 md:h-9",
         disabled ? "opacity-50" : "cursor-pointer",
         className
       )}
+      data-base-ui-swipe-ignore=""
       onKeyDown={handleKeyDown}
       onPointerCancel={finishPointer}
       onPointerDown={handlePointerDown}
-      onPointerLeave={restCursor}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={() => {
+        if (!draggingRef.current) restCursor()
+      }}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
       ref={stripRef}
       role="slider"
+      style={
+        {
+          "--selection-day": selectedDay,
+          "--selection-position": `${
+            (selectedDay / Math.max(1, totalDays)) * 100
+          }%`,
+        } as CSSProperties
+      }
       tabIndex={disabled ? -1 : 0}
     >
-      {Array.from({ length: totalDays + 1 }, (_, day) => {
-        const isSelected = day === shownDay
+      <span
+        aria-hidden="true"
+        className="scrub-tooltip pointer-events-none invisible absolute top-0 z-20 max-w-32 truncate rounded-md border bg-popover/95 px-2 py-1 text-[11px] leading-4 font-medium whitespace-nowrap text-popover-foreground shadow-sm backdrop-blur-sm md:hidden"
+        ref={tooltipRef}
+      >
+        {formatDayAction(selectedDay)}
+      </span>
+      <span
+        aria-hidden="true"
+        className="scrub-selection pointer-events-none absolute bottom-0.5 z-10 h-8 w-0.5 rounded-full bg-primary md:h-6"
+      />
+      {visibleDays.map((day) => {
         const isMonthStart = months.has(day)
         return (
           <span
             aria-hidden="true"
             className={cn(
-              "scrub-tick pointer-events-none w-px shrink-0 sm:w-0.5",
-              isSelected
-                ? "h-6 bg-primary"
-                : isMonthStart
-                  ? "h-4 bg-muted-foreground/70"
-                  : "h-3 bg-muted-foreground/45",
-              !isSelected && day > shownDay && "opacity-40"
+              "scrub-tick pointer-events-none absolute bottom-0.5 block rounded-full",
+              isMonthStart
+                ? "h-5 w-0.5 bg-muted-foreground/70 md:h-4 md:w-px"
+                : "h-3.5 w-px bg-muted-foreground/45 md:h-3 md:w-0.5"
             )}
             key={day}
-            style={{ "--i": day } as CSSProperties}
+            style={
+              {
+                "--i": day,
+                "--scrub-scale-amplitude": 0.9,
+                "--tick-position": `${(day / Math.max(1, totalDays)) * 100}%`,
+              } as CSSProperties
+            }
           />
         )
       })}

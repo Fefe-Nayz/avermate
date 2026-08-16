@@ -18,14 +18,17 @@ import {
   useState,
 } from "react"
 import {
-  createPointerInspectionController,
   installNonPassiveWheelListener,
   type NumericDomain,
   normalizeWheelDelta,
   panDomainBy,
+  panLinearDomainByPixels,
   pinchDomainFromGesture,
+  resolveChartDragIntent,
   resolveChartKeyboardCommand,
   shouldHandleChartWheel,
+  shouldPinChartInspection,
+  type ChartDragIntent,
   zoomDomainAt,
 } from "./time-series-interaction"
 import { ResponsiveChart } from "./responsive-chart"
@@ -72,6 +75,11 @@ interface PointerPosition {
   sceneY: number
 }
 
+interface PanBaseline {
+  domain: NumericDomain
+  sceneX: number
+  width: number
+}
 interface PinchBaseline {
   distance: number
   domain: NumericDomain
@@ -103,7 +111,18 @@ function isInsidePlot<TDatum>(
 }
 
 /** Owns inspection and semantic-domain gestures around a native chart. */
-export function InteractiveTimeSeriesChart<TDatum>({
+export function InteractiveTimeSeriesChart<TDatum>(
+  props: InteractiveTimeSeriesChartProps<TDatum>
+) {
+  return (
+    <InteractiveTimeSeriesChartInner
+      key={`${props.domain[0]}:${props.domain[1]}`}
+      {...props}
+    />
+  )
+}
+
+function InteractiveTimeSeriesChartInner<TDatum>({
   ariaDescription,
   ariaLabel,
   buildDefinition,
@@ -128,51 +147,42 @@ export function InteractiveTimeSeriesChart<TDatum>({
   const gestureHostRef = useRef<HTMLDivElement>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const pinchBaselineRef = useRef<PinchBaseline | null>(null)
+  const panBaselineRef = useRef<PanBaseline | null>(null)
   const wheelArmedRef = useRef(false)
   const draggedRef = useRef(false)
-  const dragOriginRef = useRef<{ x: number; y: number } | null>(null)
+  const dragOriginRef = useRef<PointerPosition | null>(null)
+  const dragIntentRef = useRef<ChartDragIntent | null>(null)
+  const inspectingRef = useRef(false)
+  const focusFrameRef = useRef<number | undefined>(undefined)
   const frameRef = useRef<number | undefined>(undefined)
   const pendingViewportRef = useRef<NumericDomain | undefined>(undefined)
+  const onViewportChangeRef = useRef(onViewportChange)
+
+  useEffect(() => {
+    onViewportChangeRef.current = onViewportChange
+  }, [onViewportChange])
 
   useEffect(() => {
     viewportRef.current = viewport
   }, [viewport])
 
-  // Keyed on the domain's VALUES, not the array identity: callers rebuild
-  // their rows (and therefore this array) on unrelated re-renders, and a
-  // reset that fired on identity would wipe the viewport — and anything
-  // notified about it — every time the page breathed.
+  // The outer component remounts this implementation only when the domain's
+  // values change, so all viewport and gesture state resets atomically.
   const domainStart = domain[0]
   const domainEnd = domain[1]
   useEffect(() => {
-    if (frameRef.current !== undefined) {
-      cancelAnimationFrame(frameRef.current)
-      frameRef.current = undefined
-    }
-    pendingViewportRef.current = undefined
-    pointersRef.current.clear()
-    pinchBaselineRef.current = null
-    wheelArmedRef.current = false
-    dragOriginRef.current = null
-    draggedRef.current = false
-    renderContextRef.current?.interaction.setControlledFocus(null)
-    const next: NumericDomain = [domainStart, domainEnd]
-    viewportRef.current = next
-    setViewport(next)
-    onViewportChangeRef.current?.(next)
+    onViewportChangeRef.current?.([domainStart, domainEnd])
   }, [domainStart, domainEnd])
 
   useEffect(
     () => () => {
       if (frameRef.current !== undefined) cancelAnimationFrame(frameRef.current)
+      if (focusFrameRef.current !== undefined) {
+        cancelAnimationFrame(focusFrameRef.current)
+      }
     },
     []
   )
-
-  const onViewportChangeRef = useRef(onViewportChange)
-  useEffect(() => {
-    onViewportChangeRef.current = onViewportChange
-  }, [onViewportChange])
 
   const commitViewport = useCallback((next: NumericDomain) => {
     viewportRef.current = next
@@ -245,20 +255,32 @@ export function InteractiveTimeSeriesChart<TDatum>({
     )
   }, [])
 
-  const inspection = useMemo(
-    () =>
-      createPointerInspectionController({
-        clear: () =>
-          renderContextRef.current?.interaction.setControlledFocus(null),
-        inspect,
-      }),
-    [inspect]
-  )
+  const clearInspection = useCallback(() => {
+    renderContextRef.current?.interaction.setControlledFocus(null)
+  }, [])
+
+  // TanStack also receives the synthesized mobile click after pointerup. Pin
+  // one frame later so our deliberate tap/drag result is the final focus.
+  const pinPointer = useCallback((clientX: number, clientY: number) => {
+    if (focusFrameRef.current !== undefined) {
+      cancelAnimationFrame(focusFrameRef.current)
+    }
+    focusFrameRef.current = requestAnimationFrame(() => {
+      focusFrameRef.current = undefined
+      const interaction = renderContextRef.current?.interaction
+      const resolution = interaction?.resolvePointer(clientX, clientY)
+      interaction?.setControlledFocus(resolution ?? null, {
+        pinned: true,
+        source: "pointer",
+      })
+    })
+  }, [])
 
   const startPinch = useCallback(() => {
     const scale = renderContextRef.current?.scene.scales.x
     const entries = [...pointersRef.current.entries()]
     pinchBaselineRef.current = null
+    panBaselineRef.current = null
     if (!scale || entries.length < 2) {
       return
     }
@@ -285,12 +307,34 @@ export function InteractiveTimeSeriesChart<TDatum>({
       const position = resolvePosition(event.clientX, event.clientY)
       if (!position) return
 
+      if (focusFrameRef.current !== undefined) {
+        cancelAnimationFrame(focusFrameRef.current)
+        focusFrameRef.current = undefined
+      }
       event.currentTarget.setPointerCapture(event.pointerId)
       wheelArmedRef.current = true
       pointersRef.current.set(event.pointerId, position)
-      if (pointersRef.current.size === 2) startPinch()
-      dragOriginRef.current ??= { x: event.clientX, y: event.clientY }
-      draggedRef.current = false
+      if (pointersRef.current.size === 1) {
+        const chart = renderContextRef.current?.scene.chart
+        dragOriginRef.current = position
+        dragIntentRef.current =
+          event.pointerType === "mouse" ? "horizontal" : null
+        panBaselineRef.current = chart
+          ? {
+              domain: viewportRef.current,
+              sceneX: position.sceneX,
+              width: chart.width,
+            }
+          : null
+        inspectingRef.current = false
+        draggedRef.current = false
+      } else {
+        dragIntentRef.current = "horizontal"
+        panBaselineRef.current = null
+        inspectingRef.current = false
+        draggedRef.current = true
+        if (pointersRef.current.size === 2) startPinch()
+      }
     },
     [resolvePosition, startPinch]
   )
@@ -301,30 +345,27 @@ export function InteractiveTimeSeriesChart<TDatum>({
       const previous = pointersRef.current.get(event.pointerId)
       if (!context || !previous) {
         if (event.pointerType === "mouse") {
-          inspection.move(event.clientX, event.clientY)
+          inspect(event.clientX, event.clientY)
         }
         return
       }
 
-      // Pointer capture intentionally keeps an active gesture continuous when
-      // a finger or mouse crosses the plot edge. Only gesture start is bounded.
+      // Pointer capture keeps an accepted horizontal gesture continuous when
+      // it crosses the plot edge. `touch-action: pan-y` still lets the browser
+      // cancel us and own a vertical page scroll.
       const current = resolvePosition(event.clientX, event.clientY, false)
       if (!current) return
       const origin = dragOriginRef.current
-      if (
-        origin &&
-        Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 4
-      ) {
-        draggedRef.current = true
-      }
-
       const scale = context.scene.scales.x
       if (!scale) return
       pointersRef.current.set(event.pointerId, current)
       const pointers = [...pointersRef.current.values()]
-      context.interaction.setControlledFocus(null)
 
       if (pointers.length >= 2) {
+        draggedRef.current = true
+        dragIntentRef.current = "horizontal"
+        inspectingRef.current = false
+        context.interaction.setControlledFocus(null)
         const baseline = pinchBaselineRef.current
         if (!baseline) {
           startPinch()
@@ -353,21 +394,57 @@ export function InteractiveTimeSeriesChart<TDatum>({
         return
       }
 
-      const delta = current.sceneX - previous.sceneX
+      if (!origin) return
+      if (event.pointerType !== "mouse") {
+        let intent = dragIntentRef.current
+        if (!intent) {
+          intent = resolveChartDragIntent(
+            event.clientX - origin.clientX,
+            event.clientY - origin.clientY
+          )
+          if (!intent) return
+          dragIntentRef.current = intent
+        }
+        draggedRef.current = true
+        if (intent === "vertical") {
+          inspectingRef.current = false
+          return
+        }
+      } else if (
+        Math.hypot(
+          event.clientX - origin.clientX,
+          event.clientY - origin.clientY
+        ) > 4
+      ) {
+        draggedRef.current = true
+      }
+
+      // At the full-domain view there is nowhere to pan. A horizontal drag is
+      // therefore useful inspection instead, keeping the tooltip under a
+      // finger just as hover does under a mouse.
+      if (sameDomain(viewportRef.current, domain)) {
+        inspectingRef.current = true
+        inspect(event.clientX, event.clientY)
+        return
+      }
+
+      inspectingRef.current = false
+      context.interaction.setControlledFocus(null)
+      const baseline = panBaselineRef.current
+      if (!baseline) return
+      const delta = current.sceneX - baseline.sceneX
       if (delta !== 0) {
         commitViewport(
-          panDomainBy(scale, viewportRef.current, domain, delta, maximumZoom)
+          panLinearDomainByPixels(
+            baseline.domain,
+            domain,
+            delta,
+            baseline.width
+          )
         )
       }
     },
-    [
-      commitViewport,
-      domain,
-      inspection,
-      maximumZoom,
-      resolvePosition,
-      startPinch,
-    ]
+    [commitViewport, domain, inspect, maximumZoom, resolvePosition, startPinch]
   )
 
   const finishPointer = useCallback(
@@ -378,32 +455,48 @@ export function InteractiveTimeSeriesChart<TDatum>({
       }
 
       if (
-        wasTracked &&
-        !cancelled &&
-        !draggedRef.current &&
-        pointersRef.current.size === 0
+        shouldPinChartInspection({
+          activePointers: pointersRef.current.size,
+          cancelled,
+          dragged: draggedRef.current,
+          inspecting: inspectingRef.current,
+          wasTracked,
+        })
       ) {
-        const resolution = renderContextRef.current?.interaction.resolvePointer(
-          event.clientX,
-          event.clientY
-        )
-        renderContextRef.current?.interaction.setControlledFocus(
-          resolution ?? null,
-          { pinned: true, source: "pointer" }
-        )
+        pinPointer(event.clientX, event.clientY)
       }
 
       if (pointersRef.current.size === 0) {
         pinchBaselineRef.current = null
+        panBaselineRef.current = null
         dragOriginRef.current = null
+        dragIntentRef.current = null
+        inspectingRef.current = false
         draggedRef.current = false
       } else if (pointersRef.current.size >= 2) {
+        panBaselineRef.current = null
+        dragIntentRef.current = "horizontal"
         startPinch()
       } else {
+        // Continue smoothly as a one-finger pan after one finger leaves a
+        // pinch. Start from the latest semantic domain, not the renderer's
+        // possibly one-frame-old scale.
+        const remaining = [...pointersRef.current.values()][0] ?? null
+        const chart = renderContextRef.current?.scene.chart
         pinchBaselineRef.current = null
+        dragOriginRef.current = remaining
+        dragIntentRef.current = "horizontal"
+        panBaselineRef.current =
+          remaining && chart
+            ? {
+                domain: viewportRef.current,
+                sceneX: remaining.sceneX,
+                width: chart.width,
+              }
+            : null
       }
     },
-    [startPinch]
+    [pinPointer, startPinch]
   )
 
   const handleWheel = useCallback(
@@ -534,7 +627,7 @@ export function InteractiveTimeSeriesChart<TDatum>({
   return (
     <div className={className}>
       <div
-        className="relative overscroll-contain select-none"
+        className="relative select-none"
         onKeyDownCapture={handleKeyDown}
         onLostPointerCapture={(event) => finishPointer(event, true)}
         onPointerCancel={(event) => finishPointer(event, true)}
@@ -542,13 +635,13 @@ export function InteractiveTimeSeriesChart<TDatum>({
         onPointerLeave={() => {
           if (pointersRef.current.size === 0) {
             wheelArmedRef.current = false
-            inspection.leave()
+            clearInspection()
           }
         }}
         onPointerMove={handlePointerMove}
         onPointerUp={finishPointer}
         ref={gestureHostRef}
-        style={{ touchAction: "none", ...style }}
+        style={{ touchAction: "pan-y", ...style }}
       >
         <ResponsiveChart
           ariaDescription={`${ariaDescription ? `${ariaDescription} ` : ""}${interactionHint}`}

@@ -24,6 +24,72 @@ export {
   type NumericDomain,
 }
 
+export type ChartDragIntent = "horizontal" | "vertical"
+
+/**
+ * Waits out touch jitter, then commits to one axis for the rest of the drag.
+ * Ties favor vertical movement so page scrolling remains the safer default.
+ */
+export function resolveChartDragIntent(
+  deltaX: number,
+  deltaY: number,
+  threshold = 8
+): ChartDragIntent | null {
+  if (Math.hypot(deltaX, deltaY) < threshold) return null
+  return Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical"
+}
+
+/**
+ * Pans a linear semantic domain from one fixed pointer-down baseline.
+ *
+ * Gesture renders are frame-batched, so the renderer scale can briefly lag
+ * behind the latest semantic viewport. Deriving every move from pixels and
+ * the baseline domain avoids feeding a new domain through that stale scale,
+ * which otherwise reads as a tiny rollback during fast touch drags.
+ */
+export function panLinearDomainByPixels(
+  baseline: NumericDomain,
+  full: NumericDomain,
+  deltaPixels: number,
+  plotWidth: number
+): NumericDomain {
+  if (!Number.isFinite(deltaPixels) || !Number.isFinite(plotWidth) || plotWidth <= 0) {
+    return baseline
+  }
+  const span = baseline[1] - baseline[0]
+  const fullStart = Math.min(full[0], full[1])
+  const fullEnd = Math.max(full[0], full[1])
+  const shift = -(deltaPixels / plotWidth) * span
+  let start = baseline[0] + shift
+  let end = baseline[1] + shift
+  if (start < fullStart) {
+    end += fullStart - start
+    start = fullStart
+  }
+  if (end > fullEnd) {
+    start -= end - fullEnd
+    end = fullEnd
+  }
+  return [Math.max(fullStart, start), Math.min(fullEnd, end)]
+}
+export function shouldPinChartInspection({
+  activePointers,
+  cancelled,
+  dragged,
+  inspecting,
+  wasTracked,
+}: {
+  activePointers: number
+  cancelled: boolean
+  dragged: boolean
+  inspecting: boolean
+  wasTracked: boolean
+}): boolean {
+  return (
+    wasTracked && !cancelled && activePointers === 0 && (!dragged || inspecting)
+  )
+}
+
 interface NearestSeriesOptions<TDatum> {
   getSeriesId: (datum: TDatum) => string
   getTimestamp?: (datum: TDatum) => number
