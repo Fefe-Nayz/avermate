@@ -32,7 +32,7 @@ interactions, states and data flow.
 | `/dashboard/cards/new` (gallery+builder) | `/settings/cards` → gallery + card-edit | ✅ | Gallery + slots shipped; IA differs (settings entry) — acceptable, note. |
 | `/dashboard/cards/[cardId]` | `/settings/card-edit?id` | ✅ | |
 | `/insights` (+cards) | `/(tabs)/insights` | ✅ | Widget surface + editor + gallery. |
-| `/grades` | `/(tabs)/grades` | 🟡 | Search/sort/month groups ✅; web view switcher (timeline/table/calendar) ❌ — decide: port both views. |
+| `/grades` | `/(tabs)/grades` | ✅ | Search/sort/month groups + the web's three views: result-band calendar (day detail below grid, latest month first) and hierarchical table (horizontal scroll in card, general + custom average footer). View persisted per account. |
 | `/grades/new`, `[id]`, `[id]/edit` | `/grade/*` | 🟡 | Flows exist; visual pass pending. |
 | `/subjects` | `/(tabs)/subjects` | 🟡 | List exists; web drag reorder ❌; custom-averages header restyle parity check. |
 | `/subjects/[subjectId]` | `/subject/[id]` | ✅ | Charts, search+5 sorts, child sort, impact, patterns. |
@@ -66,9 +66,10 @@ interactions, states and data flow.
 | Area | Status | Notes |
 |---|---|---|
 | Charts: curves/dots/tooltip/presets/y-frame | ✅ | Commit 073164b, geometry unit-tested. |
-| Charts: trend line, passing-line exact style, tooltip order, axis formats, legend restyle | 🟡 | Agent in flight. |
+| Charts: trend line, passing-line exact style, tooltip order, axis formats, legend restyle, wipe entrance | ✅ | Segmented trend via the same core function (dashed 5 4, muted, framed); tooltip = web layout (shared-day header, bold values, per-row dates); axes 5 ticks/1 digit; legend rests as web's dotted list, toggle kept; 800ms wipe respecting reduced motion. Remaining sub-pixel deltas of the single-series web chart documented in the agent report. |
 | Radar chart (dashboard "Main subjects at a glance") | ✅ | Web spec geometry ported (folded spoke labels, polygon rings, tap tooltip), unit-tested; mounted on the home tab. |
-| Drag & drop: cards grid, subjects, goals, averages, periods, preset editor | 🟡 | Sortable primitive + goals/averages in flight; then subjects/year/preset/cards grid. |
+| Drag & drop: goals, averages | ✅ | Reusable touch sortable (200ms hold, closest-centre projection, velocity settle, autoscroll, reduced-motion, a11y move actions; 21 math tests). Goals = web reorder mode with overlay grips; averages = always-on grips + web persistence/error copy. |
+| Drag & drop: subjects, year periods, preset editor, cards grid | 🟡 | Adopt the shipped primitive on these four surfaces next. |
 | Rewind / timeline scrubbing | ✅ | Scope-bar timeline panel now uses the web's day-per-tick scrubber (month-start ticks, drag previews, commit on release) instead of a slider. Gaussian tick magnify (decorative CSS) intentionally not ported. |
 | Localization FR/EN | ✅ | Catalogue tests enforce 1:1; keep green per slice. |
 | Themes light/dark/system + presets + seasonal | ✅ | Web base tokens mirrored; presets/seasonal already wired via theme-presets. Custom theme studio parity to verify. |
