@@ -31,6 +31,7 @@ import {
 } from "@/components/ui";
 import { AverageValue, DeltaValue, ResultBadge } from "@/components/value";
 import { Sparkline } from "@/components/sparkline";
+import { SubjectRadar } from "@/components/charts/subject-radar";
 import { ScopeBar } from "@/components/scope-bar";
 import { formatDay } from "@/components/date-field";
 import { useYear } from "@/components/year-provider";
@@ -64,6 +65,7 @@ export default function Dashboard() {
     subjects,
     period,
     passingRatio,
+    scale,
     refresh,
     timelineDate,
     now,
@@ -71,6 +73,25 @@ export default function Dashboard() {
   const plans = useGoalPlans();
 
   const general = graph.ratio(null);
+
+  // The headline subjects on one comparable scale, exactly as the web
+  // dashboard's radar prepares them.
+  const radarPoints = useMemo(
+    () =>
+      graph.subjects.flatMap((subject) => {
+        if (!subject.isMain) return [];
+        const subjectRatio = graph.ratio(subject.id);
+        return subjectRatio === null
+          ? []
+          : [
+              {
+                subject: subject.shortName ?? subject.name,
+                value: subjectRatio * scale,
+              },
+            ];
+      }),
+    [graph, scale],
+  );
 
   // The running average, day by day, so the line is the year as it was lived
   // rather than a smoothing of the final numbers.
@@ -405,6 +426,18 @@ export default function Dashboard() {
               onPress={() => router.push("/insights")}
             />
           </Card>
+        </Section>
+      ) : null}
+
+      {radarPoints.length >= 3 ? (
+        <Section title={t("Main subjects at a glance")}>
+          <SubjectRadar
+            points={radarPoints}
+            scale={scale}
+            formatValue={(value) =>
+              value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+            }
+          />
         </Section>
       ) : null}
 

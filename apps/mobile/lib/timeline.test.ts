@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { SubjectGraph } from "@avermate/core";
 import {
   clampTimelineDay,
+  DAY_IN_MS,
   dayAtOffset,
+  monthStartOffsets,
   subjectsAtTimelineDay,
   timelineBounds,
 } from "./timeline";
@@ -53,5 +55,21 @@ describe("identity/year-safe semantic time travel", () => {
     );
     const graph = new SubjectGraph(visible);
     expect(graph.allGrades().map((item) => item.id)).toEqual(["past"]);
+  });
+});
+
+describe("monthStartOffsets", () => {
+  test("finds every first-of-month inside the timeline", () => {
+    const year = {
+      startsAt: new Date("2025-09-15T00:00:00.000Z"),
+      endsAt: new Date("2026-06-30T00:00:00.000Z"),
+    };
+    const now = new Date("2025-12-10T12:00:00.000Z").getTime();
+    const offsets = monthStartOffsets(year, now);
+    const { minimum } = timelineBounds(year, now);
+    expect(offsets.length).toBe(3); // Oct 1, Nov 1, Dec 1
+    for (const offset of offsets) {
+      expect(new Date(minimum + offset * DAY_IN_MS).getDate()).toBe(1);
+    }
   });
 });

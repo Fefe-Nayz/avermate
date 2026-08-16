@@ -35,6 +35,9 @@ export interface Palette {
   positive: string;
   negative: string;
 
+  /** The web's --chart-1 token; palette presets may override it. */
+  chart1: string;
+
   band: Record<ResultBand, string>;
   bandSoft: Record<ResultBand, string>;
 }
@@ -60,6 +63,8 @@ const light: Palette = {
 
   positive: "#2F855A",
   negative: "#DC2626",
+
+  chart1: "#D4D4D4",
 
   band: {
     excellent: "#1E7A4E",
@@ -95,6 +100,8 @@ const dark: Palette = {
 
   positive: "#5BBE8A",
   negative: "#F87171",
+
+  chart1: "#D4D4D4",
 
   band: {
     excellent: "#5BBE8A",

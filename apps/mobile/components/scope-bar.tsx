@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
-import { NativeSlider } from "@/components/native-controls";
+import { DayScrubber } from "@/components/day-scrubber";
 import { formatDate } from "@/components/format";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
@@ -11,6 +11,7 @@ import {
   calendarDayTimestamp,
   dayAtOffset,
   isoCalendarDay,
+  monthStartOffsets,
   offsetForTimelineDay,
   timelineBounds,
 } from "@/lib/timeline";
@@ -47,6 +48,7 @@ export function ScopeBar() {
   if (!year) return null;
 
   const bounds = timelineBounds(year, now);
+  const monthStarts = monthStartOffsets(year, now);
   const selectedDay = timelineDate
     ? offsetForTimelineDay(timelineDate, year, now)
     : bounds.totalDays;
@@ -331,14 +333,14 @@ export function ScopeBar() {
               <Icon name="remove" size={18} color={palette.textMuted} />
             </Pressable>
             <View style={{ flex: 1 }}>
-              <NativeSlider
-                min={0}
-                max={Math.max(1, bounds.totalDays)}
-                step={1}
-                value={selectedDay}
-                onValueChange={(value) =>
-                  setTimelineDate(dayAtOffset(year, now, value))
-                }
+              <DayScrubber
+                totalDays={Math.max(1, bounds.totalDays)}
+                selectedDay={selectedDay}
+                monthStarts={monthStarts}
+                onCommit={(day) => {
+                  haptic("selection");
+                  setTimelineDate(dayAtOffset(year, now, day));
+                }}
               />
             </View>
             <Pressable

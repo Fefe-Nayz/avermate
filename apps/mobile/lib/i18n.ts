@@ -1324,6 +1324,8 @@ const fr: Record<string, string> = {
   "Nothing of this kind exists in this year yet.":
     "Rien de ce type n'existe encore dans cette année.",
 
+  "Main subjects at a glance": "Les matières principales en un coup d'œil",
+
   // ------------------------------------------------------------- formula v2
   "Built-in metric": "Métrique intégrée",
   "Same as the card": "Comme la carte",

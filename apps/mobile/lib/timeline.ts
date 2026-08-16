@@ -100,3 +100,19 @@ export function subjectsAtTimelineDay(
     ),
   }));
 }
+
+/**
+ * Day offsets (from the timeline start) that fall on the first of a month —
+ * the taller ticks on the rewind scrubber.
+ */
+export function monthStartOffsets(
+  year: Pick<Year, "startsAt" | "endsAt">,
+  now: number,
+): number[] {
+  const { minimum, totalDays } = timelineBounds(year, now);
+  const offsets: number[] = [];
+  for (let day = 0; day <= totalDays; day += 1) {
+    if (new Date(minimum + day * DAY_IN_MS).getDate() === 1) offsets.push(day);
+  }
+  return offsets;
+}
