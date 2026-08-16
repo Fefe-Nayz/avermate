@@ -15,10 +15,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
-import { CoefficientBadge, ResultBadge } from "@/components/data/value"
 import { SortMenu } from "@/components/data/sort-menu"
 import { useYear } from "@/components/year/year-provider"
 import { HierarchicalGradeTable } from "@/components/grades/hierarchical-grade-table"
+import { GradeList } from "@/components/grades/grade-list"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
 import { GradeCalendar } from "@/components/grades/grade-calendar"
 import { useStickyState } from "@/hooks/use-sticky-state"
@@ -253,35 +253,7 @@ export default function GradesPage() {
                   {group.label}
                 </h2>
               ) : null}
-              <ul className="overflow-hidden rounded-xl border bg-card">
-                {group.grades.map((grade, index) => (
-                  <li
-                    key={grade.id}
-                    className={index > 0 ? "border-t" : undefined}
-                  >
-                    <Link
-                      href={`/grades/${grade.id}`}
-                      className="flex min-h-14 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {grade.name}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {graph.byId(grade.subjectId)?.name}
-                          {" · "}
-                          {format.dateTime(grade.passedAt, {
-                            day: "numeric",
-                            month: "short",
-                          })}
-                        </p>
-                      </div>
-                      <CoefficientBadge coefficient={grade.coefficient} />
-                      <ResultBadge ratio={gradeRatio(grade)} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <GradeList grades={group.grades} />
             </section>
           ))
         )}
