@@ -20,8 +20,8 @@ interactions, states and data flow.
 | Web route | Mobile route | Status | Notes |
 |---|---|---|---|
 | `/` landing | — | ➖ | Marketing page; app opens to auth/dashboard. |
-| `/auth/sign-in` | `/sign-in` | 🟡 | Flows work; visual pass vs web pending. |
-| `/auth/sign-up` | `/sign-up` | 🟡 | Same. |
+| `/auth/sign-in` | `/sign-in` | ✅ | Structure verified side-by-side (expo-web vs web @393px): title 30/600, OAuth Google+Microsoft, email/password, forgot + create links. |
+| `/auth/sign-up` | `/sign-up` | ✅ | Verified: name/email/password + OAuth + submit, FR copy. |
 | `/auth/forgot-password` | `/forgot-password` | 🟡 | Reset link lands on web (`/auth/reset-password`) — document deep-link story. |
 | `/auth/reset-password` | — | ➖ | Email links target the web app; acceptable, verify copy mentions it. |
 | `/auth/verify` | `/verify-email` | 🟡 | |
@@ -57,7 +57,7 @@ interactions, states and data flow.
 | `/admin/announcements` | `/admin/announcements` | 🟡 | |
 | `/admin/feedback` | `/admin/feedback` (+[id]) | 🟡 | |
 | `/admin/presets` (+editor) | `/admin/presets`, `/admin/preset/*` | 🟡 | Web visual editor uses drag — port after sortable primitive lands. |
-| `/admin/card-templates` (+new) | in flight (agent) | ❌→🟡 | List/curation screen being built; from-scratch builder link after. |
+| `/admin/card-templates` | `/admin/card-templates` | ✅ | Curation screen: draft-from-card, live previews (WidgetResultRenderer + slot substitution), metadata editing, publish/archive — web payload parity. From-scratch builder (web `/new`) intentionally deferred: mobile builder-with-submission-override is a follow-up; no dead button shipped. |
 | `/admin/social/*` | `/admin/social/*` | 🟡 | |
 | — | `/settings/system-widget`, `/settings/widget-library`, `/settings/feedback`, `/social/blocks`, `/social/report` | ➖ | Legitimate mobile-only capabilities (§17) — preserve. |
 

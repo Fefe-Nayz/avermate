@@ -1312,6 +1312,19 @@ const fr: Record<string, string> = {
   "No grade matches.": "Aucune note ne correspond.",
   "Search grades…": "Rechercher des notes…",
 
+  // ------------------------------------------------------- admin card gallery
+  Draft: "Brouillon",
+  "{count} installer choices": "{count} choix d'installation",
+  "Untitled card": "Carte sans titre",
+  "Curated card templates every account can browse and install. Lift one of your existing cards — references to your entities become the installer's choices.":
+    "Des modèles de cartes que chaque compte peut parcourir et installer. Élevez une de vos cartes existantes — ses références deviennent les choix de l'installateur.",
+  "Pick one of your cards…": "Choisissez une de vos cartes…",
+  "Create a draft from it": "En créer un brouillon",
+  "Draft created": "Brouillon créé",
+  "No templates yet.": "Aucun modèle pour l'instant.",
+  "Create the first draft from one of your cards.":
+    "Créez le premier brouillon à partir d'une de vos cartes.",
+
   // ------------------------------------------------------------ card gallery
   "Card gallery": "Galerie de cartes",
   "Browse the gallery": "Parcourir la galerie",

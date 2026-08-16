@@ -1,5 +1,5 @@
 import type { Grade, SeriesPoint, Subject } from "@avermate/core";
-import { gradeRatio } from "@avermate/core";
+import { gradeRatio, segmentedTrendLine } from "@avermate/core";
 
 const DAY_IN_MS = 86_400_000;
 
@@ -18,6 +18,8 @@ export interface SerializableChartSeries {
   /** How the run between samples is drawn. Dots always render for "none". */
   line?: "full" | "faint" | "none";
   points: SerializableChartPoint[];
+  /** The series the dashed trend follows, as the web subject page flags it. */
+  primary?: boolean;
 }
 
 export interface SerializableTimeSeriesModel {
@@ -41,6 +43,7 @@ export interface TimeSeriesInput {
     id?: string;
     value: number | null;
   }>;
+  primary?: boolean;
 }
 
 function safeDomain(values: readonly number[]): readonly [number, number] {
@@ -68,6 +71,7 @@ export function createSerializableTimeSeriesModel(input: {
     id: item.id,
     label: item.label,
     line: item.line,
+    primary: item.primary,
     points: item.points.flatMap((point, index): SerializableChartPoint[] => {
       const timestamp = point.date.getTime();
       if (
@@ -122,6 +126,7 @@ export function averageSeriesInput(input: {
   color: string;
   id: string;
   label: string;
+  primary?: boolean;
   scale: number;
   series: readonly SeriesPoint[];
 }): TimeSeriesInput {
@@ -129,12 +134,65 @@ export function averageSeriesInput(input: {
     color: input.color,
     id: input.id,
     label: input.label,
+    primary: input.primary,
     points: input.series.map((point, index) => ({
       date: point.date,
       id: `${input.id}:${point.date.getTime()}:${index}`,
       value: point.ratio === null ? null : point.ratio * input.scale,
     })),
   };
+}
+
+/**
+ * The dashed trend the web charts draw when `showTrend` is on, computed with
+ * the exact same core segments (`segmentedTrendLine`) over ratio space and
+ * mapped back onto the chart's scale.
+ *
+ * Which samples feed it mirrors the web outcome for every mobile chart:
+ * a series flagged `primary` wins (the web subject page flags the subject's
+ * own average); otherwise the first full-line series — mobile callers seat
+ * the principal average first where the web flags it; otherwise the chart is
+ * a dots-only grade cloud and, like the web grade chart, every visible
+ * sample is pooled chronologically into one trend source.
+ */
+export function createTrendChartSeries(input: {
+  maximumScale: number;
+  series: readonly SerializableChartSeries[];
+  subdivisions: number;
+}): SerializableChartSeries | null {
+  if (!(input.maximumScale > 0)) return null;
+  const populated = input.series.filter((item) => item.points.length > 0);
+  const principal =
+    populated.find((item) => item.primary) ??
+    populated.find((item) => (item.line ?? "full") === "full");
+  const source = principal
+    ? principal.points
+    : populated
+        .flatMap((item) => item.points)
+        .sort((left, right) => left.timestamp - right.timestamp);
+  if (source.length < 2) return null;
+
+  const trend = segmentedTrendLine(
+    source.map((point) => ({
+      date: new Date(point.timestamp),
+      ratio: point.value / input.maximumScale,
+    })),
+    input.subdivisions,
+  );
+  const points = trend.flatMap((point, index): SerializableChartPoint[] => {
+    const timestamp = point.date.getTime();
+    if (point.ratio === null || !Number.isFinite(timestamp)) return [];
+    return [
+      {
+        id: `trend:${timestamp}:${index}`,
+        timestamp,
+        value: point.ratio * input.maximumScale,
+      },
+    ];
+  });
+  if (points.length < 2) return null;
+
+  return { color: "", id: "__trend__", label: "", points };
 }
 
 /** Actual assessments grouped into irregular, independently focused series. */

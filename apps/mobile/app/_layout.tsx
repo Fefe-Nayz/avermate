@@ -419,6 +419,10 @@ function ReadyLayout({ scope }: { scope: QueryScope }) {
                   options={{ title: t("Managed presets") }}
                 />
                 <Stack.Screen
+                  name="admin/card-templates"
+                  options={{ title: t("Card gallery") }}
+                />
+                <Stack.Screen
                   name="admin/preset/new"
                   options={{ title: t("New managed preset") }}
                 />

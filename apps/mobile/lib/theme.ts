@@ -215,6 +215,8 @@ export const type = {
   hero: { fontSize: 56, lineHeight: 60, fontWeight: "700" as const },
   display: { fontSize: 34, lineHeight: 38, fontWeight: "700" as const },
   title: { fontSize: 24, lineHeight: 30, fontWeight: "600" as const },
+  /** The web's auth-screen headline: text-3xl semibold. */
+  titleLarge: { fontSize: 30, lineHeight: 36, fontWeight: "600" as const },
   heading: { fontSize: 17, lineHeight: 22, fontWeight: "600" as const },
   section: { fontSize: 14, lineHeight: 19, fontWeight: "500" as const },
   body: { fontSize: 15, lineHeight: 21, fontWeight: "400" as const },

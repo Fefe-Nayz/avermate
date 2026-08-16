@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, {
   Circle,
@@ -18,13 +18,19 @@ import {
   type NumericDomain,
   type NumericScaleLike,
 } from "@avermate/core/chart-interaction";
+import { haptic } from "@/lib/haptics";
+import { useInteractionPreferences } from "@/lib/interaction-preferences";
 import { radius, space, type } from "@/lib/theme";
-import type { SerializableTimeSeriesModel } from "./time-series-model";
+import {
+  createTrendChartSeries,
+  type SerializableTimeSeriesModel,
+} from "./time-series-model";
 import {
   GUTTER_RIGHT,
   GUTTER_TOP,
   createXScale,
   createYScale,
+  linePath,
   niceTicks,
   plotRect,
   projectSeries,
@@ -49,8 +55,15 @@ import {
  * painting and touch.
  */
 
-/** Beyond this many samples the dots merge into a smear and only cost frames. */
-const MAX_VISIBLE_DOTS = 140;
+/**
+ * Beyond this many samples the dots merge into a smear and only cost frames.
+ * The web multi-series chart draws its optional points up to the same count.
+ */
+const MAX_VISIBLE_DOTS = 160;
+
+/** The web chart's entrance wipe: 800ms, cubic-bezier(0.25, 1, 0.4, 1). */
+const ENTRANCE_DURATION_MS = 800;
+const ENTRANCE_EASING = Easing.bezier(0.25, 1, 0.4, 1);
 
 const DAY_IN_MS = 86_400_000;
 
@@ -79,6 +92,9 @@ export interface TimeSeriesChartProps {
   model: SerializableTimeSeriesModel;
   passingValue?: number;
   showPoints: boolean;
+  /** Draw the dashed piecewise trend the web charts derive from the data. */
+  showTrend?: boolean;
+  trendSubdivisions?: number;
   strings: {
     hideSeries: string;
     reset: string;
@@ -108,6 +124,8 @@ export function TimeSeriesChart({
   model,
   passingValue,
   showPoints,
+  showTrend = false,
+  trendSubdivisions = 1,
   strings,
   theme,
   zoomPresets,
@@ -131,25 +149,78 @@ export function TimeSeriesChart({
     setPointer(null);
   }, [domain]);
 
+  // The web chart wipes in left to right on mount (clip-path, 800ms); here a
+  // surface-coloured curtain slides off the plot once the width is known.
+  // Reduced motion skips straight to the settled chart.
+  const { reduceMotion } = useInteractionPreferences();
+  const [entered, setEntered] = useState(false);
+  const entranceProgress = useRef(new Animated.Value(0)).current;
+  const entranceStartedRef = useRef(false);
+  useEffect(() => {
+    if (entranceStartedRef.current || width === 0) return;
+    entranceStartedRef.current = true;
+    if (reduceMotion) {
+      setEntered(true);
+      return;
+    }
+    Animated.timing(entranceProgress, {
+      duration: ENTRANCE_DURATION_MS,
+      easing: ENTRANCE_EASING,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setEntered(true);
+    });
+  }, [entranceProgress, reduceMotion, width]);
+
   const number = new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-GB", {
     maximumFractionDigits: 2,
   });
+  // The web y-axis rounds harder than the tooltip: one fraction digit.
+  const axisNumber = new Intl.NumberFormat(
+    locale === "fr" ? "fr-FR" : "en-GB",
+    { maximumFractionDigits: 1 },
+  );
   const shortDate = new Intl.DateTimeFormat(
     locale === "fr" ? "fr-FR" : "en-GB",
     { day: "numeric", month: "short" },
+  );
+  const longDate = new Intl.DateTimeFormat(
+    locale === "fr" ? "fr-FR" : "en-GB",
+    { day: "numeric", month: "long" },
   );
 
   const plot = plotRect(width, height);
   const hidden = new Set(hiddenIds);
   const visibleSeries = model.series.filter((series) => !hidden.has(series.id));
 
+  // The same core segments the web draws, following the primary series (or
+  // the pooled grade cloud), recomputed when a legend toggle changes the mix.
+  const trendSeries = useMemo(
+    () =>
+      showTrend
+        ? createTrendChartSeries({
+            maximumScale: model.maximumScale,
+            series: model.series.filter(
+              (series) => !hiddenIds.includes(series.id),
+            ),
+            subdivisions: trendSubdivisions,
+          })
+        : null,
+    [hiddenIds, model, showTrend, trendSubdivisions],
+  );
+
   const zoomed = !sameDomain(viewport, domain);
   // While zoomed, the y-window follows what is visible so a run can leave
-  // the frame through the sides but never through the top or bottom.
+  // the frame through the sides but never through the top or bottom. The
+  // trend counts too: the web frames its trend rows alongside the data.
+  const framingSeries = trendSeries
+    ? [...visibleSeries, trendSeries]
+    : visibleSeries;
   const yDomain =
-    model.autoZoom && zoomed
+    model.autoZoom && (zoomed || trendSeries)
       ? viewportYDomain(
-          visibleSeries,
+          framingSeries,
           viewport,
           model.maximumScale,
           model.yDomain,
@@ -164,6 +235,17 @@ export function TimeSeriesChart({
     scaleY,
     lineStyle,
   );
+  // Piecewise-linear like the web's, whatever the line-style preference says,
+  // and never part of inspection or dots: it is a reading, not a sample.
+  const trendPath = trendSeries
+    ? linePath(
+        trendSeries.points.map(
+          (point) =>
+            [scaleX.map(point.timestamp), scaleY(point.value)] as const,
+        ),
+        "straight",
+      )
+    : "";
 
   const inspected =
     pointer && projected.length > 0
@@ -277,6 +359,7 @@ export function TimeSeriesChart({
     );
   };
   const applyPreset = (preset: ZoomPresetString) => {
+    haptic("selection");
     if (preset.days === null) {
       changeViewport(domain);
       return;
@@ -286,24 +369,30 @@ export function TimeSeriesChart({
   };
 
   const yTicks = niceTicks(yDomain[0], yDomain[1], 5);
-  const xTicks = width > 0 ? timeTicks(viewport, 4) : [];
+  // The web thins its date labels to a 40px minimum gap, keeping the ends;
+  // a width-aware count approximates that on whatever screen this is.
+  const xTickCount = Math.max(2, Math.min(7, Math.round(plot.width / 90)));
+  const xTicks = width > 0 ? timeTicks(viewport, xTickCount) : [];
 
-  // Series drawn without a run keep their dots no matter what: dots are the
-  // whole mark there, not an ornament.
-  const dotOnlySeries = new Set(
+  // Grade series keep their dots no matter what: the dots ARE the mark there
+  // (the faint connector is a reading aid), not an ornament over a line.
+  const gradeStyleSeries = new Set(
     visibleSeries
-      .filter((series) => (series.line ?? "full") === "none")
+      .filter((series) => {
+        const line = series.line ?? "full";
+        return line === "none" || line === "faint";
+      })
       .map((series) => series.id),
   );
   const dots = projected.filter(
     (point) =>
-      dotOnlySeries.has(point.datum.seriesId) ||
+      gradeStyleSeries.has(point.datum.seriesId) ||
       (showPoints && projected.length <= MAX_VISIBLE_DOTS),
   );
   const primary = inspected[0];
   const tooltipRight = primary ? primary.x > plot.x + plot.width / 2 : false;
 
-  // One shared day reads once under the rows; mixed days label every row so
+  // One shared day reads once above the rows; mixed days label every row so
   // no value is ever shown against a date that is not its own.
   const sharedDay =
     inspected.length > 0 &&
@@ -315,13 +404,20 @@ export function TimeSeriesChart({
 
   return (
     <View>
+      {/*
+       * Reads like the web legend at rest — a small colour dot beside a
+       * muted 12px label — but stays tappable: hiding a series is a mobile
+       * extra the web keeps in its header controls. Hidden series dim and
+       * strike through instead of losing their place in the list.
+       */}
       <View
         style={{
+          columnGap: space.md,
           flexDirection: "row",
           flexWrap: "wrap",
-          gap: space.xs,
           paddingHorizontal: space.lg,
           paddingTop: space.sm,
+          rowGap: space.xs,
         }}
       >
         {model.series.map((series) => {
@@ -338,8 +434,10 @@ export function TimeSeriesChart({
               accessibilityRole="button"
               accessibilityState={{ disabled: last, selected: !isHidden }}
               disabled={last}
+              hitSlop={6}
               key={series.id}
               onPress={() => {
+                haptic("selection");
                 setPointer(null);
                 setHiddenIds((current) =>
                   current.includes(series.id)
@@ -349,32 +447,30 @@ export function TimeSeriesChart({
               }}
               style={{
                 alignItems: "center",
-                backgroundColor: isHidden ? "transparent" : `${series.color}1F`,
-                borderColor: isHidden ? theme.border : series.color,
-                borderRadius: radius.pill,
-                borderWidth: 1,
                 flexDirection: "row",
-                gap: 5,
+                gap: 6,
                 maxWidth: "100%",
                 minHeight: 28,
-                opacity: isHidden ? 0.6 : 1,
-                paddingHorizontal: 9,
-                paddingVertical: 3,
+                opacity: isHidden ? 0.45 : 1,
               }}
             >
               <View
                 style={{
                   backgroundColor: series.color,
                   borderRadius: radius.pill,
-                  height: 7,
-                  width: 7,
+                  height: 8,
+                  width: 8,
                 }}
               />
               <Text
                 numberOfLines={1}
                 style={[
-                  type.footnote,
-                  { color: isHidden ? theme.muted : theme.text, flexShrink: 1 },
+                  type.caption,
+                  {
+                    color: theme.muted,
+                    flexShrink: 1,
+                    textDecorationLine: isHidden ? "line-through" : "none",
+                  },
                 ]}
               >
                 {series.label}
@@ -433,7 +529,7 @@ export function TimeSeriesChart({
             new Date(viewport[1]),
           )}`}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-          style={{ height }}
+          style={{ height, overflow: "hidden" }}
         >
           {width > 0 ? (
             <Svg height={height} width={width}>
@@ -462,10 +558,10 @@ export function TimeSeriesChart({
                     fill={theme.muted}
                     fontSize={11}
                     textAnchor="end"
-                    x={plot.x - 7}
+                    x={plot.x - 8}
                     y={scaleY(tick) + 4}
                   >
-                    {number.format(tick)}
+                    {axisNumber.format(tick)}
                   </SvgText>
                 </G>
               ))}
@@ -476,10 +572,14 @@ export function TimeSeriesChart({
                   fontSize={11}
                   key={`x-${index}`}
                   textAnchor={
-                    index === 0 ? "start" : index === 3 ? "end" : "middle"
+                    index === 0
+                      ? "start"
+                      : index === xTicks.length - 1
+                        ? "end"
+                        : "middle"
                   }
                   x={scaleX.map(tick)}
-                  y={plot.y + plot.height + 15}
+                  y={plot.y + plot.height + 16}
                 >
                   {shortDate.format(new Date(tick))}
                 </SvgText>
@@ -522,22 +622,35 @@ export function TimeSeriesChart({
                       stroke={series.color}
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeOpacity={series.line === "faint" ? 0.35 : 1}
-                      strokeWidth={series.line === "faint" ? 1.25 : 2.25}
+                      strokeOpacity={series.line === "faint" ? 0.45 : 1}
+                      strokeWidth={series.line === "faint" ? 1.5 : 2.25}
                     />
                   ))}
 
-                {dots.map((point) => (
-                  <Circle
-                    cx={point.x}
-                    cy={point.y}
-                    fill={point.datum.color}
-                    key={point.datum.id}
-                    r={dotOnlySeries.has(point.datum.seriesId) ? 3.5 : 2.5}
-                    stroke={theme.background}
-                    strokeWidth={1}
+                {trendPath ? (
+                  <Path
+                    d={trendPath}
+                    fill="none"
+                    stroke={theme.muted}
+                    strokeDasharray="5 4"
+                    strokeWidth={1.5}
                   />
-                ))}
+                ) : null}
+
+                {dots.map((point) => {
+                  const grade = gradeStyleSeries.has(point.datum.seriesId);
+                  return (
+                    <Circle
+                      cx={point.x}
+                      cy={point.y}
+                      fill={point.datum.color}
+                      key={point.datum.id}
+                      r={grade ? 4 : 2.5}
+                      stroke={theme.background}
+                      strokeWidth={grade ? 1.5 : 1}
+                    />
+                  );
+                })}
 
                 {inspected.map((point) => (
                   <Circle
@@ -545,7 +658,7 @@ export function TimeSeriesChart({
                     cy={point.y}
                     fill={point.datum.color}
                     key={`active-${point.datum.id}`}
-                    r={5}
+                    r={gradeStyleSeries.has(point.datum.seriesId) ? 6 : 5}
                     stroke={theme.background}
                     strokeWidth={2}
                   />
@@ -554,7 +667,36 @@ export function TimeSeriesChart({
             </Svg>
           ) : null}
 
+          {!entered && width > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                backgroundColor: theme.background,
+                bottom: 0,
+                left: 0,
+                position: "absolute",
+                top: 0,
+                transform: [
+                  {
+                    translateX: entranceProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, width],
+                    }),
+                  },
+                ],
+                width,
+              }}
+            />
+          ) : null}
+
           {primary ? (
+            /*
+             * The web tooltip's shape: one quiet date line on top when every
+             * row shares the day (long month), otherwise a short date under
+             * each row so no value is ever labeled with a wrong date. Rows
+             * read muted-label-then-bold-value, dots are the web's little
+             * rounded squares.
+             */
             <View
               pointerEvents="none"
               style={{
@@ -562,7 +704,7 @@ export function TimeSeriesChart({
                 borderColor: theme.border,
                 borderRadius: radius.md,
                 borderWidth: 1,
-                gap: 3,
+                gap: 6,
                 left: tooltipRight ? undefined : primary.x + 12,
                 maxWidth: Math.max(120, plot.width - 24),
                 padding: space.sm,
@@ -574,40 +716,62 @@ export function TimeSeriesChart({
                 ),
               }}
             >
-              {inspected.map((point) => (
-                <View
-                  key={`tip-${point.datum.id}`}
-                  style={{ alignItems: "center", flexDirection: "row", gap: 6 }}
-                >
-                  <View
-                    style={{
-                      backgroundColor: point.datum.color,
-                      borderRadius: radius.pill,
-                      height: 7,
-                      width: 7,
-                    }}
-                  />
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      type.footnote,
-                      { color: theme.text, flexShrink: 1 },
-                    ]}
-                  >
-                    {(point.datum.detail
-                      ? `${number.format(point.datum.value)} · ${point.datum.detail}`
-                      : `${point.datum.label} · ${number.format(point.datum.value)}`) +
-                      (sharedDay
-                        ? ""
-                        : ` · ${shortDate.format(new Date(point.datum.timestamp))}`)}
-                  </Text>
-                </View>
-              ))}
               {sharedDay ? (
-                <Text style={[type.footnote, { color: theme.muted }]}>
-                  {shortDate.format(new Date(primary.datum.timestamp))}
+                <Text style={[type.caption, { color: theme.muted }]}>
+                  {longDate.format(new Date(primary.datum.timestamp))}
                 </Text>
               ) : null}
+              {inspected.map((point) => (
+                <View key={`tip-${point.datum.id}`} style={{ gap: 2 }}>
+                  <View
+                    style={{
+                      alignItems: "center",
+                      flexDirection: "row",
+                      gap: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: point.datum.color,
+                        borderRadius: 2,
+                        height: 8,
+                        width: 8,
+                      }}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        type.footnote,
+                        { color: theme.muted, flexGrow: 1, flexShrink: 1 },
+                      ]}
+                    >
+                      {point.datum.detail ?? point.datum.label}
+                    </Text>
+                    <Text
+                      style={[
+                        type.footnote,
+                        {
+                          color: theme.text,
+                          fontVariant: ["tabular-nums"],
+                          fontWeight: "700",
+                        },
+                      ]}
+                    >
+                      {number.format(point.datum.value)}
+                    </Text>
+                  </View>
+                  {sharedDay ? null : (
+                    <Text
+                      style={[
+                        type.caption,
+                        { color: theme.muted, paddingLeft: 14 },
+                      ]}
+                    >
+                      {shortDate.format(new Date(point.datum.timestamp))}
+                    </Text>
+                  )}
+                </View>
+              ))}
             </View>
           ) : null}
 

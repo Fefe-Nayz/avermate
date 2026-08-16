@@ -205,6 +205,26 @@ describe("line paths and viewport framing", () => {
     }
   });
 
+  test("faint grade connectors stay straight whatever the line style says", () => {
+    const plot = plotRect(360, 240);
+    const scaleX = createXScale([0, 2 * DAY], plot);
+    const scaleY = createYScale([0, 20], plot);
+    const { paths } = projectSeries(
+      [
+        { ...series("grades", "#111", [10, 16, 11]), line: "faint" },
+        series("average", "#222", [10, 16, 11]),
+      ],
+      scaleX,
+      scaleY,
+      "smooth",
+    );
+
+    // A smooth sweep between unrelated assessments would claim a
+    // relationship, so the connector refuses the curve the average takes.
+    expect(paths.find((path) => path.id === "grades")?.path).not.toContain("C");
+    expect(paths.find((path) => path.id === "average")?.path).toContain("C");
+  });
+
   test("projectSeries tags each path with its line treatment", () => {
     const plot = plotRect(360, 240);
     const { paths } = projectSeries(

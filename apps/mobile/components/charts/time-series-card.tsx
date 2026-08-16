@@ -35,7 +35,8 @@ export function TimeSeriesCard({
   zoomPresets?: boolean;
 }) {
   const palette = usePalette();
-  const { lineStyle, showPoints } = useChartSettings();
+  const { lineStyle, showPoints, showTrend, trendSubdivisions } =
+    useChartSettings();
   const points = model.series.reduce(
     (total, series) => total + series.points.length,
     0,
@@ -79,6 +80,8 @@ export function TimeSeriesCard({
           model={model}
           passingValue={passingValue}
           showPoints={showPoints}
+          showTrend={showTrend}
+          trendSubdivisions={trendSubdivisions}
           strings={{
             hideSeries: t("Hide {name}"),
             reset: t("Reset chart view"),

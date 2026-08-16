@@ -233,6 +233,10 @@ export function linePath(
 /**
  * Project every visible sample once, producing both the path for each series
  * and the flat point list the nearest-point search consumes.
+ *
+ * Faint grade connectors ignore the line-style preference and stay straight,
+ * as on the web: a smooth or stepped sweep between unrelated assessments
+ * would claim a relationship that does not exist.
  */
 export function projectSeries(
   series: readonly SerializableChartSeries[],
@@ -268,7 +272,7 @@ export function projectSeries(
       color: item.color,
       id: item.id,
       line: item.line ?? "full",
-      path: linePath(coords, lineStyle),
+      path: linePath(coords, item.line === "faint" ? "straight" : lineStyle),
     });
   }
 

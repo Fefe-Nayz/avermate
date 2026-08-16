@@ -80,7 +80,7 @@ export default function SignIn() {
       >
         <View style={{ gap: space.sm }}>
           <Wordmark />
-          <Text style={[type.display, { color: palette.text }]}>
+          <Text style={[type.titleLarge, { color: palette.text }]}>
             {t("Sign in")}
           </Text>
           <Text style={[type.callout, { color: palette.textMuted }]}>
