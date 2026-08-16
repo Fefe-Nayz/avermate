@@ -11,7 +11,6 @@ import {
   Empty,
   Loading,
   Note,
-  Problem,
   Row,
   Screen,
   Section,
@@ -43,6 +42,7 @@ export default function FriendDetail() {
         queryKey: orpc.social.friends.list.queryKey(),
       });
       router.back();
+      Alert.alert(t("Friend removed."));
     },
   });
   const block = useMutation({
@@ -58,6 +58,7 @@ export default function FriendDetail() {
         }),
       ]);
       router.back();
+      Alert.alert(t("Account blocked."));
     },
   });
 
@@ -74,6 +75,13 @@ export default function FriendDetail() {
             icon="person-outline"
             title={t("This friend could not be found")}
             body={t("The friendship may have been removed.")}
+            action={
+              <Button
+                label={t("Back to friends")}
+                variant="secondary"
+                onPress={() => router.back()}
+              />
+            }
           />
         ) : (
           <>
@@ -112,7 +120,10 @@ export default function FriendDetail() {
                 ) : null}
 
                 {friend.sharing.subjects.length ? (
-                  <Section title={t("Shared subjects")}>
+                  <Section
+                    title={t("Shared subjects")}
+                    description={t("Only what they unlocked appears here.")}
+                  >
                     <Card padded={false}>
                       {friend.sharing.subjects.map((subject, index) => (
                         <Row
@@ -144,7 +155,8 @@ export default function FriendDetail() {
                 icon="eye-off-outline"
                 title={t("Nothing is shared right now")}
                 body={t(
-                  "They locked their figures, or have no academic year to share yet.",
+                  "{name} has locked their figures, or has no academic year to share yet.",
+                  { name: friend.name },
                 )}
               />
             )}
@@ -159,7 +171,7 @@ export default function FriendDetail() {
                     Alert.alert(
                       t("Remove this friend?"),
                       t(
-                        "Neither of you will see the other's figures any more.",
+                        "Neither of you will see the other's figures any more. Either of you can send a new request later.",
                       ),
                       [
                         { text: t("Cancel"), style: "cancel" },
@@ -183,7 +195,7 @@ export default function FriendDetail() {
                     Alert.alert(
                       t("Block this account?"),
                       t(
-                        "The friendship ends immediately and they can no longer reach you. They are not notified.",
+                        "The friendship ends immediately and they can no longer send you requests or invitations. They are not notified.",
                       ),
                       [
                         { text: t("Cancel"), style: "cancel" },

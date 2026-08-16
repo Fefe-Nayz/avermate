@@ -1,19 +1,19 @@
 import { useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
-import type { Subject } from "@avermate/core";
-import { Button, Card, Label, Screen } from "@/components/ui";
-import { NativeSwitch } from "@/components/native-controls";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { Button, Note, Problem, Screen } from "@/components/ui";
 import {
   ChoiceField,
   FieldGroup,
   PickerField,
   TextField,
+  SwitchField,
   type Choice,
 } from "@/components/field";
 import { useYear } from "@/components/year-provider";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import { space, type, usePalette } from "@/lib/theme";
+import { space } from "@/lib/theme";
+import type { Subject } from "@avermate/core";
 
 /**
  * A subject, or a category.
@@ -23,6 +23,9 @@ import { space, type, usePalette } from "@/lib/theme";
  * with its own weight, a category dissolves and its children are weighed
  * individually one level up. Getting that wrong quietly changes every average,
  * so the hint under each option is not decoration.
+ *
+ * Field order, copy and validation follow the web `SubjectForm` step for step:
+ * name and short name, where it sits, then how it counts.
  */
 
 export interface SubjectDraft {
@@ -43,11 +46,14 @@ export interface SubjectPayload {
   isMain: boolean;
 }
 
-export function emptySubjectDraft(parentId?: string): SubjectDraft {
+export function emptySubjectDraft(
+  parentId?: string,
+  kind: "subject" | "category" = "subject",
+): SubjectDraft {
   return {
     name: "",
     shortName: "",
-    kind: "subject",
+    kind,
     parentId: parentId ?? null,
     coefficient: "1",
     isMain: false,
@@ -85,11 +91,12 @@ export function SubjectForm({
   excludeId?: string;
   extra?: React.ReactNode;
 }) {
-  const palette = usePalette();
   const { yearGraph } = useYear();
   const [touched, setTouched] = useState(false);
 
-  const parents = useMemo(() => {
+  // A subject cannot sit inside itself, and neither can it sit inside one of
+  // its own descendants — that branch would detach from the year.
+  const parents = useMemo<Choice[]>(() => {
     const banned = new Set<string>();
     if (excludeId) {
       banned.add(excludeId);
@@ -98,20 +105,17 @@ export function SubjectForm({
       }
     }
 
-    const walk = (nodes: readonly Subject[], depth: number): Choice[] =>
-      [...nodes]
-        .sort(
-          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-        )
-        .filter((subject) => !banned.has(subject.id))
-        .flatMap((subject) => [
-          { value: subject.id, label: subject.name, depth },
-          ...walk(yearGraph.childrenOf(subject.id), depth + 1),
-        ]);
-
     return [
       { value: "__root__", label: t("Top level") },
-      ...walk(yearGraph.roots, 0),
+      ...yearGraph
+        .flatten()
+        .filter((subject) => !banned.has(subject.id))
+        .map((subject) => ({
+          value: subject.id,
+          label: subject.name,
+          depth: yearGraph.depthOf(subject.id) + 1,
+          hint: subject.kind === "category" ? t("group") : undefined,
+        })),
     ];
   }, [yearGraph, excludeId]);
 
@@ -124,7 +128,7 @@ export function SubjectForm({
   const submit = () => {
     setTouched(true);
     if (nameProblem) {
-      haptic("error");
+      haptic("warning");
       return;
     }
     onSubmit({
@@ -132,7 +136,7 @@ export function SubjectForm({
       shortName: draft.shortName.trim() || null,
       kind: draft.kind,
       parentId: draft.parentId,
-      coefficient: Number(draft.coefficient.replace(",", ".")) || 1,
+      coefficient: Number.parseFloat(draft.coefficient.replace(",", ".")) || 1,
       isMain: draft.isMain,
     });
   };
@@ -150,16 +154,30 @@ export function SubjectForm({
             label={t("Name")}
             value={draft.name}
             onChangeText={(name) => patch({ name })}
-            placeholder={t("Mathematics, Philosophy…")}
+            placeholder={t("Mathematics, Physics, Written exam…")}
             error={touched ? (nameProblem ?? undefined) : undefined}
             autoFocus
           />
 
-          <TextField
-            label={t("Short name")}
-            value={draft.shortName}
-            onChangeText={(shortName) => patch({ shortName })}
-            placeholder={t("Used where space is tight")}
+          <View style={{ gap: space.sm }}>
+            <TextField
+              label={t("Short name")}
+              value={draft.shortName}
+              onChangeText={(shortName) => patch({ shortName })}
+              placeholder={t("Maths")}
+              maxLength={24}
+            />
+            <Note>{t("Used on charts and narrow screens. Optional.")}</Note>
+          </View>
+
+          <PickerField
+            label={t("Sits inside")}
+            choices={parents}
+            value={draft.parentId ?? "__root__"}
+            onChange={(parentId) =>
+              patch({ parentId: parentId === "__root__" ? null : parentId })
+            }
+            placeholder={t("Top level")}
           />
 
           <ChoiceField
@@ -170,64 +188,51 @@ export function SubjectForm({
               {
                 value: "subject",
                 label: t("Subject"),
-                hint: t("Counts once, with its own average and weight"),
+                hint: t(
+                  "Counted once, with its own weight, using its own average.",
+                ),
               },
               {
                 value: "category",
                 label: t("Category"),
                 hint: t(
-                  "Just a grouping — its children are weighed one by one",
+                  "A heading. What it contains is weighed one by one at the level above.",
                 ),
               },
             ]}
           />
 
-          <PickerField
-            label={t("Inside")}
-            choices={parents}
-            value={draft.parentId ?? "__root__"}
-            onChange={(parentId) =>
-              patch({ parentId: parentId === "__root__" ? null : parentId })
-            }
-          />
-
           {draft.kind === "subject" ? (
-            <TextField
-              label={t("Weight")}
-              value={draft.coefficient}
-              onChangeText={(coefficient) => patch({ coefficient })}
-              keyboardType="decimal-pad"
-              align="right"
-            />
-          ) : null}
-
-          <Card>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: space.md,
-              }}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Label>{t("Show on the dashboard")}</Label>
-                <Text style={[type.footnote, { color: palette.textMuted }]}>
-                  {t("Keeps this one in front of you all year.")}
-                </Text>
-              </View>
-              <NativeSwitch
-                value={draft.isMain}
-                onValueChange={(isMain) => patch({ isMain })}
+            <View style={{ gap: space.sm }}>
+              <TextField
+                label={t("Weight")}
+                value={draft.coefficient}
+                onChangeText={(coefficient) => patch({ coefficient })}
+                keyboardType="decimal-pad"
+                align="right"
               />
+              <Note>
+                {t("How much this subject counts against its siblings.")}
+              </Note>
             </View>
-          </Card>
+          ) : (
+            <Note>
+              {t("A category carries no weight of its own — its contents do.")}
+            </Note>
+          )}
+
+          <SwitchField
+            label={t("Show on the dashboard")}
+            hint={t("Pinned to the sidebar and the home screen")}
+            value={draft.isMain}
+            onValueChange={(isMain) => {
+              haptic("selection");
+              patch({ isMain });
+            }}
+          />
         </FieldGroup>
 
-        {error ? (
-          <Text style={[type.footnote, { color: palette.negative }]}>
-            {error}
-          </Text>
-        ) : null}
+        {error ? <Problem>{error}</Problem> : null}
 
         {extra}
       </Screen>

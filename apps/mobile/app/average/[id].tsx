@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "@/components/icon";
-import { averageOverTime, dayRange, gradeRatio } from "@avermate/core";
+import { averageEventDates, averageOverTime, gradeRatio } from "@avermate/core";
 import { averageAnalytics } from "@/components/averages/average-analytics";
 import {
   TimeSeriesCard,
@@ -13,21 +13,29 @@ import {
   createSerializableTimeSeriesModel,
 } from "@/components/charts/time-series-model";
 import { formatDay } from "@/components/format";
-import { Card, Empty, Loading, Row, Screen, Section } from "@/components/ui";
+import { ScopeBar } from "@/components/scope-bar";
+import {
+  Button,
+  Card,
+  Empty,
+  Label,
+  Loading,
+  Row,
+  Screen,
+  Section,
+} from "@/components/ui";
 import {
   AverageValue,
   CoefficientTag,
   DeltaValue,
-  PercentValue,
-  PointsValue,
   ResultBadge,
 } from "@/components/value";
 import { useYear } from "@/components/year-provider";
 import { useChartSettings } from "@/lib/chart-settings";
 import { haptic } from "@/lib/haptics";
-import { t } from "@/lib/i18n";
+import { locale, t } from "@/lib/i18n";
 import { timelineCutoffTimestamp } from "@/lib/timeline";
-import { space, type, usePalette } from "@/lib/theme";
+import { numeric, radius, space, type, usePalette } from "@/lib/theme";
 
 /** General and custom averages share one analytical destination on mobile. */
 export default function AverageDetail() {
@@ -52,6 +60,9 @@ export default function AverageDetail() {
     [customAverages, graph, id, passingRatio],
   );
 
+  // The web samples the curve at grade events, not on a calendar grid: an
+  // average is a step function of grades, and inventing days between them
+  // smoothed steps that never happened.
   const series = useMemo(() => {
     if (!analytics || !year) return [];
     const from = new Date(
@@ -65,10 +76,9 @@ export default function AverageDetail() {
       ),
     );
     if (to.getTime() <= from.getTime()) return [];
-    const days = (to.getTime() - from.getTime()) / 86_400_000;
     return averageOverTime(
       analytics.resolvedGraph.subjects,
-      dayRange(from, to, Math.max(1, Math.ceil(days / 60))),
+      averageEventDates(analytics.resolvedGraph.subjects, from, to),
       null,
       analytics.scope,
     );
@@ -105,12 +115,50 @@ export default function AverageDetail() {
           icon="help-circle-outline"
           title={t("Average not found")}
           body={t("It may have been deleted, or it belongs to another year.")}
+          action={
+            <Button
+              label={t("Back to custom averages")}
+              variant="outline"
+              onPress={() => router.push("/settings/averages")}
+            />
+          }
         />
       </Screen>
     );
   }
 
   const title = analytics.custom?.name ?? t("General average");
+  const localeTag = locale() === "fr" ? "fr-FR" : "en-GB";
+  const percent = (value: number | null) =>
+    value === null
+      ? "—"
+      : value.toLocaleString(localeTag, {
+          style: "percent",
+          maximumFractionDigits: 0,
+        });
+  const stats = [
+    {
+      label: t("Median"),
+      value:
+        analytics.median === null
+          ? "—"
+          : (analytics.median * scale).toLocaleString(localeTag, {
+              maximumFractionDigits: 2,
+            }),
+    },
+    { label: t("Pass rate"), value: percent(analytics.passRate) },
+    { label: t("Consistency"), value: percent(analytics.consistency) },
+    { label: t("Grades"), value: String(analytics.grades.length) },
+  ];
+  // The impact grid only shows readings that have something to compare.
+  const impacts = analytics.impacts.filter(
+    (item) =>
+      item.impact.withValue !== null || item.impact.withoutValue !== null,
+  );
+  const chartPoints = chartModel.series.reduce(
+    (total, item) => total + item.points.length,
+    0,
+  );
 
   return (
     <>
@@ -120,7 +168,7 @@ export default function AverageDetail() {
           headerRight: analytics.custom
             ? () => (
                 <Pressable
-                  accessibilityLabel={t("Edit custom average")}
+                  accessibilityLabel={t("Edit")}
                   accessibilityRole="button"
                   hitSlop={10}
                   onPress={() => {
@@ -131,7 +179,7 @@ export default function AverageDetail() {
                   }}
                 >
                   <Icon
-                    name="options-outline"
+                    name="pencil-outline"
                     size={20}
                     color={palette.textMuted}
                   />
@@ -141,15 +189,11 @@ export default function AverageDetail() {
         }}
       />
       <Screen>
-        <View style={{ gap: space.sm, paddingTop: space.sm }}>
-          <Text style={[type.title, { color: palette.text }]}>{title}</Text>
-        </View>
+        <ScopeBar />
 
         <Card>
           <View style={{ gap: space.xs }}>
-            <Text style={[type.label, { color: palette.textFaint }]}>
-              {t("Average")}
-            </Text>
+            <Label>{t("Average")}</Label>
             <AverageValue
               ratio={analytics.ratio}
               size="display"
@@ -159,25 +203,44 @@ export default function AverageDetail() {
           </View>
         </Card>
 
-        <Section title={t("Evolution")}>
+        {chartPoints < 2 ? (
+          <Card>
+            <View style={{ gap: space.xs }}>
+              <Text selectable style={[type.heading, { color: palette.text }]}>
+                {t("Over time")}
+              </Text>
+              <Text
+                selectable
+                style={[
+                  type.footnote,
+                  {
+                    color: palette.textMuted,
+                    paddingVertical: space.xxl,
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                {t("Record a few grades and the curve will appear here.")}
+              </Text>
+            </View>
+          </Card>
+        ) : (
           <TimeSeriesCard
-            title={t("Average over time")}
-            description={t("Drag to pan, pinch or use the wheel to zoom.")}
+            title={t("Over time")}
             model={chartModel}
             passingValue={passingRatio * scale}
             zoomPresets
           />
-        </Section>
+        )}
 
         {analytics.composition.length > 0 ? (
-          <Section title={t("Composition")}>
+          <Section title={t("Subjects")}>
             <Card padded={false}>
               {analytics.composition.map((item, index) => (
                 <Row
                   key={item.subject.id}
                   first={index === 0}
                   title={item.subject.name}
-                  muted={item.subject.kind === "category"}
                   onPress={() => router.push(`/subject/${item.subject.id}`)}
                   trailing={
                     <View
@@ -197,58 +260,134 @@ export default function AverageDetail() {
           </Section>
         ) : null}
 
-        <Section title={t("Statistics")}>
-          <Card padded={false}>
-            <Row
-              first
-              title={t("Median")}
-              trailing={<AverageValue ratio={analytics.median} size="body" />}
-            />
-            <Row
-              title={t("Pass rate")}
-              trailing={<PercentValue ratio={analytics.passRate} />}
-            />
-            <Row
-              title={t("Consistency")}
-              trailing={<PercentValue ratio={analytics.consistency} />}
-            />
-            <Row
-              title={t("Grades")}
-              trailing={
-                <Text style={[type.body, { color: palette.text }]}>
-                  {analytics.grades.length}
-                </Text>
-              }
-            />
-          </Card>
-        </Section>
+        <View style={{ flexDirection: "row", gap: space.sm }}>
+          {stats.map((stat) => (
+            <View
+              key={stat.label}
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: space.sm,
+                paddingVertical: 10,
+                borderRadius: radius.xl,
+                borderCurve: "continuous",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: palette.border,
+                backgroundColor: palette.surface,
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={[
+                  numeric,
+                  {
+                    fontSize: 18,
+                    lineHeight: 24,
+                    fontWeight: "600",
+                    color: palette.text,
+                  },
+                ]}
+              >
+                {stat.value}
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 11,
+                  lineHeight: 14,
+                  marginTop: 2,
+                  color: palette.textMuted,
+                  textAlign: "center",
+                }}
+              >
+                {stat.label}
+              </Text>
+            </View>
+          ))}
+        </View>
 
-        {analytics.impacts.length > 0 ? (
+        {impacts.length > 0 ? (
           <Section title={t("Impact by subject")}>
-            <Card padded={false}>
-              {analytics.impacts.map((item, index) => (
-                <Row
+            <View
+              style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}
+            >
+              {impacts.map((item) => (
+                <Pressable
                   key={item.subject.id}
-                  first={index === 0}
-                  title={item.subject.name}
-                  subtitle={t("Effect on this average")}
-                  onPress={() => router.push(`/subject/${item.subject.id}`)}
-                  trailing={
-                    <DeltaValue delta={item.impact.delta} size="body" />
-                  }
-                />
+                  accessibilityRole="button"
+                  onPress={() => {
+                    haptic("selection");
+                    router.push(`/subject/${item.subject.id}`);
+                  }}
+                  style={({ pressed }) => ({
+                    flexBasis: "47%",
+                    flexGrow: 1,
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Card>
+                    <View style={{ gap: space.xs }}>
+                      <Text
+                        numberOfLines={1}
+                        style={[type.label, { color: palette.textFaint }]}
+                      >
+                        {item.subject.name}
+                      </Text>
+                      <DeltaValue delta={item.impact.delta} size="title" />
+                      <View
+                        accessibilityLabel={t(
+                          "Average without and with this value",
+                        )}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: space.xs,
+                        }}
+                      >
+                        <AverageValue
+                          ratio={item.impact.withoutValue}
+                          size="footnote"
+                          decimals={2}
+                          style={{ color: palette.textMuted }}
+                        />
+                        <Text
+                          style={[type.footnote, { color: palette.textMuted }]}
+                        >
+                          →
+                        </Text>
+                        <AverageValue
+                          ratio={item.impact.withValue}
+                          size="footnote"
+                          decimals={2}
+                          style={{ color: palette.textMuted }}
+                        />
+                      </View>
+                    </View>
+                  </Card>
+                </Pressable>
               ))}
-            </Card>
+            </View>
           </Section>
         ) : null}
 
         <Section title={t("Grades")}>
           <Card padded={false}>
             {analytics.grades.length === 0 ? (
-              <Empty
-                icon="document-text-outline"
-                title={t("No grade recorded here yet.")}
-              />
+              <Text
+                style={[
+                  type.footnote,
+                  {
+                    color: palette.textMuted,
+                    paddingHorizontal: space.lg,
+                    paddingVertical: space.xl,
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                {t("No grade recorded here yet.")}
+              </Text>
             ) : (
               analytics.grades.map((grade, index) => (
                 <Row
@@ -260,18 +399,15 @@ export default function AverageDetail() {
                   } · ${formatDay(grade.passedAt)}`}
                   onPress={() => router.push(`/grade/${grade.id}`)}
                   trailing={
-                    <View style={{ alignItems: "flex-end", gap: 2 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: space.sm,
+                      }}
+                    >
+                      <CoefficientTag coefficient={grade.coefficient} />
                       <ResultBadge ratio={gradeRatio(grade)} />
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: space.sm,
-                        }}
-                      >
-                        <CoefficientTag coefficient={grade.coefficient} />
-                        <PointsValue value={grade.value} outOf={grade.outOf} />
-                      </View>
                     </View>
                   }
                 />

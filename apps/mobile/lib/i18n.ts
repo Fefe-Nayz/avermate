@@ -129,10 +129,7 @@ const fr: Record<string, string> = {
   "Average not found": "Moyenne introuvable",
   "It may have been deleted, or it belongs to another year.":
     "Elle a peut-être été supprimée ou appartient à une autre année.",
-  Composition: "Composition",
-  Statistics: "Statistiques",
   "Impact by subject": "Impact par matière",
-  "Effect on this average": "Effet sur cette moyenne",
   "Feedback detail": "Détail du retour",
   "Social moderation": "Modération sociale",
   "Safety reports": "Signalements de sécurité",
@@ -481,7 +478,6 @@ const fr: Record<string, string> = {
   "New subject": "Nouvelle matière",
   "Edit subject": "Modifier la matière",
   "Delete subject": "Supprimer la matière",
-  "Subject not found.": "Matière introuvable.",
   "This year has no subjects yet.": "Cette année n'a encore aucune matière.",
   "This subject is not in the current period.":
     "Cette matière n'existe pas sur la période affichée.",
@@ -504,24 +500,12 @@ const fr: Record<string, string> = {
 
   // ----------------------------------------------------------- subject form
   "Short name": "Nom court",
-  "Used where space is tight": "Utilisé quand la place manque",
-  "Mathematics, Philosophy…": "Mathématiques, Philosophie…",
   "Give this subject a name.": "Donnez un nom à cette matière.",
   "How does it count?": "Comment compte-t-elle ?",
-  "Counts once, with its own average and weight":
-    "Compte une fois, avec sa propre moyenne et son coefficient",
-  "Just a grouping — its children are weighed one by one":
-    "Simple regroupement — ses matières sont pondérées une à une",
-  Inside: "Dans",
   "Top level": "Premier niveau",
   "Show on the dashboard": "Afficher sur l'accueil",
-  "Keeps this one in front of you all year.":
-    "La garde sous les yeux toute l'année.",
   "The subject could not be saved.": "Impossible d'enregistrer la matière.",
   "Delete {name}?": "Supprimer {name} ?",
-  "Its {count} grades go with it. This cannot be undone.":
-    "Ses {count} notes disparaissent avec elle. C'est définitif.",
-  "Keep what is inside": "Garder ce qu'elle contient",
 
   // ----------------------------------------------------------------- grades
   "New grade": "Nouvelle note",
@@ -1392,6 +1376,165 @@ const fr: Record<string, string> = {
   "Permanent. We email you a link to confirm before anything is removed.":
     "Définitif. Nous vous envoyons un lien de confirmation avant toute suppression.",
 
+  "weight {coefficient}": "coefficient {coefficient}",
+  "Back to grades": "Retour aux notes",
+  "It will be filed into {period} automatically.":
+    "Elle sera classée dans {period} automatiquement.",
+
+  // -------------------------------------- subject & average parity pass
+  "Mathematics, Physics, Written exam…":
+    "Mathématiques, Physique, Épreuve écrite…",
+  Maths: "Maths",
+  "Used on charts and narrow screens. Optional.":
+    "Utilisé sur les graphiques et les écrans étroits. Facultatif.",
+  "Sits inside": "Se range dans",
+  "Counted once, with its own weight, using its own average.":
+    "Comptée une fois, avec son propre poids, selon sa propre moyenne.",
+  "A heading. What it contains is weighed one by one at the level above.":
+    "Un intitulé. Son contenu est pesé élément par élément au niveau supérieur.",
+  "How much this subject counts against its siblings.":
+    "Le poids de cette matière face à ses voisines.",
+  "A category carries no weight of its own — its contents do.":
+    "Une catégorie n'a pas de poids propre — son contenu en a.",
+  "Pinned to the sidebar and the home screen":
+    "Épinglée à la barre latérale et à l'accueil",
+  "Subject not found": "Matière introuvable",
+  "Back to subjects": "Retour aux matières",
+  "Deleting this also removes {count} subjects underneath it.":
+    "Supprimer ceci retire aussi {count} matières en dessous.",
+  "This branch contains {subjects} child subjects and {grades} grades.":
+    "Cette branche contient {subjects} sous-matières et {grades} notes.",
+  "One DataCard will be updated or removed.":
+    "Une DataCard sera mise à jour ou supprimée.",
+  "{count} DataCards will be updated or removed.":
+    "{count} DataCards seront mises à jour ou supprimées.",
+  "Keep child subjects": "Garder les sous-matières",
+  "Delete the whole branch": "Supprimer toute la branche",
+  "Over time": "Dans le temps",
+  "Record a few grades and the curve will appear here.":
+    "Saisissez quelques notes et la courbe apparaîtra ici.",
+  "Back to custom averages": "Retour aux moyennes personnalisées",
+  "Average without and with this value": "Moyenne sans puis avec cette valeur",
+
+  // ------------------------------------------------ social parity rewrite
+  "They had already asked — you are now friends.":
+    "Cette personne avait déjà demandé — vous êtes désormais amis.",
+  "Request sent.": "Demande envoyée.",
+  "Friend added.": "Ami ajouté.",
+  "Request declined.": "Demande refusée.",
+  "By their handle, or with a link you send them.":
+    "Par leur identifiant, ou avec un lien que vous leur envoyez.",
+  "Revoke {prefix}…": "Révoquer {prefix}…",
+  "Accepting makes sharing mutual by default.":
+    "Accepter rend le partage mutuel par défaut.",
+  "Open someone to see what they share with you.":
+    "Ouvrez quelqu'un pour voir ce qu'il partage avec vous.",
+  Shares: "Partage",
+  "Friend removed.": "Ami retiré.",
+  "Account blocked.": "Compte bloqué.",
+  "Back to friends": "Retour aux amis",
+  "Only what they unlocked appears here.":
+    "Seul ce qu'ils ont déverrouillé apparaît ici.",
+  "{name} has locked their figures, or has no academic year to share yet.":
+    "{name} a verrouillé ses chiffres, ou n'a pas encore d'année scolaire à partager.",
+  "Neither of you will see the other's figures any more. Either of you can send a new request later.":
+    "Aucun de vous ne verra plus les chiffres de l'autre. Chacun pourra renvoyer une demande plus tard.",
+  "The friendship ends immediately and they can no longer send you requests or invitations. They are not notified.":
+    "L'amitié prend fin immédiatement et cette personne ne peut plus vous envoyer de demandes ni d'invitations. Elle n'est pas prévenue.",
+  "Year connected": "Année connectée",
+  "Model needed": "Modèle requis",
+  "Choose a year": "Choisir une année",
+  "Follow a class using the same subjects, periods and grading scale. Friend sharing remains separate.":
+    "Suivez une classe avec les mêmes matières, périodes et barème. Le partage entre amis reste séparé.",
+  "Create a class from an existing year or a new model, or open an invitation from a classmate.":
+    "Créez une classe depuis une année existante ou un nouveau modèle, ou ouvrez l'invitation d'un camarade.",
+  "The change could not be saved.":
+    "La modification n'a pas pu être enregistrée.",
+  "A new year was created and connected to this class.":
+    "Une nouvelle année a été créée et connectée à cette classe.",
+  "Year connected. Sharing remains off.":
+    "Année connectée. Le partage reste désactivé.",
+  "This class is on hold": "Cette classe est en pause",
+  "Class model": "Modèle de la classe",
+  "The shared subjects, periods and grading scale are fixed for this class.":
+    "Les matières, périodes et barème partagés sont figés pour cette classe.",
+  "Preset model": "Modèle preset",
+  "Custom model": "Modèle personnalisé",
+  "This class must be connected to one of your years before it can be used. The choice cannot be changed later.":
+    "Cette classe doit être connectée à une de vos années avant utilisation. Ce choix ne pourra plus changer.",
+  "Model year": "Année modèle",
+  "Configure class": "Configurer la classe",
+  "The owner must choose a model year before the class can be used.":
+    "Le propriétaire doit choisir une année modèle avant que la classe soit utilisable.",
+  "Your year in this class": "Votre année dans cette classe",
+  "Only the year connected here is used for class comparisons.":
+    "Seule l'année connectée ici sert aux comparaisons de classe.",
+  "Your previously connected year no longer matches this class. Choose another one or create a fresh copy.":
+    "Votre année précédemment connectée ne correspond plus à cette classe. Choisissez-en une autre ou créez une copie neuve.",
+  "Connect a compatible year before sharing results with the class.":
+    "Connectez une année compatible avant de partager vos résultats avec la classe.",
+  "Compatible year": "Année compatible",
+  "Connect year": "Connecter l'année",
+  "New year name": "Nom de la nouvelle année",
+  "A separate empty year is created and connected. Existing years and grades are never changed.":
+    "Une année vide séparée est créée et connectée. Vos années et notes existantes ne changent jamais.",
+  "Create and connect": "Créer et connecter",
+  "Create a new year": "Créer une nouvelle année",
+  "Share in class comparisons": "Partager dans les comparaisons de classe",
+  "Sharing is optional and only uses the compatible year connected above.":
+    "Le partage est facultatif et n'utilise que l'année compatible connectée ci-dessus.",
+  "Connect a compatible year to enable sharing.":
+    "Connectez une année compatible pour activer le partage.",
+  "Your figures are visible to this class.":
+    "Vos chiffres sont visibles par cette classe.",
+  "Your figures are hidden from this class.":
+    "Vos chiffres sont masqués pour cette classe.",
+  Comparisons: "Comparaisons",
+  "Compare the general average or a subject from the shared class model.":
+    "Comparez la moyenne générale ou une matière du modèle partagé de la classe.",
+  "Add a comparison": "Ajouter une comparaison",
+  "Remove this comparison": "Retirer cette comparaison",
+  Participation: "Participation",
+  "{count} of {total}": "{count} sur {total}",
+  "Class leaderboard — {name}": "Classement de la classe — {name}",
+  "Class members": "Membres de la classe",
+  "Only members who opted in appear with a figure.":
+    "Seuls les membres ayant accepté apparaissent avec un chiffre.",
+  "No class figures are shared yet.":
+    "Aucun chiffre de classe n'est encore partagé.",
+  "No year connected": "Aucune année connectée",
+  "Year incompatible": "Année incompatible",
+  "Not shared": "Non partagé",
+  "Invite classmates": "Inviter des camarades",
+  "The invitation shows the class model before the person chooses or creates a compatible year.":
+    "L'invitation montre le modèle de la classe avant que la personne choisisse ou crée une année compatible.",
+  Revoke: "Révoquer",
+  "{count} joins · by {name}": "{count} adhésions · par {name}",
+  "The class and its memberships disappear for everyone. Nobody's years or grades are affected.":
+    "La classe et ses adhésions disparaissent pour tout le monde. Les années et notes de personne ne sont touchées.",
+  "You own this class.": "Vous possédez cette classe.",
+  "Someone joined the class {className}.":
+    "Quelqu'un a rejoint la classe {className}.",
+  "You were removed from the class {className}.":
+    "Vous avez été retiré de la classe {className}.",
+  "Requests, joins, and moderation outcomes.":
+    "Demandes, adhésions et décisions de modération.",
+  "Unread only": "Non lues seulement",
+  "Mark read": "Marquer lue",
+  "Nothing unread": "Rien de non lu",
+  "The server could not answer. Refresh, or try again shortly.":
+    "Le serveur n'a pas pu répondre. Actualisez, ou réessayez dans un instant.",
+  "Two locks decide what every friend sees: your general average, and your subjects. Each class has its own separate switch.":
+    "Deux verrous décident de ce que voit chaque ami : votre moyenne générale, et vos matières. Chaque classe a son interrupteur séparé.",
+  "Changes apply immediately to every friend.":
+    "Les changements s'appliquent immédiatement à tous vos amis.",
+  "Unchecked subjects never leave your account.":
+    "Les matières décochées ne quittent jamais votre compte.",
+  "This preview is the same answer the server gives them.":
+    "Cet aperçu est exactement la réponse que le serveur leur donne.",
+  "No subject averages are shared.":
+    "Aucune moyenne de matière n'est partagée.",
+
   // ------------------------------------------------------------- grade views
   Timeline: "Chronologie",
   Calendar: "Calendrier",
@@ -1558,59 +1701,22 @@ const fr: Record<string, string> = {
   "New class": "Nouvelle classe",
   "Your classes": "Vos classes",
   "No classes yet": "Aucune classe pour le moment",
-  "Setup required": "Configuration requise",
-  "Choose a class year": "Choisir une année pour la classe",
   "Incompatible year": "Année incompatible",
-  "Your class year": "Votre année de classe",
-  "Connected year": "Année rattachée",
-  Connected: "Rattachée",
-  "Connect this year": "Rattacher cette année",
-  "Set class template": "Définir le modèle de la classe",
   "Grades out of {scale}": "Notes sur {scale}",
   "Academic structure": "Structure scolaire",
-  "Choose one of your years once to define this class template.":
-    "Choisissez une de vos années une seule fois pour définir le modèle de cette classe.",
-  "The owner still needs to choose the class template.":
-    "Le propriétaire doit encore choisir le modèle de la classe.",
-  "Only figures from this year can appear in the class.":
-    "Seuls les chiffres de cette année peuvent apparaître dans la classe.",
-  "Your previously selected year no longer matches this class. Nothing in it was changed.":
-    "L’année précédemment sélectionnée ne correspond plus à cette classe. Rien n’y a été modifié.",
-  "Create a new year from the template":
-    "Créer une nouvelle année depuis le modèle",
-  "Create a separate year?": "Créer une année distincte ?",
-  "Subjects, periods and custom averages are copied. None of your existing years or grades will be changed.":
-    "Les matières, périodes et moyennes personnalisées sont copiées. Aucune de vos années ni notes existantes ne sera modifiée.",
-  "The new year is now connected to this class.":
-    "La nouvelle année est maintenant rattachée à cette classe.",
   "Share my figures with this class": "Partager mes chiffres avec cette classe",
-  "Sharing is off by default. Only figures from your connected year can appear.":
-    "Le partage est désactivé par défaut. Seuls les chiffres de votre année rattachée peuvent apparaître.",
-  "Subject boards come from the common class template.":
-    "Les tableaux par matière proviennent du modèle commun de la classe.",
   "Class average": "Moyenne de la classe",
-  "Class ranking": "Classement de la classe",
   "Remove from class": "Retirer de la classe",
-  "Members without a figure have not connected a compatible year or shared their figures yet.":
-    "Les membres sans chiffre n’ont pas encore rattaché une année compatible ou partagé leurs chiffres.",
-  "The link works for a month or until revoked. Each person must connect a compatible year before joining.":
-    "Le lien fonctionne un mois ou jusqu’à révocation. Chaque personne doit rattacher une année compatible avant de rejoindre.",
   "Class settings": "Réglages de la classe",
   "You still own this class": "Vous possédez encore cette classe",
   "Remove the other members first, or delete the class.":
     "Retirez d’abord les autres membres, ou supprimez la classe.",
-  "The class and its memberships disappear for everyone. Nobody's grades are affected.":
-    "La classe et ses adhésions disparaissent pour tout le monde. Les notes de personne ne sont affectées.",
   "Leave class": "Quitter la classe",
   "This class could not be found": "Cette classe est introuvable",
   "A moderator paused this class after a report. Figures are hidden until the hold is lifted; nothing has been deleted.":
     "Un modérateur a suspendu cette classe après un signalement. Les chiffres sont masqués jusqu’à la levée de la suspension ; rien n’a été supprimé.",
   "Create a year": "Créer une année",
   "{start} to {end}": "{start} à {end}",
-  "A class brings together people who use the same subjects, periods and grading scale.":
-    "Une classe réunit des personnes qui utilisent les mêmes matières, périodes et barème.",
-  "Create a class from one of your school years, build a new model, or open an invitation.":
-    "Créez une classe depuis une de vos années scolaires, construisez un nouveau modèle ou ouvrez une invitation.",
   Sharing: "Partage",
   Updates: "Actualités",
   "Send request": "Envoyer la demande",
@@ -1710,17 +1816,12 @@ const fr: Record<string, string> = {
   // ---------------------------------------------------- social, rebuilt
   "included with {name}": "incluse avec {name}",
   "That comparison already exists.": "Cette comparaison existe déjà.",
-  Boards: "Tableaux",
-  "Add a board": "Ajouter un tableau",
   "A subject": "Une matière",
   "Median grade": "Note médiane",
   "Goals achieved": "Objectifs atteints",
   Add: "Ajouter",
-  "Remove this board": "Retirer ce tableau",
-  "Year created": "Année créée",
   "{subjects} subjects · {averages} custom averages · {periods} periods":
     "{subjects} matières · {averages} moyennes personnalisées · {periods} périodes",
-  "Create my year": "Créer mon année",
   "Friends group": "Groupe d'amis",
   "Study group": "Groupe d'étude",
   Class: "Classe",
@@ -1740,14 +1841,8 @@ const fr: Record<string, string> = {
   "Computed from {year}": "Calculée à partir de {year}",
   "Shared subjects": "Matières partagées",
   "Nothing is shared right now": "Rien n'est partagé pour le moment",
-  "They locked their figures, or have no academic year to share yet.":
-    "Cette personne a verrouillé ses chiffres, ou n'a pas encore d'année scolaire à partager.",
   Actions: "Actions",
   "Remove friend": "Retirer l'ami",
-  "Neither of you will see the other's figures any more.":
-    "Aucun de vous ne verra plus les chiffres de l'autre.",
-  "The friendship ends immediately and they can no longer reach you. They are not notified.":
-    "L'amitié prend fin immédiatement et cette personne ne peut plus vous joindre. Elle n'est pas prévenue.",
   "This invitation is no longer valid": "Cette invitation n'est plus valide",
   "It may have expired, been revoked, or already used.":
     "Elle a peut-être expiré, été révoquée ou déjà utilisée.",
@@ -1763,8 +1858,6 @@ const fr: Record<string, string> = {
   "On hold": "En pause",
   "It may have been deleted, or you were removed.":
     "Il a peut-être été supprimé, ou vous en avez été retiré.",
-  Range: "Étendue",
-  "Invite people": "Inviter des personnes",
   "Share an invitation link": "Partager un lien d'invitation",
   "Edit name and description": "Modifier le nom et la description",
   "Delete class": "Supprimer la classe",
@@ -1781,7 +1874,6 @@ const fr: Record<string, string> = {
   "Keep waiting": "Continuer d'attendre",
   "Cancel request": "Annuler la demande",
   "Friends could not be refreshed.": "Les amis n'ont pas pu être actualisés.",
-  "Shares their figures": "Partage ses chiffres",
   "Shares nothing": "Ne partage rien",
   "No friends yet": "Pas encore d'amis",
   "Send a request to a handle you know, or share an invitation link.":
@@ -1795,9 +1887,7 @@ const fr: Record<string, string> = {
   "You are already a member.": "Vous êtes déjà membre.",
   "You received a friend request.": "Vous avez reçu une demande d'ami.",
   "Your friend request was accepted.": "Votre demande d'ami a été acceptée.",
-  "Someone joined {groupName}.": "Quelqu'un a rejoint {groupName}.",
   "Someone joined your class.": "Quelqu'un a rejoint votre classe.",
-  "You were removed from {groupName}.": "Vous avez été retiré de {groupName}.",
   "You were removed from a class.": "Vous avez été retiré d'une classe.",
   "A social update is available.": "Une mise à jour sociale est disponible.",
   Latest: "Récents",
@@ -1812,13 +1902,10 @@ const fr: Record<string, string> = {
   "The report could not be sent. Try again later.":
     "Le signalement n'a pas pu être envoyé. Réessayez plus tard.",
   "Send private report": "Envoyer le signalement privé",
-  "Sharing settings could not be loaded.":
-    "Les réglages de partage n'ont pas pu être chargés.",
   "Your handle": "Votre pseudo",
   Handle: "Pseudo",
   "your-handle": "votre-pseudo",
   "That handle is already taken.": "Ce pseudo est déjà pris.",
-  "Save handle": "Enregistrer le pseudo",
   "Friends find you with it. Leave empty to be reachable by invitation link only.":
     "Les amis vous trouvent avec. Laissez vide pour n'être joignable que par lien d'invitation.",
   "What friends see": "Ce que voient les amis",

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import { Stack } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { SharedAverageText } from "@/components/social/social-ui";
@@ -47,7 +48,17 @@ export default function Sharing() {
         queryKey: orpc.social.sharing.get.queryKey(),
       });
     },
+    onError: (error) => {
+      haptic("error");
+      // A taken handle is explained beside the field; anything else was not
+      // a handle problem and gets the web's generic refusal.
+      if (!String(error?.message ?? "").includes("taken")) {
+        Alert.alert(t("The change could not be saved."));
+      }
+    },
   });
+  const handleTaken =
+    update.isError && String(update.error?.message ?? "").includes("taken");
 
   if (sharing.isLoading) {
     return (
@@ -62,7 +73,9 @@ export default function Sharing() {
       <>
         <Stack.Screen options={{ title: t("Sharing") }} />
         <Screen>
-          <Problem>{t("Sharing settings could not be loaded.")}</Problem>
+          <Problem>
+            {t("The server could not answer. Refresh, or try again shortly.")}
+          </Problem>
         </Screen>
       </>
     );
@@ -77,6 +90,12 @@ export default function Sharing() {
     <>
       <Stack.Screen options={{ title: t("Sharing") }} />
       <Screen>
+        <Note>
+          {t(
+            "Two locks decide what every friend sees: your general average, and your subjects. Each class has its own separate switch.",
+          )}
+        </Note>
+
         <Section title={t("Your handle")}>
           <Card style={{ gap: space.md }}>
             <TextField
@@ -87,11 +106,11 @@ export default function Sharing() {
               autoCapitalize="none"
               maxLength={32}
               error={
-                update.isError ? t("That handle is already taken.") : undefined
+                handleTaken ? t("That handle is already taken.") : undefined
               }
             />
             <Button
-              label={t("Save handle")}
+              label={t("Save")}
               variant="secondary"
               disabled={(handle ?? "") === (settings.handle ?? "")}
               loading={update.isPending}
@@ -109,7 +128,10 @@ export default function Sharing() {
           </Card>
         </Section>
 
-        <Section title={t("What friends see")}>
+        <Section
+          title={t("What friends see")}
+          description={t("Changes apply immediately to every friend.")}
+        >
           <Card style={{ gap: space.lg }}>
             <SwitchField
               label={t("General average")}
@@ -154,7 +176,10 @@ export default function Sharing() {
         </Section>
 
         {settings.shareSubjectsMode === "selected" ? (
-          <Section title={t("Subjects you share")}>
+          <Section
+            title={t("Subjects you share")}
+            description={t("Unchecked subjects never leave your account.")}
+          >
             <Card style={{ gap: space.md }}>
               {subjects.isLoading ? (
                 <Loading />
@@ -180,7 +205,12 @@ export default function Sharing() {
           </Section>
         ) : null}
 
-        <Section title={t("Exactly what a friend sees")}>
+        <Section
+          title={t("Exactly what a friend sees")}
+          description={t(
+            "This preview is the same answer the server gives them.",
+          )}
+        >
           {settings.preview ? (
             <Card padded={false}>
               <Row
@@ -199,19 +229,23 @@ export default function Sharing() {
                   settings.preview.shareGeneralAverage ? undefined : t("Locked")
                 }
               />
-              {settings.preview.subjects.map((subject) => (
-                <Row
-                  key={subject.id}
-                  title={subject.name}
-                  trailing={
-                    <SharedAverageText
-                      ratio={subject.average}
-                      scale={settings.preview?.year.scale ?? null}
-                      decimals={settings.preview?.year.decimals ?? null}
-                    />
-                  }
-                />
-              ))}
+              {settings.preview.subjects.length ? (
+                settings.preview.subjects.map((subject) => (
+                  <Row
+                    key={subject.id}
+                    title={subject.name}
+                    trailing={
+                      <SharedAverageText
+                        ratio={subject.average}
+                        scale={settings.preview?.year.scale ?? null}
+                        decimals={settings.preview?.year.decimals ?? null}
+                      />
+                    }
+                  />
+                ))
+              ) : (
+                <Row muted title={t("No subject averages are shared.")} />
+              )}
             </Card>
           ) : (
             <Card>

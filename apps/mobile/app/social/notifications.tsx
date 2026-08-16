@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
+import { SwitchField } from "@/components/field";
 import {
   Button,
   Card,
   Empty,
   Loading,
+  Note,
   Problem,
   Row,
   Screen,
@@ -19,17 +22,23 @@ import { usePalette } from "@/lib/theme";
 export default function SocialNotifications() {
   const palette = usePalette();
   const router = useRouter();
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const notifications = useQuery(
     orpc.social.notifications.list.queryOptions({
-      input: { unreadOnly: false },
+      input: { unreadOnly },
     }),
   );
+  const refresh = () =>
+    queryClient.invalidateQueries({
+      queryKey: orpc.social.notifications.list.key(),
+    });
+  const markRead = useMutation({
+    ...orpc.social.notifications.markRead.mutationOptions(),
+    onSuccess: refresh,
+  });
   const markAll = useMutation({
     ...orpc.social.notifications.markAllRead.mutationOptions(),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: orpc.social.notifications.list.key(),
-      }),
+    onSuccess: refresh,
   });
 
   function describe(kind: string, params: Record<string, string>) {
@@ -48,15 +57,17 @@ export default function SocialNotifications() {
         return {
           icon: "people-circle-outline" as const,
           label: params.groupName
-            ? t("Someone joined {groupName}.", { groupName: params.groupName })
+            ? t("Someone joined the class {className}.", {
+                className: params.groupName,
+              })
             : t("Someone joined your class."),
         };
       case "group_removed":
         return {
           icon: "person-remove-outline" as const,
           label: params.groupName
-            ? t("You were removed from {groupName}.", {
-                groupName: params.groupName,
+            ? t("You were removed from the class {className}.", {
+                className: params.groupName,
               })
             : t("You were removed from a class."),
         };
@@ -74,6 +85,8 @@ export default function SocialNotifications() {
     <>
       <Stack.Screen options={{ title: t("Updates") }} />
       <Screen>
+        <Note>{t("Requests, joins, and moderation outcomes.")}</Note>
+
         {unread > 0 ? (
           <Button
             label={t("Mark all read")}
@@ -82,6 +95,14 @@ export default function SocialNotifications() {
             onPress={() => markAll.mutate({})}
           />
         ) : null}
+
+        <Card>
+          <SwitchField
+            label={t("Unread only")}
+            value={unreadOnly}
+            onValueChange={setUnreadOnly}
+          />
+        </Card>
 
         <Section title={t("Latest")}>
           {notifications.isLoading ? (
@@ -92,6 +113,7 @@ export default function SocialNotifications() {
             <Card padded={false}>
               {notifications.data.map((item, index) => {
                 const { icon, label } = describe(item.kind, item.safeParams);
+                const isUnread = !item.readAt;
                 return (
                   <Row
                     key={item.id}
@@ -99,7 +121,7 @@ export default function SocialNotifications() {
                     title={
                       item.actor?.name ? `${item.actor.name} — ${label}` : label
                     }
-                    muted={Boolean(item.readAt)}
+                    muted={!isUnread}
                     subtitle={new Intl.DateTimeFormat(undefined, {
                       dateStyle: "medium",
                       timeStyle: "short",
@@ -108,8 +130,21 @@ export default function SocialNotifications() {
                       <Icon
                         name={icon}
                         size={18}
-                        color={item.readAt ? palette.textFaint : palette.accent}
+                        color={isUnread ? palette.accent : palette.textFaint}
                       />
+                    }
+                    trailing={
+                      isUnread ? (
+                        <Button
+                          label={t("Mark read")}
+                          variant="ghost"
+                          size="sm"
+                          disabled={markRead.isPending}
+                          onPress={() =>
+                            markRead.mutate({ notificationId: item.id })
+                          }
+                        />
+                      ) : undefined
                     }
                     onPress={
                       item.entityType === "group" && item.entityId
@@ -123,7 +158,7 @@ export default function SocialNotifications() {
           ) : (
             <Empty
               icon="notifications-outline"
-              title={t("Nothing yet")}
+              title={unreadOnly ? t("Nothing unread") : t("Nothing yet")}
               body={t("Friend requests and class activity will appear here.")}
             />
           )}

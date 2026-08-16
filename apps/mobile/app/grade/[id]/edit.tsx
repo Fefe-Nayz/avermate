@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Grade } from "@avermate/core";
-import { Button, Loading } from "@/components/ui";
+import { useMutation } from "@tanstack/react-query";
+import { Button, Empty, Loading, Screen } from "@/components/ui";
 import { GradeForm, draftOf, type GradeDraft } from "@/components/grade-form";
+import { useYear } from "@/components/year-provider";
 import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
@@ -12,26 +12,30 @@ import { t } from "@/lib/i18n";
 export default function EditGrade() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { isLoading, yearGraph, yearId } = useYear();
 
-  const grade = useQuery(
-    orpc.grades.get.queryOptions({ input: { gradeId: id } }),
-  );
+  // The year graph already holds every grade of the year — the same source
+  // the web edit page reads from, with no second fetch.
+  const grade = yearGraph.allGrades().find((item) => item.id === id);
+
   const [draft, setDraft] = useState<GradeDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // The form owns the draft once it exists; this only seeds it.
-  useEffect(() => {
-    if (!grade.data || draft) return;
-    const loaded = grade.data as unknown as Grade;
-    setDraft(draftOf(loaded, loaded.subjectId));
-  }, [grade.data, draft]);
+  // A saved grade changes the year snapshot and nothing else, so that is the
+  // one query worth refetching — the same key the web invalidates.
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: orpc.snapshot.get.queryKey({
+        input: { yearId: yearId ?? "" },
+      }),
+    });
 
   const update = useMutation({
     mutationFn: (input: Parameters<typeof client.grades.update>[0]) =>
       client.grades.update(input),
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      void invalidate();
       router.back();
     },
     onError: () => {
@@ -45,7 +49,7 @@ export default function EditGrade() {
       client.grades.delete(input),
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      void invalidate();
       // Going back would land on the detail of a grade that no longer
       // exists, so the whole grade stack is dismissed instead.
       router.dismissTo("/(tabs)/grades");
@@ -66,13 +70,36 @@ export default function EditGrade() {
     ]);
   };
 
-  if (!draft) return <Loading />;
+  if (!grade) {
+    if (isLoading) return <Loading />;
+    return (
+      <>
+        <Stack.Screen options={{ title: t("Edit grade") }} />
+        <Screen>
+          <Empty
+            icon="document-text-outline"
+            title={t("Grade not found")}
+            body={t("It may have been deleted, or it belongs to another year.")}
+            action={
+              <Button
+                label={t("Back to grades")}
+                variant="outline"
+                onPress={() => router.dismissTo("/(tabs)/grades")}
+              />
+            }
+          />
+        </Screen>
+      </>
+    );
+  }
+
+  const current = draft ?? draftOf(grade, grade.subjectId);
 
   return (
     <>
       <Stack.Screen options={{ title: t("Edit grade") }} />
       <GradeForm
-        draft={draft}
+        draft={current}
         onChange={setDraft}
         onSubmit={(payload) => {
           setError(null);

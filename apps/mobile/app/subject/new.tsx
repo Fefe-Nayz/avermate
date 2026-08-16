@@ -14,14 +14,21 @@ import { t } from "@/lib/i18n";
 export default function NewSubject() {
   const router = useRouter();
   const { yearId: activeYearId } = useYear();
-  const { parentId, yearId: requestedYearId } = useLocalSearchParams<{
+  const {
+    kind: requestedKind,
+    parentId,
+    yearId: requestedYearId,
+  } = useLocalSearchParams<{
+    kind?: string;
     parentId?: string;
     yearId?: string;
   }>();
   const yearId = requestedYearId ?? activeYearId;
+  // The same defaulting the web's new-subject page applies to its params.
+  const kind = requestedKind === "category" ? "category" : "subject";
 
   const [draft, setDraft] = useState<SubjectDraft>(() =>
-    emptySubjectDraft(parentId),
+    emptySubjectDraft(parentId, kind),
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +49,14 @@ export default function NewSubject() {
             queryKey: orpc.years.configurationStatus.queryKey({
               input: { yearId },
             }),
+          }),
+          // Academic changes can move the year between announcement
+          // audiences; the web invalidates the same projections on save.
+          queryClient.invalidateQueries({
+            queryKey: orpc.announcements.active.key(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: orpc.announcements.history.key(),
           }),
         ]);
       }

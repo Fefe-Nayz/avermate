@@ -7,13 +7,13 @@ import {
   type GradeDraft,
 } from "@/components/grade-form";
 import { useYear } from "@/components/year-provider";
-import { client, queryClient } from "@/lib/orpc";
+import { client, orpc, queryClient } from "@/lib/orpc";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
 
 export default function NewGrade() {
   const router = useRouter();
-  const { year } = useYear();
+  const { period, year, yearId } = useYear();
   const { subjectId } = useLocalSearchParams<{ subjectId?: string }>();
 
   const [draft, setDraft] = useState<GradeDraft>(() =>
@@ -26,7 +26,13 @@ export default function NewGrade() {
       client.grades.create(input),
     onSuccess: () => {
       haptic("success");
-      void queryClient.invalidateQueries();
+      // A saved grade changes the year snapshot and nothing else, so that is
+      // the one query worth refetching — the same key the web invalidates.
+      void queryClient.invalidateQueries({
+        queryKey: orpc.snapshot.get.queryKey({
+          input: { yearId: yearId ?? "" },
+        }),
+      });
       router.back();
     },
     onError: () => {
@@ -46,6 +52,9 @@ export default function NewGrade() {
       submitLabel={t("Add grade")}
       busy={create.isPending}
       error={error}
+      intro={t("It will be filed into {period} automatically.", {
+        period: period.name,
+      })}
     />
   );
 }

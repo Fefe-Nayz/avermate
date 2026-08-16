@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  Confirmation,
   Empty,
   Heading,
   Loading,
@@ -33,7 +34,11 @@ export default function Social() {
   const router = useRouter();
   const friends = useQuery(orpc.social.friends.list.queryOptions());
   const requests = useQuery(orpc.social.friends.requests.queryOptions());
+  const invitations = useQuery(
+    orpc.social.friends.invitations.list.queryOptions(),
+  );
   const [handle, setHandle] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
 
   const refresh = () =>
     Promise.all([
@@ -43,20 +48,34 @@ export default function Social() {
       queryClient.invalidateQueries({
         queryKey: orpc.social.friends.requests.queryKey(),
       }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.friends.invitations.list.queryKey(),
+      }),
     ]);
 
   const send = useMutation({
     ...orpc.social.friends.request.mutationOptions(),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       haptic("success");
       setHandle("");
+      // The server folds a crossed request into an instant friendship.
+      setSent(
+        result.status === "accepted"
+          ? t("They had already asked — you are now friends.")
+          : t("Request sent."),
+      );
       await refresh();
     },
   });
   const respond = useMutation({
     ...orpc.social.friends.respond.mutationOptions(),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       haptic("success");
+      Alert.alert(
+        result.status === "accepted"
+          ? t("Friend added.")
+          : t("Request declined."),
+      );
       await refresh();
     },
   });
@@ -68,22 +87,39 @@ export default function Social() {
     ...orpc.social.friends.invitations.create.mutationOptions(),
     onSuccess: async (invitation) => {
       haptic("success");
+      await refresh();
       await Share.share({
         message: `${env.webUrl}/social/friends/invitations/${invitation.token}`,
       });
     },
   });
+  const revokeInvite = useMutation({
+    ...orpc.social.friends.invitations.revoke.mutationOptions(),
+    onSuccess: refresh,
+  });
 
   return (
     <>
       <Screen>
-        <Heading icon="people-outline" title={t("Friends")} />
-        <Section title={t("Add a friend")}>
+        <Heading
+          icon="people-outline"
+          title={t("Friends")}
+          description={t(
+            "Each friend sees exactly what your sharing locks allow — nothing more.",
+          )}
+        />
+        <Section
+          title={t("Add a friend")}
+          description={t("By their handle, or with a link you send them.")}
+        >
           <Card style={{ gap: space.md }}>
             <TextField
               label={t("Their handle")}
               value={handle}
-              onChangeText={setHandle}
+              onChangeText={(value) => {
+                setHandle(value);
+                setSent(null);
+              }}
               placeholder={t("their-handle")}
               autoCapitalize="none"
               maxLength={32}
@@ -97,7 +133,10 @@ export default function Social() {
               label={t("Send request")}
               disabled={!handle.trim()}
               loading={send.isPending}
-              onPress={() => send.mutate({ handle: handle.trim() })}
+              onPress={() => {
+                setSent(null);
+                send.mutate({ handle: handle.trim() });
+              }}
             />
             <Button
               label={t("Share an invitation link")}
@@ -106,11 +145,30 @@ export default function Social() {
               loading={invite.isPending}
               onPress={() => invite.mutate({})}
             />
+            {sent ? <Confirmation>{sent}</Confirmation> : null}
+            {(invitations.data ?? []).map((invitation) => (
+              <Button
+                key={invitation.id}
+                label={t("Revoke {prefix}…", {
+                  prefix: invitation.tokenPrefix,
+                })}
+                variant="ghost"
+                size="sm"
+                icon="close"
+                disabled={revokeInvite.isPending}
+                onPress={() =>
+                  revokeInvite.mutate({ invitationId: invitation.id })
+                }
+              />
+            ))}
           </Card>
         </Section>
 
         {requests.data?.incoming.length ? (
-          <Section title={t("Requests for you")}>
+          <Section
+            title={t("Requests for you")}
+            description={t("Accepting makes sharing mutual by default.")}
+          >
             {requests.data.incoming.map((request) => (
               <Card key={request.id} style={{ gap: space.md }}>
                 <SocialIdentity
@@ -170,7 +228,10 @@ export default function Social() {
           </Section>
         ) : null}
 
-        <Section title={t("Your friends")}>
+        <Section
+          title={t("Your friends")}
+          description={t("Open someone to see what they share with you.")}
+        >
           {friends.isLoading ? (
             <Loading />
           ) : friends.isError ? (
@@ -186,7 +247,7 @@ export default function Social() {
                     <Badge
                       label={
                         friend.sharesSomething
-                          ? t("Shares their figures")
+                          ? t("Shares")
                           : t("Shares nothing")
                       }
                       icon={
@@ -262,12 +323,6 @@ export default function Social() {
             />
           </Card>
         </Section>
-
-        <Note>
-          {t(
-            "Each friend sees exactly what your sharing locks allow — nothing more.",
-          )}
-        </Note>
       </Screen>
     </>
   );

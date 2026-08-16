@@ -38,6 +38,24 @@ export function comparisonUnit(kind: string): "scale" | "percent" {
 }
 
 /**
+ * The server writes its refusals in plain sentences ("This group is on an
+ * administrative hold", "This year is not compatible with the class
+ * template"). The web shows them verbatim; so does native.
+ */
+export function serverMessage(error: unknown, fallback: string): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
+
+/**
  * The small social vocabulary on native: a person, and a shared figure.
  * Everything else is built from the ordinary layout pieces.
  */

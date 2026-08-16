@@ -23,13 +23,23 @@ export default function Groups() {
   const router = useRouter();
   const groups = useQuery(orpc.social.groups.list.queryOptions());
 
+  /** The web's year-state badge, folded into the row's subtitle. */
+  const yearLabel = (group: NonNullable<typeof groups.data>[number]) =>
+    group.yearStatus === "connected"
+      ? (group.linkedYearName ?? t("Year connected"))
+      : group.setupRequired
+        ? t("Model needed")
+        : group.yearStatus === "incompatible"
+          ? t("Incompatible year")
+          : t("Choose a year");
+
   return (
     <>
       <Stack.Screen options={{ title: t("Classes") }} />
       <Screen>
         <Note>
           {t(
-            "A class brings together people who use the same subjects, periods and grading scale.",
+            "Follow a class using the same subjects, periods and grading scale. Friend sharing remains separate.",
           )}
         </Note>
 
@@ -51,26 +61,20 @@ export default function Groups() {
                   key={group.id}
                   first={index === 0}
                   title={group.name}
-                  subtitle={
-                    (group.memberCount === 1
+                  subtitle={[
+                    group.memberCount === 1
                       ? t("1 member")
-                      : t("{count} members", { count: group.memberCount })) +
-                    (group.linkedYearName
-                      ? ` · ${group.linkedYearName}`
-                      : group.setupRequired
-                        ? ` · ${t("Setup required")}`
-                        : ` · ${t("Choose a class year")}`)
-                  }
+                      : t("{count} members", { count: group.memberCount }),
+                    yearLabel(group),
+                    group.description || null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   trailing={
                     group.state === "frozen" ? (
                       <Badge
                         label={t("On hold")}
                         icon="snow-outline"
-                        toneColor="negative"
-                      />
-                    ) : group.yearStatus === "incompatible" ? (
-                      <Badge
-                        label={t("Incompatible year")}
                         toneColor="negative"
                       />
                     ) : group.role === "owner" ? (
@@ -101,7 +105,7 @@ export default function Groups() {
               icon="people-circle-outline"
               title={t("No classes yet")}
               body={t(
-                "Create a class from one of your school years, build a new model, or open an invitation.",
+                "Create a class from an existing year or a new model, or open an invitation from a classmate.",
               )}
             />
           )}
