@@ -2,6 +2,10 @@ import { memo, useMemo, useState } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { usePalette } from "@/lib/theme";
+import {
+  resolveScrubberTickStep,
+  resolveVisibleScrubberDays,
+} from "./day-scrubber-model";
 
 /**
  * The web's day-per-tick rewind scrubber, translated for touch: one thin
@@ -17,30 +21,41 @@ function clampDay(day: number, totalDays: number): number {
 
 const Ticks = memo(function Ticks({
   totalDays,
+  width,
   monthStarts,
   baseColor,
   monthColor,
 }: {
   totalDays: number;
+  width: number;
   monthStarts: readonly number[];
   baseColor: string;
   monthColor: string;
 }) {
   const months = useMemo(() => new Set(monthStarts), [monthStarts]);
+  // The web virtualizes its strip the same way: only ticks that can be told
+  // apart are mounted, and month anchors always survive the thinning.
+  const visible = useMemo(
+    () =>
+      resolveVisibleScrubberDays(
+        totalDays,
+        resolveScrubberTickStep(totalDays, width),
+        monthStarts,
+      ),
+    [monthStarts, totalDays, width],
+  );
   return (
-    <View
-      pointerEvents="none"
-      style={{
-        flexDirection: "row",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-        flex: 1,
-      }}
-    >
-      {Array.from({ length: totalDays + 1 }, (_unused, day) => (
+    <View pointerEvents="none" style={{ flex: 1 }}>
+      {visible.map((day) => (
         <View
           key={day}
           style={{
+            position: "absolute",
+            bottom: 0,
+            left:
+              totalDays > 0
+                ? Math.min((day / totalDays) * width, Math.max(0, width - 1))
+                : 0,
             width: 1,
             height: months.has(day) ? 16 : 10,
             backgroundColor: months.has(day) ? monthColor : baseColor,
@@ -117,6 +132,7 @@ export function DayScrubber({
       >
         <Ticks
           totalDays={totalDays}
+          width={width}
           monthStarts={monthStarts}
           baseColor={`${palette.textFaint}73`}
           monthColor={`${palette.textMuted}B3`}
