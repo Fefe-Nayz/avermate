@@ -252,14 +252,6 @@ export default function GradePage({
       : []),
   ]
 
-  const componentTotal = grade.components.reduce(
-    (sum, component) =>
-      gradeRatio(component) === null
-        ? sum
-        : sum + Math.max(0, component.coefficient),
-    0
-  )
-
   return (
     <>
       <PageMeta title={grade.name} subtitle={subject?.name} />
@@ -357,20 +349,17 @@ export default function GradePage({
             after two charts about how the number compares to others. Everything
             below this point interprets the result; this still describes it. */}
         {grade.components.length > 0 ? (
-          <Card className="gap-2 py-4">
-            <CardHeader className="px-4">
-              <CardTitle className="text-sm font-medium">
-                {t("What it is made of")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4">
-              <ul className="flex flex-col gap-2">
-                {grade.components.map((component) => {
-                  const componentShare =
-                    componentTotal > 0 && gradeRatio(component) !== null
-                      ? Math.max(0, component.coefficient) / componentTotal
-                      : null
-                  return (
+          // The heading sits outside the card, the way "Where it stands" does. It
+          // names a section rather than labelling a panel, and a card that carries
+          // its own title was the odd one out on this page.
+          <section className="flex flex-col gap-2">
+            <h2 className="px-1 text-sm font-medium">
+              {t("What it is made of")}
+            </h2>
+            <Card className="py-4">
+              <CardContent className="px-4">
+                <ul className="flex flex-col gap-2">
+                  {grade.components.map((component) => (
                     <li
                       key={component.id}
                       className="flex items-center gap-3 border-b pb-2 last:border-0 last:pb-0"
@@ -378,34 +367,33 @@ export default function GradePage({
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {component.name}
                       </span>
-                      {/* The coefficient says how it was entered; the share says
-                          what it decided. Both, because one explains the other. */}
-                      {componentShare !== null ? (
-                        <span className="numeric hidden text-xs text-muted-foreground @sm/main:inline">
-                          {format.number(componentShare, {
-                            style: "percent",
-                            maximumFractionDigits: 0,
-                          })}
+                      <CoefficientBadge coefficient={component.coefficient} />
+                      {/* The badge already says the mark on the year's scale, so
+                          the points as entered are only worth a column when they
+                          are a different reading: a part out of 20 in a year out of
+                          20 printed the same numerals twice on one row. Out of
+                          anything else — 29 / 40 — they say what was on the paper,
+                          which the normalised mark cannot. Same rule as the header
+                          above, for the same reason. */}
+                      {component.outOf !== scale ? (
+                        <span className="numeric w-20 text-right text-xs text-muted-foreground">
+                          <PointsValue
+                            value={component.value}
+                            outOf={component.outOf}
+                          />
                         </span>
                       ) : null}
-                      <CoefficientBadge coefficient={component.coefficient} />
                       <ResultBadge
                         ratio={gradeRatio(component)}
                         showScale={false}
                         className="text-sm"
                       />
-                      <span className="numeric w-20 text-right text-xs text-muted-foreground">
-                        <PointsValue
-                          value={component.value}
-                          outOf={component.outOf}
-                        />
-                      </span>
                     </li>
-                  )
-                })}
-              </ul>
-            </CardContent>
-          </Card>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
         ) : null}
 
         {standing.length > 0 ? (
