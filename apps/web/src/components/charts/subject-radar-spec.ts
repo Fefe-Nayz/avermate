@@ -2,6 +2,7 @@ import {
   angleGrid,
   polar,
   radialArea,
+  radialDot,
   radialGrid,
   radialText,
 } from "@tanstack/charts/polar"
@@ -131,7 +132,11 @@ export function labelLines(
   const join = (parts: string[]) =>
     parts.reduce(
       (text, part) =>
-        text === "" ? part : text.endsWith("-") ? text + part : `${text} ${part}`,
+        text === ""
+          ? part
+          : text.endsWith("-")
+            ? text + part
+            : `${text} ${part}`,
       ""
     )
 
@@ -168,6 +173,7 @@ export function radarSpec({
   width,
   height,
   formatValue,
+  focusedSubject = null,
 }: {
   points: readonly RadarPoint[]
   /** The year's own top mark; a year here is not always out of twenty. */
@@ -175,6 +181,13 @@ export function radarSpec({
   width: number
   height: number
   formatValue: (value: number) => string
+  /**
+   * The subject under the pointer, as the host last reported it.
+   *
+   * Focus reaches the spec as data because no radial mark can read it from the
+   * renderer. See the active point below.
+   */
+  focusedSubject?: string | null
 }) {
   const domain = points.map((point) => point.subject)
   const fontSize = labelFontSizeFor(width)
@@ -253,6 +266,41 @@ export function radarSpec({
             fill: "var(--chart-1)",
             fillOpacity: 0.1,
             stroke: "var(--chart-1)",
+            strokeWidth: 2,
+          }),
+          /*
+           * The active point, given back.
+           *
+           * This chart used to have one and it was the renderer's: nothing here
+           * drew it, `focusRing` was left on, and the built-in ring marked the
+           * focused vertex. Turning that off across every definition — to be rid
+           * of the `Canvas`-filled white halo it puts under the primary point —
+           * took the radar's only marker with it. Every cartesian chart in the
+           * app had a replacement ready, a `dot` that grows on focus through
+           * `states: [{ when: { focus: "key" }, … }]`. The radar had none, and
+           * no radial mark in this library accepts `states`.
+           *
+           * Nor can a channel stand in for one: `ChannelAccessorContext` is
+           * `{ index, data }`, so a dot cannot ask what is focused. So focus
+           * comes the other way round — the host reports it through
+           * `onFocusChange`, the component holds it, and it arrives here as an
+           * argument. The dot is in the chart's own colour rather than the halo's
+           * white, which is what the ring was turned off for.
+           */
+          // SAFETY: the mark reads the source and never writes to it; the cast
+          // only drops `readonly`, which its `Iterable` parameter does not take.
+          radialDot(points as RadarPoint[], {
+            id: "main-subject-radar-active-point",
+            angle: "subject",
+            radius: "value",
+            key: "subject",
+            // Zero, not absent: the dot keeps its identity across focus changes,
+            // so the renderer resizes one circle instead of adding and removing
+            // one — the same shape the cartesian charts' `states` produce.
+            r: (datum) => (datum.subject === focusedSubject ? 5 : 0),
+            fill: "var(--chart-1)",
+            // Lifts it off the area's own fill and stroke.
+            stroke: "var(--background)",
             strokeWidth: 2,
           }),
           radialText(labels, {

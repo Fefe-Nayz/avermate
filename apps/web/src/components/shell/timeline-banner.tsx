@@ -320,7 +320,15 @@ function TimelineMiniBar() {
               format="short"
               className="h-11 w-full"
             />
-            <div>
+            {/* The whole scrubber, dates included, is off-limits to the swipe.
+                `DayScrubber` carries `data-base-ui-swipe-ignore` itself, and the
+                drawer resolves it with `target.closest()` — so the exemption
+                covered the ticks and stopped at their bottom edge. The dates
+                underneath sit right where a thumb lands, a drag from one was a
+                downward swipe like any other, and the sheet shut on the way to
+                picking a day. Held here instead of on each child so the two
+                halves of one control cannot answer differently again. */}
+            <div data-base-ui-swipe-ignore="">
               <DayScrubber
                 totalDays={Math.max(1, totalDays)}
                 selectedDay={selectedDay}

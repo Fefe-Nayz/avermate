@@ -14,6 +14,7 @@ import { usePreferences } from "@/hooks/use-preferences"
 import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
 import { lineStyleCurve } from "./line-style"
+import { INSTANT_FOCUS_STATE } from "./responsive-chart"
 import {
   createIndependentSeriesFocus,
   viewportValues,
@@ -307,12 +308,7 @@ export function MultiSeriesAverageChart({
                 // its dot — "key" lit only the single closest series.
                 when: { focus: "group" },
                 style: { r: 5, fillOpacity: 1 },
-                transition: {
-                  type: "tween",
-                  duration: 90,
-                  easing: "ease-out",
-                  respectReducedMotion: true,
-                },
+                transition: INSTANT_FOCUS_STATE,
               },
             ],
           }),

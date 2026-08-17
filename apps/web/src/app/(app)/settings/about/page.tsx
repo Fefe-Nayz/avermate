@@ -11,6 +11,7 @@ import { useFeedback } from "@/components/feedback/feedback-provider"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { InstallCard } from "@/components/pwa/install-card"
 import { haptic } from "@/lib/haptics"
+import { copyText } from "@/lib/clipboard"
 
 export default function AboutPage() {
   const t = useExtracted()
@@ -49,10 +50,11 @@ export default function AboutPage() {
         >
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               haptic("light")
-              void navigator.clipboard.writeText(user.id)
-              toast.success(t("Copied."))
+              // Awaited, so "Copied." is only ever said when it was.
+              if (await copyText(user.id)) toast.success(t("Copied."))
+              else toast.error(t("Could not copy."))
             }}
             className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-left font-mono text-xs"
           >

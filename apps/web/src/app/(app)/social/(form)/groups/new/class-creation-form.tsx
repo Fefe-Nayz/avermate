@@ -46,6 +46,7 @@ import {
   type PeriodDraft,
 } from "@/lib/period-drafts"
 import { cn } from "@/lib/utils"
+import { randomId } from "@/lib/id"
 
 type SourceMode = "year" | "builder"
 type PeriodTemplate =
@@ -56,7 +57,7 @@ function emptyConfiguration(subjectName: string): PresetEditorConfiguration {
   return {
     subjects: [
       {
-        key: `subject:${crypto.randomUUID().replaceAll("-", "")}`,
+        key: `subject:${randomId().replaceAll("-", "")}`,
         name: subjectName,
         kind: "subject",
         isMain: true,

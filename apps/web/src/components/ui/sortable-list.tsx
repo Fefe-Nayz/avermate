@@ -465,6 +465,8 @@ export function DragHandle({ className }: { className?: string }) {
       type="button"
       aria-label={t("Reorder")}
       disabled={handle.disabled}
+      // The shell's pull-to-refresh skips gestures that begin here.
+      data-drag-handle
       className={cn(
         "flex size-11 shrink-0 cursor-grab touch-manipulation items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing disabled:opacity-40 md:size-8 md:rounded-md",
         className

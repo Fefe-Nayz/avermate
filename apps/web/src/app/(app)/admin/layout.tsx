@@ -18,7 +18,9 @@ export default async function AdminLayout({
 }) {
   await requireServerAdmin()
   return (
-    <div className="flex gap-8">
+    // The rail sits beside the content on a wide screen; the pill row the same
+    // component renders stacks above it on a phone.
+    <div className="flex flex-col gap-4 md:flex-row md:gap-8">
       <AdminNavigation />
       <div className="min-w-0 flex-1">{children}</div>
     </div>

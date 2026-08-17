@@ -27,7 +27,10 @@ import {
   type WidgetValueType,
   type WidgetVisualizationV1,
 } from "@avermate/core"
-import { ResponsiveChart } from "@/components/charts/responsive-chart"
+import {
+  INSTANT_CHART_UPDATES,
+  ResponsiveChart,
+} from "@/components/charts/responsive-chart"
 import { useStatusLabel } from "@/components/goals/goal-strip"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
@@ -1347,6 +1350,10 @@ function WidgetSeriesChart({
         : undefined,
       clip: true,
       focus: "nearest",
+      // The renderer's built-in focus ring is a `Canvas`-filled circle under
+      // the primary point — white on a light card, and reading as a halo the
+      // design never asked for. Off everywhere, not just on the sparkline.
+      focusRing: false,
       tooltip: {
         use: tooltip,
         placement: ["top", "bottom", "right", "left"],
@@ -1439,6 +1446,7 @@ function WidgetSeriesChart({
             definition={definition}
             height={height}
             initialWidth={expandedWidth(height)}
+            updateTransition={INSTANT_CHART_UPDATES}
           />
         </div>
         {rightLegend ? legend : null}

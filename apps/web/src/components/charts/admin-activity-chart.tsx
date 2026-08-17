@@ -8,6 +8,7 @@ import { curveMonotoneX } from "d3-shape"
 import { useExtracted, useFormatter } from "next-intl"
 import { useCallback, useMemo } from "react"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
+import { INSTANT_FOCUS_STATE } from "./responsive-chart"
 import {
   createIndependentSeriesFocus,
   type NumericDomain,
@@ -127,12 +128,7 @@ export function AdminActivityChart({
               {
                 when: { focus: "key" },
                 style: { r: 4, fillOpacity: 1 },
-                transition: {
-                  type: "tween",
-                  duration: 90,
-                  easing: "ease-out",
-                  respectReducedMotion: true,
-                },
+                transition: INSTANT_FOCUS_STATE,
               },
             ],
           }),
@@ -165,6 +161,10 @@ export function AdminActivityChart({
         },
         clip: true,
         focus,
+        // The renderer's built-in focus ring is a `Canvas`-filled circle under
+        // the primary point — white on a light card, and reading as a halo the
+        // design never asked for. Off everywhere, not just on the sparkline.
+        focusRing: false,
         maxFocusDistance: Number.POSITIVE_INFINITY,
         pointer: false,
         tooltip: {

@@ -12,17 +12,14 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
-import {
-  DateField,
-  NumberField,
-  TextField,
-} from "@/components/forms/controls"
+import { DateField, NumberField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { AverageValue, DeltaValue } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+import { randomId } from "@/lib/id"
 
 /**
  * Recording a result.
@@ -480,7 +477,7 @@ export function GradeForm({
                     if (checked && components.length === 0) {
                       setComponents([
                         {
-                          key: crypto.randomUUID(),
+                          key: randomId(),
                           name: "",
                           value: "",
                           outOf: outOf,
@@ -591,7 +588,7 @@ export function GradeForm({
                       setComponents((current) => [
                         ...current,
                         {
-                          key: crypto.randomUUID(),
+                          key: randomId(),
                           name: "",
                           value: "",
                           outOf,

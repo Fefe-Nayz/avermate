@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { EllipsisIcon, PlusIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { usePreferences } from "@/hooks/use-preferences"
@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { useQuickAdd } from "./quick-add"
+import { useScrollPane } from "./scroll-pane"
 
 /**
  * The bottom bar.
@@ -28,6 +29,8 @@ import { useQuickAdd } from "./quick-add"
 export function MobileTabBar() {
   const t = useExtracted()
   const pathname = usePathname()
+  const router = useRouter()
+  const pane = useScrollPane()
   const quickAdd = useQuickAdd()
   const { preferences } = usePreferences()
 
@@ -86,12 +89,31 @@ export function MobileTabBar() {
 
           const active =
             pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+          // Only the exact route re-taps. From `/grades/abc` the Grades tab is
+          // lit but tapping it means "up to the list", so the link must run.
+          const onCurrentScreen = pathname === tab.href
 
           return (
             <li key={tab.href} className="flex justify-center">
               <Link
                 href={tab.href}
-                onClick={() => haptic("selection")}
+                onClick={(event) => {
+                  haptic("selection")
+                  if (!onCurrentScreen) return
+                  // Nowhere to navigate: the tap becomes the two things a phone
+                  // means by tapping the tab you are already on — first take me
+                  // back to the top, then, once there, get me fresh data.
+                  event.preventDefault()
+                  if (pane && !pane.isAtTop()) {
+                    pane.scrollToTop()
+                    return
+                  }
+                  // Through the pane, not the router: a bare refresh replaces
+                  // the tree with no spinner at all, and a tap that shows
+                  // nothing is indistinguishable from a tap that did nothing.
+                  if (pane) pane.refresh()
+                  else router.refresh()
+                }}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex h-full w-full flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",

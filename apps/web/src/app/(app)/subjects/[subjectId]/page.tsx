@@ -58,7 +58,6 @@ import {
 } from "@/components/grades/grade-list"
 import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
-import { cn } from "@/lib/utils"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
 
 /**
@@ -300,14 +299,12 @@ export default function SubjectPage({
          * four cramped boxes further down the page — so the number and the
          * things that explain it never appeared together.
          */}
-        <div
-          className={cn(
-            "grid gap-3",
-            isCategory
-              ? "grid-cols-1"
-              : "grid-cols-2 @2xl/main:grid-cols-3 @4xl/main:grid-cols-6"
-          )}
-        >
+        {/* One grid for both kinds. The single-column variant existed only
+            while a category showed nothing but the average; with the four
+            figures back it left the `col-span-2` card straddling an implicit
+            second column, which is what made the tiles come out in mismatched
+            wide/narrow pairs. */}
+        <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-3 @4xl/main:grid-cols-6">
           <Card className="col-span-2 gap-1 py-4 @2xl/main:col-span-1 @4xl/main:col-span-2">
             <CardHeader className="px-4">
               <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -328,19 +325,22 @@ export default function SubjectPage({
             </CardContent>
           </Card>
 
-          {!isCategory
-            ? stats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
-                >
-                  <p className="numeric text-lg font-semibold">{stat.value}</p>
-                  <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                    {stat.label}
-                  </p>
-                </div>
-              ))
-            : null}
+          {/* Categories get these too. They were gated out, but every figure
+              here reads the whole sub-tree — `gradeRatios(graph, subjectId)`
+              and `allGrades(subjectId)` both walk descendants — so a category
+              has exactly as much to describe as a leaf, and hiding them left
+              the busiest subjects with the least detail. */}
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
+            >
+              <p className="numeric text-lg font-semibold">{stat.value}</p>
+              <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                {stat.label}
+              </p>
+            </div>
+          ))}
         </div>
 
         <MultiSeriesAverageChart

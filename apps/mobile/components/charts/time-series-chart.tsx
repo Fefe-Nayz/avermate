@@ -173,26 +173,32 @@ export function TimeSeriesChart({
     });
   }, [entranceProgress, reduceMotion, width]);
 
-  const number = new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-GB", {
-    maximumFractionDigits: 2,
-  });
-  // The web y-axis rounds harder than the tooltip: one fraction digit.
-  const axisNumber = new Intl.NumberFormat(
-    locale === "fr" ? "fr-FR" : "en-GB",
-    { maximumFractionDigits: 1 },
-  );
-  const shortDate = new Intl.DateTimeFormat(
-    locale === "fr" ? "fr-FR" : "en-GB",
-    { day: "numeric", month: "short" },
-  );
-  const longDate = new Intl.DateTimeFormat(
-    locale === "fr" ? "fr-FR" : "en-GB",
-    { day: "numeric", month: "long" },
-  );
+  // Built once per locale rather than per render: constructing an Intl
+  // formatter is expensive, and a scrub re-renders this component on every
+  // finger movement.
+  const { number, axisNumber, shortDate, longDate } = useMemo(() => {
+    const tag = locale === "fr" ? "fr-FR" : "en-GB";
+    return {
+      number: new Intl.NumberFormat(tag, { maximumFractionDigits: 2 }),
+      // The web y-axis rounds harder than the tooltip: one fraction digit.
+      axisNumber: new Intl.NumberFormat(tag, { maximumFractionDigits: 1 }),
+      shortDate: new Intl.DateTimeFormat(tag, {
+        day: "numeric",
+        month: "short",
+      }),
+      longDate: new Intl.DateTimeFormat(tag, {
+        day: "numeric",
+        month: "long",
+      }),
+    };
+  }, [locale]);
 
-  const plot = plotRect(width, height);
-  const hidden = new Set(hiddenIds);
-  const visibleSeries = model.series.filter((series) => !hidden.has(series.id));
+  const plot = useMemo(() => plotRect(width, height), [width, height]);
+  const hidden = useMemo(() => new Set(hiddenIds), [hiddenIds]);
+  const visibleSeries = useMemo(
+    () => model.series.filter((series) => !hidden.has(series.id)),
+    [hidden, model.series],
+  );
 
   // The same core segments the web draws, following the primary series (or
   // the pooled grade cloud), recomputed when a legend toggle changes the mix.
@@ -214,11 +220,11 @@ export function TimeSeriesChart({
   // While zoomed, the y-window follows what is visible so a run can leave
   // the frame through the sides but never through the top or bottom. The
   // trend counts too: the web frames its trend rows alongside the data.
-  const framingSeries = trendSeries
-    ? [...visibleSeries, trendSeries]
-    : visibleSeries;
-  const yDomain =
-    model.autoZoom && (zoomed || trendSeries)
+  const yDomain = useMemo(() => {
+    const framingSeries = trendSeries
+      ? [...visibleSeries, trendSeries]
+      : visibleSeries;
+    return model.autoZoom && (zoomed || trendSeries)
       ? viewportYDomain(
           framingSeries,
           viewport,
@@ -226,26 +232,50 @@ export function TimeSeriesChart({
           model.yDomain,
         )
       : model.yDomain;
-
-  const scaleX: NumericScaleLike = createXScale(viewport, plot);
-  const scaleY = createYScale(yDomain, plot);
-  const { paths, points: projected } = projectSeries(
+  }, [
+    model.autoZoom,
+    model.maximumScale,
+    model.yDomain,
+    trendSeries,
+    viewport,
     visibleSeries,
-    scaleX,
-    scaleY,
-    lineStyle,
-  );
-  // Piecewise-linear like the web's, whatever the line-style preference says,
-  // and never part of inspection or dots: it is a reading, not a sample.
-  const trendPath = trendSeries
-    ? linePath(
-        trendSeries.points.map(
-          (point) =>
-            [scaleX.map(point.timestamp), scaleY(point.value)] as const,
-        ),
-        "straight",
-      )
-    : "";
+    zoomed,
+  ]);
+
+  /**
+   * Scales and path geometry — every input except the pointer.
+   *
+   * Scrubbing calls `setPointer` on each finger movement, so anything left
+   * loose in the render body is recomputed at gesture frequency. Projecting
+   * every sample and re-serialising the path strings for a reading that only
+   * moves one dot is what makes the dot trail the finger, and it all runs on
+   * the JS thread the gesture is already using. Held here, a scrub re-runs
+   * only the nearest-point lookup below.
+   */
+  const geometry = useMemo(() => {
+    const scaleX: NumericScaleLike = createXScale(viewport, plot);
+    const scaleY = createYScale(yDomain, plot);
+    const { paths, points } = projectSeries(
+      visibleSeries,
+      scaleX,
+      scaleY,
+      lineStyle,
+    );
+    // Piecewise-linear like the web's, whatever the line-style preference
+    // says, and never part of inspection or dots: it is a reading, not a
+    // sample.
+    const trendPath = trendSeries
+      ? linePath(
+          trendSeries.points.map(
+            (point) =>
+              [scaleX.map(point.timestamp), scaleY(point.value)] as const,
+          ),
+          "straight",
+        )
+      : "";
+    return { paths, points, scaleX, scaleY, trendPath };
+  }, [lineStyle, plot, trendSeries, viewport, visibleSeries, yDomain]);
+  const { paths, points: projected, scaleX, scaleY, trendPath } = geometry;
 
   const inspected =
     pointer && projected.length > 0

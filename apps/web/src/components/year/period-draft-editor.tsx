@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sortable-list"
 import { Switch } from "@/components/ui/switch"
 import { haptic } from "@/lib/haptics"
+import { randomId } from "@/lib/id"
 import {
   periodDraftProblems,
   periodDraftsFromTemplate,
@@ -96,7 +97,7 @@ export function PeriodDraftEditor({
     onChange([
       ...value,
       {
-        key: crypto.randomUUID(),
+        key: randomId(),
         name: t("New period"),
         startAt: year.startsAt,
         endAt: year.endsAt,

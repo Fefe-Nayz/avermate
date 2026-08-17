@@ -31,15 +31,14 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
-import {
-  SettingsSection,
-} from "@/components/settings/settings-section"
+import { SettingsSection } from "@/components/settings/settings-section"
 import { DateField, NumberField, TextField } from "@/components/forms/controls"
 import { PeriodDraftEditor } from "@/components/year/period-draft-editor"
 import { useYear } from "@/components/year/year-provider"
 import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
+import { randomId } from "@/lib/id"
 import {
   dateInputValue,
   periodDraftProblems,
@@ -328,7 +327,7 @@ export default function YearSettingsPage() {
                   setDrafts((current) => [
                     ...current,
                     {
-                      key: crypto.randomUUID(),
+                      key: randomId(),
                       id: undefined,
                       name: t("New period"),
                       startAt: startsAt,

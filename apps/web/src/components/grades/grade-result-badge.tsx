@@ -64,6 +64,20 @@ export function GradeResultBadge({
     }
   }, [grade.id, grade.subjectId, graph, hasGrade, open])
   const accessibleResult = formatPoints(grade.value, grade.outOf, { locale })
+  /**
+   * The weight belongs in the name too, not only in the chip.
+   *
+   * A screen reader gets the badge as one link; `×3` beside it would either be
+   * read as a stray symbol or skipped, so the weight is said in words — and only
+   * when there is one to say, matching what the chip decides to draw.
+   */
+  const accessibleLabel =
+    grade.coefficient === 1
+      ? `${grade.name}: ${accessibleResult}`
+      : `${grade.name}: ${accessibleResult}, ${t("Weight")} ${grade.coefficient.toLocaleString(
+          locale,
+          { maximumFractionDigits: 2 }
+        )}`
 
   return (
     <HoverCard open={open} onOpenChange={setOpen}>
@@ -73,15 +87,27 @@ export function GradeResultBadge({
         render={
           <Link
             href={`/grades/${grade.id}`}
-            aria-label={`${grade.name}: ${accessibleResult}`}
+            aria-label={accessibleLabel}
             className={cn(
-              "inline-flex rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              "inline-flex items-center gap-1 rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               className
             )}
           />
         }
       >
         <ResultBadge ratio={ratio} />
+        {/* The weight, on the badge rather than only inside the hover card.
+            A row of grades is what explains the average beside it, and a 15/20
+            counting three times explains it very differently from one counting
+            once — a reader following a subject's average could not see which was
+            which without opening every grade in turn. On touch that hover card
+            is a deliberate long press, so on a phone the weight was effectively
+            not there at all.
+
+            `CoefficientBadge` draws nothing at a coefficient of one, which is
+            most grades: the ordinary row is unchanged and only the grades that
+            actually pull on the average announce themselves. */}
+        <CoefficientBadge coefficient={grade.coefficient} />
       </HoverCardTrigger>
 
       <HoverCardContent

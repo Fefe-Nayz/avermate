@@ -1,8 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { use, useMemo } from "react"
-import { ChevronRightIcon, LayersIcon, PencilIcon } from "lucide-react"
+import { use, useMemo, useState } from "react"
+import {
+  ChevronRightIcon,
+  LayersIcon,
+  PencilIcon,
+  SearchIcon,
+} from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import {
   averageEventDates,
@@ -22,6 +27,15 @@ import {
   type AverageSeries,
 } from "@/components/charts/multi-series-average-chart"
 import { GradeResultsChart } from "@/components/charts/grade-results-chart"
+import { SortMenu } from "@/components/data/sort-menu"
+import {
+  filterGrades,
+  sortGrades,
+  sortRows,
+  type ChildSortKey,
+  type GradeSortKey,
+} from "@/components/grades/grade-sorting"
+import { Input } from "@/components/ui/input"
 import { AverageValue, CoefficientBadge } from "@/components/data/value"
 import {
   GradeList,
@@ -61,6 +75,9 @@ export default function AverageAnalyticsPage({
     year,
   } = useYear()
   const { preferences, update: updatePreferences } = usePreferences()
+  const [gradeQuery, setGradeQuery] = useState("")
+  const [gradeSort, setGradeSort] = useState<GradeSortKey>("date")
+  const [subjectSort, setSubjectSort] = useState<ChildSortKey>("custom")
   const custom = customAverages.find((average) => average.id === averageId)
   const isGeneral = averageId === "general"
 
@@ -107,7 +124,8 @@ export default function AverageAnalyticsPage({
       ...children.map((child, index) => ({
         id: child.id,
         label: child.name,
-        color: AVERAGE_SERIES_COLORS[(index + 1) % AVERAGE_SERIES_COLORS.length],
+        color:
+          AVERAGE_SERIES_COLORS[(index + 1) % AVERAGE_SERIES_COLORS.length],
         points: seriesFor(child.id),
       })),
       {
@@ -118,12 +136,7 @@ export default function AverageAnalyticsPage({
         primary: true,
       },
     ]
-  }, [
-    preferences.chartSettings.showSubSubjects,
-    range,
-    resolved,
-    title,
-  ])
+  }, [preferences.chartSettings.showSubSubjects, range, resolved, title])
 
   const children = resolved?.graph.childrenOf(null) ?? []
 
@@ -145,7 +158,11 @@ export default function AverageAnalyticsPage({
 
   const ratio = resolved.graph.ratio(null, resolved.scope)
   const ratios = gradeRatios(resolved.graph)
-  const grades = [...resolved.graph.allGrades()].reverse()
+  const allGrades = [...resolved.graph.allGrades()].reverse()
+  const grades = sortGrades(
+    filterGrades(allGrades, gradeQuery, (id) => graph.byId(id)?.name),
+    gradeSort
+  )
   const contributors = resolved.graph.contributorsOf(null)
   const composition = custom
     ? custom.entries.flatMap((entry) => {
@@ -153,6 +170,7 @@ export default function AverageAnalyticsPage({
         if (!subject || !resolved.graph.has(subject.id)) return []
         return [
           {
+            name: subject.name,
             coefficient: entry.coefficient ?? subject.coefficient,
             ratio: resolved.graph.ratio(subject.id, resolved.scope),
             subject,
@@ -160,10 +178,15 @@ export default function AverageAnalyticsPage({
         ]
       })
     : contributors.map((subject) => ({
+        name: subject.name,
         coefficient: subject.coefficient,
         ratio: graph.ratio(subject.id),
         subject,
       }))
+  // Ordered on the figures the rows display, which for a custom average are
+  // its own overridden coefficients and scoped ratios rather than the
+  // subjects' own.
+  const visibleComposition = sortRows(composition, subjectSort)
   const stats = [
     {
       label: t("Median"),
@@ -194,7 +217,10 @@ export default function AverageAnalyticsPage({
               maximumFractionDigits: 0,
             }),
     },
-    { label: t("Grades"), value: String(grades.length) },
+    // `ratios`, not the rendered list: that one is filtered by the search box,
+    // and a statistic that moves while you type is describing your query rather
+    // than your results. Same source as the subject page's tile.
+    { label: t("Grades"), value: String(ratios.length) },
   ]
   const impacts = contributors.map((subject) => ({
     id: subject.id,
@@ -249,22 +275,40 @@ export default function AverageAnalyticsPage({
           <PeriodRail />
         </div>
 
-        <Card className="gap-1 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {t("Average")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4">
-            <AverageValue
-              ratio={ratio}
-              showScale
-              colored
-              className="text-4xl font-semibold"
-              animateFromZero
-            />
-          </CardContent>
-        </Card>
+        {/* The same band a subject page uses: the average beside the four
+            figures that qualify it. They were split here — the number at the
+            top, the figures most of a page further down — so the two pages
+            answered the same question in two different shapes. */}
+        <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-3 @4xl/main:grid-cols-6">
+          <Card className="col-span-2 gap-1 py-4 @2xl/main:col-span-1 @4xl/main:col-span-2">
+            <CardHeader className="px-4">
+              <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {t("Average")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4">
+              <AverageValue
+                ratio={ratio}
+                showScale
+                colored
+                className="text-3xl font-semibold"
+                animateFromZero
+              />
+            </CardContent>
+          </Card>
+
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
+            >
+              <p className="numeric text-lg font-semibold">{stat.value}</p>
+              <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </div>
 
         <MultiSeriesAverageChart
           title={t("Over time")}
@@ -313,15 +357,34 @@ export default function AverageAnalyticsPage({
           title={t("Grade results")}
         />
 
+        {/* Impacts before the list, as on a subject page: the two answer
+            "which of these matters most" and "what are these", in that order.
+            They were the other way round here. */}
+        <ImpactGrid readings={impacts} title={t("Impact by subject")} />
+
         {composition.length > 0 ? (
           <section className="flex flex-col gap-2">
-            <div className="px-1">
+            <div className="flex items-center justify-between gap-2 px-1">
               <h3 className="text-sm font-medium">{t("Subjects")}</h3>
+              {composition.length > 1 ? (
+                <SortMenu
+                  value={subjectSort}
+                  onValueChange={setSubjectSort}
+                  variant="ghost"
+                  size="icon-sm"
+                  options={[
+                    { value: "custom", label: t("Custom order") },
+                    { value: "name", label: t("Name") },
+                    { value: "best", label: t("Best average") },
+                    { value: "coefficient", label: t("Highest coefficient") },
+                  ]}
+                />
+              ) : null}
             </div>
             <Card className="gap-2 py-0">
               <CardContent className="p-0">
                 <ul className="divide-y">
-                  {composition.map(({ coefficient, ratio, subject }) => (
+                  {visibleComposition.map(({ coefficient, ratio, subject }) => (
                     <li key={subject.id}>
                       <Link
                         href={`/subjects/${subject.id}`}
@@ -347,24 +410,37 @@ export default function AverageAnalyticsPage({
           </section>
         ) : null}
 
-        <div className="grid grid-cols-4 gap-2">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-xl border bg-card px-3 py-2.5 text-center"
-            >
-              <p className="numeric text-lg font-semibold">{stat.value}</p>
-              <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
-                {stat.label}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <ImpactGrid readings={impacts} title={t("Impact by subject")} />
-
         <section className="flex flex-col gap-2">
           <h3 className="px-1 text-sm font-medium">{t("Grades")}</h3>
+          {/* Search and sort, the same pair a subject page offers over the same
+              list. An average can gather more grades than any single subject,
+              so it was the page that needed them most and the only one without
+              them. Both controls come from the shared helpers, so the orders
+              mean the same thing on both pages. */}
+          {allGrades.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={gradeQuery}
+                  onChange={(event) => setGradeQuery(event.target.value)}
+                  placeholder={t("Search grades…")}
+                  className="h-11 pl-9 md:h-9"
+                />
+              </div>
+              <SortMenu
+                value={gradeSort}
+                onValueChange={setGradeSort}
+                className="h-11 md:h-9 md:w-9"
+                options={[
+                  { value: "date", label: t("Most recent") },
+                  { value: "oldest", label: t("Oldest first") },
+                  { value: "best", label: t("Best result") },
+                  { value: "worst", label: t("Worst result") },
+                ]}
+              />
+            </div>
+          ) : null}
           {grades.length === 0 ? (
             <Card className="gap-2 py-0">
               <CardContent className="p-0">

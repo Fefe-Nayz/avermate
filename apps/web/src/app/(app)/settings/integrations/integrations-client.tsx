@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { env } from "@/lib/env"
 import { cn } from "@/lib/utils"
+import { copyText } from "@/lib/clipboard"
 import type {
   OAuthClientSummary,
   OAuthConsentSummary,
@@ -64,8 +65,7 @@ function displayDate(value: string | number | undefined): string | null {
 }
 
 async function copy(value: string, successMessage: string): Promise<void> {
-  await navigator.clipboard.writeText(value)
-  toast.success(successMessage)
+  if (await copyText(value)) toast.success(successMessage)
 }
 
 /**
@@ -499,7 +499,9 @@ export function IntegrationsClient({
                       key={option.scope}
                       className={cn(
                         "flex items-start gap-3 p-3 transition-colors",
-                        locked ? "cursor-default" : "cursor-pointer hover:bg-accent/40"
+                        locked
+                          ? "cursor-default"
+                          : "cursor-pointer hover:bg-accent/40"
                       )}
                     >
                       <Checkbox

@@ -1,13 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "./app-sidebar"
@@ -16,6 +10,9 @@ import { MobileHeader, MobilePageTitle } from "./mobile-header"
 import { MobileTabBar } from "./mobile-tabbar"
 import { AnnouncementBanner } from "@/components/announcements/announcement-banner"
 import { TimelineBanner } from "./timeline-banner"
+import { PullToRefresh } from "./pull-to-refresh"
+import { ScrollPaneProvider } from "./scroll-pane"
+import { usePaneScrollRestoration } from "@/hooks/use-pane-scroll-restoration"
 
 /**
  * One tree, two layouts.
@@ -39,25 +36,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }))
   const condensed = scrollState.pathname === pathname && scrollState.condensed
 
-  // A new screen starts at the top. Restoring position across routes reads as
-  // a bug on a phone, where the header would come back already collapsed.
-  // Layout-phase, and the clipped shell ancestors are zeroed too: the router's
-  // own focus/scrollIntoView on the incoming segment can programmatically
-  // scroll any ancestor, and one that owns no scrollbar can never be brought
-  // back by the user — the page then sits under the sticky header with its
-  // bottom cropped, which is exactly the navigation bug this guards against.
-  useLayoutEffect(() => {
-    const pane = scrollRef.current
-    if (!pane) return
-    pane.scrollTo({ top: 0 })
-    for (
-      let ancestor = pane.parentElement;
-      ancestor;
-      ancestor = ancestor.parentElement
-    ) {
-      if (ancestor.scrollTop !== 0) ancestor.scrollTop = 0
-    }
-  }, [pathname])
+  // A new screen starts at the top; a screen you came *back* to starts where
+  // you left it. See the hook for why those are opposite requirements and how
+  // they are told apart.
+  usePaneScrollRestoration(scrollRef, pathname)
 
   useEffect(() => {
     const node = scrollRef.current
@@ -106,24 +88,31 @@ export function AppShell({ children }: { children: ReactNode }) {
       style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
     >
       <AppSidebar user={user} />
-      <SidebarInset className="min-w-0 overflow-clip">
-        <SiteHeader user={user} />
-        <MobileHeader user={user} condensed={condensed} />
-        <TimelineBanner />
-        <AnnouncementBanner />
+      <ScrollPaneProvider paneRef={scrollRef}>
+        <SidebarInset className="min-w-0 overflow-clip">
+          <SiteHeader user={user} />
+          <MobileHeader user={user} condensed={condensed} />
+          <TimelineBanner />
+          <AnnouncementBanner />
 
-        <div
-          ref={scrollRef}
-          className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-[max(1.5rem,var(--spacing-safe-bottom))]"
-        >
-          <div className="mx-auto w-full max-w-6xl pt-1 pr-[max(1rem,var(--spacing-safe-right))] pb-6 pl-[max(1rem,var(--spacing-safe-left))] md:pt-4 md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
-            <MobilePageTitle />
-            {children}
+          {/* `relative` so the pull indicator can hang over the top of the
+              pane without joining its scroll flow. */}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <PullToRefresh paneRef={scrollRef} />
+            <div
+              ref={scrollRef}
+              className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-[max(1.5rem,var(--spacing-safe-bottom))]"
+            >
+              <div className="mx-auto w-full max-w-6xl pt-1 pr-[max(1rem,var(--spacing-safe-right))] pb-6 pl-[max(1rem,var(--spacing-safe-left))] md:pt-4 md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
+                <MobilePageTitle />
+                {children}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <MobileTabBar />
-      </SidebarInset>
+          <MobileTabBar />
+        </SidebarInset>
+      </ScrollPaneProvider>
     </SidebarProvider>
   )
 }

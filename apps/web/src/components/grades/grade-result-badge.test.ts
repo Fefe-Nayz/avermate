@@ -58,4 +58,27 @@ describe("rich grade result badge", () => {
     expect(table).not.toContain("title={grade.name}")
     expect(cards).toContain("<GradeResultBadge grade={grade} />")
   })
+
+  test("carries the weight on the badge, and only when there is one", async () => {
+    const component = await readFile(
+      new URL("./grade-result-badge.tsx", import.meta.url),
+      "utf8"
+    )
+
+    // On the badge itself rather than at each call site, so every surface that
+    // shows a grade shows its weight under one rule. Without `showWhenOne` —
+    // that is the whole restraint: a coefficient of one draws nothing, so the
+    // ordinary row is untouched and only the grades that pull on the average
+    // say so. The hover card keeps `showWhenOne` because a panel headed
+    // "Weight" with nothing under it answers nothing.
+    expect(component).toContain(
+      "<CoefficientBadge coefficient={grade.coefficient} />"
+    )
+    expect(component).toContain("showWhenOne")
+
+    // Said in words for a screen reader: the chip's `×3` beside a link label is
+    // either read as a stray symbol or skipped.
+    expect(component).toContain("aria-label={accessibleLabel}")
+    expect(component).toContain("grade.coefficient === 1")
+  })
 })

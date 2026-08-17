@@ -17,6 +17,7 @@ import { useYear } from "@/components/year/year-provider"
 import { usePreferences } from "@/hooks/use-preferences"
 import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
+import { INSTANT_FOCUS_STATE } from "./responsive-chart"
 import {
   createIndependentSeriesFocus,
   viewportValues,
@@ -245,12 +246,7 @@ export function GradeResultsChart({
               {
                 when: { focus: "key" },
                 style: { r: 6, strokeWidth: 2 },
-                transition: {
-                  type: "tween",
-                  duration: 90,
-                  easing: "ease-out",
-                  respectReducedMotion: true,
-                },
+                transition: INSTANT_FOCUS_STATE,
               },
             ],
           }),

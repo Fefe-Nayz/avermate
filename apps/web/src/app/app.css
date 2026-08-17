@@ -178,6 +178,28 @@
     animation: live-dot 2s ease-in-out infinite;
   }
 
+  /* Every chart, not one of them.
+
+     The renderer gives its <svg> host `tabindex="-1"`, and clicking or
+     scrubbing it moves DOM focus there — so the browser frames the whole plot
+     in its focus ring. Scoping this to the sparkline left the same white
+     rectangle on every other chart, which is exactly what it looked like.
+
+     `tabindex="-1"` is not tab-reachable, so the ring never marks a keyboard
+     position anyone could act on; the charts that do take keyboard input
+     surface it through their own focused-point marks instead.
+
+     The dot's white halo is a separate thing, gone at the source:
+     `focusRing: false` on each definition stops the renderer emitting its
+     `Canvas`-filled circle, so there is nothing here for CSS to chase. */
+  .ts-chart:focus,
+  .ts-chart:focus-visible,
+  .ts-chart-host :focus,
+  .ts-chart-host :focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
   /* Chart entrances (see ResponsiveChart's `entrance`): curves wipe in
      along their time axis, radial shapes rise. GPU-only properties, and
      the tooltip lives in a portal the clip never touches. */
@@ -266,6 +288,90 @@
   }
 }
 
+/* The story's progress bar, filled by the browser rather than by React.
+
+   It used to be a width driven from a `setProgress` on a 50ms interval, which
+   made this the only thing on screen that React repainted twenty times a
+   second — and the only element up in the chrome animating geometry at all.
+   Measured off a recording of the heatmap zooming out, the whole row failed to
+   draw on three separate frames inside 80ms: rows 457-465 fell from 35% to 6%
+   luminance while no row anywhere else in the frame changed, and the track went
+   with the fill even though nothing animates the track. Repainting the row was
+   the thing that could fail; everything else was static, so a stale frame looked
+   correct.
+
+   Here the fill is one composited transform the browser owns for the whole slide,
+   so there is no per-frame repaint to lose, and `.story-paused` above stops it
+   with everything else. The interval still runs and still decides when to
+   advance — that part is untouched — it simply no longer draws anything. */
+@keyframes story-bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.story-bar-fill {
+  animation-name: story-bar-fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+/* The radar pulse behind the peak marker.
+
+   This is CSS rather than a motion component because it has to expand and fade
+   as one thing. Given to the animation library, `scale` and `opacity` become two
+   animations on two different clocks — the library keeps `scale` on the main
+   thread, which the story clock drives, and hands `opacity` to the compositor,
+   which runs on the document timeline. Any offset between those clocks becomes a
+   phase difference between the two halves of the pulse, and once per cycle they
+   line up at their worst: the ring at full size while the opacity is at its
+   peak, a single bright frame in an otherwise soft pulse. Measured off a screen
+   recording at 3.75s, 4.45s, 4.83s, 5.67s and 6.05s — 0.4s then 0.8s apart,
+   which is the two rings' 0.4s stagger inside one 1.2s cycle.
+
+   One keyframe set cannot drift from itself, and `.story-paused` above already
+   holds CSS animations for the pause, so this needs nothing else. */
+@keyframes story-pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  10% {
+    transform: scale(1.4);
+    opacity: var(--ring-peak, 0.8);
+  }
+  100% {
+    transform: scale(5);
+    opacity: 0;
+  }
+}
+
+.story-pulse-ring {
+  --ring-peak: 0.8;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  animation: story-pulse-ring 1.2s ease-out infinite;
+}
+
+/* The trailing ring: fainter, and half a beat behind the first. */
+.story-pulse-ring-trailing {
+  --ring-peak: 0.6;
+  animation-delay: 0.4s;
+}
+
+/* Held at the first keyframe, where the ring has no opacity, so it draws nothing
+   until the peak is reached. The element exists all the same, which is the
+   point: its compositing layer is built with the slide instead of appearing
+   partway through and forcing the chart around it to be rasterised again. */
+.story-pulse-ring-held {
+  animation-play-state: paused;
+}
+
 @keyframes flame-sway {
   0%,
   100% {
@@ -295,11 +401,9 @@
   0%,
   100% {
     transform: scale(1);
-    opacity: 1;
   }
   50% {
     transform: scale(1.4);
-    opacity: 0.7;
   }
 }
 

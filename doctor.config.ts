@@ -24,6 +24,10 @@ export default defineConfig({
   // Only errors fail the run; warnings stay advisory and visible.
   blocking: "error",
 
+  // Left at the tool's default: each run posts project shape and rule
+  // names/counts (never source) to react.doctor to compute the 0–100 score and
+  // a share URL. Set `noScore: true` here, or pass --no-telemetry, to opt out.
+
   rules: {
     // Pre-existing error backlog (counts at adoption, 2026-08-16).
     "react-doctor/no-layout-property-animation": "warn", // 15

@@ -8,16 +8,13 @@ import {
   BellIcon,
   ChevronRightIcon,
   GraduationCapIcon,
-  InfoIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
   MoonIcon,
-  PaletteIcon,
   ShieldIcon,
   SparklesIcon,
   SunIcon,
   TargetIcon,
-  UserIcon,
   UsersRoundIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -33,6 +30,7 @@ import { haptic } from "@/lib/haptics"
 import { useIsAdmin } from "@/hooks/use-admin"
 import { useYear } from "@/components/year/year-provider"
 import { useYearSheet } from "@/components/shell/year-sheet"
+import { useSettingsSections } from "@/lib/nav-labels"
 
 /**
  * The account hub.
@@ -53,6 +51,7 @@ export default function MorePage() {
   const { isAdmin } = useIsAdmin()
   const { year, years } = useYear()
   const yearSheet = useYearSheet()
+  const settings = useSettingsSections()
 
   const groups: Array<{
     label?: string
@@ -88,20 +87,15 @@ export default function MorePage() {
     },
     {
       label: t("Settings"),
-      items: [
-        { icon: UserIcon, label: t("Profile"), href: "/settings" },
-        {
-          icon: PaletteIcon,
-          label: t("Appearance"),
-          href: "/settings/appearance",
-        },
-        {
-          icon: ChartNoAxesCombinedIcon,
-          label: t("Year & periods"),
-          href: "/settings/year",
-        },
-        { icon: InfoIcon, label: t("About"), href: "/settings/about" },
-      ],
+      // Every section, not a chosen few. The desktop rail is `hidden md:block`,
+      // so a section missing from this list is a section a phone cannot reach —
+      // which is what had happened to Navigation, Year preset, Custom averages,
+      // Account and Integrations.
+      items: settings.map((section) => ({
+        icon: section.icon,
+        label: section.label,
+        href: section.href,
+      })),
     },
     {
       items: [

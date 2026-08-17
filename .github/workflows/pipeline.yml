@@ -71,6 +71,11 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # anti-slop + the react-doctor correctness/security/a11y slice; the deep
+      # React scan runs separately in react-doctor.yml.
+      - name: Lint (oxlint)
+        run: bun run lint:slop
+
       - name: Typecheck
         run: bun run check-types
 

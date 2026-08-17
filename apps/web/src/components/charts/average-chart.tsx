@@ -13,6 +13,7 @@ import { usePreferences } from "@/hooks/use-preferences"
 import { useViewportPresets, ZoomPresetGroup } from "./chart-zoom-presets"
 import { InteractiveTimeSeriesChart } from "./interactive-time-series-chart"
 import { lineStyleCurve } from "./line-style"
+import { INSTANT_FOCUS_STATE } from "./responsive-chart"
 import {
   createIndependentSeriesFocus,
   viewportValues,
@@ -252,12 +253,7 @@ export function AverageChart({
                 // its dot — "key" lit only the single closest series.
                 when: { focus: "group" },
                 style: { r: 5, fillOpacity: 1 },
-                transition: {
-                  type: "tween",
-                  duration: 90,
-                  easing: "ease-out",
-                  respectReducedMotion: true,
-                },
+                transition: INSTANT_FOCUS_STATE,
               },
             ],
           }),
@@ -307,6 +303,10 @@ export function AverageChart({
         ],
         clip: true,
         focus,
+        // The renderer's built-in focus ring is a `Canvas`-filled circle under
+        // the primary point — white on a light card, and reading as a halo the
+        // design never asked for. Off everywhere, not just on the sparkline.
+        focusRing: false,
         maxFocusDistance: Number.POSITIVE_INFINITY,
         pointer: false,
         tooltip: {

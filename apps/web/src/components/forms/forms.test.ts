@@ -111,7 +111,28 @@ describe("form flows", () => {
     expect(controls).toContain("<Popover open={open}")
     // A month that fills its card rather than floating in the middle of one.
     expect(controls).toContain('layout === "page" && !wide')
-    expect(controls).toContain("[--cell-size:--spacing(10)]")
+    expect(controls).toContain("MonthPagerCalendar")
+  })
+
+  test("the phone date picker is swiped, not paged by dropdowns", async () => {
+    const pager = await source("./month-pager-calendar.tsx")
+    const controls = await source("./controls.tsx")
+
+    // The swipe is the browser's own scroll, so it needs no gesture handler.
+    expect(pager).toContain("snap-x snap-mandatory")
+    expect(pager).toContain("overflow-x-auto")
+    // Days grow square with the width rather than stretching to fill a phone.
+    expect(pager).toContain("aspect-square")
+    // One locale for the weekday names and the week start both, or the caption
+    // follows the browser while the weekday row stays English.
+    expect(pager).toContain('locale === "fr" ? fr : enUS')
+    expect(pager).toContain("weekStartsOn")
+
+    // Shortcuts belong in the layer's pinned footer, where a thumb is, and
+    // must not render an empty rule when the bounds exclude all of them.
+    expect(controls).toContain(
+      "shortcutDays.length > 0 ? shortcuts : undefined"
+    )
   })
 
   test("advancing a step cannot save the form", async () => {

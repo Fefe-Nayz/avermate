@@ -22,6 +22,72 @@ import {
 } from "./time-series-interaction"
 
 const MEASUREMENT_TOLERANCE = 0.5
+/** Pointer jitter to absorb before a press is read as a drag. */
+const DRAG_THRESHOLD = 8
+
+/**
+ * Renderer updates with no duration — what every pointer-driven chart wants.
+ *
+ * The motion renderer's fallback tween is 1100ms, and it does not only govern
+ * the data morph: `applyStateFocus` re-runs the update animation on every
+ * focus change, so left at the default the active point spends over a second
+ * arriving and over a second leaving while the pointer has long moved on.
+ * Zooming and panning pay it too — those re-render every frame, and any tween
+ * between frames reads as lag.
+ *
+ * Marks that declare their own `states` transition keep it; this is the floor
+ * under everything else. The entrance is unaffected (that is `initial`, plus
+ * the CSS wipe). The trade is that a data refresh snaps in rather than
+ * morphing — worth it wherever a pointer is driving the chart.
+ */
+export const INSTANT_CHART_UPDATES: ChartMotionTransition = {
+  type: "tween",
+  duration: 0,
+}
+
+/**
+ * Focus-state transition for a mark the pointer drives.
+ *
+ * A mark's `states` transition is passed to the renderer as an *override*,
+ * applied after everything else — so it wins over INSTANT_CHART_UPDATES, and a
+ * chart can be instant on data updates while still crawling on focus.
+ *
+ * It has to be zero, not merely short. `applyStateFocus` cancels the animation
+ * in flight and starts a fresh one on every focus change, so during a drag a
+ * 90ms tween is killed at roughly a tenth of its progress, ten times a second:
+ * the active point creeps a few percent per event and reads as frozen, then
+ * jumps to where the finger has been the moment the moves stop. A slow drag
+ * looks fine because it leaves the tween time to run — which is the tell.
+ */
+export const INSTANT_FOCUS_STATE = {
+  type: "tween",
+  duration: 0,
+  respectReducedMotion: true,
+} as const
+/** Keeps the clamped pointer off the plot's exact edge, which resolves to nothing. */
+const PLOT_EDGE_INSET = 1
+
+/** Client-space pointer, pulled back inside the plot rectangle. */
+function clampToPlot<
+  TDatum,
+  TXValue extends ChartValue,
+  TYValue extends ChartValue,
+>(
+  context: ChartRendererRenderContext<TDatum, TXValue, TYValue>,
+  clientX: number,
+  clientY: number
+): [number, number] {
+  const rect = context.container.getBoundingClientRect()
+  const { chart } = context.scene
+  const left = rect.left + chart.x + PLOT_EDGE_INSET
+  const right = rect.left + chart.x + chart.width - PLOT_EDGE_INSET
+  const top = rect.top + chart.y + PLOT_EDGE_INSET
+  const bottom = rect.top + chart.y + chart.height - PLOT_EDGE_INSET
+  return [
+    Math.min(Math.max(clientX, left), right),
+    Math.min(Math.max(clientY, top), bottom),
+  ]
+}
 const subscribeToClient = () => () => undefined
 const getClientSnapshot = () => true
 const getServerSnapshot = () => false
@@ -57,7 +123,8 @@ export function ResponsiveChart<
   onRender,
   fill = false,
   entrance = "wipe",
-  touchInspection = false,
+  dragInspection = false,
+  onInspectingChange,
   updateTransition,
   ...props
 }: Omit<RendererChartProps<TDatum, TXValue, TYValue>, "renderer"> & {
@@ -77,10 +144,25 @@ export function ResponsiveChart<
    */
   updateTransition?: ChartMotionTransition
   /**
-   * Lets a touch drag inspect the tooltip while preserving vertical page
-   * scrolling. Intended for compact, non-zoomable charts such as sparklines.
+   * Lets a pointer drag inspect the chart, with the pointer captured for the
+   * whole gesture so it keeps tracking once the finger or cursor leaves the
+   * plot. Touch still yields to vertical page scrolling; a held mouse button
+   * has nothing to yield to, so it commits on the first movement in any
+   * direction. Intended for compact, non-zoomable charts such as sparklines.
+   *
+   * Capture is what makes this work at all: driving focus through
+   * `setControlledFocus` takes ownership away from the renderer's own pointer
+   * tracking, so its `mouseleave` teardown no longer drops the reading when
+   * the gesture wanders outside.
    */
-  touchInspection?: boolean
+  dragInspection?: boolean
+  /**
+   * Fires when a drag starts and ends. Callers that dress the chart during
+   * inspection read it from here rather than tracking a parallel gesture of
+   * their own — the events are captured here, so a duplicate listener on an
+   * ancestor would miss every move (and every release) outside the box.
+   */
+  onInspectingChange?: (inspecting: boolean) => void
 }) {
   const isClient = useSyncExternalStore(
     subscribeToClient,
@@ -101,8 +183,16 @@ export function ResponsiveChart<
     originX: number
     originY: number
     pointerId: number
+    pointerType: string
   } | null>(null)
   const focusFrameRef = useRef<number | undefined>(undefined)
+  const inspectingRef = useRef(false)
+  // Held in a ref so the captured-pointer handlers never have to be rebuilt
+  // mid-gesture just because the caller re-created its callback.
+  const onInspectingChangeRef = useRef(onInspectingChange)
+  useEffect(() => {
+    onInspectingChangeRef.current = onInspectingChange
+  }, [onInspectingChange])
 
   // The motion renderer animates the first client render — marks grow, draw
   // and stagger in — where the plain SVG renderer only animates updates.
@@ -183,9 +273,15 @@ export function ResponsiveChart<
     })
   }, [])
 
+  const setInspecting = useCallback((next: boolean) => {
+    if (inspectingRef.current === next) return
+    inspectingRef.current = next
+    onInspectingChangeRef.current?.(next)
+  }, [])
+
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!touchInspection || event.pointerType === "mouse") return
+      if (!dragInspection) return
       touchPointersRef.current.add(event.pointerId)
       if (touchPointersRef.current.size > 1) {
         touchGestureRef.current = null
@@ -222,40 +318,62 @@ export function ResponsiveChart<
         originX: event.clientX,
         originY: event.clientY,
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
       }
     },
-    [touchInspection]
+    [dragInspection]
   )
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!touchInspection) return
+      if (!dragInspection) return
       const gesture = touchGestureRef.current
       if (!gesture || gesture.pointerId !== event.pointerId) return
 
       if (!gesture.intent) {
-        gesture.intent = resolveChartDragIntent(
-          event.clientX - gesture.originX,
-          event.clientY - gesture.originY
-        )
+        const deltaX = event.clientX - gesture.originX
+        const deltaY = event.clientY - gesture.originY
+        // A held mouse button has no page scroll to lose, so any direction
+        // past the jitter threshold means "scrub". Touch keeps the axis
+        // arbitration, where committing to vertical hands the drag back to
+        // the page.
+        gesture.intent =
+          gesture.pointerType === "mouse"
+            ? Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD
+              ? null
+              : "horizontal"
+            : resolveChartDragIntent(deltaX, deltaY, DRAG_THRESHOLD)
         if (!gesture.intent) return
         gesture.dragged = true
       }
       if (gesture.intent === "vertical") return
 
       gesture.inspecting = true
-      const interaction = renderContextRef.current?.interaction
-      interaction?.setControlledFocus(
-        interaction.resolvePointer(event.clientX, event.clientY),
+      setInspecting(true)
+      const context = renderContextRef.current
+      const interaction = context?.interaction
+      if (!interaction) return
+      // Resolve against the pointer held inside the plot rather than its real
+      // position. A gesture that wanders off the chart keeps reading as the
+      // nearest column instead of resolving to nothing and stranding the
+      // last value — the drag follows the finger past the edge, and vertical
+      // excursion stops mattering once it has left.
+      const [clientX, clientY] = clampToPlot(
+        context,
+        event.clientX,
+        event.clientY
+      )
+      interaction.setControlledFocus(
+        interaction.resolvePointer(clientX, clientY),
         { source: "pointer" }
       )
     },
-    [touchInspection]
+    [dragInspection, setInspecting]
   )
 
   const finishPointer = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
-      if (!touchInspection || event.pointerType === "mouse") return
+      if (!dragInspection) return
       touchPointersRef.current.delete(event.pointerId)
       const gesture = touchGestureRef.current
       const wasTracked = gesture?.pointerId === event.pointerId
@@ -263,8 +381,15 @@ export function ResponsiveChart<
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
+      // Release runs through both `pointerup` and the `lostpointercapture`
+      // it causes; only the pass that still owned the gesture reports the end.
+      if (wasTracked) setInspecting(false)
 
+      // Tap-to-pin is a touch affordance: it stands in for the hover a finger
+      // cannot do. A mouse already hovers, so pinning after a mouse drag would
+      // just strand the reading.
       if (
+        event.pointerType !== "mouse" &&
         shouldPinChartInspection({
           activePointers: touchPointersRef.current.size,
           cancelled,
@@ -276,7 +401,7 @@ export function ResponsiveChart<
         pinTouchPointer(event.clientX, event.clientY)
       }
     },
-    [pinTouchPointer, touchInspection]
+    [dragInspection, pinTouchPointer, setInspecting]
   )
 
   return (
@@ -285,7 +410,7 @@ export function ResponsiveChart<
       aria-busy={hasMeasuredLayout ? undefined : true}
       className={
         (fill ? "relative h-full" : "relative") +
-        (touchInspection ? " select-none" : "")
+        (dragInspection ? " select-none" : "")
       }
       data-chart-layout={hasMeasuredLayout ? "measured" : "pending"}
       onLostPointerCapture={(event) => finishPointer(event, true)}
@@ -295,7 +420,7 @@ export function ResponsiveChart<
       onPointerUp={finishPointer}
       style={{
         ...(fill ? undefined : { height: props.height }),
-        ...(touchInspection ? { touchAction: "pan-y pinch-zoom" } : undefined),
+        ...(dragInspection ? { touchAction: "pan-y pinch-zoom" } : undefined),
       }}
     >
       <div

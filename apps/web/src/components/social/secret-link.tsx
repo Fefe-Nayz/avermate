@@ -6,6 +6,7 @@ import { useExtracted } from "next-intl"
 import { SocialCallout } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { copyText } from "@/lib/clipboard"
 
 /**
  * A secret shown exactly once.
@@ -53,8 +54,9 @@ export function SecretLink({
           variant="outline"
           size="icon"
           onClick={async () => {
-            await navigator.clipboard.writeText(url)
-            setCopied(true)
+            // The tick is the only feedback here, so it must not appear when
+            // the copy failed.
+            if (await copyText(url)) setCopied(true)
           }}
         >
           {copied ? <CheckIcon /> : <CopyIcon />}

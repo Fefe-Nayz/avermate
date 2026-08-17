@@ -31,15 +31,7 @@ import {
   type ChartDragIntent,
   zoomDomainAt,
 } from "./time-series-interaction"
-import { ResponsiveChart } from "./responsive-chart"
-
-/**
- * Gesture-driven charts must track the pointer, not chase it: a zoom or pan
- * re-renders every frame, and any tween between frames reads as lag. The
- * entrance wipe is CSS and the focus markers carry their own transitions,
- * so both survive this.
- */
-const INSTANT_UPDATES = { type: "tween", duration: 0 } as const
+import { INSTANT_CHART_UPDATES, ResponsiveChart } from "./responsive-chart"
 
 interface InteractiveTimeSeriesChartProps<TDatum> {
   ariaDescription?: string
@@ -653,7 +645,7 @@ function InteractiveTimeSeriesChartInner<TDatum>({
             renderContextRef.current = context
           }}
           renderTooltipBody={renderTooltipBody}
-          updateTransition={INSTANT_UPDATES}
+          updateTransition={INSTANT_CHART_UPDATES}
         />
         {zoomed ? (
           <button

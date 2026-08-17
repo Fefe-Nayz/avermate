@@ -5,6 +5,7 @@ export * from "./goals";
 export * from "./year-review";
 export * from "./format";
 export * from "./cards";
+export * from "./card-grid";
 export * from "./widget-types";
 export * from "./widget-registry";
 export * from "./widget-defaults";

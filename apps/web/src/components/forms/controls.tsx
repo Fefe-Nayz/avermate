@@ -42,6 +42,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { FullScreenLayer } from "./full-screen-layer"
+import { MonthPagerCalendar } from "./month-pager-calendar"
 
 /**
  * Form controls tuned for a thumb.
@@ -522,19 +523,6 @@ export function DatePicker({
     />
   )
 
-  /**
-   * A month that fills the width it is given.
-   *
-   * The default cell is 1.75rem, which on a phone draws a small square
-   * calendar afloat in a card. Raising the floor and letting the cells
-   * distribute gives the same edge-to-edge month the grades page has — days
-   * stay square because the cell is, so the grid grows with the screen
-   * instead of leaving a margin around itself.
-   */
-  const wideCalendar = calendarWith(
-    "w-full p-3 [--cell-size:--spacing(10)] sm:[--cell-size:--spacing(11)]"
-  )
-
   const label = selected
     ? selected.toLocaleDateString(locale, {
         day: "numeric",
@@ -546,11 +534,14 @@ export function DatePicker({
   // The dates people actually reach for, as one tap rather than a month of
   // hunting. Kept beside the calendar rather than replacing it, because
   // "last Tuesday" is a scan and "today" is a reflex.
+  // Bounds can exclude all three — a term that ended last spring has no
+  // "today" — and a pinned footer holding nothing is just a stray rule across
+  // the screen, so the list is resolved before it is offered.
+  const shortcutDays = relativeDays().filter((option) => allowed(option.date))
   const shortcuts = (
     <div className="flex flex-wrap gap-2">
-      {relativeDays().map((option) => {
+      {shortcutDays.map((option) => {
         const date = option.date
-        if (!allowed(date)) return null
         const isSelected =
           selected !== undefined && toIsoDate(date) === toIsoDate(selected)
         return (
@@ -576,16 +567,22 @@ export function DatePicker({
     </div>
   )
 
+  const pager = (fill: boolean) => (
+    <MonthPagerCalendar
+      selected={selected}
+      min={lower ?? undefined}
+      max={upper ?? undefined}
+      onSelect={pick}
+      fill={fill}
+    />
+  )
+
   // When the date is the whole screen there is nothing to open: the calendar
   // is the screen. Same rule as the subject list. No shortcut chips here —
   // "today" is one tap on the month anyway, since that is where a calendar
   // opens, and the row was costing the calendar a chip-row of height.
   if (layout === "page" && !wide) {
-    return (
-      <div className="overflow-hidden rounded-xl border bg-card">
-        {wideCalendar}
-      </div>
-    )
+    return <div className="rounded-xl border bg-card p-3">{pager(false)}</div>
   }
 
   if (!wide) {
@@ -610,17 +607,19 @@ export function DatePicker({
           <span className="truncate">{label}</span>
         </button>
 
+        {/* The month takes the screen and the shortcuts take the footer: a
+            chip row at the top scrolled out of thumb reach and cost the
+            calendar a row of height, while the layer's own footer is pinned
+            exactly where a thumb already is. */}
         <FullScreenLayer
           open={open}
           onClose={() => setOpen(false)}
           title={t("Pick a date")}
           description={selected ? label : undefined}
+          footer={shortcutDays.length > 0 ? shortcuts : undefined}
         >
-          <div className="flex flex-col gap-4 p-4">
-            {shortcuts}
-            <div className="overflow-hidden rounded-xl border bg-card">
-              {wideCalendar}
-            </div>
+          <div className="flex h-full flex-col justify-center p-4">
+            {pager(true)}
           </div>
         </FullScreenLayer>
       </>

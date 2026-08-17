@@ -3,8 +3,8 @@
 import { defineChart } from "@tanstack/charts"
 import { tooltip } from "@tanstack/charts/tooltip"
 import { useExtracted, useFormatter } from "next-intl"
-import { useMemo } from "react"
-import { ResponsiveChart } from "./responsive-chart"
+import { useMemo, useState } from "react"
+import { INSTANT_CHART_UPDATES, ResponsiveChart } from "./responsive-chart"
 import { radarSpec, type RadarPoint } from "./subject-radar-spec"
 import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
@@ -32,6 +32,18 @@ export function SubjectRadarChart({ title }: { title: string }) {
     [graph, scale]
   )
 
+  /**
+   * The subject under the pointer.
+   *
+   * Held here because the spec cannot ask: no radial mark takes a focus state
+   * and no channel is told what is focused, so the host reports focus to React
+   * and React hands it back to the spec. That is what draws the active point —
+   * see `radarSpec`. The definition is rebuilt on each focus change, which is
+   * seven subjects' worth of layout and lands instantly because
+   * `INSTANT_CHART_UPDATES` leaves nothing to tween.
+   */
+  const [focusedSubject, setFocusedSubject] = useState<string | null>(null)
+
   const definition = useMemo(
     () =>
       defineChart({
@@ -42,8 +54,15 @@ export function SubjectRadarChart({ title }: { title: string }) {
             width,
             height,
             formatValue: (value) => format.number(value),
+            focusedSubject,
           }),
         focus: "nearest",
+        // The renderer's built-in focus ring is a `Canvas`-filled circle under
+        // the primary point — white on a light card, and reading as a halo the
+        // design never asked for. Off everywhere, not just on the sparkline.
+        // The radar's own active point above replaces it; turning this off
+        // without one is what had left this chart with no active point at all.
+        focusRing: false,
         svgAnimation: {
           duration: 240,
           easing: "ease-out",
@@ -72,7 +91,7 @@ export function SubjectRadarChart({ title }: { title: string }) {
           },
         },
       }),
-    [format, points, scale, t]
+    [focusedSubject, format, points, scale, t]
   )
 
   if (points.length < 3) return null
@@ -93,6 +112,10 @@ export function SubjectRadarChart({ title }: { title: string }) {
             entrance="rise"
             height={340}
             initialWidth={360}
+            onFocusChange={(point) =>
+              setFocusedSubject(point?.datum?.subject ?? null)
+            }
+            updateTransition={INSTANT_CHART_UPDATES}
           />
         </CardContent>
       </Card>

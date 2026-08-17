@@ -52,7 +52,6 @@ import { useMutation } from "@tanstack/react-query"
 import { useAuthenticatedUser } from "@/components/authenticated-user"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import confetti from "canvas-confetti"
 import { toPng } from "@jpinsonneau/html-to-image"
 import LightPillar from "@/components/LightPillar"
 import { useExtracted, useFormatter } from "next-intl"
@@ -63,6 +62,13 @@ import {
   YEAR_REVIEW_CANONICAL_WIDTH,
 } from "./year-review-layout"
 import { buildYearReviewPath } from "./year-review-path"
+import {
+  createAnimationSync,
+  nextStoryClock,
+  useStoryFrame,
+  useStoryTimeout,
+} from "./story-clock"
+import { useStoryConfetti } from "./story-confetti"
 
 // --- Canonical Size for Stories ---
 // The story is designed for this fixed resolution and scaled to fit any screen
@@ -349,7 +355,26 @@ interface YearReviewStoryProps {
  * library's own scheduler, out of reach of both the CSS pause class and the
  * Web Animations API — they have to be told.
  */
+/** How long the prime-time line takes to trace itself, in story milliseconds. */
+/** The zoom out, and the fill settling in behind it. Story milliseconds. */
+const REVEAL_DURATION = 300
+const SETTLE_DURATION = 500
+
+const TRACE_DURATION = 2500
+
+/** The kilonova inspiral, in story milliseconds and rotations per second. */
+const INSPIRAL_DURATION = 1000
+const INSPIRAL_INITIAL_RADIUS = 90
+const INSPIRAL_FINAL_RADIUS = 5
+const INSPIRAL_INITIAL_SPEED = 4
+const INSPIRAL_FINAL_SPEED = 18
+
 const StoryPausedContext = createContext(false)
+
+/** Every slide's choreography hangs off this, through the story clock. */
+function useStoryPaused() {
+  return useContext(StoryPausedContext)
+}
 
 function CountUp({
   value,
@@ -566,10 +591,7 @@ function StatsSlide({ stats }: SlideProps) {
   const distanceToGradesCenter = GAP / 2 + BAR_WIDTH / 2 // 56px
   const xOffset = distanceToGradesCenter * SCALE // ~157px
 
-  useEffect(() => {
-    const timer = setTimeout(() => setZoomOut(true), 2200)
-    return () => clearTimeout(timer)
-  }, [])
+  useStoryTimeout(() => setZoomOut(true), 2200, useStoryPaused())
 
   // Generate more speed lines for the tracking phase - spread across the whole screen
   const speedLines = useMemo(() => {
@@ -601,6 +623,7 @@ function StatsSlide({ stats }: SlideProps) {
           background:
             "radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0) 70%)",
         }}
+        initial={false}
         animate={
           zoomOut ? { scale: 1.2, opacity: 0.6 } : { scale: 0.8, opacity: 0.4 }
         }
@@ -838,10 +861,7 @@ function HeatmapSlide({
   }, [days])
 
   // Trigger zoom out after horizontal pan completes
-  useEffect(() => {
-    const timer = setTimeout(() => setZoomOut(true), 1800)
-    return () => clearTimeout(timer)
-  }, [])
+  useStoryTimeout(() => setZoomOut(true), 1800, useStoryPaused())
 
   // Generate horizontal speed lines for the pan effect
   const speedLines = useMemo(() => {
@@ -891,6 +911,7 @@ function HeatmapSlide({
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <motion.div
           className="absolute -top-[20%] -right-[20%] h-[350px] w-[350px] rounded-full bg-[#3e61d2]/15 blur-[100px]"
+          initial={false}
           animate={
             zoomOut ? { scale: 1.3, opacity: 0.2 } : { scale: 1, opacity: 0.15 }
           }
@@ -898,6 +919,7 @@ function HeatmapSlide({
         />
         <motion.div
           className="absolute -bottom-[20%] -left-[20%] h-[300px] w-[300px] rounded-full bg-[#5e81f2]/10 blur-[80px]"
+          initial={false}
           animate={
             zoomOut ? { scale: 1.2, opacity: 0.15 } : { scale: 1, opacity: 0.1 }
           }
@@ -980,6 +1002,16 @@ function HeatmapSlide({
         style={{
           boxShadow:
             "inset 0 0 0 1px rgba(62, 97, 210, 0.2), 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(62, 97, 210, 0.1)",
+          // Promoted for the same reason the peak slide's camera is. This card
+          // is a rounded clip holding a few hundred cells, and its scale stops
+          // being a 1.8s tween and becomes a spring the instant `zoomOut` turns
+          // true — a new rasterisation of a masked subtree at a new size. Read
+          // off a recording, the frame at that exact boundary lost the whole
+          // grid and the card's own border while the name and avatar appearing
+          // outside it drew normally. Holding a layer means the browser keeps
+          // showing the texture it has while it prepares the next one.
+          willChange: "transform",
+          backfaceVisibility: "hidden",
         }}
       >
         {/* Subtle scan line effect during pan */}
@@ -1101,8 +1133,8 @@ function StreakSlide({ stats, paused }: SlideProps) {
           whole slide per frame, on top of the ray march. */}
       <div className="relative z-10">
         <motion.div
-          initial={{ y: -20 }}
-          animate={{ y: 0 }}
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="mb-8 inline-flex items-center gap-2 rounded-full bg-orange-500/20 px-4 py-2 text-orange-300 backdrop-blur-sm"
           style={{ boxShadow: "inset 0 0 0 1px rgba(249, 115, 22, 0.4)" }}
@@ -1114,8 +1146,8 @@ function StreakSlide({ stats, paused }: SlideProps) {
         </motion.div>
 
         <motion.h2
-          initial={{ y: 20 }}
-          animate={{ y: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="mb-4 text-3xl font-bold drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
         >
@@ -1123,8 +1155,8 @@ function StreakSlide({ stats, paused }: SlideProps) {
         </motion.h2>
 
         <motion.div
-          initial={{ scale: 0.5 }}
-          animate={{ scale: 1 }}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.4 }}
           className="bg-gradient-to-b from-yellow-300 via-orange-500 to-red-600 bg-clip-text text-[12rem] leading-none font-black text-transparent drop-shadow-[0_0_50px_rgba(234,88,12,0.5)]"
         >
@@ -1137,8 +1169,8 @@ function StreakSlide({ stats, paused }: SlideProps) {
         </motion.div>
 
         <motion.p
-          initial={{ y: 20 }}
-          animate={{ y: 0 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 0.8, y: 0 }}
           transition={{ delay: 0.8 }}
           className="mx-auto mt-8 max-w-xs text-xl opacity-80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
         >
@@ -1203,40 +1235,24 @@ function PrimeTimeSlide({ stats }: SlideProps) {
   const pathD = curve.path
   const peakProgress = curve.progressAtPoint(peakIndex)
 
-  // Animate progress for tracing phase
-  useEffect(() => {
-    if (phase !== "tracing") return
-
-    const duration = 2500
-    const startTime = performance.now()
-
-    let frame = 0
-    const animateProgress = (currentTime: number) => {
-      const elapsed = currentTime - startTime
-      const t = Math.min(elapsed / duration, 1)
+  // Animate progress for tracing phase, on story time: the raw frame clock
+  // kept tracing behind a paused story, so resuming revealed a line that had
+  // drawn itself in the dark.
+  const peakPaused = useStoryPaused()
+  const traceProgress = useCallback(
+    (elapsed: number) => {
+      const t = Math.min(elapsed / TRACE_DURATION, 1)
       // Ease out cubic
       const eased = 1 - Math.pow(1 - t, 3)
       setProgress(eased * peakProgress)
-
-      if (t < 1) {
-        frame = requestAnimationFrame(animateProgress)
-      }
-    }
-
-    frame = requestAnimationFrame(animateProgress)
-    return () => cancelAnimationFrame(frame)
-  }, [phase, peakProgress])
+    },
+    [peakProgress]
+  )
+  useStoryFrame(traceProgress, phase === "tracing", peakPaused)
 
   // Animation timeline
-  useEffect(() => {
-    const peakTimer = setTimeout(() => setPhase("peak"), 2500)
-    const revealTimer = setTimeout(() => setPhase("reveal"), 3200)
-
-    return () => {
-      clearTimeout(peakTimer)
-      clearTimeout(revealTimer)
-    }
-  }, [])
+  useStoryTimeout(() => setPhase("peak"), 2500, peakPaused)
+  useStoryTimeout(() => setPhase("reveal"), 3200, peakPaused)
 
   // Calculate current dot position
   const currentProgress = phase === "tracing" ? progress : peakProgress
@@ -1246,11 +1262,58 @@ function PrimeTimeSlide({ stats }: SlideProps) {
   const cameraX = phase === "reveal" ? 0 : -(currentDotPos.x - 50) * 7
   const cameraY = phase === "reveal" ? 0 : -(currentDotPos.y - 50) * 2
 
+  // How far the line is drawn, as a fraction of its length.
+  //
+  // This is a number the render turns into a `stroke-dashoffset`, not a value
+  // handed to the animation library, and that is the whole point. Animating
+  // `pathLength` meant the line's visible length lived in an animation whose
+  // duration changed at every phase — instant while the camera tracks the dot,
+  // eased for the zoom out — so the library tore the animation down and built a
+  // new one at each change. On the frame between the two, the element fell back
+  // to its own attributes, and those attributes said `strokeDashoffset={1}`:
+  // hidden completely. That was the blink, one frame at each transition,
+  // measured off a recording at 2.009s and 3.501s.
+  //
+  // An attribute has no such gap. It holds whatever the last render gave it, so
+  // there is no state for the line to fall back to other than the right one.
+  // `pathLength={1}` normalises the length so the offset is a plain 0-to-1
+  // fraction regardless of the path's real geometry.
+  //
+  // The two eases below are on story time for the same reason the trace is. A
+  // CSS transition would have expressed them in a line each, and would not have
+  // paused: transitions ignore `animation-play-state`, which is the only lever
+  // `.story-paused` has over them. Holding the slide still has to mean the line
+  // stops being drawn and the fill stops brightening, not just that the shader
+  // freezes behind them.
+  //
+  // Both go inactive once they arrive, so neither leaves a frame loop running
+  // for the rest of the slide.
+  const [revealEase, setRevealEase] = useState(0)
+  const [settleEase, setSettleEase] = useState(0)
+  useStoryFrame(
+    (elapsed) => setRevealEase(Math.min(elapsed / REVEAL_DURATION, 1)),
+    phase === "reveal" && revealEase < 1,
+    peakPaused
+  )
+  useStoryFrame(
+    (elapsed) => setSettleEase(Math.min(elapsed / SETTLE_DURATION, 1)),
+    phase !== "tracing" && settleEase < 1,
+    peakPaused
+  )
+
+  // Tracking the dot, then holding at the peak, then easing out to the whole
+  // line. `revealEase` is 0 until the zoom out, so the peak reading stands.
+  const drawnTo =
+    phase === "tracing"
+      ? progress
+      : peakProgress + (1 - peakProgress) * revealEase
+
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-[#0a0a0a] text-center text-white">
       {/* Animated background gradient */}
       <motion.div
         className="absolute inset-0 bg-gradient-to-br from-emerald-900/20 via-[#0a0a0a] to-green-900/20"
+        initial={false}
         animate={phase === "reveal" ? { opacity: 0.8 } : { opacity: 0.4 }}
         transition={{ duration: 0.8 }}
       />
@@ -1258,6 +1321,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
       {/* Background glow that intensifies at peak */}
       <motion.div
         className="absolute top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/20 blur-[100px]"
+        initial={false}
         animate={
           phase === "peak"
             ? { scale: 1.5, opacity: 0.6 }
@@ -1271,6 +1335,23 @@ function PrimeTimeSlide({ stats }: SlideProps) {
       {/* Chart container - camera follows dot, then zooms out */}
       <motion.div
         className="relative flex w-full flex-1 items-center justify-center"
+        // Promoted for the whole slide, which is what stops the chart blinking.
+        //
+        // Every phase change moves this camera, and an unpromoted subtree has to
+        // be re-rasterised from scratch when its transform changes — a phone
+        // shows one frame of nothing while that happens. Read off a recording,
+        // there was exactly one black frame at each transition: at 2.95s going
+        // into the peak, at 3.69s going into the zoom out. What survived both
+        // was precisely what already had a layer of its own, the dot and then
+        // the rings, which is what named the cause. Holding a layer here means
+        // the browser keeps showing the texture it has while it prepares the
+        // next one, so there is no frame with nothing in it.
+        style={{ willChange: "transform", backfaceVisibility: "hidden" }}
+        // The camera is placed, not animated in. Without this it mounts at the
+        // element's own scale of 1 and x of 0 — the fully zoomed-out, centred
+        // view, which is the *end* of this slide — and then flies to the
+        // zoomed-in opening frame over 100ms.
+        initial={false}
         animate={{
           scale: phase === "reveal" ? 1 : 2.8,
           x: cameraX,
@@ -1297,7 +1378,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
             preserveAspectRatio="none"
           >
             {[20, 40, 60, 80].map((y) => (
-              <motion.line
+              <line
                 key={y}
                 x1="0"
                 y1={y}
@@ -1305,8 +1386,7 @@ function PrimeTimeSlide({ stats }: SlideProps) {
                 y2={y}
                 stroke="rgba(255,255,255,0.05)"
                 strokeWidth="0.3"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: phase === "reveal" ? 1 : 0.3 }}
+                style={{ opacity: 0.3 + 0.7 * revealEase }}
               />
             ))}
           </svg>
@@ -1357,16 +1437,15 @@ function PrimeTimeSlide({ stats }: SlideProps) {
             <path d={pathD} fill="none" stroke="transparent" />
 
             {/* Area fill under line */}
-            <motion.path
+            <path
               d={`${pathD} L 100 100 L 0 100 Z`}
               fill="url(#chartGradientPrime)"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: phase !== "tracing" ? 0.5 : 0.2 }}
-              transition={{ duration: 0.5 }}
+              style={{ opacity: 0.2 + 0.3 * settleEase }}
             />
 
-            {/* The line with draw animation - matches dot position exactly */}
-            <motion.path
+            {/* The line, drawn by an attribute rather than an animation.
+                Matches the dot position exactly. */}
+            <path
               d={pathD}
               fill="none"
               stroke="url(#lineGradientPrime)"
@@ -1374,24 +1453,9 @@ function PrimeTimeSlide({ stats }: SlideProps) {
               strokeLinecap="round"
               strokeLinejoin="round"
               filter="url(#lineGlow)"
-              style={{ pathLength: 0 }}
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{
-                pathLength:
-                  phase === "tracing"
-                    ? progress
-                    : phase === "peak"
-                      ? peakProgress
-                      : 1,
-                opacity: 1,
-              }}
-              transition={{
-                pathLength: {
-                  duration: phase === "reveal" ? 0.3 : 0,
-                  ease: "linear",
-                },
-                opacity: { duration: 0.1, delay: 0.05 },
-              }}
+              pathLength={1}
+              strokeDasharray={1}
+              strokeDashoffset={1 - drawnTo}
             />
           </svg>
 
@@ -1409,55 +1473,38 @@ function PrimeTimeSlide({ stats }: SlideProps) {
             />
           </motion.div>
 
-          {/* Radar-style pulse rings - at dot position, infinite during reveal */}
-          {(phase === "peak" || phase === "reveal") && (
-            <div
-              className="pointer-events-none absolute z-0 -mt-[36px] -ml-[36px] h-[72px] w-[72px]"
-              style={{
-                left: `${peakPoint.x}%`,
-                top: `${100 - peakPoint.y}%`,
-                contain: "layout style",
-                isolation: "isolate",
-                transform: "translate3d(0, 0, 0)",
-              }}
-            >
-              <div className="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2">
-                <motion.div
-                  className="absolute inset-0 rounded-full border-2 border-emerald-400/80"
-                  style={{
-                    opacity: 0,
-                    willChange: "transform, opacity",
-                    backfaceVisibility: "hidden",
-                    transformOrigin: "50% 50%",
-                  }}
-                  animate={{ scale: 5, opacity: [0, 0.8, 0] }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    ease: "easeOut",
-                    times: [0, 0.1, 1],
-                  }}
-                />
-                <motion.div
-                  className="absolute inset-0 rounded-full border border-emerald-400/60"
-                  style={{
-                    opacity: 0,
-                    willChange: "transform, opacity",
-                    backfaceVisibility: "hidden",
-                    transformOrigin: "50% 50%",
-                  }}
-                  animate={{ scale: 5, opacity: [0, 0.6, 0] }}
-                  transition={{
-                    duration: 1.2,
-                    repeat: Infinity,
-                    ease: "easeOut",
-                    delay: 0.4,
-                    times: [0, 0.1, 1],
-                  }}
-                />
-              </div>
+          {/* Radar-style pulse rings, at the peak. Mounted for the whole slide
+              rather than from the peak onwards: this wrapper asks for its own
+              compositing layer, and inserting one inside the chart partway
+              through was the other half of the blinking — the browser has to
+              split the layer it already had, and re-rasterising the remainder
+              cost a frame. Held at the start of the animation until the peak, it
+              draws nothing, so nothing has to appear. */}
+          <div
+            className="pointer-events-none absolute z-0 -mt-[36px] -ml-[36px] h-[72px] w-[72px]"
+            style={{
+              left: `${peakPoint.x}%`,
+              top: `${100 - peakPoint.y}%`,
+              contain: "layout style",
+              isolation: "isolate",
+              transform: "translate3d(0, 0, 0)",
+            }}
+          >
+            <div className="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2">
+              {/* Plain elements on one CSS animation, not two motion values
+                  on two clocks — `story-pulse-ring` in app.css says why. */}
+              <div
+                className={`story-pulse-ring absolute inset-0 rounded-full border-2 border-emerald-400/80 ${
+                  phase === "tracing" ? "story-pulse-ring-held" : ""
+                }`}
+              />
+              <div
+                className={`story-pulse-ring story-pulse-ring-trailing absolute inset-0 rounded-full border border-emerald-400/60 ${
+                  phase === "tracing" ? "story-pulse-ring-held" : ""
+                }`}
+              />
             </div>
-          )}
+          </div>
 
           {/* Peak marker */}
           <motion.div
@@ -1523,15 +1570,11 @@ function SubjectsSlide({ stats }: SlideProps) {
   >("anticipation")
 
   // Animation timeline: staggered reveal from #3 to #1
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase("reveal3"), 400),
-      setTimeout(() => setPhase("reveal2"), 1000),
-      setTimeout(() => setPhase("reveal1"), 1600),
-      setTimeout(() => setPhase("complete"), 2400),
-    ]
-    return () => timers.forEach(clearTimeout)
-  }, [])
+  const podiumPaused = useStoryPaused()
+  useStoryTimeout(() => setPhase("reveal3"), 400, podiumPaused)
+  useStoryTimeout(() => setPhase("reveal2"), 1000, podiumPaused)
+  useStoryTimeout(() => setPhase("reveal1"), 1600, podiumPaused)
+  useStoryTimeout(() => setPhase("complete"), 2400, podiumPaused)
 
   const subjects = stats.bestSubjects.slice(0, 3)
   const hasProgression = stats.bestProgression.value > 0
@@ -1769,103 +1812,61 @@ function SubjectsSlide({ stats }: SlideProps) {
 function PercentileSlide({ stats }: SlideProps) {
   const t = useExtracted()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(
-    null
-  )
+  const burstConfetti = useStoryConfetti(canvasRef)
   const [phase, setPhase] = useState<"inspiral" | "explode" | "revealed">(
     "inspiral"
   )
   const [orb1Pos, setOrb1Pos] = useState({ x: 0, y: 0 })
   const [orb2Pos, setOrb2Pos] = useState({ x: 0, y: 0 })
   const [orbRadius, setOrbRadius] = useState(80)
-  const animationRef = useRef<number | null>(null)
-  const startTimeRef = useRef<number | null>(null)
+  // Neutron star inspiral animation - accelerating spiral inward.
+  // Driven by story time: on the raw frame clock it kept spiralling through a
+  // pause and was somewhere else entirely when the story resumed.
+  const inspiralPaused = useStoryPaused()
+  const animateInspiral = useCallback((elapsed: number) => {
+    const progress = Math.min(elapsed / INSPIRAL_DURATION, 1)
 
-  // Neutron star inspiral animation - accelerating spiral inward
-  useEffect(() => {
-    if (phase !== "inspiral") return
+    // Exponential decay for radius - gets tighter faster near the end
+    const radiusProgress = Math.pow(progress, 1.5)
+    const currentRadius =
+      INSPIRAL_INITIAL_RADIUS -
+      (INSPIRAL_INITIAL_RADIUS - INSPIRAL_FINAL_RADIUS) * radiusProgress
+    setOrbRadius(currentRadius)
 
-    const TOTAL_DURATION = 1000 // Total inspiral time (1 second)
-    const INITIAL_RADIUS = 90
-    const FINAL_RADIUS = 5
-    const INITIAL_SPEED = 4 // rotations per second at start
-    const FINAL_SPEED = 18 // rotations per second at end
+    // Calculate angle - integral of speed over time for smooth acceleration
+    const baseRotations = INSPIRAL_INITIAL_SPEED * (elapsed / 1000)
+    const acceleratedRotations =
+      ((INSPIRAL_FINAL_SPEED - INSPIRAL_INITIAL_SPEED) *
+        Math.pow(progress, 3) *
+        (elapsed / 1000)) /
+      3
+    const angle = (baseRotations + acceleratedRotations) * Math.PI * 2
 
-    const animateInspiral = (timestamp: number) => {
-      if (!startTimeRef.current) startTimeRef.current = timestamp
-      const elapsed = timestamp - startTimeRef.current
-      const progress = Math.min(elapsed / TOTAL_DURATION, 1)
+    // Orb 1 position (180 degrees offset from orb 2)
+    setOrb1Pos({
+      x: Math.cos(angle) * currentRadius,
+      y: Math.sin(angle) * currentRadius,
+    })
 
-      // Exponential decay for radius - gets tighter faster near the end
-      const radiusProgress = Math.pow(progress, 1.5)
-      const currentRadius =
-        INITIAL_RADIUS - (INITIAL_RADIUS - FINAL_RADIUS) * radiusProgress
-      setOrbRadius(currentRadius)
+    // Orb 2 position (opposite side)
+    setOrb2Pos({
+      x: Math.cos(angle + Math.PI) * currentRadius,
+      y: Math.sin(angle + Math.PI) * currentRadius,
+    })
+  }, [])
 
-      // Calculate angle - integral of speed over time for smooth acceleration
-      const baseRotations = INITIAL_SPEED * (elapsed / 1000)
-      const acceleratedRotations =
-        ((FINAL_SPEED - INITIAL_SPEED) *
-          Math.pow(progress, 3) *
-          (elapsed / 1000)) /
-        3
-      const angle = (baseRotations + acceleratedRotations) * Math.PI * 2
-
-      // Orb 1 position (180 degrees offset from orb 2)
-      setOrb1Pos({
-        x: Math.cos(angle) * currentRadius,
-        y: Math.sin(angle) * currentRadius,
-      })
-
-      // Orb 2 position (opposite side)
-      setOrb2Pos({
-        x: Math.cos(angle + Math.PI) * currentRadius,
-        y: Math.sin(angle + Math.PI) * currentRadius,
-      })
-
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animateInspiral)
-      }
-    }
-
-    animationRef.current = requestAnimationFrame(animateInspiral)
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
-    }
-  }, [phase])
+  useStoryFrame(animateInspiral, phase === "inspiral", inspiralPaused)
 
   // Phase timeline
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase("explode"), 1000),
-      setTimeout(() => setPhase("revealed"), 1300),
-    ]
-    return () => timers.forEach(clearTimeout)
-  }, [])
-
-  // Create confetti instance
-  useEffect(() => {
-    if (canvasRef.current && !confettiInstanceRef.current) {
-      confettiInstanceRef.current = confetti.create(canvasRef.current, {
-        resize: false,
-        useWorker: true,
-      })
-    }
-    return () => {
-      if (confettiInstanceRef.current) {
-        confettiInstanceRef.current.reset()
-      }
-    }
-  }, [])
+  const kilonovaPaused = useStoryPaused()
+  useStoryTimeout(() => setPhase("explode"), 1000, kilonovaPaused)
+  useStoryTimeout(() => setPhase("revealed"), 1300, kilonovaPaused)
 
   // Fire confetti on explosion - kilonova style burst
   useEffect(() => {
-    if (phase === "explode" && confettiInstanceRef.current) {
+    if (phase === "explode") {
       // Main kilonova explosion - bright burst
-      confettiInstanceRef.current({
+      burstConfetti({
         particleCount: 120,
         spread: 360,
         origin: { x: 0.5, y: 0.45 },
@@ -1882,9 +1883,12 @@ function PercentileSlide({ stats }: SlideProps) {
         gravity: 0.8,
         scalar: 1.2,
       })
-      // Secondary ring burst
+      // Secondary ring burst. These two follow-ups are deliberately left on
+      // the raw clock: they fire 80ms and 200ms after a burst that has already
+      // been thrown, so there is no pause long enough to fall inside them, and
+      // the library's own particles are stopped below instead.
       setTimeout(() => {
-        confettiInstanceRef.current?.({
+        burstConfetti({
           particleCount: 80,
           spread: 360,
           origin: { x: 0.5, y: 0.45 },
@@ -1895,7 +1899,7 @@ function PercentileSlide({ stats }: SlideProps) {
       }, 80)
       // Final sparkle
       setTimeout(() => {
-        confettiInstanceRef.current?.({
+        burstConfetti({
           particleCount: 40,
           spread: 180,
           origin: { x: 0.5, y: 0.45 },
@@ -1904,7 +1908,7 @@ function PercentileSlide({ stats }: SlideProps) {
         })
       }, 200)
     }
-  }, [phase])
+  }, [phase, burstConfetti])
 
   // Orb scale shrinks as they spiral in
   const orbScale = Math.max(0.4, orbRadius / 90)
@@ -2390,43 +2394,28 @@ const getAwardBorderColor = (colorClass: string): string => {
 function AwardRevealSlide({ stats }: SlideProps) {
   const t = useExtracted()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const confettiInstanceRef = useRef<ReturnType<typeof confetti.create> | null>(
-    null
-  )
+  const burstConfetti = useStoryConfetti(canvasRef)
   const award = useAward(stats.awardType)
   const Icon = awardIcons[award.icon] || Plane
 
+  // Fire confetti with award accent colors after a delay. The instance is built
+  // on demand against whichever canvas is currently mounted — see
+  // `useStoryConfetti` for why that matters.
   useEffect(() => {
-    // Create a confetti instance bound to our canvas inside the story
-    if (canvasRef.current && !confettiInstanceRef.current) {
-      confettiInstanceRef.current = confetti.create(canvasRef.current, {
-        resize: false,
-        useWorker: true,
-      })
-    }
-
-    // Fire confetti with award accent colors after a delay
     const timer = setTimeout(() => {
-      if (confettiInstanceRef.current) {
-        confettiInstanceRef.current({
-          particleCount: 180,
-          spread: 70,
-          origin: { x: 0.5, y: 0.5 },
-          colors: getAwardConfettiColors(award.color),
-          startVelocity: 45,
-          gravity: 0.8,
-          ticks: 300,
-        })
-      }
+      burstConfetti({
+        particleCount: 180,
+        spread: 70,
+        origin: { x: 0.5, y: 0.5 },
+        colors: getAwardConfettiColors(award.color),
+        startVelocity: 45,
+        gravity: 0.8,
+        ticks: 300,
+      })
     }, 600)
 
-    return () => {
-      clearTimeout(timer)
-      if (confettiInstanceRef.current) {
-        confettiInstanceRef.current.reset()
-      }
-    }
-  }, [award.color])
+    return () => clearTimeout(timer)
+  }, [award.color, burstConfetti])
 
   return (
     <div className="relative flex h-full flex-col items-center justify-center overflow-hidden bg-black p-6 text-center text-white">
@@ -3033,17 +3022,30 @@ function CanonicalYearReviewStory({
     if (!isOpen) return
     MotionGlobalConfig.useManualTiming = true
     frameData.timestamp = performance.now()
-    let last = performance.now()
+
+    // Where this clock goes each frame is decided by `nextStoryClock`, which
+    // explains the invariant it exists to hold: while the story plays, this
+    // clock reads real time, so the stamps the library puts on compositor-driven
+    // animations mean what the browser thinks they mean.
+    //
+    // What this costs is at the moment a pause is released, and only for values
+    // the library keeps on the main thread — `scale`, `x`, `y`, `pathLength`.
+    // One of those caught mid-flight lands where it would have been rather than
+    // carrying on from where it stopped. Compositor-driven values are
+    // unaffected: the sweep below paused them, and playing them resumes them
+    // where they were. Holding a slide still is what the pause is for, and it
+    // still does that; this is only about the instant of release.
     let raf = 0
     const tick = (now: number) => {
-      if (!clockPausedRef.current) {
-        // The same clamp the library applies: a background tab must not
-        // fast-forward the story when it comes back.
-        const delta = Math.max(Math.min(now - last, 40), 1)
-        frameData.delta = delta
-        frameData.timestamp += delta
+      const next = nextStoryClock(
+        frameData.timestamp,
+        now,
+        clockPausedRef.current
+      )
+      if (next) {
+        frameData.timestamp = next.timestamp
+        frameData.delta = next.delta
       }
-      last = now
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -3053,28 +3055,28 @@ function CanonicalYearReviewStory({
     }
   }, [isOpen])
 
-  // The library promotes some transform and opacity tweens to the Web
-  // Animations API, which runs on the compositor's clock, not the one
-  // above. Those are paused animation by animation — and only the ones
-  // caught running are resumed, so a finished entrance does not replay
-  // when the story does.
-  const pausedAnimationsRef = useRef<Animation[]>([])
+  // Animations the library hands to the compositor run on the document
+  // timeline, not the story clock above, so they need re-anchoring as they are
+  // created and pausing one by one. `createAnimationSync` explains why and
+  // holds the arithmetic; this supplies it with a frame, the current lag
+  // between the two clocks, and whether the story is paused.
   useEffect(() => {
     const root = storyContainerRef.current
-    if (!root || typeof root.getAnimations !== "function") return
-    if (paused) {
-      const running = root
-        .getAnimations({ subtree: true })
-        .filter((animation) => animation.playState === "running")
-      for (const animation of running) animation.pause()
-      pausedAnimationsRef.current = running
-      return
+    if (!isOpen || !root || typeof root.getAnimations !== "function") return
+
+    const sync = createAnimationSync()
+    let frame = 0
+
+    const sweep = () => {
+      // Never negative: the story clock is seeded from real time and only ever
+      // advances by real elapsed gaps, so it can trail but never lead.
+      const lag = performance.now() - frameData.timestamp
+      sync(root.getAnimations({ subtree: true }), lag, clockPausedRef.current)
+      frame = requestAnimationFrame(sweep)
     }
-    for (const animation of pausedAnimationsRef.current) {
-      if (animation.playState === "paused") animation.play()
-    }
-    pausedAnimationsRef.current = []
-  }, [paused])
+    sweep()
+    return () => cancelAnimationFrame(frame)
+  }, [isOpen])
 
   // Auto-progress using interval (only updates progress, doesn't change slides)
   useEffect(() => {
@@ -3261,17 +3263,25 @@ function CanonicalYearReviewStory({
     }
   }
 
-  // Get the display progress for a bar
-  const getBarProgress = (index: number): number => {
-    // Check if this bar is being animated
-    if (index in animatedBars) {
-      return animatedBars[index]
-    }
-    // Default states based on position relative to current slide
+  /**
+   * How full a bar should be drawn, or `null` for the one the browser fills.
+   *
+   * The playing bar is left to a CSS animation so that nothing repaints it every
+   * frame — see `story-bar-fill` in app.css. Jumping between slides is still
+   * drawn from here, because that is a deliberate short animation with its own
+   * duration rather than the steady march of a slide.
+   */
+  const getBarProgress = (index: number): number | null => {
+    if (index in animatedBars) return animatedBars[index] ?? 0
     if (index < currentSlide) return 100
     if (index > currentSlide) return 0
-    // Current slide (not animating)
-    return progress
+    // Where the bar has actually got to, for the render between the navigation
+    // starting and `animatedBars` arriving — `animateToSlide` flips the flag
+    // synchronously but fills the map from a `setTimeout`. Answering 0 in that
+    // gap emptied the bar before animating it, so going forward it dropped to
+    // nothing and refilled instead of topping up from where it stood, and going
+    // back it snapped to empty instead of draining.
+    return isNavigating ? progress : null
   }
 
   if (!isOpen) return null
@@ -3426,7 +3436,24 @@ function CanonicalYearReviewStory({
               />
 
               {/* Progress Bars */}
-              <div className="absolute top-0 right-0 left-0 z-20 flex gap-1 p-2">
+              {/* Promoted, which is the only reason this stays on top.
+                  A slide that animates `scale` — the heatmap card zooming out —
+                  gets a compositing layer from the browser, and a compositing
+                  layer can end up drawn over content of a higher z-index that
+                  has no layer of its own. The card is `z-10` and this row is
+                  `z-20`, so it should never happen, and for a few frames it
+                  does: measured on a recording, rows 457-465 dropped from 35% to
+                  6% luminance — 6% being #0d1117, the card's own background —
+                  and the whole band took on that one flat value, which is a
+                  surface covering the bars rather than bars failing to draw.
+                  The audio and pause buttons beside them share `z-20` and never
+                  flicker; the only thing they have that this lacked is
+                  `backdrop-blur-sm`, which quietly gives them a layer. This
+                  asks for one on purpose. */}
+              <div
+                className="absolute top-0 right-0 left-0 z-20 flex gap-1 p-2"
+                style={{ transform: "translate3d(0, 0, 0)" }}
+              >
                 {slides.map((_, index) => {
                   const barProgress = getBarProgress(index)
                   return (
@@ -3441,15 +3468,29 @@ function CanonicalYearReviewStory({
                         number: String(index + 1),
                       })}
                     >
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-white/30 transition-colors group-hover:bg-white/40">
+                      {/* The fill overlays the track rather than being clipped
+                          by it: a rounded `overflow-hidden` around a composited
+                          child asks the browser for a mask layer, which is its
+                          own source of dropped frames on a phone. Both wear the
+                          same radius instead, and at four pixels tall the
+                          squashed right cap is not visible. */}
+                      <div className="relative h-1 w-full rounded-full bg-white/30 transition-colors group-hover:bg-white/40">
                         <div
-                          className="h-full bg-white"
-                          style={{
-                            width: `${barProgress}%`,
-                            transition: isNavigating
-                              ? `width ${stepDuration}ms linear`
-                              : "width 50ms linear",
-                          }}
+                          className={`absolute inset-0 origin-left rounded-full bg-white ${
+                            barProgress === null ? "story-bar-fill" : ""
+                          }`}
+                          style={
+                            barProgress === null
+                              ? {
+                                  animationDuration: `${slides[index].duration}ms`,
+                                }
+                              : {
+                                  transform: `scaleX(${barProgress / 100})`,
+                                  transition: isNavigating
+                                    ? `transform ${stepDuration}ms linear`
+                                    : "none",
+                                }
+                          }
                         />
                       </div>
                     </button>

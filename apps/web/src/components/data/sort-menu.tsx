@@ -4,19 +4,24 @@ import { ArrowDownUpIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  DropDrawer,
+  DropDrawerContent,
+  DropDrawerLabel,
+  DropDrawerRadioGroup,
+  DropDrawerRadioItem,
+  DropDrawerTrigger,
+} from "@/components/ui/drop-drawer"
 import { haptic } from "@/lib/haptics"
 
 /**
- * The list-sorting idiom in one place: an icon trigger opening a radio
- * dropdown, labeled inside the group. The grades page and the subject lists
- * share it, so choosing an order reads the same everywhere.
+ * The list-sorting idiom in one place: an icon trigger opening a radio choice,
+ * labeled inside the group. The grades page and the subject lists share it, so
+ * choosing an order reads the same everywhere.
+ *
+ * A dropdown on a pointer, a bottom sheet under a thumb — see `DropDrawer`. A
+ * floating menu anchored to an icon in the top corner of a phone is the wrong
+ * end of the screen for the hand that has to reach it, and its rows are cursor
+ * height.
  */
 export function SortMenu<T extends string>({
   value,
@@ -35,8 +40,8 @@ export function SortMenu<T extends string>({
 }) {
   const t = useExtracted()
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
+    <DropDrawer>
+      <DropDrawerTrigger
         render={
           <Button
             variant={variant}
@@ -47,9 +52,9 @@ export function SortMenu<T extends string>({
         }
       >
         <ArrowDownUpIcon className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup
+      </DropDrawerTrigger>
+      <DropDrawerContent align="end">
+        <DropDrawerRadioGroup
           value={value}
           onValueChange={(next) => {
             haptic("selection")
@@ -58,14 +63,14 @@ export function SortMenu<T extends string>({
         >
           {/* Inside the radio group, so it labels it rather than floating
               above as a heading with nothing attached. */}
-          <DropdownMenuLabel>{t("Sort by")}</DropdownMenuLabel>
+          <DropDrawerLabel>{t("Sort by")}</DropDrawerLabel>
           {options.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
+            <DropDrawerRadioItem key={option.value} value={option.value}>
               {option.label}
-            </DropdownMenuRadioItem>
+            </DropDrawerRadioItem>
           ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropDrawerRadioGroup>
+      </DropDrawerContent>
+    </DropDrawer>
   )
 }

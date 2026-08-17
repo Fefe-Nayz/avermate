@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import { useMotionValue, useSpring } from "motion/react"
+import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 
 const FALLBACK_TICK_TARGET = 96
@@ -224,6 +225,22 @@ export function DayScrubber({
     [disabled, followCursor, measureStrip, pointAt]
   )
 
+  /**
+   * A day is a detent, so it gets a tick.
+   *
+   * Picking up the handle is the firmer of the two, then one light tick per day
+   * crossed — the same pair the sparkline uses, so a scrub feels the same
+   * wherever you do it. Held against the last day rather than fired on every
+   * move: a pointer travels many pixels inside one day, and buzzing for each of
+   * them reads as a rattle instead of a scale.
+   */
+  const hapticDayRef = useRef<number | null>(null)
+  const tickDay = useCallback((day: number) => {
+    if (hapticDayRef.current === day) return
+    hapticDayRef.current = day
+    haptic("selection")
+  }, [])
+
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (disabled) return
@@ -238,6 +255,8 @@ export function DayScrubber({
       const touch = event.pointerType !== "mouse"
       draggingRef.current = { touch }
       const { cursorDay, day } = pointAt(event.clientX)
+      hapticDayRef.current = day
+      haptic("light")
       followCursor(cursorDay)
       positionSelection(day)
       if (touch) updateTouchPreview(day)
@@ -261,6 +280,7 @@ export function DayScrubber({
       followCursor(cursorDay)
       const dragging = draggingRef.current
       if (!dragging) return
+      tickDay(day)
       positionSelection(day)
       if (dragging.touch) updateTouchPreview(day)
       else commitMouseDay(day)
@@ -271,6 +291,7 @@ export function DayScrubber({
       followCursor,
       pointAt,
       positionSelection,
+      tickDay,
       updateTouchPreview,
     ]
   )
@@ -279,6 +300,7 @@ export function DayScrubber({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const dragging = draggingRef.current
       draggingRef.current = null
+      hapticDayRef.current = null
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
@@ -337,6 +359,7 @@ export function DayScrubber({
         return
       }
       event.preventDefault()
+      haptic("selection")
       onSelectDay(next)
     },
     [disabled, onSelectDay, selectedDay, totalDays]

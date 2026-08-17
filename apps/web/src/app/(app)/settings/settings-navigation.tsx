@@ -3,17 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useExtracted } from "next-intl"
-import {
-  CalendarRangeIcon,
-  CompassIcon,
-  FunctionSquareIcon,
-  InfoIcon,
-  PaletteIcon,
-  PlugIcon,
-  ScrollTextIcon,
-  ShieldCheckIcon,
-  UserRoundIcon,
-} from "lucide-react"
+import { isActiveSettingsSection } from "@/lib/nav"
+import { useSettingsSections } from "@/lib/nav-labels"
 import { cn } from "@/lib/utils"
 
 /**
@@ -27,42 +18,9 @@ export function SettingsNavigation() {
   const t = useExtracted()
   const pathname = usePathname()
 
-  const sections = [
-    {
-      href: "/settings",
-      label: t("Profile"),
-      icon: UserRoundIcon,
-      exact: true,
-    },
-    { href: "/settings/appearance", label: t("Appearance"), icon: PaletteIcon },
-    {
-      href: "/settings/navigation",
-      label: t("Navigation"),
-      icon: CompassIcon,
-    },
-    {
-      href: "/settings/year",
-      label: t("Year & periods"),
-      icon: CalendarRangeIcon,
-    },
-    {
-      href: "/settings/preset",
-      label: t("Year preset"),
-      icon: ScrollTextIcon,
-    },
-    {
-      href: "/settings/averages",
-      label: t("Custom averages"),
-      icon: FunctionSquareIcon,
-    },
-    { href: "/settings/account", label: t("Account"), icon: ShieldCheckIcon },
-    {
-      href: "/settings/integrations",
-      label: t("Integrations"),
-      icon: PlugIcon,
-    },
-    { href: "/settings/about", label: t("About"), icon: InfoIcon },
-  ]
+  // Shared with the account hub, which is the only way onto these screens on a
+  // phone — this rail is `hidden md:block`.
+  const sections = useSettingsSections()
 
   return (
     <nav className="hidden w-52 shrink-0 md:block">
@@ -71,9 +29,7 @@ export function SettingsNavigation() {
       </h1>
       <ul className="flex flex-col gap-0.5">
         {sections.map((section) => {
-          const active = section.exact
-            ? pathname === section.href
-            : pathname.startsWith(section.href)
+          const active = isActiveSettingsSection(pathname, section)
           const Icon = section.icon
           return (
             <li key={section.href}>

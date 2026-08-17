@@ -319,3 +319,101 @@ describe("the subjects radar", () => {
     ])
   })
 })
+
+describe("the active point", () => {
+  /** The dots the active-point mark draws, by radius from the polar centre. */
+  function activePoints(
+    width: number,
+    height: number,
+    focusedSubject: string | null
+  ) {
+    const scene = createChartScene(
+      radarSpec({
+        points: pointsFor(SUBJECTS),
+        scale: 20,
+        width,
+        height,
+        formatValue: (value) => String(value),
+        focusedSubject,
+      }) as never,
+      { width, height },
+      { theme: defaultChartTheme } as never
+    )
+
+    const found: Array<{ radius: number; size: number }> = []
+    const seen = new Set<unknown>()
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== "object" || seen.has(node)) return
+      seen.add(node)
+      if (Array.isArray(node)) {
+        for (const child of node) walk(child)
+        return
+      }
+      const record: Record<string, unknown> = { ...node }
+      // The area mark emits its own dots for hit-testing, unfilled and at the
+      // library's own size; only the active-point mark's are under test.
+      if (
+        record.kind === "dot" &&
+        String(record.key ?? "").startsWith("main-subject-radar-active-point")
+      ) {
+        found.push({
+          radius: Math.hypot(Number(record.x) || 0, Number(record.y) || 0),
+          size: Number(record.radius) || 0,
+        })
+      }
+      for (const value of Object.values(record)) walk(value)
+    }
+    // The drawing layer only. The scene emits every dot twice — once inside the
+    // polar group, positioned from the centre, and once in a flat interaction
+    // layer in absolute scene coordinates. They are the same points, but only
+    // the first is a radius, so measuring both would double every reading.
+    const layers = { ...scene }.nodes
+    walk(Array.isArray(layers) ? layers[0] : layers)
+    return found
+  }
+
+  test("shows nothing while nothing is focused", () => {
+    // One circle per subject exists either way — the mark keeps its identity so
+    // the renderer resizes rather than adds — but none of them is drawn.
+    const drawn = activePoints(360, 340, null)
+
+    expect(drawn).toHaveLength(SUBJECTS.length)
+    expect(drawn.every((point) => point.size === 0)).toBe(true)
+  })
+
+  test("marks the focused subject, on its own value", () => {
+    // The regression this covers: `focusRing: false` reached every definition,
+    // every cartesian chart replaced the ring with a focus-state dot, and this
+    // one was left with no active point at all.
+    const ring = ringRadius(360, 340)
+    const focused = pointsFor(SUBJECTS)[3]
+    if (!focused) throw new Error("no subject to focus")
+
+    const drawn = activePoints(360, 340, focused.subject)
+    const visible = drawn.filter((point) => point.size > 0)
+
+    expect(visible).toHaveLength(1)
+    expect(visible[0]?.radius).toBeCloseTo((ring * focused.value) / 20, 6)
+  })
+
+  test("follows the ring when the card is narrow", () => {
+    // The radius ratio steps down below 360px, and a point that did not follow
+    // it would sit off the shape it belongs to.
+    const focused = pointsFor(SUBJECTS)[2]
+    if (!focused) throw new Error("no subject to focus")
+    const visible = activePoints(320, 340, focused.subject).filter(
+      (point) => point.size > 0
+    )
+
+    expect(visible[0]?.radius).toBeCloseTo(
+      (ringRadius(320, 340) * focused.value) / 20,
+      6
+    )
+  })
+
+  test("ignores a name that is not on the chart", () => {
+    expect(
+      activePoints(360, 340, "Not a subject").every((point) => point.size === 0)
+    ).toBe(true)
+  })
+})

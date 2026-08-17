@@ -1,12 +1,21 @@
 import {
   BookMarkedIcon,
+  CalendarRangeIcon,
   ChartNoAxesCombinedIcon,
+  CompassIcon,
+  FunctionSquareIcon,
+  InfoIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
+  PaletteIcon,
+  PlugIcon,
+  ScrollTextIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   ShieldIcon,
   SparklesIcon,
   TargetIcon,
+  UserRoundIcon,
   UsersRoundIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -84,15 +93,53 @@ export const NAV_ENTRIES: NavEntry[] = [
   },
 ]
 
-export const SETTINGS_SECTIONS = [
-  { href: "/settings", label: "Profile", exact: true },
-  { href: "/settings/appearance", label: "Appearance" },
-  { href: "/settings/navigation", label: "Navigation" },
-  { href: "/settings/year", label: "Year & periods" },
-  { href: "/settings/averages", label: "Custom averages" },
-  { href: "/settings/account", label: "Account" },
-  { href: "/settings/about", label: "About" },
-] as const
+export interface SettingsSection {
+  href: string
+  /** Source-language label; screens translate it through `useExtracted`. */
+  label: string
+  icon: LucideIcon
+  /** Lit only on an exact match: `/settings` is a page, not a section root. */
+  exact?: boolean
+}
+
+/**
+ * The settings screens, declared once — for the same reason as above.
+ *
+ * This list existed and was read by nothing: the desktop rail kept its own
+ * copy, which grew two sections this one never heard about, and the account hub
+ * on a phone hand-picked four of them. The rail is `hidden md:block`, so those
+ * five sections — Navigation, Year preset, Custom averages, Account,
+ * Integrations — could not be reached on a phone at all. Nothing was broken;
+ * there were simply three lists and only one of them was ever complete.
+ *
+ * Both surfaces now render this, so a new settings screen reaches the phone and
+ * the desktop at the same time or neither.
+ */
+export const SETTINGS_SECTIONS: SettingsSection[] = [
+  { href: "/settings", label: "Profile", icon: UserRoundIcon, exact: true },
+  { href: "/settings/appearance", label: "Appearance", icon: PaletteIcon },
+  { href: "/settings/navigation", label: "Navigation", icon: CompassIcon },
+  { href: "/settings/year", label: "Year & periods", icon: CalendarRangeIcon },
+  { href: "/settings/preset", label: "Year preset", icon: ScrollTextIcon },
+  {
+    href: "/settings/averages",
+    label: "Custom averages",
+    icon: FunctionSquareIcon,
+  },
+  { href: "/settings/account", label: "Account", icon: ShieldCheckIcon },
+  { href: "/settings/integrations", label: "Integrations", icon: PlugIcon },
+  { href: "/settings/about", label: "About", icon: InfoIcon },
+]
+
+/** Whether `pathname` is inside a settings section. */
+export function isActiveSettingsSection(
+  pathname: string,
+  section: SettingsSection
+): boolean {
+  return section.exact
+    ? pathname === section.href
+    : pathname.startsWith(section.href)
+}
 
 export function isActivePath(pathname: string, entry: NavEntry): boolean {
   const candidates = [entry.href, ...(entry.matches ?? [])]

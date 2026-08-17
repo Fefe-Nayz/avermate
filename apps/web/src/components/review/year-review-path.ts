@@ -1,3 +1,5 @@
+import { lineStyleCurve } from "@/components/charts/line-style"
+
 export interface ReviewChartPoint {
   x: number
   y: number
@@ -5,6 +7,13 @@ export interface ReviewChartPoint {
 
 interface CurveSample extends ReviewChartPoint {
   length: number
+}
+
+interface CubicSegment {
+  start: ReviewChartPoint
+  control1: ReviewChartPoint
+  control2: ReviewChartPoint
+  end: ReviewChartPoint
 }
 
 function cubicPoint(
@@ -35,9 +44,77 @@ function cubicPoint(
 }
 
 /**
- * Builds the canonical Catmull-Rom curve and an arc-length lookup table.
- * Keeping the lookup pure lets React render the moving camera without reading
- * an SVG ref, while the trace, dot and beacon still share one geometry.
+ * A path sink that keeps the cubics rather than drawing them.
+ *
+ * d3's curves speak to a canvas-shaped target. Handing them one that records
+ * gives us the same segments a chart would have drawn, which is what makes the
+ * arc-length walk below possible: sampling a curve needs its control points, and
+ * a path string has thrown them away.
+ *
+ * The stubs are the rest of the canvas path surface. A curve interpolator never
+ * reaches for them, and implementing them empty is cheaper than asserting a
+ * narrower type onto something the signature says is wider.
+ */
+function createSegmentRecorder() {
+  const segments: CubicSegment[] = []
+  let cursor: ReviewChartPoint = { x: 0, y: 0 }
+
+  return {
+    segments,
+    moveTo(x: number, y: number): void {
+      cursor = { x, y }
+    },
+    lineTo(x: number, y: number): void {
+      const end = { x, y }
+      // A straight run is a cubic whose handles sit on its own ends, so the
+      // sampler needs no second case for it.
+      segments.push({ start: cursor, control1: cursor, control2: end, end })
+      cursor = end
+    },
+    bezierCurveTo(
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      x: number,
+      y: number
+    ): void {
+      const end = { x, y }
+      segments.push({
+        start: cursor,
+        control1: { x: x1, y: y1 },
+        control2: { x: x2, y: y2 },
+        end,
+      })
+      cursor = end
+    },
+    closePath(): void {},
+    arc(): void {},
+    arcTo(): void {},
+    ellipse(): void {},
+    quadraticCurveTo(): void {},
+    rect(): void {},
+  }
+}
+
+/**
+ * Builds the curve and an arc-length lookup table.
+ *
+ * The interpolation is the dashboard's: `lineStyleCurve("smooth")`, which is
+ * `curveMonotoneX`. That is the point of taking it from there rather than
+ * spelling it out — the review draws the same average as the dashboard, so it
+ * should draw it with the same shape, and it will keep doing so if that shared
+ * definition ever changes.
+ *
+ * It used to build a Catmull-Rom spline instead. Catmull-Rom overshoots: to pass
+ * smoothly through its points it swings past them, inventing dips before a climb
+ * and peaks above the highest reading. On a year of averages that reads as a
+ * curve doing things the numbers never did. Monotone interpolation is built on
+ * the opposite promise — between two samples it never leaves the range those two
+ * samples define — so every bump on screen is a bump in the data.
+ *
+ * Keeping the lookup pure lets React render the moving camera without reading an
+ * SVG ref, while the trace, dot and beacon still share one geometry.
  */
 export function buildYearReviewPath(points: readonly ReviewChartPoint[]) {
   if (points.length < 2) {
@@ -49,27 +126,23 @@ export function buildYearReviewPath(points: readonly ReviewChartPoint[]) {
     }
   }
 
+  const recorder = createSegmentRecorder()
+  const curve = lineStyleCurve("smooth")(recorder)
+  curve.lineStart()
+  for (const point of points) curve.point(point.x, point.y)
+  curve.lineEnd()
+
+  const { segments } = recorder
   let path = `M ${points[0].x} ${points[0].y}`
   const samples: CurveSample[] = [{ ...points[0], length: 0 }]
   const endpointLengths = [0]
   let totalLength = 0
 
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const previous = points[Math.max(0, index - 1)]
-    const start = points[index]
-    const end = points[index + 1]
-    const next = points[Math.min(points.length - 1, index + 2)]
-    const control1 = {
-      x: start.x + (end.x - previous.x) / 6,
-      y: start.y + (end.y - previous.y) / 6,
-    }
-    const control2 = {
-      x: end.x - (next.x - start.x) / 6,
-      y: end.y - (next.y - start.y) / 6,
-    }
-
+  for (const { start, control1, control2, end } of segments) {
     path += ` C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${end.x} ${end.y}`
 
+    // SAFETY: seeded with the first point above and only ever appended to, so
+    // there is always a last sample to measure the next step against.
     let last = samples.at(-1) as CurveSample
     for (let step = 1; step <= 32; step += 1) {
       const point = cubicPoint(start, control1, control2, end, step / 32)
@@ -102,10 +175,14 @@ export function buildYearReviewPath(points: readonly ReviewChartPoint[]) {
 
   return {
     path,
+    // Indexed against the segments actually recorded, not the points handed in:
+    // a curve drops a point that repeats the one before it, and clamping to the
+    // input length would then read past the end of this table.
     progressAtPoint: (index: number) =>
       totalLength > 0
-        ? (endpointLengths[Math.max(0, Math.min(index, points.length - 1))] ??
-            0) / totalLength
+        ? (endpointLengths[
+            Math.max(0, Math.min(index, endpointLengths.length - 1))
+          ] ?? 0) / totalLength
         : 0,
     pointAtProgress,
   }

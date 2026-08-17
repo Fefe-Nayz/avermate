@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { randomId } from "@/lib/id"
 
 export interface PresetEditorSubject {
   key: string
@@ -61,7 +62,7 @@ interface FlatSubject {
 }
 
 function freshKey(prefix: "subject" | "average") {
-  return `${prefix}:${crypto.randomUUID().replaceAll("-", "")}`
+  return `${prefix}:${randomId().replaceAll("-", "")}`
 }
 
 function makeSubject(

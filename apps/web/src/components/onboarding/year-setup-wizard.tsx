@@ -31,6 +31,7 @@ import {
   writeActiveYearCookie,
 } from "@/lib/year-selection"
 import { cn } from "@/lib/utils"
+import { randomId } from "@/lib/id"
 import {
   clearYearSetupDraft,
   parseYearSetupDraft,
@@ -77,7 +78,7 @@ export function YearSetupWizard({
 }) {
   const existing = useQuery(orpc.years.list.queryOptions())
   const storedDraft = useStoredDraft(mode)
-  const [newIdempotencyKey] = useState(() => crypto.randomUUID())
+  const [newIdempotencyKey] = useState(() => randomId())
   const defaults = suggestSchoolYear(initialNow, existing.data ?? [])
 
   // Keep the server and hydration render identical. useSyncExternalStore then

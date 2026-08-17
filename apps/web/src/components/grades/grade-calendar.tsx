@@ -1,25 +1,25 @@
 "use client"
 
-import Link from "next/link"
-import { useMemo, useState } from "react"
 import {
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns"
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { addMonths, isSameDay, isSameMonth, startOfMonth } from "date-fns"
 import { enUS, fr } from "date-fns/locale"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 import { useExtracted, useFormatter, useLocale } from "next-intl"
 import { bandOf, gradeRatio, type Grade, type ResultBand } from "@avermate/core"
-import { CoefficientBadge, ResultBadge } from "@/components/data/value"
+import { GradeList } from "@/components/grades/grade-list"
 import { Button } from "@/components/ui/button"
 import { useYear } from "@/components/year/year-provider"
+import { dayKey, monthGrid } from "@/lib/calendar"
 import { cn } from "@/lib/utils"
+
+export { dayKey, monthGrid }
 
 /**
  * Grades, on a calendar.
@@ -53,13 +53,6 @@ const BAND_DOT: Record<ResultBand, string> = {
   poor: "bg-band-poor",
 }
 
-/** A local calendar day, as a stable key. Never `toISOString` — that shifts. */
-export function dayKey(value: Date): string {
-  const month = `${value.getMonth() + 1}`.padStart(2, "0")
-  const day = `${value.getDate()}`.padStart(2, "0")
-  return `${value.getFullYear()}-${month}-${day}`
-}
-
 /** Grades bucketed by the local day they were sat. */
 export function groupGradesByDay(grades: Grade[]): Map<string, Grade[]> {
   const byDay = new Map<string, Grade[]>()
@@ -72,16 +65,8 @@ export function groupGradesByDay(grades: Grade[]): Map<string, Grade[]> {
   return byDay
 }
 
-/**
- * The days a month grid has to draw: whole weeks, so the grid stays
- * rectangular and the weekday columns line up.
- */
-export function monthGrid(month: Date, weekStartsOn: 0 | 1): Date[] {
-  return eachDayOfInterval({
-    start: startOfWeek(startOfMonth(month), { weekStartsOn }),
-    end: endOfWeek(endOfMonth(month), { weekStartsOn }),
-  })
-}
+/** Bound on rendered month panels, so one stray date cannot mint hundreds. */
+const MAX_MONTH_PANELS = 36
 
 export function GradeCalendar({ grades }: { grades: Grade[] }) {
   const t = useExtracted()
@@ -104,11 +89,107 @@ export function GradeCalendar({ grades }: { grades: Grade[] }) {
       ) ?? today,
     [grades, today]
   )
-  const [month, setMonth] = useState(() => startOfMonth(latest))
+  /**
+   * Every month the calendar can reach, laid out end to end.
+   *
+   * Paging used to mean pressing a chevron, which on a phone is the one
+   * interaction a calendar should never need — the gesture for "next month" is
+   * a swipe. Rendering the whole span into a scroll-snapping row makes that
+   * swipe the native one: no gesture handler, no recentring, and the chevrons
+   * simply scroll the same container. The span is bounded by the data (with
+   * today always inside it) and capped, so a stray date cannot mint hundreds
+   * of panels.
+   */
+  const months = useMemo(() => {
+    const earliest = grades.reduce<Date | null>(
+      (first, grade) =>
+        first === null || grade.passedAt < first ? grade.passedAt : first,
+      null
+    )
+    const end = startOfMonth(latest > today ? latest : today)
+    let start = startOfMonth(earliest ?? end)
+    if (start > end) start = end
+    const list: Date[] = []
+    for (
+      let cursor = start;
+      cursor <= end && list.length < MAX_MONTH_PANELS;
+      cursor = addMonths(cursor, 1)
+    ) {
+      list.push(cursor)
+    }
+    // A capped span keeps the most recent months, which are the ones read.
+    return list.length === MAX_MONTH_PANELS ? list : list.length ? list : [end]
+  }, [grades, latest, today])
+
+  const openAt = useMemo(() => {
+    const target = startOfMonth(latest)
+    const index = months.findIndex((entry) => isSameMonth(entry, target))
+    return index === -1 ? months.length - 1 : index
+  }, [latest, months])
+
+  const [monthIndex, setMonthIndex] = useState(openAt)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const pagerRef = useRef<HTMLDivElement | null>(null)
+  const settleRef = useRef<number | undefined>(undefined)
+
+  const month =
+    months[Math.min(monthIndex, months.length - 1)] ?? startOfMonth(latest)
+
+  /** Jump the pager to a panel; `auto` for the first paint, so it never slides in. */
+  const scrollToIndex = useCallback(
+    (index: number, behavior: ScrollBehavior = "smooth") => {
+      const node = pagerRef.current
+      if (!node) return
+      node.scrollTo({ left: index * node.clientWidth, behavior })
+    },
+    []
+  )
+
+  // Adjusted during render rather than from an effect: when the data moves the
+  // opening month, the pager must already be on it for the paint that follows.
+  const [lastOpenAt, setLastOpenAt] = useState(openAt)
+  if (lastOpenAt !== openAt) {
+    setLastOpenAt(openAt)
+    setMonthIndex(openAt)
+  }
+
+  // No animation for the initial placement: the calendar opens on its month,
+  // it does not slide there from January.
+  useLayoutEffect(() => {
+    scrollToIndex(openAt, "auto")
+  }, [openAt, scrollToIndex])
+
+  useEffect(
+    () => () => {
+      if (settleRef.current !== undefined)
+        window.clearTimeout(settleRef.current)
+    },
+    []
+  )
+
+  // Read the settled panel rather than every intermediate pixel: momentum on a
+  // phone fires scroll continuously, and re-rendering the month name per frame
+  // would flicker it through the months being passed.
+  const handlePagerScroll = useCallback(() => {
+    if (settleRef.current !== undefined) window.clearTimeout(settleRef.current)
+    settleRef.current = window.setTimeout(() => {
+      settleRef.current = undefined
+      const node = pagerRef.current
+      if (!node || node.clientWidth === 0) return
+      const index = Math.round(node.scrollLeft / node.clientWidth)
+      setMonthIndex((current) => (current === index ? current : index))
+    }, 90)
+  }, [])
 
   const byDay = useMemo(() => groupGradesByDay(grades), [grades])
-  const days = useMemo(() => monthGrid(month, weekStartsOn), [month, weekStartsOn])
+  const panels = useMemo(
+    () =>
+      months.map((entry) => ({
+        month: entry,
+        days: monthGrid(entry, weekStartsOn),
+      })),
+    [months, weekStartsOn]
+  )
   const weekdays = useMemo(
     () =>
       monthGrid(month, weekStartsOn)
@@ -118,7 +199,7 @@ export function GradeCalendar({ grades }: { grades: Grade[] }) {
   )
 
   const selected = selectedKey ? (byDay.get(selectedKey) ?? []) : []
-  const monthCount = days.filter(
+  const monthCount = monthGrid(month, weekStartsOn).filter(
     (day) => isSameMonth(day, month) && byDay.has(dayKey(day))
   ).length
 
@@ -148,19 +229,27 @@ export function GradeCalendar({ grades }: { grades: Grade[] }) {
             ? t("1 day with results")
             : t("{count} days with results", { count: String(monthCount) })}
         </span>
+        {/* The chevrons drive the same scroller the swipe does, so the two
+            can never disagree about which month is showing. */}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="outline"
             size="icon-sm"
             aria-label={t("Previous month")}
-            onClick={() => setMonth((current) => addMonths(current, -1))}
+            disabled={monthIndex <= 0}
+            onClick={() => scrollToIndex(monthIndex - 1)}
           >
             <ChevronLeftIcon />
           </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setMonth(startOfMonth(today))}
+            onClick={() => {
+              const index = months.findIndex((entry) =>
+                isSameMonth(entry, today)
+              )
+              if (index !== -1) scrollToIndex(index)
+            }}
           >
             {t("Today")}
           </Button>
@@ -168,7 +257,8 @@ export function GradeCalendar({ grades }: { grades: Grade[] }) {
             variant="outline"
             size="icon-sm"
             aria-label={t("Next month")}
-            onClick={() => setMonth((current) => addMonths(current, 1))}
+            disabled={monthIndex >= months.length - 1}
+            onClick={() => scrollToIndex(monthIndex + 1)}
           >
             <ChevronRightIcon />
           </Button>
@@ -191,124 +281,129 @@ export function GradeCalendar({ grades }: { grades: Grade[] }) {
           ))}
         </div>
 
-        <div className="grid grid-cols-7">
-          {days.map((day) => {
-            const key = dayKey(day)
-            const dayGrades = byDay.get(key) ?? []
-            const outside = !isSameMonth(day, month)
-            const isToday = isSameDay(day, today)
-            const isSelected = key === selectedKey
+        <div
+          ref={pagerRef}
+          onScroll={handlePagerScroll}
+          className="no-scrollbar flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
+        >
+          {panels.map(({ month: panelMonth, days }) => (
+            <div
+              key={panelMonth.toISOString()}
+              className="w-full shrink-0 snap-center"
+              aria-hidden={isSameMonth(panelMonth, month) ? undefined : true}
+            >
+              <div className="grid grid-cols-7">
+                {days.map((day) => {
+                  const key = dayKey(day)
+                  const dayGrades = byDay.get(key) ?? []
+                  const outside = !isSameMonth(day, panelMonth)
+                  const isToday = isSameDay(day, today)
+                  const isSelected = key === selectedKey
 
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={isSelected}
-                aria-label={format.dateTime(day, {
-                  day: "numeric",
-                  month: "long",
-                })}
-                disabled={dayGrades.length === 0}
-                onClick={() => setSelectedKey(isSelected ? null : key)}
-                className={cn(
-                  "flex min-h-16 flex-col items-stretch gap-1 border-r border-b p-1.5 text-left transition-colors last:border-r-0 md:min-h-24",
-                  "[&:nth-child(7n)]:border-r-0",
-                  outside && "bg-muted/25",
-                  dayGrades.length > 0 && "hover:bg-accent/50",
-                  isSelected && "bg-accent",
-                  dayGrades.length === 0 && "cursor-default"
-                )}
-              >
-                <span
-                  className={cn(
-                    "numeric flex size-5 shrink-0 items-center justify-center self-start rounded-full text-[11px]",
-                    isToday && "bg-primary font-semibold text-primary-foreground",
-                    !isToday && outside && "text-muted-foreground/50",
-                    !isToday && !outside && "text-muted-foreground"
-                  )}
-                >
-                  {day.getDate()}
-                </span>
-
-                {/* Phones get a dot per result — a mark chip in a 44px cell is
-                    unreadable — and the day's detail opens underneath. */}
-                <span className="flex flex-wrap gap-0.5 md:hidden">
-                  {dayGrades.slice(0, 6).map((grade) => {
-                    const { band } = chipFor(grade)
-                    return (
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={format.dateTime(day, {
+                        day: "numeric",
+                        month: "long",
+                      })}
+                      disabled={dayGrades.length === 0}
+                      onClick={() => setSelectedKey(isSelected ? null : key)}
+                      className={cn(
+                        "flex min-h-16 flex-col items-stretch gap-1 border-r border-b p-1.5 text-left transition-colors last:border-r-0 md:min-h-24",
+                        "[&:nth-child(7n)]:border-r-0",
+                        outside && "bg-muted/25",
+                        dayGrades.length > 0 && "hover:bg-accent/50",
+                        isSelected && "bg-accent",
+                        dayGrades.length === 0 && "cursor-default"
+                      )}
+                    >
                       <span
-                        key={grade.id}
                         className={cn(
-                          "size-1.5 rounded-full",
-                          band ? BAND_DOT[band] : "bg-muted-foreground/40"
-                        )}
-                      />
-                    )
-                  })}
-                </span>
-
-                <span className="hidden flex-col gap-0.5 md:flex">
-                  {dayGrades.slice(0, 3).map((grade) => {
-                    const { band, label } = chipFor(grade)
-                    return (
-                      <span
-                        key={grade.id}
-                        className={cn(
-                          "flex items-center gap-1 rounded px-1 py-0.5 text-[11px]",
-                          band ? BAND_CHIP[band] : "bg-muted text-muted-foreground"
+                          "numeric flex size-5 shrink-0 items-center justify-center self-start rounded-full text-[11px]",
+                          isToday &&
+                            "bg-primary font-semibold text-primary-foreground",
+                          !isToday && outside && "text-muted-foreground/50",
+                          !isToday && !outside && "text-muted-foreground"
                         )}
                       >
-                        <span className="min-w-0 flex-1 truncate">
-                          {graph.byId(grade.subjectId)?.shortName ||
-                            graph.byId(grade.subjectId)?.name ||
-                            grade.name}
-                        </span>
-                        <span className="numeric font-medium">{label}</span>
+                        {day.getDate()}
                       </span>
-                    )
-                  })}
-                  {dayGrades.length > 3 ? (
-                    <span className="px-1 text-[11px] text-muted-foreground">
-                      {t("+{count} more", {
-                        count: String(dayGrades.length - 3),
-                      })}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            )
-          })}
+
+                      {/* Phones get a dot per result — a mark chip in a 44px cell is
+                    unreadable — and the day's detail opens underneath. */}
+                      <span className="flex flex-wrap gap-0.5 md:hidden">
+                        {dayGrades.slice(0, 6).map((grade) => {
+                          const { band } = chipFor(grade)
+                          return (
+                            <span
+                              key={grade.id}
+                              className={cn(
+                                "size-1.5 rounded-full",
+                                band ? BAND_DOT[band] : "bg-muted-foreground/40"
+                              )}
+                            />
+                          )
+                        })}
+                      </span>
+
+                      <span className="hidden flex-col gap-0.5 md:flex">
+                        {dayGrades.slice(0, 3).map((grade) => {
+                          const { band, label } = chipFor(grade)
+                          return (
+                            <span
+                              key={grade.id}
+                              className={cn(
+                                "flex items-center gap-1 rounded px-1 py-0.5 text-[11px]",
+                                band
+                                  ? BAND_CHIP[band]
+                                  : "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              <span className="min-w-0 flex-1 truncate">
+                                {graph.byId(grade.subjectId)?.shortName ||
+                                  graph.byId(grade.subjectId)?.name ||
+                                  grade.name}
+                              </span>
+                              <span className="numeric font-medium">
+                                {label}
+                              </span>
+                            </span>
+                          )
+                        })}
+                        {dayGrades.length > 3 ? (
+                          <span className="px-1 text-[11px] text-muted-foreground">
+                            {t("+{count} more", {
+                              count: String(dayGrades.length - 3),
+                            })}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       {selectedKey ? (
-        <section className="overflow-hidden rounded-xl border bg-card">
-          <h3 className="border-b px-4 py-2.5 text-sm font-medium">
+        // The same list the timeline and the dashboard use, rather than a
+        // fourth hand-rolled copy of it: a day's results are the same rows
+        // wherever you meet them, and three near-identical lists is how they
+        // drifted apart before.
+        <section className="flex flex-col gap-2">
+          <h3 className="px-1 text-sm font-medium">
             {format.dateTime(new Date(`${selectedKey}T00:00:00`), {
               weekday: "long",
               day: "numeric",
               month: "long",
             })}
           </h3>
-          <ul className="divide-y">
-            {selected.map((grade) => (
-              <li key={grade.id}>
-                <Link
-                  href={`/grades/${grade.id}`}
-                  className="flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{grade.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {graph.byId(grade.subjectId)?.name}
-                    </p>
-                  </div>
-                  <CoefficientBadge coefficient={grade.coefficient} />
-                  <ResultBadge ratio={gradeRatio(grade)} />
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <GradeList grades={selected} />
         </section>
       ) : (
         <p className="px-1 text-xs text-muted-foreground">
