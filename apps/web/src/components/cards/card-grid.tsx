@@ -39,6 +39,7 @@ import {
   PlusIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { toast } from "sonner"
 import {
   layoutCardGrid,
   layoutCards,
@@ -187,6 +188,22 @@ interface DragSession {
   /** Where inside the card the pointer took hold; `null` for a keyboard drag. */
   grab: { x: number; y: number } | null
   source: { width: number; height: number } | null
+}
+
+/**
+ * Whether a failed write was a conflict rather than a fault.
+ *
+ * Read off the status the server sends rather than the message, so it survives
+ * translation and rewording. `CONFLICT` is the one error here a person should be
+ * told about, because the layout on screen is about to be replaced by someone
+ * else's.
+ */
+function isLayoutConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "CONFLICT"
+  )
 }
 
 /** The pointer position a drag started from, whichever input started it. */
@@ -550,11 +567,19 @@ export function CardGrid({
 
   const reorder = useMutation({
     ...orpc.cards.reorder.mutationOptions(),
-    onError: (_error, variables) => {
+    onError: (error, variables) => {
       // Snap back to what the server still holds, rather than leaving a layout
       // on screen that was never saved — but only if this was the arrangement on
       // screen. An older request failing must not take a newer one down with it.
       haptic("warning")
+      // A conflict is not a failure to explain away: the layout really did change
+      // somewhere else, and the refetch below is about to replace what is on
+      // screen. Saying so is the difference between that and a bug.
+      if (isLayoutConflict(error)) {
+        toast.info(t("This dashboard was changed on another device."), {
+          description: t("The latest layout has been loaded."),
+        })
+      }
       if (sameCardOrder(pendingRef.current, variables.cardIds))
         showPending(null)
     },
@@ -811,8 +836,13 @@ export function CardGrid({
       // Queued behind whatever is already in flight. The rejection is swallowed
       // here and nowhere else: `onError` above is what tells the person, and an
       // unhandled rejection on this chain would also stop the next drag being sent.
+      // `active.ids` is the arrangement this gesture started from, which is exactly
+      // what the server needs to check the layout has not moved under it. The drag
+      // session already froze it — the compare-and-swap costs one field.
       sendRef.current = sendRef.current
-        .then(() => reorder.mutateAsync({ cardIds: next }))
+        .then(() =>
+          reorder.mutateAsync({ cardIds: next, expectedCardIds: active.ids })
+        )
         .catch(() => {})
     }
     clearDrag()

@@ -280,7 +280,9 @@ describe("the dashboard grid draws the arrangement it will save", () => {
     expect(grid).toContain(
       "active?.targetId === null ? null : previewRef.current"
     )
-    expect(grid).toContain("reorder.mutateAsync({ cardIds: next })")
+    expect(grid).toContain(
+      "reorder.mutateAsync({ cardIds: next, expectedCardIds: active.ids })"
+    )
     expect(grid).not.toContain("resolveGridReorder")
   })
 
@@ -315,5 +317,31 @@ describe("the dashboard grid draws the arrangement it will save", () => {
     // without this its edit button, hide button and link are all present twice
     // under the same accessible names.
     expect(grid).toContain('className="pointer-events-none" inert')
+  })
+})
+
+/**
+ * Two devices cannot silently overwrite each other's layout.
+ *
+ * Each request carries a complete, absolute order rather than a relative move, so
+ * the last write wins unconditionally — and "last" is decided by the network. Two
+ * tabs reordering from the same starting point, and the loser's refetch shows them
+ * their own gesture undone with no explanation.
+ */
+describe("a layout write says what it was working from", () => {
+  const grid = readFileSync(new URL("./card-grid.tsx", import.meta.url), "utf8")
+
+  test("sends the arrangement the gesture started from", () => {
+    // `active.ids` is the frozen base order, not the live one — the compare-and-swap
+    // has to be against what the person was looking at when they picked the card up.
+    expect(grid).toContain("expectedCardIds: active.ids")
+    expect(grid).not.toContain("expectedCardIds: previewRef.current")
+  })
+
+  test("tells the person when the layout moved somewhere else", () => {
+    // Read off the status rather than the message, so it survives translation, and
+    // a conflict is announced rather than snapping the grid silently.
+    expect(grid).toContain('=== "CONFLICT"')
+    expect(grid).toContain("isLayoutConflict(error)")
   })
 })

@@ -31,7 +31,7 @@ import {
   normalizeTargetReference,
   type TargetKind,
 } from "../lib/domain-integrity";
-import { badRequest, protectedProcedure } from "../lib/orpc";
+import { badRequest, conflict, protectedProcedure } from "../lib/orpc";
 import { newId } from "../lib/id";
 import {
   requireCustomAverage,
@@ -217,7 +217,20 @@ export const cardsRouter = {
     }),
 
   reorder: protectedProcedure
-    .input(z.object({ cardIds: z.array(z.string()).min(1) }))
+    .input(
+      z.object({
+        cardIds: z.array(z.string()).min(1),
+        /**
+         * The order the caller believed was stored when it computed `cardIds`.
+         *
+         * A compare-and-swap on the layout itself, which is available because a
+         * reorder already has to name every card on the surface — so the client
+         * holds the whole thing and can say what it was working from. No revision
+         * column and no extra round trip: the content *is* the version.
+         */
+        expectedCardIds: z.array(z.string()).min(1),
+      }),
+    )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       if (new Set(input.cardIds).size !== input.cardIds.length) {
@@ -271,6 +284,30 @@ export const cardsRouter = {
        */
       if (current.length !== input.cardIds.length) {
         badRequest("A reorder must list every card on the surface");
+      }
+
+      /**
+       * Reject a layout computed against an arrangement that has since changed.
+       *
+       * Each request carries a complete, absolute order rather than a relative move,
+       * so the last write wins unconditionally — and "last" is decided by the
+       * network, not by the person. Two devices, or two tabs, each reordering from
+       * the same starting point: whichever answer arrives second overwrites the
+       * other, silently, and the loser's refetch then shows them their own gesture
+       * undone with no explanation.
+       *
+       * Comparing against what the caller thought it was reordering closes that. The
+       * client already sends every card, so it can also say which arrangement it
+       * started from, and this is a compare-and-swap without a revision column to
+       * keep in step. Order-sensitive, deliberately: a *different sequence* of the
+       * same cards is precisely the conflict, and set equality would miss it.
+       */
+      const stored = current.map((card) => card.id);
+      const stale =
+        stored.length !== input.expectedCardIds.length ||
+        stored.some((id, index) => id !== input.expectedCardIds[index]);
+      if (stale) {
+        conflict("This layout was changed somewhere else");
       }
       const statements = input.cardIds.map((id, index) =>
         db

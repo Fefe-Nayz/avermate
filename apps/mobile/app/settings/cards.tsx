@@ -148,10 +148,13 @@ export default function Cards() {
     setError(null);
     setOrderedIds(cardIds);
     const dragged = [...cardIds];
+    const stored = widgets.all.map((card) => card.id);
     const full = widgets.all.map((card) =>
       card.hidden ? card.id : (dragged.shift() ?? card.id),
     );
-    reorder.mutate({ cardIds: full });
+    // The arrangement this list was read from, so the server can refuse a write
+    // computed against a layout that has since changed on another device.
+    reorder.mutate({ cardIds: full, expectedCardIds: stored });
   };
   const route = (id?: string) =>
     `/settings/card-edit?surface=${surface}${id ? `&id=${encodeURIComponent(id)}` : ""}` as const;

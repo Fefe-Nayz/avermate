@@ -39,3 +39,15 @@ export function notFound(what: string): never {
 export function badRequest(message: string): never {
   throw new ORPCError("BAD_REQUEST", { message });
 }
+
+/**
+ * The write was well-formed but the state it assumed has moved on.
+ *
+ * Its own status because a client has to be able to tell it apart from a rejection:
+ * a bad request means stop and fix the payload, a conflict means reload and let the
+ * person see what changed. Answering both with `BAD_REQUEST` left the only sensible
+ * client behaviour — refetch and say so — indistinguishable from a bug.
+ */
+export function conflict(message: string): never {
+  throw new ORPCError("CONFLICT", { message });
+}

@@ -1301,7 +1301,13 @@ function registerWriteSurface(server: McpServer, api: Api): void {
     "cards.reorder",
     {
       description: "Set dashboard-card order.",
-      inputSchema: z.object({ cardIds: z.array(id) }),
+      // `expectedCardIds` is the order the caller was working from; the write is
+      // refused if the stored layout has moved on. Required, so an agent cannot
+      // opt out of the check by omitting it.
+      inputSchema: z.object({
+        cardIds: z.array(id),
+        expectedCardIds: z.array(id),
+      }),
       _meta: writeMeta,
     },
     (input) => call(() => api.cards.reorder(input)),

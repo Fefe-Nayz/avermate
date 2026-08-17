@@ -601,7 +601,10 @@ describe("router year invariants", () => {
       ...metricCard("average"),
     });
     await expect(
-      api.cards.reorder({ cardIds: [cardA?.id ?? "", cardB?.id ?? ""] }),
+      api.cards.reorder({
+        cardIds: [cardA?.id ?? "", cardB?.id ?? ""],
+        expectedCardIds: [cardA?.id ?? "", cardB?.id ?? ""],
+      }),
     ).rejects.toThrow("Every reordered card must share a year and surface");
 
     // A layout is the whole surface or it is nothing. Naming one card of several
@@ -612,14 +615,33 @@ describe("router year invariants", () => {
     const before = await api.cards.list({ yearId: "year-a" });
     expect(before.length).toBeGreaterThan(1);
     await expect(
-      api.cards.reorder({ cardIds: [cardA?.id ?? ""] }),
+      api.cards.reorder({
+        cardIds: [cardA?.id ?? ""],
+        expectedCardIds: [cardA?.id ?? ""],
+      }),
     ).rejects.toThrow("A reorder must list every card on the surface");
+    expect(
+      (await api.cards.list({ yearId: "year-a" })).map((c) => c.id),
+    ).toEqual(before.map((c) => c.id));
+
+    // Computed against an arrangement that has since moved on: refused, and the
+    // stored order is left exactly as it was. Without this the last write wins
+    // unconditionally, and "last" is decided by the network rather than by the
+    // person — two devices reordering from the same point, and the loser's refetch
+    // shows them their own gesture undone with no explanation.
+    await expect(
+      api.cards.reorder({
+        cardIds: [...before.map((c) => c.id)].reverse(),
+        expectedCardIds: [...before.map((c) => c.id)].reverse(),
+      }),
+    ).rejects.toThrow("This layout was changed somewhere else");
     expect(
       (await api.cards.list({ yearId: "year-a" })).map((c) => c.id),
     ).toEqual(before.map((c) => c.id));
 
     await api.cards.reorder({
       cardIds: [...before.map((c) => c.id)].reverse(),
+      expectedCardIds: before.map((c) => c.id),
     });
     const cards = await api.cards.list({ yearId: "year-a" });
     expect(cards.map((c) => c.id)).toEqual(
@@ -653,7 +675,10 @@ describe("router year invariants", () => {
       ),
     ).toBe(false);
 
-    await api.cards.reorder({ cardIds: [second?.id ?? "", first?.id ?? ""] });
+    await api.cards.reorder({
+      cardIds: [second?.id ?? "", first?.id ?? ""],
+      expectedCardIds: [first?.id ?? "", second?.id ?? ""],
+    });
     expect(
       (await api.cards.list({ yearId: "year-a", surface: "insights" })).map(
         (card) => card.id,
