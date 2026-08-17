@@ -311,6 +311,8 @@ const fr: Record<string, string> = {
   "Complete the highlighted widget fields before saving.":
     "Complétez les champs signalés avant d'enregistrer.",
   "Widgets could not be refreshed.": "Impossible d'actualiser les widgets.",
+  "Unavailable card": "Carte indisponible",
+  "This card could not be read.": "Cette carte n’a pas pu être lue.",
   "Build the analysis view that answers your questions.":
     "Composez la vue d'analyse qui répond à vos questions.",
   Definition: "Définition",
@@ -851,7 +853,6 @@ const fr: Record<string, string> = {
   Spread: "Dispersion",
   "Spread of results": "Répartition des notes",
   "Steadiest subjects": "Matières les plus régulières",
-  Strong: "Fort",
   "Subjects ranked": "Classement des matières",
   Sunday: "Dimanche",
   Terms: "Conditions d'utilisation",
@@ -890,7 +891,6 @@ const fr: Record<string, string> = {
   Trend: "Tendance",
   Tuesday: "Mardi",
   "Version {version}": "Version {version}",
-  Weak: "Faible",
   Wednesday: "Mercredi",
   "Weighted ×{value} here": "Pondérée ×{value} ici",
   "What are you trying to do that the app makes hard?":
@@ -914,9 +914,6 @@ const fr: Record<string, string> = {
   "Your message": "Votre message",
   "Your year, told back to you": "Votre année, racontée",
   Yours: "Les vôtres",
-  "and counting": "et ça continue",
-  "right now": "actuellement",
-  "{count} days": "{count} jours",
 
   // ---------------------------------------------- charts and semantic timeline
   "Adjust time travel date": "Ajuster la date du voyage temporel",

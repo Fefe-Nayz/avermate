@@ -8,11 +8,6 @@ import { resolveWidgetRow, type StoredWidgetRow } from "./widget-row";
 const row: StoredWidgetRow = {
   id: "card-1",
   surface: "overview",
-  metric: "passRate",
-  targetKind: "general",
-  targetId: null,
-  goalId: null,
-  display: "gauge",
   span: 1,
   title: null,
   accent: null,
@@ -23,7 +18,7 @@ const row: StoredWidgetRow = {
 };
 
 describe("resolveWidgetRow", () => {
-  test("uses a valid V1 definition", () => {
+  test("uses the stored definition", () => {
     const definition = createWidgetDefinition("overview");
     const resolved = resolveWidgetRow(
       { ...row, definitionVersion: 1, definitionJson: definition },
@@ -32,37 +27,39 @@ describe("resolveWidgetRow", () => {
     const compiled = compileWidgetDefinition(definition, {
       surface: "overview",
     });
-    expect(resolved.source).toBe("v1");
-    expect(resolved.legacySpec).toBeNull();
+
     expect(compiled.valid).toBe(true);
-    expect(compiled.plan).not.toBeNull();
     expect(resolved.definition).toEqual(compiled.plan!.definition);
+    expect(resolved.issues).toEqual([]);
   });
 
-  test("falls back to legacy columns for unknown JSON", () => {
+  test("reports a row it cannot read rather than becoming another card", () => {
+    // The old fallback read the `metric` / `display` columns and handed them to a
+    // *different renderer*, so an unreadable row silently became a working card
+    // that looked nothing like the one the editor showed for it.
     const resolved = resolveWidgetRow(
       { ...row, definitionVersion: 1, definitionJson: { apiVersion: 999 } },
       "overview",
     );
-    expect(resolved.source).toBe("legacy");
-    expect(resolved.legacySpec?.display).toBe("gauge");
-    expect(resolved.definition.analysis.measure).toMatchObject({
-      kind: "metric",
-      metric: "passRate",
-    });
+
+    expect(resolved.definition).toBeNull();
     expect(resolved.issues.length).toBeGreaterThan(0);
   });
 
-  test("keeps the persisted sparkline display in the legacy spec", () => {
+  test("has no second representation to fall back to", () => {
+    expect(resolveWidgetRow(row, "overview").definition).toBeNull();
+  });
+
+  test("refuses a definition version this build does not know", () => {
     const resolved = resolveWidgetRow(
-      { ...row, metric: "average", display: "sparkline" },
+      {
+        ...row,
+        definitionVersion: 2,
+        definitionJson: createWidgetDefinition("overview"),
+      },
       "overview",
     );
 
-    expect(resolved.source).toBe("legacy");
-    expect(resolved.legacySpec).toMatchObject({
-      metric: "average",
-      display: "sparkline",
-    });
+    expect(resolved.definition).toBeNull();
   });
 });

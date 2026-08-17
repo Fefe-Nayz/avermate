@@ -1,33 +1,11 @@
 import {
-  CARD_METRICS,
+  WIDGET_DEFINITION_VERSION,
   compileWidgetDefinition,
-  legacyCardToWidgetDefinition,
-  type CardDisplay,
-  type CardMetric,
-  type CardSpec,
   type WidgetDefinitionV1,
   type WidgetSurface,
   type WidgetValidationIssue,
 } from "@avermate/core"
 import type { DashboardCardRow } from "@/components/year/year-provider"
-
-const CARD_DISPLAYS = ["value", "sparkline", "chart", "list", "gauge"] as const
-
-function metric(value: string): CardMetric {
-  return CARD_METRICS.includes(value as CardMetric)
-    ? (value as CardMetric)
-    : "average"
-}
-
-function display(value: string): CardDisplay {
-  return CARD_DISPLAYS.includes(value as CardDisplay)
-    ? (value as CardDisplay)
-    : "value"
-}
-
-function targetKind(value: string): "general" | "subject" | "custom" {
-  return value === "subject" || value === "custom" ? value : "general"
-}
 
 function surface(value: string): WidgetSurface {
   return value === "subject" || value === "grade" || value === "insights"
@@ -36,73 +14,42 @@ function surface(value: string): WidgetSurface {
 }
 
 export interface ResolvedWidgetRow {
-  definition: WidgetDefinitionV1
-  source: "v1" | "legacy"
+  /**
+   * `null` when the row carries nothing this build can read — no definition, a
+   * version from the future, or JSON that fails to compile.
+   */
+  definition: WidgetDefinitionV1 | null
   issues: WidgetValidationIssue[]
 }
 
-export function widgetEvaluationMode(source: ResolvedWidgetRow["source"]): {
-  legacy: boolean
-  v1: boolean
-} {
-  return { legacy: source === "legacy", v1: source === "v1" }
-}
-
-export function legacyCardSpec(row: DashboardCardRow): CardSpec {
-  return {
-    id: row.id,
-    metric: metric(row.metric),
-    target: {
-      kind: targetKind(row.targetKind),
-      referenceId: row.targetId,
-    },
-    goalId: row.goalId,
-    display: display(row.display),
-    span: Math.min(4, Math.max(1, row.span)) as CardSpec["span"],
-    title: row.title,
-    accent: row.accent,
-    sortOrder: row.sortOrder,
-    hidden: row.hidden,
-  }
-}
-
 /**
- * Dual-read one persisted card during the V1 rollout.
+ * Read one persisted card.
  *
- * Invalid JSON never takes the whole surface down. The old columns remain a
- * complete, deterministic fallback until the migration has proven itself on
- * every client and every stored row.
+ * There used to be a second answer here. A row whose definition was missing or
+ * unreadable fell back to the old `metric` / `targetKind` / `display` columns and
+ * was rendered by a different component, which is how the same card could look
+ * one way on the dashboard and another way in its own editor: the grid drew
+ * whichever of the two the row happened to resolve to, and the editor always drew
+ * the definition. Two renderers, one card, no way to tell from the screen which
+ * you were looking at.
+ *
+ * The definition is now the only representation, so that divergence cannot exist:
+ * both surfaces run the same renderer over the same document. A row that fails to
+ * compile is a broken row and says so, rather than quietly becoming a different
+ * card.
  */
 export function resolveWidgetRow(row: DashboardCardRow): ResolvedWidgetRow {
-  const rowSurface = surface(row.surface)
-  if (row.definitionVersion === 1 && row.definitionJson) {
-    const compiled = compileWidgetDefinition(row.definitionJson, {
-      surface: rowSurface,
-    })
-    if (compiled.valid && compiled.plan) {
-      return {
-        definition: compiled.plan.definition,
-        source: "v1",
-        issues: [],
-      }
-    }
+  if (
+    row.definitionVersion !== WIDGET_DEFINITION_VERSION ||
+    !row.definitionJson
+  )
+    return { definition: null, issues: [] }
 
-    return {
-      definition: legacyDefinition(row),
-      source: "legacy",
-      issues: compiled.issues,
-    }
-  }
-
-  return { definition: legacyDefinition(row), source: "legacy", issues: [] }
-}
-
-function legacyDefinition(row: DashboardCardRow): WidgetDefinitionV1 {
-  return legacyCardToWidgetDefinition({
-    metric: metric(row.metric),
-    targetKind: targetKind(row.targetKind),
-    targetId: row.targetId,
-    goalId: row.goalId,
-    display: display(row.display),
+  const compiled = compileWidgetDefinition(row.definitionJson, {
+    surface: surface(row.surface),
   })
+  if (compiled.valid && compiled.plan) {
+    return { definition: compiled.plan.definition, issues: [] }
+  }
+  return { definition: null, issues: compiled.issues }
 }

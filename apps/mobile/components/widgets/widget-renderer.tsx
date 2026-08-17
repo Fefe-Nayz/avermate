@@ -1371,6 +1371,7 @@ export function widgetCardTitle(
   card: Pick<WidgetCardModel, "title" | "definition">,
 ): string {
   if (card.title) return card.title;
+  if (!card.definition) return t("Unavailable card");
   const capability = widgetCapability(
     widgetMeasureId(card.definition.analysis.measure),
   );
@@ -1379,15 +1380,20 @@ export function widgetCardTitle(
 
 export function WidgetCardView({
   card,
+  // Passed separately from `card` because the model's definition is nullable and
+  // a prop cannot be narrowed by the caller's check. The grid draws an
+  // `UnreadableCard` for the null case rather than a second kind of real card.
+  definition,
   result,
 }: {
   card: WidgetCardModel;
+  definition: WidgetDefinitionV1;
   result: WidgetEvaluationResult | undefined;
 }) {
   const palette = usePalette();
   const listy =
     result?.kind === "series" &&
-    ["list", "table"].includes(card.definition.visualization.mark);
+    ["list", "table"].includes(definition.visualization.mark);
   const accent =
     card.accent && /^#[0-9a-f]{6}$/i.test(card.accent) ? card.accent : null;
   return (
@@ -1413,7 +1419,7 @@ export function WidgetCardView({
         >
           {widgetCardTitle(card)}
         </Text>
-        <WidgetResultRenderer definition={card.definition} result={result} />
+        <WidgetResultRenderer definition={definition} result={result} />
       </View>
     </Card>
   );

@@ -17,18 +17,19 @@ const code = (file: string) =>
     .replace(/^\s*\/\/.*$/gm, "")
 
 const shell = code("./card-shell.tsx")
+// There were three of these. The third was the old card editor, which drew a
+// third copy of the chrome for a renderer only it used; it went with the rest of
+// the legacy card path.
 const surfaces = {
   "the dashboard grid": code("./card-grid.tsx"),
-  "the legacy card editor": code("./card-form.tsx"),
   "the widget editor": code("./widget-form.tsx"),
 }
 
 describe("the card shell", () => {
   test("draws every card the app shows, preview or not", () => {
-    // The bug this ends: three hand-written copies of the same chrome. A
-    // preview whose whole job is to predict the card is the one component that
-    // cannot afford its own copy — each of these had drifted somewhere the
-    // difference showed.
+    // The bug this ends: hand-written copies of the same chrome. A preview whose
+    // whole job is to predict the card is the one component that cannot afford
+    // its own copy — each of these had drifted somewhere the difference showed.
     for (const [name, file] of Object.entries(surfaces)) {
       expect(file, name).toContain("CardShell")
       // None of them builds the chrome itself any more.
@@ -75,11 +76,21 @@ describe("the card shell", () => {
     // prop: `expanded` takes a chart from 170px to 300 or 320. The grid passes
     // it for every insights card; the editor's preview passed nothing, so an
     // insights card was previewed at half the height it would have.
-    for (const [name, file] of Object.entries({
-      "the dashboard grid": surfaces["the dashboard grid"],
-      "the widget editor": surfaces["the widget editor"],
-    })) {
+    for (const [name, file] of Object.entries(surfaces)) {
       expect(file, name).toContain('expanded={surface === "insights"}')
+    }
+  })
+
+  test("runs one renderer, so the two surfaces cannot draw different cards", () => {
+    // The complaint this closes: the preview's contents had nothing to do with
+    // the card's. Two renderers existed — `WidgetBody` for a definition and
+    // `CardBody` for the old columns — and the grid picked between them per row
+    // while the editor always drew `WidgetBody`. A row that resolved to the old
+    // path was therefore drawn by one component on the dashboard and by another
+    // in its own editor, and no amount of shared chrome could reconcile that.
+    for (const [name, file] of Object.entries(surfaces)) {
+      expect(file, name).toContain("<WidgetBody")
+      expect(file, name).not.toContain("<CardBody")
     }
   })
 

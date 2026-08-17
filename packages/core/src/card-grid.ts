@@ -231,46 +231,23 @@ export function planGridReorder(
   };
 }
 
-export interface CardGridCell {
-  rowIndex: number;
-  /** First column the card occupies, zero-based. */
-  columnStart: number;
-  /** Columns it draws — the filled width, which is what CSS places. */
-  columnSpan: number;
-}
-
-/**
- * Where each card sits in the grid, as cells rather than as a sequence.
+/*
+ * There was a `cardGridCells` here, which said which cell each card lands in so
+ * a drag could translate the cards into those cells and draw the candidate
+ * arrangement itself. It has gone, along with the preview that used it.
  *
- * A sortable can only offer a preview by moving rectangles around, and it
- * assumes the rectangle a card lands in is the rectangle another card vacated.
- * That holds for a uniform grid. Ours *repacks*: change the order and the rows
- * are composed differently, so the cells in the new arrangement are not a
- * permutation of the old ones. Anything that wants to draw the new arrangement
- * has to be told which cell each card lands in, which is what this returns.
+ * Predicting the arrangement can only ever be half right. Cells give position,
+ * and this grid also changes *widths*: the packer widens a card to close a row's
+ * hole, so a reorder can take a card from two columns to one. A translated card
+ * keeps its old width and lands on its neighbour — which was the overlap on
+ * screen — and there is no fixing that from here, because a card's own body
+ * scales its type and its charts to its width. Any predicted geometry is a second
+ * layout engine to keep in step with CSS.
  *
- * Columns are cumulative over the *drawn* widths, because that is what CSS grid
- * auto-placement does — a card widened to close a gap pushes its neighbours
- * along by the width it actually got, not the one it asked for.
+ * So the caller renders the candidate order and lets the browser lay it out. What
+ * this file still owes it is the *order* — `planGridReorder` — and nothing about
+ * pixels.
  */
-export function cardGridCells(
-  specs: readonly CardSpec[],
-  columns: number,
-): Map<string, CardGridCell> {
-  const cells = new Map<string, CardGridCell>();
-  for (const row of layoutCardGrid(specs, columns).rows) {
-    let columnStart = 0;
-    for (const item of row.items) {
-      cells.set(item.spec.id, {
-        rowIndex: row.index,
-        columnStart,
-        columnSpan: item.columns,
-      });
-      columnStart += item.columns;
-    }
-  }
-  return cells;
-}
 
 /** The order a drop should produce, for callers that only need the sequence. */
 export function resolveGridReorder(

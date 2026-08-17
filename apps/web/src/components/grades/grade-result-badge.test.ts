@@ -36,13 +36,12 @@ describe("rich grade result badge", () => {
   })
 
   test("is wired to isolated result badges without nesting links in row links", async () => {
-    const [component, table, cards] = await Promise.all([
+    const [component, table] = await Promise.all([
       readFile(new URL("./grade-result-badge.tsx", import.meta.url), "utf8"),
       readFile(
         new URL("./hierarchical-grade-table.tsx", import.meta.url),
         "utf8"
       ),
-      readFile(new URL("../cards/card-view.tsx", import.meta.url), "utf8"),
     ])
 
     expect(component).toContain("<HoverCard")
@@ -56,7 +55,6 @@ describe("rich grade result badge", () => {
     expect(component).toContain("grade.components.slice(0, 4)")
     expect(table).toContain("<GradeResultBadge key={grade.id} grade={grade} />")
     expect(table).not.toContain("title={grade.name}")
-    expect(cards).toContain("<GradeResultBadge grade={grade} />")
   })
 
   test("carries the weight on the badge, and only when there is one", async () => {

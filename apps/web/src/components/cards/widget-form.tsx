@@ -33,8 +33,12 @@ import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 import { CARD_ACCENTS } from "./card-accent"
-import { CardShell, CardShellGrid, useDashboardGrid } from "./card-shell"
-import { cardSurface } from "./card-view"
+import {
+  CardShell,
+  CardShellGrid,
+  cardSurface,
+  useDashboardGrid,
+} from "./card-shell"
 import {
   WidgetFieldRenderer,
   type WidgetOptionSets,
@@ -108,9 +112,10 @@ export function WidgetForm({
   const { graph, customAverages, goals, periods, yearId } = useYear()
   const initialDefinition = useMemo(
     () =>
-      initial
-        ? resolveWidgetRow(initial).definition
-        : createWidgetDefinition(surface),
+      // A row that will not compile opens as a fresh card rather than as a
+      // blank screen: editing is the one place that can repair it.
+      (initial ? resolveWidgetRow(initial).definition : null) ??
+      createWidgetDefinition(surface),
     [initial, surface]
   )
   const [definition, setDefinition] = useState(initialDefinition)

@@ -2,10 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   estimateRemaining,
-  evaluateCard,
   evaluateWidgetDefinition,
-  type CardResult,
-  type CardSpec,
   type CardMetric,
   type WidgetDefinitionV1,
   type WidgetEvaluationContext,
@@ -25,9 +22,8 @@ import {
 export interface WidgetCardModel {
   id: string;
   surface: WidgetSurface;
-  definition: WidgetDefinitionV1;
-  legacySpec: CardSpec | null;
-  source: "v1" | "legacy";
+  /** `null` for a row this build cannot read — see `resolveWidgetRow`. */
+  definition: WidgetDefinitionV1 | null;
   issues: WidgetValidationIssue[];
   span: 1 | 2 | 3 | 4;
   title: string | null;
@@ -40,10 +36,7 @@ function span(value: number): 1 | 2 | 3 | 4 {
   return Math.min(4, Math.max(1, Math.round(value))) as 1 | 2 | 3 | 4;
 }
 
-/**
- * Dual-read every stored card and evaluate the canonical V1 definition.
- * Legacy columns remain a deterministic fallback for old or invalid rows.
- */
+/** Read every stored card's definition and evaluate it. */
 export function useCards(surface: WidgetSurface = "overview") {
   const yearState = useYear();
   const query = useQuery({
@@ -61,8 +54,6 @@ export function useCards(surface: WidgetSurface = "overview") {
           id: row.id,
           surface,
           definition: resolved.definition,
-          legacySpec: resolved.legacySpec,
-          source: resolved.source,
           issues: resolved.issues,
           span: span(row.span),
           title: row.title,
@@ -75,7 +66,7 @@ export function useCards(surface: WidgetSurface = "overview") {
   );
 
   const results = useMemo(() => {
-    const computed = new Map<string, WidgetEvaluationResult | CardResult>();
+    const computed = new Map<string, WidgetEvaluationResult>();
     const { year, period } = yearState;
     if (!year) return computed;
 
@@ -116,12 +107,8 @@ export function useCards(surface: WidgetSurface = "overview") {
     };
 
     for (const card of all) {
-      computed.set(
-        card.id,
-        card.legacySpec
-          ? evaluateCard(card.legacySpec, context)
-          : evaluateWidgetDefinition(card.definition, context),
-      );
+      if (!card.definition) continue;
+      computed.set(card.id, evaluateWidgetDefinition(card.definition, context));
     }
     return computed;
   }, [all, surface, yearState]);

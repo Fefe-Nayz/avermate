@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { layoutCards, type CardSpec } from "./cards";
 import {
-  cardGridCells,
   layoutCardGrid,
   planGridReorder,
   resolveGridReorder,
@@ -28,8 +27,10 @@ function card(
 
 /** A drawing at full span: the whole row on two columns. */
 const wide = (id: string) => card(id, 4, "sparkline");
-/** A value card at half span: one column on two. */
+/** A value card at half span: one column on two, two on four. */
 const small = (id: string) => card(id, 2, "value");
+/** A quarter-span value card: one column on four. */
+const quarter = (id: string) => card(id, 1, "value");
 
 const widths = (specs: readonly CardSpec[], columns: number) =>
   layoutCards(specs, columns).map((item) => `${item.spec.id}=${item.columns}`);
@@ -337,47 +338,95 @@ describe("the anchor makes a flat preview honest", () => {
   });
 });
 
-describe("cardGridCells", () => {
-  const cells = (specs: readonly CardSpec[], columns: number) =>
-    [...cardGridCells(specs, columns)].map(
-      ([id, cell]) =>
-        `${id}@${cell.rowIndex}:${cell.columnStart}+${cell.columnSpan}`,
-    );
-
-  it("gives every card the cell the grid places it in", () => {
-    expect(cells([wide("M"), small("A"), small("B")], 2)).toEqual([
-      "M@0:0+2",
-      "A@1:0+1",
-      "B@1:1+1",
-    ]);
-  });
-
-  it("counts columns from the drawn widths, as auto-placement does", () => {
-    // `A` is alone on its row and widened to close the gap, so `B` starts at the
-    // top of the next row rather than beside it. Walking the requested widths
-    // would put the two in one row and overlap them.
-    expect(cells([wide("M"), small("A"), wide("B")], 2)).toEqual([
-      "M@0:0+2",
-      "A@1:0+2",
-      "B@2:0+2",
-    ]);
-  });
-
-  it("moves the cells a reorder produces, not a permutation of the old ones", () => {
-    const specs = [wide("M"), small("A"), small("B")];
-    const order = planGridReorder(specs, 2, "M", "A").order;
+describe("a reorder changes how wide cards are, not only where they sit", () => {
+  const reordered = (
+    specs: readonly CardSpec[],
+    columns: number,
+    activeId: string,
+    overId: string,
+  ) => {
+    const order = planGridReorder(specs, columns, activeId, overId).order;
     const byId = new Map(specs.map((spec) => [spec.id, spec]));
+    return layoutCardGrid(
+      order.flatMap((id) => {
+        const spec = byId.get(id);
+        return spec ? [spec] : [];
+      }),
+      columns,
+    );
+  };
 
-    // The pair keeps its row and rises into row 0; `M` takes row 1. No card
-    // inherits another's cell, which is exactly what a rect swap assumes.
-    expect(
-      cells(
-        order.flatMap((id) => {
-          const spec = byId.get(id);
-          return spec ? [spec] : [];
-        }),
-        2,
-      ),
-    ).toEqual(["A@0:0+1", "B@0:1+1", "M@1:0+2"]);
+  it("widens the cards a move leaves alone on their rows", () => {
+    // The case a translated preview cannot draw. `A` and `B` share a row, so
+    // each has one column. Send `B` below the full-width `M` and neither has a
+    // partner any more: the packer widens *both* to close their rows, and `A`
+    // has not been dragged at all.
+    const specs = [small("A"), small("B"), wide("M")];
+    expect(widths(specs, 2)).toEqual(["A=1", "B=1", "M=2"]);
+
+    const layout = reordered(specs, 2, "B", "M");
+
+    expect(layout.items.map((item) => item.spec.id)).toEqual(["A", "M", "B"]);
+    expect(layout.byId.get("A")?.columns).toBe(2);
+    expect(layout.byId.get("M")?.columns).toBe(2);
+    expect(layout.byId.get("B")?.columns).toBe(2);
+  });
+
+  it("narrows a card that gains a partner", () => {
+    // And the other direction: `A` and `B` are each alone and widened, and
+    // bringing them together halves both. A preview that keeps the width it
+    // measured draws two full-row cards in one row of two columns.
+    const specs = [small("A"), wide("M"), small("B")];
+    expect(widths(specs, 2)).toEqual(["A=2", "M=2", "B=2"]);
+
+    const layout = reordered(specs, 2, "B", "A");
+
+    expect(layout.items.map((item) => item.spec.id)).toEqual(["B", "A", "M"]);
+    expect(layout.byId.get("B")?.columns).toBe(1);
+    expect(layout.byId.get("A")?.columns).toBe(1);
+  });
+
+  it("re-splits the rows of the arrangement in the recording", () => {
+    // Four small cards under a full-width average, which is the dashboard in the
+    // video. Dropping the average below them takes it from a row of its own to
+    // sharing a row with the ranking — half the width it had.
+    const specs = [
+      small("average"),
+      quarter("latest"),
+      quarter("weakest"),
+      quarter("strongest"),
+      quarter("pass"),
+      small("ranking"),
+    ];
+    expect(rows(specs, 4)).toEqual([
+      ["average", "latest", "weakest"],
+      ["strongest", "pass", "ranking"],
+    ]);
+
+    const layout = reordered(specs, 4, "average", "ranking");
+
+    expect(layout.rows.map((row) => row.items.map((item) => item.spec.id)))
+      .toEqual([
+        ["latest", "weakest", "strongest", "pass"],
+        ["ranking", "average"],
+      ]);
+    expect(layout.byId.get("average")?.columns).toBe(2);
+    expect(layout.byId.get("ranking")?.columns).toBe(2);
+    for (const id of ["latest", "weakest", "strongest", "pass"]) {
+      expect(layout.byId.get(id)?.columns).toBe(1);
+    }
+  });
+
+  it("answers the same however many times the same target is resolved", () => {
+    // The property the drag relies on: the target is resolved against the order
+    // the drag *started* from, so a pointer that has not moved cannot produce a
+    // second, different arrangement — however often the grid re-renders in
+    // between.
+    const specs = [small("A"), small("B"), wide("M")];
+    const first = planGridReorder(specs, 2, "B", "M").order;
+
+    for (let step = 0; step < 20; step += 1) {
+      expect(planGridReorder(specs, 2, "B", "M").order).toEqual(first);
+    }
   });
 });

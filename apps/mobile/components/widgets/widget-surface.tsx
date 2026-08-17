@@ -5,7 +5,6 @@ import { useRouter } from "expo-router";
 import {
   layoutCards,
   widgetDefinitionToLegacyProjection,
-  type CardResult,
   type CardSpec,
   type WidgetEvaluationResult,
   type WidgetSurface,
@@ -17,20 +16,28 @@ import { t } from "@/lib/i18n";
 import { space, type, usePalette } from "@/lib/theme";
 import { WidgetCardView, widgetCardTitle } from "./widget-renderer";
 import { useCards, type WidgetCardModel } from "@/components/use-cards";
-import { CardResultBody } from "@/components/card-view";
 
+/**
+ * A card as the *layout* sees it: the packer needs a width, and a width depends
+ * on what the card draws as well as on its stored span. A row that cannot be read
+ * is laid out as a plain value card, since that is the least it could be.
+ */
 function layoutSpec(card: WidgetCardModel): CardSpec {
-  if (card.legacySpec) return card.legacySpec;
-  const projection = widgetDefinitionToLegacyProjection(card.definition);
+  const projection = card.definition
+    ? widgetDefinitionToLegacyProjection(card.definition)
+    : null;
   return {
     id: card.id,
-    metric: projection.metric,
-    target: { kind: projection.targetKind, referenceId: projection.targetId },
-    display: projection.display,
+    metric: projection?.metric ?? "average",
+    target: {
+      kind: projection?.targetKind ?? "general",
+      referenceId: projection?.targetId ?? null,
+    },
+    display: projection?.display ?? "value",
     span: card.span,
     title: card.title,
     accent: card.accent,
-    goalId: projection.goalId,
+    goalId: projection?.goalId ?? null,
     sortOrder: card.sortOrder,
     hidden: card.hidden,
   };
@@ -41,7 +48,7 @@ export function WidgetGrid({
   results,
 }: {
   cards: WidgetCardModel[];
-  results: Map<string, WidgetEvaluationResult | CardResult>;
+  results: Map<string, WidgetEvaluationResult>;
 }) {
   const [width, setWidth] = useState(0);
   const columns = width >= 720 ? 4 : width >= 500 ? 3 : width >= 300 ? 2 : 1;
@@ -72,18 +79,14 @@ export function WidgetGrid({
             minWidth: 0,
           }}
         >
-          {entry.card.legacySpec ? (
-            <LegacyWidgetCard
-              card={entry.card}
-              result={results.get(entry.card.id) as CardResult | undefined}
-            />
-          ) : (
+          {entry.card.definition ? (
             <WidgetCardView
               card={entry.card}
-              result={
-                results.get(entry.card.id) as WidgetEvaluationResult | undefined
-              }
+              definition={entry.card.definition}
+              result={results.get(entry.card.id)}
             />
+          ) : (
+            <UnreadableCard card={entry.card} />
           )}
         </View>
       ))}
@@ -91,42 +94,28 @@ export function WidgetGrid({
   );
 }
 
-function LegacyWidgetCard({
-  card,
-  result,
-}: {
-  card: WidgetCardModel;
-  result: CardResult | undefined;
-}) {
+/**
+ * A card whose definition will not compile.
+ *
+ * It used to become a different card instead: the old columns were read and a
+ * separate renderer drew them, so a broken row looked like a working one and the
+ * same card could differ between screens. Saying so is the honest answer, and it
+ * is the one that leads somewhere — the editor can repair it.
+ */
+function UnreadableCard({ card }: { card: WidgetCardModel }) {
   const palette = usePalette();
-  const spec = card.legacySpec;
-  if (!spec || !result || result.kind === "empty") {
-    return <WidgetCardView card={card} result={undefined} />;
-  }
-  const listy = result.kind === "list";
-  const accent =
-    card.accent && /^#[0-9a-f]{6}$/i.test(card.accent) ? card.accent : null;
   return (
-    <Card
-      padded={!listy}
-      style={accent ? { borderTopWidth: 3, borderTopColor: accent } : undefined}
-    >
+    <Card padded style={{ minHeight: 132 }}>
       <View style={{ gap: space.md }}>
         <Text
           numberOfLines={2}
-          style={[
-            type.callout,
-            {
-              color: palette.text,
-              fontWeight: "600",
-              paddingHorizontal: listy ? space.lg : 0,
-              paddingTop: listy ? space.lg : 0,
-            },
-          ]}
+          style={[type.callout, { color: palette.text, fontWeight: "600" }]}
         >
-          {widgetCardTitle(card)}
+          {card.title ?? t("Unavailable card")}
         </Text>
-        <CardResultBody spec={spec} result={result} />
+        <Text style={[type.footnote, { color: palette.textMuted }]}>
+          {t("This card could not be read.")}
+        </Text>
       </View>
     </Card>
   );

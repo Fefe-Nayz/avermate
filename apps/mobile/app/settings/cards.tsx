@@ -97,6 +97,9 @@ export default function Cards() {
   const duplicate = useMutation({
     mutationFn: (card: (typeof widgets.cards)[number]) => {
       if (!yearId) throw new Error("No year selected");
+      // Nothing to copy from a row whose definition will not compile: the
+      // definition *is* the card.
+      if (!card.definition) throw new Error("Card cannot be read");
       return client.cards.create({
         yearId,
         surface,

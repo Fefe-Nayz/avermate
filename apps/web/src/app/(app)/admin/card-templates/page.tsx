@@ -90,7 +90,10 @@ export default function AdminCardTemplatesPage() {
   const createFromCard = () => {
     const row = sources.find((card) => card.id === sourceCardId)
     if (!row) return
+    // A row whose definition will not compile cannot seed a template: there is
+    // nothing to copy but the envelope.
     const definition = resolveWidgetRow(row).definition
+    if (!definition) return
     create.mutate({
       title: row.title?.trim() || t("Untitled card"),
       description: "",

@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createWidgetDefinition } from "@avermate/core"
 import type { DashboardCardRow } from "@/components/year/year-provider"
-import {
-  legacyCardSpec,
-  resolveWidgetRow,
-  widgetEvaluationMode,
-} from "./widget-row"
+import { resolveWidgetRow } from "./widget-row"
 
 const row: DashboardCardRow = {
   id: "card",
@@ -24,55 +20,46 @@ const row: DashboardCardRow = {
   definitionJson: null,
 }
 
-describe("persisted widget dual-read", () => {
-  test("adapts legacy cards without changing their intent", () => {
-    const resolved = resolveWidgetRow(row)
+const withDefinition = (
+  definitionJson: DashboardCardRow["definitionJson"]
+): DashboardCardRow => ({ ...row, definitionVersion: 1, definitionJson })
 
-    expect(resolved.source).toBe("legacy")
-    expect(resolved.definition.analysis.measure).toEqual({
-      kind: "metric",
-      metric: "passRate",
-      goalId: null,
-    })
-    expect(resolved.definition.visualization.mark).toBe("gauge")
-  })
-
-  test("keeps the exact legacy display while the V1 adapter is only a fallback", () => {
-    const legacy = { ...row, display: "sparkline" }
-
-    expect(resolveWidgetRow(legacy).source).toBe("legacy")
-    expect(legacyCardSpec(legacy).display).toBe("sparkline")
-    expect(widgetEvaluationMode("legacy")).toEqual({ legacy: true, v1: false })
-  })
-
-  test("prefers a valid V1 definition", () => {
+describe("reading one persisted card", () => {
+  test("reads the stored definition", () => {
     const definition = createWidgetDefinition("overview")
     definition.query.window = { kind: "whole-year" }
-    const resolved = resolveWidgetRow({
-      ...row,
-      definitionVersion: 1,
-      definitionJson: definition,
-    })
 
-    expect(resolved.source).toBe("v1")
-    expect(widgetEvaluationMode(resolved.source)).toEqual({
-      legacy: false,
-      v1: true,
-    })
-    expect(resolved.definition.query.window).toEqual({ kind: "whole-year" })
+    const resolved = resolveWidgetRow(withDefinition(definition))
+
+    expect(resolved.definition?.query.window).toEqual({ kind: "whole-year" })
+    expect(resolved.issues).toEqual([])
   })
 
-  test("falls back to legacy columns when V1 data is corrupt", () => {
+  test("reports a row it cannot read rather than becoming another card", () => {
+    // This is the divergence that made the editor and the dashboard disagree.
+    // A row that failed to compile used to fall back to the old `metric` /
+    // `display` columns and be drawn by a *different component*, so the same
+    // card was one thing in the grid and another in its own editor. There is
+    // now one representation, and a row that cannot be read says so.
+    const resolved = resolveWidgetRow(withDefinition({ apiVersion: 999 }))
+
+    expect(resolved.definition).toBeNull()
+    expect(resolved.issues.length).toBeGreaterThan(0)
+  })
+
+  test("does not read the old semantic columns at all", () => {
+    // The row above carries `metric: "passRate"` and `display: "gauge"`. Under
+    // the dual-read that alone produced a working pass-rate gauge.
+    expect(resolveWidgetRow(row).definition).toBeNull()
+  })
+
+  test("refuses a definition version this build does not know", () => {
     const resolved = resolveWidgetRow({
       ...row,
-      definitionVersion: 1,
-      definitionJson: { apiVersion: 999 },
+      definitionVersion: 2,
+      definitionJson: createWidgetDefinition("overview"),
     })
 
-    expect(resolved.source).toBe("legacy")
-    expect(resolved.issues.length).toBeGreaterThan(0)
-    expect(resolved.definition.analysis.measure).toMatchObject({
-      metric: "passRate",
-    })
+    expect(resolved.definition).toBeNull()
   })
 })

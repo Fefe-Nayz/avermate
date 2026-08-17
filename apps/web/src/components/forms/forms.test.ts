@@ -9,7 +9,7 @@ const FORMS = [
   "../subjects/subject-form.tsx",
   "../goals/goal-form.tsx",
   "../averages/average-form.tsx",
-  "../cards/card-form.tsx",
+  "../cards/widget-form.tsx",
 ]
 
 describe("form flows", () => {
@@ -37,7 +37,7 @@ describe("form flows", () => {
 
   test("the card preview becomes a sticky side rail only when space allows", async () => {
     const flow = await source("./form-flow.tsx")
-    const card = await source("../cards/card-form.tsx")
+    const card = await source("../cards/widget-form.tsx")
 
     expect(card).toContain('asidePlacement="sticky-end"')
     expect(flow).toContain('asidePlacement?: "top" | "sticky-end"')
@@ -183,7 +183,7 @@ describe("form flows", () => {
     // The optional last touches are asked for on the review screen, where the
     // only button is the one that saves.
     expect(await source("../grades/grade-form.tsx")).toContain("beforeSave={")
-    expect(await source("../cards/card-form.tsx")).toContain("beforeSave={")
+    expect(await source("../cards/widget-form.tsx")).toContain("beforeSave={")
   })
 
   test("the calendar's month and year use this app's select", async () => {
@@ -232,12 +232,13 @@ describe("form flows", () => {
     // step exists to show.
     expect(picker).toContain("searchBox(false)")
 
-    // Every choice that is a step of its own is laid out that way.
+    // Every choice that is a step of its own is laid out that way. The card
+    // editor is not in this list: its choices are fields *within* a step, driven
+    // by the widget flow rather than by a step of their own.
     for (const path of [
       "../grades/grade-form.tsx",
       "../subjects/subject-form.tsx",
       "../goals/goal-form.tsx",
-      "../cards/card-form.tsx",
     ]) {
       expect(await source(path)).toContain('layout="page"')
     }

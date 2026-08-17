@@ -101,6 +101,23 @@ export function CardShell({
   )
 }
 
+/**
+ * Card-level dress.
+ *
+ * Most cards wear the neutral shell, but a live streak changes the whole card,
+ * not just its icon: a warm gradient rising from the flame's corner and a ring
+ * to match. The grid and the editor preview both apply it, so the card burns the
+ * same everywhere.
+ */
+export function cardSurface(result: {
+  kind: string
+  alive?: boolean
+}): string | undefined {
+  return result.kind === "streak" && result.alive === true
+    ? "bg-linear-to-tr from-band-weak/15 via-card to-band-fair/10 ring-band-weak/25"
+    : undefined
+}
+
 /** `gap-3`, as a number, because the track arithmetic below needs it. */
 const GRID_GAP = 12
 

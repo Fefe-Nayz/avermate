@@ -156,7 +156,9 @@ export default function CardEdit() {
   useEffect(() => {
     if (!existing || loadedId.current === existing.id) return;
     loadedId.current = existing.id;
-    setDefinition(existing.definition);
+    // A row that will not compile opens as the fresh card this screen started
+    // with rather than as a blank editor: editing is what can repair it.
+    if (existing.definition) setDefinition(existing.definition);
     setTitle(existing.title ?? "");
     setSpan(existing.span);
     setAccent(existing.accent ?? "");

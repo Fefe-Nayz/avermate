@@ -12,7 +12,8 @@ import { useYear } from "@/components/year/year-provider"
 import { widgetEvaluationTime } from "./widget-evaluation-time"
 
 export function useWidgetResult(
-  definition: WidgetDefinitionV1,
+  /** `null` for a row this build cannot read — see `resolveWidgetRow`. */
+  definition: WidgetDefinitionV1 | null,
   surface: WidgetSurface,
   enabled = true
 ): WidgetEvaluationResult {
@@ -32,7 +33,8 @@ export function useWidgetResult(
   const { remaining } = useGoalPlans()
 
   return useMemo(() => {
-    if (!enabled || !year) return { kind: "empty", shape: "scalar" }
+    if (!enabled || !year || !definition)
+      return { kind: "empty", shape: "scalar" }
     const evaluationTime = widgetEvaluationTime(
       timelineDate,
       now,
