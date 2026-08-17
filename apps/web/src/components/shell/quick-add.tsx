@@ -37,12 +37,77 @@ interface QuickAddStore {
 
 const QuickAddContext = createContext<QuickAddStore | null>(null)
 
-interface Action {
+export interface QuickAddAction {
   href: string
+  /** The thing itself, for the sheet's own list: "Grade", "Subject". */
   label: string
+  /**
+   * The same action as a button says it — "New grade" rather than "Grade".
+   *
+   * Written out per action instead of assembled from the label, because
+   * "Add " + lowercase(label) is a sentence built by string surgery, and the
+   * languages this app ships in do not all agree that it produces one.
+   */
+  addLabel: string
   hint: string
   icon: LucideIcon
   accent?: boolean
+}
+
+/**
+ * Everything this app can create, in one list.
+ *
+ * A hook rather than a constant because every label is translated. Exported so the
+ * sheet is not the only thing that knows what "add" means here: the sidebar's own
+ * button offers one of these, and Settings → Navigation lets an account pick which.
+ */
+export function useQuickAddActions(): QuickAddAction[] {
+  const t = useExtracted()
+  return [
+    {
+      href: "/grades/new",
+      label: t("Grade"),
+      addLabel: t("New grade"),
+      hint: t("Record a result you were given"),
+      icon: PlusCircleIcon,
+      accent: true,
+    },
+    {
+      href: "/subjects/new",
+      label: t("Subject"),
+      addLabel: t("New subject"),
+      hint: t("Add a course to this year"),
+      icon: BookMarkedIcon,
+    },
+    {
+      href: "/subjects/new?kind=category",
+      label: t("Category"),
+      addLabel: t("New category"),
+      hint: t("Group subjects without adding a level of averaging"),
+      icon: FolderPlusIcon,
+    },
+    {
+      href: "/goals/new",
+      label: t("Goal"),
+      addLabel: t("New goal"),
+      hint: t("Set a target and get a way to reach it"),
+      icon: TargetIcon,
+    },
+    {
+      href: "/settings/averages/new",
+      label: t("Custom average"),
+      addLabel: t("New custom average"),
+      hint: t("Combine a few subjects into their own average"),
+      icon: SigmaIcon,
+    },
+    {
+      href: "/settings/year",
+      label: t("Period"),
+      addLabel: t("New period"),
+      hint: t("Split the year into trimesters or semesters"),
+      icon: CalendarRangeIcon,
+    },
+  ]
 }
 
 export function QuickAddProvider({ children }: { children: ReactNode }) {
@@ -55,45 +120,7 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const actions: Action[] = [
-    {
-      href: "/grades/new",
-      label: t("Grade"),
-      hint: t("Record a result you were given"),
-      icon: PlusCircleIcon,
-      accent: true,
-    },
-    {
-      href: "/subjects/new",
-      label: t("Subject"),
-      hint: t("Add a course to this year"),
-      icon: BookMarkedIcon,
-    },
-    {
-      href: "/subjects/new?kind=category",
-      label: t("Category"),
-      hint: t("Group subjects without adding a level of averaging"),
-      icon: FolderPlusIcon,
-    },
-    {
-      href: "/goals/new",
-      label: t("Goal"),
-      hint: t("Set a target and get a way to reach it"),
-      icon: TargetIcon,
-    },
-    {
-      href: "/settings/averages/new",
-      label: t("Custom average"),
-      hint: t("Combine a few subjects into their own average"),
-      icon: SigmaIcon,
-    },
-    {
-      href: "/settings/year",
-      label: t("Period"),
-      hint: t("Split the year into trimesters or semesters"),
-      icon: CalendarRangeIcon,
-    },
-  ]
+  const actions = useQuickAddActions()
 
   const go = useCallback(
     (href: string) => {
@@ -114,32 +141,32 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
         description={t("Everything here opens as its own screen.")}
       >
         <div className="grid gap-1">
-            {actions.map((action) => (
-              <button
-                key={action.href}
-                type="button"
-                onClick={() => go(action.href)}
-                className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-accent/60 active:bg-accent"
+          {actions.map((action) => (
+            <button
+              key={action.href}
+              type="button"
+              onClick={() => go(action.href)}
+              className="flex items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-accent/60 active:bg-accent"
+            >
+              <span
+                className={
+                  action.accent
+                    ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+                    : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
+                }
               >
-                <span
-                  className={
-                    action.accent
-                      ? "flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
-                      : "flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
-                  }
-                >
-                  <action.icon className="size-5" />
+                <action.icon className="size-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">
+                  {action.label}
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">
-                    {action.label}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {action.hint}
-                  </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {action.hint}
                 </span>
-              </button>
-            ))}
+              </span>
+            </button>
+          ))}
         </div>
       </ResponsiveSheet>
     </QuickAddContext.Provider>

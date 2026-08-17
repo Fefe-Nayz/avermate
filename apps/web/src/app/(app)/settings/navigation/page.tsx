@@ -10,6 +10,7 @@ import {
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SelectControl } from "@/components/forms/controls"
+import { useQuickAddActions } from "@/components/shell/quick-add"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { usePreferences } from "@/hooks/use-preferences"
@@ -30,9 +31,19 @@ import { haptic } from "@/lib/haptics"
  * from More and the command palette — this page arranges, it never locks
  * anything away.
  */
+/**
+ * The select's stand-in for "nothing".
+ *
+ * `SelectControl` speaks in strings, and the preference's own way of saying no is to
+ * be absent — so the two need a token between them rather than an empty string,
+ * which a select cannot tell apart from an unset value.
+ */
+const NO_SIDEBAR_ACTION = "none"
+
 export default function NavigationSettingsPage() {
   const t = useExtracted()
   const { preferences, update } = usePreferences()
+  const quickAddActions = useQuickAddActions()
 
   const labels: Record<string, string> = {
     "/dashboard": t("Dashboard"),
@@ -65,6 +76,12 @@ export default function NavigationSettingsPage() {
       navigation: { ...preferences.navigation, sidebar: next },
     })
   }
+  const saveSidebarAction = (next: string | undefined) => {
+    haptic("selection")
+    update({
+      navigation: { ...preferences.navigation, sidebarAction: next },
+    })
+  }
 
   const moveSidebar = (href: string, direction: -1 | 1) => {
     const index = sidebar.indexOf(href)
@@ -83,6 +100,29 @@ export default function NavigationSettingsPage() {
         <h1 className="hidden text-2xl font-semibold tracking-tight md:block">
           {t("Navigation")}
         </h1>
+
+        <SettingsSection
+          title={t("Sidebar button")}
+          description={t(
+            "A sidebar is for going places. If one thing you create is worth a seat at the top of it, choose which."
+          )}
+        >
+          <SelectControl
+            aria-label={t("Sidebar button")}
+            value={preferences.navigation.sidebarAction ?? NO_SIDEBAR_ACTION}
+            onValueChange={(value) => {
+              if (!value) return
+              saveSidebarAction(value === NO_SIDEBAR_ACTION ? undefined : value)
+            }}
+            options={[
+              { value: NO_SIDEBAR_ACTION, label: t("No button") },
+              ...quickAddActions.map((candidate) => ({
+                value: candidate.href,
+                label: candidate.addLabel,
+              })),
+            ]}
+          />
+        </SettingsSection>
 
         <SettingsSection
           title={t("Phone tab bar")}

@@ -24,6 +24,7 @@ import {
 } from "@/lib/nav"
 import { usePreferences } from "@/hooks/use-preferences"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
+import { useQuickAddActions } from "./quick-add"
 import { NavUser } from "./nav-user"
 import { YearSwitcher } from "./year-switcher"
 import { SidebarSubjectTree } from "./sidebar-subject-tree"
@@ -52,6 +53,18 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
     )
     return entry ? [entry] : []
   })
+  /**
+   * The one thing this sidebar can *create*, if the account asked for one.
+   *
+   * Off by default, and deliberately: a sidebar is for going places, and a button
+   * that makes something is a different kind of thing to put among them. But the
+   * commonest act in this app is recording a grade, and reaching it through the
+   * quick-add sheet is two gestures for something done several times a week — so an
+   * account that wants it can have it, and can choose which of the six it is.
+   */
+  const action = useQuickAddActions().find(
+    (candidate) => candidate.href === preferences.navigation.sidebarAction
+  )
   const secondary = NAV_ENTRIES.filter(
     (entry) =>
       (!entry.adminOnly || isAdmin) &&
@@ -79,6 +92,24 @@ export function AppSidebar({ user }: { user: AuthenticatedUser }) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* Above the places, not among them, and filled rather than quiet:
+                  the one item here that does something instead of going
+                  somewhere should not have to be read to be told apart. It
+                  collapses to its icon with everything else, so the rail keeps
+                  working. */}
+              {action ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip={action.addLabel}
+                    className="mb-1 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                    onClick={() => haptic("light")}
+                    render={<Link href={action.href} />}
+                  >
+                    <action.icon />
+                    <span>{action.addLabel}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
               {primary.map((entry) => (
                 <SidebarMenuItem key={entry.href}>
                   <SidebarMenuButton

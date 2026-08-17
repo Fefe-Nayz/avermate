@@ -48,6 +48,14 @@ export interface Preferences {
   navigation: {
     tabs?: string[]
     sidebar?: string[]
+    /**
+     * The quick-add action the sidebar offers as a button, by href.
+     *
+     * Absent means none, which is the default: the sidebar is for going places, and
+     * a button that creates something is a different kind of thing to put in it. An
+     * account that adds grades every day can have it at the top all the same.
+     */
+    sidebarAction?: string
   }
   unlockedThemes: string[]
   seenCelebrations: string[]
