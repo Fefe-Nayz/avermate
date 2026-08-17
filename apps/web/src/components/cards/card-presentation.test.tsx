@@ -53,7 +53,14 @@ describe("a card's figures", () => {
     expect(figure).toContain("<AverageValue")
     expect(figure).toContain("<DeltaValue")
     expect(figure).toContain("NumberFlow")
-    expect(figure).toContain("requestAnimationFrame")
+    // The entrance itself moved to `use-entered`, and moved for a reason worth
+    // keeping: a six-line hook should not drag a rendering library behind it, and
+    // importing it from here pulled NumberFlow into every page that wanted a
+    // figure to arrive — the impact bars, for one.
+    expect(figure).toContain('from "@/hooks/use-entered"')
+    expect(source("../../hooks/use-entered.ts")).toContain(
+      "requestAnimationFrame"
+    )
   })
 
   test("answer the width of the card they are in", () => {

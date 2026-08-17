@@ -1,10 +1,10 @@
 "use client"
 
 import NumberFlow, { type Format } from "@number-flow/react"
-import { useEffect, useState } from "react"
 import { useLocale } from "next-intl"
 import type { WidgetValueType, WidgetVisualizationV1 } from "@avermate/core"
 import { AverageValue, DeltaValue } from "@/components/data/value"
+import { useEnterValue, useEntered } from "@/hooks/use-entered"
 import { cn } from "@/lib/utils"
 import { widgetValuePresentation } from "./widget-view-model"
 
@@ -34,29 +34,6 @@ export const NAME_TEXT =
   "text-lg leading-tight font-semibold @[16rem]/card:text-xl @[26rem]/card:text-2xl"
 export const SUPPORT_TEXT = "text-sm @[16rem]/card:text-base"
 export const FOOTNOTE_TEXT = "text-xs @[16rem]/card:text-sm"
-
-/**
- * The entrance: a headline figure mounts at zero and rolls up to its value.
- *
- * NumberFlow only animates *changes*, so the entry is made of one — the first
- * paint shows zero, and the real value lands a frame later on the reel. The same
- * flag drives the gauge bars, whose width transition needs a zero to start from
- * for the same reason.
- */
-export function useEntered(): boolean {
-  const [entered, setEntered] = useState(false)
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setEntered(true))
-    return () => cancelAnimationFrame(frame)
-  }, [])
-  return entered
-}
-
-/** Zero on the first frame, so the reels and gauges have an entrance. */
-export function useEnterValue(): (value: number | null) => number | null {
-  const entered = useEntered()
-  return (value) => (entered ? value : value === null ? null : 0)
-}
 
 /** A plain figure on the same reel the averages already use. */
 export function TickNumber({

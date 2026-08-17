@@ -50,10 +50,9 @@ import {
   NAME_TEXT,
   SUPPORT_TEXT,
   TickNumber,
-  useEnterValue,
-  useEntered,
   VALUE_TEXT,
 } from "./card-figure"
+import { useEnterValue, useEntered } from "@/hooks/use-entered"
 import { MiniDistribution } from "./card-distribution"
 import { RankingList } from "./card-ranking"
 import { WidgetNumberText } from "./widget-number"

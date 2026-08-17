@@ -360,7 +360,13 @@ export default function AverageAnalyticsPage({
         {/* Impacts before the list, as on a subject page: the two answer
             "which of these matters most" and "what are these", in that order.
             They were the other way round here. */}
-        <ImpactGrid readings={impacts} title={t("Impact by subject")} />
+        <ImpactGrid
+          readings={impacts}
+          title={t("Impact by subject")}
+          // Peers, not a cascade: the subjects feeding one average have no
+          // natural sequence, so the biggest contribution leads.
+          order="magnitude"
+        />
 
         {composition.length > 0 ? (
           <section className="flex flex-col gap-2">
