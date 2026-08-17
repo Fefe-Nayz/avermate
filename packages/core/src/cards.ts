@@ -494,11 +494,16 @@ export interface PlacedCard {
  * wider one. Everything else is left alone: a grid only gains a column once it
  * has the width to carry one, so a column is never a sliver, and a floor on
  * text cards would buy nothing but a duller dashboard on a large screen.
+ *
+ * `display` is the whole of the input, and `metric` used to be in the signature
+ * without ever being read — which invited the worry that layout depends on a
+ * *lossy* reading of a card. It does not, and the distinction it needs survives
+ * that reading intact: `markToDisplay` is total over the marks and sends `value`
+ * and `gauge` here and everything else to the floor, so a sparkline arriving as
+ * `"chart"` gets exactly the floor a sparkline wants. A mark added later falls
+ * through to `"chart"` too, which is the safe answer rather than the lucky one.
  */
-function minColumns(
-  spec: Pick<CardSpec, "display" | "metric">,
-  columns: number,
-): number {
+function minColumns(spec: Pick<CardSpec, "display">, columns: number): number {
   if (columns <= 1) return 1;
   if (spec.display === "value" || spec.display === "gauge") return 1;
   return columns <= 2 ? columns : Math.min(2, columns);
@@ -510,7 +515,7 @@ function clamp(value: number, low: number, high: number): number {
 
 /** The width a single card asks for on a grid this wide, before packing. */
 export function cardColumns(
-  spec: Pick<CardSpec, "span" | "display" | "metric">,
+  spec: Pick<CardSpec, "span" | "display">,
   columns: number,
 ): number {
   const scaled = Math.round((spec.span * columns) / SPAN_UNITS);

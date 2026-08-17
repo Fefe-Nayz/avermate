@@ -186,28 +186,32 @@ describe("the drawing budget still bounds what a renderer receives", () => {
  * not now that transforms see everything.
  */
 describe("transforms cost what they should, and rank what they can measure", () => {
-  test("a moving average adds a pass, not a scan per point", () => {
-    // The transform in isolation: the same series evaluated with and without it, so
-    // whatever else the pipeline costs cancels out. Measured on 4 000 buckets — the
-    // most a transform can now be handed — the quadratic version added about 100ms
-    // to a 260ms evaluation; one pass with a running sum adds under a millisecond.
-    //
-    // A ratio, so the assertion means the same thing on any machine. Anything under
-    // a fifth is comfortably linear and far under what a scan per point costs.
-    const time = (transforms: WidgetTransform[]) => {
-      dailySeries(4_000, transforms);
-      const started = performance.now();
-      dailySeries(4_000, transforms);
-      return performance.now() - started;
-    };
-    const plain = time([]);
-    const averaged = time([{ kind: "moving-average", points: 7 }]);
-    const added = Math.max(0, averaged - plain);
+  test("a moving average makes one pass, not a scan per point", () => {
+    // Asserted as shape, not as a clock. The measurement that motivated the rewrite
+    // was real — 104ms against 0.69ms on 4 000 buckets, 150× — but a timing
+    // assertion flaked about one run in ten even taking the best of three, and a
+    // flaky guard is worse than an absent one. This says the thing the timing was a
+    // proxy for: the window advances with a running sum, and nothing re-scans the
+    // result for every row.
+    const source = readFileSync(
+      new URL("./widget-evaluator.ts", import.meta.url),
+      "utf8",
+    );
+    const branch = source
+      .slice(
+        source.indexOf('transform.kind === "moving-average"'),
+        source.indexOf('transform.kind === "cumulative"'),
+      )
+      // Comments out, or the negative assertions below match the very prose that
+      // explains what the old implementation did.
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
 
-    expect(
-      added / Math.max(plain, 0.01),
-      `${Math.round(plain)}ms plain, ${Math.round(averaged)}ms averaged`,
-    ).toBeLessThan(0.2);
+    expect(branch).toContain("const means = new Map<WidgetSeriesDatum,");
+    expect(branch).toContain("sum -= leaving");
+    // The two calls that made it quadratic, one per row apiece.
+    expect(branch).not.toContain("result.filter");
+    expect(branch).not.toContain("findIndex");
   });
 
   test("and it still averages the same seven consecutive buckets", () => {
