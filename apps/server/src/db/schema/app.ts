@@ -489,16 +489,19 @@ export const dashboardCards = sqliteTable(
     /** Which screen owns the card: overview, subject, grade or insights. */
     surface: text().notNull().default("overview"),
 
-    metric: text().notNull(),
-    /** "general" | "subject" | "custom" */
-    targetKind: text().notNull().default("general"),
-    targetId: text(),
+    /**
+     * The goal a card is about, as a foreign key rather than as a field of the
+     * definition.
+     *
+     * The definition names it too, and this is not a second source of truth: it is
+     * here for `ON DELETE CASCADE`, which is behaviour no JSON blob can arrange.
+     * Delete a goal and the cards built on it go with it.
+     */
     goalId: text().references(() => goals.id, {
       onDelete: "cascade",
       onUpdate: "cascade",
     }),
 
-    display: text().notNull().default("value"),
     span: integer().notNull().default(1),
     /** `null` uses the metric's own localised name. */
     title: text(),
@@ -506,9 +509,21 @@ export const dashboardCards = sqliteTable(
     sortOrder: integer().notNull().default(0),
     hidden: integer({ mode: "boolean" }).notNull().default(false),
 
-    /** Versioned analytics definition. Null means the legacy columns are canonical. */
-    definitionVersion: integer(),
-    definitionJson: text({ mode: "json" }).$type<WidgetDefinitionV1>(),
+    /**
+     * The card. Not a description of one — the whole of what it measures, over
+     * what, and how it is drawn.
+     *
+     * `NOT NULL`, at last. There were four columns beside this one holding a
+     * projection of it — `metric`, `target_kind`, `target_id`, `display` — written
+     * on every insert and read by nothing, kept because they were `NOT NULL` on
+     * rows that predated this column. Two representations of one fact, one of them
+     * authoritative and the other free to rot. They are gone, and this cannot be
+     * null, so a row that cannot be read no longer exists.
+     */
+    definitionVersion: integer().notNull(),
+    definitionJson: text({ mode: "json" })
+      .$type<WidgetDefinitionV1>()
+      .notNull(),
 
     yearId: text()
       .notNull()

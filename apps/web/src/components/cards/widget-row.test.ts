@@ -6,11 +6,7 @@ import { resolveWidgetRow } from "./widget-row"
 const row: DashboardCardRow = {
   id: "card",
   surface: "overview",
-  metric: "passRate",
-  targetKind: "general",
-  targetId: null,
   goalId: null,
-  display: "gauge",
   span: 2,
   title: null,
   accent: null,

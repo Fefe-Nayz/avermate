@@ -189,17 +189,21 @@ export function compileStoredWidgetDefinition(
 /**
  * The row a definition writes.
  *
- * `definitionJson` is canonical. The `metric` / `targetKind` / `targetId` /
- * `goalId` / `display` columns beside it are a projection of it and are no longer
- * read by anything — they are still written because they are `NOT NULL` on a
- * table whose rows predate the definition column. Dropping them needs a backfill
- * for those rows first (`0017` added the column without filling it in), which is
- * a data decision rather than a refactor; until then they are derived, never a
- * second source of truth.
+ * Just the definition, now that the columns beside it are gone. There used to be a
+ * projection here — `metric`, `targetKind`, `targetId`, `display` — written on
+ * every insert and read by nothing, kept alive only because they were `NOT NULL`
+ * on a table whose rows predated the definition column. Two representations of one
+ * fact, one of them authoritative, is a drift waiting for the first writer that
+ * forgets; the projection is derived on demand from the definition wherever a
+ * caller still wants it.
+ *
+ * `goalId` is not part of that and stays a column: it is a foreign key with
+ * `ON DELETE CASCADE`, so it is behaviour rather than a copy — delete a goal and
+ * its cards go with it, which no JSON blob can arrange.
  */
 export function widgetSemanticColumns(definition: WidgetDefinitionV1) {
   return {
-    ...cardSemanticsFromDefinition(definition),
+    goalId: cardSemanticsFromDefinition(definition).goalId,
     definitionVersion: WIDGET_DEFINITION_VERSION,
     definitionJson: definition,
   };

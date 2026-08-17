@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createWidgetDefinition } from "@avermate/core";
+import {
+  cardSemanticsFromDefinition,
+  createWidgetDefinition,
+} from "@avermate/core";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -528,9 +531,12 @@ describe("MCP authorization, scopes and ownership", () => {
       .where(eq(schema.dashboardCards.title, "MCP analytical widget"));
     expect(created).toMatchObject({
       surface: "insights",
+      definitionVersion: 1,
+    });
+    // The target is read off the definition; the row keeps no copy of it.
+    expect(cardSemanticsFromDefinition(created!.definitionJson)).toMatchObject({
       targetKind: "subject",
       targetId: "subject-owned",
-      definitionVersion: 1,
     });
     expect(
       await database

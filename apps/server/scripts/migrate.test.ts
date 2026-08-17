@@ -7,7 +7,7 @@ import {
   prepareMigrationBaseline,
 } from "./migrate";
 
-const expectedMigrationCount = 20;
+const expectedMigrationCount = 21;
 
 async function migrationRows(client: Client) {
   const result = await client.execute(
@@ -47,7 +47,11 @@ async function expectAnnouncementAudienceSchema(client: Client) {
 async function expectCardDefinitionSchema(client: Client) {
   const [columns, referenceTable, triggers] = await Promise.all([
     client.execute(
-      "SELECT name FROM pragma_table_info('dashboard_cards') WHERE name IN ('definitionVersion', 'definitionJson') ORDER BY name",
+      `SELECT name, "notnull" FROM pragma_table_info('dashboard_cards')
+         WHERE name IN ('definitionVersion', 'definitionJson',
+                        'metric', 'target_kind', 'targetKind',
+                        'target_id', 'targetId', 'display')
+         ORDER BY name`,
     ),
     client.execute(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'dashboard_card_references'",
@@ -56,9 +60,17 @@ async function expectCardDefinitionSchema(client: Client) {
       "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'dashboard_card_%_deleted' ORDER BY name",
     ),
   ]);
-  expect(columns.rows.map((row) => String(row.name))).toEqual([
-    "definitionJson",
-    "definitionVersion",
+  // The definition is the only representation of a card, and it is mandatory. The
+  // four columns that projected it — written on every insert, read by nothing — are
+  // gone, so asserting the *set* here is what stops one creeping back.
+  expect(
+    columns.rows.map((row) => ({
+      name: String(row.name),
+      notNull: Number(row.notnull) === 1,
+    })),
+  ).toEqual([
+    { name: "definitionJson", notNull: true },
+    { name: "definitionVersion", notNull: true },
   ]);
   expect(referenceTable.rows).toHaveLength(1);
   expect(triggers.rows.map((row) => String(row.name))).toEqual([

@@ -97,11 +97,10 @@ export const snapshotRouter = {
           .select({
             id: dashboardCards.id,
             surface: dashboardCards.surface,
-            metric: dashboardCards.metric,
-            targetKind: dashboardCards.targetKind,
-            targetId: dashboardCards.targetId,
+            // No `metric` / `targetKind` / `targetId` / `display`: the clients read
+            // those off the definition with `cardSemanticsFromDefinition`, and
+            // sending a second copy invited one of them to trust the stale half.
             goalId: dashboardCards.goalId,
-            display: dashboardCards.display,
             span: dashboardCards.span,
             title: dashboardCards.title,
             accent: dashboardCards.accent,

@@ -171,7 +171,7 @@ export function academicCardRows(userId: string, yearId: string) {
     });
     return {
       surface: "overview",
-      ...cardSemanticsFromDefinition(definitionJson),
+      goalId: cardSemanticsFromDefinition(definitionJson).goalId,
       span: card.span,
       title: card.title,
       accent: card.accent,

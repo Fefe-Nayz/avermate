@@ -141,6 +141,13 @@
       "when": 1786814516069,
       "tag": "0019_strong_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1786992057668,
+      "tag": "0020_close_widget_definitions",
+      "breakpoints": true
     }
   ]
 }

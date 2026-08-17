@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 import { createRouterClient } from "@orpc/server";
 import {
+  cardSemanticsFromDefinition,
   createWidgetDefinition,
   widgetDefinitionFromCard,
   WIDGET_DEFINITION_VERSION,
@@ -62,6 +63,36 @@ type AppRouter = typeof import("./index").appRouter;
 type Api = ReturnType<
   typeof createRouterClient<AppRouter, Record<never, never>>
 >;
+
+/**
+ * The cards built on a custom average, found through their reference rows.
+ *
+ * The `target_id` column this used to query is gone: it held a card's *primary*
+ * target, while a definition can name several averages and every one of them is a
+ * reference row. Asking the same way the router asks keeps the test honest about
+ * what the router will find.
+ */
+async function cardsForAverage(averageId: string) {
+  const references = await database
+    .select({ cardId: schema.dashboardCardReferences.cardId })
+    .from(schema.dashboardCardReferences)
+    .where(
+      and(
+        eq(schema.dashboardCardReferences.kind, "custom-average"),
+        eq(schema.dashboardCardReferences.referenceId, averageId),
+      ),
+    );
+  if (references.length === 0) return [];
+  return database
+    .select()
+    .from(schema.dashboardCards)
+    .where(
+      inArray(
+        schema.dashboardCards.id,
+        references.map((reference) => reference.cardId),
+      ),
+    );
+}
 
 let api: Api;
 let adminApi: Api;
@@ -634,12 +665,11 @@ describe("router year invariants", () => {
       surface: "insights",
     });
     expect(recommended).toHaveLength(4);
-    expect(recommended.map((card) => card.metric)).toEqual([
-      "average",
-      "distribution",
-      "mostImproved",
-      "consistency",
-    ]);
+    expect(
+      recommended.map(
+        (card) => cardSemanticsFromDefinition(card.definitionJson).metric,
+      ),
+    ).toEqual(["average", "distribution", "mostImproved", "consistency"]);
     expect(recommended.every((card) => card.definitionVersion === 1)).toBe(
       true,
     );
@@ -652,7 +682,7 @@ describe("router year invariants", () => {
     ).toEqual([]);
   });
 
-  test("canonicalizes V1 widgets, projects legacy columns and rejects forged references", async () => {
+  test("canonicalizes V1 widgets and rejects forged references", async () => {
     const definition = createWidgetDefinition("insights");
     definition.query.scope = {
       kind: "subjects",
@@ -676,12 +706,16 @@ describe("router year invariants", () => {
       span: 3,
       title: "Owned widget",
     });
-    expect(created).toMatchObject({
-      surface: "insights",
+    // The semantics are read back *off the definition*, not off columns beside it:
+    // the row no longer carries a second copy to compare against.
+    expect(cardSemanticsFromDefinition(created!.definitionJson)).toMatchObject({
       metric: "average",
       targetKind: "subject",
       targetId: "subject-a",
       display: "chart",
+    });
+    expect(created).toMatchObject({
+      surface: "insights",
       span: 3,
       title: "Owned widget",
       definitionVersion: 1,
@@ -764,13 +798,20 @@ describe("router year invariants", () => {
         },
       },
     });
-    // The old columns survive beside it because they are NOT NULL on a table
-    // older than the definition, and they are written as a projection of it —
-    // note `display` comes back as "chart", not "sparkline": the projection knows
-    // nothing about the axes, so it cannot tell a sparkline from a chart. Which is
-    // the whole argument for the definition being the only thing anything reads.
-    expect(sparkline).toMatchObject({
-      definitionVersion: 1,
+    // One representation, and this is the case that argued for it. The row used to
+    // carry a projection of the definition — `metric`, `targetKind`, `targetId`,
+    // `display` — and `display` came back as "chart" for the card above, not
+    // "sparkline": the projection knew nothing about axes, so it could not tell a
+    // sparkline from a chart. It is gone; the keys are not on the row at all.
+    for (const key of ["metric", "targetKind", "targetId", "display"]) {
+      expect(sparkline, key).not.toHaveProperty(key);
+    }
+    expect(sparkline).toMatchObject({ definitionVersion: 1 });
+    // Derived on demand it is still lossy in exactly the same way, which is why
+    // nothing stores it: the projection is a convenience, never an authority.
+    expect(
+      cardSemanticsFromDefinition(sparkline!.definitionJson),
+    ).toMatchObject({
       metric: "average",
       targetKind: "subject",
       targetId: "subject-a",
@@ -784,8 +825,6 @@ describe("router year invariants", () => {
     expect(renamed).toMatchObject({
       title: "Renamed without rewriting semantics",
       definitionVersion: 1,
-      metric: "average",
-      targetId: "subject-a",
     });
     expect(renamed?.definitionJson).toEqual(sparkline?.definitionJson);
 
@@ -853,34 +892,17 @@ describe("router year invariants", () => {
     expect(unchanged.some((card) => card.id === formulaCard?.id)).toBe(true);
   });
 
-  test("keeps presentation-only updates lossless for migrated legacy cards", async () => {
-    await database.insert(schema.dashboardCards).values({
-      id: "legacy-card-presentation",
-      metric: "average",
-      targetKind: "subject",
-      targetId: "subject-a",
-      display: "sparkline",
-      span: 1,
-      yearId: "year-a",
-      userId: "user-a",
-      definitionVersion: null,
-      definitionJson: null,
-    });
-
-    const updated = await api.cards.update({
-      cardId: "legacy-card-presentation",
-      hidden: true,
-      span: 2,
-    });
-
-    expect(updated).toMatchObject({
-      display: "sparkline",
-      hidden: true,
-      span: 2,
-      definitionVersion: null,
-      definitionJson: null,
-    });
-  });
+  /*
+   * There was a test here for a card with no definition — `definitionVersion` and
+   * `definitionJson` both null, its meaning carried by the `metric` / `target_kind`
+   * / `target_id` / `display` columns — checking that a presentation-only update
+   * left that meaning intact.
+   *
+   * The row it described can no longer be written. Those columns are gone and the
+   * definition is `NOT NULL`, so "a card whose meaning lives somewhere else" is not
+   * a state to defend against; it is a state the schema refuses. Deleting the test
+   * is the point of the change, not a gap left by it.
+   */
 
   test("keeps derived widget references current and cascades every reference kind", async () => {
     const yearId = "year-widget-references";
@@ -1184,10 +1206,16 @@ describe("router year invariants", () => {
     const retained = (
       await api.cards.list({ yearId, surface: "insights" })
     ).find((card) => card.id === multiCard?.id);
+    // The surviving subject, read off the definition — which is where the card's
+    // target lives now, and where it always was authoritatively.
+    expect(cardSemanticsFromDefinition(retained!.definitionJson)).toMatchObject(
+      {
+        targetKind: "subject",
+        targetId: "subject-widget-retained",
+      },
+    );
     expect(retained).toMatchObject({
       id: multiCard?.id,
-      targetKind: "subject",
-      targetId: "subject-widget-retained",
       definitionVersion: 1,
       definitionJson: {
         query: {
@@ -1568,22 +1596,27 @@ describe("router year invariants", () => {
     });
 
     expect(created).toMatchObject({ name: "Dashboard science", isMain: false });
-    expect(
-      await database
-        .select()
-        .from(schema.dashboardCards)
-        .where(eq(schema.dashboardCards.targetId, created?.id ?? "")),
-    ).toMatchObject([
+    const createdCards = await cardsForAverage(created?.id ?? "");
+    // The row carries the presentation; the definition carries the meaning.
+    expect(createdCards).toMatchObject([
       {
         surface: "overview",
-        metric: "average",
-        targetKind: "custom",
-        targetId: created?.id,
-        display: "chart",
         span: 2,
         title: "Dashboard science",
         hidden: false,
         yearId: "year-a",
+      },
+    ]);
+    expect(
+      createdCards.map((card) =>
+        cardSemanticsFromDefinition(card.definitionJson),
+      ),
+    ).toMatchObject([
+      {
+        metric: "average",
+        targetKind: "custom",
+        targetId: created?.id,
+        display: "chart",
       },
     ]);
     expect(
@@ -1618,12 +1651,7 @@ describe("router year invariants", () => {
     });
 
     await api.averages.delete({ averageId: created?.id ?? "" });
-    expect(
-      await database
-        .select()
-        .from(schema.dashboardCards)
-        .where(eq(schema.dashboardCards.targetId, created?.id ?? "")),
-    ).toHaveLength(0);
+    expect(await cardsForAverage(created?.id ?? "")).toHaveLength(0);
 
     const longName = "A".repeat(64);
     const longNamed = await api.averages.create({
@@ -1632,10 +1660,7 @@ describe("router year invariants", () => {
       addDashboardCard: true,
       entries: [{ subjectId: "subject-a" }],
     });
-    const [longNamedCard] = await database
-      .select()
-      .from(schema.dashboardCards)
-      .where(eq(schema.dashboardCards.targetId, longNamed?.id ?? ""));
+    const [longNamedCard] = await cardsForAverage(longNamed?.id ?? "");
     expect(longNamed?.name).toBe(longName);
     expect(longNamedCard?.title).toBe("A".repeat(48));
     await api.averages.delete({ averageId: longNamed?.id ?? "" });

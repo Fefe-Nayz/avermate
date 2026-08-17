@@ -302,15 +302,30 @@ export const averagesRouter = {
       const userId = context.session.user.id;
       const existing = await requireCustomAverage(userId, input.averageId);
       await db.batch([
-        db
-          .delete(dashboardCards)
-          .where(
-            and(
-              eq(dashboardCards.userId, userId),
-              eq(dashboardCards.targetKind, "custom"),
-              eq(dashboardCards.targetId, input.averageId),
+        // Found through the reference rows rather than through a `targetKind` /
+        // `targetId` pair on the card, which is what this used to match and which
+        // only ever held a card's *primary* target: a definition can name several
+        // averages, and a card built on two of them was left behind pointing at one
+        // that no longer exists. Every reference a definition makes is a row here,
+        // so this catches all of them — and it is still one statement, so the cards
+        // and the average go in the same batch.
+        db.delete(dashboardCards).where(
+          and(
+            eq(dashboardCards.userId, userId),
+            inArray(
+              dashboardCards.id,
+              db
+                .select({ cardId: dashboardCardReferences.cardId })
+                .from(dashboardCardReferences)
+                .where(
+                  and(
+                    eq(dashboardCardReferences.kind, "custom-average"),
+                    eq(dashboardCardReferences.referenceId, input.averageId),
+                  ),
+                ),
             ),
           ),
+        ),
         db.delete(customAverages).where(eq(customAverages.id, input.averageId)),
         detachYearPresetStatement(userId, existing.yearId, "average_deleted"),
       ]);

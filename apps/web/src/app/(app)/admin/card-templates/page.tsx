@@ -7,6 +7,7 @@ import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import {
   WIDGET_DEFINITION_VERSION,
+  cardSemanticsFromDefinition,
   type WidgetDefinitionV1,
   type WidgetSurface,
 } from "@avermate/core"
@@ -26,7 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { useYear } from "@/components/year/year-provider"
+import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
@@ -52,6 +53,20 @@ interface TemplateRow {
  * template's slots; installers re-point them at their own subjects,
  * averages, goals or periods.
  */
+/**
+ * A card's metric name, for a list that has to call it something.
+ *
+ * The row used to carry `metric` beside the definition; it does not any more, and
+ * the definition is where the answer was authoritative all along. A row whose
+ * definition will not compile has no name to give, and says so with `null` rather
+ * than guessing.
+ */
+function cardLabel(card: DashboardCardRow): string | null {
+  const { definition } = resolveWidgetRow(card)
+  if (!definition) return null
+  return cardSemanticsFromDefinition(definition).metric
+}
+
 export default function AdminCardTemplatesPage() {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -133,7 +148,10 @@ export default function AdminCardTemplatesPage() {
             options={sources.map((card) => ({
               value: card.id,
               label:
-                (card.title?.trim() || card.metric) +
+                // The metric name comes off the definition; the row no longer
+                // carries a copy. A card whose definition will not compile has no
+                // name to offer, so it is listed by id rather than dropped.
+                (card.title?.trim() || cardLabel(card) || card.id) +
                 (card.surface === "insights" ? " · Insights" : ""),
             }))}
           />

@@ -43,14 +43,25 @@ import {
 
 export type CardSurface = "overview" | "subject" | "grade" | "insights"
 
+/**
+ * A card as the snapshot sends it: its presentation, and its definition.
+ *
+ * There were four more fields here — `metric`, `targetKind`, `targetId`,
+ * `display` — a projection of the definition that the server stored beside it and
+ * sent alongside it. Nothing read them: the semantics come from
+ * `cardSemanticsFromDefinition`, which knows about axes and formulas where the
+ * projection did not. Declaring them invited the first reader in a hurry to trust
+ * the flatter half.
+ *
+ * `definitionVersion` and `definitionJson` are non-null at the source now, but stay
+ * nullable here: this type describes a payload arriving over a network, and a
+ * client that assumes a field cannot be missing is a client that crashes when it
+ * is. `resolveWidgetRow` is where that is decided, once.
+ */
 export interface DashboardCardRow {
   id: string
   surface: string
-  metric: string
-  targetKind: string
-  targetId: string | null
   goalId: string | null
-  display: string
   span: number
   title: string | null
   accent: string | null

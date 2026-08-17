@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { cardSemanticsFromDefinition } from "@avermate/core";
 import { db } from "../db";
 import {
   customAverageEntries,
@@ -190,26 +191,35 @@ async function presetReplacementPlan(
         targetKind: goal.kind,
         targetId: goal.referenceId,
       })),
-    ...yearCards
-      .filter(
-        (card) =>
-          targetWouldDisappear(card.targetKind, card.targetId) ||
-          yearCardReferences.some(
-            (reference) =>
-              reference.cardId === card.id &&
-              targetWouldDisappear(
-                reference.kind === "custom-average" ? "custom" : reference.kind,
-                reference.referenceId,
-              ),
+    // Reference rows only. There used to be a second check against the card's own
+    // `targetKind` / `targetId` columns beside this one, which said the same thing
+    // less completely: those columns hold a card's *primary* target, while a
+    // definition can reference several subjects and averages, and every one of them
+    // is a reference row. The columns are gone and nothing here got weaker.
+    ...yearCards.flatMap((card) => {
+      const blocking = yearCardReferences.find(
+        (reference) =>
+          reference.cardId === card.id &&
+          targetWouldDisappear(
+            reference.kind === "custom-average" ? "custom" : reference.kind,
+            reference.referenceId,
           ),
-      )
-      .map((card) => ({
-        resource: "dashboard_card" as const,
-        id: card.id,
-        label: card.title ?? card.metric,
-        targetKind: card.targetKind,
-        targetId: card.targetId,
-      })),
+      );
+      if (!blocking) return [];
+      const semantics = card.definitionJson
+        ? cardSemanticsFromDefinition(card.definitionJson)
+        : null;
+      return [
+        {
+          resource: "dashboard_card" as const,
+          id: card.id,
+          label: card.title ?? semantics?.metric ?? card.id,
+          targetKind:
+            blocking.kind === "custom-average" ? "custom" : blocking.kind,
+          targetId: blocking.referenceId,
+        },
+      ];
+    }),
   ];
 
   return {
