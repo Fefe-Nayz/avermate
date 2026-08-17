@@ -51,6 +51,14 @@ const chartSettings = z.object({
 const navigationSettings = z.object({
   tabs: z.array(z.string().max(64)).max(4).optional(),
   sidebar: z.array(z.string().max(64)).max(12).optional(),
+  /**
+   * The quick-add action the sidebar offers as a button, by href. Absent is none.
+   *
+   * A field the client sends has to be a field this schema names: zod strips what it
+   * does not know, so the setting travelled to the server and came back missing —
+   * which read, exactly once per attempt, as a toggle that switched itself off.
+   */
+  sidebarAction: z.string().max(120).optional(),
 });
 
 const themeShape = z.object({
