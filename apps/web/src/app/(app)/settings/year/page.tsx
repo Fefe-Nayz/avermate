@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  ChevronRightIcon,
   PlusIcon,
   SaveIcon,
   Trash2Icon,
@@ -19,6 +20,7 @@ import {
   SortableRow,
   sortableListClassName,
   sortableRowClassName,
+  sortableRowLinkClassName,
 } from "@/components/ui/sortable-list"
 import {
   AlertDialog,
@@ -35,18 +37,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { DateField, NumberField, TextField } from "@/components/forms/controls"
-import { PeriodDraftEditor } from "@/components/year/period-draft-editor"
 import { useYear } from "@/components/year/year-provider"
-import { invalidateAnnouncementAudience } from "@/lib/announcement-cache"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
-import { randomId } from "@/lib/id"
-import {
-  dateInputValue,
-  periodDraftProblems,
-  periodDraftsFromRows,
-  type PeriodDraft,
-} from "@/lib/period-drafts"
+import { dateInputValue } from "@/lib/period-drafts"
 
 /**
  * The year itself: its dates, its scale, and how it is split.
@@ -78,12 +72,6 @@ export default function YearSettingsPage() {
     String(year ? year.passingRatio * year.scale : 10)
   )
   const [decimals, setDecimals] = useState(() => String(year?.decimals ?? 2))
-  const [sourcePeriods, setSourcePeriods] = useState(periods)
-  const [drafts, setDrafts] = useState<PeriodDraft[]>(() =>
-    periodDraftsFromRows(
-      periods.filter((period) => period.id !== "__full_year__")
-    )
-  )
 
   // A refreshed snapshot replaces the editing baseline. Adjusting guarded
   // render state avoids an extra effect render while keeping unsaved edits
@@ -99,15 +87,6 @@ export default function YearSettingsPage() {
       setPassing(String(year.passingRatio * year.scale))
       setDecimals(String(year.decimals))
     }
-  }
-
-  if (sourcePeriods !== periods) {
-    setSourcePeriods(periods)
-    setDrafts(
-      periodDraftsFromRows(
-        periods.filter((period) => period.id !== "__full_year__")
-      )
-    )
   }
 
   const invalidate = () =>
@@ -133,19 +112,21 @@ export default function YearSettingsPage() {
     },
   })
 
-  const savePeriods = useMutation({
-    ...orpc.periods.replaceAll.mutationOptions(),
+  /**
+   * The order, saved the moment it changes.
+   *
+   * Its own mutation rather than part of a pending draft: reordering is a thing you
+   * *did*, and every other list in the app treats it that way — there was no reason
+   * for periods to make it something you then had to remember to save.
+   */
+  const reorderPeriods = useMutation({
+    ...orpc.periods.reorder.mutationOptions(),
     onSuccess: () => {
-      haptic("success")
-      toast.success(t("Periods updated."))
-      void Promise.all([
-        invalidate(),
-        invalidateAnnouncementAudience(queryClient),
-      ])
+      void invalidate()
     },
     onError: (error: Error) => {
       haptic("error")
-      toast.error(error.message || t("The periods could not be saved."))
+      toast.error(error.message || t("The periods could not be reordered."))
     },
   })
 
@@ -320,64 +301,75 @@ export default function YearSettingsPage() {
             "A grade with no period of its own is filed by its date. Deleting a period never deletes grades."
           )}
           footer={
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  haptic("light")
-                  setDrafts((current) => [
-                    ...current,
-                    {
-                      key: randomId(),
-                      id: undefined,
-                      name: t("New period"),
-                      startAt: startsAt,
-                      endAt: endsAt,
-                      isCumulative: false,
-                    },
-                  ])
-                }}
-              >
-                <PlusIcon className="size-4" />
-                {t("Add a period")}
-              </Button>
-              <Button
-                size="sm"
-                className="ml-auto"
-                disabled={
-                  savePeriods.isPending ||
-                  periodDraftProblems(drafts, { startsAt, endsAt }).length > 0
-                }
-                onClick={() =>
-                  savePeriods.mutate({
-                    yearId: yearId as string,
-                    periods: drafts.map((draft) => ({
-                      periodId: draft.id,
-                      name: draft.name.trim() || t("Period"),
-                      startAt: new Date(`${draft.startAt}T00:00:00`),
-                      endAt: new Date(`${draft.endAt}T23:59:59`),
-                      isCumulative: draft.isCumulative,
-                    })),
-                  })
-                }
-              >
-                {savePeriods.isPending ? (
-                  <Spinner className="size-4" />
-                ) : (
-                  <SaveIcon className="size-4" />
-                )}
-                {t("Save periods")}
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/settings/year/periods/new" />}
+            >
+              <PlusIcon className="size-4" />
+              {t("Add a period")}
+            </Button>
           }
         >
-          <PeriodDraftEditor
-            value={drafts}
-            onChange={setDrafts}
-            year={{ startsAt, endsAt }}
-            allowAdd={false}
-          />
+          {/* Summaries that open their own form, and a drag that saves itself.
+              This section used to be a column of open forms over one "Save periods"
+              button that replaced the whole set at once — the only object in the app
+              edited that way, and the only list whose order was part of a pending
+              draft rather than a thing you did. A period is now created, edited and
+              deleted like everything else: on a route, through `FormFlow`, which is
+              all the fields at once on a laptop and one decision per screen on a
+              phone. The wizards keep their in-place editor, because their periods are
+              unsaved drafts in wizard state and no route can reach those. */}
+          {periods.length === 0 ? (
+            <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+              {t("No periods — the whole year counts as one.")}
+            </p>
+          ) : (
+            <SortableList
+              ids={periods.map((period) => period.id)}
+              onReorder={(periodIds) => {
+                haptic("light")
+                reorderPeriods.mutate({ periodIds })
+              }}
+              disabled={reorderPeriods.isPending}
+            >
+              <ul className={sortableListClassName}>
+                {periods.map((period, index) => (
+                  <SortableRow
+                    key={period.id}
+                    id={period.id}
+                    disabled={reorderPeriods.isPending}
+                    className={sortableRowClassName(index)}
+                  >
+                    <DragHandle className="ml-1.5" />
+                    <Link
+                      href={`/settings/year/periods/${period.id}`}
+                      className={sortableRowLinkClassName}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {period.name}
+                        </span>
+                        <span className="numeric block truncate text-xs text-muted-foreground">
+                          {format.dateTime(new Date(period.startAt), {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                          {" → "}
+                          {format.dateTime(new Date(period.endAt), {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                          {period.isCumulative ? ` · ${t("Cumulative")}` : ""}
+                        </span>
+                      </span>
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                    </Link>
+                  </SortableRow>
+                ))}
+              </ul>
+            </SortableList>
+          )}
         </SettingsSection>
 
         <SettingsSection
