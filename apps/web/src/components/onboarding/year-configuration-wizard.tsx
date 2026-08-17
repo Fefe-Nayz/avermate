@@ -373,7 +373,12 @@ function SubjectsConfigurationStep({
               className="pl-9"
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* One column until the pane is genuinely wide enough for a preset name on
+              one line. `sm:` split at 640px of *viewport*, which on a phone in this
+              wizard gave two ~250px columns — narrow enough that names broke mid-word
+              and every card grew to three lines of title. A container query asks the
+              column that actually holds them. */}
+          <div className="grid gap-3 @2xl/main:grid-cols-2">
             {visiblePresets.map((preset) => (
               <PresetCard
                 key={preset.id}

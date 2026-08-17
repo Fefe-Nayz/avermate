@@ -185,6 +185,41 @@ export function ChangeSummary({
 }
 
 /** A preset in a list you can choose from. */
+/**
+ * The shell a preset choice wears.
+ *
+ * `role="radio"` rather than `aria-pressed`: this is one choice among several, and a
+ * set of independent toggles is what a pressed button announces. A screen reader now
+ * hears how many options there are and which one is taken.
+ */
+function PresetChoice({
+  selected,
+  onSelect,
+  children,
+}: {
+  selected: boolean
+  onSelect: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex h-full w-full min-w-0 flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors",
+        // One signal, not three. It carried a primary border *and* a tinted
+        // background *and* a ring, which is a lot of ceremony for a boolean — and the
+        // ring sat outside the border, so a column of them read as misaligned.
+        selected ? "border-primary bg-primary/8" : "bg-card hover:bg-accent/50"
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function PresetCard({
   name,
   description,
@@ -209,44 +244,58 @@ export function PresetCard({
   const t = useExtracted()
 
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={cn(
-        "flex h-full w-full min-w-0 flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors",
-        selected
-          ? "border-primary bg-primary/6 ring-1 ring-primary/30"
-          : "bg-card hover:bg-accent/50"
-      )}
-    >
+    <PresetChoice selected={selected} onSelect={onSelect}>
+      {/* `break-words` stays, and my first attempt at this was wrong. It splits a
+          word only when the word cannot fit the column at all — so "Section Générale
+          & Technologique" coming out as "Technologiq" over "ue" was the *column*
+          being 250px wide, not this class. Clamping the name instead traded a break
+          for a truncation, which is worse and which the classes flow test rightly
+          refuses: a chooser you scan by name must not hide one. The fix belongs at
+          the grid, and it is there. */}
       <span className="flex min-w-0 items-start gap-2">
         {featured ? (
-          <SparklesIcon className="size-4 shrink-0 text-primary" />
+          <SparklesIcon className="mt-0.5 size-4 shrink-0 text-primary" />
         ) : null}
         <span className="min-w-0 flex-1 font-medium break-words whitespace-normal">
           {name}
         </span>
-        <VersionBadge version={version} />
       </span>
+      {/* Shown when there is one. The shipped catalogue described every preset as
+          "Préset pour <its own name>" — the title again, with filler — and I first
+          answered that here, with a guard that spotted a restatement. Wrong place:
+          a description that says nothing is a description that should not have been
+          written, so the catalogue was fixed instead. */}
       {description ? (
         <span className="text-sm leading-relaxed break-words whitespace-normal text-muted-foreground">
           {description}
         </span>
       ) : null}
-      <span className="mt-1 flex flex-wrap items-center gap-1.5">
+      {/* Pushed to the bottom, so a row of cards lines its tags and counts up
+          instead of hanging them wherever each description happened to end. */}
+      <span className="mt-auto flex flex-wrap items-center gap-1.5 pt-2">
         {tags?.map((tag) => (
           <Badge key={tag} variant="secondary" className="text-[10px]">
             {tag}
           </Badge>
         ))}
         <span className="numeric text-xs text-muted-foreground">
-          {t("{subjects} subjects · {averages} averages", {
-            subjects: String(subjectCount),
-            averages: String(averageCount),
-          })}
+          {/* Averages only when there are some: "0 averages" is a fact about
+              nothing, printed on most of the catalogue. And the version comes down
+              here rather than sitting beside the name — every preset in the list is
+              v1, so at the top it was a badge that distinguished nothing while
+              taking the space a long name needed. */}
+          {averageCount > 0
+            ? t("{subjects} subjects · {averages} averages · v{version}", {
+                subjects: String(subjectCount),
+                averages: String(averageCount),
+                version: String(version),
+              })
+            : t("{subjects} subjects · v{version}", {
+                subjects: String(subjectCount),
+                version: String(version),
+              })}
         </span>
       </span>
-    </button>
+    </PresetChoice>
   )
 }
