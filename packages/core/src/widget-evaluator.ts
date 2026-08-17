@@ -374,13 +374,55 @@ function dateKey(date: Date, interval: "day" | "week" | "month"): string {
   return `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
 }
 
-function sampleEvenly<T>(values: readonly T[], limit: number): T[] {
+/**
+ * Thin a series down to a drawing budget, keeping both ends.
+ *
+ * This used to run *inside* the bucket walk, which put it before every
+ * transform — so `cumulative` summed a sample of the buckets rather than all of
+ * them, and a seven-point moving average averaged seven points that were no
+ * longer seven consecutive days. Measured on 600 daily buckets: 500 points out,
+ * with gaps of one day and two. The numbers on screen were wrong, not just the
+ * shape.
+ *
+ * It belongs at the end, and it has to keep the last point: for a cumulative
+ * that point *is* the answer.
+ */
+function downsampleForRender<T>(values: readonly T[], limit: number): T[] {
   if (values.length <= limit) return [...values];
-  if (limit <= 1) return values.length === 0 ? [] : [values[0]];
-  return Array.from({ length: limit }, (_, index) => {
-    const sourceIndex = Math.round((index * (values.length - 1)) / (limit - 1));
-    return values[sourceIndex];
+  if (limit <= 1) return values.length === 0 ? [] : [values[values.length - 1]];
+  if (limit === 2) return [values[0] as T, values[values.length - 1] as T];
+  const inner = Array.from({ length: limit - 2 }, (_, index) => {
+    const source = Math.round(
+      ((index + 1) * (values.length - 1)) / (limit - 1),
+    );
+    return values[Math.min(values.length - 2, Math.max(1, source))] as T;
   });
+  return [values[0] as T, ...inner, values[values.length - 1] as T];
+}
+
+/** Per-series drawing budget, shared out when a card draws several lines. */
+function renderBudget(seriesCount: number): number {
+  return Math.max(
+    2,
+    Math.floor(WIDGET_LIMITS.resultPoints / Math.max(1, seriesCount)),
+  );
+}
+
+/** Thin every series independently, so one long line cannot starve another. */
+function downsampleSeriesForRender(
+  values: readonly WidgetSeriesDatum[],
+): WidgetSeriesDatum[] {
+  const keys = [...new Set(values.map((item) => item.series))];
+  if (keys.length <= 1) {
+    return downsampleForRender(values, renderBudget(1));
+  }
+  const budget = renderBudget(keys.length);
+  return keys.flatMap((key) =>
+    downsampleForRender(
+      values.filter((item) => item.series === key),
+      budget,
+    ),
+  );
 }
 
 function datumForTime(
@@ -402,10 +444,10 @@ function datumForTime(
       .filter((subject): subject is Subject => Boolean(subject))
       .slice(0, WIDGET_LIMITS.series);
     if (targets.length > 0) {
-      const perSeriesLimit = Math.max(
-        2,
-        Math.floor(WIDGET_LIMITS.resultPoints / targets.length),
-      );
+      // Each series keeps its own full set of buckets. Sharing the *drawing*
+      // budget between series is right and happens at the end; sharing the
+      // bucket budget was what cut an eight-series card to 62 buckets a line
+      // and made every transform on it wrong.
       return targets.flatMap((subject) => {
         const ids = new Set([
           subject.id,
@@ -419,7 +461,7 @@ function datumForTime(
           groupBy,
           subject.id,
           subject.name,
-          perSeriesLimit,
+          WIDGET_LIMITS.seriesBuckets,
         );
       });
     }
@@ -431,7 +473,7 @@ function datumForTime(
     groupBy,
     "all",
     null,
-    WIDGET_LIMITS.resultPoints,
+    WIDGET_LIMITS.seriesBuckets,
   );
 }
 
@@ -442,7 +484,7 @@ function datumForTimeSingle(
   groupBy: Extract<WidgetGroupBy, { kind: "time" }>,
   seriesKey: string,
   seriesLabel: string | null,
-  limit: number,
+  bucketLimit: number,
 ): WidgetSeriesDatum[] {
   const buckets = new Map<string, Grade[]>();
   for (const grade of data.graph.allGrades()) {
@@ -480,7 +522,10 @@ function datumForTimeSingle(
       series: seriesLabel,
     };
   });
-  return sampleEvenly(values, limit);
+  // Bounded, never sampled: transforms downstream have to see every bucket.
+  // If a window somehow exceeds the guard, the most recent buckets are the ones
+  // worth keeping — but a year cannot get here.
+  return values.length <= bucketLimit ? values : values.slice(-bucketLimit);
 }
 
 function datumForSubjects(
@@ -592,7 +637,10 @@ function applyTransforms(
       });
     }
   }
-  return result.slice(0, WIDGET_LIMITS.resultPoints);
+  // No budget here. A slice in the middle of the pipeline is a semantic
+  // truncation dressed as a safeguard: it dropped points before the comparison
+  // had seen them, and before the caller had a chance to draw them.
+  return result;
 }
 
 function withComparison(
@@ -919,8 +967,9 @@ export function evaluateWidgetDefinition(
             definition.analysis.groupBy,
           )
         : compareSeries(transformed, definition);
-    return values.some((item) => item.value !== null)
-      ? { kind: "series", shape: "temporal-series", values, valueType }
+    const drawn = downsampleSeriesForRender(values);
+    return drawn.some((item) => item.value !== null)
+      ? { kind: "series", shape: "temporal-series", values: drawn, valueType }
       : { kind: "empty", shape: "temporal-series" };
   }
   if (definition.analysis.groupBy.kind === "subject") {
@@ -957,11 +1006,12 @@ export function evaluateWidgetDefinition(
             });
           })()
         : compareSeries(values, definition);
-    return compared.some((item) => item.value !== null)
+    const drawn = downsampleSeriesForRender(compared);
+    return drawn.some((item) => item.value !== null)
       ? {
           kind: "series",
           shape: "categorical-series",
-          values: compared,
+          values: drawn,
           valueType,
         }
       : { kind: "empty", shape: "categorical-series" };

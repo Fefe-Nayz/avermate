@@ -35,6 +35,25 @@ export const WIDGET_LIMITS = Object.freeze({
   /** Each metric operand is a full data pass; bounded separately. */
   formulaMetricNodes: 8,
   series: 8,
+  /**
+   * Logical buckets one series may hold *before* transforms.
+   *
+   * Separate from `resultPoints` because the two answer different questions.
+   * This one bounds the work: one scalar evaluation per bucket, so it exists to
+   * stop a pathological window from walking forever. A school year cannot reach
+   * it — daily buckets over two years is 730 — which is the point: transforms
+   * must never see a shortened series, because a cumulative over a shortened
+   * series is simply a wrong number.
+   */
+  seriesBuckets: 4_000,
+  /**
+   * Points handed to a renderer, per series.
+   *
+   * Applied *last*, after every transform and comparison, and as a downsample
+   * that keeps the first and last point rather than a truncation. It is a
+   * drawing budget: dropping a point changes how a line looks, never what it
+   * says.
+   */
   resultPoints: 500,
 });
 
