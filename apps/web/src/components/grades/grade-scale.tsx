@@ -98,6 +98,27 @@ export interface ScaleMarker {
   ratio: number
 }
 
+/**
+ * A tone per marker, so two averages a fraction apart are still two things.
+ *
+ * Both used to be `bg-foreground/70`: identical ticks whose only distinguishing
+ * feature was the legend underneath, which is no help precisely when it matters —
+ * two averages a few pixels apart, and no way to tell which is which.
+ *
+ * Not two chart colours: this app's chart palettes are analogous by design, each
+ * preset keeping its five hues inside about 45°, so a pair picked from them is
+ * reliably distinct in no preset. `foreground` and `primary` are two *semantic*
+ * tokens instead — a preset that let those two converge would be unusable for
+ * other reasons — so the difference survives every theme. And neither is a band
+ * colour, deliberately: a band colour on this strip would read as a verdict about
+ * the average rather than as a label for it.
+ */
+const MARKER_TONES = ["bg-foreground", "bg-primary"] as const
+
+function markerTone(index: number): string {
+  return MARKER_TONES[index % MARKER_TONES.length] as string
+}
+
 export function GradeScale({
   ratio,
   markers = [],
@@ -177,11 +198,14 @@ export function GradeScale({
             className="absolute inset-y-0 w-px bg-foreground/35"
             style={tickStyle(clamp(passingRatio) * 100, 0.5)}
           />
-          {markers.map((marker) => (
+          {markers.map((marker, index) => (
             <span
               key={marker.id}
               aria-hidden
-              className="absolute inset-y-0 w-0.5 rounded-full bg-foreground/70"
+              className={cn(
+                "absolute inset-y-0 w-0.5 rounded-full",
+                markerTone(index)
+              )}
               style={tickStyle(clamp(marker.ratio) * 100, 1)}
             />
           ))}
@@ -209,11 +233,11 @@ export function GradeScale({
           row carries the values. */}
       {markers.length > 0 ? (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {markers.map((marker) => (
+          {markers.map((marker, index) => (
             <li key={marker.id} className="flex items-center gap-1.5">
               <span
                 aria-hidden
-                className="h-2.5 w-0.5 rounded-full bg-foreground/70"
+                className={cn("h-2.5 w-0.5 rounded-full", markerTone(index))}
               />
               {marker.label}
               <span className="numeric text-foreground">

@@ -212,30 +212,6 @@ export function GradeResultsChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
-          // Told apart from the other two lines on the plot by more than a
-          // colour, because a thin accent line among a dashed threshold and a
-          // dashed trend is just a third thin line. It is haloed — a wide soft
-          // band under a crisp core, the same idiom as the highlighted dot, so
-          // the marked level and the marked result read as one thing — and it is
-          // the only solid line here.
-          ...(marked.length > 0
-            ? [
-                ruleY(marked, {
-                  id: "highlight-level-halo",
-                  y: "value",
-                  stroke: "var(--chart-1)",
-                  strokeOpacity: 0.14,
-                  strokeWidth: 7,
-                }),
-                ruleY(marked, {
-                  id: "highlight-level",
-                  y: "value",
-                  stroke: "var(--chart-1)",
-                  strokeOpacity: 0.75,
-                  strokeWidth: 1.5,
-                }),
-              ]
-            : []),
           // Opt-in reading aid: a straight, recessive thread between the
           // dots for readers who want their eye guided through the cloud.
           // It stays out of the line-style preference — a smooth or stepped
