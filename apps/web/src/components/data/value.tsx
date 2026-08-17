@@ -184,12 +184,27 @@ export function ResultBadge({
   )
 }
 
+/**
+ * Below this, a change is no change.
+ *
+ * A ratio, so it is `0.0005` — half of the last digit a two-decimal mark on a
+ * twenty-point scale can show. A delta smaller than this rounds to `0.00`, and
+ * anything that draws a delta has to agree with the number about that: the moment a
+ * bar appears beside a `±0.00`, the reader is being shown movement the figure denies.
+ *
+ * That is not a hypothetical. Averages are sums of quotients, so removing a value
+ * and adding it back rarely returns the same float — the difference lands around
+ * `1e-16`. Compared against zero it is a change; compared against anything a person
+ * can read, it is not.
+ */
+export const NEUTRAL_DELTA = 0.0005
+
 /** A signed change, phrased on the year's scale rather than as a percentage. */
 export function DeltaValue({
   delta,
   className,
   decimals,
-  neutralThreshold = 0.0005,
+  neutralThreshold = NEUTRAL_DELTA,
 }: {
   delta: number | null
   className?: string

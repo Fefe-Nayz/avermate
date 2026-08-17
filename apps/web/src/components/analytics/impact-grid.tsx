@@ -3,10 +3,35 @@
 import Link from "next/link"
 import type { Impact } from "@avermate/core"
 import { useExtracted } from "next-intl"
-import { AverageValue, DeltaValue } from "@/components/data/value"
+import {
+  AverageValue,
+  DeltaValue,
+  NEUTRAL_DELTA,
+} from "@/components/data/value"
 import { useEntered } from "@/hooks/use-entered"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+
+/**
+ * The magnitude a row contributes to the shared scale — zero if it did not move.
+ *
+ * Anything under `NEUTRAL_DELTA` counts as no movement, and it has to, because
+ * comparing against exact zero was wrong in the way that matters. An average is a
+ * sum of quotients: remove a grade, recompute, add it back, and the float that
+ * comes out differs from the one that went in by about `1e-16`. Every impact on a
+ * page where a grade changes nothing was therefore a *different* tiny non-zero
+ * number — and a scale normalised on the largest of them turned that noise into a
+ * full-length bar, with the rest ranked neatly underneath it. Five rows reading
+ * `±0.00` and `14.01 → 14.01`, each with a confident red bar of its own length.
+ *
+ * So the threshold is the one the number beside it uses. The bar and the figure now
+ * agree by construction: no bar can appear next to a `±`.
+ */
+export function impactMagnitude(delta: number | null): number {
+  if (delta === null) return 0
+  const magnitude = Math.abs(delta)
+  return magnitude < NEUTRAL_DELTA ? 0 : magnitude
+}
 
 /**
  * How much of a row's half-track one impact fills, as a percentage.
@@ -15,17 +40,15 @@ import { cn } from "@/lib/utils"
  * each other rather than each to itself — which is the whole reason the bars exist.
  * Half the track is one direction, so the biggest impact fills its side exactly.
  *
- * Nothing to draw is `0`, and that covers the case with no arithmetic to do: a list
- * where nothing moved has `scale === 0` and would otherwise divide by it.
- *
  * The floor is deliberate. An impact of 0.004 against a scale of 0.44 is half a
  * percent of the track — a fraction of a pixel, indistinguishable from no bar at
  * all — and the row would then read as if the grade had not moved that average. It
  * did; the stub says so.
  */
 export function impactBarShare(delta: number | null, scale: number): number {
-  if (delta === null || delta === 0 || scale <= 0) return 0
-  return Math.max(2, (Math.abs(delta) / scale) * 50)
+  const magnitude = impactMagnitude(delta)
+  if (magnitude === 0 || scale <= 0) return 0
+  return Math.max(2, (magnitude / scale) * 50)
 }
 
 export interface ImpactReading {
@@ -81,14 +104,14 @@ export function ImpactGrid({
   if (available.length === 0) return null
 
   const magnitude = (reading: ImpactReading) =>
-    Math.abs(reading.impact.delta ?? 0)
+    impactMagnitude(reading.impact.delta)
   const rows =
     order === "magnitude"
       ? [...available].sort((left, right) => magnitude(right) - magnitude(left))
       : available
   // The scale every bar is drawn against, so the lengths are comparable to each
-  // other rather than each to itself. Zero when nothing moved, which is the one
-  // case with no bars to draw and no division to do.
+  // other rather than each to itself. Zero when nothing moved by an amount anyone
+  // could read, which is then the one case with no bars to draw and no division.
   const scale = Math.max(...rows.map(magnitude))
 
   return (
