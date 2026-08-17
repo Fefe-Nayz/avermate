@@ -350,62 +350,12 @@ export default function GradePage({
           </CardContent>
         </Card>
 
-        {standing.length > 0 ? (
-          <section className="flex flex-col gap-2">
-            <h2 className="px-1 text-sm font-medium">{t("Where it stands")}</h2>
-            {/* The same tiles the subject page sets its figures in, so a reading
-                looks the same wherever the app reports one. */}
-            {/* Four across on a wide pane and two-by-two on a narrow one, which
-                is why the fourth reading is worth having beyond what it says:
-                three tiles left a hole on every phone. */}
-            <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-4">
-              {standing.map((reading) => (
-                <div
-                  key={reading.id}
-                  className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
-                >
-                  <p className="numeric text-lg font-semibold">
-                    {reading.value}
-                  </p>
-                  <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
-                    {reading.label}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <ImpactGrid readings={impacts} title={t("Impact on averages")} />
-
-        {/* Two charts, because they answer different questions and the page is
-            about one result. The curve says what this did to where the reader
-            stands — so the day is ruled, and the step the line takes across it is
-            the answer. The cloud says how it compares to the reader's other
-            results — so the mark is haloed and a rule is drawn across at its
-            level, which turns "is this typical?" into counting dots above and
-            below a line. Both are the same pair the subject page carries, which
-            is why neither needs explaining here. */}
-        {series[0] && series[0].points.length > 1 ? (
-          <MultiSeriesAverageChart
-            title={t("The subject around it")}
-            series={series}
-            height={260}
-            moment={grade.passedAt}
-            emptyHint={t("Record a few grades and the curve will appear here.")}
-          />
-        ) : null}
-
-        {subject && subjectGrades.length > 1 ? (
-          <GradeResultsChart
-            grades={subjectGrades}
-            subjects={graph.subjects}
-            title={t("Against the other results")}
-            height={240}
-            highlight={gradeId}
-          />
-        ) : null}
-
+        {/* What it is made of, before anything about what it did.
+            A composite grade's parts are not an aside, they are the mark: 14/20
+            averaged out of three papers is a different fact from 14/20 on one, and
+            a reader who has just looked at the scale above wants that next — not
+            after two charts about how the number compares to others. Everything
+            below this point interprets the result; this still describes it. */}
         {grade.components.length > 0 ? (
           <Card className="gap-2 py-4">
             <CardHeader className="px-4">
@@ -456,6 +406,62 @@ export default function GradePage({
               </ul>
             </CardContent>
           </Card>
+        ) : null}
+
+        {standing.length > 0 ? (
+          <section className="flex flex-col gap-2">
+            <h2 className="px-1 text-sm font-medium">{t("Where it stands")}</h2>
+            {/* The same tiles the subject page sets its figures in, so a reading
+                looks the same wherever the app reports one. */}
+            {/* Four across on a wide pane and two-by-two on a narrow one, which
+                is why the fourth reading is worth having beyond what it says:
+                three tiles left a hole on every phone. */}
+            <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-4">
+              {standing.map((reading) => (
+                <div
+                  key={reading.id}
+                  className="flex flex-col justify-center rounded-xl border bg-card px-3 py-2.5 text-center"
+                >
+                  <p className="numeric text-lg font-semibold">
+                    {reading.value}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
+                    {reading.label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <ImpactGrid readings={impacts} title={t("Impact on averages")} />
+
+        {/* Two charts, because they answer different questions and the page is
+            about one result. The curve says what this did to where the reader
+            stands — so the day is ruled, and the step the line takes across it is
+            the answer. The cloud says how it compares to the reader's other
+            results — so the mark is haloed among them, and the counting of dots
+            above and below is left to the eye rather than to a second rule
+            competing with the passing mark. Both are the same pair the subject
+            page carries, which is why neither needs explaining here. */}
+        {series[0] && series[0].points.length > 1 ? (
+          <MultiSeriesAverageChart
+            title={t("The subject around it")}
+            series={series}
+            height={260}
+            moment={grade.passedAt}
+            emptyHint={t("Record a few grades and the curve will appear here.")}
+          />
+        ) : null}
+
+        {subject && subjectGrades.length > 1 ? (
+          <GradeResultsChart
+            grades={subjectGrades}
+            subjects={graph.subjects}
+            title={t("Against the other results")}
+            height={240}
+            highlight={gradeId}
+          />
         ) : null}
 
         {grade.note ? (

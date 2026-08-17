@@ -174,35 +174,9 @@ export function GradeResultBadge({
             </div>
           )}
 
-          {impacts &&
-          (impacts.subject.delta !== null || impacts.general.delta !== null) ? (
-            <section className="border-t pt-3">
-              <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                {t("Impact on averages")}
-              </h3>
-              <div className="mt-2 grid grid-cols-2 gap-3">
-                <div className="min-w-0">
-                  <p className="text-xs break-words text-muted-foreground">
-                    {subject?.name ?? t("Subject")}
-                  </p>
-                  <DeltaValue
-                    delta={impacts.subject.delta}
-                    className="mt-0.5 block text-sm font-semibold"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">
-                    {t("General average")}
-                  </p>
-                  <DeltaValue
-                    delta={impacts.general.delta}
-                    className="mt-0.5 block text-sm font-semibold"
-                  />
-                </div>
-              </div>
-            </section>
-          ) : null}
-
+          {/* Before the impact, for the same reason as on the grade's own page:
+              a composite mark's parts describe what the mark *is*, and the impact
+              describes what it did. Describe first. */}
           {grade.components.length > 0 ? (
             <section className="border-t pt-3">
               <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -236,6 +210,35 @@ export function GradeResultBadge({
                   </li>
                 ) : null}
               </ul>
+            </section>
+          ) : null}
+
+          {impacts &&
+          (impacts.subject.delta !== null || impacts.general.delta !== null) ? (
+            <section className="border-t pt-3">
+              <h3 className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                {t("Impact on averages")}
+              </h3>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs break-words text-muted-foreground">
+                    {subject?.name ?? t("Subject")}
+                  </p>
+                  <DeltaValue
+                    delta={impacts.subject.delta}
+                    className="mt-0.5 block text-sm font-semibold"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    {t("General average")}
+                  </p>
+                  <DeltaValue
+                    delta={impacts.general.delta}
+                    className="mt-0.5 block text-sm font-semibold"
+                  />
+                </div>
+              </div>
             </section>
           ) : null}
 
