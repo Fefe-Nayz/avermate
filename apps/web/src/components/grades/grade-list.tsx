@@ -8,8 +8,18 @@ import { CoefficientBadge, ResultBadge } from "@/components/data/value"
 import { Card, CardContent } from "@/components/ui/card"
 import { useYear } from "@/components/year/year-provider"
 
-export const gradeListItemClassName =
-  "flex min-h-12 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/60 active:bg-accent"
+/**
+ * A row in one of the app's lists.
+ *
+ * The measurements rather than the behaviour, so a list of readings that go nowhere
+ * sits at the same rhythm as one that navigates — same height, same gutters, same
+ * gap — without pretending to be clickable. Every list in the app shares a card with
+ * no padding of its own and a `divide-y` between rows; this is the row.
+ */
+export const listRowClassName = "flex min-h-12 items-center gap-3 px-4 py-2.5"
+
+/** The same row, for the lists whose rows are links. */
+export const gradeListItemClassName = `${listRowClassName} transition-colors hover:bg-accent/60 active:bg-accent`
 
 /**
  * The shared grade list used on the dashboard and the grades timeline.

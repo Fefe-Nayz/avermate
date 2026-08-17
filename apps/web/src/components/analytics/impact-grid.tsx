@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ChevronRightIcon } from "lucide-react"
 import type { Impact } from "@avermate/core"
 import { useExtracted } from "next-intl"
 import {
@@ -8,6 +9,10 @@ import {
   DeltaValue,
   NEUTRAL_DELTA,
 } from "@/components/data/value"
+import {
+  gradeListItemClassName,
+  listRowClassName,
+} from "@/components/grades/grade-list"
 import { useEntered } from "@/hooks/use-entered"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -117,26 +122,21 @@ export function ImpactGrid({
   return (
     <section className="flex flex-col gap-2">
       <h2 className="px-1 text-sm font-medium">{title}</h2>
-      <Card className="py-4">
-        <CardContent className="px-4">
-          <ul className="flex flex-col gap-2">
+      {/* The app's list, not a shape of its own: a card with no padding, rows
+          divided by a rule, and the whole row a link where there is somewhere to
+          go — the same three lines the grades, subject and average lists use. It
+          had `border-b` on each row inside a padded card, which is a second idiom
+          for one thing and reads as a different component. */}
+      <Card className="py-0">
+        <CardContent className="p-0">
+          <ul className="divide-y">
             {rows.map((reading) => {
               const delta = reading.impact.delta
               const share = impactBarShare(delta, scale)
-
-              return (
-                <li
-                  key={reading.id}
-                  className="flex items-center gap-3 border-b pb-2 last:border-0 last:pb-0"
-                >
+              const content = (
+                <>
                   <span className="min-w-0 flex-[2] truncate text-sm">
-                    {reading.href ? (
-                      <Link href={reading.href} className="hover:underline">
-                        {reading.label}
-                      </Link>
-                    ) : (
-                      reading.label
-                    )}
+                    {reading.label}
                   </span>
 
                   {/* The bar is scenery for the number beside it, so it is hidden
@@ -207,6 +207,22 @@ export function ImpactGrid({
                       decimals={2}
                     />
                   </span>
+                </>
+              )
+
+              return (
+                <li key={reading.id}>
+                  {reading.href ? (
+                    <Link
+                      href={reading.href}
+                      className={gradeListItemClassName}
+                    >
+                      {content}
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+                    </Link>
+                  ) : (
+                    <div className={listRowClassName}>{content}</div>
+                  )}
                 </li>
               )
             })}

@@ -39,6 +39,7 @@ import {
 } from "@/components/charts/multi-series-average-chart"
 import { GradeResultsChart } from "@/components/charts/grade-results-chart"
 import { GradeScale } from "@/components/grades/grade-scale"
+import { listRowClassName } from "@/components/grades/grade-list"
 
 /**
  * One result, and what it did.
@@ -356,14 +357,15 @@ export default function GradePage({
             <h2 className="px-1 text-sm font-medium">
               {t("What it is made of")}
             </h2>
-            <Card className="py-4">
-              <CardContent className="px-4">
-                <ul className="flex flex-col gap-2">
+            {/* The app's list idiom — card without padding, rows divided by a
+                rule, `listRowClassName` for the measurements. No hover: a
+                component has no page of its own to go to, and a row that lights up
+                under the pointer promises one. */}
+            <Card className="py-0">
+              <CardContent className="p-0">
+                <ul className="divide-y">
                   {grade.components.map((component) => (
-                    <li
-                      key={component.id}
-                      className="flex items-center gap-3 border-b pb-2 last:border-0 last:pb-0"
-                    >
+                    <li key={component.id} className={listRowClassName}>
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {component.name}
                       </span>
