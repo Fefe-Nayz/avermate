@@ -37,7 +37,7 @@ import {
   yearReviewViews,
   years,
 } from "../src/db/schema";
-import { defaultCards } from "@avermate/core";
+import { academicCardRows } from "../src/lib/academic-setup";
 import { migrateLegacySeason, migrateLegacyTheme } from "./legacy-converters";
 
 const LEGACY_URL = process.env.LEGACY_DATABASE_URL ?? "file:../api/dev.db";
@@ -580,23 +580,12 @@ async function main() {
       .where(eq(dashboardCards.yearId, year.id));
     if (total > 0) continue;
 
-    await db.insert(dashboardCards).values(
-      defaultCards().map((card) => ({
-        surface: "overview",
-        metric: card.metric,
-        targetKind: card.target.kind,
-        targetId: card.target.referenceId,
-        goalId: null,
-        display: card.display,
-        span: card.span,
-        title: card.title,
-        accent: card.accent,
-        sortOrder: card.sortOrder,
-        hidden: card.hidden,
-        yearId: year.id,
-        userId: year.userId,
-      })),
-    );
+    // Straight from the year bootstrap, so an imported year gets exactly the
+    // dashboard a new one does — definitions included. Writing the old columns
+    // alone, as this did, produces rows the app cannot read.
+    await db
+      .insert(dashboardCards)
+      .values(academicCardRows(year.userId, year.id));
   }
 
   const [

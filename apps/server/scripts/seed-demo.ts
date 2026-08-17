@@ -30,6 +30,7 @@ import {
   accounts,
   customAverageEntries,
   customAverages,
+  dashboardCardReferences,
   dashboardCards,
   goals,
   gradeComponents,
@@ -47,12 +48,104 @@ import {
 import { auth } from "../src/lib/auth";
 import { newId } from "../src/lib/id";
 import { canonicalPair } from "../src/lib/social-policy";
-import { defaultCards } from "@avermate/core";
+import {
+  cardSemanticsFromDefinition,
+  defaultCards,
+  widgetDefinitionFromCard,
+  WIDGET_DEFINITION_VERSION,
+  type CardSemantics,
+} from "@avermate/core";
+import { widgetReferenceRows } from "../src/lib/card-storage";
 import {
   buildDemoCohort,
   type DemoProfile,
   type DemoUser,
 } from "./seed-demo-data";
+
+interface DemoCard {
+  row: typeof dashboardCards.$inferInsert;
+  references: Array<typeof dashboardCardReferences.$inferInsert>;
+}
+
+/**
+ * One seeded card.
+ *
+ * A card *is* its definition. The `metric` / `targetKind` / `display` columns
+ * beside it are a projection of it and nothing reads them — so writing only those
+ * columns, which is what this script used to do, now produces a row the app
+ * cannot read at all. Every card on the demo dashboard would have said so.
+ *
+ * The derived reference rows come along too. They are what the delete triggers
+ * read: seeded without them, deleting a demo subject would leave a card pointing
+ * at nothing, which is a bug the complete account exists to expose rather than to
+ * hide.
+ */
+function demoCard(input: {
+  semantics: CardSemantics;
+  span: number;
+  sortOrder: number;
+  yearId: string;
+  userId: string;
+  surface?: string;
+  title?: string | null;
+  accent?: string | null;
+  hidden?: boolean;
+  /** Deterministic where the caller needs one — the cohort names its rows. */
+  id?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}): DemoCard {
+  const definitionJson = widgetDefinitionFromCard(input.semantics);
+  const id = input.id ?? newId("card");
+  return {
+    row: {
+      id,
+      surface: input.surface ?? "overview",
+      ...cardSemanticsFromDefinition(definitionJson),
+      span: input.span,
+      title: input.title ?? null,
+      accent: input.accent ?? null,
+      sortOrder: input.sortOrder,
+      hidden: input.hidden ?? false,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
+      definitionJson,
+      yearId: input.yearId,
+      userId: input.userId,
+      ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+      ...(input.updatedAt ? { updatedAt: input.updatedAt } : {}),
+    },
+    references: widgetReferenceRows(id, definitionJson),
+  };
+}
+
+/** The default dashboard, as rows for one year. */
+function demoDefaultCards(
+  yearId: string,
+  userId: string,
+  options: { id?: (index: number) => string; at?: Date } = {},
+): DemoCard[] {
+  return defaultCards().map((card, index) =>
+    demoCard({
+      id: options.id?.(index),
+      semantics: {
+        metric: card.metric,
+        targetKind: card.target.kind,
+        targetId: card.target.referenceId,
+        goalId: null,
+        display: card.display,
+      },
+      span: card.span,
+      title: card.title,
+      accent: card.accent,
+      sortOrder: card.sortOrder,
+      hidden: card.hidden,
+      yearId,
+      userId,
+      createdAt: options.at,
+      updatedAt: options.at,
+    }),
+  );
+}
 
 function argument(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -812,165 +905,126 @@ async function seedFull(email: string, name: string) {
 
   // ------------------------------------------------------------------- cards
 
-  await db.insert(dashboardCards).values([
-    ...defaultCards().map((card) => ({
-      surface: "overview",
-      metric: card.metric,
-      targetKind: card.target.kind,
-      targetId: card.target.referenceId,
-      goalId: null,
-      display: card.display,
-      span: card.span,
-      title: card.title,
-      accent: card.accent,
-      sortOrder: card.sortOrder,
-      hidden: card.hidden,
-      yearId: year.id,
-      userId: user.id,
-    })),
+  const cards = [
+    ...demoDefaultCards(year.id, user.id),
     // Beyond the defaults: one card per shape the renderer can produce, so a
     // change to any branch of it is visible on the first screen you open.
-    {
-      surface: "overview",
-      metric: "goalProgress",
-      targetKind: "general",
-      targetId: null,
-      goalId: goalRows[0]?.id ?? null,
-      display: "gauge",
+    demoCard({
+      semantics: {
+        metric: "goalProgress",
+        targetKind: "general",
+        targetId: null,
+        goalId: goalRows[0]?.id ?? null,
+        display: "gauge",
+      },
       span: 2,
-      title: null,
-      accent: null,
       sortOrder: 20,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "average",
-      targetKind: "custom",
-      targetId: scientific?.id ?? null,
-      goalId: null,
-      display: "sparkline",
+    }),
+    demoCard({
+      semantics: {
+        metric: "average",
+        targetKind: "custom",
+        targetId: scientific?.id ?? null,
+        goalId: null,
+        display: "sparkline",
+      },
       span: 2,
       title: "Sciences, à ma sauce",
-      accent: null,
       sortOrder: 21,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "average",
-      targetKind: "subject",
-      targetId: maths,
-      goalId: null,
-      display: "value",
+    }),
+    demoCard({
+      semantics: {
+        metric: "average",
+        targetKind: "subject",
+        targetId: maths,
+        goalId: null,
+        display: "value",
+      },
       span: 1,
-      title: null,
-      accent: null,
       sortOrder: 22,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "distribution",
-      targetKind: "general",
-      targetId: null,
-      goalId: null,
-      display: "chart",
+    }),
+    demoCard({
+      semantics: {
+        metric: "distribution",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display: "chart",
+      },
       span: 2,
-      title: null,
-      accent: null,
       sortOrder: 23,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "subjectRanking",
-      targetKind: "general",
-      targetId: null,
-      goalId: null,
-      display: "list",
+    }),
+    demoCard({
+      semantics: {
+        metric: "subjectRanking",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display: "list",
+      },
       span: 2,
-      title: null,
-      accent: null,
       sortOrder: 24,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "passStreak",
-      targetKind: "general",
-      targetId: null,
-      goalId: null,
-      display: "value",
+    }),
+    demoCard({
+      semantics: {
+        metric: "passStreak",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display: "value",
+      },
       span: 1,
-      title: null,
-      accent: null,
       sortOrder: 25,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
-      surface: "overview",
-      metric: "lastGrade",
-      targetKind: "general",
-      targetId: null,
-      goalId: null,
-      display: "value",
+    }),
+    demoCard({
+      semantics: {
+        metric: "lastGrade",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display: "value",
+      },
       span: 2,
-      title: null,
-      accent: null,
       sortOrder: 26,
-      hidden: false,
       yearId: year.id,
       userId: user.id,
-    },
-    {
+    }),
+    demoCard({
       // Hidden, so the "show this card again" path has something to restore.
-      surface: "overview",
-      metric: "median",
-      targetKind: "general",
-      targetId: null,
-      goalId: null,
-      display: "value",
+      semantics: {
+        metric: "median",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display: "value",
+      },
       span: 1,
-      title: null,
-      accent: null,
       sortOrder: 27,
       hidden: true,
       yearId: year.id,
       userId: user.id,
-    },
-  ]);
+    }),
+    // Cards are per year, so the previous one needs its own.
+    ...demoDefaultCards(past.id, user.id),
+  ];
 
-  // Cards are per year, so the previous one needs its own.
-  await db.insert(dashboardCards).values(
-    defaultCards().map((card) => ({
-      surface: "overview",
-      metric: card.metric,
-      targetKind: card.target.kind,
-      targetId: card.target.referenceId,
-      goalId: null,
-      display: card.display,
-      span: card.span,
-      title: card.title,
-      accent: card.accent,
-      sortOrder: card.sortOrder,
-      hidden: card.hidden,
-      yearId: past.id,
-      userId: user.id,
-    })),
-  );
+  await db.insert(dashboardCards).values(cards.map((card) => card.row));
+  const cardReferences = cards.flatMap((card) => card.references);
+  if (cardReferences.length > 0) {
+    await db.insert(dashboardCardReferences).values(cardReferences);
+  }
 
   console.info(`Complete account: ${email} / ${PASSWORD}`);
   console.info(
@@ -1199,6 +1253,8 @@ async function seedCohort(size: number, seed: number | undefined) {
   const averageEntryRows: Array<typeof customAverageEntries.$inferInsert> = [];
   const goalRows: Array<typeof goals.$inferInsert> = [];
   const cardRows: Array<typeof dashboardCards.$inferInsert> = [];
+  const cardReferenceRows: Array<typeof dashboardCardReferences.$inferInsert> =
+    [];
 
   for (const [profileIndex, demo] of cohort.entries()) {
     const { profile } = demo;
@@ -1336,67 +1392,57 @@ async function seedCohort(size: number, seed: number | undefined) {
         })),
       );
 
-      const defaultCardRows = defaultCards().map((card, index) => ({
-        id: `${year.id}_card_${index + 1}`,
-        surface: "overview",
-        metric: card.metric,
-        targetKind: card.target.kind,
-        targetId: card.target.referenceId,
-        goalId: null,
-        display: card.display,
-        span: card.span,
-        title: card.title,
-        accent: card.accent,
-        sortOrder: card.sortOrder,
-        hidden: card.hidden,
-        yearId: year.id,
-        userId: profile.id,
-        createdAt,
-        updatedAt,
-      }));
+      const defaultCardRows = demoDefaultCards(year.id, profile.id, {
+        id: (index) => `${year.id}_card_${index + 1}`,
+        at: createdAt,
+      });
       const featuredAverage = year.customAverages[1] ?? year.customAverages[0];
       const featuredGoal = year.goals[0];
-      cardRows.push(...defaultCardRows);
+      const yearCards = [...defaultCardRows];
       if (featuredAverage) {
-        cardRows.push({
-          id: `${year.id}_card_custom_average`,
-          surface: "overview",
-          metric: "average",
-          targetKind: "custom",
-          targetId: featuredAverage.id,
-          goalId: null,
-          display: "sparkline",
-          span: 2,
-          title: featuredAverage.name,
-          accent: null,
-          sortOrder: defaultCardRows.length + 1,
-          hidden: false,
-          yearId: year.id,
-          userId: profile.id,
-          createdAt,
-          updatedAt,
-        });
+        yearCards.push(
+          demoCard({
+            id: `${year.id}_card_custom_average`,
+            semantics: {
+              metric: "average",
+              targetKind: "custom",
+              targetId: featuredAverage.id,
+              goalId: null,
+              display: "sparkline",
+            },
+            span: 2,
+            title: featuredAverage.name,
+            sortOrder: defaultCardRows.length + 1,
+            yearId: year.id,
+            userId: profile.id,
+            createdAt,
+            updatedAt,
+          }),
+        );
       }
       if (featuredGoal) {
-        cardRows.push({
-          id: `${year.id}_card_goal`,
-          surface: "overview",
-          metric: "goalProgress",
-          targetKind: featuredGoal.kind,
-          targetId: featuredGoal.referenceId,
-          goalId: featuredGoal.id,
-          display: "gauge",
-          span: 2,
-          title: featuredGoal.name,
-          accent: null,
-          sortOrder: defaultCardRows.length + 2,
-          hidden: false,
-          yearId: year.id,
-          userId: profile.id,
-          createdAt,
-          updatedAt,
-        });
+        yearCards.push(
+          demoCard({
+            id: `${year.id}_card_goal`,
+            semantics: {
+              metric: "goalProgress",
+              targetKind: featuredGoal.kind,
+              targetId: featuredGoal.referenceId,
+              goalId: featuredGoal.id,
+              display: "gauge",
+            },
+            span: 2,
+            title: featuredGoal.name,
+            sortOrder: defaultCardRows.length + 2,
+            yearId: year.id,
+            userId: profile.id,
+            createdAt,
+            updatedAt,
+          }),
+        );
       }
+      cardRows.push(...yearCards.map((card) => card.row));
+      cardReferenceRows.push(...yearCards.flatMap((card) => card.references));
     }
   }
 
@@ -1431,6 +1477,9 @@ async function seedCohort(size: number, seed: number | undefined) {
     await insertBatches(goalRows, (batch) => tx.insert(goals).values(batch));
     await insertBatches(cardRows, (batch) =>
       tx.insert(dashboardCards).values(batch),
+    );
+    await insertBatches(cardReferenceRows, (batch) =>
+      tx.insert(dashboardCardReferences).values(batch),
     );
   });
 
