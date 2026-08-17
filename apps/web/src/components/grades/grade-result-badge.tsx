@@ -191,10 +191,14 @@ export function GradeResultBadge({
                     <span className="min-w-0 flex-1 break-words">
                       {component.name}
                     </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {component.coefficient !== 1
-                        ? `×${format.number(component.coefficient, { maximumFractionDigits: 2 })} · `
-                        : ""}
+                    {/* The badge, not `×3 · ` written out by hand. It was the one
+                        place in the app that spelled a weight itself instead of
+                        using the component made for it — so it had its own
+                        separator, its own rounding, and no way to pick up a change
+                        the badge makes. `CoefficientBadge` draws nothing at a
+                        weight of one, which is what the conditional here was for. */}
+                    <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+                      <CoefficientBadge coefficient={component.coefficient} />
                       <PointsValue
                         value={component.value}
                         outOf={component.outOf}
