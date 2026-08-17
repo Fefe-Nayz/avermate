@@ -400,6 +400,33 @@ export function FormFlow({
             aside && asidePlacement === "sticky-end" && "@4xl/main:col-start-1"
           )}
         >
+          {/* Deleting lives in the pinned footer, on the first screen only.
+
+              It has moved twice. It began after each step's content, centred and
+              floating — on a short step that is the middle of an empty screen. I then
+              put it on the review, reasoning that a destructive action on "step 1 of 4"
+              answers a question nobody has asked. Wrong: someone who opened an edit
+              form *to delete the thing* should not walk four steps to reach it. First
+              screen, then, and inside the footer rather than adrift above it — so it is
+              always in the same place, always reachable, and above the row it must not
+              be confused with rather than beside it. */}
+          {destructive && position === 0 && !returning ? (
+            <div className="pb-3 md:hidden">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => {
+                  haptic("warning")
+                  destructive.onClick()
+                }}
+              >
+                {destructive.label}
+              </Button>
+            </div>
+          ) : null}
+
           {/* Phone: move through the flow, and only save from the review. */}
           <div className="flex items-center gap-2 md:hidden">
             {position > 0 || returning ? (
@@ -489,34 +516,6 @@ export function FormFlow({
             </Button>
           </div>
         </div>
-
-        {/* Deleting belongs at the end, and only there.
-
-            It was rendered after every step's content, centred and floating: on a
-            short first step it sat alone in the middle of an empty screen, four
-            steps before the form could even be saved. A destructive action on
-            "step 1 of 4" is an answer to a question nobody has asked yet.
-
-            So the phone shows it on the review, where the form is complete and the
-            reader is deciding what to do with it — ruled off from the answers above,
-            full width so it is a deliberate target rather than a stray tap, and
-            still nowhere near the pinned primary action a thumb aims for. */}
-        {destructive && onReview ? (
-          <div className="border-t pt-4 pb-4 md:hidden">
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => {
-                haptic("warning")
-                destructive.onClick()
-              }}
-            >
-              {destructive.label}
-            </Button>
-          </div>
-        ) : null}
 
         {overlays}
       </form>
