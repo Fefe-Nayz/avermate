@@ -3,13 +3,22 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { CheckIcon, ListOrderedIcon, PlusIcon, TargetIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  ListOrderedIcon,
+  PlusIcon,
+  TargetIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import {
   DragHandle,
   SortableList,
   SortableRow,
+  sortableListClassName,
+  sortableRowClassName,
+  sortableRowLinkClassName,
 } from "@/components/ui/sortable-list"
 import {
   Empty,
@@ -27,13 +36,29 @@ import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
-const STATUS_STYLE = {
-  achieved: "border-band-good/50",
-  secured: "border-band-excellent/50",
-  "on-track": "border-primary/40",
-  "at-risk": "border-band-fair/50",
-  unreachable: "border-band-poor/50",
-  "no-data": "border-border",
+/**
+ * A status, in the vocabulary this app already reads verdicts in.
+ *
+ * It used to be a tinted 1px border around the whole card, at 50% opacity, on a card
+ * that floated on its own. That is the weakest available signal for the most important
+ * thing on the row — and card-level dress is spoken for elsewhere: the dashboard
+ * reserves it for a live streak. The bands are how this app says good-or-bad
+ * everywhere else, so a status says it as a chip and as the colour of its own
+ * progress, and the row goes back to being a row.
+ */
+const STATUS_TONE = {
+  secured: {
+    chip: "bg-band-excellent/12 text-band-excellent",
+    bar: "bg-band-excellent",
+  },
+  achieved: { chip: "bg-band-good/12 text-band-good", bar: "bg-band-good" },
+  "on-track": { chip: "bg-primary/12 text-primary", bar: "bg-primary" },
+  "at-risk": { chip: "bg-band-fair/14 text-band-fair", bar: "bg-band-fair" },
+  unreachable: { chip: "bg-band-poor/14 text-band-poor", bar: "bg-band-poor" },
+  "no-data": {
+    chip: "bg-muted text-muted-foreground",
+    bar: "bg-muted-foreground/40",
+  },
 } as const
 
 export default function GoalsPage() {
@@ -147,110 +172,115 @@ export default function GoalsPage() {
             onReorder={reorderGoals}
             disabled={!orderedIds}
           >
-            <ul className="flex flex-col gap-3">
-              {displayedPlans.map((plan) => {
+            {/* The app's sortable list, the same object as the custom averages: one
+                card, rows divided by a rule, the grip inline at the left. The grip is
+                always there now rather than appearing in a reorder mode that also had
+                to switch the link off — a row you cannot open is a stranger thing to
+                explain than a grip you can ignore. */}
+            <ul className={sortableListClassName}>
+              {displayedPlans.map((plan, index) => {
                 const progress =
                   plan.current === null || plan.target === 0
                     ? 0
                     : Math.min(1, Math.max(0, plan.current / plan.target))
                 const next = plan.nextResults[0]
+                const tone = STATUS_TONE[plan.status]
 
                 return (
                   <SortableRow
                     key={plan.goal.id}
                     id={plan.goal.id}
                     disabled={!orderedIds}
+                    className={sortableRowClassName(index)}
                   >
-                    <div
-                      className={cn(
-                        "relative rounded-xl border bg-card",
-                        STATUS_STYLE[plan.status]
-                      )}
+                    <DragHandle className="ml-1.5" />
+                    <Link
+                      href={`/goals/${plan.goal.id}`}
+                      className={cn(sortableRowLinkClassName, "relative")}
                     >
-                      <Link
-                        href={`/goals/${plan.goal.id}`}
-                        className={cn(
-                          "flex flex-col gap-3 rounded-xl p-4 transition-colors hover:bg-accent/40 active:bg-accent",
-                          orderedIds && "pointer-events-none pr-14"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {plan.goal.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {statusLabel(plan.status)}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <AverageValue
-                              ratio={plan.current}
-                              className="text-xl font-semibold"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {t("of")}{" "}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {plan.goal.name}
+                        </p>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+                          <span
+                            className={cn(
+                              "shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-4 font-medium",
+                              tone.chip
+                            )}
+                          >
+                            {statusLabel(plan.status)}
+                          </span>
+                          {/* What to do about it, on the same line as the verdict. It
+                              was a third paragraph below a progress bar, which is
+                              where a reader scanning a list never reached. */}
+                          {plan.status === "unreachable" ? (
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              {t("Not reachable any more")}
+                            </span>
+                          ) : plan.gap !== null &&
+                            plan.gap > 0 &&
+                            next?.achievable ? (
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              {t("Next in {subject}:", {
+                                subject: next.subject.name,
+                              })}{" "}
                               <AverageValue
-                                ratio={plan.target}
+                                ratio={next.requiredRatio}
                                 animate={false}
                                 showScale
+                                colored
+                                className="font-medium"
                               />
-                            </p>
-                          </div>
+                            </span>
+                          ) : plan.gap !== null && plan.gap <= 0 ? (
+                            <span className="min-w-0 truncate text-muted-foreground">
+                              {t("Ahead by")}{" "}
+                              <DeltaValue
+                                delta={-plan.gap}
+                                className="font-medium"
+                              />
+                            </span>
+                          ) : null}
                         </div>
+                      </div>
 
-                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-[width] duration-500",
-                              plan.status === "unreachable"
-                                ? "bg-negative"
-                                : plan.status === "achieved" ||
-                                    plan.status === "secured"
-                                  ? "bg-positive"
-                                  : "bg-primary"
-                            )}
-                            style={{ width: `${Math.round(progress * 100)}%` }}
+                      {/* The reading, then the target it is measured against — set the
+                          way every other list in the app sets a figure. */}
+                      <div className="shrink-0 text-right">
+                        <AverageValue
+                          ratio={plan.current}
+                          className="text-sm font-medium"
+                        />
+                        <p className="numeric text-[11px] text-muted-foreground">
+                          {t("of")}{" "}
+                          <AverageValue
+                            ratio={plan.target}
+                            animate={false}
+                            showScale
                           />
-                        </div>
+                        </p>
+                      </div>
+                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
 
-                        {plan.status === "unreachable" ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t(
-                              "Not reachable any more, even with perfect results."
-                            )}
-                          </p>
-                        ) : plan.gap !== null &&
-                          plan.gap > 0 &&
-                          next?.achievable ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("Next result in {subject} needs to be", {
-                              subject: next.subject.name,
-                            })}{" "}
-                            <AverageValue
-                              ratio={next.requiredRatio}
-                              animate={false}
-                              showScale
-                              colored
-                              className="font-medium"
-                            />
-                          </p>
-                        ) : plan.gap !== null && plan.gap <= 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t("Ahead of target by")}{" "}
-                            <DeltaValue
-                              delta={-plan.gap}
-                              className="font-medium"
-                            />
-                          </p>
-                        ) : null}
-                      </Link>
-                      {orderedIds ? (
-                        <div className="absolute top-3 right-3">
-                          <DragHandle className="border bg-background" />
-                        </div>
-                      ) : null}
-                    </div>
+                      {/* Progress as a rail on the row's own bottom edge, tinted by
+                          status. It was a bar in the flow, costing a line of height
+                          per goal and repeating in colour what the chip now says;
+                          here it reads along the row it belongs to and takes no
+                          height at all. */}
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-muted/40"
+                      >
+                        <span
+                          className={cn(
+                            "block h-full transition-[width] duration-500",
+                            tone.bar
+                          )}
+                          style={{ width: `${Math.round(progress * 100)}%` }}
+                        />
+                      </span>
+                    </Link>
                   </SortableRow>
                 )
               })}

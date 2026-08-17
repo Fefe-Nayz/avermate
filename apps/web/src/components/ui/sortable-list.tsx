@@ -455,6 +455,31 @@ export function SortableDropTarget({
 }
 
 /** The grip. Focusable, so the list stays operable without a pointer. */
+/**
+ * The shape of a sortable list, in one place.
+ *
+ * Every reorderable list in the app is the same object: one card, rows separated by a
+ * rule, a grip inline at the left of each row and the rest of the row a link. It was
+ * written out three times with three sets of numbers — and the goals page had drifted
+ * furthest, into free-floating cards with the grip absolutely positioned over them and
+ * the link switched off while reordering. Exported so the next list is the same list.
+ */
+export const sortableListClassName = "overflow-hidden rounded-xl border bg-card"
+
+/** A row of one: the grip, then whatever fills the rest. */
+export function sortableRowClassName(index: number): string {
+  return index > 0 ? "flex items-center border-t" : "flex items-center"
+}
+
+/**
+ * The link that fills a sortable row.
+ *
+ * Taller than a plain list row — `min-h-14` against `min-h-12` — because these rows
+ * carry a second line under the title, and the grip needs the height to be a target.
+ */
+export const sortableRowLinkClassName =
+  "flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
+
 export function DragHandle({ className }: { className?: string }) {
   const t = useExtracted()
   const handle = useContext(HandleContext)

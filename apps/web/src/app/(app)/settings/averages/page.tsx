@@ -9,6 +9,9 @@ import { resolveCustomAverage } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import {
   DragHandle,
+  sortableListClassName,
+  sortableRowClassName,
+  sortableRowLinkClassName,
   SortableList,
   SortableRow,
 } from "@/components/ui/sortable-list"
@@ -97,7 +100,7 @@ export default function AveragesSettingsPage() {
             ids={customAverages.map((average) => average.id)}
             onReorder={reorderAverages}
           >
-            <ul className="overflow-hidden rounded-xl border bg-card">
+            <ul className={sortableListClassName}>
               {customAverages.map((average, index) => {
                 const resolved = resolveCustomAverage(graph, average)
                 const ratio = resolved.graph.ratio(null, resolved.scope)
@@ -107,16 +110,12 @@ export default function AveragesSettingsPage() {
                     key={average.id}
                     id={average.id}
                     disabled={reorder.isPending}
-                    className={
-                      index > 0
-                        ? "flex items-center border-t"
-                        : "flex items-center"
-                    }
+                    className={sortableRowClassName(index)}
                   >
                     <DragHandle className="ml-1.5" />
                     <Link
                       href={`/settings/averages/${average.id}`}
-                      className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60 active:bg-accent"
+                      className={sortableRowLinkClassName}
                     >
                       <div className="min-w-0 flex-1">
                         <p className="flex items-center gap-1.5 truncate text-sm font-medium">
