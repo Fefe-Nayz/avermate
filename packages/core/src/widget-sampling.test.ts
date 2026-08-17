@@ -62,7 +62,10 @@ function dailySeries(days: number, transforms: WidgetTransform[]) {
   definition.analysis.groupBy = {
     kind: "time",
     interval: "day",
-    accumulation: "none",
+    // Running, so bucket k reports every result to date — a sequence whose sums
+    // and means have closed forms, which is what makes the assertions below
+    // exact rather than golden.
+    accumulation: "running",
   };
   definition.analysis.transforms = transforms;
 
@@ -94,11 +97,22 @@ function dailySeries(days: number, transforms: WidgetTransform[]) {
   return result.values;
 }
 
-/** One grade a day, so bucket k reports k results to date. */
+/** One grade a day and a running count, so bucket k reports k results to date. */
 const bucketValue = (k: number) => k;
 const triangular = (n: number) => (n * (n + 1)) / 2;
 
 describe("the drawing budget does not change the arithmetic", () => {
+  test("the fixture is the sequence the closed forms below assume", () => {
+    // Asserted rather than assumed: every expectation in this file is a formula
+    // over bucket k, so the formulas are only worth anything if bucket k really
+    // reports k. Read under the budget, where nothing is thinned.
+    const values = dailySeries(120, []);
+    expect(values.map((item) => item.value)).toEqual(
+      Array.from({ length: 120 }, (_, index) => bucketValue(index + 1)),
+    );
+  });
+
+
   test("a cumulative sums every bucket, over the budget or under it", () => {
     for (const days of [120, WIDGET_LIMITS.resultPoints + 100, 900]) {
       const values = dailySeries(days, [{ kind: "cumulative" }]);

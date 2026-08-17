@@ -1,4 +1,4 @@
-import { cardColumns, layoutCards, type CardSpec } from "./cards";
+import { packCardGrid, type CardSpec, type PackedCard } from "./cards";
 
 /**
  * The grid, as rows — and reordering expressed against them.
@@ -62,59 +62,44 @@ export interface CardGridLayout {
   byId: Map<string, CardPlacement>;
 }
 
-/** `layoutCards`, with the row structure it already computed kept. */
+/**
+ * `packCardGrid`, in the shape this module's callers already expect.
+ *
+ * Derived rather than recomputed: this used to walk the cards a second time to
+ * rebuild the rows, which meant the renderer's rows and the reorder resolver's
+ * rows were two implementations of one rule.
+ */
 export function layoutCardGrid(
   specs: readonly CardSpec[],
   columns: number,
 ): CardGridLayout {
-  const width = Math.max(1, Math.floor(columns));
-  const drawn = layoutCards(specs, width);
-
-  const items: CardPlacement[] = [];
-  const rows: CardGridRow[] = [];
-  let current: CardPlacement[] = [];
-  let requestedUsed = 0;
-
-  const closeRow = () => {
-    if (current.length === 0) return;
-    const requested = requestedUsed;
-    rows.push({
-      index: rows.length,
-      items: current,
-      requestedColumns: requested,
-      renderedColumns: current.reduce((total, item) => total + item.columns, 0),
-      remainingColumns: Math.max(0, width - requested),
-    });
-    current = [];
-    requestedUsed = 0;
-  };
-
-  // The same walk `layoutCards` performs, so the rows recorded here are exactly
-  // the rows it drew. Deriving them a second way is how the two would drift.
-  for (const item of drawn) {
-    const requestedColumns = cardColumns(item.spec, width);
-    if (requestedUsed > 0 && requestedUsed + requestedColumns > width) {
-      closeRow();
-    }
-    const placement: CardPlacement = {
-      spec: item.spec,
-      requestedColumns,
-      columns: item.columns,
-      rowIndex: rows.length,
-      grewToFill: item.columns > requestedColumns,
-    };
-    current.push(placement);
-    items.push(placement);
-    requestedUsed += requestedColumns;
-    if (requestedUsed >= width) closeRow();
-  }
-  closeRow();
+  const packed = packCardGrid(specs, columns);
+  const placement = (card: PackedCard): CardPlacement => ({
+    spec: card.spec,
+    requestedColumns: card.requestedColumns,
+    columns: card.renderedColumns,
+    rowIndex: card.rowIndex,
+    grewToFill: card.grewToFill,
+  });
+  const items = packed.cards.map(placement);
+  const byId = new Map(items.map((item) => [item.spec.id, item]));
 
   return {
-    columns: width,
-    rows,
+    columns: packed.columns,
+    rows: packed.rows.map((row) => ({
+      index: row.index,
+      // The same objects the layout reports, so a caller cannot be handed two
+      // different placements for one card.
+      items: row.cards.flatMap((card) => {
+        const item = byId.get(card.spec.id);
+        return item ? [item] : [];
+      }),
+      requestedColumns: row.requestedColumns,
+      renderedColumns: row.renderedColumns,
+      remainingColumns: row.remainingColumns,
+    })),
     items,
-    byId: new Map(items.map((item) => [item.spec.id, item])),
+    byId,
   };
 }
 

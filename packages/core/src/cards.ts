@@ -149,7 +149,10 @@ export type CardResult =
 
 const SERIES_POINTS = 24;
 
-function seriesFor(context: CardContext, subjectId: string | null): SeriesPoint[] {
+function seriesFor(
+  context: CardContext,
+  subjectId: string | null,
+): SeriesPoint[] {
   const span = Math.max(
     1,
     Math.round(
@@ -170,10 +173,7 @@ function seriesFor(context: CardContext, subjectId: string | null): SeriesPoint[
  * deleted subject, a goal that vanished — comes back as `empty` rather than a
  * throw, because a dashboard is a collection of independent readings.
  */
-export function evaluateCard(
-  spec: CardSpec,
-  context: CardContext,
-): CardResult {
+export function evaluateCard(spec: CardSpec, context: CardContext): CardResult {
   const resolved = context.resolveTarget(spec.target);
   if (!resolved) return { kind: "empty" };
 
@@ -191,7 +191,8 @@ export function evaluateCard(
       if (ratio === null) return { kind: "empty" };
       const series =
         spec.display === "value" ? null : seriesFor(localContext, subjectId);
-      const first = series?.find((point) => point.ratio !== null)?.ratio ?? null;
+      const first =
+        series?.find((point) => point.ratio !== null)?.ratio ?? null;
       return {
         kind: "ratio",
         ratio,
@@ -517,33 +518,160 @@ export function cardColumns(
   return clamp(Math.max(scaled, floor), 1, columns);
 }
 
-/** Hand the spare columns to the narrowest cards, one at a time. */
-function fillRow(row: PlacedCard[], columns: number): void {
-  const asked = row.map((item) => item.columns);
-  let spare = columns - asked.reduce((total, value) => total + value, 0);
-  if (spare <= 0) return;
+/**
+ * Hand the spare columns out one at a time, and keep whatever was handed out.
+ *
+ * The rule has always been that a card must not end up more than twice the width
+ * it asked for — widen it further and it is no longer the card its owner
+ * arranged. The old implementation enforced that by distributing *all* the spare
+ * space and then cancelling the whole distribution if any single card had gone
+ * too far, which is all-or-nothing where the rule is per-card. On four columns a
+ * lone quarter-width card was pushed to four, found to be over its cap, and
+ * reset to one — leaving three columns empty when two was allowed and better.
+ *
+ * Growing one column at a time, always to the card that has grown least
+ * relative to what it asked for, and only while that card is still under its own
+ * cap, is maximal under the same constraint: it stops only when the row is full
+ * or when no card may legally grow.
+ */
+function fillRowBounded(row: PackedCard[], columns: number): void {
+  let spare =
+    columns - row.reduce((total, card) => total + card.renderedColumns, 0);
 
-  const grown = [...asked];
   while (spare > 0) {
-    let narrowest = 0;
-    for (let index = 1; index < grown.length; index += 1) {
-      if ((grown[index] as number) < (grown[narrowest] as number))
-        narrowest = index;
+    let target: PackedCard | null = null;
+    for (const card of row) {
+      // Never past twice the request, and never past the grid itself — a lone
+      // card on a wide row is capped by the row, not by its own doubling.
+      const cap = Math.min(columns, card.requestedColumns * 2);
+      if (card.renderedColumns >= cap) continue;
+      // Narrowest first, by absolute width, which is what evens a row out.
+      // Growing whichever card is least over-grown *relative* to its request
+      // would also be maximal, and gives `[3, 1]` where this gives `[2, 2]` —
+      // proportionally fair, visually lopsided. A grid wants the even one.
+      // Ties fall to the earlier card, so the answer belongs to the canonical
+      // order rather than to iteration order.
+      if (!target || card.renderedColumns < target.renderedColumns) {
+        target = card;
+      }
     }
-    grown[narrowest] = (grown[narrowest] as number) + 1;
+    if (!target) break;
+    target.renderedColumns += 1;
     spare -= 1;
   }
 
-  // A card that would end up more than twice the width it asked for is no
-  // longer the card its owner arranged, so the row keeps its hole instead.
-  const distorted = grown.some(
-    (value, index) => value > (asked[index] as number) * 2,
-  );
-  if (distorted) return;
+  for (const card of row) {
+    card.grewToFill = card.renderedColumns > card.requestedColumns;
+  }
+}
 
-  row.forEach((item, index) => {
-    item.columns = grown[index] as number;
+export interface PackedCard {
+  spec: CardSpec;
+  /** Width before the row's spare columns were handed out. */
+  requestedColumns: number;
+  /** Width actually drawn. */
+  renderedColumns: number;
+  rowIndex: number;
+  /** First column occupied, zero-based, counted over *drawn* widths. */
+  columnStart: number;
+  /** Whether packing widened this card to close a gap. */
+  grewToFill: boolean;
+}
+
+export interface PackedRow {
+  index: number;
+  cards: PackedCard[];
+  /** Columns the row's cards asked for, before filling. */
+  requestedColumns: number;
+  /** Columns the row draws. */
+  renderedColumns: number;
+  /**
+   * Room a further card could still ask for. Measured against the *requested*
+   * widths, not the drawn ones: a row whose hole was closed by widening a card
+   * still had that hole, and a card that would have fitted it still fits.
+   */
+  remainingColumns: number;
+}
+
+export interface PackedCardGrid {
+  columns: number;
+  rows: PackedRow[];
+  cards: PackedCard[];
+  byId: Map<string, PackedCard>;
+}
+
+/**
+ * The one place a row is opened or closed.
+ *
+ * There used to be two walks: `layoutCards` produced widths, and `layoutCardGrid`
+ * walked the same cards again to rebuild the row boundaries the drag needed. They
+ * agreed, and a comment said so — but agreement maintained by hand is a thing to
+ * keep agreeing, and the day a closing rule or a minimum width moved, the
+ * renderer and the reorder resolver would have been talking about different rows
+ * with nothing failing to say so.
+ *
+ * Everything else here is derived from this: the widths, the rows, the cells.
+ */
+export function packCardGrid(
+  specs: readonly CardSpec[],
+  columns: number,
+): PackedCardGrid {
+  const width = Math.max(1, Math.floor(columns));
+  const cards: PackedCard[] = specs.map((spec) => {
+    const requested = cardColumns(spec, width);
+    return {
+      spec,
+      requestedColumns: requested,
+      renderedColumns: requested,
+      rowIndex: 0,
+      columnStart: 0,
+      grewToFill: false,
+    };
   });
+
+  const rows: PackedRow[] = [];
+  let current: PackedCard[] = [];
+  let requestedUsed = 0;
+
+  const closeRow = () => {
+    if (current.length === 0) return;
+    fillRowBounded(current, width);
+    let columnStart = 0;
+    for (const card of current) {
+      card.columnStart = columnStart;
+      columnStart += card.renderedColumns;
+    }
+    rows.push({
+      index: rows.length,
+      cards: current,
+      requestedColumns: requestedUsed,
+      renderedColumns: current.reduce(
+        (total, card) => total + card.renderedColumns,
+        0,
+      ),
+      remainingColumns: Math.max(0, width - requestedUsed),
+    });
+    current = [];
+    requestedUsed = 0;
+  };
+
+  for (const card of cards) {
+    if (requestedUsed > 0 && requestedUsed + card.requestedColumns > width) {
+      closeRow();
+    }
+    card.rowIndex = rows.length;
+    current.push(card);
+    requestedUsed += card.requestedColumns;
+    if (requestedUsed >= width) closeRow();
+  }
+  closeRow();
+
+  return {
+    columns: width,
+    rows,
+    cards,
+    byId: new Map(cards.map((card) => [card.spec.id, card])),
+  };
 }
 
 /**
@@ -551,34 +679,16 @@ function fillRow(row: PlacedCard[], columns: number): void {
  *
  * Pure and shared: the dashboard, the phone and the editor's preview all call
  * this, which is what makes the preview honest on whichever device is editing.
+ * A view of `packCardGrid` for callers that only need the widths.
  */
 export function layoutCards(
   specs: readonly CardSpec[],
   columns: number,
 ): PlacedCard[] {
-  const placed: PlacedCard[] = specs.map((spec) => ({
-    spec,
-    columns: cardColumns(spec, columns),
+  return packCardGrid(specs, columns).cards.map((card) => ({
+    spec: card.spec,
+    columns: card.renderedColumns,
   }));
-
-  let row: PlacedCard[] = [];
-  let used = 0;
-  for (const item of placed) {
-    if (used > 0 && used + item.columns > columns) {
-      fillRow(row, columns);
-      row = [];
-      used = 0;
-    }
-    row.push(item);
-    used += item.columns;
-    if (used >= columns) {
-      row = [];
-      used = 0;
-    }
-  }
-  fillRow(row, columns);
-
-  return placed;
 }
 
 /**

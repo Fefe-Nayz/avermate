@@ -8,6 +8,7 @@ import {
   type CardMetric,
   type CardSpec,
 } from "./cards";
+import { layoutCardGrid } from "./card-grid";
 
 function card(
   id: string,
@@ -34,6 +35,23 @@ const named = { display: "value" as const, metric: "bestSubject" as const };
 
 const widths = (specs: CardSpec[], columns: number) =>
   layoutCards(specs, columns).map((item) => item.columns);
+
+/** Every ordered combination of one to four spans, for exhaustive checks. */
+function everyRow(columns: number): Array<Array<1 | 2 | 3 | 4>> {
+  const spans: Array<1 | 2 | 3 | 4> = [1, 2, 3, 4];
+  const rows: Array<Array<1 | 2 | 3 | 4>> = [];
+  for (let length = 1; length <= 4; length += 1) {
+    const walk = (prefix: Array<1 | 2 | 3 | 4>) => {
+      if (prefix.length === length) {
+        rows.push(prefix);
+        return;
+      }
+      for (const span of spans) walk([...prefix, span]);
+    };
+    walk([]);
+  }
+  return rows;
+}
 
 describe("card layout", () => {
   test("a stored span means the same fraction of the row on every surface", () => {
@@ -76,10 +94,56 @@ describe("card layout", () => {
   });
 
   test("a card is never grown to more than twice what it asked for", () => {
-    // A lone quarter-row card at the end would have to quadruple, so the
-    // dashboard keeps the hole and the card keeps its size.
-    expect(widths([card("a", 1)], 4)).toEqual([1]);
-    expect(widths([card("a", 4), card("b", 1)], 4)).toEqual([4, 1]);
+    // The rule is per card, and the fill now stops at each card's own cap
+    // instead of cancelling the whole row's growth when one card would exceed
+    // it. A lone quarter-row card cannot quadruple, so it doubles and the
+    // dashboard keeps the smaller hole — which is where the "add a card" button
+    // goes. It used to be reset all the way back to a quarter, leaving three
+    // columns empty to avoid a violation that only ever applied to the fourth.
+    expect(widths([card("a", 1)], 4)).toEqual([2]);
+    expect(widths([card("a", 1)], 3)).toEqual([2]);
+    expect(widths([card("a", 4), card("b", 1)], 4)).toEqual([4, 2]);
+  });
+
+  test("filling a row is maximal under that cap", () => {
+    // Exhaustive over every row a grid this size can hold: the fill must never
+    // overflow, never exceed a card's cap, and never stop while some card could
+    // still legally take a column.
+    for (const columns of [1, 2, 3, 4]) {
+      for (const spans of everyRow(columns)) {
+        const cards = spans.map((span, index) => card(`c${index}`, span));
+        const placed = layoutCards(cards, columns);
+        const rows = layoutCardGrid(cards, columns).rows;
+
+        for (const row of rows) {
+          const drawn = row.items.reduce((sum, item) => sum + item.columns, 0);
+          expect(drawn, `${columns}:${spans.join(",")}`).toBeLessThanOrEqual(
+            columns,
+          );
+
+          for (const item of row.items) {
+            const cap = Math.min(columns, item.requestedColumns * 2);
+            expect(
+              item.columns,
+              `${columns}:${spans.join(",")}`,
+            ).toBeLessThanOrEqual(cap);
+          }
+
+          // Maximal: if the row has room left, every card in it is at its cap.
+          if (drawn < columns) {
+            for (const item of row.items) {
+              const cap = Math.min(columns, item.requestedColumns * 2);
+              expect(item.columns, `${columns}:${spans.join(",")}`).toBe(cap);
+            }
+          }
+        }
+
+        // And the flat view agrees with the row view, card for card.
+        expect(placed.map((item) => item.columns)).toEqual(
+          rows.flatMap((row) => row.items.map((item) => item.columns)),
+        );
+      }
+    }
   });
 
   test("a lone card on a phone takes the row rather than half of it", () => {
@@ -140,8 +204,8 @@ describe("card layout", () => {
     // And a chart on a phone has one: it cannot be drawn at half a row.
     expect(
       availableSpans({ display: "chart", metric: "distribution" }, 2).map(
-        (item) => item.columns
-      )
+        (item) => item.columns,
+      ),
     ).toEqual([2]);
     // A card that reports a name is offered every width, same as any other.
     expect(availableSpans(named, 4).map((item) => item.columns)).toEqual([
@@ -164,9 +228,9 @@ describe("card layout", () => {
   });
 
   test("a width the surface cannot draw leaves the stored span alone", () => {
-    expect(spanForColumns(2, 1, { display: "chart", metric: "average" }, 2)).toBe(
-      2
-    );
+    expect(
+      spanForColumns(2, 1, { display: "chart", metric: "average" }, 2),
+    ).toBe(2);
   });
 
   test("a round trip through a phone edit is stable", () => {
