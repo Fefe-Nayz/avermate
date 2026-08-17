@@ -13,7 +13,7 @@ import {
   resolveWidgetFlow,
   spanForColumns,
   widgetCapability,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
   widgetMeasureId,
   WIDGET_DEFINITION_VERSION,
   type CardSpec,
@@ -170,7 +170,7 @@ export function WidgetForm({
   // The pane the dashboard is drawn in decides, exactly as its container
   // queries do — not this window. See `useDashboardGrid`.
   const { columns } = useDashboardGrid()
-  const projection = widgetDefinitionToLegacyProjection(flow.prunedDefinition)
+  const projection = cardSemanticsFromDefinition(flow.prunedDefinition)
   const shape = { metric: projection.metric, display: projection.display }
   const widths = availableSpans(shape, columns)
   const drawn = cardColumns({ ...shape, span }, columns)

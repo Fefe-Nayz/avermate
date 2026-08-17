@@ -1,9 +1,44 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 import { createRouterClient } from "@orpc/server";
-import { createWidgetDefinition } from "@avermate/core";
+import {
+  createWidgetDefinition,
+  widgetDefinitionFromCard,
+  WIDGET_DEFINITION_VERSION,
+  type CardMetric,
+  type CardSemantics,
+} from "@avermate/core";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+/**
+ * A plain metric card, as a create payload.
+ *
+ * These used to be written in the API's other accepted shape — `metric`,
+ * `targetKind`, `display` as loose fields — which stored no definition at all.
+ * There is one shape now, so the fixture builds it: same intent, one
+ * representation.
+ */
+const metricCard = (
+  metric: CardMetric,
+  over: Partial<Omit<CardSemantics, "metric">> & {
+    surface?: "overview" | "insights" | "subject" | "grade";
+  } = {},
+) => {
+  const { surface, ...semantics } = over;
+  return {
+    ...(surface ? { surface } : {}),
+    definitionVersion: WIDGET_DEFINITION_VERSION,
+    definitionJson: widgetDefinitionFromCard({
+      metric,
+      targetKind: "general",
+      targetId: null,
+      goalId: null,
+      display: "value",
+      ...semantics,
+    }),
+  };
+};
 
 const databaseUrl = "file::memory:";
 
@@ -361,11 +396,17 @@ describe("router year invariants", () => {
     await expect(
       api.cards.create({
         yearId: "year-a",
-        metric: "average",
-        targetKind: "subject",
-        targetId: "subject-b",
+        ...metricCard("average", {
+          targetKind: "subject",
+          targetId: "subject-b",
+        }),
       }),
-    ).rejects.toThrow("Card subject must belong to the same year");
+      // Cross-year references used to be caught by a check that existed only on
+      // the legacy write path. They are now caught by compiling the definition
+      // against what this account owns in *this* year, which is one check for
+      // every reference a card can hold rather than one for the three the old
+      // columns could name.
+    ).rejects.toThrow("Invalid widget definition");
   });
 
   test("requires an exact destination sibling order while preserving re-parenting", async () => {
@@ -522,11 +563,11 @@ describe("router year invariants", () => {
 
     const cardA = await api.cards.create({
       yearId: "year-a",
-      metric: "average",
+      ...metricCard("average"),
     });
     const cardB = await api.cards.create({
       yearId: "year-b",
-      metric: "average",
+      ...metricCard("average"),
     });
     await expect(
       api.cards.reorder({ cardIds: [cardA?.id ?? "", cardB?.id ?? ""] }),
@@ -543,12 +584,12 @@ describe("router year invariants", () => {
     const first = await api.cards.create({
       yearId: "year-a",
       surface: "insights",
-      metric: "average",
+      ...metricCard("average", { surface: "insights" }),
     });
     const second = await api.cards.create({
       yearId: "year-a",
       surface: "insights",
-      metric: "gradeCount",
+      ...metricCard("gradeCount", { surface: "insights" }),
     });
 
     const insights = await api.cards.list({
@@ -668,45 +709,67 @@ describe("router year invariants", () => {
     ).rejects.toThrow();
   });
 
-  test("keeps legacy writes lossless and protects V1 formulas", async () => {
-    const legacy = await api.cards.create({
+  test("stores one representation, and renaming leaves it alone", async () => {
+    // A card described by `metric` / `targetKind` / `display` used to be accepted
+    // and stored as *only* those columns, with no definition at all. Both clients
+    // then had to read two representations, and the one they fell back to was
+    // drawn by a different renderer — so the same card could look like two
+    // different cards depending on which screen resolved it. There is now one
+    // shape in, and the API refuses the other rather than half-supporting it.
+    await expect(
+      api.cards.create({
+        yearId: "year-a",
+        metric: "average",
+        targetKind: "subject",
+        targetId: "subject-a",
+        display: "sparkline",
+      } as never),
+    ).rejects.toThrow();
+
+    const sparkline = await api.cards.create({
       yearId: "year-a",
+      ...metricCard("average", {
+        targetKind: "subject",
+        targetId: "subject-a",
+        display: "sparkline",
+      }),
+    });
+    expect(sparkline?.definitionJson).toMatchObject({
+      visualization: { mark: "line" },
+    });
+    // The old columns survive beside it because they are NOT NULL on a table
+    // older than the definition, and they are written as a projection of it —
+    // note `display` comes back as "chart", not "sparkline", because both map to
+    // the `line` mark and the projection cannot tell them apart. Which is the
+    // whole argument for the definition being the only thing anything reads.
+    expect(sparkline).toMatchObject({
+      definitionVersion: 1,
       metric: "average",
       targetKind: "subject",
       targetId: "subject-a",
-      display: "sparkline",
+      display: "chart",
     });
-    expect(legacy).toMatchObject({
-      metric: "average",
-      targetKind: "subject",
-      targetId: "subject-a",
-      display: "sparkline",
-      definitionVersion: null,
-      definitionJson: null,
-    });
+
     const renamed = await api.cards.update({
-      cardId: legacy?.id ?? "",
+      cardId: sparkline?.id ?? "",
       title: "Renamed without rewriting semantics",
     });
     expect(renamed).toMatchObject({
-      metric: "average",
-      targetKind: "subject",
-      targetId: "subject-a",
-      span: 1,
       title: "Renamed without rewriting semantics",
-      display: "sparkline",
-      definitionVersion: null,
-      definitionJson: null,
+      definitionVersion: 1,
+      metric: "average",
+      targetId: "subject-a",
     });
-    const legacySemanticUpdate = await api.cards.update({
-      cardId: legacy?.id ?? "",
-      display: "chart",
-    });
-    expect(legacySemanticUpdate).toMatchObject({
-      display: "chart",
-      definitionVersion: null,
-      definitionJson: null,
-    });
+    expect(renamed?.definitionJson).toEqual(sparkline?.definitionJson);
+
+    // A semantics patch has to carry the whole definition; there is no
+    // field-level back door into it any more.
+    await expect(
+      api.cards.update({
+        cardId: sparkline?.id ?? "",
+        display: "chart",
+      } as never),
+    ).rejects.toThrow();
 
     const formula = createWidgetDefinition("insights");
     formula.analysis.measure = {
@@ -737,10 +800,8 @@ describe("router year invariants", () => {
       api.cards.update({
         cardId: formulaCard?.id ?? "",
         display: "value",
-      }),
-    ).rejects.toThrow(
-      "A legacy semantic update cannot modify a V1 widget definition",
-    );
+      } as never),
+    ).rejects.toThrow();
     expect(
       await api.cards.list({ yearId: "year-a", surface: "insights" }),
     ).toContainEqual(
@@ -1076,11 +1137,12 @@ describe("router year invariants", () => {
       definitionVersion: 1,
       definitionJson: singleDefinition,
     });
-    const legacyCard = await api.cards.create({
+    const subjectCard = await api.cards.create({
       yearId,
-      metric: "average",
-      targetKind: "subject",
-      targetId: "subject-widget-removed-child",
+      ...metricCard("average", {
+        targetKind: "subject",
+        targetId: "subject-widget-removed-child",
+      }),
     });
 
     await expect(
@@ -1124,7 +1186,7 @@ describe("router year invariants", () => {
       expect.objectContaining({ id: singleCard?.id }),
     );
     expect(overviewCards).not.toContainEqual(
-      expect.objectContaining({ id: legacyCard?.id }),
+      expect.objectContaining({ id: subjectCard?.id }),
     );
   });
 
@@ -1555,8 +1617,8 @@ describe("router year invariants", () => {
   test("rolls back year creation and dashboard reset when card seeding fails", async () => {
     const existingCard = await api.cards.create({
       yearId: "year-a",
-      metric: "average",
       surface: "overview",
+      ...metricCard("average"),
     });
 
     await database.$client.executeMultiple(`
@@ -2941,21 +3003,24 @@ describe("managed preset lifecycle", () => {
     });
     const mathematicsCard = await api.cards.create({
       yearId: year.id,
-      metric: "average",
-      targetKind: "subject",
-      targetId: mathematics?.id,
+      ...metricCard("average", {
+        targetKind: "subject",
+        targetId: mathematics?.id ?? null,
+      }),
     });
     const averageCard = await api.cards.create({
       yearId: year.id,
-      metric: "average",
-      targetKind: "custom",
-      targetId: scienceAverage?.id,
+      ...metricCard("average", {
+        targetKind: "custom",
+        targetId: scienceAverage?.id ?? null,
+      }),
     });
     const physicsCard = await api.cards.create({
       yearId: year.id,
-      metric: "average",
-      targetKind: "subject",
-      targetId: physics?.id,
+      ...metricCard("average", {
+        targetKind: "subject",
+        targetId: physics?.id ?? null,
+      }),
     });
     const multiSubjectDefinition = createWidgetDefinition("overview");
     multiSubjectDefinition.query.scope = {

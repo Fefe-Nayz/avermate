@@ -914,7 +914,12 @@ function ScalarChart({
   );
 }
 
-function LegacyResult({
+/**
+ * A result the V1 union does not model as a number or a series — a record, a
+ * streak, a goal. Named for the shape it draws, not for a migration: the V1
+ * evaluator returns these itself, under `kind: "structured"`.
+ */
+function StructuredResult({
   definition,
   value,
   formatValue,
@@ -1359,7 +1364,7 @@ export function WidgetResultRenderer({
   }
 
   return (
-    <LegacyResult
+    <StructuredResult
       definition={definition}
       value={result.value}
       formatValue={formatValue}

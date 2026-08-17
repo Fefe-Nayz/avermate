@@ -10,8 +10,8 @@ import {
 import {
   createWidgetDefinition,
   defaultInsightWidgets,
-  legacyCardToWidgetDefinition,
-  widgetDefinitionToLegacyProjection,
+  widgetDefinitionFromCard,
+  cardSemanticsFromDefinition,
 } from "./widget-defaults";
 import { evaluateWidgetDefinition } from "./widget-evaluator";
 import { evaluateWidgetFormula, parseWidgetFormula } from "./widget-formula";
@@ -143,12 +143,12 @@ describe("widget V1 registry and compatibility", () => {
       goalId: null,
       display: "gauge" as const,
     };
-    const definition = legacyCardToWidgetDefinition(legacy);
-    expect(widgetDefinitionToLegacyProjection(definition)).toEqual(legacy);
+    const definition = widgetDefinitionFromCard(legacy);
+    expect(cardSemanticsFromDefinition(definition)).toEqual(legacy);
   });
 
   test("legacy goal cards ignore obsolete target columns owned by the goal", () => {
-    const definition = legacyCardToWidgetDefinition({
+    const definition = widgetDefinitionFromCard({
       metric: "goalProgress",
       targetKind: "subject",
       targetId: "math",
@@ -782,8 +782,8 @@ describe("widget evaluator", () => {
     ];
 
     const result = evaluateWidgetDefinition(definition, evaluationContext);
-    expect(result.kind).toBe("legacy");
-    if (result.kind !== "legacy" || result.value.kind !== "goal") return;
+    expect(result.kind).toBe("structured");
+    if (result.kind !== "structured" || result.value.kind !== "goal") return;
     expect(result.value.plan.current).toBeCloseTo(0.7);
     expect(result.value.plan.goal.referenceId).toBe("science");
   });
@@ -818,8 +818,8 @@ describe("widget evaluator", () => {
     ];
 
     const result = evaluateWidgetDefinition(definition, emptyContext);
-    expect(result.kind).toBe("legacy");
-    if (result.kind === "legacy" && result.value.kind === "goal") {
+    expect(result.kind).toBe("structured");
+    if (result.kind === "structured" && result.value.kind === "goal") {
       expect(result.value.plan.current).toBeNull();
       expect(result.value.plan.goal.targetRatio).toBe(0.75);
     }
@@ -1291,7 +1291,7 @@ describe("widget evaluator", () => {
       value: 0.775,
     });
 
-    const distribution = legacyCardToWidgetDefinition({
+    const distribution = widgetDefinitionFromCard({
       metric: "distribution",
       targetKind: "general",
       targetId: null,

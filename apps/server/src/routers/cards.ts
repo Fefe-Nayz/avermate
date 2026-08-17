@@ -4,12 +4,12 @@ import {
   CARD_METRICS,
   defaultCards,
   defaultInsightWidgets,
-  legacyCardToWidgetDefinition,
+  widgetDefinitionFromCard,
   WIDGET_DEFINITION_VERSION,
   type CardDisplay,
   type CardMetric,
   type WidgetDefinitionV1,
-  type WidgetLegacyAdapterInput,
+  type CardSemantics,
   type WidgetSurface,
 } from "@avermate/core";
 import { db } from "../db";
@@ -41,183 +41,45 @@ import {
   requireYear,
 } from "../lib/ownership";
 
-const cardMetrics = z.enum(CARD_METRICS);
-const cardDisplays = z.enum(["value", "sparkline", "chart", "list", "gauge"]);
-const targetKinds = z.enum(["general", "subject", "custom"]);
-const legacyKeys = [
-  "metric",
-  "targetKind",
-  "targetId",
-  "goalId",
-  "display",
-] as const;
-
-type CardRow = typeof dashboardCards.$inferSelect;
-
-async function validateLegacyScope(
-  userId: string,
-  yearId: string,
-  input: WidgetLegacyAdapterInput,
-): Promise<WidgetLegacyAdapterInput> {
-  const targetId = normalizeTargetReference(
-    input.targetKind,
-    input.targetId,
-    "Card target",
-  );
-  if (input.targetKind === "subject" && targetId) {
-    const subject = await requireSubject(userId, targetId);
-    assertSameYear("Card subject", yearId, subject.yearId);
-  }
-  if (input.targetKind === "custom" && targetId) {
-    const average = await requireCustomAverage(userId, targetId);
-    assertSameYear("Card average", yearId, average.yearId);
-  }
-  const goalId = input.metric === "goalProgress" ? input.goalId : null;
-  if (goalId) {
-    const goal = await requireGoal(userId, goalId);
-    assertSameYear("Card goal", yearId, goal.yearId);
-  }
-  return { ...input, targetId, goalId };
-}
-
-function storedLegacy(row: CardRow): WidgetLegacyAdapterInput {
-  return {
-    metric: cardMetrics.parse(row.metric),
-    targetKind: targetKinds.parse(row.targetKind),
-    targetId: row.targetId,
-    goalId: row.goalId,
-    display: cardDisplays.parse(row.display),
-  };
-}
-
-function isLegacyPatch(input: CardUpdateInput): boolean {
-  return legacyKeys.some((key) => key in input);
-}
-
-function mergedLegacyPatch(
-  row: CardRow,
-  input: CardUpdateInput,
-): WidgetLegacyAdapterInput {
-  const patch = input as Partial<WidgetLegacyAdapterInput>;
-  const stored = storedLegacy(row);
-  const targetKind = patch.targetKind ?? stored.targetKind;
-  const changedKind =
-    patch.targetKind !== undefined && patch.targetKind !== stored.targetKind;
-  return {
-    metric: patch.metric ?? stored.metric,
-    targetKind,
-    targetId:
-      patch.targetId !== undefined
-        ? patch.targetId
-        : changedKind
-          ? null
-          : stored.targetId,
-    goalId: patch.goalId !== undefined ? patch.goalId : stored.goalId,
-    display: patch.display ?? stored.display,
-  };
-}
-
 interface PreparedSemantics {
   definition: WidgetDefinitionV1;
-  columns: {
-    metric: CardMetric;
-    targetKind: TargetKind;
-    targetId: string | null;
-    goalId: string | null;
-    display: CardDisplay;
-    definitionVersion: number | null;
-    definitionJson: WidgetDefinitionV1 | null;
-  };
+  columns: ReturnType<typeof widgetSemanticColumns>;
 }
 
-function legacySemanticColumns(
-  legacy: WidgetLegacyAdapterInput,
-): PreparedSemantics["columns"] {
-  return {
-    ...legacy,
-    definitionVersion: null,
-    definitionJson: null,
-  };
-}
-
+/**
+ * The definition a write stores, compiled against what this account owns.
+ *
+ * Both of these used to have a second branch for a card described by the old
+ * columns, and an update could arrive as a patch of them. Those shapes are no
+ * longer accepted — see `cardCreateInputSchema` — so there is one path, and a
+ * stored card can only ever have come through it.
+ */
 async function semanticsForCreate(
   userId: string,
   input: CardCreateInput,
 ): Promise<PreparedSemantics> {
-  const surface = input.surface;
-  if (hasWidgetDefinition(input)) {
-    const definition = await compileOwnedWidgetDefinition(
-      userId,
-      input.yearId,
-      surface,
-      input.definitionJson,
-    );
-    return { definition, columns: widgetSemanticColumns(definition) };
-  }
-  const legacy = await validateLegacyScope(userId, input.yearId, input);
   const definition = await compileOwnedWidgetDefinition(
     userId,
     input.yearId,
-    surface,
-    legacyCardToWidgetDefinition(legacy),
+    input.surface,
+    input.definitionJson,
   );
-  return { definition, columns: legacySemanticColumns(legacy) };
+  return { definition, columns: widgetSemanticColumns(definition) };
 }
 
 async function semanticsForUpdate(
   userId: string,
-  row: CardRow,
-  input: CardUpdateInput,
+  row: typeof dashboardCards.$inferSelect,
+  definitionJson: unknown,
   surface: WidgetSurface,
 ): Promise<PreparedSemantics> {
-  if (hasWidgetDefinition(input)) {
-    const definition = await compileOwnedWidgetDefinition(
-      userId,
-      row.yearId,
-      surface,
-      input.definitionJson,
-    );
-    return { definition, columns: widgetSemanticColumns(definition) };
-  }
-  if (isLegacyPatch(input)) {
-    if (
-      row.definitionVersion === WIDGET_DEFINITION_VERSION &&
-      row.definitionJson
-    ) {
-      badRequest(
-        "A legacy semantic update cannot modify a V1 widget definition",
-      );
-    }
-    const legacy = await validateLegacyScope(
-      userId,
-      row.yearId,
-      mergedLegacyPatch(row, input),
-    );
-    const definition = await compileOwnedWidgetDefinition(
-      userId,
-      row.yearId,
-      surface,
-      legacyCardToWidgetDefinition(legacy),
-    );
-    return { definition, columns: legacySemanticColumns(legacy) };
-  }
-  const existing =
-    row.definitionVersion === WIDGET_DEFINITION_VERSION && row.definitionJson
-      ? row.definitionJson
-      : legacyCardToWidgetDefinition(storedLegacy(row));
   const definition = await compileOwnedWidgetDefinition(
     userId,
     row.yearId,
     surface,
-    existing,
+    definitionJson,
   );
-  return {
-    definition,
-    columns:
-      row.definitionVersion === WIDGET_DEFINITION_VERSION && row.definitionJson
-        ? widgetSemanticColumns(definition)
-        : legacySemanticColumns(storedLegacy(row)),
-  };
+  return { definition, columns: widgetSemanticColumns(definition) };
 }
 
 export const cardsRouter = {
@@ -301,7 +163,7 @@ export const cardsRouter = {
       if (surface !== existing.surface) {
         badRequest("A card cannot change surface through an update");
       }
-      if (!hasWidgetDefinition(input) && !isLegacyPatch(input)) {
+      if (!hasWidgetDefinition(input)) {
         await db
           .update(dashboardCards)
           .set({
@@ -322,7 +184,7 @@ export const cardsRouter = {
       const semantics = await semanticsForUpdate(
         userId,
         existing,
-        input,
+        input.definitionJson,
         surface,
       );
       const statements = [
@@ -445,7 +307,7 @@ export const cardsRouter = {
       const presets =
         input.surface === "overview"
           ? defaultCards().map((card) => ({
-              definition: legacyCardToWidgetDefinition({
+              definition: widgetDefinitionFromCard({
                 metric: card.metric,
                 targetKind: card.target.kind,
                 targetId: card.target.referenceId,

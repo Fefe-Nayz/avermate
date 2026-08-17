@@ -522,7 +522,7 @@ export type WidgetEvaluationResult =
       };
     }
   | {
-      kind: "legacy";
+      kind: "structured";
       shape: "record" | "records" | "streak" | "goal";
       value: CardResult;
     };
@@ -536,7 +536,16 @@ export interface WidgetEvaluationContext extends CardContext {
   now?: Date;
 }
 
-export interface WidgetLegacyProjection {
+/**
+ * A card described the way the packer and the storage row still need it: what it
+ * measures, what it measures over, and how it is drawn.
+ *
+ * There were two identical copies of this — one for reading a definition down to
+ * these fields, one for building a definition up from them — named for a
+ * migration that is over. Layout genuinely needs them: a list card needs room for
+ * its columns, so a width cannot be derived from the stored span alone.
+ */
+export interface CardSemantics {
   metric: CardMetric;
   targetKind: "general" | "subject" | "custom";
   targetId: string | null;
@@ -558,14 +567,6 @@ export interface WidgetCompileOptions {
     goalIds?: ReadonlySet<string>;
     periodIds?: ReadonlySet<string>;
   };
-}
-
-export interface WidgetLegacyAdapterInput {
-  metric: CardMetric;
-  targetKind: "general" | "subject" | "custom";
-  targetId: string | null;
-  goalId: string | null;
-  display: CardSpec["display"];
 }
 
 export interface WidgetFormulaContext {

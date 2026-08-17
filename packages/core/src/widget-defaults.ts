@@ -3,8 +3,7 @@ import { widgetCapability, widgetCompatibleMarks } from "./widget-registry";
 import type {
   WidgetChartMark,
   WidgetDefinitionV1,
-  WidgetLegacyAdapterInput,
-  WidgetLegacyProjection,
+  CardSemantics,
   WidgetMarkOptions,
   WidgetPreset,
   WidgetSurface,
@@ -95,7 +94,7 @@ export function createWidgetDefinition(
   };
 }
 
-function displayToMark(input: WidgetLegacyAdapterInput): WidgetChartMark {
+function displayToMark(input: CardSemantics): WidgetChartMark {
   if (input.display === "value") return "value";
   if (input.display === "gauge") return "gauge";
   if (input.display === "list") return "list";
@@ -105,8 +104,8 @@ function displayToMark(input: WidgetLegacyAdapterInput): WidgetChartMark {
     : "value";
 }
 
-export function legacyCardToWidgetDefinition(
-  input: WidgetLegacyAdapterInput,
+export function widgetDefinitionFromCard(
+  input: CardSemantics,
 ): WidgetDefinitionV1 {
   const mark = displayToMark(input);
   const scope =
@@ -165,9 +164,9 @@ function markToDisplay(mark: WidgetChartMark): CardDisplay {
   return "chart";
 }
 
-export function widgetDefinitionToLegacyProjection(
+export function cardSemanticsFromDefinition(
   definition: WidgetDefinitionV1,
-): WidgetLegacyProjection {
+): CardSemantics {
   const measure = definition.analysis.measure;
   const metric = measure.kind === "metric" ? measure.metric : "average";
   const target = definition.query.scope;
@@ -194,11 +193,11 @@ export function widgetDefinitionToLegacyProjection(
 
 function preset(
   key: string,
-  metric: WidgetLegacyAdapterInput["metric"],
+  metric: CardSemantics["metric"],
   mark: WidgetChartMark,
   span: 1 | 2 | 3 | 4,
 ): WidgetPreset {
-  const definition = legacyCardToWidgetDefinition({
+  const definition = widgetDefinitionFromCard({
     metric,
     targetKind: "general",
     targetId: null,

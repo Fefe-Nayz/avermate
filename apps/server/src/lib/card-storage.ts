@@ -5,7 +5,7 @@ import {
   compileWidgetDefinition,
   WIDGET_DEFINITION_VERSION,
   WIDGET_SURFACES,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
   type WidgetCompileOptions,
   type WidgetDefinitionV1,
   type WidgetSurface,
@@ -34,16 +34,6 @@ const envelope = {
   hidden: z.boolean().default(false),
 };
 
-const legacy = {
-  metric: z.enum(CARD_METRICS),
-  targetKind: z.enum(["general", "subject", "custom"]).default("general"),
-  targetId: z.string().nullable().default(null),
-  goalId: z.string().nullable().default(null),
-  display: z
-    .enum(["value", "sparkline", "chart", "list", "gauge"])
-    .default("value"),
-};
-
 const definition = {
   definitionVersion: z.literal(WIDGET_DEFINITION_VERSION),
   definitionJson: z.custom<WidgetDefinitionV1>(
@@ -53,22 +43,19 @@ const definition = {
   ),
 };
 
-const legacyCreate = z
-  .object({
-    yearId: z.string(),
-    ...envelope,
-    ...legacy,
-    definitionVersion: z.null().optional(),
-    definitionJson: z.null().optional(),
-  })
-  .strict();
-
-const definitionCreate = z
+/**
+ * A card is its definition.
+ *
+ * There used to be a second accepted shape here — `metric`, `targetKind`,
+ * `display` and friends — and a card created that way stored *only* those
+ * columns. The clients then had to read both, and the fallback they read was
+ * drawn by a different renderer, so the same card could look like two different
+ * cards depending on which screen resolved it. Accepting one representation is
+ * what makes that impossible rather than merely unlikely.
+ */
+export const cardCreateInputSchema = z
   .object({ yearId: z.string(), ...envelope, ...definition })
   .strict();
-
-/** A create carries exactly one semantic representation. */
-export const cardCreateInputSchema = z.union([legacyCreate, definitionCreate]);
 
 // Patch schemas intentionally omit defaults: applying create defaults during
 // an update would turn a presentation-only change into a semantic rewrite.
@@ -81,41 +68,18 @@ const envelopePatch = z
     hidden: z.boolean(),
   })
   .partial();
-const legacyPatch = z
-  .object({
-    metric: z.enum(CARD_METRICS),
-    targetKind: z.enum(["general", "subject", "custom"]),
-    targetId: z.string().nullable(),
-    goalId: z.string().nullable(),
-    display: z.enum(["value", "sparkline", "chart", "list", "gauge"]),
-  })
-  .partial();
 
 const presentationUpdate = envelopePatch
   .extend({ cardId: z.string() })
   .strict();
 
-const legacyUpdate = envelopePatch
-  .extend({
-    cardId: z.string(),
-    ...legacyPatch.shape,
-    definitionVersion: z.null().optional(),
-    definitionJson: z.null().optional(),
-  })
-  .strict()
-  .refine(
-    (value) => Object.keys(legacy).some((key) => key in value),
-    "A legacy update must change at least one semantic field",
-  );
-
 const definitionUpdate = envelopePatch
   .extend({ cardId: z.string(), ...definition })
   .strict();
 
-/** Presentation-only patches are valid; semantic patches remain exclusive. */
+/** Presentation-only patches are valid; the semantics arrive whole or not at all. */
 export const cardUpdateInputSchema = z.union([
   definitionUpdate,
-  legacyUpdate,
   presentationUpdate,
 ]);
 
@@ -222,9 +186,20 @@ export function compileStoredWidgetDefinition(
   return compiled.plan.definition;
 }
 
+/**
+ * The row a definition writes.
+ *
+ * `definitionJson` is canonical. The `metric` / `targetKind` / `targetId` /
+ * `goalId` / `display` columns beside it are a projection of it and are no longer
+ * read by anything — they are still written because they are `NOT NULL` on a
+ * table whose rows predate the definition column. Dropping them needs a backfill
+ * for those rows first (`0017` added the column without filling it in), which is
+ * a data decision rather than a refactor; until then they are derived, never a
+ * second source of truth.
+ */
 export function widgetSemanticColumns(definition: WidgetDefinitionV1) {
   return {
-    ...widgetDefinitionToLegacyProjection(definition),
+    ...cardSemanticsFromDefinition(definition),
     definitionVersion: WIDGET_DEFINITION_VERSION,
     definitionJson: definition,
   };

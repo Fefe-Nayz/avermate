@@ -1,8 +1,8 @@
 import {
   defaultCards,
-  legacyCardToWidgetDefinition,
+  widgetDefinitionFromCard,
   WIDGET_DEFINITION_VERSION,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
 } from "@avermate/core";
 import { z } from "zod";
 import { badRequest, notFound } from "./orpc";
@@ -162,7 +162,7 @@ export function periodRowsForSetup(
 
 export function academicCardRows(userId: string, yearId: string) {
   return defaultCards().map((card) => {
-    const definitionJson = legacyCardToWidgetDefinition({
+    const definitionJson = widgetDefinitionFromCard({
       metric: card.metric,
       targetKind: card.target.kind,
       targetId: card.target.referenceId,
@@ -171,7 +171,7 @@ export function academicCardRows(userId: string, yearId: string) {
     });
     return {
       surface: "overview",
-      ...widgetDefinitionToLegacyProjection(definitionJson),
+      ...cardSemanticsFromDefinition(definitionJson),
       span: card.span,
       title: card.title,
       accent: card.accent,

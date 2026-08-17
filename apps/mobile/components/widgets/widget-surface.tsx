@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
   layoutCards,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
   type CardSpec,
   type WidgetEvaluationResult,
   type WidgetSurface,
@@ -24,7 +24,7 @@ import { useCards, type WidgetCardModel } from "@/components/use-cards";
  */
 function layoutSpec(card: WidgetCardModel): CardSpec {
   const projection = card.definition
-    ? widgetDefinitionToLegacyProjection(card.definition)
+    ? cardSemanticsFromDefinition(card.definition)
     : null;
   return {
     id: card.id,

@@ -106,7 +106,7 @@ export function WidgetBody({
     )
   }
 
-  if (result.kind === "legacy") {
+  if (result.kind === "structured") {
     return (
       <WidgetStructuredResult
         result={result.value}
@@ -211,7 +211,7 @@ function WidgetStructuredResult({
   showDelta,
   valueType,
 }: {
-  result: Extract<WidgetEvaluationResult, { kind: "legacy" }>["value"]
+  result: Extract<WidgetEvaluationResult, { kind: "structured" }>["value"]
   visualization: WidgetVisualizationV1
   showDelta: boolean
   valueType: WidgetValueType

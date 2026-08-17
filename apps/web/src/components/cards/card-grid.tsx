@@ -43,7 +43,7 @@ import {
   layoutCards,
   planGridReorder,
   widgetCapability,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
   widgetMeasureId,
   type CardSpec,
   type WidgetSurface,
@@ -88,9 +88,7 @@ import { WidgetBody } from "./widget-view"
  */
 export function toSpec(row: DashboardCardRow): CardSpec {
   const { definition } = resolveWidgetRow(row)
-  const projection = definition
-    ? widgetDefinitionToLegacyProjection(definition)
-    : null
+  const projection = definition ? cardSemanticsFromDefinition(definition) : null
   return {
     id: row.id,
     metric: projection?.metric ?? "average",

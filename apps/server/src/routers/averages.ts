@@ -1,9 +1,9 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
-  legacyCardToWidgetDefinition,
+  widgetDefinitionFromCard,
   WIDGET_DEFINITION_VERSION,
-  widgetDefinitionToLegacyProjection,
+  cardSemanticsFromDefinition,
 } from "@avermate/core";
 import { db } from "../db";
 import {
@@ -160,7 +160,7 @@ export const averagesRouter = {
         .insert(customAverageEntries)
         .values(input.entries.map((entry) => ({ ...entry, averageId })));
       const cardId = newId("card");
-      const cardDefinition = legacyCardToWidgetDefinition({
+      const cardDefinition = widgetDefinitionFromCard({
         metric: "average",
         targetKind: "custom",
         targetId: averageId,
@@ -172,7 +172,7 @@ export const averagesRouter = {
             db.insert(dashboardCards).values({
               id: cardId,
               surface: "overview",
-              ...widgetDefinitionToLegacyProjection(cardDefinition),
+              ...cardSemanticsFromDefinition(cardDefinition),
               span: 2,
               // Average names may be longer than editable DataCard titles.
               title: generatedCardTitle(input.name),

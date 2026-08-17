@@ -12,7 +12,7 @@ import {
 } from "./analytics";
 import { estimateRemaining } from "./goals";
 import { compileWidgetDefinition } from "./widget-definition";
-import { widgetDefinitionToLegacyProjection } from "./widget-defaults";
+import { cardSemanticsFromDefinition } from "./widget-defaults";
 import { evaluateWidgetFormula } from "./widget-formula";
 import { gradeRatio, resolveCustomAverage, SubjectGraph } from "./graph";
 import type { Grade, Subject } from "./types";
@@ -268,7 +268,7 @@ function cardContext(
 }
 
 function cardSpec(definition: WidgetDefinitionV1): CardSpec {
-  const projection = widgetDefinitionToLegacyProjection(definition);
+  const projection = cardSemanticsFromDefinition(definition);
   return {
     id: "widget-evaluation",
     metric: projection.metric,
@@ -348,18 +348,18 @@ function evaluateScalar(
   definition: WidgetDefinitionV1,
   data: PreparedWidgetData,
   context: WidgetEvaluationContext,
-): { value: number | null; legacy: CardResult | null } {
+): { value: number | null; card: CardResult | null } {
   if (definition.analysis.measure.kind === "formula") {
     return {
       value: evaluateWidgetFormula(
         definition.analysis.measure.formula,
         formulaContext(definition, data, context),
       ),
-      legacy: null,
+      card: null,
     };
   }
   const result = evaluateCard(cardSpec(definition), cardContext(data, context));
-  return { value: scalarFromCardResult(result), legacy: result };
+  return { value: scalarFromCardResult(result), card: result };
 }
 
 function dateKey(date: Date, interval: "day" | "week" | "month"): string {
@@ -899,7 +899,7 @@ export function evaluateWidgetDefinition(
       ),
     });
     return evaluated.kind === "goal"
-      ? { kind: "legacy", shape: "goal", value: evaluated }
+      ? { kind: "structured", shape: "goal", value: evaluated }
       : { kind: "empty", shape: "goal" };
   }
   const data = prepareWidgetData(definition, context);
@@ -968,7 +968,7 @@ export function evaluateWidgetDefinition(
   }
 
   const evaluated = evaluateScalar(definition, data, context);
-  if (evaluated.legacy?.kind === "distribution") {
+  if (evaluated.card?.kind === "distribution") {
     const ratios = data.graph
       .allGrades()
       .map(gradeRatio)
@@ -976,38 +976,35 @@ export function evaluateWidgetDefinition(
     const bins =
       definition.visualization.options.kind === "histogram"
         ? definition.visualization.options.bins
-        : evaluated.legacy.buckets.length;
+        : evaluated.card.buckets.length;
     return {
       kind: "distribution",
       shape: "distribution",
       buckets: distribution(ratios, bins),
-      total: evaluated.legacy.total,
+      total: evaluated.card.total,
       summary: distributionSummary(ratios),
     };
   }
   if (
-    evaluated.legacy &&
-    ["grade", "subject", "list", "streak", "goal"].includes(
-      evaluated.legacy.kind,
-    )
+    evaluated.card &&
+    ["grade", "subject", "list", "streak", "goal"].includes(evaluated.card.kind)
   ) {
     const shape =
-      evaluated.legacy.kind === "list"
+      evaluated.card.kind === "list"
         ? "records"
-        : evaluated.legacy.kind === "grade" ||
-            evaluated.legacy.kind === "subject"
+        : evaluated.card.kind === "grade" || evaluated.card.kind === "subject"
           ? "record"
-          : evaluated.legacy.kind;
+          : evaluated.card.kind;
     if (
       (definition.visualization.mark === "table" ||
         definition.visualization.mark === "list") &&
-      evaluated.legacy.kind === "list"
+      evaluated.card.kind === "list"
     ) {
       return {
         kind: "series",
         shape: "categorical-series",
         valueType,
-        values: evaluated.legacy.items.map((item) => ({
+        values: evaluated.card.items.map((item) => ({
           key: item.id,
           label: item.label,
           date: null,
@@ -1019,9 +1016,9 @@ export function evaluateWidgetDefinition(
       };
     }
     return {
-      kind: "legacy",
+      kind: "structured",
       shape: shape as "record" | "records" | "streak" | "goal",
-      value: evaluated.legacy,
+      value: evaluated.card,
     };
   }
   if (evaluated.value === null) return { kind: "empty", shape: resultShape };
