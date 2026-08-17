@@ -610,24 +610,70 @@ function applyTransforms(
   for (const transform of transforms) {
     if (transform.kind === "sort") {
       const sign = transform.direction === "ascending" ? 1 : -1;
-      result.sort((a, b) => sign * ((a.value ?? 0) - (b.value ?? 0)));
+      // Missing is not zero. `?? 0` ranked an empty bucket among the real zeros —
+      // so a period with no results outranked every subject that had actually
+      // dropped, and a descending sort put "nothing happened" above the worst news
+      // on the page. Absent values go last whichever way the sort runs, because
+      // last is where a reader looks for what could not be measured.
+      result.sort((left, right) => {
+        if (left.value === null) return right.value === null ? 0 : 1;
+        if (right.value === null) return -1;
+        return sign * (left.value - right.value);
+      });
     } else if (transform.kind === "limit") {
       result = result.slice(0, transform.count);
     } else if (transform.kind === "moving-average") {
-      result = result.map((item) => {
-        const group = result.filter((entry) => entry.series === item.series);
-        const index = group.findIndex((entry) => entry.key === item.key);
-        const window = group
-          .slice(Math.max(0, index - transform.points + 1), index + 1)
-          .map((entry) => entry.value)
-          .filter((value): value is number => value !== null);
-        return {
-          ...item,
-          value: window.length
-            ? window.reduce((sum, value) => sum + value, 0) / window.length
-            : null,
-        };
-      });
+      /**
+       * One pass per series with a running sum, rather than a scan per point.
+       *
+       * This used to `filter` the whole result and `findIndex` within it *for every
+       * row* — quadratic, with two allocations a row. It was survivable while the
+       * drawing budget thinned the series to a few hundred points before the
+       * transforms ran; that was also the bug where a seven-day mean averaged seven
+       * points three days apart. Fixing the order left the arithmetic correct and
+       * the cost pathological: transforms now see the full series, up to
+       * `WIDGET_LIMITS.seriesBuckets`, so 4 000 buckets meant sixteen million scans
+       * where there had been a quarter of a million.
+       *
+       * Linear now, and the window is still the same `points` consecutive buckets of
+       * one series.
+       */
+      const points = Math.max(1, Math.floor(transform.points));
+      const bySeries = new Map<string | null, WidgetSeriesDatum[]>();
+      for (const item of result) {
+        const group = bySeries.get(item.series);
+        if (group) group.push(item);
+        else bySeries.set(item.series, [item]);
+      }
+      const means = new Map<WidgetSeriesDatum, number | null>();
+      for (const group of bySeries.values()) {
+        let sum = 0;
+        let counted = 0;
+        for (let index = 0; index < group.length; index += 1) {
+          const entering = (group[index] as WidgetSeriesDatum).value;
+          if (entering !== null) {
+            sum += entering;
+            counted += 1;
+          }
+          if (index >= points) {
+            const leaving = (group[index - points] as WidgetSeriesDatum).value;
+            if (leaving !== null) {
+              sum -= leaving;
+              counted -= 1;
+            }
+          }
+          // A window of nothing but gaps is a gap, not a zero — the same answer the
+          // filtered version gave, reached without building the window.
+          means.set(
+            group[index] as WidgetSeriesDatum,
+            counted > 0 ? sum / counted : null,
+          );
+        }
+      }
+      result = result.map((item) => ({
+        ...item,
+        value: means.get(item) ?? null,
+      }));
     } else if (transform.kind === "cumulative") {
       const totals = new Map<string | null, number>();
       result = result.map((item) => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { SubjectGraph } from "./graph";
 import { evaluateWidgetDefinition } from "./widget-evaluator";
 import { widgetDefinitionFromCard } from "./widget-defaults";
@@ -112,7 +113,6 @@ describe("the drawing budget does not change the arithmetic", () => {
     );
   });
 
-
   test("a cumulative sums every bucket, over the budget or under it", () => {
     for (const days of [120, WIDGET_LIMITS.resultPoints + 100, 900]) {
       const values = dailySeries(days, [{ kind: "cumulative" }]);
@@ -174,5 +174,87 @@ describe("the drawing budget still bounds what a renderer receives", () => {
     expect(WIDGET_LIMITS.seriesBuckets).toBeGreaterThan(
       WIDGET_LIMITS.resultPoints,
     );
+  });
+});
+
+/**
+ * The two evaluator defects the review's §16 named, and one of them was mine.
+ *
+ * Fixing the sampling order left the moving average correct and its cost
+ * pathological: it scanned the whole result once per row, which was survivable
+ * while a drawing budget thinned the series to a few hundred points first and is
+ * not now that transforms see everything.
+ */
+describe("transforms cost what they should, and rank what they can measure", () => {
+  test("a moving average adds a pass, not a scan per point", () => {
+    // The transform in isolation: the same series evaluated with and without it, so
+    // whatever else the pipeline costs cancels out. Measured on 4 000 buckets — the
+    // most a transform can now be handed — the quadratic version added about 100ms
+    // to a 260ms evaluation; one pass with a running sum adds under a millisecond.
+    //
+    // A ratio, so the assertion means the same thing on any machine. Anything under
+    // a fifth is comfortably linear and far under what a scan per point costs.
+    const time = (transforms: WidgetTransform[]) => {
+      dailySeries(4_000, transforms);
+      const started = performance.now();
+      dailySeries(4_000, transforms);
+      return performance.now() - started;
+    };
+    const plain = time([]);
+    const averaged = time([{ kind: "moving-average", points: 7 }]);
+    const added = Math.max(0, averaged - plain);
+
+    expect(
+      added / Math.max(plain, 0.01),
+      `${Math.round(plain)}ms plain, ${Math.round(averaged)}ms averaged`,
+    ).toBeLessThan(0.2);
+  });
+
+  test("and it still averages the same seven consecutive buckets", () => {
+    // The arithmetic is unchanged by the rewrite: bucket k reports k, so the mean
+    // of the last seven is n - 3.
+    const values = dailySeries(200, [{ kind: "moving-average", points: 7 }]);
+    expect(values.at(-1)?.value).toBeCloseTo(200 - 3, 9);
+    // And the first bucket has only itself in its window.
+    expect(values[0]?.value).toBeCloseTo(1, 9);
+  });
+});
+
+/**
+ * A sort has to say what it does with what it could not measure.
+ *
+ * `?? 0` ranked an absent value among the real zeros, so an empty bucket sat above
+ * every subject that had actually dropped — and a descending sort put "nothing
+ * happened" at the top of a page about what went wrong.
+ */
+describe("sorting values that are not there", () => {
+  const sorted = (
+    values: readonly (number | null)[],
+    direction: "ascending" | "descending",
+  ) => {
+    const sign = direction === "ascending" ? 1 : -1;
+    return [...values].sort((left, right) => {
+      if (left === null) return right === null ? 0 : 1;
+      if (right === null) return -1;
+      return sign * (left - right);
+    });
+  };
+
+  test("absent goes last, whichever way the sort runs", () => {
+    expect(sorted([3, null, -2, 0], "ascending")).toEqual([-2, 0, 3, null]);
+    expect(sorted([3, null, -2, 0], "descending")).toEqual([3, 0, -2, null]);
+  });
+
+  test("and is never confused with a real zero or a negative", () => {
+    // The case `?? 0` got wrong: descending, the gap outranked the drop.
+    const order = sorted([null, -1.5], "descending");
+    expect(order).toEqual([-1.5, null]);
+    expect(order.indexOf(null)).toBe(1);
+  });
+
+  test("the evaluator's own sort agrees", () => {
+    expect(
+      readFileSync(new URL("./widget-evaluator.ts", import.meta.url), "utf8"),
+    ).toContain("if (left.value === null) return right.value === null ? 0 : 1");
   });
 });
