@@ -1,7 +1,7 @@
 "use client"
 
 import { segmentedTrendLine, type SeriesPoint } from "@avermate/core"
-import { defineChart, dot, lineY, ruleY } from "@tanstack/charts"
+import { defineChart, dot, lineY, ruleX, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
@@ -113,6 +113,7 @@ export function MultiSeriesAverageChart({
   emptyHint,
   height = 320,
   headerActions,
+  moment,
 }: {
   title: string
   series: readonly AverageSeries[]
@@ -120,6 +121,15 @@ export function MultiSeriesAverageChart({
   height?: number
   /** Extra controls seated right of the zoom presets in the header row. */
   headerActions?: ReactNode
+  /**
+   * A day worth pointing at, for a screen that is about one event rather than
+   * about the whole curve.
+   *
+   * A vertical rule rather than a highlighted point, because the curve's value
+   * *at* that day is the average once that day had happened — the interesting
+   * thing is the moment, and the step the line takes across it.
+   */
+  moment?: Date
 }) {
   const t = useExtracted()
   const format = useFormatter()
@@ -207,6 +217,19 @@ export function MultiSeriesAverageChart({
     t,
   ])
 
+  /**
+   * The moment as a one-row series, so the rule shares the plot's own x scale
+   * rather than being positioned by hand against it.
+   */
+  const marked = useMemo(() => {
+    const first = prepared.rows[0]
+    const timestamp = moment?.getTime()
+    if (!first || timestamp === undefined || !Number.isFinite(timestamp)) {
+      return []
+    }
+    return [{ ...first, id: "moment", timestamp }]
+  }, [moment, prepared.rows])
+
   const focus = useMemo(
     () =>
       createIndependentSeriesFocus<Datum>({
@@ -252,6 +275,17 @@ export function MultiSeriesAverageChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
+          ...(marked.length > 0
+            ? [
+                ruleX(marked, {
+                  id: "moment",
+                  x: "timestamp",
+                  stroke: "var(--chart-1)",
+                  strokeOpacity: 0.35,
+                  strokeWidth: 1.5,
+                }),
+              ]
+            : []),
           lineY(prepared.rows, {
             id: SERIES_MARK_ID,
             x: "timestamp",
@@ -390,6 +424,7 @@ export function MultiSeriesAverageChart({
     [
       focus,
       format,
+      marked,
       passingRatio,
       prepared,
       scale,

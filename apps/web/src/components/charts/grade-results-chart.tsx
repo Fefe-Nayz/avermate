@@ -67,11 +67,22 @@ export function GradeResultsChart({
   subjects,
   title,
   height = 280,
+  highlight,
 }: {
   grades: readonly Grade[]
   subjects: readonly Subject[]
   title: string
   height?: number
+  /**
+   * One result to pick out of the cloud, by id.
+   *
+   * For the screen that is *about* a single grade. Without it the reader has to
+   * find their own mark among a dozen identical dots, and the chart answers "how
+   * did the term go" instead of "how does this one compare" — and a rule drawn
+   * across at its value turns the second question into something readable at a
+   * glance: how many sit above the line, how many below.
+   */
+  highlight?: string
 }) {
   const t = useExtracted()
   const format = useFormatter()
@@ -153,6 +164,11 @@ export function GradeResultsChart({
     t,
   ])
 
+  const marked = useMemo(
+    () => prepared.rows.filter((row) => row.gradeId === highlight),
+    [highlight, prepared.rows]
+  )
+
   const focus = useMemo(
     () =>
       createIndependentSeriesFocus<GradeDatum>({
@@ -196,6 +212,20 @@ export function GradeResultsChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
+          // Solid where the passing mark is dashed, and on the accent rather
+          // than the muted colour: two rules on one plot have to be told apart
+          // without a legend, and this one is a reading while that is a rule.
+          ...(marked.length > 0
+            ? [
+                ruleY(marked, {
+                  id: "highlight-level",
+                  y: "value",
+                  stroke: "var(--chart-1)",
+                  strokeOpacity: 0.35,
+                  strokeWidth: 1.5,
+                }),
+              ]
+            : []),
           // Opt-in reading aid: a straight, recessive thread between the
           // dots for readers who want their eye guided through the cloud.
           // It stays out of the line-style preference — a smooth or stepped
@@ -250,6 +280,33 @@ export function GradeResultsChart({
               },
             ],
           }),
+          // Drawn after the cloud so it sits over any dot it overlaps, and
+          // haloed rather than merely bigger: a slightly larger dot among a
+          // dozen identical ones is not findable, which is the whole job.
+          ...(marked.length > 0
+            ? [
+                dot(marked, {
+                  id: "highlight-halo",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  r: 9,
+                  fill: "var(--chart-1)",
+                  fillOpacity: 0.18,
+                  stroke: "transparent",
+                }),
+                dot(marked, {
+                  id: "highlight-point",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  r: 5,
+                  fill: "var(--chart-1)",
+                  stroke: "var(--background)",
+                  strokeWidth: 2,
+                }),
+              ]
+            : []),
         ],
         x: {
           scale: scaleLinear().domain(prepared.domain),
@@ -320,6 +377,7 @@ export function GradeResultsChart({
     [
       focus,
       format,
+      marked,
       passingRatio,
       prepared,
       scale,

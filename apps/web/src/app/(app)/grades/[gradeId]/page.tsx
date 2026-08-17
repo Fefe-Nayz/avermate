@@ -36,6 +36,7 @@ import {
   MultiSeriesAverageChart,
   type AverageSeries,
 } from "@/components/charts/multi-series-average-chart"
+import { GradeResultsChart } from "@/components/charts/grade-results-chart"
 import { GradeScale } from "@/components/grades/grade-scale"
 
 /**
@@ -130,6 +131,10 @@ export default function GradePage({
   const inSubject = subject ? gradeStanding(graph, gradeId, subject.id) : null
   const inYear = gradeStanding(graph, gradeId)
   const share = gradeWeightShare(graph, gradeId)
+  // The subject and everything under it, which is the field the standing above is
+  // measured against — so the cloud and the rank cannot disagree about what "the
+  // other results" means.
+  const subjectGrades = subject ? graph.allGrades(subject.id) : []
   const neighbours = gradeNeighbours(graph, gradeId)
 
   const impacts = [
@@ -328,12 +333,31 @@ export default function GradePage({
 
         <ImpactGrid readings={impacts} title={t("Impact on averages")} />
 
+        {/* Two charts, because they answer different questions and the page is
+            about one result. The curve says what this did to where the reader
+            stands — so the day is ruled, and the step the line takes across it is
+            the answer. The cloud says how it compares to the reader's other
+            results — so the mark is haloed and a rule is drawn across at its
+            level, which turns "is this typical?" into counting dots above and
+            below a line. Both are the same pair the subject page carries, which
+            is why neither needs explaining here. */}
         {series[0] && series[0].points.length > 1 ? (
           <MultiSeriesAverageChart
             title={t("The subject around it")}
             series={series}
             height={260}
+            moment={grade.passedAt}
             emptyHint={t("Record a few grades and the curve will appear here.")}
+          />
+        ) : null}
+
+        {subject && subjectGrades.length > 1 ? (
+          <GradeResultsChart
+            grades={subjectGrades}
+            subjects={graph.subjects}
+            title={t("Against the other results")}
+            height={240}
+            highlight={gradeId}
           />
         ) : null}
 
