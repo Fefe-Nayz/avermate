@@ -99,9 +99,32 @@ function displayToMark(input: CardSemantics): WidgetChartMark {
   if (input.display === "gauge") return "gauge";
   if (input.display === "list") return "list";
   if (input.metric === "distribution") return "histogram";
-  return input.display === "sparkline" || input.display === "chart"
-    ? "line"
-    : "value";
+  // A sparkline is filled; the fill pouring to the card's bottom edge is most of
+  // what makes it read as scenery for the number above it rather than as a chart.
+  if (input.display === "sparkline") return "area";
+  return input.display === "chart" ? "line" : "value";
+}
+
+/**
+ * Strips a line of its apparatus, which is the whole difference between a
+ * sparkline and a small chart.
+ *
+ * `sparkline` and `chart` used to compile to the same thing — a `line` with axes
+ * and a y-grid — and the renderer drew them the same way: a study squeezed into a
+ * 170px box, with no reading above it, where a card had shown "13.86 / 20" and a
+ * curve. There is no new mark for this, because there was never a new *drawing*:
+ * the axes are already in the model, and turning them off is the request.
+ */
+function stripAxes(
+  visualization: WidgetVisualizationV1,
+): WidgetVisualizationV1 {
+  return {
+    ...visualization,
+    axes: {
+      x: { visible: false, grid: false, label: null },
+      y: { visible: false, grid: false, label: null },
+    },
+  };
 }
 
 export function widgetDefinitionFromCard(
@@ -125,7 +148,8 @@ export function widgetDefinitionFromCard(
     capability.groupings.includes("subject") &&
     ["subjectRanking", "mostImproved", "steadiest"].includes(input.metric)
       ? { kind: "subject" as const, limit: 10, includeCategories: false }
-      : mark === "line" && capability.groupings.includes("time")
+      : (mark === "line" || mark === "area") &&
+          capability.groupings.includes("time")
         ? {
             kind: "time" as const,
             interval: "week" as const,
@@ -139,6 +163,7 @@ export function widgetDefinitionFromCard(
   const compatibleMark = compatibleMarks.includes(mark)
     ? mark
     : (compatibleMarks[0] ?? "value");
+  const visualization = createWidgetVisualization(compatibleMark);
   return {
     apiVersion: 1,
     query: {
@@ -153,7 +178,11 @@ export function widgetDefinitionFromCard(
       comparison: { kind: "none" },
       transforms: [],
     },
-    visualization: createWidgetVisualization(compatibleMark),
+    visualization:
+      input.display === "sparkline" &&
+      (compatibleMark === "area" || compatibleMark === "line")
+        ? stripAxes(visualization)
+        : visualization,
   };
 }
 

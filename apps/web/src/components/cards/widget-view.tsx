@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { MinusIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
 import {
   areaY,
@@ -36,6 +36,7 @@ import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
 import { AVERAGE_SERIES_COLORS } from "@/components/charts/multi-series-average-chart"
 import { WidgetNumberText } from "./widget-number"
+import { Sparkline } from "./widget-sparkline"
 import {
   widgetColorBucketKey,
   widgetColorBuckets,
@@ -185,6 +186,18 @@ export function WidgetBody({
         />
       )
     }
+    // A card that plots a value over time says what the value is. Only the
+    // insights surface skips it, because there the chart *is* the subject —
+    // a card is a glance, a study is a study.
+    if (!expanded && result.values.some((item) => item.date !== null)) {
+      return (
+        <WidgetTrend
+          values={result.values}
+          valueType={result.valueType}
+          visualization={definition.visualization}
+        />
+      )
+    }
     return (
       <WidgetSeriesChart
         values={result.values}
@@ -202,6 +215,143 @@ export function WidgetBody({
       delta={result.delta}
       visualization={definition.visualization}
     />
+  )
+}
+
+/**
+ * A line with no axes and no grid is a sparkline, and a sparkline is scenery for
+ * a reading rather than a chart in its own right.
+ *
+ * Read off the definition rather than carried as a separate mark: "sparkline" was
+ * never a different *kind* of drawing, it was a line stripped of its apparatus,
+ * and the apparatus is already in the model. So a card asks for one by turning the
+ * axes off, and the editor's existing axis toggles turn a card into one either
+ * way — which is a nicer thing to have discovered than a twelfth mark.
+ */
+function widgetIsSparkline(visualization: WidgetVisualizationV1): boolean {
+  return (
+    (visualization.mark === "line" || visualization.mark === "area") &&
+    !visualization.axes.x.visible &&
+    !visualization.axes.y.visible &&
+    !visualization.axes.x.grid &&
+    !visualization.axes.y.grid
+  )
+}
+
+/**
+ * The card the dashboard used to have: the reading, its change, and the curve
+ * that got there.
+ *
+ * Routing these through the generic series chart lost both halves of it. The
+ * chart drew axes, a y-grid and dated ticks in a 170px box — a study squeezed into
+ * a glance — and, worse, dropped the number entirely, because a series result has
+ * no scalar to show. A card whose whole job is to say "13.86" stopped saying it.
+ *
+ * So the value comes back to the top and the curve goes below it. Which curve is
+ * the definition's business, not this component's: a stripped line is drawn as a
+ * sparkline that takes every remaining pixel and follows the finger, and a line
+ * that kept its axes is drawn as the small chart it asked to be. Either way the
+ * card answers the question first.
+ */
+function WidgetTrend({
+  values,
+  valueType,
+  visualization,
+}: {
+  values: WidgetSeriesDatum[]
+  valueType: WidgetValueType
+  visualization: WidgetVisualizationV1
+}) {
+  const t = useExtracted()
+  const { scale, decimals } = useYear()
+  /** The reading under the finger; the chart owns it and hands it up. */
+  const [focused, setFocused] = useState<number | null>(null)
+
+  const points = useMemo(
+    () =>
+      values.flatMap((item) =>
+        item.date ? [{ date: item.date, value: item.value }] : []
+      ),
+    [values]
+  )
+  const last = [...values].reverse().find((item) => item.value !== null)
+  if (!last || last.value === null) {
+    return (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        {t("Not enough data yet")}
+      </p>
+    )
+  }
+
+  const shown = focused ?? last.value
+  /**
+   * How far the reading has moved across the window — the current value against
+   * the first point on the curve.
+   *
+   * Not the datum's own `delta`, which a plain series leaves null: that field is
+   * filled by `analysis.comparison`, and a comparison would mean "against the
+   * previous week", a different question. This is the number the card showed
+   * before, to the definition: `ratio - first`.
+   *
+   * It stays put while the curve is dragged. The reading above it moves, because
+   * that is the day under the finger; the change over the window does not, because
+   * the window has not moved.
+   */
+  const first = values.find((item) => item.value !== null)?.value ?? null
+  const delta = last.delta ?? (first === null ? null : last.value - first)
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <WidgetNumberText
+          value={shown}
+          valueType={valueType}
+          format={visualization.format}
+          scale={scale}
+          defaultDecimals={decimals}
+          daysLabel={t("days")}
+          showRatioScale
+          className="text-3xl font-semibold @[16rem]/card:text-4xl @[26rem]/card:text-5xl"
+        />
+        {delta !== null ? (
+          <WidgetNumberText
+            value={delta}
+            valueType={valueType}
+            format={visualization.format}
+            scale={scale}
+            defaultDecimals={decimals}
+            daysLabel={t("days")}
+            signed
+            className={cn(
+              "text-sm @[16rem]/card:text-base",
+              Math.abs(delta) < 0.0005
+                ? "text-muted-foreground"
+                : delta > 0
+                  ? "text-positive"
+                  : "text-negative"
+            )}
+          />
+        ) : null}
+      </div>
+      {widgetIsSparkline(visualization) ? (
+        <Sparkline
+          points={points}
+          positive={(delta ?? 0) >= 0}
+          onPointFocus={setFocused}
+        />
+      ) : (
+        // Shorter than a chart that owns its card, because here it does not: the
+        // reading above it has taken its share of the row.
+        <div className="mt-2">
+          <WidgetSeriesChart
+            values={values}
+            valueType={valueType}
+            visualization={visualization}
+            height={130}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 

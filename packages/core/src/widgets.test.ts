@@ -147,6 +147,52 @@ describe("widget V1 registry and compatibility", () => {
     expect(cardSemanticsFromDefinition(definition)).toEqual(legacy);
   });
 
+  test("a sparkline asks for a line with its apparatus stripped", () => {
+    // `sparkline` and `chart` used to compile to the same thing, and the renderer
+    // drew both as a full cartesian chart: axes, a y-grid, dated ticks in a 170px
+    // box, and — because a series result carries no scalar — no reading at all.
+    // A card whose job is to say "13.86" stopped saying it. There is no new mark
+    // for this: a sparkline is a filled line without the apparatus, and the
+    // apparatus is already in the model.
+    const card = {
+      metric: "average" as const,
+      targetKind: "general" as const,
+      targetId: null,
+      goalId: null,
+    };
+    const spark = widgetDefinitionFromCard({ ...card, display: "sparkline" });
+    const chart = widgetDefinitionFromCard({ ...card, display: "chart" });
+
+    expect(spark.visualization.mark).toBe("area");
+    expect(spark.visualization.axes).toEqual({
+      x: { visible: false, grid: false, label: null },
+      y: { visible: false, grid: false, label: null },
+    });
+    // Both still walk time, so both have a curve to draw.
+    expect(spark.analysis.groupBy.kind).toBe("time");
+    expect(chart.analysis.groupBy.kind).toBe("time");
+
+    // And a card that asked for a chart keeps one.
+    expect(chart.visualization.mark).toBe("line");
+    expect(chart.visualization.axes.x.visible).toBe(true);
+    expect(chart.visualization.axes.y.visible).toBe(true);
+  });
+
+  test("stripping the axes is reserved for the marks it means something for", () => {
+    for (const display of ["value", "gauge", "list"] as const) {
+      const definition = widgetDefinitionFromCard({
+        metric: "average",
+        targetKind: "general",
+        targetId: null,
+        goalId: null,
+        display,
+      });
+      expect(["line", "area"], display).not.toContain(
+        definition.visualization.mark,
+      );
+    }
+  });
+
   test("legacy goal cards ignore obsolete target columns owned by the goal", () => {
     const definition = widgetDefinitionFromCard({
       metric: "goalProgress",

@@ -734,14 +734,22 @@ describe("router year invariants", () => {
         display: "sparkline",
       }),
     });
+    // A sparkline is a filled line with its apparatus stripped, which is what the
+    // card renderer reads to draw a reading over scenery rather than a chart.
     expect(sparkline?.definitionJson).toMatchObject({
-      visualization: { mark: "line" },
+      visualization: {
+        mark: "area",
+        axes: {
+          x: { visible: false, grid: false },
+          y: { visible: false, grid: false },
+        },
+      },
     });
     // The old columns survive beside it because they are NOT NULL on a table
     // older than the definition, and they are written as a projection of it —
-    // note `display` comes back as "chart", not "sparkline", because both map to
-    // the `line` mark and the projection cannot tell them apart. Which is the
-    // whole argument for the definition being the only thing anything reads.
+    // note `display` comes back as "chart", not "sparkline": the projection knows
+    // nothing about the axes, so it cannot tell a sparkline from a chart. Which is
+    // the whole argument for the definition being the only thing anything reads.
     expect(sparkline).toMatchObject({
       definitionVersion: 1,
       metric: "average",
