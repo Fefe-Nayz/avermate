@@ -60,6 +60,125 @@ export function gradeImpact(
   };
 }
 
+/**
+ * Where one grade stands among its peers.
+ *
+ * A mark on its own says almost nothing: 14 is a triumph in one class and a
+ * disappointment in another, and the only reader who knows which is the student.
+ * A position does say something, and it needs no interpretation.
+ *
+ * `subjectId` narrows the field to one subject and its descendants; omitting it
+ * ranks against every grade the graph holds, which on a period-restricted graph
+ * means every grade of that period.
+ */
+export interface GradeStanding {
+  /** Position counting from the best, 1-based. */
+  rank: number;
+  /** How many grades were ranked, this one included. */
+  total: number;
+}
+
+export function gradeStanding(
+  graph: SubjectGraph,
+  gradeId: string,
+  subjectId?: string,
+): GradeStanding | null {
+  const ranked = rankGrades(graph, subjectId);
+  const index = ranked.findIndex((entry) => entry.grade.id === gradeId);
+  if (index < 0) return null;
+  return { rank: index + 1, total: ranked.length };
+}
+
+/**
+ * What fraction of its subject's weight one grade carries.
+ *
+ * The stored coefficient is the wrong number to show anybody: "weight 2" is
+ * meaningless without the other coefficients, and a student reading it cannot
+ * tell whether this mark decided the term or barely registered. A share can be
+ * read on its own — and it is the explanation for the impact figures, which
+ * otherwise arrive from nowhere.
+ *
+ * Only the grade's *own* subject: a share of an ancestor's average is not a
+ * fraction of anything, because the hierarchy re-weights at every level. That
+ * question is what `gradeImpact` answers, honestly, by removing the grade.
+ */
+export function gradeWeightShare(
+  graph: SubjectGraph,
+  gradeId: string,
+): number | null {
+  for (const subject of graph.subjects) {
+    const grade = subject.grades.find((item) => item.id === gradeId);
+    if (!grade) continue;
+    if (gradeRatio(grade) === null) return null;
+    // Grades that do not count carry no weight, so they are not in the total
+    // either — otherwise a mark out of zero would dilute every share.
+    const total = subject.grades.reduce(
+      (sum, item) =>
+        gradeRatio(item) === null ? sum : sum + Math.max(0, item.coefficient),
+      0,
+    );
+    if (total <= 0) return null;
+    return Math.max(0, grade.coefficient) / total;
+  }
+  return null;
+}
+
+/**
+ * The grades either side of this one in the same subject, and the ones sharing
+ * its day.
+ *
+ * A result is an event in a sequence, and a page showing one result with no way
+ * to reach the next is a dead end. Ordered by the day sat rather than the day
+ * entered, because that is the order the student lived them.
+ *
+ * "Either side" means either side *in time*, not in the sorted array: a grade sat
+ * the same day is a companion, not a step, so it belongs to `sameDay` and nowhere
+ * else. Letting it be `next` as well listed it twice on the same screen and made
+ * "next" mean whichever of two simultaneous results happened to sort first — which
+ * is no meaning at all.
+ */
+export interface GradeNeighbours {
+  previous: Grade | null;
+  next: Grade | null;
+  /** Other grades of the same subject sat on the same day. */
+  sameDay: Grade[];
+}
+
+export function gradeNeighbours(
+  graph: SubjectGraph,
+  gradeId: string,
+): GradeNeighbours {
+  const empty: GradeNeighbours = { previous: null, next: null, sameDay: [] };
+  const subject = graph.subjects.find((item) =>
+    item.grades.some((grade) => grade.id === gradeId),
+  );
+  if (!subject) return empty;
+
+  // Ties fall back to entry order and then to id, so the walk is stable rather
+  // than however the array happened to arrive.
+  const ordered = [...subject.grades].sort(
+    (left, right) =>
+      left.passedAt.getTime() - right.passedAt.getTime() ||
+      left.createdAt.getTime() - right.createdAt.getTime() ||
+      left.id.localeCompare(right.id),
+  );
+  const current = ordered.find((grade) => grade.id === gradeId);
+  if (!current) return empty;
+
+  const day = (date: Date) =>
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const today = day(current.passedAt);
+
+  return {
+    previous:
+      ordered.filter((grade) => day(grade.passedAt) < today).at(-1) ?? null,
+    next: ordered.find((grade) => day(grade.passedAt) > today) ?? null,
+    sameDay: ordered.filter(
+      (grade) => grade.id !== gradeId && day(grade.passedAt) === today,
+    ),
+  };
+}
+
 /** How much a whole subject (and its sub-tree) moves an average. */
 export function subjectImpact(
   graph: SubjectGraph,
