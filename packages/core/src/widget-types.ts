@@ -6,16 +6,28 @@ import type { CustomAverage, Period, Subject, Year } from "./types";
 export const WIDGET_DEFINITION_VERSION = 1 as const;
 
 /**
- * A gauge's bar, in pixels, when nobody has asked for another.
+ * A gauge's bar, in pixels, for a renderer that has no scale of its own.
  *
  * The dashboard draws its gauge as a hairline that thickens once the card is wide
- * enough — a margin note under the number, not a pipe beside it. A single stored
- * number cannot say "responsive", so this is the value that *means* the card's own
- * bar: a renderer that sees it is free to use its own scale, and any other value
- * is a deliberate override and is honoured literally. It was 10, which read as an
- * override on every card ever created and buried the hairline.
+ * enough — a margin note under the number, not a pipe beside it. That is what
+ * `"auto"` asks for, and it is what a card gets unless it names a number.
+ *
+ * This constant used to carry that meaning *itself*: 6 was the value that meant
+ * "the card's own bar", and any other value was a deliberate override. Which left
+ * one number saying two things, so a card that genuinely wanted a 6px bar was given
+ * the responsive one instead, with nothing to distinguish the two intentions. The
+ * thickness is `"auto" | number` now and says which it is.
  */
 export const WIDGET_GAUGE_THICKNESS = 6;
+
+/**
+ * How thick a gauge's bar is drawn.
+ *
+ * `"auto"` leaves it to the renderer, which is the only way to ask for a bar that
+ * responds to the card's width — no single number can. Anything else is a literal
+ * pixel height, honoured as given.
+ */
+export type WidgetGaugeThickness = "auto" | number;
 
 export const WIDGET_SURFACES = [
   "overview",
@@ -246,7 +258,7 @@ export type WidgetMarkOptions =
       showDelta: boolean;
       trendIndicator: boolean;
     }
-  | { kind: "gauge"; showValue: boolean; thickness: number }
+  | { kind: "gauge"; showValue: boolean; thickness: WidgetGaugeThickness }
   | {
       kind: "line";
       curve: "linear" | "monotone" | "step";
@@ -557,6 +569,28 @@ export type WidgetEvaluationResult =
       shape: "record" | "records" | "streak" | "goal";
       value: CardResult;
     };
+
+/**
+ * The live streak a result is reporting, if it is reporting one.
+ *
+ * Here rather than in a renderer because it is a question about *this* union, and
+ * the answer has already been got wrong once by being asked elsewhere. A streak
+ * arrives wrapped — the evaluator returns it as a `structured` result whose value
+ * is the streak — and the dashboard's card dress matched only the outer kind, so
+ * every streak card silently stopped burning. Nothing failed; the card just went
+ * quiet, which is the kind of loss that survives a refactor.
+ *
+ * So the shape is read where the shape is declared. Change the wrapping and this
+ * function is what stops compiling, instead of a card in another package going
+ * dark.
+ */
+export function widgetLiveStreak(
+  result: WidgetEvaluationResult,
+): Extract<CardResult, { kind: "streak" }> | null {
+  if (result.kind !== "structured") return null;
+  if (result.value.kind !== "streak") return null;
+  return result.value.alive ? result.value : null;
+}
 
 export interface WidgetEvaluationContext extends CardContext {
   surface: WidgetSurface;

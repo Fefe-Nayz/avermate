@@ -16,11 +16,9 @@ function defaultMarkOptions(mark: WidgetChartMark): WidgetMarkOptions {
     case "value":
       return { kind: "value", showDelta: true, trendIndicator: true };
     case "gauge":
-      return {
-        kind: "gauge",
-        showValue: true,
-        thickness: WIDGET_GAUGE_THICKNESS,
-      };
+      // Not a number: the default gauge is the responsive hairline, and saying
+      // so is the whole point of the discriminant.
+      return { kind: "gauge", showValue: true, thickness: "auto" };
     case "line":
       return { kind: "line", curve: "monotone", points: false, strokeWidth: 2 };
     case "area":

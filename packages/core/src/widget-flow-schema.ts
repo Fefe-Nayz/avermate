@@ -866,6 +866,11 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 2,
       max: 32,
       step: 1,
+      // Optional, because empty is a real answer here: it stores nothing and the
+      // definition reads back as `"auto"`, the responsive bar. A required number
+      // would have left a card unable to give the choice back once it had named a
+      // thickness, since no number means "let the renderer decide".
+      required: false,
       visibleWhen: equals("visualization.mark", "gauge"),
     },
   ),

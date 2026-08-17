@@ -147,7 +147,10 @@ export function widgetScalarPresentation(
     trendIndicator: Boolean(
       valueOptions?.trendIndicator && result.delta !== null,
     ),
-    gaugeThickness: gaugeOptions?.thickness ?? 10,
+    // `"auto"` asks the renderer to choose; this one has no responsive scale of
+    // its own, so it chooses this.
+    gaugeThickness:
+      typeof gaugeOptions?.thickness === "number" ? gaugeOptions.thickness : 10,
     progress: Math.max(
       0,
       Math.min(1, scale.reverse ? 1 - rawProgress : rawProgress),

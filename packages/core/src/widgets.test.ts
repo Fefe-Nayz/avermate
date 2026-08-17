@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { CARD_METRICS } from "./cards";
+import { CARD_METRICS, type CardResult } from "./cards";
 import { SubjectGraph } from "./graph";
+import { widgetLiveStreak, type WidgetEvaluationResult } from "./widget-types";
 import {
   canonicalizeWidgetDefinition,
   collectWidgetReferences,
@@ -1495,5 +1496,45 @@ describe("formula metric operands", () => {
     expect(parsed.issues).toContainEqual(
       expect.objectContaining({ code: "complexity-limit" }),
     );
+  });
+});
+
+describe("widgetLiveStreak", () => {
+  const wrap = (
+    value: Extract<CardResult, { kind: "streak" }>,
+  ): WidgetEvaluationResult => ({ kind: "structured", shape: "streak", value });
+  const streak = (alive: boolean) =>
+    ({ kind: "streak", current: 4, longest: 9, alive }) as const;
+
+  test("finds a live streak through the wrapper it arrives in", () => {
+    expect(widgetLiveStreak(wrap(streak(true)))).toEqual(streak(true));
+  });
+
+  test("says nothing for a streak that has gone out", () => {
+    // A dead streak is still a streak result; it just does not dress the card.
+    expect(widgetLiveStreak(wrap(streak(false)))).toBeNull();
+  });
+
+  test("says nothing for the results that are not streaks", () => {
+    expect(widgetLiveStreak({ kind: "empty", shape: "scalar" })).toBeNull();
+    expect(
+      widgetLiveStreak({
+        kind: "scalar",
+        shape: "scalar",
+        value: 1,
+        valueType: "count",
+        delta: null,
+      }),
+    ).toBeNull();
+    // A `structured` result carrying something else, so the inner check is doing
+    // work too — and the shape tag is deliberately not `"streak"` here either,
+    // since the value is what is read and the tag is not consulted.
+    expect(
+      widgetLiveStreak({
+        kind: "structured",
+        shape: "records",
+        value: { kind: "list", items: [] },
+      }),
+    ).toBeNull();
   });
 });

@@ -272,7 +272,12 @@ function markOptions(mark: WidgetChartMark, value: unknown): WidgetMarkOptions {
       return {
         kind: "gauge",
         showValue: bool(raw.showValue, true),
-        thickness: finite(raw.thickness, WIDGET_GAUGE_THICKNESS, 2, 32),
+        // Absent, malformed, or the string: all of them mean "let the renderer
+        // decide". Only a usable number is an override.
+        thickness:
+          typeof raw.thickness === "number" && Number.isFinite(raw.thickness)
+            ? finite(raw.thickness, WIDGET_GAUGE_THICKNESS, 2, 32)
+            : "auto",
       };
     case "line":
       return {

@@ -27,7 +27,6 @@ import { tooltip } from "@tanstack/charts/tooltip"
 import { curveLinear, curveMonotoneX, curveStep } from "d3-shape"
 import { useFormatter, useExtracted } from "next-intl"
 import {
-  WIDGET_GAUGE_THICKNESS,
   type WidgetDefinitionV1,
   type WidgetEvaluationResult,
   type WidgetSeriesDatum,
@@ -673,7 +672,7 @@ function WidgetScalarValue({
     visualization.options.kind === "value" ? visualization.options : null
   const gaugeOptions =
     visualization.options.kind === "gauge" ? visualization.options : null
-  const gaugeThickness = gaugeOptions?.thickness ?? WIDGET_GAUGE_THICKNESS
+  const gaugeThickness = gaugeOptions?.thickness ?? "auto"
   const showValue = !gauge || gaugeOptions?.showValue !== false
   const showDelta = valueOptions?.showDelta === true && delta !== null
   const showTrend = valueOptions?.trendIndicator === true && delta !== null
@@ -719,19 +718,18 @@ function WidgetScalarValue({
       ) : null}
       {gauge ? (
         // A hairline that thickens once the card is wide enough, not a pipe: the
-        // number is the answer and the bar is its margin note. A card that asked
-        // for a particular thickness is honoured literally; the default value
-        // means "the card's own bar", which no single number could say.
+        // number is the answer and the bar is its margin note. That is `"auto"`,
+        // and it is the only way to ask for it — no stored number can describe a
+        // bar that responds to the card's width. A card that named a thickness is
+        // honoured literally, including when the number it named is the one this
+        // renderer would have picked anyway.
         <div
           className={cn(
             "overflow-hidden rounded-full bg-muted",
-            gaugeThickness === WIDGET_GAUGE_THICKNESS &&
-              "h-1.5 @[20rem]/card:h-2"
+            gaugeThickness === "auto" && "h-1.5 @[20rem]/card:h-2"
           )}
           style={
-            gaugeThickness === WIDGET_GAUGE_THICKNESS
-              ? undefined
-              : { height: gaugeThickness }
+            gaugeThickness === "auto" ? undefined : { height: gaugeThickness }
           }
         >
           <div

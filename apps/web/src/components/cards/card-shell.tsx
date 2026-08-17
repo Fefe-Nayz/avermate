@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import type { WidgetEvaluationResult } from "@avermate/core"
+import { widgetLiveStreak, type WidgetEvaluationResult } from "@avermate/core"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useScrollPane } from "@/components/shell/scroll-pane"
 import { cn } from "@/lib/utils"
@@ -110,18 +110,17 @@ export function CardShell({
  * to match. The grid and the editor preview both apply it, so the card burns the
  * same everywhere.
  *
- * A streak arrives wrapped these days — the widget evaluator returns it as a
- * `structured` result whose *value* is the streak — so this looks one level in.
- * Matching only the outer kind silently stopped every streak card burning, which
- * is the kind of loss that survives a refactor because nothing fails, the card
- * just goes quiet.
+ * The shape of a streak result is asked about in core rather than unpicked here.
+ * It arrives wrapped — a `structured` result whose *value* is the streak — and this
+ * function once matched only the outer kind, which silently stopped every streak
+ * card burning: nothing failed, the card just went quiet. `widgetLiveStreak` lives
+ * beside the union it reads, so a change to the wrapping stops compiling instead of
+ * putting a card in another package out.
  */
 export function cardSurface(
   result: WidgetEvaluationResult
 ): string | undefined {
-  return result.kind === "structured" &&
-    result.value.kind === "streak" &&
-    result.value.alive
+  return widgetLiveStreak(result)
     ? "bg-linear-to-tr from-band-weak/15 via-card to-band-fair/10 ring-band-weak/25"
     : undefined
 }

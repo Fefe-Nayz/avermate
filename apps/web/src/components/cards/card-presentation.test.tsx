@@ -133,12 +133,15 @@ describe("a live streak", () => {
     const shell = source("./card-shell.tsx")
 
     // The evaluator returns a streak as a `structured` result whose value is the
-    // streak, so matching only the outer kind silently stopped every streak card
-    // burning — a loss that survives a refactor because nothing fails, the card
-    // just goes quiet.
-    expect(shell).toContain('result.kind === "structured"')
-    expect(shell).toContain('result.value.kind === "streak"')
-    expect(shell).toContain("result.value.alive")
+    // streak, and this file once matched only the outer kind — which silently
+    // stopped every streak card burning: nothing failed, the card just went quiet.
+    //
+    // The shape is now read in core, beside the union that declares it, so what
+    // matters here is that the shell asks rather than unpicks. Whether the answer
+    // is right is `widgetLiveStreak`'s own test, where it can be called instead of
+    // read as text.
+    expect(shell).toContain("widgetLiveStreak(result)")
+    expect(shell).not.toContain('result.value.kind === "streak"')
     expect(shell).toContain("from-band-weak/15 via-card to-band-fair/10")
   })
 })
