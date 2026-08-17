@@ -156,8 +156,20 @@ export function ImpactGrid({
                     ) : null}
                   </span>
 
+                  {/* The signed number sits against the bar, because the two say
+                      one thing twice — a length and a figure — and splitting them
+                      put the reader's eye across the row to check that the bar it
+                      just read was the number it was looking for. */}
+                  <DeltaValue
+                    delta={delta}
+                    className="w-14 shrink-0 text-right text-sm font-semibold"
+                  />
+
+                  {/* Where the average was and where it is, last: it is the
+                      working behind the change rather than the reading, and it is
+                      the first thing a narrow pane can do without. */}
                   <span
-                    className="numeric hidden shrink-0 text-xs text-muted-foreground @2xl/main:inline"
+                    className="numeric hidden shrink-0 text-right text-xs text-muted-foreground @2xl/main:inline"
                     aria-label={t("Average without and with this value")}
                   >
                     <AverageValue
@@ -172,11 +184,6 @@ export function ImpactGrid({
                       decimals={2}
                     />
                   </span>
-
-                  <DeltaValue
-                    delta={delta}
-                    className="w-14 shrink-0 text-right text-sm font-semibold"
-                  />
                 </li>
               )
             })}
