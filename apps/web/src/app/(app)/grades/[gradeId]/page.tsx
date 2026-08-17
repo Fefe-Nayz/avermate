@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { use, useMemo } from "react"
+import { use, useMemo, type ReactNode } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, PencilIcon } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
@@ -26,6 +26,7 @@ import {
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import {
   CoefficientBadge,
+  DeltaValue,
   PointsValue,
   ResultBadge,
 } from "@/components/data/value"
@@ -179,8 +180,27 @@ export default function GradePage({
       : []),
   ]
 
+  /**
+   * How far the reading moved since the last time this subject was assessed.
+   *
+   * The one thing the rest of the page never says. The rank compares this result
+   * to every other without regard to order; the impact compares it to its own
+   * absence. Neither answers "which way am I going", which is the reading a
+   * student is actually looking for — and the only one here that is about the
+   * sequence rather than about the set.
+   *
+   * Against the previous *day* rather than the previous element, which is what
+   * `gradeNeighbours` already means: two results sat the same morning are
+   * companions, and a delta between them describes the paper, not the progress.
+   */
+  const previousRatio = neighbours.previous
+    ? gradeRatio(neighbours.previous)
+    : null
+  const progress =
+    ratio !== null && previousRatio !== null ? ratio - previousRatio : null
+
   /** The stored coefficient is not a reading; its share of the subject is. */
-  const standing = [
+  const standing: Array<{ id: string; label: string; value: ReactNode }> = [
     ...(inSubject && subject
       ? [
           {
@@ -214,6 +234,19 @@ export default function GradePage({
               style: "percent",
               maximumFractionDigits: 0,
             }),
+          },
+        ]
+      : []),
+    ...(progress !== null && neighbours.previous
+      ? [
+          {
+            id: "progress",
+            label: t("Since {name}", { name: neighbours.previous.name }),
+            // `DeltaValue`, so it is signed, scaled and coloured the way every
+            // other change in the app is — including `±` when it is a draw.
+            value: (
+              <DeltaValue delta={progress} className="text-lg font-semibold" />
+            ),
           },
         ]
       : []),
@@ -313,7 +346,10 @@ export default function GradePage({
             <h2 className="px-1 text-sm font-medium">{t("Where it stands")}</h2>
             {/* The same tiles the subject page sets its figures in, so a reading
                 looks the same wherever the app reports one. */}
-            <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-3">
+            {/* Four across on a wide pane and two-by-two on a narrow one, which
+                is why the fourth reading is worth having beyond what it says:
+                three tiles left a hole on every phone. */}
+            <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-4">
               {standing.map((reading) => (
                 <div
                   key={reading.id}
