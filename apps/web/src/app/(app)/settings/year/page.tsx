@@ -17,6 +17,8 @@ import {
   DragHandle,
   SortableList,
   SortableRow,
+  sortableListClassName,
+  sortableRowClassName,
 } from "@/components/ui/sortable-list"
 import {
   AlertDialog,
@@ -390,91 +392,101 @@ export default function YearSettingsPage() {
             </Button>
           }
         >
+          {/* The app's sortable list, the same object as the custom averages, the
+              goals and the sidebar settings. This was a fourth set of numbers —
+              `min-h-16`, `px-1`, `border-b` with a `last:` exception, and a grip
+              with no gutter — for the same thing those three already are. */}
           <SortableList
             ids={years.map((item) => item.id)}
             onReorder={reorderYearList}
           >
-            {years.map((item) => {
-              const isCurrent = item.id === yearId
-              const isArchived = Boolean(item.archivedAt)
-              const canArchive = isArchived || activeYearCount > 1
+            <ul className={sortableListClassName}>
+              {years.map((item, index) => {
+                const isCurrent = item.id === yearId
+                const isArchived = Boolean(item.archivedAt)
+                const canArchive = isArchived || activeYearCount > 1
 
-              return (
-                <SortableRow
-                  key={item.id}
-                  id={item.id}
-                  as="div"
-                  disabled={reorderYears.isPending}
-                  className="flex min-h-16 items-center gap-2 border-b px-1 py-3 last:border-b-0"
-                >
-                  <DragHandle />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {item.name}
-                      {isCurrent ? (
-                        <span className="ml-2 text-xs font-normal text-primary">
-                          {t("Current")}
-                        </span>
-                      ) : null}
-                      {isArchived ? (
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {t("Archived")}
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {format.dateTime(new Date(item.startsAt), {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      {" → "}
-                      {format.dateTime(new Date(item.endsAt), {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={!canArchive || archiveYear.isPending}
-                    aria-label={
-                      isArchived
-                        ? t("Restore {name}", { name: item.name })
-                        : t("Archive {name}", { name: item.name })
-                    }
-                    onClick={() =>
-                      archiveYear.mutate({
-                        yearId: item.id,
-                        archived: !isArchived,
-                      })
-                    }
+                return (
+                  <SortableRow
+                    key={item.id}
+                    id={item.id}
+                    disabled={reorderYears.isPending}
+                    className={sortableRowClassName(index)}
                   >
-                    {isArchived ? (
-                      <ArchiveRestoreIcon className="size-4" />
-                    ) : (
-                      <ArchiveIcon className="size-4" />
-                    )}
-                  </Button>
-                  {years.length > 1 ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-destructive hover:text-destructive"
-                      aria-label={t("Delete {name}", { name: item.name })}
-                      onClick={() => {
-                        haptic("warning")
-                        setDeletingYearId(item.id)
-                      }}
-                    >
-                      <Trash2Icon className="size-4" />
-                    </Button>
-                  ) : null}
-                </SortableRow>
-              )
-            })}
+                    <DragHandle className="ml-1.5" />
+                    {/* A year's row is not a link — it carries its own actions — so
+                        it takes the shared measurements without the hover state
+                        that would promise somewhere to go. */}
+                    <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-3 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {item.name}
+                          {isCurrent ? (
+                            <span className="ml-2 text-xs font-normal text-primary">
+                              {t("Current")}
+                            </span>
+                          ) : null}
+                          {isArchived ? (
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                              {t("Archived")}
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {format.dateTime(new Date(item.startsAt), {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                          {" → "}
+                          {format.dateTime(new Date(item.endsAt), {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={!canArchive || archiveYear.isPending}
+                        aria-label={
+                          isArchived
+                            ? t("Restore {name}", { name: item.name })
+                            : t("Archive {name}", { name: item.name })
+                        }
+                        onClick={() =>
+                          archiveYear.mutate({
+                            yearId: item.id,
+                            archived: !isArchived,
+                          })
+                        }
+                      >
+                        {isArchived ? (
+                          <ArchiveRestoreIcon className="size-4" />
+                        ) : (
+                          <ArchiveIcon className="size-4" />
+                        )}
+                      </Button>
+                      {years.length > 1 ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          aria-label={t("Delete {name}", { name: item.name })}
+                          onClick={() => {
+                            haptic("warning")
+                            setDeletingYearId(item.id)
+                          }}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </SortableRow>
+                )
+              })}
+            </ul>
           </SortableList>
         </SettingsSection>
       </div>
