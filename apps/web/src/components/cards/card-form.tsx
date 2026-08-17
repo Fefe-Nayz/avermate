@@ -15,11 +15,11 @@ import {
   type CardMetric,
   type CardSpec,
 } from "@avermate/core"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
 import { ChoiceField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { CARD_ACCENTS, cardAccent } from "./card-accent"
+import { CardShell, CardShellGrid, useDashboardGrid } from "./card-shell"
 import {
   CardBody,
   cardSurface,
@@ -27,7 +27,6 @@ import {
   useMetricLabels,
 } from "./card-view"
 import { useYear } from "@/components/year/year-provider"
-import { useMediaQuery } from "@/hooks/use-media-query"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -98,14 +97,13 @@ export function CardForm({
   // room left for the sidebar the dashboard has and this page's column does
   // not. One stored width sits underneath, so choosing "half" is the same
   // decision everywhere; only its name and its drawing change.
-  const roomForFour = useMediaQuery("(min-width: 1200px)")
-  const roomForThree = useMediaQuery("(min-width: 900px)")
-  const columns = roomForFour ? 4 : roomForThree ? 3 : 2
+  // The pane the dashboard is drawn in decides, exactly as its container
+  // queries do — not this window. See `useDashboardGrid`.
+  const { columns } = useDashboardGrid()
   const shape = { display: effectiveDisplay, metric }
   const widths = availableSpans(shape, columns)
   const drawn = cardColumns({ ...shape, span }, columns)
   const rowRemainder = columns - drawn
-  const accentBar = cardAccent(accent)
 
   const spec: CardSpec = useMemo(() => {
     const validDisplays = allowedDisplays(metric)
@@ -234,43 +232,18 @@ export function CardForm({
      card floating on its own. It stays on screen through every step, because
      every step changes what it looks like. */
   const previewGrid = (
-    <div
-      className={cn(
-        "grid gap-3",
-        columns === 4
-          ? "grid-cols-4"
-          : columns === 3
-            ? "grid-cols-3"
-            : "grid-cols-2"
-      )}
-    >
-      <Card
-        className={cn(
-          "@container/card relative gap-2 overflow-hidden py-4",
-          cardSurface(preview),
-          PREVIEW_SPAN[drawn]
-        )}
+    <CardShellGrid>
+      {/* The very shell the grid draws. Written out here a second time, it had
+          lost `min-h-0 flex-1` from the body — so a chart took its natural
+          height instead of the row's and the preview was a different card. */}
+      <CardShell
+        accent={spec.accent}
+        surface={cardSurface(preview)}
+        spanClasses={PREVIEW_SPAN[drawn]}
+        title={spec.title ?? labels[metric]}
       >
-        {accentBar ? (
-          <span
-            aria-hidden
-            className={cn("absolute inset-x-0 top-0 h-0.5", accentBar.bar)}
-          />
-        ) : null}
-        <CardHeader className="px-4">
-          <CardTitle
-            className={cn(
-              "line-clamp-2 text-xs leading-tight font-medium tracking-wide uppercase",
-              accentBar ? accentBar.text : "text-muted-foreground"
-            )}
-          >
-            {spec.title ?? labels[metric]}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4">
-          <CardBody spec={spec} result={preview} />
-        </CardContent>
-      </Card>
+        <CardBody spec={spec} result={preview} />
+      </CardShell>
       {rowRemainder > 0 ? (
         <div
           aria-hidden
@@ -280,7 +253,7 @@ export function CardForm({
           )}
         />
       ) : null}
-    </div>
+    </CardShellGrid>
   )
 
   const targetSummary =

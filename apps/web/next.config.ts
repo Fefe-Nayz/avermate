@@ -129,26 +129,41 @@ const nextConfig: NextConfig = {
   },
 }
 
-// No locale routing: the locale comes from a cookie (see src/i18n/request.ts).
-// `useExtracted` pulls the inline English strings into messages/en.json and
-// keeps fr.json in step, so a screen can never ship with a missing key.
-// The experimental extractor writes message files while modules compile.
-// Running it during incremental development can leave a partial catalogue
-// when several Turbopack compilations overlap, so extraction is build-only.
-const withNextIntl =
-  process.env.NODE_ENV === "development"
-    ? createNextIntlPlugin()
-    : createNextIntlPlugin({
-        experimental: {
-          extract: true,
-          messages: {
-            path: "./messages",
-            format: "json",
-            locales: ["en", "fr"],
-            sourceLocale: "en",
-          },
-          srcPath: "./src",
-        },
-      })
+/*
+ * No locale routing: the locale comes from a cookie (see src/i18n/request.ts).
+ * `useExtracted` pulls the inline English strings into messages/en.json and
+ * keeps fr.json in step, so a screen can never ship with a missing key.
+ *
+ * Extraction runs in development too, and it has to. It is not only a build
+ * step that fills the catalogues: the same option installs the loader that
+ * rewrites each `t("Some text")` call into a lookup of that message's generated
+ * id — `messages/fr.json` is keyed `"y1Z3or": "Langue"`, not `"Language"`. With
+ * the option off, no call site asks for an id, every string renders its inline
+ * English source, and the whole app is English whatever the locale says. The
+ * language setting then looks broken while doing exactly what it is told: the
+ * cookie is written, the server resolves `fr`, `<html lang="fr">` is correct,
+ * and the French catalogue is even shipped to the client — with nothing to read
+ * it. That cost a while to find, which is the other reason this is on.
+ *
+ * The risk it was turned off for is real and worth naming: the extractor writes
+ * the catalogues while modules compile, and overlapping Turbopack compilations
+ * can leave them partially written. They are committed, so the damage is always
+ * visible as `git diff -- apps/web/messages` and undone by checking them out
+ * again. A blank value is also harmless at runtime — `src/i18n/request.ts`
+ * falls back to the source locale for any key whose translation is empty, so a
+ * half-written catalogue reads as English rather than as nothing.
+ */
+const withNextIntl = createNextIntlPlugin({
+  experimental: {
+    extract: true,
+    messages: {
+      path: "./messages",
+      format: "json",
+      locales: ["en", "fr"],
+      sourceLocale: "en",
+    },
+    srcPath: "./src",
+  },
+})
 
 export default withNextIntl(nextConfig)

@@ -22,7 +22,6 @@ import {
   type WidgetOptionProvider,
   type WidgetSurface,
 } from "@avermate/core"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ChoiceField,
   FormSection,
@@ -30,11 +29,12 @@ import {
 } from "@/components/forms/controls"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
 import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
-import { useMediaQuery } from "@/hooks/use-media-query"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
-import { CARD_ACCENTS, cardAccent } from "./card-accent"
+import { CARD_ACCENTS } from "./card-accent"
+import { CardShell, CardShellGrid, useDashboardGrid } from "./card-shell"
+import { cardSurface } from "./card-view"
 import {
   WidgetFieldRenderer,
   type WidgetOptionSets,
@@ -162,14 +162,13 @@ export function WidgetForm({
   )
   const defaultTitle = message(capability.messageKey)
 
-  const roomForFour = useMediaQuery("(min-width: 1200px)")
-  const roomForThree = useMediaQuery("(min-width: 900px)")
-  const columns = roomForFour ? 4 : roomForThree ? 3 : 2
+  // The pane the dashboard is drawn in decides, exactly as its container
+  // queries do — not this window. See `useDashboardGrid`.
+  const { columns } = useDashboardGrid()
   const projection = widgetDefinitionToLegacyProjection(flow.prunedDefinition)
   const shape = { metric: projection.metric, display: projection.display }
   const widths = availableSpans(shape, columns)
   const drawn = cardColumns({ ...shape, span }, columns)
-  const accentStyle = cardAccent(accent)
 
   const updateDraft = (draft: WidgetDraftValue) => {
     setDefinition(
@@ -244,43 +243,28 @@ export function WidgetForm({
   }
 
   const preview = (
-    <div
-      className={cn(
-        "grid gap-3",
-        columns === 4
-          ? "grid-cols-4"
-          : columns === 3
-            ? "grid-cols-3"
-            : "grid-cols-2"
-      )}
-    >
-      <Card
-        className={cn(
-          "@container/card relative min-h-36 gap-2 overflow-hidden py-4",
-          PREVIEW_SPAN[drawn]
-        )}
+    <CardShellGrid>
+      {/* The very shell the grid draws. This copy had grown a `min-h-36` floor
+          the real card has no trace of, dropped `cardSurface` — so the preview
+          never showed a loading, empty or error state — and let a long title run
+          unclamped. */}
+      <CardShell
+        accent={accent}
+        surface={cardSurface(result)}
+        spanClasses={PREVIEW_SPAN[drawn]}
+        title={title.trim() || defaultTitle}
       >
-        {accentStyle ? (
-          <span
-            aria-hidden
-            className={cn("absolute inset-x-0 top-0 h-0.5", accentStyle.bar)}
-          />
-        ) : null}
-        <CardHeader className="px-4">
-          <CardTitle
-            className={cn(
-              "text-xs leading-tight font-medium tracking-wide uppercase",
-              accentStyle ? accentStyle.text : "text-muted-foreground"
-            )}
-          >
-            {title.trim() || defaultTitle}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="min-h-0 flex-1 px-4">
-          <WidgetBody definition={flow.prunedDefinition} result={result} />
-        </CardContent>
-      </Card>
-    </div>
+        {/* `expanded` is not decoration: it takes a chart from 170px to 300 or
+            320. The grid passes it for every insights card and this preview
+            passed nothing, so an insights card was previewed at half the height
+            it would be drawn at — the body diverging, not just its frame. */}
+        <WidgetBody
+          definition={flow.prunedDefinition}
+          result={result}
+          expanded={surface === "insights"}
+        />
+      </CardShell>
+    </CardShellGrid>
   )
 
   const steps: FlowStep[] = [

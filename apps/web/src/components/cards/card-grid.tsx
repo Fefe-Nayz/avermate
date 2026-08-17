@@ -43,18 +43,12 @@ import {
   type WidgetSurface,
 } from "@avermate/core"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { CardAction } from "@/components/ui/card"
 import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
-import { cardAccent } from "./card-accent"
+import { CardShell } from "./card-shell"
 import {
   gridPreviewTransforms,
   readGridTracks,
@@ -185,7 +179,6 @@ function DashboardCard({
     widgetCapability(widgetMeasureId(resolved.definition.analysis.measure))
       .messageKey
   )
-  const accent = cardAccent(spec.accent)
   const route = surface === "insights" ? "/insights/cards" : "/dashboard/cards"
   const queryClient = useQueryClient()
   const visibility = useMutation({
@@ -209,47 +202,26 @@ function DashboardCard({
   } = useSortable({ id: row.id, disabled: !editing })
 
   return (
-    <Card
+    <CardShell
       ref={setNodeRef}
       // The grid reads this back to measure a row's edge while dragging.
       data-card-id={row.id}
       style={{ transform: CSS.Translate.toString(transform), transition }}
+      accent={spec.accent}
+      surface={cardSurface(
+        resolved.source === "legacy" ? legacyResult : widgetResult
+      )}
+      spanClasses={spanClasses}
       className={cn(
-        // Its own query container: the body scales its type to the width the
-        // grid actually gave this card, not to the viewport.
-        "@container/card relative gap-2 overflow-hidden py-4",
-        cardSurface(resolved.source === "legacy" ? legacyResult : widgetResult),
-        spanClasses,
         row.hidden && "opacity-55",
         isDragging && "z-10 opacity-80 shadow-lg"
       )}
-    >
-      {accent ? (
-        <span
-          aria-hidden
-          className={cn("absolute inset-x-0 top-0 h-0.5", accent.bar)}
-        />
-      ) : null}
-      {/* CardHeader is a grid, and CardAction is its second column: the title
-          gets the `1fr` and the controls the `auto`, so the two never bargain
-          for the same pixels. Laying them out as loose flex siblings is what
-          let a long title be squeezed mid-word on the narrowest column, and
-          left the handle sitting on a different baseline from the buttons. */}
-      <CardHeader className="px-4">
-        <CardTitle
-          className={cn(
-            // Two lines rather than an ellipsis: at the narrowest column
-            // "Strongest subject" does not fit on one, and a card whose own
-            // title is cut off has stopped saying what it is. `break-words`
-            // covers the case the column is narrower than the longest word.
-            "line-clamp-2 min-w-0 text-xs leading-tight font-medium tracking-wide break-words uppercase",
-            accent ? accent.text : "text-muted-foreground"
-          )}
-        >
-          {spec.title ??
-            (resolved.source === "v1" ? defaultTitle : labels[spec.metric])}
-        </CardTitle>
-        {editing ? (
+      title={
+        spec.title ??
+        (resolved.source === "v1" ? defaultTitle : labels[spec.metric])
+      }
+      action={
+        editing ? (
           <CardAction className="flex items-center gap-0.5">
             <Button
               variant="ghost"
@@ -290,23 +262,19 @@ function DashboardCard({
               <GripVerticalIcon className="size-4" />
             </Button>
           </CardAction>
-        ) : null}
-      </CardHeader>
-      {/* The row's height is set by its tallest card; `flex-1` hands the
-          difference to the body so charts can drink it. Bodies that keep
-          their natural height simply leave it. */}
-      <CardContent className="min-h-0 flex-1 px-4">
-        {resolved.source === "v1" ? (
-          <WidgetBody
-            definition={resolved.definition}
-            result={widgetResult}
-            expanded={surface === "insights"}
-          />
-        ) : (
-          <CardBody spec={spec} result={legacyResult} />
-        )}
-      </CardContent>
-    </Card>
+        ) : null
+      }
+    >
+      {resolved.source === "v1" ? (
+        <WidgetBody
+          definition={resolved.definition}
+          result={widgetResult}
+          expanded={surface === "insights"}
+        />
+      ) : (
+        <CardBody spec={spec} result={legacyResult} />
+      )}
+    </CardShell>
   )
 }
 
