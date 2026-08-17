@@ -10,9 +10,12 @@ import {
   DragHandle,
   SortableList,
   SortableRow,
+  sortableListClassName,
+  sortableRowClassName,
 } from "@/components/ui/sortable-list"
 import { Switch } from "@/components/ui/switch"
 import { haptic } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 import { randomId } from "@/lib/id"
 import {
   periodDraftProblems,
@@ -167,66 +170,79 @@ export function PeriodDraftEditor({
             if (ordered.length === value.length) onChange(ordered)
           }}
         >
-          {value.map((draft, index) => (
-            <SortableRow
-              key={draft.key}
-              id={draft.key}
-              as="div"
-              className="rounded-xl border bg-card p-3"
-            >
-              <div className="flex items-center gap-2 pb-3">
-                <DragHandle className="-ml-1" />
-                <input
-                  value={draft.name}
-                  maxLength={64}
-                  aria-label={t("Period name")}
-                  onChange={(event) =>
-                    update(index, { name: event.target.value })
-                  }
-                  className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("Remove")}
-                  onClick={() => {
-                    haptic("light")
-                    onChange(value.filter((_, position) => position !== index))
-                  }}
-                >
-                  <Trash2Icon className="size-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <DateField
-                  label={t("Starts")}
-                  value={draft.startAt}
-                  onValueChange={(startAt) => update(index, { startAt })}
-                />
-                <DateField
-                  label={t("Ends")}
-                  value={draft.endAt}
-                  onValueChange={(endAt) => update(index, { endAt })}
-                />
-              </div>
-              <div className="pt-3">
-                <SettingsRow
-                  label={t("Cumulative")}
-                  description={t(
-                    "Includes everything since the start of the year."
-                  )}
-                >
-                  <Switch
-                    checked={draft.isCumulative}
-                    onCheckedChange={(isCumulative) =>
-                      update(index, { isCumulative })
+          {/* The app's sortable list — one card, rows divided by a rule, the grip
+              inline at the left — rather than a column of free-floating cards with
+              their own border and radius each. The row is taller than the shared
+              measurements because it *contains* a form: on this surface a period is
+              edited in place, since these drafts live in a wizard's state and there is
+              no route that can reach them. So it shares the card, the divider and the
+              grip's gutter, and keeps its own height. */}
+          <ul className={sortableListClassName}>
+            {value.map((draft, index) => (
+              <SortableRow
+                key={draft.key}
+                id={draft.key}
+                className={cn(
+                  sortableRowClassName(index),
+                  "flex-col items-stretch gap-0"
+                )}
+              >
+                <div className="flex items-center gap-2 px-1.5 pt-2.5 pb-3">
+                  <DragHandle />
+                  <input
+                    value={draft.name}
+                    maxLength={64}
+                    aria-label={t("Period name")}
+                    onChange={(event) =>
+                      update(index, { name: event.target.value })
                     }
+                    className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
                   />
-                </SettingsRow>
-              </div>
-            </SortableRow>
-          ))}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("Remove")}
+                    onClick={() => {
+                      haptic("light")
+                      onChange(
+                        value.filter((_, position) => position !== index)
+                      )
+                    }}
+                  >
+                    <Trash2Icon className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 px-3">
+                  <DateField
+                    label={t("Starts")}
+                    value={draft.startAt}
+                    onValueChange={(startAt) => update(index, { startAt })}
+                  />
+                  <DateField
+                    label={t("Ends")}
+                    value={draft.endAt}
+                    onValueChange={(endAt) => update(index, { endAt })}
+                  />
+                </div>
+                <div className="px-3 pt-3 pb-2">
+                  <SettingsRow
+                    label={t("Cumulative")}
+                    description={t(
+                      "Includes everything since the start of the year."
+                    )}
+                  >
+                    <Switch
+                      checked={draft.isCumulative}
+                      onCheckedChange={(isCumulative) =>
+                        update(index, { isCumulative })
+                      }
+                    />
+                  </SettingsRow>
+                </div>
+              </SortableRow>
+            ))}
+          </ul>
         </SortableList>
       )}
 
