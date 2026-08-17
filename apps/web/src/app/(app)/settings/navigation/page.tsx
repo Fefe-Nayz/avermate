@@ -1,17 +1,18 @@
 "use client"
 
 import { useExtracted } from "next-intl"
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  EllipsisIcon,
-  PlusIcon,
-} from "lucide-react"
+import { EllipsisIcon, PlusIcon } from "lucide-react"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SelectControl } from "@/components/forms/controls"
+import {
+  DragHandle,
+  SortableList,
+  SortableRow,
+  sortableListClassName,
+  sortableRowClassName,
+} from "@/components/ui/sortable-list"
 import { useQuickAddActions } from "@/components/shell/quick-add"
-import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { usePreferences } from "@/hooks/use-preferences"
 import {
@@ -83,15 +84,10 @@ export default function NavigationSettingsPage() {
     })
   }
 
-  const moveSidebar = (href: string, direction: -1 | 1) => {
-    const index = sidebar.indexOf(href)
-    const target = index + direction
-    if (index < 0 || target < 0 || target >= sidebar.length) return
-    const next = [...sidebar]
-    next.splice(index, 1)
-    next.splice(target, 0, href)
-    saveSidebar(next)
-  }
+  /** Everything not seated, in the registry's order rather than the order it left. */
+  const hiddenSidebar = CUSTOMIZABLE_NAV_HREFS.filter(
+    (href) => !sidebar.includes(href)
+  )
 
   return (
     <>
@@ -164,67 +160,99 @@ export default function NavigationSettingsPage() {
         <SettingsSection
           title={t("Sidebar")}
           description={t(
-            "Order and show the screens you live in. Hidden ones stay reachable from More and the search."
+            "Drag to order the screens you live in. Hidden ones stay reachable from More and the search."
           )}
         >
-          <ul className="overflow-hidden rounded-xl border bg-card">
-            {CUSTOMIZABLE_NAV_HREFS.map((href) => {
-              const entry = NAV_ENTRIES.find(
-                (candidate) => candidate.href === href
-              )
-              if (!entry) return null
-              const position = sidebar.indexOf(href)
-              const visible = position >= 0
-              return (
-                <li
-                  key={href}
-                  className="flex min-h-12 items-center gap-2 border-b px-3 py-2 last:border-b-0"
-                >
-                  <entry.icon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {labels[href] ?? href}
-                  </span>
-                  {visible ? (
-                    <>
-                      <Button
-                        aria-label={t("Move up")}
-                        disabled={position === 0}
-                        onClick={() => moveSidebar(href, -1)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
+          {/* Two lists rather than one, because that is what the setting *is*: an
+              ordered selection, and everything else. A single list had a handle on
+              some rows and not others, and arrows that were disabled at the ends —
+              so the rows that could move looked like the rows that could not.
+
+              Dragging is the app's own sortable list, the same object as the custom
+              averages and the goals, so this page stops being the one place where
+              order is changed by pressing a button repeatedly. */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <p className="px-1 text-xs font-medium text-muted-foreground">
+                {t("In your sidebar")}
+              </p>
+              <SortableList ids={sidebar} onReorder={saveSidebar}>
+                <ul className={sortableListClassName}>
+                  {sidebar.map((href, index) => {
+                    const entry = NAV_ENTRIES.find(
+                      (candidate) => candidate.href === href
+                    )
+                    if (!entry) return null
+                    return (
+                      <SortableRow
+                        key={href}
+                        id={href}
+                        className={sortableRowClassName(index)}
                       >
-                        <ArrowUpIcon className="size-4" />
-                      </Button>
-                      <Button
-                        aria-label={t("Move down")}
-                        disabled={position === sidebar.length - 1}
-                        onClick={() => moveSidebar(href, 1)}
-                        size="icon-sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        <ArrowDownIcon className="size-4" />
-                      </Button>
-                    </>
-                  ) : null}
-                  <Switch
-                    aria-label={labels[href] ?? href}
-                    checked={visible}
-                    disabled={visible && sidebar.length <= 1}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        saveSidebar([...sidebar, href])
-                        return
-                      }
-                      if (sidebar.length <= 1) return
-                      saveSidebar(sidebar.filter((item) => item !== href))
-                    }}
-                  />
-                </li>
-              )
-            })}
-          </ul>
+                        <DragHandle className="ml-1.5" />
+                        <div className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                          <entry.icon className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate text-sm">
+                            {labels[href] ?? href}
+                          </span>
+                          <Switch
+                            aria-label={labels[href] ?? href}
+                            checked
+                            // The last one cannot leave: a sidebar with nothing in
+                            // it is a sidebar you cannot navigate from.
+                            disabled={sidebar.length <= 1}
+                            onCheckedChange={() => {
+                              if (sidebar.length <= 1) return
+                              saveSidebar(
+                                sidebar.filter((item) => item !== href)
+                              )
+                            }}
+                          />
+                        </div>
+                      </SortableRow>
+                    )
+                  })}
+                </ul>
+              </SortableList>
+            </div>
+
+            {hiddenSidebar.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <p className="px-1 text-xs font-medium text-muted-foreground">
+                  {t("Hidden")}
+                </p>
+                <ul className={sortableListClassName}>
+                  {hiddenSidebar.map((href, index) => {
+                    const entry = NAV_ENTRIES.find(
+                      (candidate) => candidate.href === href
+                    )
+                    if (!entry) return null
+                    return (
+                      <li key={href} className={sortableRowClassName(index)}>
+                        {/* No handle: an unordered set has no order to change, and
+                            a grip that did nothing would say otherwise. The gutter
+                            keeps the two lists aligned all the same. */}
+                        <span aria-hidden className="ml-1.5 size-8 shrink-0" />
+                        <div className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-3 py-2">
+                          <entry.icon className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                            {labels[href] ?? href}
+                          </span>
+                          <Switch
+                            aria-label={labels[href] ?? href}
+                            checked={false}
+                            onCheckedChange={() =>
+                              saveSidebar([...sidebar, href])
+                            }
+                          />
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         </SettingsSection>
       </div>
     </>
