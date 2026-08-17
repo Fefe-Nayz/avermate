@@ -112,6 +112,70 @@ function moveTo(ids: readonly string[], from: number, to: number): string[] {
 }
 
 /**
+ * The stretch of a row the active card can trade places with.
+ *
+ * Not a single card: a half-width card is worth two quarter-width ones, and a
+ * person dropping it onto a pair of them means exactly that. What is needed is a
+ * *contiguous run of one row*, containing the card under the pointer, whose
+ * requested widths add up to the active card's own — one card of the same width,
+ * or two, or four, whatever the row is made of.
+ *
+ * Searched from the target outwards, and that order is the whole of the rule:
+ *
+ * - **Starting at the target**, so the card lands with its leading edge on the
+ *   card that was pointed at. That is where a person aiming expects it.
+ * - **Then reaching back**, one card at a time, for a target too near the end of
+ *   its row to have enough room to its right. Reaching back the least is
+ *   preferred, so the run stays as centred on the target as the row allows.
+ *
+ * The sums are positive, so at most one run can start at a given card — there is
+ * never a choice to arbitrate, only the first start that works.
+ */
+function swapRun(
+  items: readonly CardPlacement[],
+  at: number,
+  width: number,
+): { start: number; end: number } | null {
+  for (let start = at; start >= 0; start -= 1) {
+    let sum = 0;
+    for (let end = start; end < items.length; end += 1) {
+      sum += (items[end] as CardPlacement).requestedColumns;
+      if (sum > width) break;
+      // `end >= at` keeps the card that was pointed at inside the run; without
+      // it, reaching back could find a run that stops short of the target and
+      // exchange with cards nobody aimed at.
+      if (sum === width && end >= at) return { start, end };
+    }
+  }
+  return null;
+}
+
+/**
+ * The active card and a run of another row trade places.
+ *
+ * One card goes where the run was and the run goes where the card was, each
+ * keeping its internal order. `from` is never inside `[runFrom, runTo]` — the run
+ * is in another row — so the two substitutions cannot interfere.
+ */
+function exchange(
+  ids: readonly string[],
+  from: number,
+  runFrom: number,
+  runTo: number,
+): string[] {
+  const run = ids.slice(runFrom, runTo + 1);
+  const active = ids[from] as string;
+  const next: string[] = [];
+  for (let index = 0; index < ids.length; index += 1) {
+    if (index === from) next.push(...run);
+    else if (index === runFrom) next.push(active);
+    else if (index > runFrom && index <= runTo) continue;
+    else next.push(ids[index] as string);
+  }
+  return next;
+}
+
+/**
  * The order a drop should produce, in canonical ids.
  *
  * `overId` is the card the pointer settled on, which is all a sortable context
@@ -164,6 +228,16 @@ export interface GridReorderPlan {
     /** The card whose index the move targets. Reporting it makes preview truth. */
     anchorId: string;
   } | null;
+  /**
+   * The cards the active one traded places with, or `null` for an insertion.
+   *
+   * Reported because an exchange is the one outcome here that moves more than the
+   * card being dragged, and a caller cannot work out which cards those were from
+   * the order alone. Its first use is to keep the invariant honest — "nothing the
+   * gesture did not name is disturbed" has to name these too — and a drag that
+   * wanted to outline what is about to move has it to hand.
+   */
+  exchanged: string[] | null;
 }
 
 /** The plan a drop would carry out, and how it should be shown while dragging. */
@@ -177,24 +251,99 @@ export function planGridReorder(
   const from = ids.indexOf(activeId);
   const over = ids.indexOf(overId);
   if (from < 0 || over < 0 || from === over) {
-    return { order: ids, insertion: null };
+    return { order: ids, insertion: null, exchanged: null };
   }
 
   const layout = layoutCardGrid(specs, columns);
   const active = layout.byId.get(activeId);
   const target = layout.byId.get(overId);
   if (!active || !target) {
-    return { order: moveTo(ids, from, over), insertion: null };
+    return { order: moveTo(ids, from, over), insertion: null, exchanged: null };
   }
 
   const row = layout.rows[target.rowIndex];
   const sameRow = active.rowIndex === target.rowIndex;
-  const joins =
-    active.requestedColumns <= target.requestedColumns ||
-    (row?.remainingColumns ?? 0) >= active.requestedColumns;
+
+  /**
+   * Crossing rows onto cards that add up to this one is an *exchange*, not a move.
+   *
+   * The reported symptom was that a wide card could not be shifted one row up or
+   * down in a single gesture — only diagonally, and then along its new row. Here
+   * is why. Take the dashboard as it ships on four columns:
+   *
+   *     [average(2) latest(1) weakest(1)]        order: average latest weakest
+   *     [strongest(1) pass(1) ranking(2)]               strongest pass ranking
+   *
+   * Drag `average` down onto `ranking` and an insertion gives
+   * `[latest weakest strongest pass ranking average]`, which repacks as a row of
+   * four small cards over `ranking` and `average` *side by side*. Neither wide card
+   * went where it was pointed. No pointer position produces the arrangement being
+   * asked for either, because an insertion can only ever insert.
+   *
+   * Exchanging them gives `[ranking latest weakest strongest pass average]` — the
+   * two rows keep their shapes and the two wide cards have traded them.
+   *
+   * And the partner need not be one card. A half-width card is worth two
+   * quarter-width ones, so dropping it onto a pair of them trades it for the pair;
+   * `swapRun` finds whatever contiguous stretch of the target's row adds up to it.
+   *
+   * How much of the layout survives depends on how many cards the partner is, and
+   * it is worth being exact about it, because the packer reads nothing but the
+   * sequence of requested widths:
+   *
+   * - **One for one.** The sequence is *identical* — two equal numbers have swapped
+   *   places. No row boundary can move, every row keeps the spare columns it had,
+   *   and no card is widened or narrowed. Only the occupancy changes.
+   * - **One for several.** The two rows that were touched keep their totals, since
+   *   each site gave up and took back the same number of columns. Rows before the
+   *   first site and after the second keep their exact composition too. Rows
+   *   *between* the two sites can re-break: every card there shifts by the
+   *   difference in card count, so a ragged row that had a hole may find a
+   *   different neighbour to fill it. `[M‖A B‖c‖N‖d]` on two columns is the small
+   *   case — trading `N` for `A B` lets `c` pair up with `A` and closes the row `c`
+   *   had to itself.
+   *
+   * That second freedom is the same one every insertion already has, and it is the
+   * price of the gesture being possible at all.
+   *
+   * Two conditions bound it, each excluding a case where something else is meant:
+   *
+   * - **Across rows.** Inside one row an insertion already *is* the exchange for
+   *   two adjacent cards, and reads as a list — which is what a single row is.
+   * - **The row is full.** A row with a hole beside the target can take the card
+   *   *as well*, and that is more of what was asked for than evicting cards that
+   *   were not in the way. Dropping a quarter card onto a lone half-width one joins
+   *   it and narrows it; it does not send it to the other end of the dashboard.
+   *
+   * There is no third condition about widths. A run that adds up exists or it does
+   * not, and when it does not — a half-width card aimed at a row of thirds — the
+   * insertion below is still the honest answer.
+   */
+  const hasRoom = (row?.remainingColumns ?? 0) >= active.requestedColumns;
+  const run =
+    sameRow || hasRoom || !row
+      ? null
+      : swapRun(
+          row.items,
+          row.items.findIndex((item) => item.spec.id === overId),
+          active.requestedColumns,
+        );
+  if (run) {
+    const runFrom = ids.indexOf(
+      (row?.items[run.start] as CardPlacement).spec.id,
+    );
+    const runTo = runFrom + (run.end - run.start);
+    return {
+      order: exchange(ids, from, runFrom, runTo),
+      insertion: null,
+      exchanged: ids.slice(runFrom, runTo + 1),
+    };
+  }
+
+  const joins = active.requestedColumns <= target.requestedColumns || hasRoom;
 
   if (sameRow || !row || joins) {
-    return { order: moveTo(ids, from, over), insertion: null };
+    return { order: moveTo(ids, from, over), insertion: null, exchanged: null };
   }
 
   const after = from < over;
@@ -204,7 +353,8 @@ export function planGridReorder(
     ? (row.items[row.items.length - 1] as CardPlacement).spec.id
     : (row.items[0] as CardPlacement).spec.id;
   const to = ids.indexOf(anchor);
-  if (to < 0) return { order: moveTo(ids, from, over), insertion: null };
+  if (to < 0)
+    return { order: moveTo(ids, from, over), insertion: null, exchanged: null };
 
   return {
     order: moveTo(ids, from, to),
@@ -213,6 +363,7 @@ export function planGridReorder(
       edge: after ? "after" : "before",
       anchorId: anchor,
     },
+    exchanged: null,
   };
 }
 

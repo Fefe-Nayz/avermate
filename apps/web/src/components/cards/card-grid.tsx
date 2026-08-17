@@ -3,6 +3,7 @@
 import Link from "next/link"
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -56,9 +57,9 @@ import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { CardShell, cardSurface } from "./card-shell"
 import {
+  aimGridSlot,
   captureGridSlots,
   gridColumnCount,
-  nearestGridSlot,
   overlayGrabShift,
   sameCardOrder,
   type GridSlot,
@@ -172,6 +173,17 @@ interface DragSession {
   specs: CardSpec[]
   columns: number
   slots: GridSlot[]
+  /**
+   * The card set the snapshot was taken of.
+   *
+   * Everything above describes an arrangement, and an arrangement is only about
+   * the cards it was measured from. If a refetch adds, removes or resizes one
+   * mid-gesture, the frozen slots describe a grid that is no longer on screen and
+   * every decision taken against them is about the wrong dashboard.
+   */
+  cardsKey: string
+  /** What the drag was last aiming at, so the aim can prefer to stay put. */
+  targetId: string | null
   /** Where inside the card the pointer took hold; `null` for a keyboard drag. */
   grab: { x: number; y: number } | null
   source: { width: number; height: number } | null
@@ -406,6 +418,23 @@ export function CardGrid({
     () => surfaceCards.filter((card) => editing || !card.hidden),
     [editing, surfaceCards]
   )
+  /**
+   * What a frozen drag snapshot is a snapshot *of*.
+   *
+   * Which cards exist and how wide each asks to be — not their order, which the
+   * drag itself is busy changing. A refetch landing mid-gesture that returns the
+   * same cards leaves this untouched and the drag continues; one that adds a card,
+   * removes one, or changes a span makes every frozen slot describe a grid nobody
+   * is looking at, and the drag has to go.
+   */
+  const cardsKey = useMemo(
+    () =>
+      stored
+        .map((row) => `${row.id}:${row.span}:${row.hidden ? 1 : 0}`)
+        .sort()
+        .join("|"),
+    [stored]
+  )
   const gridRef = useRef<HTMLDivElement>(null)
   /**
    * The order the drop produced, held until the server's own order arrives.
@@ -423,6 +452,14 @@ export function CardGrid({
   const [previewIds, setPreviewIds] = useState<string[] | null>(null)
   const sessionRef = useRef<DragSession | null>(null)
   const [session, setSession] = useState<DragSession | null>(null)
+  /**
+   * Bumped to throw away a drag dnd-kit is still holding.
+   *
+   * Used as `DndContext`'s key. Clearing our own session is not enough on its own:
+   * dnd-kit keeps its own active-drag state and its own measured rectangles, and
+   * nothing in its API says "forget this drag, the page moved underneath it".
+   */
+  const [dragEpoch, setDragEpoch] = useState(0)
   const [overlayBox, setOverlayBox] = useState<{
     width: number
     height: number
@@ -432,6 +469,8 @@ export function CardGrid({
     () => rowsInOrder(stored, previewIds ?? pendingIds),
     [stored, previewIds, pendingIds]
   )
+  /** Whether there is a grid element at all — the empty state renders none. */
+  const hasGrid = visible.length > 0
 
   // Compiled once per card rather than once per arrangement: a drag changes the
   // order many times a second, and re-reading every definition on each of those
@@ -560,25 +599,35 @@ export function CardGrid({
     const grid = gridRef.current
     if (!active || !grid) return closestCenter(args)
 
+    const box = grid.getBoundingClientRect()
     // A keyboard drag has no pointer, and dnd-kit's own answer over the rects it
     // measured at drag start is the right one there: each keypress is a discrete
     // step through the arrangement the drag began in, which is this snapshot.
     const aimed = args.pointerCoordinates
-      ? nearestGridSlot(
-          active.slots,
-          args.pointerCoordinates,
-          grid.getBoundingClientRect()
-        )?.id
-      : closestCenter(args)[0]?.id
-    if (aimed === undefined) return []
+      ? aimGridSlot({
+          slots: active.slots,
+          point: args.pointerCoordinates,
+          origin: box,
+          bounds: box,
+          previousId: active.targetId,
+        })
+      : (closestCenter(args)[0]?.id ?? null)
 
-    const { insertion } = planGridReorder(
-      active.specs,
-      active.columns,
-      active.activeId,
-      String(aimed)
-    )
-    return [{ id: insertion?.anchorId ?? String(aimed) }]
+    // Remembered so the next answer can prefer to stay put, and so a pointer
+    // that has left the grid can be told apart from one that has not moved.
+    active.targetId = aimed === null ? null : String(aimed)
+    if (aimed === null) return []
+
+    // Reported as aimed, not translated first. This used to hand back
+    // `insertion.anchorId` — the far card of the destination row — so that
+    // dnd-kit's own sorting strategy would preview the order the drop produced.
+    // No strategy draws anything any more (`staticStrategy`), so the only reader
+    // left is `dragOver`, which plans against whatever it is told. Translating
+    // here meant planning twice from two different targets, and the second plan
+    // could legitimately reach a different arrangement than the first — the
+    // reported row-end can have a trade partner the aimed card had not. One aim,
+    // one plan, drawn and saved.
+    return [{ id: String(aimed) }]
   }, [])
 
   const clearDrag = useCallback(() => {
@@ -588,6 +637,66 @@ export function CardGrid({
     setPreviewIds(null)
     setOverlayBox(null)
   }, [])
+
+  /**
+   * Abandon a gesture whose snapshot has stopped describing the screen.
+   *
+   * Remounting `DndContext` is the blunt part and the necessary part: dnd-kit is
+   * holding an active drag with its own measured rects, and there is no way to
+   * tell it from outside that the grid it measured is gone. A new context starts
+   * with no drag, which is exactly the state we want, and the pointer is already
+   * down so nothing is left half-held.
+   */
+  const abandonDrag = useCallback(() => {
+    if (!sessionRef.current) return
+    clearDrag()
+    setDragEpoch((epoch) => epoch + 1)
+  }, [clearDrag])
+
+  /**
+   * Whether the gesture in flight is still about the dashboard on screen.
+   *
+   * Asked at both places a session is used rather than watched from an effect. An
+   * effect is the wrong shape for it twice over: React's own rule is that an effect
+   * synchronises with something outside React, and there is no outside here — the
+   * cards arrive as a render. And synchronously abandoning inside one cascades a
+   * second render out of the first.
+   *
+   * Both moments that matter are event handlers instead. `dragOver` ends the
+   * gesture the instant the pointer moves after the cards changed, and `dragEnd`
+   * refuses to commit at all — which is the destructive case, and the one that
+   * needs no pointer movement to reach: a drag merely *held* while a refetch lands
+   * would otherwise save a rearrangement of cards that are no longer there.
+   */
+  const sessionIsStale = (active: DragSession) => active.cardsKey !== cardsKey
+
+  /**
+   * A grid that changes column count ends the gesture too.
+   *
+   * The frozen slots are pixel boxes from a particular arrangement at a particular
+   * width. Rotate the phone, open the sidebar, drag the window narrower, and the
+   * grid repacks from four columns to two — every slot is now somewhere else, and
+   * `planGridReorder` is being asked about rows that no longer exist. Observed
+   * rather than polled, because a container query can fire without a resize event
+   * reaching this component at all.
+   */
+  useEffect(() => {
+    const grid = gridRef.current
+    if (!grid || !editing) return
+    const observer = new ResizeObserver(() => {
+      const active = sessionRef.current
+      if (!active) return
+      if (gridColumnCount(grid, active.columns) !== active.columns)
+        abandonDrag()
+    })
+    observer.observe(grid)
+    return () => observer.disconnect()
+    // `dragEpoch` and `hasGrid` are here because they are the two ways this
+    // effect's *subject* is replaced: an abandon remounts the grid, and an empty
+    // dashboard has no grid at all. Without them the observer stays attached to a
+    // node that has left the document, so column-change detection would work
+    // exactly once.
+  }, [abandonDrag, dragEpoch, editing, hasGrid])
 
   const onDragStart = (event: DragStartEvent) => {
     const grid = gridRef.current
@@ -613,6 +722,8 @@ export function CardGrid({
           ? { x: pointer.x - rect.left, y: pointer.y - rect.top }
           : null,
       source: rect ? { width: rect.width, height: rect.height } : null,
+      cardsKey,
+      targetId: null,
     }
     sessionRef.current = next
     previewRef.current = ids
@@ -622,7 +733,22 @@ export function CardGrid({
 
   const onDragOver = (event: DragOverEvent) => {
     const active = sessionRef.current
-    if (!active || !event.over) return
+    if (!active) return
+    if (sessionIsStale(active)) {
+      abandonDrag()
+      return
+    }
+    if (!event.over) {
+      // Aiming at nothing is a real answer, and it means the arrangement the
+      // drag started from. Leaving the last preview up instead is what let a
+      // pointer dragged off the page keep a rearrangement it was no longer
+      // pointing at — and then commit it on release.
+      if (!sameCardOrder(previewRef.current, active.ids)) {
+        previewRef.current = active.ids
+        setPreviewIds(active.ids)
+      }
+      return
+    }
     const next = planGridReorder(
       active.specs,
       active.columns,
@@ -644,7 +770,14 @@ export function CardGrid({
    */
   const onDragEnd = () => {
     const active = sessionRef.current
-    const next = previewRef.current
+    // The cards changed while this was held: the order about to be saved is a
+    // permutation of a dashboard that is no longer on screen.
+    if (active && sessionIsStale(active)) {
+      abandonDrag()
+      return
+    }
+    // Released while aiming at nothing: no target, no reorder.
+    const next = active?.targetId === null ? null : previewRef.current
     // Batched with the clear below, so the candidate arrangement is replaced by
     // the identical pending one without a frame of the old order in between.
     if (active && next && !sameCardOrder(active.ids, next)) {
@@ -743,6 +876,7 @@ export function CardGrid({
 
   return (
     <DndContext
+      key={dragEpoch}
       sensors={sensors}
       collisionDetection={collisionDetection}
       onDragStart={onDragStart}
@@ -801,7 +935,11 @@ export function CardGrid({
           finished. */}
       <DragOverlay dropAnimation={null}>
         {activeRow && overlayStyle ? (
-          <div className="pointer-events-none" style={overlayStyle}>
+          // `inert` as well as `pointer-events-none`: this is a second copy of a
+          // card that is already in the grid, so without it the same edit button,
+          // the same hide button and the same link are in the accessibility tree
+          // and the tab order twice, under the same names.
+          <div className="pointer-events-none" inert style={overlayStyle}>
             <DashboardCardView
               row={activeRow}
               spec={specsById.get(activeRow.id) ?? toSpec(activeRow)}

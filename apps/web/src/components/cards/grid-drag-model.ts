@@ -142,6 +142,88 @@ export function nearestGridSlot(
   return nearest
 }
 
+/**
+ * How far outside the grid a pointer may still be aiming at it.
+ *
+ * Generous, because dropping onto the first or last row means aiming at its edge
+ * and overshooting is normal. Bounded, because "nearest slot" answers for every
+ * point on the screen: without a limit, letting go halfway down the page — the
+ * gesture everyone uses to mean *no* — still reordered the dashboard.
+ */
+export const GRID_AIM_MARGIN = { x: 32, y: 64 }
+
+/**
+ * How much closer a new slot has to be before the aim moves to it.
+ *
+ * Compared centre-to-centre, so two adjacent slots are separated by a hairline
+ * where a pointer resting on the boundary alternates between them — and every
+ * alternation reflows the whole grid. Squared distance, so the margin is in
+ * squared pixels: `24²` is about a fingertip of stickiness.
+ */
+const AIM_HYSTERESIS = 24 * 24
+
+/**
+ * The slot a drag is aiming at, with the two things a bare nearest-neighbour
+ * answer cannot express: nothing, and a preference for staying put.
+ */
+export function aimGridSlot({
+  slots,
+  point,
+  origin,
+  bounds,
+  previousId,
+}: {
+  slots: readonly GridSlot[]
+  point: { x: number; y: number }
+  origin: GridOrigin
+  /** The grid's live box, for deciding whether the pointer is still aiming. */
+  bounds: { width: number; height: number }
+  /** What the drag was aiming at a moment ago, if anything. */
+  previousId?: string | null
+}): string | null {
+  const x = point.x - origin.left
+  const y = point.y - origin.top
+  if (
+    x < -GRID_AIM_MARGIN.x ||
+    y < -GRID_AIM_MARGIN.y ||
+    x > bounds.width + GRID_AIM_MARGIN.x ||
+    y > bounds.height + GRID_AIM_MARGIN.y
+  ) {
+    return null
+  }
+
+  let nearest: GridSlot | null = null
+  let best = Number.POSITIVE_INFINITY
+  let previous = Number.POSITIVE_INFINITY
+
+  for (const slot of slots) {
+    // Containment is unambiguous, so it needs no stickiness: a pointer inside a
+    // card is aiming at that card.
+    if (
+      x >= slot.left &&
+      x <= slot.left + slot.width &&
+      y >= slot.top &&
+      y <= slot.top + slot.height
+    ) {
+      return slot.id
+    }
+    const dx = x - (slot.left + slot.width / 2)
+    const dy = y - (slot.top + slot.height / 2)
+    const distance = dx * dx + dy * dy
+    if (slot.id === previousId) previous = distance
+    if (distance < best) {
+      best = distance
+      nearest = slot
+    }
+  }
+
+  if (!nearest) return null
+  // Keep the previous aim unless the newcomer is clearly better, so a pointer
+  // wobbling on a boundary cannot thrash the layout.
+  if (previousId && previous - best < AIM_HYSTERESIS) return previousId
+  return nearest.id
+}
+
 /** Whether two orders are the same sequence, for skipping needless renders. */
 export function sameCardOrder(
   left: readonly string[] | null | undefined,

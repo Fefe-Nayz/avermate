@@ -310,21 +310,30 @@ export default function GradePage({
                 animate
                 animateFromZero
               />
-              <p className="text-sm text-muted-foreground">
-                <PointsValue value={grade.value} outOf={grade.outOf} />
-                {grade.coefficient !== 1 ? (
+              {/* The weight, always — and the raw points only when they are not
+                  the badge above said a second time. A grade entered out of the
+                  year's own scale makes `PointsValue` render the very same
+                  numerals as `ResultBadge`, one line apart, which is how "14 / 20"
+                  came to be on this card twice. Out of anything else it is a
+                  genuine second reading: 29 / 40 is not 14,5 / 20 to look at,
+                  and the mark as it was written on the paper is worth keeping.
+                  The weight took the opposite treatment: it was hidden at ×1,
+                  which is exactly when a reader wonders whether it is missing. */}
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                {grade.outOf !== scale ? (
                   <>
-                    {" · "}
-                    <span className="numeric">
-                      {t("weight {coefficient}", {
-                        coefficient: format.number(grade.coefficient, {
-                          maximumFractionDigits: 2,
-                        }),
-                      })}
-                    </span>
+                    <PointsValue value={grade.value} outOf={grade.outOf} />
+                    <span aria-hidden>·</span>
                   </>
                 ) : null}
-              </p>
+                {/* Labelled, because `×1,5` on its own is a convention this page
+                    has no room to teach — in the lists where the bare badge
+                    appears, the row it sits on supplies the meaning. The colon is
+                    inside the message so a translator can set it the way their
+                    language does; French puts a space before it. */}
+                <span>{t("Weight:")}</span>
+                <CoefficientBadge coefficient={grade.coefficient} showWhenOne />
+              </div>
               <p className="text-xs text-muted-foreground">
                 {format.dateTime(grade.passedAt, {
                   weekday: "long",

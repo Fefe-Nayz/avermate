@@ -31,6 +31,8 @@ const wide = (id: string) => card(id, 4, "sparkline");
 const small = (id: string) => card(id, 2, "value");
 /** A quarter-span value card: one column on four. */
 const quarter = (id: string) => card(id, 1, "value");
+/** Three quarters: the width no run of halves or wholes can add up to. */
+const three = (id: string) => card(id, 3, "value");
 
 const widths = (specs: readonly CardSpec[], columns: number) =>
   layoutCards(specs, columns).map((item) => `${item.spec.id}=${item.columns}`);
@@ -140,16 +142,36 @@ describe("resolveGridReorder", () => {
     for (const columns of [1, 2, 3, 4]) {
       for (const activeId of ids) {
         for (const overId of ids) {
-          const result = resolveGridReorder(specs, columns, activeId, overId);
+          const plan = planGridReorder(specs, columns, activeId, overId);
+          const result = plan.order;
 
           // A permutation, every time.
           expect([...result].sort()).toEqual([...ids].sort());
           expect(new Set(result).size).toBe(result.length);
 
-          // Everything the gesture did not touch keeps its relative order.
-          expect(result.filter((id) => id !== activeId)).toEqual(
-            ids.filter((id) => id !== activeId),
-          );
+          // Everything the gesture did not name keeps its relative order — and
+          // the names are the active card plus whatever it traded places with,
+          // which the plan reports because an exchange is the one outcome that
+          // moves more than the card being dragged.
+          const moved = new Set([activeId, ...(plan.exchanged ?? [])]);
+          const untouched = (list: readonly string[]) =>
+            list.filter((id) => !moved.has(id));
+          expect(untouched(result)).toEqual(untouched(ids));
+
+          // A one-for-one exchange additionally leaves every row totalling exactly
+          // what it totalled, which is why it can never widen or narrow a card:
+          // two equal numbers swapping places leaves the width sequence the packer
+          // reads identical. One card for *several* keeps the two touched rows'
+          // totals but shifts every card between them by the difference in count,
+          // so a ragged row in between may re-break — see `planGridReorder`.
+          if (plan.exchanged?.length === 1) {
+            const totals = (order: readonly string[]) =>
+              layoutCardGrid(
+                order.map((id) => specs.find((spec) => spec.id === id)!),
+                columns,
+              ).rows.map((row) => row.requestedColumns);
+            expect(totals(result)).toEqual(totals(ids));
+          }
 
           // And nothing overflows the grid it was packed for.
           for (const row of layoutCardGrid(
@@ -217,6 +239,96 @@ describe("resolveGridReorder", () => {
     expect(second).toEqual(ids);
   });
 
+  it("shifts a wide card a row without dragging it twice", () => {
+    // The dashboard as it ships on four columns, and the gesture that had no
+    // answer: move the wide `average` down a row, or `ranking` up one.
+    const specs = [
+      small("average"),
+      quarter("latest"),
+      quarter("weakest"),
+      quarter("strongest"),
+      quarter("pass"),
+      small("ranking"),
+    ];
+    expect(rows(specs, 4)).toEqual([
+      ["average", "latest", "weakest"],
+      ["strongest", "pass", "ranking"],
+    ]);
+
+    const moved = resolveGridReorder(specs, 4, "average", "ranking");
+    expect(moved).toEqual([
+      "ranking",
+      "latest",
+      "weakest",
+      "strongest",
+      "pass",
+      "average",
+    ]);
+
+    // The two rows keep their exact shapes; the wide cards have exchanged them.
+    // Insertion instead gave `[… ranking average]`, putting both wide cards side
+    // by side on one row — neither of them where the pointer was.
+    const after = moved.map((id) => specs.find((spec) => spec.id === id)!);
+    expect(rows(after, 4)).toEqual([
+      ["ranking", "latest", "weakest"],
+      ["strongest", "pass", "average"],
+    ]);
+    // The *widths* are untouched, column for column — which is the property that
+    // makes the swap safe rather than merely desirable.
+    expect(layoutCards(after, 4).map((item) => item.columns)).toEqual(
+      layoutCards(specs, 4).map((item) => item.columns),
+    );
+
+    // And it reads the same from either end of the gesture.
+    expect(resolveGridReorder(specs, 4, "ranking", "average")).toEqual(moved);
+  });
+
+  it("trades one wide card for the two narrow ones that add up to it", () => {
+    // The partner does not have to be a single card. A full-width card dropped on
+    // a row of two half-width ones is worth exactly that pair, and trading it for
+    // the pair is what the gesture means — the same answer the row-atomic
+    // insertion used to reach, now for a reason that says which cards moved.
+    const specs = [wide("M"), small("A"), small("B")];
+    expect(rows(specs, 4)).toEqual([["M"], ["A", "B"]]);
+
+    for (const target of ["A", "B"]) {
+      const plan = planGridReorder(specs, 4, "M", target);
+      expect(plan.order, target).toEqual(["A", "B", "M"]);
+      expect(plan.exchanged, target).toEqual(["A", "B"]);
+    }
+  });
+
+  it("takes as much of the row as it needs, starting where it was aimed", () => {
+    // A half-width card onto a full row of quarters — the case that started this:
+    // a card two columns wide is worth two cards one column wide.
+    const specs = [
+      small("M"),
+      quarter("a"),
+      quarter("b"),
+      quarter("p"),
+      quarter("q"),
+      quarter("r"),
+      quarter("s"),
+    ];
+    expect(rows(specs, 4)).toEqual([
+      ["M", "a", "b"],
+      ["p", "q", "r", "s"],
+    ]);
+
+    // Aimed at `p`: it lands with its leading edge there and takes `q` with it.
+    const forward = planGridReorder(specs, 4, "M", "p");
+    expect(forward.exchanged).toEqual(["p", "q"]);
+    expect(forward.order).toEqual(["p", "q", "a", "b", "M", "r", "s"]);
+
+    // Aimed at `q`, one along: the run moves along with the aim.
+    expect(planGridReorder(specs, 4, "M", "q").exchanged).toEqual(["q", "r"]);
+
+    // Aimed at `s`, the last: nothing lies to its right, so the run reaches back
+    // and the card lands with its *trailing* edge on what was pointed at, rather
+    // than the gesture being refused.
+    expect(planGridReorder(specs, 4, "M", "s").exchanged).toEqual(["r", "s"]);
+  });
+
   it("is deterministic", () => {
     const specs = [wide("M"), small("A"), small("B")];
     const once = resolveGridReorder(specs, 2, "M", "A");
@@ -228,40 +340,32 @@ describe("resolveGridReorder", () => {
 describe("planGridReorder", () => {
   const specs = [wide("M"), small("A"), small("B")];
 
-  it("reports the destination edge when a card lands against a whole row", () => {
+  it("never splits a pair the dragged card is worth", () => {
     // The move a flat sortable gets wrong. Dropping the full-width card onto the
     // left half previews `[A, M, B]` — A widened into M's place, B alone below —
-    // while the drop is `[A, B, M]`. Saying so lets the drag draw the edge it is
-    // really heading for instead of shuffling a card that is not going to move.
+    // while the drop is `[A, B, M]`. The two halves are together worth exactly what
+    // the dragged card is, so the answer is that the three of them trade rows.
     const plan = planGridReorder(specs, 2, "M", "A");
 
     expect(plan.order).toEqual(["A", "B", "M"]);
-    expect(plan.insertion).toEqual({
-      rowIndex: 1,
-      edge: "after",
-      anchorId: "B",
-    });
+    expect(plan.exchanged).toEqual(["A", "B"]);
   });
 
-  it("reports the same edge from either half of that row", () => {
-    // Both halves mean the row, which is the rule this exists to make visible.
+  it("answers the same from either half of that row", () => {
+    // Both halves mean the pair, which is the rule this exists to make visible.
     const left = planGridReorder(specs, 2, "M", "A");
     const right = planGridReorder(specs, 2, "M", "B");
 
     expect(right.order).toEqual(left.order);
-    expect(right.insertion).toEqual(left.insertion);
+    expect(right.exchanged).toEqual(left.exchanged);
   });
 
-  it("marks the near edge when the card comes from below", () => {
+  it("trades the same way coming up as going down", () => {
     const fromBelow = [small("A"), small("B"), wide("M")];
     const plan = planGridReorder(fromBelow, 2, "M", "B");
 
     expect(plan.order).toEqual(["M", "A", "B"]);
-    expect(plan.insertion).toEqual({
-      rowIndex: 0,
-      edge: "before",
-      anchorId: "A",
-    });
+    expect(plan.exchanged).toEqual(["A", "B"]);
   });
 
   it("claims no edge for a swap inside one row", () => {
@@ -299,42 +403,74 @@ describe("planGridReorder", () => {
   });
 });
 
-describe("the anchor makes a flat preview honest", () => {
-  const specs = [wide("M"), small("A"), small("B")];
-  const ids = specs.map((spec) => spec.id);
+describe("the plan says which of the two things it did", () => {
+  /**
+   * Both outcomes describe themselves, and a caller that draws an affordance needs
+   * to know which it got. What it must *not* do is re-plan against what the plan
+   * reports — the drag learned that the hard way and stopped.
+   *
+   * `insertion.anchorId` was once fed back as the drag's target, so that dnd-kit's
+   * own sorting strategy would preview `arrayMove` onto it and land on the order
+   * the drop produced. That mechanism is gone: the grid renders the candidate order
+   * itself and no strategy draws anything. Feeding the anchor back was left behind,
+   * and it is worse than useless now that a card can *trade* with a run of the
+   * destination row — the row-end the anchor names may have a trade partner the
+   * aimed card had not, so planning again from the anchor could reach a different
+   * arrangement than the plan that produced it.
+   */
+  it("reports the row and the edge when it inserts against a whole row", () => {
+    // A three-quarter card over a row of two halves: no stretch of that row is
+    // worth three columns — one is two, both are four — so there is nothing to
+    // trade for and it lands against the row instead.
+    const specs = [three("M"), small("A"), small("B")];
+    expect(rows(specs, 4)).toEqual([["M"], ["A", "B"]]);
 
-  const arrayMove = (order: readonly string[], from: number, to: number) => {
-    const next = [...order];
-    const [moved] = next.splice(from, 1);
-    if (moved !== undefined) next.splice(to, 0, moved);
-    return next;
-  };
+    const plan = planGridReorder(specs, 4, "M", "A");
 
-  it("gives the same order a sortable would compute from it", () => {
-    // A sortable previews `arrayMove` onto whatever it is told the target is.
-    // Told the card under the pointer, it disagrees with the drop; told the
-    // anchor, it agrees exactly — which is the whole point of reporting it.
+    expect(plan.exchanged).toBeNull();
+    expect(plan.insertion).toEqual({
+      rowIndex: 1,
+      edge: "after",
+      anchorId: "B",
+    });
+    // Never between the row's members, whichever of them was pointed at.
     for (const over of ["A", "B"]) {
-      const plan = planGridReorder(specs, 2, "M", over);
-      const anchor = plan.insertion?.anchorId ?? over;
-
-      expect(arrayMove(ids, 0, ids.indexOf(anchor))).toEqual(plan.order);
+      expect(planGridReorder(specs, 4, "M", over).order, over).toEqual(
+        plan.order,
+      );
     }
   });
 
-  it("disagrees when told the card under the pointer, which was the bug", () => {
+  it("reports the cards it traded with when it exchanges", () => {
+    const specs = [wide("M"), small("A"), small("B")];
     const plan = planGridReorder(specs, 2, "M", "A");
 
-    expect(arrayMove(ids, 0, ids.indexOf("A"))).not.toEqual(plan.order);
+    expect(plan.insertion).toBeNull();
+    expect(plan.exchanged).toEqual(["A", "B"]);
   });
 
-  it("resolves to itself, so reporting it cannot oscillate", () => {
-    const plan = planGridReorder(specs, 2, "M", "A");
-    const anchor = plan.insertion?.anchorId ?? "A";
-    const again = planGridReorder(specs, 2, "M", anchor);
+  it("never reports both", () => {
+    const specs = [
+      wide("M"),
+      small("A"),
+      small("B"),
+      quarter("c"),
+      small("N"),
+      quarter("d"),
+    ];
+    const ids = specs.map((spec) => spec.id);
 
-    expect(again.order).toEqual(plan.order);
-    expect(again.insertion?.anchorId).toBe(anchor);
+    for (const columns of [1, 2, 3, 4]) {
+      for (const activeId of ids) {
+        for (const overId of ids) {
+          const plan = planGridReorder(specs, columns, activeId, overId);
+          expect(
+            plan.insertion === null || plan.exchanged === null,
+            `${columns} ${activeId}->${overId}`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 });
 
@@ -386,10 +522,17 @@ describe("a reorder changes how wide cards are, not only where they sit", () => 
     expect(layout.byId.get("A")?.columns).toBe(1);
   });
 
-  it("re-splits the rows of the arrangement in the recording", () => {
-    // Four small cards under a full-width average, which is the dashboard in the
-    // video. Dropping the average below them takes it from a row of its own to
-    // sharing a row with the ranking — half the width it had.
+  it("changes only the occupancy when two equals trade rows", () => {
+    // The boundary of the claim this suite makes. Widths follow from the order, so
+    // *most* reorders change them — and there is exactly one shape of reorder that
+    // cannot, because the packer reads only the sequence of requested widths and
+    // exchanging two equal ones leaves that sequence identical.
+    //
+    // This test used to assert the opposite and was wrong to. It dropped the wide
+    // `average` onto the wide `ranking` and expected the two to end up side by
+    // side on one row, with four quarter cards above them — an arrangement neither
+    // end of the gesture pointed at, and the reason a wide card could not be
+    // shifted a row at all. See `planGridReorder`'s swap rule.
     const specs = [
       small("average"),
       quarter("latest"),
@@ -398,18 +541,15 @@ describe("a reorder changes how wide cards are, not only where they sit", () => 
       quarter("pass"),
       small("ranking"),
     ];
-    expect(rows(specs, 4)).toEqual([
-      ["average", "latest", "weakest"],
-      ["strongest", "pass", "ranking"],
-    ]);
 
     const layout = reordered(specs, 4, "average", "ranking");
 
-    expect(layout.rows.map((row) => row.items.map((item) => item.spec.id)))
-      .toEqual([
-        ["latest", "weakest", "strongest", "pass"],
-        ["ranking", "average"],
-      ]);
+    expect(
+      layout.rows.map((row) => row.items.map((item) => item.spec.id)),
+    ).toEqual([
+      ["ranking", "latest", "weakest"],
+      ["strongest", "pass", "average"],
+    ]);
     expect(layout.byId.get("average")?.columns).toBe(2);
     expect(layout.byId.get("ranking")?.columns).toBe(2);
     for (const id of ["latest", "weakest", "strongest", "pass"]) {

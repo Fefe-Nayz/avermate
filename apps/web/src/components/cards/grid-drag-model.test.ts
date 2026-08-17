@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import {
+  GRID_AIM_MARGIN,
+  aimGridSlot,
   captureGridSlots,
   nearestGridSlot,
   overlayGrabShift,
@@ -75,6 +77,68 @@ describe("aiming a drag", () => {
     expect(nearestGridSlot(GRID, at(-400, -400), ORIGIN)?.id).toBe("latest")
     expect(nearestGridSlot(GRID, at(900, 900), ORIGIN)?.id).toBe("average")
     expect(nearestGridSlot([], at(0, 0), ORIGIN)).toBeNull()
+  })
+})
+
+/** The grid's own box, for the aim's bounds. `GRID` fills 596×332 of it. */
+const BOUNDS = { width: 596, height: 332 }
+const aim = (x: number, y: number, previousId?: string | null) =>
+  aimGridSlot({
+    slots: GRID,
+    point: at(x, y),
+    origin: ORIGIN,
+    bounds: BOUNDS,
+    previousId,
+  })
+
+describe("a drag can aim at nothing", () => {
+  test("inside the grid, it aims at the card the pointer is on", () => {
+    expect(aim(320, 20)).toBe("strongest")
+    expect(aim(500, 250)).toBe("average")
+  })
+
+  test("a little outside, it still aims — overshooting an edge row is normal", () => {
+    // Dropping onto the first row means aiming at its top edge, and nobody stops
+    // exactly on it. Both of these are past the grid and both still count.
+    expect(aim(320, -GRID_AIM_MARGIN.y + 4)).toBe("strongest")
+    expect(aim(BOUNDS.width + GRID_AIM_MARGIN.x - 4, 250)).toBe("average")
+  })
+
+  test("well outside, it aims at nothing at all", () => {
+    // This is the gesture everyone uses to mean *no*: drag it off and let go.
+    // `nearestGridSlot` answers for every point on the screen, so before this
+    // existed, releasing halfway down the page still rearranged the dashboard.
+    expect(aim(320, -GRID_AIM_MARGIN.y - 1)).toBeNull()
+    expect(aim(320, BOUNDS.height + GRID_AIM_MARGIN.y + 1)).toBeNull()
+    expect(aim(-GRID_AIM_MARGIN.x - 1, 60)).toBeNull()
+    expect(aim(BOUNDS.width + GRID_AIM_MARGIN.x + 1, 60)).toBeNull()
+    // And nothing to aim at is also nothing.
+    expect(
+      aimGridSlot({
+        slots: [],
+        point: at(0, 0),
+        origin: ORIGIN,
+        bounds: BOUNDS,
+      })
+    ).toBeNull()
+  })
+
+  test("a pointer resting on a boundary does not flip back and forth", () => {
+    // Centre-to-centre distance makes the frontier between two slots a hairline,
+    // and every crossing repacks the whole grid — so a hand that is merely not
+    // perfectly still made the layout flicker. The midpoint between `latest` and
+    // `weakest` is x=146; a pointer there keeps whichever it already had.
+    expect(aim(146, 60, "latest")).toBe("latest")
+    expect(aim(146, 60, "weakest")).toBe("weakest")
+    // Move decisively and it moves. Containment beats stickiness outright, which
+    // is why the aim is never *stuck*: a pointer inside a card means that card.
+    expect(aim(200, 60, "latest")).toBe("weakest")
+  })
+
+  test("stickiness cannot hold an aim outside the grid", () => {
+    expect(
+      aim(320, BOUNDS.height + GRID_AIM_MARGIN.y + 1, "average")
+    ).toBeNull()
   })
 })
 
@@ -213,8 +277,32 @@ describe("the dashboard grid draws the arrangement it will save", () => {
   })
 
   test("saves what was last drawn instead of resolving a new order", () => {
-    expect(grid).toContain("const next = previewRef.current")
+    expect(grid).toContain(
+      "active?.targetId === null ? null : previewRef.current"
+    )
     expect(grid).toContain("reorder.mutate({ cardIds: next })")
     expect(grid).not.toContain("resolveGridReorder")
+  })
+
+  test("throws the gesture away when its snapshot stops describing the screen", () => {
+    // A frozen snapshot is only as good as the grid it was taken of. Both of
+    // these change that grid without the pointer moving, and a drag that is
+    // merely *held* still commits on release — so neither can be caught by
+    // checking when asked.
+    expect(grid).toContain("active.cardsKey !== cardsKey")
+    expect(grid).toContain(
+      "gridColumnCount(grid, active.columns) !== active.columns"
+    )
+    // Our own state is not the only state: dnd-kit holds an active drag and its
+    // own measured rects, and remounting is the only way to tell it to let go.
+    expect(grid).toContain("key={dragEpoch}")
+    expect(grid).toContain("setDragEpoch((epoch) => epoch + 1)")
+  })
+
+  test("does not put the dragged card's controls in the tree twice", () => {
+    // The overlay is a second copy of a card that is still in the grid, so
+    // without this its edit button, hide button and link are all present twice
+    // under the same accessible names.
+    expect(grid).toContain('className="pointer-events-none" inert')
   })
 })
