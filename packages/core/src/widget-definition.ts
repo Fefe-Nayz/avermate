@@ -11,6 +11,7 @@ import {
   widgetMeasureHasIntrinsicDelta,
   widgetMeasureId,
 } from "./widget-registry";
+import { WIDGET_GAUGE_THICKNESS } from "./widget-types";
 import type {
   WidgetChartMark,
   WidgetCompileOptions,
@@ -271,7 +272,7 @@ function markOptions(mark: WidgetChartMark, value: unknown): WidgetMarkOptions {
       return {
         kind: "gauge",
         showValue: bool(raw.showValue, true),
-        thickness: finite(raw.thickness, 10, 2, 32),
+        thickness: finite(raw.thickness, WIDGET_GAUGE_THICKNESS, 2, 32),
       };
     case "line":
       return {

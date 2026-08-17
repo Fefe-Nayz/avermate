@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
+import type { WidgetEvaluationResult } from "@avermate/core"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useScrollPane } from "@/components/shell/scroll-pane"
 import { cn } from "@/lib/utils"
@@ -108,12 +109,19 @@ export function CardShell({
  * not just its icon: a warm gradient rising from the flame's corner and a ring
  * to match. The grid and the editor preview both apply it, so the card burns the
  * same everywhere.
+ *
+ * A streak arrives wrapped these days — the widget evaluator returns it as a
+ * `structured` result whose *value* is the streak — so this looks one level in.
+ * Matching only the outer kind silently stopped every streak card burning, which
+ * is the kind of loss that survives a refactor because nothing fails, the card
+ * just goes quiet.
  */
-export function cardSurface(result: {
-  kind: string
-  alive?: boolean
-}): string | undefined {
-  return result.kind === "streak" && result.alive === true
+export function cardSurface(
+  result: WidgetEvaluationResult
+): string | undefined {
+  return result.kind === "structured" &&
+    result.value.kind === "streak" &&
+    result.value.alive
     ? "bg-linear-to-tr from-band-weak/15 via-card to-band-fair/10 ring-band-weak/25"
     : undefined
 }

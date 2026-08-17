@@ -5,6 +5,18 @@ import type { CustomAverage, Period, Subject, Year } from "./types";
 /** Stable wire version stored in `dashboard_cards.definitionJson`. */
 export const WIDGET_DEFINITION_VERSION = 1 as const;
 
+/**
+ * A gauge's bar, in pixels, when nobody has asked for another.
+ *
+ * The dashboard draws its gauge as a hairline that thickens once the card is wide
+ * enough — a margin note under the number, not a pipe beside it. A single stored
+ * number cannot say "responsive", so this is the value that *means* the card's own
+ * bar: a renderer that sees it is free to use its own scale, and any other value
+ * is a deliberate override and is honoured literally. It was 10, which read as an
+ * override on every card ever created and buried the hairline.
+ */
+export const WIDGET_GAUGE_THICKNESS = 6;
+
 export const WIDGET_SURFACES = [
   "overview",
   "subject",

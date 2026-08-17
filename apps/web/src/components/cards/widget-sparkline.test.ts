@@ -22,9 +22,10 @@ describe("the trend card", () => {
   test("shows the reading, not only the curve", () => {
     expect(view).toContain("function WidgetTrend")
     expect(view).toContain("<Sparkline")
-    // The number and its change sit above the curve.
-    expect(view).toContain("showRatioScale")
-    expect(view).toContain("text-positive")
+    // The number and its change sit above the curve, in the app's own hand — see
+    // card-presentation.test.tsx for what that hand is.
+    expect(view).toContain("<CardFigure")
+    expect(view).toContain("<CardDelta")
   })
 
   test("reads the change across the window, not against last week", () => {

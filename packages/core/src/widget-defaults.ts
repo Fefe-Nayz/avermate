@@ -1,5 +1,6 @@
 import type { CardDisplay } from "./cards";
 import { widgetCapability, widgetCompatibleMarks } from "./widget-registry";
+import { WIDGET_GAUGE_THICKNESS } from "./widget-types";
 import type {
   WidgetChartMark,
   WidgetDefinitionV1,
@@ -15,7 +16,11 @@ function defaultMarkOptions(mark: WidgetChartMark): WidgetMarkOptions {
     case "value":
       return { kind: "value", showDelta: true, trendIndicator: true };
     case "gauge":
-      return { kind: "gauge", showValue: true, thickness: 10 };
+      return {
+        kind: "gauge",
+        showValue: true,
+        thickness: WIDGET_GAUGE_THICKNESS,
+      };
     case "line":
       return { kind: "line", curve: "monotone", points: false, strokeWidth: 2 };
     case "area":

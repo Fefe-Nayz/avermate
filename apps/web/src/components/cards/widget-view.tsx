@@ -1,7 +1,13 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
-import { MinusIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+import {
+  FlameIcon,
+  MinusIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+} from "lucide-react"
 import {
   areaY,
   barX,
@@ -21,6 +27,7 @@ import { tooltip } from "@tanstack/charts/tooltip"
 import { curveLinear, curveMonotoneX, curveStep } from "d3-shape"
 import { useFormatter, useExtracted } from "next-intl"
 import {
+  WIDGET_GAUGE_THICKNESS,
   type WidgetDefinitionV1,
   type WidgetEvaluationResult,
   type WidgetSeriesDatum,
@@ -31,17 +38,31 @@ import {
   INSTANT_CHART_UPDATES,
   ResponsiveChart,
 } from "@/components/charts/responsive-chart"
+import { AverageValue, DeltaValue, ResultBadge } from "@/components/data/value"
+import { GradeResultBadge } from "@/components/grades/grade-result-badge"
 import { useStatusLabel } from "@/components/goals/goal-strip"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
 import { AVERAGE_SERIES_COLORS } from "@/components/charts/multi-series-average-chart"
+import {
+  CardDelta,
+  CardFigure,
+  FOOTNOTE_TEXT,
+  NAME_TEXT,
+  SUPPORT_TEXT,
+  TickNumber,
+  useEnterValue,
+  useEntered,
+  VALUE_TEXT,
+} from "./card-figure"
+import { MiniDistribution } from "./card-distribution"
+import { RankingList } from "./card-ranking"
 import { WidgetNumberText } from "./widget-number"
 import { Sparkline } from "./widget-sparkline"
 import {
   widgetColorBucketKey,
   widgetColorBuckets,
   widgetDefinitionShowsDelta,
-  widgetDefinitionValueType,
   widgetDisplayValue as displayValue,
   widgetEncodedScaleValue,
   widgetEncodedSeriesDatum,
@@ -113,7 +134,6 @@ export function WidgetBody({
         result={result.value}
         visualization={definition.visualization}
         showDelta={showDelta}
-        valueType={widgetDefinitionValueType(definition)}
       />
     )
   }
@@ -124,6 +144,19 @@ export function WidgetBody({
         <WidgetBoxPlot
           summary={result.summary}
           visualization={definition.visualization}
+        />
+      )
+    }
+    // The dashboard's own histogram, unless the card is a study: bars on the
+    // chart accent, bucket floors on the x-axis and nothing else, the full range
+    // owed to the tooltip. The generic chart spells out every boundary and adds a
+    // y-axis and a grid, which is a study where a shape was wanted.
+    if (!expanded && definition.visualization.mark === "histogram") {
+      return (
+        <MiniDistribution
+          ariaLabel={t("Distribution")}
+          buckets={result.buckets}
+          scale={scale}
         />
       )
     }
@@ -177,6 +210,23 @@ export function WidgetBody({
         definition.visualization.options.kind === "list"
           ? definition.visualization.options.rows
           : 10
+      // A ranking of subjects is the dashboard's list, which measures the box it
+      // was given — columns from the width, cells from the height — rather than
+      // stacking a fixed six rows down a card that is half a desktop wide, and
+      // counts what did not fit out loud. It only stands in where the rows *are*
+      // subjects, because it links each one to its page.
+      if (!expanded && definition.analysis.groupBy.kind === "subject") {
+        return (
+          <RankingList
+            items={result.values.map((item) => ({
+              id: item.key,
+              label: item.label,
+              ratio: result.valueType === "ratio" ? item.value : null,
+              delta: item.delta,
+            }))}
+          />
+        )
+      }
       return (
         <WidgetSeriesList
           values={result.values.slice(0, rows)}
@@ -303,33 +353,24 @@ function WidgetTrend({
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <WidgetNumberText
+        <CardFigure
           value={shown}
           valueType={valueType}
           format={visualization.format}
           scale={scale}
           defaultDecimals={decimals}
           daysLabel={t("days")}
-          showRatioScale
-          className="text-3xl font-semibold @[16rem]/card:text-4xl @[26rem]/card:text-5xl"
+          className={VALUE_TEXT}
         />
         {delta !== null ? (
-          <WidgetNumberText
-            value={delta}
+          <CardDelta
+            delta={delta}
             valueType={valueType}
             format={visualization.format}
             scale={scale}
             defaultDecimals={decimals}
             daysLabel={t("days")}
-            signed
-            className={cn(
-              "text-sm @[16rem]/card:text-base",
-              Math.abs(delta) < 0.0005
-                ? "text-muted-foreground"
-                : delta > 0
-                  ? "text-positive"
-                  : "text-negative"
-            )}
+            className={SUPPORT_TEXT}
           />
         ) : null}
       </div>
@@ -359,16 +400,17 @@ function WidgetStructuredResult({
   result,
   visualization,
   showDelta,
-  valueType,
 }: {
   result: Extract<WidgetEvaluationResult, { kind: "structured" }>["value"]
   visualization: WidgetVisualizationV1
   showDelta: boolean
-  valueType: WidgetValueType
 }) {
   const t = useExtracted()
+  const format = useFormatter()
   const statusLabel = useStatusLabel()
-  const { scale, decimals } = useYear()
+  const { yearGraph } = useYear()
+  const entered = useEntered()
+  const enter = useEnterValue()
   if (result.kind === "empty") {
     return (
       <p className="text-sm text-muted-foreground">
@@ -377,17 +419,31 @@ function WidgetStructuredResult({
     )
   }
   if (result.kind === "grade") {
+    const grade = yearGraph
+      .byId(result.subjectId)
+      ?.grades.find((item) => item.id === result.gradeId)
     return (
-      <div className="flex h-full flex-col justify-center gap-2">
-        <p className="text-base font-medium break-words">{result.name}</p>
-        <WidgetScalarValue
-          value={result.ratio}
-          valueType="ratio"
-          delta={null}
-          visualization={visualization}
-          compact
-        />
-        <p className="text-xs text-muted-foreground">{result.subjectName}</p>
+      <div className="flex flex-col gap-1">
+        {/* The name is the answer this card exists to give, so it wraps rather
+            than truncating, and it is a way in to the grade itself. */}
+        <Link
+          href={`/grades/${result.gradeId}`}
+          className={cn(NAME_TEXT, "break-words hover:underline")}
+        >
+          {result.name}
+        </Link>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+          {grade ? (
+            <GradeResultBadge grade={grade} />
+          ) : (
+            <ResultBadge ratio={result.ratio} />
+          )}
+          {/* Wraps rather than truncating: the subject is half the answer. */}
+          <span className="min-w-0 break-words">{result.subjectName}</span>
+        </div>
+        <p className={cn(FOOTNOTE_TEXT, "text-muted-foreground")}>
+          {format.dateTime(result.at, { day: "numeric", month: "long" })}
+        </p>
       </div>
     )
   }
@@ -400,27 +456,95 @@ function WidgetStructuredResult({
       )
     }
     return (
-      <div className="flex h-full flex-col justify-center gap-2">
-        <p className="text-base font-medium break-words">{result.name}</p>
-        <WidgetScalarValue
-          value={result.ratio}
-          valueType="ratio"
-          delta={result.delta}
-          visualization={visualization}
-          compact
-        />
+      <div className="flex flex-col gap-1">
+        <Link
+          href={`/subjects/${result.subjectId}`}
+          className={cn(NAME_TEXT, "break-words hover:underline")}
+        >
+          {result.name}
+        </Link>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <AverageValue
+            ratio={result.ratio}
+            showScale
+            colored
+            className={SUPPORT_TEXT}
+          />
+          <DeltaValue delta={result.delta} className={FOOTNOTE_TEXT} />
+        </div>
       </div>
     )
   }
   if (result.kind === "streak") {
+    // The streak is the one card that celebrates. A live streak burns: a
+    // two-tone flame with a glow behind it, swaying over a warm wash, with
+    // embers drifting off the top. A broken one goes grey and holds still —
+    // the difference is the message.
     return (
-      <WidgetScalarValue
-        value={result.current}
-        valueType={valueType}
-        delta={null}
-        visualization={visualization}
-        footer={t("best {count}", { count: String(result.longest) })}
-      />
+      <div className="relative flex h-full items-center gap-4">
+        <span className="relative flex size-14 shrink-0 items-center justify-center @[16rem]/card:size-16">
+          {result.alive ? (
+            <>
+              <FlameIcon
+                aria-hidden
+                fill="currentColor"
+                className="animate-flame absolute size-full text-band-weak opacity-50 blur-lg"
+              />
+              <span
+                aria-hidden
+                className="animate-ember absolute top-0 left-[30%] size-1 rounded-full bg-band-fair"
+              />
+              <span
+                aria-hidden
+                className="animate-ember absolute top-1 left-[64%] size-1 rounded-full bg-band-weak"
+                style={{ animationDelay: "0.9s" }}
+              />
+              <span
+                aria-hidden
+                className="animate-ember absolute top-0 left-[48%] size-0.5 rounded-full bg-band-fair"
+                style={{ animationDelay: "1.7s" }}
+              />
+            </>
+          ) : null}
+          <span className={cn("relative", result.alive && "animate-flame")}>
+            <FlameIcon
+              aria-hidden
+              fill="currentColor"
+              className={cn(
+                "size-12 @[16rem]/card:size-14",
+                result.alive ? "text-band-weak" : "text-muted-foreground/50"
+              )}
+            />
+            {result.alive ? (
+              <FlameIcon
+                aria-hidden
+                fill="currentColor"
+                className="absolute bottom-[8%] left-1/2 size-5 -translate-x-1/2 text-band-fair @[16rem]/card:size-6"
+              />
+            ) : null}
+          </span>
+        </span>
+        <div className="relative flex min-w-0 flex-col gap-1.5">
+          <TickNumber
+            value={result.current}
+            className={cn(
+              VALUE_TEXT,
+              "leading-none",
+              result.alive && "text-band-weak"
+            )}
+          />
+          <span
+            className={cn(
+              "self-start rounded-full px-2 py-0.5 text-xs font-medium",
+              result.alive
+                ? "bg-band-weak/15 text-band-weak"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            {t("best {count}", { count: String(result.longest) })}
+          </span>
+        </div>
+      </div>
     )
   }
   if (result.kind === "goal") {
@@ -436,31 +560,61 @@ function WidgetStructuredResult({
               {statusLabel(goal.status)}
             </span>
           </div>
-          <p className="flex items-baseline gap-1.5 text-xs text-muted-foreground">
+          <p
+            className={cn(
+              FOOTNOTE_TEXT,
+              "flex items-baseline gap-1.5 text-muted-foreground"
+            )}
+          >
             {t("target")}
-            <WidgetNumberText
-              value={goal.target}
-              valueType="ratio"
-              format={visualization.format}
-              scale={scale}
-              defaultDecimals={decimals}
-              daysLabel={t("days")}
-              showRatioScale
-              className="text-base font-medium text-foreground"
+            <AverageValue
+              ratio={goal.target}
+              animate={false}
+              showScale
+              className={cn(SUPPORT_TEXT, "font-medium text-foreground")}
             />
           </p>
         </div>
       )
     }
+    const progress =
+      result.plan.current === null || result.plan.target === 0
+        ? 0
+        : Math.min(1, result.plan.current / result.plan.target)
     return (
-      <WidgetScalarValue
-        value={goal.current}
-        valueType="ratio"
-        delta={result.plan.gap === null ? null : -result.plan.gap}
-        visualization={visualization}
-        gaugeMaximum={result.plan.target}
-        footer={`${result.plan.goal.name} · ${statusLabel(goal.status)}`}
-      />
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <AverageValue ratio={enter(goal.current)} className={VALUE_TEXT} />
+          <span className={cn(SUPPORT_TEXT, "text-muted-foreground")}>
+            {t("of")}{" "}
+            <AverageValue
+              ratio={result.plan.target}
+              animate={false}
+              showScale
+            />
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted @[20rem]/card:h-2">
+          <div
+            className={cn(
+              "h-full rounded-full transition-[width] duration-500",
+              result.plan.status === "unreachable"
+                ? "bg-negative"
+                : "bg-primary"
+            )}
+            style={{ width: `${Math.round((entered ? progress : 0) * 100)}%` }}
+          />
+        </div>
+        <p
+          className={cn(
+            FOOTNOTE_TEXT,
+            "flex items-center gap-1 text-muted-foreground"
+          )}
+        >
+          <TrendingUpIcon className="size-3.5" />
+          {result.plan.goal.name} · {statusLabel(goal.status)}
+        </p>
+      </div>
     )
   }
   if (result.kind === "list") {
@@ -519,12 +673,23 @@ function WidgetScalarValue({
     visualization.options.kind === "value" ? visualization.options : null
   const gaugeOptions =
     visualization.options.kind === "gauge" ? visualization.options : null
+  const gaugeThickness = gaugeOptions?.thickness ?? WIDGET_GAUGE_THICKNESS
   const showValue = !gauge || gaugeOptions?.showValue !== false
   const showDelta = valueOptions?.showDelta === true && delta !== null
   const showTrend = valueOptions?.trendIndicator === true && delta !== null
   const threshold = [...visualization.thresholds]
     .sort((left, right) => left.value - right.value)
     .findLast((item) => value >= item.value)
+  // The bar grows from nothing on the first paint, for the same reason the reels
+  // start at zero: a gauge that is simply *there* at 68% never says it filled.
+  const entered = useEntered()
+  const figure = {
+    valueType,
+    format: visualization.format,
+    scale,
+    defaultDecimals: decimals,
+    daysLabel: t("days"),
+  }
   return (
     <div className="flex h-full flex-col justify-center gap-3">
       {showValue ? (
@@ -532,60 +697,54 @@ function WidgetScalarValue({
           className="flex items-center gap-2"
           style={{ color: threshold?.color ?? undefined }}
         >
-          <WidgetNumberText
+          <CardFigure
+            {...figure}
             value={value}
-            valueType={valueType}
-            format={visualization.format}
-            scale={scale}
-            defaultDecimals={decimals}
-            daysLabel={t("days")}
-            showRatioScale
-            className={cn(
-              "font-semibold",
-              compact ? "text-xl" : "text-3xl @min-[18rem]/card:text-4xl"
-            )}
+            className={cn(compact ? SUPPORT_TEXT : VALUE_TEXT, "font-semibold")}
           />
           {showTrend ? <TrendIndicator delta={delta as number} /> : null}
         </div>
       ) : null}
       {showDelta ? (
-        <WidgetNumberText
-          value={delta as number}
-          valueType={valueType}
-          format={visualization.format}
-          scale={scale}
-          defaultDecimals={decimals}
-          daysLabel={t("days")}
-          signed
-          className={cn(
-            "text-sm",
-            Math.abs(delta as number) < 0.0005
-              ? "text-muted-foreground"
-              : (delta as number) > 0
-                ? "text-positive"
-                : "text-negative"
-          )}
+        <CardDelta
+          {...figure}
+          delta={delta as number}
+          className={SUPPORT_TEXT}
         />
       ) : null}
       {threshold?.label ? (
-        <p className="text-xs text-muted-foreground">{threshold.label}</p>
+        <p className={cn(FOOTNOTE_TEXT, "text-muted-foreground")}>
+          {threshold.label}
+        </p>
       ) : null}
       {gauge ? (
+        // A hairline that thickens once the card is wide enough, not a pipe: the
+        // number is the answer and the bar is its margin note. A card that asked
+        // for a particular thickness is honoured literally; the default value
+        // means "the card's own bar", which no single number could say.
         <div
-          className="overflow-hidden rounded-full bg-muted"
-          style={{ height: gaugeOptions?.thickness ?? 10 }}
+          className={cn(
+            "overflow-hidden rounded-full bg-muted",
+            gaugeThickness === WIDGET_GAUGE_THICKNESS &&
+              "h-1.5 @[20rem]/card:h-2"
+          )}
+          style={
+            gaugeThickness === WIDGET_GAUGE_THICKNESS
+              ? undefined
+              : { height: gaugeThickness }
+          }
         >
           <div
-            className="h-full rounded-full bg-primary transition-[width] duration-300"
+            className="h-full rounded-full bg-primary transition-[width] duration-500"
             style={{
-              width: `${gaugeRatio * 100}%`,
+              width: `${Math.round((entered ? gaugeRatio : 0) * 100)}%`,
               backgroundColor: threshold?.color ?? undefined,
             }}
           />
         </div>
       ) : null}
       {footer ? (
-        <p className="text-xs text-muted-foreground">{footer}</p>
+        <p className={cn(FOOTNOTE_TEXT, "text-muted-foreground")}>{footer}</p>
       ) : null}
     </div>
   )
