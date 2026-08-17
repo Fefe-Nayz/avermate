@@ -102,6 +102,15 @@ export function MotionPolicyProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * Optional variant, for components that render outside the shell too — a preview,
+ * a test, a harness. Absent policy means "no animation", which is the reading
+ * that is always correct even when nothing is there to animate it.
+ */
+export function useMaybeMotionPolicy(): MotionPolicyValue | null {
+  return useContext(MotionPolicyContext)
+}
+
 export function useMotionPolicy() {
   const value = useContext(MotionPolicyContext)
   if (!value) {

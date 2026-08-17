@@ -212,16 +212,26 @@ export function GradeResultsChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
-          // Solid where the passing mark is dashed, and on the accent rather
-          // than the muted colour: two rules on one plot have to be told apart
-          // without a legend, and this one is a reading while that is a rule.
+          // Told apart from the other two lines on the plot by more than a
+          // colour, because a thin accent line among a dashed threshold and a
+          // dashed trend is just a third thin line. It is haloed — a wide soft
+          // band under a crisp core, the same idiom as the highlighted dot, so
+          // the marked level and the marked result read as one thing — and it is
+          // the only solid line here.
           ...(marked.length > 0
             ? [
+                ruleY(marked, {
+                  id: "highlight-level-halo",
+                  y: "value",
+                  stroke: "var(--chart-1)",
+                  strokeOpacity: 0.14,
+                  strokeWidth: 7,
+                }),
                 ruleY(marked, {
                   id: "highlight-level",
                   y: "value",
                   stroke: "var(--chart-1)",
-                  strokeOpacity: 0.35,
+                  strokeOpacity: 0.75,
                   strokeWidth: 1.5,
                 }),
               ]

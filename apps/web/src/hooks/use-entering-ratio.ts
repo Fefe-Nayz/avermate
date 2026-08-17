@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useReducedMotion } from "motion/react"
+import { useMaybeMotionPolicy } from "@/components/motion-policy-provider"
 
 /** Eased out cubically, so a value arrives the way the app's entrances do. */
 function eased(progress: number): number {
@@ -36,7 +36,12 @@ export function useEnteringRatio(
     duration = 900,
   }: { enabled?: boolean; duration?: number } = {}
 ): number | null {
-  const reduced = useReducedMotion()
+  // The app's own policy rather than motion's hook: `MotionConfig` here is set to
+  // `never` whenever the reader has *not* asked for less motion, which makes
+  // `useReducedMotion` report false either way. The provider reads the media
+  // query through `useSyncExternalStore`, so this is right on the first render
+  // rather than one effect later.
+  const reduced = useMaybeMotionPolicy()?.reducedMotion ?? true
   const [progress, setProgress] = useState(0)
   const running = enabled && !reduced
 

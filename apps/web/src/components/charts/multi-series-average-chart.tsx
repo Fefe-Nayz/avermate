@@ -1,7 +1,7 @@
 "use client"
 
 import { segmentedTrendLine, type SeriesPoint } from "@avermate/core"
-import { defineChart, dot, lineY, ruleX, ruleY } from "@tanstack/charts"
+import { defineChart, dot, lineY, ruleY } from "@tanstack/charts"
 import { d3Curve } from "@tanstack/charts/d3/shape"
 import type { ChartTooltipBodyRenderContext } from "@tanstack/charts/react/tooltip"
 import { scaleLinear } from "@tanstack/charts/scales/linear"
@@ -125,9 +125,10 @@ export function MultiSeriesAverageChart({
    * A day worth pointing at, for a screen that is about one event rather than
    * about the whole curve.
    *
-   * A vertical rule rather than a highlighted point, because the curve's value
-   * *at* that day is the average once that day had happened — the interesting
-   * thing is the moment, and the step the line takes across it.
+   * Marked on the curve itself — the point whose reading is the average once that
+   * day had happened. A rule down the plot was tried first and it was the wrong
+   * shape: a vertical line divides a chart, and this is not a boundary between a
+   * before and an after, it is one reading among the others.
    */
   moment?: Date
 }) {
@@ -198,6 +199,7 @@ export function MultiSeriesAverageChart({
 
     return {
       colorDomain: enabled.map((item) => item.id),
+      primaryId: primary?.id ?? null,
       colorRange: enabled.map(
         (item, index) =>
           item.color ??
@@ -221,14 +223,31 @@ export function MultiSeriesAverageChart({
    * The moment as a one-row series, so the rule shares the plot's own x scale
    * rather than being positioned by hand against it.
    */
+  /**
+   * The point on the curve nearest the day being pointed at.
+   *
+   * Nearest rather than exact: the series samples the days something happened, so
+   * the day usually *is* one of them — but a marker that silently disappears when
+   * it is not would be worse than one a day out.
+   */
   const marked = useMemo(() => {
-    const first = prepared.rows[0]
     const timestamp = moment?.getTime()
-    if (!first || timestamp === undefined || !Number.isFinite(timestamp)) {
-      return []
+    if (timestamp === undefined || !Number.isFinite(timestamp)) return []
+    const candidates = prepared.rows.filter(
+      (row) =>
+        prepared.primaryId === null || row.seriesId === prepared.primaryId
+    )
+    let nearest: Datum | null = null
+    let distance = Number.POSITIVE_INFINITY
+    for (const row of candidates) {
+      const gap = Math.abs(row.timestamp - timestamp)
+      if (gap < distance) {
+        distance = gap
+        nearest = row
+      }
     }
-    return [{ ...first, id: "moment", timestamp }]
-  }, [moment, prepared.rows])
+    return nearest ? [{ ...nearest, id: "moment" }] : []
+  }, [moment, prepared.primaryId, prepared.rows])
 
   const focus = useMemo(
     () =>
@@ -275,17 +294,7 @@ export function MultiSeriesAverageChart({
             strokeDasharray: "4 4",
             strokeOpacity: 0.45,
           }),
-          ...(marked.length > 0
-            ? [
-                ruleX(marked, {
-                  id: "moment",
-                  x: "timestamp",
-                  stroke: "var(--chart-1)",
-                  strokeOpacity: 0.35,
-                  strokeWidth: 1.5,
-                }),
-              ]
-            : []),
+
           lineY(prepared.rows, {
             id: SERIES_MARK_ID,
             x: "timestamp",
@@ -346,6 +355,33 @@ export function MultiSeriesAverageChart({
               },
             ],
           }),
+          // Haloed rather than merely larger: the curve already carries points of
+          // its own under `showPoints`, and a marker that is only a size apart
+          // from them is not a marker.
+          ...(marked.length > 0
+            ? [
+                dot(marked, {
+                  id: "moment-halo",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  r: 9,
+                  fill: "var(--chart-1)",
+                  fillOpacity: 0.18,
+                  stroke: "transparent",
+                }),
+                dot(marked, {
+                  id: "moment-point",
+                  x: "timestamp",
+                  y: "value",
+                  key: "id",
+                  r: 5,
+                  fill: "var(--chart-1)",
+                  stroke: "var(--background)",
+                  strokeWidth: 2,
+                }),
+              ]
+            : []),
         ],
         x: {
           scale: scaleLinear().domain(prepared.domain),
