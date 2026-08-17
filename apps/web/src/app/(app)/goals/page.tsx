@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   CheckIcon,
   ChevronRightIcon,
+  LayersIcon,
   ListOrderedIcon,
   PlusIcon,
   TargetIcon,
@@ -31,7 +32,9 @@ import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { AverageValue, DeltaValue } from "@/components/data/value"
 import { useStatusLabel } from "@/components/goals/goal-strip"
 import { useYear } from "@/components/year/year-provider"
+import type { GoalPlan } from "@avermate/core"
 import { useGoalPlans } from "@/hooks/use-goal-plans"
+import { useStickyState } from "@/hooks/use-sticky-state"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
@@ -61,6 +64,23 @@ const STATUS_TONE = {
   },
 } as const
 
+/**
+ * The order the groups are read in, when they are grouped.
+ *
+ * Not best-to-worst. A page of goals is a page about what to do next, so the ones
+ * asking for something come first — the two that need work, then the one on course,
+ * then the ones already won, then the ones with nothing to say yet. Reading it top to
+ * bottom is reading your attention in the order it is owed.
+ */
+const STATUS_ORDER = [
+  "at-risk",
+  "unreachable",
+  "on-track",
+  "achieved",
+  "secured",
+  "no-data",
+] as const
+
 export default function GoalsPage() {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -68,6 +88,14 @@ export default function GoalsPage() {
   const { plans } = useGoalPlans()
   const statusLabel = useStatusLabel()
   const [orderedIds, setOrderedIds] = useState<string[] | null>(null)
+  /**
+   * Grouped by status, or in the order the account arranged.
+   *
+   * Sticky, because it is how someone reads this page rather than something they
+   * decide once per visit. It composes with arranging rather than excluding it —
+   * see `reorderWithin`.
+   */
+  const [grouped, setGrouped] = useStickyState("goals:grouped", false)
 
   const goalPlans = useMemo(() => plans(goals), [goals, plans])
   const displayedPlans = useMemo(() => {
@@ -91,6 +119,30 @@ export default function GoalsPage() {
     if (reorder.isPending) return
     setOrderedIds(next)
     reorder.mutate({ goalIds: next })
+  }
+
+  /**
+   * A drag inside one status group, written into the one order there is.
+   *
+   * Grouping and arranging look like they cannot coexist — the groups come out of the
+   * data and there is a single stored sequence — but a drag inside a group says
+   * something that sequence holds perfectly well: *this* at-risk goal before *that*
+   * one. So the group's new order is woven back into the slots the group already
+   * occupied, and every goal outside it keeps its place. The same weave the phone
+   * uses to reorder visible cards without disturbing the hidden ones.
+   *
+   * Dragging between groups is the gesture that would mean nothing, since a status is
+   * computed rather than chosen. It is impossible rather than refused: each group is
+   * its own sortable list, so there is nowhere else for a row to land.
+   */
+  const reorderWithin = (nextGroupIds: string[]) => {
+    const moved = new Set(nextGroupIds)
+    const queue = [...nextGroupIds]
+    reorderGoals(
+      displayedPlans.map((plan) =>
+        moved.has(plan.goal.id) ? (queue.shift() as string) : plan.goal.id
+      )
+    )
   }
 
   return (
@@ -127,7 +179,18 @@ export default function GoalsPage() {
         </div>
 
         {goalPlans.length > 1 ? (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                haptic("light")
+                setGrouped(!grouped)
+              }}
+            >
+              <LayersIcon className="size-4" />
+              {grouped ? t("Your order") : t("By status")}
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -166,128 +229,173 @@ export default function GoalsPage() {
               {t("Set your first goal")}
             </Button>
           </Empty>
+        ) : grouped ? (
+          // Groups, in the order attention is owed rather than best to worst.
+          // Each is its own sortable list, so arranging works here too: a drag
+          // rearranges the goals inside one status and cannot carry a goal into a
+          // status it did not earn.
+          <div className="flex flex-col gap-4">
+            {STATUS_ORDER.flatMap((status) => {
+              const group = displayedPlans.filter(
+                (plan) => plan.status === status
+              )
+              if (group.length === 0) return []
+              return [
+                <div key={status} className="flex flex-col gap-2">
+                  <p className="px-1 text-xs font-medium text-muted-foreground">
+                    {statusLabel(status)}
+                  </p>
+                  <SortableList
+                    ids={group.map((plan) => plan.goal.id)}
+                    onReorder={reorderWithin}
+                    disabled={!orderedIds}
+                  >
+                    <ul className={sortableListClassName}>
+                      {group.map((plan, index) => (
+                        <SortableRow
+                          key={plan.goal.id}
+                          id={plan.goal.id}
+                          disabled={!orderedIds}
+                          className={sortableRowClassName(index)}
+                        >
+                          {orderedIds ? (
+                            <DragHandle className="ml-1.5" />
+                          ) : null}
+                          <GoalRow plan={plan} statusLabel={statusLabel} />
+                        </SortableRow>
+                      ))}
+                    </ul>
+                  </SortableList>
+                </div>,
+              ]
+            })}
+          </div>
         ) : (
           <SortableList
             ids={displayedPlans.map((plan) => plan.goal.id)}
             onReorder={reorderGoals}
             disabled={!orderedIds}
           >
-            {/* The app's sortable list, the same object as the custom averages: one
-                card, rows divided by a rule, the grip inline at the left. The grip is
-                always there now rather than appearing in a reorder mode that also had
-                to switch the link off — a row you cannot open is a stranger thing to
-                explain than a grip you can ignore. */}
+            {/* The app's sortable list, the same object as the custom averages:
+                  one card, rows divided by a rule, the grip inline at the left. */}
             <ul className={sortableListClassName}>
-              {displayedPlans.map((plan, index) => {
-                const progress =
-                  plan.current === null || plan.target === 0
-                    ? 0
-                    : Math.min(1, Math.max(0, plan.current / plan.target))
-                const next = plan.nextResults[0]
-                const tone = STATUS_TONE[plan.status]
-
-                return (
-                  <SortableRow
-                    key={plan.goal.id}
-                    id={plan.goal.id}
-                    disabled={!orderedIds}
-                    className={sortableRowClassName(index)}
-                  >
-                    <DragHandle className="ml-1.5" />
-                    <Link
-                      href={`/goals/${plan.goal.id}`}
-                      className={cn(sortableRowLinkClassName, "relative")}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {plan.goal.name}
-                        </p>
-                        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-4 font-medium",
-                              tone.chip
-                            )}
-                          >
-                            {statusLabel(plan.status)}
-                          </span>
-                          {/* What to do about it, on the same line as the verdict. It
-                              was a third paragraph below a progress bar, which is
-                              where a reader scanning a list never reached. */}
-                          {plan.status === "unreachable" ? (
-                            <span className="min-w-0 truncate text-muted-foreground">
-                              {t("Not reachable any more")}
-                            </span>
-                          ) : plan.gap !== null &&
-                            plan.gap > 0 &&
-                            next?.achievable ? (
-                            <span className="min-w-0 truncate text-muted-foreground">
-                              {t("Next in {subject}:", {
-                                subject: next.subject.name,
-                              })}{" "}
-                              <AverageValue
-                                ratio={next.requiredRatio}
-                                animate={false}
-                                showScale
-                                colored
-                                className="font-medium"
-                              />
-                            </span>
-                          ) : plan.gap !== null && plan.gap <= 0 ? (
-                            <span className="min-w-0 truncate text-muted-foreground">
-                              {t("Ahead by")}{" "}
-                              <DeltaValue
-                                delta={-plan.gap}
-                                className="font-medium"
-                              />
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {/* The reading, then the target it is measured against — set the
-                          way every other list in the app sets a figure. */}
-                      <div className="shrink-0 text-right">
-                        <AverageValue
-                          ratio={plan.current}
-                          className="text-sm font-medium"
-                        />
-                        <p className="numeric text-[11px] text-muted-foreground">
-                          {t("of")}{" "}
-                          <AverageValue
-                            ratio={plan.target}
-                            animate={false}
-                            showScale
-                          />
-                        </p>
-                      </div>
-                      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
-
-                      {/* Progress as a rail on the row's own bottom edge, tinted by
-                          status. It was a bar in the flow, costing a line of height
-                          per goal and repeating in colour what the chip now says;
-                          here it reads along the row it belongs to and takes no
-                          height at all. */}
-                      <span
-                        aria-hidden
-                        className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-muted/40"
-                      >
-                        <span
-                          className={cn(
-                            "block h-full transition-[width] duration-500",
-                            tone.bar
-                          )}
-                          style={{ width: `${Math.round(progress * 100)}%` }}
-                        />
-                      </span>
-                    </Link>
-                  </SortableRow>
-                )
-              })}
+              {displayedPlans.map((plan, index) => (
+                <SortableRow
+                  key={plan.goal.id}
+                  id={plan.goal.id}
+                  disabled={!orderedIds}
+                  className={sortableRowClassName(index)}
+                >
+                  {/* Only while reordering. The grip is the only affordance on
+                        this page that does nothing outside its mode, and a row you
+                        can open should not carry a control that cannot be used. */}
+                  {orderedIds ? <DragHandle className="ml-1.5" /> : null}
+                  <GoalRow plan={plan} statusLabel={statusLabel} />
+                </SortableRow>
+              ))}
             </ul>
           </SortableList>
         )}
       </div>
     </>
+  )
+}
+
+/**
+ * One goal, as a row.
+ *
+ * Its own component because the page draws it two ways — inside a sortable list when
+ * the account is arranging them, and inside plain status groups when it is reading
+ * them — and a row copied into both shapes is a row that stops matching itself.
+ */
+function GoalRow({
+  plan,
+  statusLabel,
+}: {
+  plan: GoalPlan
+  statusLabel: (status: GoalPlan["status"]) => string
+}) {
+  const t = useExtracted()
+  const progress =
+    plan.current === null || plan.target === 0
+      ? 0
+      : Math.min(1, Math.max(0, plan.current / plan.target))
+  const next = plan.nextResults[0]
+  const tone = STATUS_TONE[plan.status]
+
+  return (
+    <Link
+      href={`/goals/${plan.goal.id}`}
+      className={cn(sortableRowLinkClassName, "relative")}
+    >
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{plan.goal.name}</p>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+          <span
+            className={cn(
+              "shrink-0 rounded px-1.5 py-0.5 text-[11px] leading-4 font-medium",
+              tone.chip
+            )}
+          >
+            {statusLabel(plan.status)}
+          </span>
+          {/* What to do about it, on the same line as the verdict. It
+                was a third paragraph below a progress bar, which is
+                where a reader scanning a list never reached. */}
+          {plan.status === "unreachable" ? (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {t("Not reachable any more")}
+            </span>
+          ) : plan.gap !== null && plan.gap > 0 && next?.achievable ? (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {t("Next in {subject}:", {
+                subject: next.subject.name,
+              })}{" "}
+              <AverageValue
+                ratio={next.requiredRatio}
+                animate={false}
+                showScale
+                colored
+                className="font-medium"
+              />
+            </span>
+          ) : plan.gap !== null && plan.gap <= 0 ? (
+            <span className="min-w-0 truncate text-muted-foreground">
+              {t("Ahead by")}{" "}
+              <DeltaValue delta={-plan.gap} className="font-medium" />
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* The reading, then the target it is measured against — set the
+            way every other list in the app sets a figure. */}
+      <div className="shrink-0 text-right">
+        <AverageValue ratio={plan.current} className="text-sm font-medium" />
+        <p className="numeric text-[11px] text-muted-foreground">
+          {t("of")}{" "}
+          <AverageValue ratio={plan.target} animate={false} showScale />
+        </p>
+      </div>
+      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
+
+      {/* Progress as a rail on the row's own bottom edge, tinted by
+            status. It was a bar in the flow, costing a line of height
+            per goal and repeating in colour what the chip now says;
+            here it reads along the row it belongs to and takes no
+            height at all. */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-muted/40"
+      >
+        <span
+          className={cn(
+            "block h-full transition-[width] duration-500",
+            tone.bar
+          )}
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
+      </span>
+    </Link>
   )
 }
