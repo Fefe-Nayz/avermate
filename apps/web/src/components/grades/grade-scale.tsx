@@ -2,7 +2,7 @@
 
 import { useLocale } from "next-intl"
 import { bandOf, type ResultBand } from "@avermate/core"
-import { useEntered } from "@/components/cards/card-figure"
+import { useEnteringRatio } from "@/hooks/use-entering-ratio"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
 
@@ -57,6 +57,41 @@ function bands(passingRatio: number): Array<{ band: ResultBand; to: number }> {
   ]
 }
 
+/** Long enough to read as a journey, short enough not to delay the answer. */
+const TRAVEL_MS = 700
+
+/**
+ * How far the chip has to slide off the marker to stay on the strip.
+ *
+ * Centred on its mark everywhere except the last tenth at each end, where a label
+ * centred on 0 hangs half of itself off the left edge — which the entrance makes
+ * unmissable, because the marker *starts* there. Inside that margin it slides to
+ * flush instead, so the number stays readable and the strip keeps its bounds.
+ */
+const EDGE = 0.1
+
+/**
+ * A tick, centred on its value and kept whole.
+ *
+ * The strip clips whatever leaves it, and a tick positioned by its left edge
+ * leaves at the right-hand end — so a perfect score put the marker exactly where
+ * it could not be seen, and every reading was drawn half a tick to the right of
+ * the value it reported. Centred and clamped to half its own width, it sits on
+ * its value everywhere and stays fully drawn at both ends.
+ */
+function tickStyle(percent: number, halfWidth: number) {
+  return {
+    left: `clamp(${halfWidth}px, ${percent}%, calc(100% - ${halfWidth}px))`,
+    transform: "translateX(-50%)",
+  }
+}
+
+function chipShift(position: number): number {
+  if (position <= EDGE) return -50 * (position / EDGE)
+  if (position >= 1 - EDGE) return -50 - 50 * ((position - (1 - EDGE)) / EDGE)
+  return -50
+}
+
 export interface ScaleMarker {
   id: string
   label: string
@@ -77,16 +112,20 @@ export function GradeScale({
   const locale = useLocale()
   const { scale, decimals, passingRatio } = useYear()
   // The mark travels in from the left edge on the first paint, like every other
-  // figure in the app arriving on its reel.
+  // figure in the app arriving on its reel — and *everything about it* travels,
+  // not just its position.
   //
-  // It was left out at first on the argument that a marker crossing five colour
-  // bands asserts a different verdict at every frame. That is true, and it is
-  // the reason the chip rides *with* the marker rather than sitting still while
-  // the tick catches up: the number and its position are never out of step, so
-  // the intermediate frames read as an arrival rather than as a claim.
-  const entered = useEntered()
+  // A CSS transition on `left` could move it, but then the chip is the final
+  // colour showing the final number while it crosses zones that mean something
+  // else: a green 14,00 sliding through the red. Which was the whole argument
+  // for leaving the entrance out. Driving one progress value in JS instead means
+  // position, band colour and number are read off the same travelled ratio, so
+  // there is no frame in which they disagree — the marker is simply somewhere
+  // else, correctly, on its way here.
+  const travelled =
+    useEnteringRatio(ratio, { enabled: true, duration: TRAVEL_MS }) ?? ratio
   const clamp = (value: number) => Math.min(1, Math.max(0, value))
-  const band = bandOf(ratio, passingRatio)
+  const band = bandOf(travelled, passingRatio)
   const shown = (value: number) =>
     (value * scale).toLocaleString(locale, {
       minimumFractionDigits: decimals,
@@ -103,8 +142,11 @@ export function GradeScale({
           that has to be findable without looking anywhere else. */}
       <div className="relative pt-7">
         <div
-          className="absolute top-0 -translate-x-1/2 transition-[left] duration-700 ease-out"
-          style={{ left: `${clamp(entered ? ratio : 0) * 100}%` }}
+          className="absolute top-0"
+          style={{
+            left: `${clamp(travelled) * 100}%`,
+            transform: `translateX(${chipShift(clamp(travelled))}%)`,
+          }}
         >
           <span
             className={cn(
@@ -113,7 +155,7 @@ export function GradeScale({
               "text-background"
             )}
           >
-            {shown(ratio)}
+            {shown(travelled)}
           </span>
         </div>
 
@@ -133,23 +175,23 @@ export function GradeScale({
           <span
             aria-hidden
             className="absolute inset-y-0 w-px bg-foreground/35"
-            style={{ left: `${clamp(passingRatio) * 100}%` }}
+            style={tickStyle(clamp(passingRatio) * 100, 0.5)}
           />
           {markers.map((marker) => (
             <span
               key={marker.id}
               aria-hidden
               className="absolute inset-y-0 w-0.5 rounded-full bg-foreground/70"
-              style={{ left: `${clamp(marker.ratio) * 100}%` }}
+              style={tickStyle(clamp(marker.ratio) * 100, 1)}
             />
           ))}
           <span
             aria-hidden
             className={cn(
-              "absolute inset-y-0 w-1 rounded-full transition-[left] duration-700 ease-out",
+              "absolute inset-y-0 w-1 rounded-full",
               band ? BAND_DOT[band] : "bg-foreground"
             )}
-            style={{ left: `${clamp(entered ? ratio : 0) * 100}%` }}
+            style={tickStyle(clamp(travelled) * 100, 2)}
           />
         </div>
 

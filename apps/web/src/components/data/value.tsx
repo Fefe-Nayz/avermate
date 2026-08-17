@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useLocale } from "next-intl"
 import { bandOf, type Ratio, type ResultBand } from "@avermate/core"
 import { cn } from "@/lib/utils"
+import { useEnteringRatio } from "@/hooks/use-entering-ratio"
 import { useYear } from "@/components/year/year-provider"
 
 /**
@@ -63,6 +64,13 @@ export function AverageValue({
   const { scale, decimals: defaultDecimals, passingRatio } = useScale()
   const digits = decimals ?? defaultDecimals
   const [entered, setEntered] = useState(!animateFromZero)
+  // The tint travels with the reel. A figure rolling up from zero used to wear
+  // its destination's colour the whole way, so a green number counted through
+  // results that are not green — the colour asserting one verdict while the
+  // number said another.
+  const shownRatio = useEnteringRatio(ratio, {
+    enabled: animate && animateFromZero,
+  })
 
   useEffect(() => {
     if (!animateFromZero) return
@@ -79,7 +87,7 @@ export function AverageValue({
   }
 
   const value = ratio * scale
-  const band = bandOf(ratio, passingRatio)
+  const band = bandOf(shownRatio ?? ratio, passingRatio)
   const formatted = value.toLocaleString(locale, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -150,7 +158,12 @@ export function ResultBadge({
   animateFromZero?: boolean
 }) {
   const { passingRatio } = useScale()
-  const band = bandOf(ratio, passingRatio)
+  // Same travelling band as the figure it wraps, so the badge and the number it
+  // contains are never two different verdicts at once.
+  const shownRatio = useEnteringRatio(ratio, {
+    enabled: animate && animateFromZero,
+  })
+  const band = bandOf(shownRatio ?? ratio, passingRatio)
 
   return (
     <span
