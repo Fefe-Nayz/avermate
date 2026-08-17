@@ -19,7 +19,13 @@ describe("subjects and averages parity", () => {
 
     expect(detail).toContain('averageId === "general"')
     expect(detail).toContain("resolveCustomAverage(graph, custom)")
-    expect(detail).toContain("<AverageChart")
+    // The same chart a subject page draws, not a single-series one. This asked
+    // for `<AverageChart` until the averages page was given the multi-series
+    // chart and its child-series toggle — which is *more* parity, not less, so
+    // the assertion follows rather than pins the older component.
+    expect(detail).toContain("<MultiSeriesAverageChart")
+    expect(detail).toContain("series={averageSeries}")
+    expect(detail).toContain("preferences.chartSettings.showSubSubjects")
     expect(detail).toContain("<ImpactGrid")
     expect(detail).toContain("resolved.graph.allGrades()")
     expect(detail).toContain("custom.entries.flatMap")
