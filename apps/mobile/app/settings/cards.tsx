@@ -132,12 +132,26 @@ export default function Cards() {
 
   if (widgets.isLoading) return <Loading />;
 
-  // The web's drag-end contract: the whole visible order, in one payload.
+  /**
+   * The drag hands back the visible order; the server is told the whole surface.
+   *
+   * This screen only lets you drag the widgets you can see, so the payload used to
+   * be the visible order alone — and the server appended everything else, which
+   * meant every reorder here swept all the hidden widgets to the end of the layout.
+   * Unhide one afterwards and it reappears somewhere it had never been. The server
+   * now refuses a partial order outright, so the hidden ones are woven back into
+   * the slots they already occupied: walk the stored order, and wherever a visible
+   * widget sits, take the next one the drag asked for.
+   */
   const reorderCards = (cardIds: string[]) => {
     if (reorder.isPending) return;
     setError(null);
     setOrderedIds(cardIds);
-    reorder.mutate({ cardIds });
+    const dragged = [...cardIds];
+    const full = widgets.all.map((card) =>
+      card.hidden ? card.id : (dragged.shift() ?? card.id),
+    );
+    reorder.mutate({ cardIds: full });
   };
   const route = (id?: string) =>
     `/settings/card-edit?surface=${surface}${id ? `&id=${encodeURIComponent(id)}` : ""}` as const;

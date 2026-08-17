@@ -280,8 +280,19 @@ describe("the dashboard grid draws the arrangement it will save", () => {
     expect(grid).toContain(
       "active?.targetId === null ? null : previewRef.current"
     )
-    expect(grid).toContain("reorder.mutate({ cardIds: next })")
+    expect(grid).toContain("reorder.mutateAsync({ cardIds: next })")
     expect(grid).not.toContain("resolveGridReorder")
+  })
+
+  test("sends one layout at a time and lets only the newest settle", () => {
+    // Each request carries a complete, absolute order, so two arriving out of
+    // sequence leave the server holding the older — the second drag silently
+    // undone. And the first to settle used to clear the pending order outright,
+    // taking a newer arrangement off the screen with it.
+    expect(grid).toContain("sendRef.current = sendRef.current")
+    expect(grid).toContain(
+      "sameCardOrder(pendingRef.current, variables.cardIds)"
+    )
   })
 
   test("throws the gesture away when its snapshot stops describing the screen", () => {

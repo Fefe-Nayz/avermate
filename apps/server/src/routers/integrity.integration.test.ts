@@ -573,8 +573,27 @@ describe("router year invariants", () => {
       api.cards.reorder({ cardIds: [cardA?.id ?? "", cardB?.id ?? ""] }),
     ).rejects.toThrow("Every reordered card must share a year and surface");
 
-    await api.cards.reorder({ cardIds: [cardA?.id ?? ""] });
+    // A layout is the whole surface or it is nothing. Naming one card of several
+    // used to be accepted and the rest appended, which renumbered every card the
+    // caller had not mentioned — a hidden card losing the position it was hidden
+    // at, and coming back somewhere it had never been once unhidden.
+    await api.cards.create({ yearId: "year-a", ...metricCard("gradeCount") });
+    const before = await api.cards.list({ yearId: "year-a" });
+    expect(before.length).toBeGreaterThan(1);
+    await expect(
+      api.cards.reorder({ cardIds: [cardA?.id ?? ""] }),
+    ).rejects.toThrow("A reorder must list every card on the surface");
+    expect(
+      (await api.cards.list({ yearId: "year-a" })).map((c) => c.id),
+    ).toEqual(before.map((c) => c.id));
+
+    await api.cards.reorder({
+      cardIds: [...before.map((c) => c.id)].reverse(),
+    });
     const cards = await api.cards.list({ yearId: "year-a" });
+    expect(cards.map((c) => c.id)).toEqual(
+      [...before.map((c) => c.id)].reverse(),
+    );
     expect(new Set(cards.map((card) => card.sortOrder)).size).toBe(
       cards.length,
     );

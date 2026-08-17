@@ -256,12 +256,23 @@ export const cardsRouter = {
           ),
         )
         .orderBy(asc(dashboardCards.sortOrder));
-      const requested = new Set(input.cardIds);
-      const orderedIds = [
-        ...input.cardIds,
-        ...current.map((card) => card.id).filter((id) => !requested.has(id)),
-      ];
-      const statements = orderedIds.map((id, index) =>
+      /**
+       * The whole surface, or nothing.
+       *
+       * This used to accept any subset and quietly append the cards the caller had
+       * not mentioned — which reads as leniency and behaves as data loss. A client
+       * that sent only its *visible* cards had every hidden one renumbered to the
+       * end of the layout, losing the position it was hidden at; unhide it later
+       * and it comes back somewhere it never was. There is no partial order that
+       * says anything useful about a layout, so there is no partial order to
+       * interpret. Sets are equal here rather than merely the same size: the ids
+       * are already known to be unique, to belong to this account, and to share
+       * this year and surface, so `current` is the same collection.
+       */
+      if (current.length !== input.cardIds.length) {
+        badRequest("A reorder must list every card on the surface");
+      }
+      const statements = input.cardIds.map((id, index) =>
         db
           .update(dashboardCards)
           .set({ sortOrder: index, updatedAt: new Date() })

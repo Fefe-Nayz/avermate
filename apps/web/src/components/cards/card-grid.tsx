@@ -438,8 +438,29 @@ export function CardGrid({
   const gridRef = useRef<HTMLDivElement>(null)
   /**
    * The order the drop produced, held until the server's own order arrives.
+   *
+   * Mirrored in a ref so a settling request can ask whether it is still the newest.
+   * Two drags inside one round-trip are ordinary on a slow connection, and the
+   * first one settling used to clear the pending order outright — dropping the
+   * second arrangement off the screen a moment after it was made, then bringing it
+   * back when its own answer landed.
    */
   const [pendingIds, setPendingIds] = useState<string[] | null>(null)
+  const pendingRef = useRef<string[] | null>(null)
+  const showPending = useCallback((ids: string[] | null) => {
+    pendingRef.current = ids
+    setPendingIds(ids)
+  }, [])
+  /**
+   * The tail of the requests sent so far, so the next one waits its turn.
+   *
+   * Each request carries a *complete, absolute* order rather than a relative move,
+   * so two of them arriving out of sequence leaves the server holding the older
+   * one — the person's second drag silently undone, and the refetch afterwards
+   * showing exactly that. Chaining is enough to rule it out and needs no
+   * reconciliation: the order they were made in is the order they are applied in.
+   */
+  const sendRef = useRef<Promise<unknown>>(Promise.resolve())
 
   /**
    * The candidate order the drag is currently showing.
@@ -529,21 +550,25 @@ export function CardGrid({
 
   const reorder = useMutation({
     ...orpc.cards.reorder.mutationOptions(),
-    onError: () => {
+    onError: (_error, variables) => {
       // Snap back to what the server still holds, rather than leaving a layout
-      // on screen that was never saved.
+      // on screen that was never saved — but only if this was the arrangement on
+      // screen. An older request failing must not take a newer one down with it.
       haptic("warning")
-      setPendingIds(null)
+      if (sameCardOrder(pendingRef.current, variables.cardIds))
+        showPending(null)
     },
-    onSettled: async () => {
+    onSettled: async (_data, _error, variables) => {
       await queryClient.invalidateQueries({
         queryKey: orpc.snapshot.get.queryKey({
           input: { yearId: yearId ?? "" },
         }),
       })
       // Released only once the refetched order is in hand, so the grid never
-      // flashes the old arrangement between the drop and the answer.
-      setPendingIds(null)
+      // flashes the old arrangement between the drop and the answer — and only by
+      // the request that is still the newest, for the reason above.
+      if (sameCardOrder(pendingRef.current, variables.cardIds))
+        showPending(null)
     },
   })
   const reset = useMutation({
@@ -782,8 +807,13 @@ export function CardGrid({
     // the identical pending one without a frame of the old order in between.
     if (active && next && !sameCardOrder(active.ids, next)) {
       haptic("light")
-      setPendingIds(next)
-      reorder.mutate({ cardIds: next })
+      showPending(next)
+      // Queued behind whatever is already in flight. The rejection is swallowed
+      // here and nowhere else: `onError` above is what tells the person, and an
+      // unhandled rejection on this chain would also stop the next drag being sent.
+      sendRef.current = sendRef.current
+        .then(() => reorder.mutateAsync({ cardIds: next }))
+        .catch(() => {})
     }
     clearDrag()
   }
