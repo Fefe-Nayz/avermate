@@ -68,7 +68,14 @@ const DropTargetContext = createContext<
   ((element: HTMLElement | null) => void) | null
 >(null)
 
-function useReorderSensors() {
+/**
+ * How every drag in this app starts.
+ *
+ * Exported because the numbers are the feel: 4px before a mouse commits, a 180ms hold
+ * before a thumb does. A second drag written with its own constants is a second drag
+ * that feels different for no reason anybody chose.
+ */
+export function useReorderSensors() {
   return useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     // A short deliberate hold separates reordering from touch scrolling. The

@@ -1,10 +1,10 @@
 "use client"
 
 import { useExtracted } from "next-intl"
-import { EllipsisIcon, PlusIcon } from "lucide-react"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
 import { SelectControl } from "@/components/forms/controls"
+import { TabBarEditor } from "./tab-bar-editor"
 import {
   DragHandle,
   SortableList,
@@ -84,6 +84,10 @@ export default function NavigationSettingsPage() {
     })
   }
 
+  /** The screens no seat holds, in the registry's order rather than the order they left. */
+  const hiddenTabs = CUSTOMIZABLE_NAV_HREFS.filter(
+    (href) => !tabs.includes(href)
+  )
   /** Everything not seated, in the registry's order rather than the order it left. */
   const hiddenSidebar = CUSTOMIZABLE_NAV_HREFS.filter(
     (href) => !sidebar.includes(href)
@@ -98,63 +102,17 @@ export default function NavigationSettingsPage() {
         </h1>
 
         <SettingsSection
-          title={t("Sidebar button")}
-          description={t(
-            "A sidebar is for going places. If one thing you create is worth a seat at the top of it, choose which."
-          )}
-        >
-          <SelectControl
-            aria-label={t("Sidebar button")}
-            value={preferences.navigation.sidebarAction ?? NO_SIDEBAR_ACTION}
-            onValueChange={(value) => {
-              if (!value) return
-              saveSidebarAction(value === NO_SIDEBAR_ACTION ? undefined : value)
-            }}
-            options={[
-              { value: NO_SIDEBAR_ACTION, label: t("No button") },
-              ...quickAddActions.map((candidate) => ({
-                value: candidate.href,
-                label: candidate.addLabel,
-              })),
-            ]}
-          />
-        </SettingsSection>
-
-        <SettingsSection
           title={t("Phone tab bar")}
           description={t(
-            "Three seats are yours; the add button and More keep theirs, so every screen stays reachable."
+            "Drag a screen into a seat. Three are yours; the add button and More keep theirs, so every screen stays reachable."
           )}
         >
-          <div className="flex flex-col gap-3">
-            <TabBarPreview tabs={tabs} labels={labels} />
-            {tabs.map((href, slot) => (
-              <div key={slot} className="flex items-center gap-3">
-                <span className="w-24 shrink-0 text-sm text-muted-foreground">
-                  {t("Slot {number}", { number: String(slot + 1) })}
-                </span>
-                <SelectControl
-                  aria-label={t("Slot {number}", { number: String(slot + 1) })}
-                  className="flex-1"
-                  value={href}
-                  onValueChange={(value) => {
-                    if (!value) return
-                    const next = [...tabs]
-                    const elsewhere = next.indexOf(value)
-                    // Choosing a screen already seated swaps the two seats
-                    // instead of silently duplicating it.
-                    if (elsewhere >= 0) next[elsewhere] = next[slot] as string
-                    next[slot] = value
-                    saveTabs(next)
-                  }}
-                  options={CUSTOMIZABLE_NAV_HREFS.map((candidate) => ({
-                    value: candidate,
-                    label: labels[candidate] ?? candidate,
-                  }))}
-                />
-              </div>
-            ))}
-          </div>
+          <TabBarEditor
+            tabs={tabs}
+            pool={hiddenTabs}
+            labels={labels}
+            onChange={saveTabs}
+          />
         </SettingsSection>
 
         <SettingsSection
@@ -252,50 +210,44 @@ export default function NavigationSettingsPage() {
                 </ul>
               </div>
             ) : null}
+            {/* The button belongs to the sidebar, so it lives in the sidebar's
+                own card — one section for the thing, not two sections that both
+                say "sidebar" and sit in different places. Ruled off rather than
+                merely spaced, because it is a different *kind* of choice: the
+                lists above arrange where you can go, this one adds something that
+                creates. */}
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <div className="px-1">
+                <p className="text-xs font-medium">{t("Button at the top")}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t(
+                    "A sidebar is for going places. If one thing you create is worth a seat above them, choose which."
+                  )}
+                </p>
+              </div>
+              <SelectControl
+                aria-label={t("Button at the top")}
+                value={
+                  preferences.navigation.sidebarAction ?? NO_SIDEBAR_ACTION
+                }
+                onValueChange={(value) => {
+                  if (!value) return
+                  saveSidebarAction(
+                    value === NO_SIDEBAR_ACTION ? undefined : value
+                  )
+                }}
+                options={[
+                  { value: NO_SIDEBAR_ACTION, label: t("No button") },
+                  ...quickAddActions.map((candidate) => ({
+                    value: candidate.href,
+                    label: candidate.addLabel,
+                  })),
+                ]}
+              />
+            </div>
           </div>
         </SettingsSection>
       </div>
     </>
-  )
-}
-
-/** A miniature of the real bar, so the choice is seen where it will live. */
-function TabBarPreview({
-  tabs,
-  labels,
-}: {
-  tabs: readonly string[]
-  labels: Record<string, string>
-}) {
-  const t = useExtracted()
-  const seats = [tabs[0], tabs[1], null, tabs[2], "/more"] as const
-
-  return (
-    <div className="rounded-xl border bg-background/60 px-2 py-1.5">
-      <ul className="grid grid-cols-5 items-center">
-        {seats.map((href, index) => {
-          if (href === null) {
-            return (
-              <li key="action" className="flex justify-center">
-                <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <PlusIcon className="size-4" />
-                </span>
-              </li>
-            )
-          }
-          const entry = NAV_ENTRIES.find((candidate) => candidate.href === href)
-          const Icon = href === "/more" ? EllipsisIcon : entry?.icon
-          return (
-            <li
-              key={`${href}-${index}`}
-              className="flex flex-col items-center gap-0.5 py-1 text-[10px] text-muted-foreground"
-            >
-              {Icon ? <Icon className="size-4" /> : null}
-              {href === "/more" ? t("More") : (labels[href ?? ""] ?? "")}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
   )
 }
