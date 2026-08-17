@@ -10,7 +10,6 @@ import {
   TablePropertiesIcon,
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
-import { gradeRatio } from "@avermate/core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
@@ -18,12 +17,23 @@ import { PeriodRail, PeriodSwitcher } from "@/components/shell/period-switcher"
 import { SortMenu } from "@/components/data/sort-menu"
 import { useYear } from "@/components/year/year-provider"
 import { HierarchicalGradeTable } from "@/components/grades/hierarchical-grade-table"
+import {
+  sortGrades,
+  type GradeOrder,
+} from "@/components/grades/grade-table-rows"
 import { GradeList } from "@/components/grades/grade-list"
 import { TimelineTrigger } from "@/components/shell/timeline-banner"
 import { GradeCalendar } from "@/components/grades/grade-calendar"
 import { useStickyState } from "@/hooks/use-sticky-state"
 
-type SortKey = "date" | "result" | "subject"
+/**
+ * One order for all three views.
+ *
+ * Four of them are the same question asked of the grades — the timeline sorts a
+ * flat list, the table sorts the badges inside each subject — and `subject` only
+ * means anything to a flat list, so the table is never offered it.
+ */
+type SortKey = GradeOrder | "subject"
 type ViewMode = "timeline" | "table" | "calendar"
 
 /**
@@ -38,7 +48,7 @@ export default function GradesPage() {
   const format = useFormatter()
   const { graph } = useYear()
   const [query, setQuery] = useState("")
-  const [sort, setSort] = useState<SortKey>("date")
+  const [sort, setSort] = useState<SortKey>("newest")
   const [view, setView] = useStickyState<ViewMode>(
     "avermate:grades-view",
     "timeline"
@@ -56,25 +66,25 @@ export default function GradesPage() {
       )
     }
 
-    if (sort === "result") {
-      grades = [...grades].sort(
-        (a, b) => (gradeRatio(b) ?? -1) - (gradeRatio(a) ?? -1)
-      )
-    } else if (sort === "subject") {
-      grades = [...grades].sort((a, b) =>
+    if (sort === "subject") {
+      return [...grades].sort((a, b) =>
         (graph.byId(a.subjectId)?.name ?? "").localeCompare(
           graph.byId(b.subjectId)?.name ?? ""
         )
       )
-    } else {
-      grades = [...grades].reverse()
     }
 
-    return grades
+    // The same comparator the table uses, so "best result" cannot mean two
+    // different orders depending on which view is open.
+    return sortGrades(grades, sort)
   }, [graph, query, sort])
 
   const groups = useMemo(() => {
-    if (sort !== "date") return [{ key: "all", label: null, grades }]
+    // Months are a heading only while the list is chronological; under "best
+    // result" they would be arbitrary slices of a ranking.
+    if (sort !== "newest" && sort !== "oldest") {
+      return [{ key: "all", label: null, grades }]
+    }
 
     const byMonth = new Map<string, typeof grades>()
     for (const grade of grades) {
@@ -152,9 +162,15 @@ export default function GradesPage() {
             onValueChange={setSort}
             className="h-11 md:h-9 md:w-9"
             options={[
-              { value: "date", label: t("Most recent") },
-              { value: "result", label: t("Best result") },
-              { value: "subject", label: t("Subject") },
+              { value: "newest", label: t("Most recent") },
+              { value: "oldest", label: t("Oldest first") },
+              { value: "best", label: t("Best result") },
+              { value: "worst", label: t("Worst result") },
+              // Grouping a flat list by subject is a real order; inside a table
+              // already grouped by subject it is nothing, so it is not offered.
+              ...(view === "table"
+                ? []
+                : [{ value: "subject" as const, label: t("Subject") }]),
             ]}
           />
           <div
@@ -225,7 +241,11 @@ export default function GradesPage() {
         {view === "calendar" ? (
           <GradeCalendar grades={grades} />
         ) : view === "table" ? (
-          <HierarchicalGradeTable query={query} />
+          <HierarchicalGradeTable
+            query={query}
+            // The table has no "by subject": it is already grouped that way.
+            order={sort === "subject" ? "newest" : sort}
+          />
         ) : total === 0 ? (
           <div className="rounded-xl border border-dashed p-10 text-center">
             <p className="text-sm text-muted-foreground">

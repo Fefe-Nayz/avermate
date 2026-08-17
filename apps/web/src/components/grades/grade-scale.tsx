@@ -2,6 +2,7 @@
 
 import { useLocale } from "next-intl"
 import { bandOf, type ResultBand } from "@avermate/core"
+import { useEntered } from "@/components/cards/card-figure"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
 
@@ -75,10 +76,15 @@ export function GradeScale({
 }) {
   const locale = useLocale()
   const { scale, decimals, passingRatio } = useYear()
-  // No entrance here, deliberately, though every figure on a card has one. A
-  // number rolling up from zero is legible at every frame; a marker sliding
-  // across five colour bands is a different verdict at every frame, and the one
-  // it starts on says you failed. A position is a reading, not a reel.
+  // The mark travels in from the left edge on the first paint, like every other
+  // figure in the app arriving on its reel.
+  //
+  // It was left out at first on the argument that a marker crossing five colour
+  // bands asserts a different verdict at every frame. That is true, and it is
+  // the reason the chip rides *with* the marker rather than sitting still while
+  // the tick catches up: the number and its position are never out of step, so
+  // the intermediate frames read as an arrival rather than as a claim.
+  const entered = useEntered()
   const clamp = (value: number) => Math.min(1, Math.max(0, value))
   const band = bandOf(ratio, passingRatio)
   const shown = (value: number) =>
@@ -97,8 +103,8 @@ export function GradeScale({
           that has to be findable without looking anywhere else. */}
       <div className="relative pt-7">
         <div
-          className="absolute top-0 -translate-x-1/2"
-          style={{ left: `${clamp(ratio) * 100}%` }}
+          className="absolute top-0 -translate-x-1/2 transition-[left] duration-700 ease-out"
+          style={{ left: `${clamp(entered ? ratio : 0) * 100}%` }}
         >
           <span
             className={cn(
@@ -140,10 +146,10 @@ export function GradeScale({
           <span
             aria-hidden
             className={cn(
-              "absolute inset-y-0 w-1 rounded-full",
+              "absolute inset-y-0 w-1 rounded-full transition-[left] duration-700 ease-out",
               band ? BAND_DOT[band] : "bg-foreground"
             )}
-            style={{ left: `${clamp(ratio) * 100}%` }}
+            style={{ left: `${clamp(entered ? ratio : 0) * 100}%` }}
           />
         </div>
 

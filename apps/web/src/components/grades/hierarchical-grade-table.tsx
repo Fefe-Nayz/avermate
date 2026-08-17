@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table"
 import { useYear } from "@/components/year/year-provider"
 import { cn } from "@/lib/utils"
+import { gradeTableRows, type GradeOrder } from "./grade-table-rows"
 
 /**
  * The structural counterpart to the chronological feed: one row per subject,
@@ -39,32 +40,27 @@ import { cn } from "@/lib/utils"
  * The leaves are shared rather than written twice. Only the arrangement differs,
  * and two copies of the content would be two things to keep true.
  */
-export function HierarchicalGradeTable({ query }: { query: string }) {
+export function HierarchicalGradeTable({
+  query,
+  order,
+}: {
+  query: string
+  order: GradeOrder
+}) {
   const t = useExtracted()
   const { customAverages, graph } = useYear()
-  const needle = query.trim().toLocaleLowerCase()
-  const rows = graph.flatten().filter((subject) => {
-    if (!needle) return true
-    return (
-      subject.name.toLocaleLowerCase().includes(needle) ||
-      subject.grades.some((grade) =>
-        grade.name.toLocaleLowerCase().includes(needle)
-      )
-    )
-  })
 
   // Resolved once for both arrangements, so neither can drift from the other.
-  const lines = rows.flatMap((subject) => {
-    const resolved = graph.byId(subject.id)
-    if (!resolved) return []
-    return [
-      {
-        subject: resolved,
-        depth: graph.depthOf(subject.id),
-        ratio: graph.ratio(subject.id),
-      },
-    ]
-  })
+  // Which grades a query is asking about, and in what order, is decided in
+  // `gradeTableRows` — rules rather than rendering, and checkable without a
+  // browser.
+  const lines = gradeTableRows(
+    graph.flatten().map((subject) => ({
+      subject,
+      depth: graph.depthOf(subject.id),
+    })),
+    { query, order }
+  ).map((row) => ({ ...row, ratio: graph.ratio(row.subject.id) }))
 
   const averages = [
     {
@@ -97,7 +93,7 @@ export function HierarchicalGradeTable({ query }: { query: string }) {
   return (
     <>
       <div className="divide-y overflow-hidden rounded-xl border bg-card md:hidden">
-        {lines.map(({ subject, depth, ratio }) => (
+        {lines.map(({ subject, depth, ratio, grades }) => (
           <div
             key={subject.id}
             className={cn(
@@ -118,9 +114,9 @@ export function HierarchicalGradeTable({ query }: { query: string }) {
                 className="ms-auto shrink-0 font-medium"
               />
             </div>
-            {subject.grades.length > 0 ? (
+            {grades.length > 0 ? (
               <div style={{ paddingInlineStart: indent(depth) }}>
-                <GradeBadges grades={subject.grades} />
+                <GradeBadges grades={grades} />
               </div>
             ) : null}
           </div>
@@ -154,7 +150,7 @@ export function HierarchicalGradeTable({ query }: { query: string }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lines.map(({ subject, depth, ratio }) => (
+            {lines.map(({ subject, depth, ratio, grades }) => (
               <TableRow
                 key={subject.id}
                 className={cn(subject.kind === "category" && "bg-muted/25")}
@@ -169,10 +165,10 @@ export function HierarchicalGradeTable({ query }: { query: string }) {
                 </TableCell>
                 <TableCell>
                   <div className="min-h-8">
-                    {subject.grades.length === 0 ? (
+                    {grades.length === 0 ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <GradeBadges grades={subject.grades} />
+                      <GradeBadges grades={grades} />
                     )}
                   </div>
                 </TableCell>
@@ -240,16 +236,19 @@ function SubjectLabel({
   )
 }
 
+/**
+ * The badges, in the order they were handed over.
+ *
+ * They used to sort themselves newest-first, which is why the page's sort control
+ * appeared to do nothing in this view: whatever the reader chose, this put it
+ * back. The order is the caller's decision now.
+ */
 function GradeBadges({ grades }: { grades: readonly Grade[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {[...grades]
-        .sort(
-          (left, right) => right.passedAt.getTime() - left.passedAt.getTime()
-        )
-        .map((grade) => (
-          <GradeResultBadge key={grade.id} grade={grade} />
-        ))}
+      {grades.map((grade) => (
+        <GradeResultBadge key={grade.id} grade={grade} />
+      ))}
     </div>
   )
 }
