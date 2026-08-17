@@ -6,6 +6,7 @@ import {
 } from "@avermate/core";
 import { z } from "zod";
 import { badRequest, notFound } from "./orpc";
+import { periodDayOf } from "./academic-periods";
 
 export const PERIOD_TEMPLATES = [
   {
@@ -138,9 +139,13 @@ export function periodRowsForSetup(
     if (endAt.getTime() <= startAt.getTime()) {
       badRequest("Each period must end after it starts");
     }
+    // Days, not instants — see `dayOf` in `academic-periods`. The tolerance above
+    // was this bug's other patch: it nudged a boundary that landed within a few
+    // minutes, which covered the timestamps it had been tried against and not the
+    // `23:59:59` a form actually sends.
     if (
-      startAt.getTime() < year.startsAt.getTime() ||
-      endAt.getTime() > year.endsAt.getTime()
+      periodDayOf(startAt) < periodDayOf(year.startsAt) ||
+      periodDayOf(endAt) > periodDayOf(year.endsAt)
     ) {
       badRequest("Each period must stay within the academic year");
     }

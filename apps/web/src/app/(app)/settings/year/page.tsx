@@ -12,6 +12,7 @@ import {
   Trash2Icon,
 } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
+import { FULL_YEAR_PERIOD_ID } from "@avermate/core"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -119,6 +120,10 @@ export default function YearSettingsPage() {
    * *did*, and every other list in the app treats it that way — there was no reason
    * for periods to make it something you then had to remember to save.
    */
+  const editablePeriods = periods.filter(
+    (period) => period.id !== FULL_YEAR_PERIOD_ID
+  )
+
   const reorderPeriods = useMutation({
     ...orpc.periods.reorder.mutationOptions(),
     onSuccess: () => {
@@ -320,13 +325,19 @@ export default function YearSettingsPage() {
               all the fields at once on a laptop and one decision per screen on a
               phone. The wizards keep their in-place editor, because their periods are
               unsaved drafts in wizard state and no route can reach those. */}
-          {periods.length === 0 ? (
+          {/* The implicit "whole year" is not one of these. It is synthesised for
+              every year so that a period picker always has something to offer — it has
+              no row behind it, so it cannot be opened, reordered or deleted, and
+              listing it here linked to an id the server has never heard of. The bulk
+              editor this section replaced filtered it out too; I dropped the filter
+              with the editor. */}
+          {editablePeriods.length === 0 ? (
             <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
               {t("No periods — the whole year counts as one.")}
             </p>
           ) : (
             <SortableList
-              ids={periods.map((period) => period.id)}
+              ids={editablePeriods.map((period) => period.id)}
               onReorder={(periodIds) => {
                 haptic("light")
                 reorderPeriods.mutate({ periodIds })
@@ -334,7 +345,7 @@ export default function YearSettingsPage() {
               disabled={reorderPeriods.isPending}
             >
               <ul className={sortableListClassName}>
-                {periods.map((period, index) => (
+                {editablePeriods.map((period, index) => (
                   <SortableRow
                     key={period.id}
                     id={period.id}

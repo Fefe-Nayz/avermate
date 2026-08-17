@@ -456,12 +456,17 @@ export function FormFlow({
             )}
           </div>
 
+          {/* Desktop keeps it in the action row, at the far left — the two moves that
+              save the form sit together on the right, and the one that destroys it is
+              across the row from them rather than adjacent. Outlined rather than a bare
+              ghost, so it reads as a button among buttons instead of red text that
+              happens to be clickable. */}
           <div className="hidden items-center gap-2 md:flex">
             {destructive ? (
               <Button
                 type="button"
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                variant="outline"
+                className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => {
                   haptic("warning")
                   destructive.onClick()
@@ -485,14 +490,24 @@ export function FormFlow({
           </div>
         </div>
 
-        {/* A destructive action does not belong next to "Continue", where a
-            thumb aiming for the primary button would find it. */}
-        {destructive ? (
-          <div className="flex justify-center pb-4 md:hidden">
+        {/* Deleting belongs at the end, and only there.
+
+            It was rendered after every step's content, centred and floating: on a
+            short first step it sat alone in the middle of an empty screen, four
+            steps before the form could even be saved. A destructive action on
+            "step 1 of 4" is an answer to a question nobody has asked yet.
+
+            So the phone shows it on the review, where the form is complete and the
+            reader is deciding what to do with it — ruled off from the answers above,
+            full width so it is a deliberate target rather than a stray tap, and
+            still nowhere near the pinned primary action a thumb aims for. */}
+        {destructive && onReview ? (
+          <div className="border-t pt-4 pb-4 md:hidden">
             <Button
               type="button"
-              variant="ghost"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              variant="outline"
+              size="lg"
+              className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => {
                 haptic("warning")
                 destructive.onClick()
