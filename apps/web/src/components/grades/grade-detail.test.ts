@@ -8,7 +8,7 @@ const detailUrl = new URL(
 const impactUrl = new URL("../analytics/impact-grid.tsx", import.meta.url)
 
 describe("grade detail", () => {
-  test("presents one result as an impact statement", async () => {
+  test("presents the grade result and supporting details", async () => {
     const detail = await readFile(detailUrl, "utf8")
 
     expect(detail).toContain('subtitle={subject?.name ?? t("Subject")}')
@@ -17,6 +17,8 @@ describe("grade detail", () => {
       'className="hidden items-center justify-between md:flex"'
     )
     expect(detail).toContain('aria-labelledby="grade-result-title"')
+    expect(detail).toContain('id="grade-result-title"')
+    expect(detail).not.toContain('t("Grade details")')
     expect(detail).toContain("<time dateTime={machineDate}>")
     expect(detail).toContain("href={`/subjects/${subject.id}`}")
     expect(detail).not.toContain('variant="trajectory"')
@@ -27,6 +29,7 @@ describe("grade detail", () => {
     expect(detail).not.toContain("min-h-36")
     expect(detail).not.toContain("md:min-h-40")
     expect(detail).toContain("text-muted-foreground uppercase")
+    expect(detail).not.toContain("gap-3 pt-4")
     expect(detail).toContain('data-grade-panel="details"')
     expect(detail).toContain("showOriginalPoints")
     expect(detail).not.toContain("bg-primary")

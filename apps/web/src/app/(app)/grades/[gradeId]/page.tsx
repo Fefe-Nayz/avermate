@@ -150,38 +150,31 @@ export default function GradePage({
         </div>
 
         <section
-          className="flex flex-col gap-3 pt-4"
+          className="flex flex-col gap-3"
           aria-labelledby="grade-result-title"
         >
           <Card
             data-grade-panel="result"
-            className="overflow-hidden rounded-xl border-border/60 bg-card/90 py-0 shadow-sm backdrop-blur-xl"
+            className="bg-card/90 py-0 shadow-sm backdrop-blur-xl"
           >
-            <CardContent className="px-0">
-              <div className="flex flex-col gap-1 p-4">
-                <div>
-                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                    {t("Result")}
-                  </p>
-                  <h2 id="grade-result-title" className="sr-only">
-                    {t("Grade details")}
-                  </h2>
-                </div>
-                <AverageValue
-                  ratio={ratio}
-                  showScale
-                  colored
-                  className="w-fit text-3xl font-semibold tracking-tight "
-                  animateFromZero
-                />
-              </div>
+            <CardContent className="flex flex-col gap-1 p-4">
+              <h2
+                id="grade-result-title"
+                className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+              >
+                {t("Result")}
+              </h2>
+              <AverageValue
+                ratio={ratio}
+                showScale
+                colored
+                className="w-fit text-3xl font-semibold tracking-tight"
+                animateFromZero
+              />
             </CardContent>
           </Card>
 
-          <Card
-            data-grade-panel="details"
-            className="overflow-hidden rounded-xl border-border/60 py-0 shadow-sm"
-          >
+          <Card data-grade-panel="details" className="py-0 shadow-sm">
             <CardContent className="px-0">
               <dl
                 className={
@@ -233,7 +226,7 @@ export default function GradePage({
           >
             {grade.components.length > 0 ? (
               <section aria-labelledby="grade-components-title">
-                <Card className="gap-0 rounded-xl border-border/60 py-0 shadow-sm">
+                <Card className="gap-0 py-0 shadow-sm">
                   <CardHeader className="px-5 pt-5 pb-3">
                     <CardTitle
                       id="grade-components-title"
@@ -303,7 +296,7 @@ export default function GradePage({
 
             {grade.note ? (
               <section aria-labelledby="grade-note-title">
-                <Card className="gap-0 rounded-xl border-border/60 py-0 shadow-sm">
+                <Card className="gap-0 py-0 shadow-sm">
                   <CardHeader className="px-5 pt-5 pb-3">
                     <CardTitle
                       id="grade-note-title"
