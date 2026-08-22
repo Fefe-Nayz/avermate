@@ -23,9 +23,7 @@
 - **Blocks**: production activation of the embedded assistant and plans 036–039
 - **Category**: agent runtime, model routing, placement, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
-- **Evidence baseline**: `dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64` plus the
-  uncommitted 025–034 implementation; replace this with the implementation-wave
-  commit before execution
+- **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
 
 ## Outcome
 

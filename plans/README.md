@@ -2,12 +2,12 @@
 
 This registry covers the completed foundation wave (000–024), the implemented
 agent-platform foundation (025–034), and the production/product-completion wave
-(035–039). It was reconciled against the working tree on 2026-08-22 at
-`dbd4fe8` on branch `rewrite`; replace that evidence SHA with the committed
-025–034 implementation baseline before executing plan 035.
+(035–039). It was reconciled against commit
+`15a8897ce1eb82c2807f5547d9f558a59ad9a2e1` on branch `rewrite`, the committed
+025–034 implementation baseline from which plan 035 execution begins.
 
 > [!IMPORTANT]
-> The 025–034 implementation currently exists in a large reviewed working tree.
+> The 025–034 implementation is committed as `15a8897`; its
 > Its root tests, types, lint, formatting and release security gates are green,
 > but plan 025 remains blocked by the unratified historical migration rewrite,
 > the global slop gate, clean-clone evidence and the maintainer's licence choice.

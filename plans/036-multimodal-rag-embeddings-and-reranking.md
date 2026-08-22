@@ -21,9 +21,7 @@
 - **Blocks**: cited multimodal answers and the learning loop in 037
 - **Category**: retrieval, multimodal documents, search quality, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
-- **Evidence baseline**: `dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64` plus the
-  uncommitted 025–034 implementation; replace after the implementation-wave
-  commit
+- **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
 
 ## Decision
 
