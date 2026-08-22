@@ -1,2 +1,3 @@
+* text=auto eol=lf
 *.lockb binary diff=lockb
 apps/server/drizzle/*.sql text eol=lf
