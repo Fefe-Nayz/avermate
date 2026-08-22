@@ -29,6 +29,7 @@ import {
   type RemoteMcpConnection,
   type RemoteMcpTool,
 } from "./remote-mcp-client"
+import { relayNodeProviderTransport } from "../node/services"
 
 type SourceRow = typeof assistantToolSources.$inferSelect
 type PolicyRow = typeof assistantToolSourcePolicies.$inferSelect
@@ -65,6 +66,8 @@ function connection(source: SourceRow): RemoteMcpConnection {
   return {
     endpointUrl: source.endpointUrl,
     placement: source.placement,
+    ownerId: source.userId,
+    placementRef: source.placementRef,
     authKind: source.authKind,
     credential: source.sealedCredential ? open(source.sealedCredential) : null,
   }
@@ -99,6 +102,7 @@ function sourceSummary(
     endpointUrl: source.endpointUrl,
     endpointOrigin: source.endpointOrigin,
     placement: source.placement,
+    placementRef: source.placementRef,
     authKind: source.authKind,
     credentialHint: source.credentialHint,
     status: source.status,
@@ -209,7 +213,9 @@ async function invalidateChangedCatalog(
 
 export class CustomMcpService {
   constructor(
-    private readonly remote: RemoteMcpClient = new SdkRemoteMcpClient(),
+    private readonly remote: RemoteMcpClient = new SdkRemoteMcpClient({
+      nodeTransport: relayNodeProviderTransport,
+    }),
     private readonly database: typeof db = db
   ) {}
 
@@ -239,6 +245,7 @@ export class CustomMcpService {
     name: string
     endpointUrl: string
     placement: CustomMcpPlacement
+    nodeId?: string | null
     authKind: CustomMcpAuthKind
     credential?: string | null
     signal?: AbortSignal
@@ -249,6 +256,14 @@ export class CustomMcpService {
       input.endpointUrl,
       input.placement
     )
+    const placementRef = input.nodeId?.trim() || null
+    if ((input.placement === "node") !== (placementRef !== null)) {
+      throw new Error(
+        input.placement === "node"
+          ? "A paired Node must be selected for a Node-hosted MCP connection"
+          : "A hosted-Core MCP connection cannot be bound to a Node"
+      )
+    }
     const credential = input.credential?.trim() || null
     if ((input.authKind === "none") !== (credential === null)) {
       throw new Error(
@@ -260,13 +275,21 @@ export class CustomMcpService {
     const remoteConnection: RemoteMcpConnection = {
       endpointUrl: endpoint.href,
       placement: input.placement,
+      ownerId: input.ownerId,
+      placementRef,
       authKind: input.authKind,
       credential,
     }
     let tools: readonly RemoteMcpTool[]
     try {
       tools = await this.remote.inspect(remoteConnection, input.signal)
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /^NODE_MCP_[A-Z0-9_:-]+$/u.test(error.message)
+      ) {
+        throw error
+      }
       throw new Error("The external MCP server could not be inspected")
     }
     const digest = toolCatalogDigest(tools)
@@ -280,6 +303,7 @@ export class CustomMcpService {
           endpointUrl: endpoint.href,
           endpointOrigin: endpoint.origin,
           placement: input.placement,
+          placementRef,
           authKind: input.authKind,
           sealedCredential: credential ? seal(credential) : null,
           credentialHint: credential ? credential.slice(-4) : null,
@@ -348,6 +372,12 @@ export class CustomMcpService {
             eq(assistantToolSources.userId, input.ownerId)
           )
         )
+      if (
+        error instanceof Error &&
+        /^NODE_MCP_[A-Z0-9_:-]+$/u.test(error.message)
+      ) {
+        throw error
+      }
       throw new Error("The external MCP server could not be inspected")
     }
     const current = await ownedSource(

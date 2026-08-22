@@ -14,14 +14,34 @@ import {
   type SandboxHandle,
   type SandboxInputFile,
   type SandboxIsolationClass,
+  type SandboxRuntimeCheckpointCapabilities,
+  type SandboxRuntimeCheckpointCompatibilityV1,
+  type SandboxRuntimeCheckpointRefV1,
   type SandboxWorkspaceSnapshotRef,
+} from "@avermate/agent-contracts";
+import {
+  sandboxRuntimeCheckpointCompatibilityV1Schema,
+  sandboxRuntimeCheckpointRefV1Schema,
+  sandboxWorkspaceSnapshotRefSchema,
 } from "@avermate/agent-contracts";
 import { createHash } from "node:crypto";
 import { SandboxPolicyError, SandboxUnavailableError } from "./errors";
 import type { RemoteSandboxTransport } from "./remote-provider";
+import type {
+  PortableWorkspaceFile,
+  PortableWorkspaceSnapshotStore,
+} from "./portable-workspace-contract";
 
 const WORKSPACE = "/workspace";
-const SNAPSHOT_FORMAT_PREFIX = "opensandbox-native-v1:";
+const RUNTIME_SNAPSHOT_NAME_PREFIX = "avermate-runtime-v1";
+
+export type OpenSandboxRuntimeCheckpointConfig = {
+  region: string;
+  architecture: "amd64" | "arm64";
+  runtimeKind: string;
+  runtimeVersion: string;
+  maximumTtlSeconds: number;
+};
 
 export interface OpenSandboxSdkTransportConfig {
   connection: ConnectionConfigOptions;
@@ -31,11 +51,14 @@ export interface OpenSandboxSdkTransportConfig {
   profiles: readonly SandboxExecutionProfile[];
   requestTimeoutMs?: number;
   fetch?: typeof fetch;
+  workspaceSnapshots?: PortableWorkspaceSnapshotStore;
+  runtimeCheckpoint?: OpenSandboxRuntimeCheckpointConfig;
 }
 
 export function createOpenSandboxSdkTransportFromEnvironment(input: {
   environment: Readonly<Record<string, string | undefined>>;
   profiles: readonly SandboxExecutionProfile[];
+  workspaceSnapshots?: PortableWorkspaceSnapshotStore;
 }): OpenSandboxSdkTransport {
   const environment = input.environment;
   const domain =
@@ -48,11 +71,7 @@ export function createOpenSandboxSdkTransportFromEnvironment(input: {
       "OpenSandbox requires SANDBOX_OPENSANDBOX_DOMAIN and SANDBOX_OPENSANDBOX_EVIDENCE_URL.",
     );
   }
-  if (
-    domain.includes("://") ||
-    domain.includes("/") ||
-    domain.includes("@")
-  ) {
+  if (domain.includes("://") || domain.includes("/") || domain.includes("@")) {
     throw new SandboxUnavailableError(
       "CONFIGURATION_INVALID",
       "SANDBOX_OPENSANDBOX_DOMAIN must contain only host[:port].",
@@ -78,6 +97,31 @@ export function createOpenSandboxSdkTransportFromEnvironment(input: {
     }
     imageUris[profile.id] = uri;
   }
+  const runtimeRegion = environment.SANDBOX_OPENSANDBOX_REGION?.trim();
+  const runtimeArchitecture =
+    environment.SANDBOX_OPENSANDBOX_ARCHITECTURE?.trim();
+  const runtimeKind = environment.SANDBOX_OPENSANDBOX_RUNTIME_KIND?.trim();
+  const runtimeVersion =
+    environment.SANDBOX_OPENSANDBOX_RUNTIME_VERSION?.trim();
+  const maximumTtlSeconds = Number(
+    environment.SANDBOX_OPENSANDBOX_CHECKPOINT_MAX_TTL_SECONDS ?? "86400",
+  );
+  const runtimeCheckpoint: OpenSandboxRuntimeCheckpointConfig | undefined =
+    runtimeRegion &&
+    (runtimeArchitecture === "amd64" || runtimeArchitecture === "arm64") &&
+    runtimeKind &&
+    runtimeVersion &&
+    Number.isSafeInteger(maximumTtlSeconds) &&
+    maximumTtlSeconds > 0 &&
+    maximumTtlSeconds <= 30 * 24 * 60 * 60
+      ? {
+          region: runtimeRegion,
+          architecture: runtimeArchitecture as "amd64" | "arm64",
+          runtimeKind,
+          runtimeVersion,
+          maximumTtlSeconds,
+        }
+      : undefined;
   return new OpenSandboxSdkTransport({
     connection: {
       domain,
@@ -92,6 +136,8 @@ export function createOpenSandboxSdkTransportFromEnvironment(input: {
       environment.SANDBOX_OPENSANDBOX_EVIDENCE_TOKEN?.trim() || undefined,
     imageUris,
     profiles: input.profiles,
+    workspaceSnapshots: input.workspaceSnapshots,
+    ...(runtimeCheckpoint ? { runtimeCheckpoint } : {}),
   });
 }
 
@@ -109,6 +155,8 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
   readonly #sandboxes = new Map<string, Sandbox>();
   readonly #requestTimeoutMs: number;
   readonly #fetch: typeof fetch;
+  readonly #workspaceSnapshots?: PortableWorkspaceSnapshotStore;
+  readonly #runtimeCheckpoint?: OpenSandboxRuntimeCheckpointConfig;
 
   constructor(private readonly config: OpenSandboxSdkTransportConfig) {
     this.#connection = new ConnectionConfig(config.connection);
@@ -122,6 +170,8 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
       Math.max(1_000, config.requestTimeoutMs ?? 15_000),
     );
     this.#fetch = config.fetch ?? fetch;
+    this.#workspaceSnapshots = config.workspaceSnapshots;
+    this.#runtimeCheckpoint = config.runtimeCheckpoint;
     for (const profile of config.profiles.filter((value) => value.enabled)) {
       const uri = this.#imageUris[profile.id];
       if (!uri || !uri.endsWith(`@${profile.image.imageDigest}`)) {
@@ -146,7 +196,10 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
       );
     }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.#requestTimeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      this.#requestTimeoutMs,
+    );
     try {
       const response = await this.#fetch(this.#evidenceUrl, {
         method: "POST",
@@ -188,14 +241,9 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
       isolationClass: SandboxIsolationClass;
     },
   ): Promise<{ sandboxId: string }> {
-    const source = input.workspaceSnapshotRef
-      ? await this.#verifiedSnapshot(input.workspaceSnapshotRef, input.ownerId)
-      : null;
     const sandbox = await Sandbox.create({
       connectionConfig: this.#connection,
-      ...(source
-        ? { snapshotId: source }
-        : { image: this.#requiredImage(input.profile) }),
+      image: this.#requiredImage(input.profile),
       timeoutSeconds: Math.max(
         1,
         Math.ceil((input.expiresAt.getTime() - Date.now()) / 1_000),
@@ -222,16 +270,24 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
       },
     });
     this.#sandboxes.set(sandbox.id, sandbox);
+    if (input.workspaceSnapshotRef) {
+      await this.#restoreLogicalWorkspace(
+        sandbox,
+        input.workspaceSnapshotRef,
+        input.ownerId,
+        input.profile,
+      );
+    }
     return { sandboxId: sandbox.id };
   }
 
-  async *execute(input: Parameters<RemoteSandboxTransport["execute"]>[0]): AsyncIterable<SandboxExecutionEvent> {
+  async *execute(
+    input: Parameters<RemoteSandboxTransport["execute"]>[0],
+  ): AsyncIterable<SandboxExecutionEvent> {
     const sandbox = await this.#sandbox(input.handle);
     const profile = this.#profile(input.handle.profileId);
     const limits = { ...profile.resources, ...(input.resources ?? {}) };
-    const command = [input.executable, ...input.argv]
-      .map(posixQuote)
-      .join(" ");
+    const command = [input.executable, ...input.argv].map(posixQuote).join(" ");
     let started = false;
     let exited = false;
     let outputBytes = 0;
@@ -368,22 +424,51 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
     handle: SandboxHandle,
   ): Promise<SandboxWorkspaceSnapshotRef> {
     const sandbox = await this.#sandbox(handle);
-    const manager = SandboxManager.create({ connectionConfig: this.#connection });
-    try {
-      const ownerHash = ownerDigest(handle.ownerId);
-      const created = await manager.createSnapshot(handle.sandboxId, {
-        name: `avermate-${ownerHash}`,
-      });
-      const ready = await waitForSnapshot(manager, created.id);
-      if (ready.name !== `avermate-${ownerHash}`) {
-        throw new Error("OpenSandbox snapshot ownership marker diverged");
-      }
-      return snapshotRef(ready.id, ownerHash);
-    } finally {
-      await manager.close();
-      await sandbox.close().catch(() => undefined);
-      this.#sandboxes.delete(handle.sandboxId);
+    const snapshots = this.#workspaceSnapshots;
+    if (!snapshots) {
+      throw new SandboxUnavailableError(
+        "SNAPSHOT_INCOMPATIBLE",
+        "Portable workspace snapshot storage is not configured.",
+      );
     }
+    const profile = this.#profile(handle.profileId);
+    const entries = await sandbox.files.listDirectory({
+      path: WORKSPACE,
+      depth: 64,
+    });
+    const files: PortableWorkspaceFile[] = [];
+    let bytes = 0;
+    for (const entry of entries) {
+      if (entry.type === "directory") continue;
+      if (entry.type !== "file" || !entry.path.startsWith(`${WORKSPACE}/`)) {
+        throw new SandboxPolicyError(
+          "filesystem",
+          "Portable snapshots reject links and non-regular workspace entries.",
+        );
+      }
+      const relativePath = entry.path.slice(`${WORKSPACE}/`.length);
+      const content = await sandbox.files.readBytes(entry.path);
+      bytes += content.byteLength;
+      if (
+        files.length + 1 > profile.resources.fileCount ||
+        bytes > profile.resources.workspaceBytes
+      ) {
+        throw new SandboxPolicyError(
+          "resource",
+          "Portable workspace exceeds the reviewed profile ceiling.",
+        );
+      }
+      files.push({
+        relativePath,
+        bytes: content,
+        ...(typeof entry.mode === "number" ? { mode: entry.mode } : {}),
+      });
+    }
+    return snapshots.capture({
+      provider: "opensandbox",
+      ownerId: handle.ownerId,
+      files,
+    });
   }
 
   async forkWorkspace(
@@ -393,24 +478,189 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
       isolationClass: SandboxIsolationClass;
     },
   ): Promise<{ sandboxId: string }> {
-    const snapshotId = await this.#verifiedSnapshot(input.source, input.ownerId);
+    return this.create({ ...input, workspaceSnapshotRef: input.source });
+  }
+
+  async runtimeCheckpointCapabilities(): Promise<SandboxRuntimeCheckpointCapabilities> {
+    const runtime = this.#runtimeCheckpoint;
+    if (!runtime) return { available: false, reason: "preflight-unavailable" };
+    return {
+      available: true,
+      provider: "opensandbox",
+      regions: [runtime.region],
+      architectures: [runtime.architecture],
+      runtimeKind: runtime.runtimeKind,
+      runtimeVersion: runtime.runtimeVersion,
+      maximumTtlSeconds: runtime.maximumTtlSeconds,
+    };
+  }
+
+  async captureRuntimeCheckpoint(input: {
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: Date;
+  }): Promise<SandboxRuntimeCheckpointRefV1> {
+    const compatibility = this.#assertRuntimeCompatibility(
+      input.handle,
+      input.compatibility,
+    );
+    const source = sandboxWorkspaceSnapshotRefSchema.parse(
+      input.sourceWorkspaceSnapshot,
+    );
+    if (
+      source.provider !== "opensandbox" ||
+      source.format !== "avermate-portable-workspace-v1"
+    ) {
+      throw new Error("RUNTIME_CHECKPOINT_LOGICAL_SOURCE_REQUIRED");
+    }
+    const runtime = this.#runtimeCheckpoint!;
+    const ttl = Math.ceil((input.expiresAt.getTime() - Date.now()) / 1_000);
+    if (ttl < 1 || ttl > runtime.maximumTtlSeconds) {
+      throw new Error("RUNTIME_CHECKPOINT_TTL_INVALID");
+    }
+    const manager = SandboxManager.create({
+      connectionConfig: this.#connection,
+    });
+    try {
+      const binding = runtimeCheckpointBinding({
+        ownerId: input.handle.ownerId,
+        source,
+        compatibility,
+        idempotencyKey: input.idempotencyKey,
+      });
+      const listed = await manager.listSnapshots({
+        name: binding,
+        page: 1,
+        pageSize: 2,
+      });
+      const matching = listed.items.filter((item) => item.name === binding);
+      if (matching.length > 1) {
+        throw new Error("RUNTIME_CHECKPOINT_IDEMPOTENCY_COLLISION");
+      }
+      const existing = matching[0];
+      const snapshotId = existing
+        ? existing.id
+        : (
+            await manager.createSnapshot(input.handle.sandboxId, {
+              name: binding,
+            })
+          ).id;
+      const ready = await waitForSnapshot(manager, snapshotId);
+      if (ready.name !== binding) {
+        throw new Error("RUNTIME_CHECKPOINT_BINDING_MISMATCH");
+      }
+      return sandboxRuntimeCheckpointRefV1Schema.parse({
+        version: 1,
+        checkpoint: {
+          provider: "opensandbox",
+          opaqueRef: ready.id,
+          portable: false,
+        },
+        compatibility,
+        sourceWorkspaceSnapshot: source,
+        captureIdempotencyKey: input.idempotencyKey,
+        captureState: "captured",
+        adoptedObjectRefs: [],
+        capturedAt: ready.createdAt.toISOString(),
+        expiresAt: input.expiresAt.toISOString(),
+      });
+    } finally {
+      await manager.close();
+    }
+  }
+
+  async restoreRuntimeCheckpoint(input: {
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }) {
+    const checkpoint = sandboxRuntimeCheckpointRefV1Schema.parse(
+      input.checkpoint,
+    );
+    if (Date.parse(checkpoint.expiresAt) <= Date.now()) {
+      throw new Error("RUNTIME_CHECKPOINT_EXPIRED");
+    }
+    this.#assertRuntimeCompatibility(
+      {
+        providerId: "opensandbox",
+        sandboxId: "checkpoint-restore",
+        ownerId: input.create.ownerId,
+        threadId: input.create.threadId,
+        branchId: input.create.branchId,
+        profileId: input.create.profile.id,
+        profileVersion: input.create.profile.version,
+        image: input.create.profile.image,
+        evidenceNonce: "checkpoint-restore",
+        expiresAt: input.create.expiresAt.toISOString(),
+      },
+      checkpoint.compatibility,
+    );
+    const manager = SandboxManager.create({
+      connectionConfig: this.#connection,
+    });
+    try {
+      const current = await manager.getSnapshot(
+        checkpoint.checkpoint.opaqueRef,
+      );
+      const expected = runtimeCheckpointBinding({
+        ownerId: input.create.ownerId,
+        source: checkpoint.sourceWorkspaceSnapshot,
+        compatibility: checkpoint.compatibility,
+        ...(checkpoint.captureIdempotencyKey
+          ? { idempotencyKey: checkpoint.captureIdempotencyKey }
+          : {}),
+      });
+      if (current.status.state !== "Ready" || current.name !== expected) {
+        throw new Error("RUNTIME_CHECKPOINT_BINDING_MISMATCH");
+      }
+    } finally {
+      await manager.close();
+    }
     const sandbox = await Sandbox.create({
       connectionConfig: this.#connection,
-      snapshotId,
+      snapshotId: checkpoint.checkpoint.opaqueRef,
       timeoutSeconds: Math.max(
         1,
-        Math.ceil((input.expiresAt.getTime() - Date.now()) / 1_000),
+        Math.ceil((input.create.expiresAt.getTime() - Date.now()) / 1_000),
       ),
       secureAccess: true,
-      metadata: this.#metadata(input),
-      networkPolicy: networkPolicy(input.profile),
+      metadata: this.#metadata(input.create),
+      networkPolicy: networkPolicy(input.create.profile),
       resource: {
-        cpu: String(input.profile.resources.cpuMillis / 1_000),
-        memory: `${Math.ceil(input.profile.resources.memoryBytes / 1024 ** 2)}Mi`,
+        cpu: String(input.create.profile.resources.cpuMillis / 1_000),
+        memory: `${Math.ceil(input.create.profile.resources.memoryBytes / 1024 ** 2)}Mi`,
       },
     });
     this.#sandboxes.set(sandbox.id, sandbox);
     return { sandboxId: sandbox.id };
+  }
+
+  async deleteRuntimeCheckpoint(checkpoint: SandboxRuntimeCheckpointRefV1) {
+    const parsed = sandboxRuntimeCheckpointRefV1Schema.parse(checkpoint);
+    const manager = SandboxManager.create({
+      connectionConfig: this.#connection,
+    });
+    try {
+      const current = await manager.getSnapshot(parsed.checkpoint.opaqueRef);
+      if (typeof current.name !== "string") {
+        throw new Error("RUNTIME_CHECKPOINT_BINDING_MISMATCH");
+      }
+      const expected = runtimeCheckpointBinding({
+        ownerHash: runtimeCheckpointOwnerHash(current.name),
+        source: parsed.sourceWorkspaceSnapshot,
+        compatibility: parsed.compatibility,
+        ...(parsed.captureIdempotencyKey
+          ? { idempotencyKey: parsed.captureIdempotencyKey }
+          : {}),
+      });
+      if (current.name !== expected) {
+        throw new Error("RUNTIME_CHECKPOINT_BINDING_MISMATCH");
+      }
+      await manager.deleteSnapshot(parsed.checkpoint.opaqueRef);
+    } finally {
+      await manager.close();
+    }
   }
 
   async stop(handle: SandboxHandle): Promise<void> {
@@ -425,7 +675,9 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
 
   async destroy(handle: SandboxHandle): Promise<void> {
     const existing = this.#sandboxes.get(handle.sandboxId);
-    const manager = SandboxManager.create({ connectionConfig: this.#connection });
+    const manager = SandboxManager.create({
+      connectionConfig: this.#connection,
+    });
     try {
       await manager.killSandbox(handle.sandboxId);
     } finally {
@@ -478,40 +730,69 @@ export class OpenSandboxSdkTransport implements RemoteSandboxTransport {
     };
   }
 
-  async #verifiedSnapshot(
+  async #restoreLogicalWorkspace(
+    sandbox: Sandbox,
     ref: SandboxWorkspaceSnapshotRef,
     ownerId: string,
-  ): Promise<string> {
-    if (ref.provider !== "opensandbox") {
+    profile: SandboxExecutionProfile,
+  ) {
+    if (ref.provider !== "opensandbox" || !this.#workspaceSnapshots) {
       throw new SandboxUnavailableError(
         "SNAPSHOT_INCOMPATIBLE",
-        "Workspace snapshot belongs to another provider.",
+        "Portable workspace snapshot storage is unavailable or incompatible.",
       );
     }
-    const snapshotId = decodeSnapshotId(ref.format);
-    const ownerHash = ownerDigest(ownerId);
-    if (snapshotRef(snapshotId, ownerHash).digest !== ref.digest) {
-      throw new SandboxUnavailableError(
-        "SNAPSHOT_INCOMPATIBLE",
-        "Workspace snapshot digest is invalid.",
-      );
-    }
-    const manager = SandboxManager.create({ connectionConfig: this.#connection });
-    try {
-      const snapshot = await manager.getSnapshot(snapshotId);
-      if (
-        snapshot.status.state !== "Ready" ||
-        snapshot.name !== `avermate-${ownerHash}`
-      ) {
-        throw new SandboxUnavailableError(
-          "SNAPSHOT_INCOMPATIBLE",
-          "Workspace snapshot is not ready or not owned by this account.",
-        );
+    const files = await this.#workspaceSnapshots.restore({
+      ref,
+      ownerId,
+      maximumBytes: profile.resources.workspaceBytes,
+      maximumFiles: profile.resources.fileCount,
+    });
+    const directories = new Set<string>([WORKSPACE]);
+    for (const file of files) {
+      const absolute = absoluteWorkspacePath(file.relativePath);
+      const segments = absolute.split("/");
+      for (let length = 3; length < segments.length; length += 1) {
+        directories.add(segments.slice(0, length).join("/"));
       }
-      return snapshot.id;
-    } finally {
-      await manager.close();
     }
+    await sandbox.files.createDirectories(
+      [...directories]
+        .toSorted((left, right) => left.length - right.length)
+        .map((path) => ({ path, mode: 0o700 })),
+    );
+    await sandbox.files.writeFiles(
+      files.map((file) => ({
+        path: absoluteWorkspacePath(file.relativePath),
+        data: file.bytes,
+        mode: file.mode ?? 0o600,
+      })),
+    );
+  }
+
+  #assertRuntimeCompatibility(
+    handle: SandboxHandle,
+    raw: SandboxRuntimeCheckpointCompatibilityV1,
+  ) {
+    const compatibility =
+      sandboxRuntimeCheckpointCompatibilityV1Schema.parse(raw);
+    const runtime = this.#runtimeCheckpoint;
+    if (!runtime) throw new Error("RUNTIME_CHECKPOINT_UNAVAILABLE");
+    if (
+      handle.providerId !== "opensandbox" ||
+      compatibility.provider !== "opensandbox" ||
+      handle.profileId !== compatibility.profileId ||
+      handle.profileVersion !== compatibility.profileVersion ||
+      handle.image.imageDigest !== compatibility.imageDigest ||
+      runtime.region !== compatibility.region ||
+      runtime.architecture !== compatibility.architecture ||
+      runtime.runtimeKind !== compatibility.runtimeKind ||
+      runtime.runtimeVersion !== compatibility.runtimeVersion
+    ) {
+      throw new Error("RUNTIME_CHECKPOINT_COMPATIBILITY_MISMATCH");
+    }
+    this.#profile(handle.profileId);
+    return compatibility;
   }
 }
 
@@ -568,7 +849,10 @@ function networkPolicy(profile: SandboxExecutionProfile) {
 
 function posixQuote(value: string): string {
   if (value.includes("\0")) {
-    throw new SandboxPolicyError("process", "Command arguments cannot contain NUL.");
+    throw new SandboxPolicyError(
+      "process",
+      "Command arguments cannot contain NUL.",
+    );
   }
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
@@ -600,41 +884,48 @@ function digest(bytes: Uint8Array): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-function snapshotRef(
-  snapshotId: string,
-  ownerHash: string,
-): SandboxWorkspaceSnapshotRef {
-  const format = `${SNAPSHOT_FORMAT_PREFIX}${snapshotId}`;
-  if (format.length > 128 || !snapshotId || /[\u0000-\u001f]/u.test(snapshotId)) {
-    throw new SandboxUnavailableError(
-      "SNAPSHOT_INCOMPATIBLE",
-      "OpenSandbox snapshot identifier cannot be represented safely.",
-    );
-  }
-  return {
-    provider: "opensandbox",
-    digest: digest(
-      new TextEncoder().encode(`${SNAPSHOT_FORMAT_PREFIX}\0${snapshotId}\0${ownerHash}`),
-    ),
-    format,
-  };
+function runtimeCheckpointBinding(input: {
+  ownerId: string;
+  source: SandboxWorkspaceSnapshotRef;
+  compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+  idempotencyKey?: string;
+}): string;
+function runtimeCheckpointBinding(input: {
+  ownerHash: string;
+  source: SandboxWorkspaceSnapshotRef;
+  compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+  idempotencyKey?: string;
+}): string;
+function runtimeCheckpointBinding(input: {
+  ownerId?: string;
+  ownerHash?: string;
+  source: SandboxWorkspaceSnapshotRef;
+  compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+  idempotencyKey?: string;
+}) {
+  const hash = input.ownerHash ?? ownerDigest(input.ownerId!).slice(0, 16);
+  const binding = createHash("sha256")
+    .update(
+      JSON.stringify({
+        source: input.source,
+        compatibility: input.compatibility,
+        ...(input.idempotencyKey
+          ? { idempotencyKey: input.idempotencyKey }
+          : {}),
+      }),
+    )
+    .digest("hex")
+    .slice(0, 32);
+  return `${RUNTIME_SNAPSHOT_NAME_PREFIX}-${hash}-${binding}`;
 }
 
-function decodeSnapshotId(format: string): string {
-  if (!format.startsWith(SNAPSHOT_FORMAT_PREFIX)) {
-    throw new SandboxUnavailableError(
-      "SNAPSHOT_INCOMPATIBLE",
-      "Unsupported OpenSandbox workspace snapshot format.",
-    );
-  }
-  const id = format.slice(SNAPSHOT_FORMAT_PREFIX.length);
-  if (!id) {
-    throw new SandboxUnavailableError(
-      "SNAPSHOT_INCOMPATIBLE",
-      "OpenSandbox workspace snapshot identifier is missing.",
-    );
-  }
-  return id;
+function runtimeCheckpointOwnerHash(name: string) {
+  const match = new RegExp(
+    `^${RUNTIME_SNAPSHOT_NAME_PREFIX}-([a-f0-9]{16})-[a-f0-9]{32}$`,
+    "u",
+  ).exec(name);
+  if (!match?.[1]) throw new Error("RUNTIME_CHECKPOINT_BINDING_MISMATCH");
+  return match[1];
 }
 
 async function waitForSnapshot(
@@ -652,14 +943,17 @@ async function waitForSnapshot(
     }
     await new Promise<void>((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error("OpenSandbox snapshot did not become ready within 30 seconds");
+  throw new Error(
+    "OpenSandbox snapshot did not become ready within 30 seconds",
+  );
 }
 
 function classifyPath(
   path: string,
 ): Pick<SandboxFileManifestEntry, "kind" | "mimeType"> {
   const lower = path.toLowerCase();
-  if (lower.endsWith(".pdf")) return { kind: "pdf", mimeType: "application/pdf" };
+  if (lower.endsWith(".pdf"))
+    return { kind: "pdf", mimeType: "application/pdf" };
   if (lower.endsWith(".png")) return { kind: "png", mimeType: "image/png" };
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
     return { kind: "jpeg", mimeType: "image/jpeg" };

@@ -8,6 +8,7 @@ import {
   studyDocumentExports,
   studyDocuments,
   type QuizContentV1,
+  type QuizContentV2,
   type StudyDocumentKind,
   type StudyDocumentMeta,
   type StudyDocumentReferenceKind,
@@ -240,7 +241,9 @@ type ReaderStudyDocument = Omit<
   "metaJson"
 > & {
   metaJson:
-    Exclude<StudyDocumentMeta, QuizContentV1> | QuizPromptContentV1 | null;
+    | Exclude<StudyDocumentMeta, QuizContentV1 | QuizContentV2>
+    | QuizPromptContentV1
+    | null;
 };
 
 function readerDocumentProjection(

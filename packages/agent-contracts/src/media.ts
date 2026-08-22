@@ -198,6 +198,21 @@ export type VideoAudioExtractWorkerInput = z.infer<
   typeof videoAudioExtractWorkerInputSchema
 >;
 
+/** Bounded segmented successor to the legacy single-WAV extraction request. */
+export const videoAudioSegmentExtractWorkerInputSchema = z.strictObject({
+  schemaVersion: z.literal(2),
+  canonicalUrl: boundedUrl,
+  provider: z.literal("youtube"),
+  maxDurationSeconds: z.number().int().min(1).max(4 * 60 * 60),
+  maxDownloadBytes: z.number().int().min(1).max(2 * 1024 ** 3),
+  outputCodec: z.literal("mp3-mono-16khz"),
+  segmentSeconds: z.number().int().min(60).max(20 * 60),
+  maximumSegmentBytes: z.literal(32 * 1024 * 1024),
+});
+export type VideoAudioSegmentExtractWorkerInput = z.infer<
+  typeof videoAudioSegmentExtractWorkerInputSchema
+>;
+
 export const generatedArtifactKindSchema = z.enum([
   "markdown",
   "latex-source",

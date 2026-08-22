@@ -28,6 +28,34 @@ describe("node protocol contracts", () => {
     expect(additive.futureCapability).toEqual({ version: 1, enabled: true });
   });
 
+  test("binds signed job execution profiles to advertised kinds", () => {
+    const jobs = {
+      version: 1,
+      kinds: ["artifact.video-audio-extract@1"],
+      maxConcurrent: 2,
+      executionProfiles: [
+        {
+          kind: "artifact.video-audio-extract@1",
+          sandboxProfileId: "media",
+          profileVersion: "node-v1-media-aabbcc",
+          imageDigest: digest,
+          egressPolicyDigest: digest,
+        },
+      ],
+    } as const;
+    expect(nodeCapabilityFeaturesSchema.safeParse({ jobs }).success).toBe(true);
+    expect(
+      nodeCapabilityFeaturesSchema.safeParse({
+        jobs: {
+          ...jobs,
+          executionProfiles: [
+            { ...jobs.executionProfiles[0], kind: "artifact.unadvertised@1" },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test("rejects job envelopes with unexpected or malformed fields", () => {
     const claims = {
       version: 1,

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "avermate.plan-037.live-evidence",
+  "policyVersion": "plan-037-live-v2",
+  "plan": "037",
+  "templateOnly": true,
+  "release": {
+    "revision": "<exact-release-revision>",
+    "checkoutDigest": "sha256:<checkout-tree-digest>"
+  },
+  "deployment": {
+    "environmentDigest": "sha256:<environment-digest>",
+    "configurationArtifactPath": "redacted-deployment-config.json",
+    "configurationDigest": "sha256:<configuration-artifact-digest>"
+  },
+  "expectations": {
+    "evaluationPolicyVersion": "learning-evaluation-v1",
+    "minimumSamples": 30,
+    "providerGradesImmutable": true,
+    "minimumResponsiveViewports": 2
+  },
+  "evidence": []
+}

@@ -1,15 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  AudioLinesIcon,
   ExternalLinkIcon,
   EyeIcon,
   PencilIcon,
   RefreshCwIcon,
   ScanTextIcon,
 } from "lucide-react"
-import { useExtracted } from "next-intl"
+import { useExtracted, useLocale } from "next-intl"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -54,6 +56,7 @@ export function MaterialViewer({
   onClose: () => void
 }) {
   const t = useExtracted()
+  const locale = useLocale()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<MaterialViewTab>(initialTab)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -117,6 +120,17 @@ export function MaterialViewer({
     }),
     enabled: row.document.sourceType === "link",
   })
+  const isYoutube = row.document.sourceKind === "youtube"
+  const videoConsent = useQuery({
+    ...orpc.mediaStudio.videoExtractionConsent.queryOptions(),
+    enabled: isYoutube,
+    staleTime: 30_000,
+  })
+  const mediaCapabilities = useQuery({
+    ...orpc.mediaStudio.capabilities.queryOptions(),
+    enabled: isYoutube,
+    staleTime: 30_000,
+  })
   const transcribe = useMutation({
     ...orpc.materials.documents.transcribe.mutationOptions(),
     onSuccess: async (result) => {
@@ -155,16 +169,34 @@ export function MaterialViewer({
   const retryDynamic = useMutation({
     ...orpc.mediaStudio.retryDynamic.mutationOptions(),
     onSuccess: async (result) => {
-      haptic(result.status === "failed" ? "error" : "success")
+      haptic("success")
+      setJobId(result.jobId)
       await ingestionRevisions.refetch()
-      const message = ingestionReasonMessage(result.reasonCode)
-      if (result.status === "failed") {
-        toast.error(message ?? result.message)
-      }
+      toast.success(t("Sandboxed browser rendering queued."))
     },
     onError: (error: Error) => {
       haptic("error")
       toast.error(error.message || t("Dynamic ingestion could not be started."))
+    },
+  })
+  const retryVideoAudio = useMutation({
+    ...orpc.mediaStudio.retryVideoAudio.mutationOptions(),
+    onSuccess: async (result) => {
+      haptic("success")
+      setJobId(result.jobId)
+      await Promise.all([
+        ingestionRevisions.refetch(),
+        queryClient.invalidateQueries({
+          queryKey: orpc.materials.documents.transcript.queryKey({
+            input: { documentId },
+          }),
+        }),
+      ])
+      toast.success(t("Authorized audio extraction queued."))
+    },
+    onError: (error: Error) => {
+      haptic("error")
+      toast.error(error.message || t("Audio extraction could not be started."))
     },
   })
   const download = useMutation({
@@ -200,6 +232,10 @@ export function MaterialViewer({
   const latestIngestionRevision = ingestionRevisions.data?.[0] ?? null
   const advancedReason = latestIngestionRevision?.reasonCode ?? null
   const advancedReasonText = ingestionReasonMessage(advancedReason)
+  const needsVideoAudioFallback =
+    isYoutube &&
+    (advancedReason === "captions_unavailable" ||
+      advancedReason === "permission_required")
   const canOpenUploadedFile =
     row.document.sourceType === "file" &&
     (row.file?.status === "stored" || row.file?.status === "ready")
@@ -662,15 +698,82 @@ export function MaterialViewer({
                     t("Transcription failed. Try again.")}
                 </p>
                 {canRetryWithDynamicRendering(advancedReason) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={retryDynamic.isPending}
-                    onClick={() => retryDynamic.mutate({ documentId })}
-                  >
-                    {retryDynamic.isPending ? <Spinner /> : <RefreshCwIcon />}
-                    {t("Try sandboxed browser rendering")}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={retryDynamic.isPending}
+                      onClick={() => retryDynamic.mutate({ documentId })}
+                    >
+                      {retryDynamic.isPending ? <Spinner /> : <RefreshCwIcon />}
+                      {t("Try sandboxed browser rendering")}
+                    </Button>
+                    {advancedReason === "placement_unavailable" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={<Link href="/settings/node#placements" />}
+                      >
+                        <ExternalLinkIcon data-icon="inline-start" />
+                        {t("Configure browser placement")}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {needsVideoAudioFallback ? (
+                  <div className="flex flex-wrap gap-2">
+                    {videoConsent.isPending ? (
+                      <Button size="sm" variant="outline" disabled>
+                        <Spinner />
+                        {t("Checking audio authorization")}
+                      </Button>
+                    ) : !videoConsent.data?.active ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={
+                          <Link href="/materials/studio#video-audio-fallback" />
+                        }
+                      >
+                        <ExternalLinkIcon data-icon="inline-start" />
+                        {t("Review audio fallback authorization")}
+                      </Button>
+                    ) : mediaCapabilities.isPending ? (
+                      <Button size="sm" variant="outline" disabled>
+                        <Spinner />
+                        {t("Checking media placement")}
+                      </Button>
+                    ) : mediaCapabilities.data?.videoAudioExtraction
+                        .available ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={retryVideoAudio.isPending}
+                        onClick={() =>
+                          retryVideoAudio.mutate({
+                            documentId,
+                            preferredLanguage: locale,
+                          })
+                        }
+                      >
+                        {retryVideoAudio.isPending ? (
+                          <Spinner />
+                        ) : (
+                          <AudioLinesIcon />
+                        )}
+                        {t("Extract authorized audio")}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={<Link href="/settings/node#placements" />}
+                      >
+                        <ExternalLinkIcon data-icon="inline-start" />
+                        {t("Configure media placement")}
+                      </Button>
+                    )}
+                  </div>
                 ) : null}
               </div>
             ) : active ? (

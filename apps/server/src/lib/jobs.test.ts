@@ -2,9 +2,17 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createRouterClient } from "@orpc/server";
 import { eq, inArray, like, or } from "drizzle-orm";
 import { readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.DATABASE_URL = "file::memory:";
+// Cancellation acknowledgement is transactional. libSQL may use another
+// connection for that transaction, so a plain :memory: database would expose
+// an empty schema on the transaction connection.
+const sharedTestDatabase = join(
+  tmpdir(),
+  `avermate-jobs-${process.pid}-${crypto.randomUUID()}.db`,
+).replaceAll("\\", "/");
+process.env.DATABASE_URL = `file:${sharedTestDatabase}`;
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET = "test-secret-that-is-at-least-32-chars";
 process.env.CLIENT_URL = "http://localhost:3001";
@@ -24,6 +32,7 @@ const migration = readdirSync(migrationDirectory)
 const databaseHookTimeout = 120_000;
 
 type AppRouter = typeof import("../routers").appRouter;
+type JobHandler = import("./jobs").JobHandler;
 type Api = ReturnType<
   typeof createRouterClient<AppRouter, Record<never, never>>
 >;
@@ -139,6 +148,40 @@ describe("durable jobs", () => {
     expect(completed.status).toBe("succeeded");
     expect(completed.result).toEqual({ answer: 42 });
     expect(completed.lockedBy).toBeNull();
+  });
+
+  test("propagates the exact owner, kind and lease generation to handlers", async () => {
+    const kind = `test.jobs.identity.${crypto.randomUUID()}`;
+    let captured: Parameters<JobHandler>[0] | undefined;
+    queue.registerJobHandler(kind, async (context) => {
+      captured = context;
+      return { accepted: true };
+    });
+    const runAt = new Date("2026-08-10T11:00:00.000Z");
+    const job = await queue.enqueueJob({
+      kind,
+      payload: { resourceId: "owned-resource" },
+      userId: "jobs-user-a",
+      runAt,
+    });
+
+    await queue.runNextJob("runner-identity", runAt);
+
+    expect(captured).toMatchObject({
+      jobId: job.id,
+      kind,
+      userId: "jobs-user-a",
+      attempts: 1,
+      leaseOwner: "runner-identity",
+      identity: {
+        jobId: job.id,
+        kind,
+        userId: "jobs-user-a",
+        attempt: 1,
+        leaseOwner: "runner-identity",
+      },
+    });
+    expect(captured?.identity.runToken).toStartWith(`${job.id}:1:`);
   });
 
   test("idempotency deduplicates both user and null-owner system jobs", async () => {
@@ -320,6 +363,54 @@ describe("durable jobs", () => {
     });
     expect(result?.lockedBy).toBeNull();
     expect(result?.lockedUntil).toBeNull();
+  });
+
+  test("a running user job acknowledges cooperative cancellation", async () => {
+    const kind = `test.jobs.cooperative-cancel.${crypto.randomUUID()}`;
+    const { USER_CANCELLABLE_JOB_KINDS } = await import("../routers/jobs");
+    USER_CANCELLABLE_JOB_KINDS.add(kind);
+    let started!: () => void;
+    const didStart = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    queue.registerJobHandler(kind, async ({ signal }) => {
+      started();
+      await new Promise<never>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return;
+        }
+        signal?.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    });
+    const runAt = new Date();
+    const job = await queue.enqueueJob({
+      kind,
+      userId: "jobs-user-a",
+      runAt,
+    });
+    const execution = queue.runNextJob("runner-cooperative-cancel", runAt);
+    await didStart;
+
+    const requested = await apiA.jobs.cancel({ jobId: job.id });
+    expect(requested).toMatchObject({
+      id: job.id,
+      status: "running",
+      cancellationRequested: true,
+    });
+    const cancelled = await execution;
+    expect(cancelled).toMatchObject({ id: job.id, status: "cancelled" });
+    const [metadata] = await database
+      .select()
+      .from(schema.jobRuntimeMetadata)
+      .where(eq(schema.jobRuntimeMetadata.jobId, job.id));
+    expect(metadata).toMatchObject({
+      stage: "terminal",
+      cancellation: "acknowledged",
+    });
+    USER_CANCELLABLE_JOB_KINDS.delete(kind);
   });
 
   test("the router enforces ownership and hides system jobs", async () => {

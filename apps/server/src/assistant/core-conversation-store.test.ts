@@ -14,6 +14,12 @@ import type {
 import type { Api } from "../mcp/shared";
 import { createFirstPartyToolBroker } from "../tools/first-party";
 import {
+  PRODUCTION_AGENT_POLICY_REVISION,
+  PRODUCTION_AGENT_RUNTIME_ID,
+  PRODUCTION_AGENT_RUNTIME_VERSION,
+  ProductionAgentRuntime,
+} from "../agent/production-runtime";
+import {
   MockReadOnlyModelGateway,
   ReadOnlyAssistantRunService,
 } from "./run-service";
@@ -23,13 +29,21 @@ import {
   CoreConversationStore,
 } from "./core-conversation-store";
 import {
+  RoutedConversationStore,
+  type ConversationDagRelay,
+} from "./routed-conversation-store";
+import type {
+  CapabilityPlacement,
+  NodeConversationDagSnapshot,
+} from "@avermate/agent-contracts";
+import {
   CoreConversationCheckpointStore,
   InMemoryCheckpointBlobStore,
 } from "./checkpoint-store";
 
 let client: Client;
 let store: CoreConversationStore;
-// Applying the complete migration history through 0060 and releasing its
+// Applying the complete migration history through 0061 and releasing its
 // relational fixtures can take about 90s on slower Windows/libSQL runners.
 const databaseHookTimeout = 120_000;
 
@@ -58,7 +72,66 @@ function usage() {
   };
 }
 
+async function authorizeConversationMigration(
+  ownerId: string,
+  source: CapabilityPlacement,
+  destination: CapabilityPlacement,
+) {
+  const id = `pmig_test_${crypto.randomUUID()}`;
+  const now = Math.floor(Date.now() / 1_000);
+  await client.execute({
+    sql: `INSERT INTO placement_migrations
+      (id, accountId, resourceKind, resourceId, sourcePlacementJson,
+       destinationPlacementJson, state, copiedBytes, idempotencyKey,
+       createdAt, updatedAt)
+      VALUES (?, ?, 'conversations', ?, ?, ?, 'copying', '0', ?, ?, ?)`,
+    args: [
+      id,
+      ownerId,
+      `placement-test-${id}`,
+      JSON.stringify(source),
+      JSON.stringify(destination),
+      `placement-test-${id}`,
+      now,
+      now,
+    ],
+  });
+  return id;
+}
+
+async function closeConversationMigration(id: string) {
+  await client.execute({
+    sql: `UPDATE placement_migrations SET state = 'completed' WHERE id = ?`,
+    args: [id],
+  });
+}
+
 describe("CoreConversationStore DAG, CAS and idempotency", () => {
+  test("snapshots the owned domain-action cursor when reserving a run", async () => {
+    const created = await thread();
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO agent_action_sequences (userId, nextSequence, updatedAt)
+            VALUES (?, 7, ?)
+            ON CONFLICT(userId) DO UPDATE SET nextSequence = 7, updatedAt = excluded.updatedAt`,
+      args: ["corpus-user-a", now],
+    });
+    const reservation = await store.reserveTurn({
+      ownerId: "corpus-user-a",
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `domain-cursor-${crypto.randomUUID()}`,
+      markdown: "Snapshot cursor",
+      modelKey: "mock-readonly",
+    });
+    const row = await client.execute({
+      sql: "SELECT domainCursorRef FROM assistant_runs WHERE id = ? LIMIT 1",
+      args: [reservation.runId],
+    });
+    expect(row.rows[0]?.domainCursorRef).toBe("domain:corpus-user-a:7");
+  });
+
   test("reserves H -> U once and rejects a stale concurrent append", async () => {
     const created = await thread();
     const first = await store.reserveTurn({
@@ -259,6 +332,286 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
     );
     expect(detail.messages).toHaveLength(0);
     expect(detail.runs).toHaveLength(0);
+  });
+});
+
+describe("RoutedConversationStore crash recovery", () => {
+  test("never commits Node plaintext to Core and reconciles a failed relay import", async () => {
+    const snapshots = new Map<string, NodeConversationDagSnapshot>();
+    let rejectImports = false;
+    const relay: ConversationDagRelay = {
+      selectedNode: async () => "node-crash-window",
+      assertOnline: async () => undefined,
+      import: async (input) => {
+        if (rejectImports) throw new Error("INJECTED_IMPORT_FAILURE");
+        snapshots.set(input.snapshot.detail.thread.id, structuredClone(input.snapshot));
+        return input.snapshot;
+      },
+      list: async () => [],
+      get: async ({ threadId }) => {
+        const snapshot = snapshots.get(threadId);
+        return snapshot
+          ? { detail: structuredClone(snapshot.detail), events: structuredClone(snapshot.events) }
+          : null;
+      },
+      delete: async ({ threadId }) => {
+        snapshots.delete(threadId);
+        return { deleted: true };
+      },
+    };
+    const routed = new RoutedConversationStore(
+      client,
+      relay,
+      "test-only-crash-window-envelope-secret-0000001",
+    );
+    const created = await routed.createThread({
+      ownerId: "corpus-user-a",
+      title: "Crash window",
+      placement: "node",
+    });
+    rejectImports = true;
+    await expect(
+      routed.reserveTurn({
+        ownerId: "corpus-user-a",
+        threadId: created.thread.id,
+        branchId: created.branch.id,
+        expectedHeadMessageId: null,
+        clientRequestId: "crash-window-request",
+        markdown: "PLAINTEXT_MUST_NEVER_REACH_CORE",
+        modelKey: "mock-readonly",
+      }),
+    ).rejects.toMatchObject({ code: "placement_unavailable" });
+
+    const durable = await client.execute({
+      sql: `SELECT partsJson FROM assistant_messages WHERE threadId = ? ORDER BY id`,
+      args: [created.thread.id],
+    });
+    expect(durable.rows).toHaveLength(1);
+    const stored = String(durable.rows[0]!.partsJson);
+    expect(stored).not.toContain("PLAINTEXT_MUST_NEVER_REACH_CORE");
+    expect(stored).toContain('"type":"node-sealed"');
+
+    rejectImports = false;
+    expect(await routed.reconcileNode("node-crash-window")).toContainEqual({
+      threadId: created.thread.id,
+      outcome: "synced",
+    });
+    const recovered = snapshots.get(created.thread.id);
+    expect(
+      recovered?.detail.messages.some((message) =>
+        message.parts.some(
+          (part) =>
+            part.type === "text" &&
+            part.markdown === "PLAINTEXT_MUST_NEVER_REACH_CORE",
+        ),
+      ),
+    ).toBe(true);
+    const pendingRun = await client.execute({
+      sql: `SELECT id FROM assistant_runs WHERE threadId = ?
+        AND status NOT IN ('complete', 'failed', 'cancelled') LIMIT 1`,
+      args: [created.thread.id],
+    });
+    if (pendingRun.rows[0]) {
+      await routed.cancelRun(
+        "corpus-user-a",
+        String(pendingRun.rows[0].id),
+      );
+    }
+  });
+
+  test("verifies destination readback in both directions before switching", async () => {
+    const snapshots = new Map<string, NodeConversationDagSnapshot>();
+    const relay: ConversationDagRelay = {
+      selectedNode: async () => "node-migration",
+      assertOnline: async () => undefined,
+      import: async (input) => {
+        snapshots.set(
+          `${input.nodeId}:${input.snapshot.detail.thread.id}`,
+          structuredClone(input.snapshot),
+        );
+        return input.snapshot;
+      },
+      list: async () => [],
+      get: async ({ nodeId, threadId }) => {
+        const snapshot = snapshots.get(`${nodeId}:${threadId}`);
+        return snapshot
+          ? {
+              detail: structuredClone(snapshot.detail),
+              events: structuredClone(snapshot.events),
+            }
+          : null;
+      },
+      delete: async ({ nodeId, threadId }) => ({
+        deleted: snapshots.delete(`${nodeId}:${threadId}`),
+      }),
+    };
+    const routed = new RoutedConversationStore(
+      client,
+      relay,
+      "test-only-placement-migration-envelope-secret-0001",
+    );
+    const created = await routed.createThread({
+      ownerId: "corpus-user-b",
+      title: "Placement round trip",
+      placement: "core",
+    });
+    await routed.reserveTurn({
+      ownerId: "corpus-user-b",
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `migration-${crypto.randomUUID()}`,
+      markdown: "ROUND_TRIP_PRIVATE_MESSAGE",
+      modelKey: "mock-readonly",
+    });
+
+    const toNodeLease = await authorizeConversationMigration(
+      "corpus-user-b",
+      { kind: "core", providerId: "core-conversations-v1" },
+      {
+        kind: "node",
+        nodeId: "node-migration",
+        providerId: "node-conversations-v1",
+      },
+    );
+    const toNode = await routed.migratePlacement({
+      ownerId: "corpus-user-b",
+      source: { kind: "core", providerId: "core-conversations-v1" },
+      destination: {
+        kind: "node",
+        nodeId: "node-migration",
+        providerId: "node-conversations-v1",
+      },
+    });
+    await closeConversationMigration(toNodeLease);
+    expect(toNode.destinationDigest).toBe(toNode.sourceDigest);
+    const sealed = await client.execute({
+      sql: `SELECT partsJson FROM assistant_messages WHERE threadId = ? LIMIT 1`,
+      args: [created.thread.id],
+    });
+    expect(String(sealed.rows[0]?.partsJson)).not.toContain(
+      "ROUND_TRIP_PRIVATE_MESSAGE",
+    );
+    expect(String(sealed.rows[0]?.partsJson)).toContain('"type":"node-sealed"');
+
+    const toCoreLease = await authorizeConversationMigration(
+      "corpus-user-b",
+      {
+        kind: "node",
+        nodeId: "node-migration",
+        providerId: "node-conversations-v1",
+      },
+      { kind: "core", providerId: "core-conversations-v1" },
+    );
+    const toCore = await routed.migratePlacement({
+      ownerId: "corpus-user-b",
+      source: {
+        kind: "node",
+        nodeId: "node-migration",
+        providerId: "node-conversations-v1",
+      },
+      destination: { kind: "core", providerId: "core-conversations-v1" },
+    });
+    await closeConversationMigration(toCoreLease);
+    expect(toCore.destinationDigest).toBe(toCore.sourceDigest);
+    const restored = await routed.getThreadDetail(
+      "corpus-user-b",
+      created.thread.id,
+    );
+    expect(
+      restored.messages.some((message) =>
+        message.parts.some(
+          (part) =>
+            part.type === "text" &&
+            part.markdown === "ROUND_TRIP_PRIVATE_MESSAGE",
+        ),
+      ),
+    ).toBe(true);
+    const placement = await client.execute({
+      sql: `SELECT placement, placementRef FROM assistant_threads WHERE id = ?`,
+      args: [created.thread.id],
+    });
+    expect(placement.rows[0]?.placement).toBe("core");
+    expect(placement.rows[0]?.placementRef).toBeNull();
+  });
+
+  test("rejects a corrupted Node readback without switching the Core source", async () => {
+    const snapshots = new Map<string, NodeConversationDagSnapshot>();
+    const relay: ConversationDagRelay = {
+      selectedNode: async () => "node-corrupt",
+      assertOnline: async () => undefined,
+      import: async (input) => {
+        snapshots.set(input.snapshot.detail.thread.id, structuredClone(input.snapshot));
+        return input.snapshot;
+      },
+      list: async () => [],
+      get: async ({ threadId }) => {
+        const snapshot = snapshots.get(threadId);
+        if (!snapshot) return null;
+        const corrupt = structuredClone(snapshot);
+        const first = corrupt.detail.messages[0];
+        if (first) {
+          first.parts = [
+            { type: "text", id: "corrupt-readback", markdown: "CORRUPTED" },
+          ];
+        }
+        return { detail: corrupt.detail, events: corrupt.events };
+      },
+      delete: async ({ threadId }) => ({
+        deleted: snapshots.delete(threadId),
+      }),
+    };
+    const routed = new RoutedConversationStore(
+      client,
+      relay,
+      "test-only-corrupt-readback-envelope-secret-0001",
+    );
+    const created = await routed.createThread({
+      ownerId: "corpus-user-b",
+      title: "Corrupt destination",
+      placement: "core",
+    });
+    await routed.reserveTurn({
+      ownerId: "corpus-user-b",
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `corrupt-${crypto.randomUUID()}`,
+      markdown: "CORE_SOURCE_MUST_SURVIVE",
+      modelKey: "mock-readonly",
+    });
+    const corruptLease = await authorizeConversationMigration(
+      "corpus-user-b",
+      { kind: "core", providerId: "core-conversations-v1" },
+      {
+        kind: "node",
+        nodeId: "node-corrupt",
+        providerId: "node-conversations-v1",
+      },
+    );
+    await expect(
+      routed.migratePlacement({
+        ownerId: "corpus-user-b",
+        source: { kind: "core", providerId: "core-conversations-v1" },
+        destination: {
+          kind: "node",
+          nodeId: "node-corrupt",
+          providerId: "node-conversations-v1",
+        },
+      }),
+    ).rejects.toThrow("MIGRATION_DIGEST_MISMATCH");
+    await closeConversationMigration(corruptLease);
+    const durable = await client.execute({
+      sql: `SELECT t.placement, m.partsJson
+        FROM assistant_threads AS t
+        JOIN assistant_messages AS m ON m.threadId = t.id
+        WHERE t.id = ? LIMIT 1`,
+      args: [created.thread.id],
+    });
+    expect(durable.rows[0]?.placement).toBe("core");
+    expect(String(durable.rows[0]?.partsJson)).toContain(
+      "CORE_SOURCE_MUST_SURVIVE",
+    );
   });
 });
 
@@ -727,7 +1080,7 @@ describe("read-only runtime integration", () => {
     );
   });
 
-  test("uses persisted skill/plan/attachments and executes only brokered reads", async () => {
+  test("runs the persisted tool loop through the fenced production runtime", async () => {
     const created = await thread();
     const reservation = await store.reserveTurn({
       ownerId: "corpus-user-a",
@@ -836,10 +1189,10 @@ describe("read-only runtime integration", () => {
       client,
       checkpointBlobs,
     );
-    const service = new ReadOnlyAssistantRunService(
+    const service = new ProductionAgentRuntime({
       client,
-      store,
-      {
+      conversations: store,
+      gateways: {
         list: async () => [MOCK_ASSISTANT_MODEL],
         resolve: async () => ({
           capability: MOCK_ASSISTANT_MODEL,
@@ -847,10 +1200,11 @@ describe("read-only runtime integration", () => {
           gateway,
         }),
       },
-      () => broker.registry,
-      undefined,
-      checkpointStore,
-    );
+      registryFactory: () => broker.registry,
+      checkpoints: checkpointStore,
+      workerId: "agent-runtime:test-tool-loop",
+      leaseTtlMs: 5_000,
+    });
     await service.runNow("corpus-user-a", reservation.runId, broker);
     const detail = await store.getThreadDetail(
       "corpus-user-a",
@@ -890,8 +1244,58 @@ describe("read-only runtime integration", () => {
     const completedRun = detail.runs.find(
       (run) => run.id === reservation.runId,
     );
-    expect(completedRun?.providerDispatchState).toBe("acknowledged");
+    expect(completedRun?.providerDispatchState).toBe("completed");
     expect(completedRun?.conversationCheckpointRef).toMatch(/^ackp_/);
+    const frozen = await client.execute({
+      sql: `SELECT runtimeId, runtimeVersion, policyRevision,
+          toolCatalogRevision, contextManifestDigest, branchIdentityDigest
+        FROM assistant_runs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [reservation.runId, "corpus-user-a"],
+    });
+    expect(frozen.rows[0]).toMatchObject({
+      runtimeId: PRODUCTION_AGENT_RUNTIME_ID,
+      runtimeVersion: PRODUCTION_AGENT_RUNTIME_VERSION,
+      policyRevision: PRODUCTION_AGENT_POLICY_REVISION,
+      toolCatalogRevision: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      contextManifestDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      branchIdentityDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    const dispatchClaims = await client.execute({
+      sql: `SELECT dispatchKey, providerKey, modelKey, state
+        FROM assistant_provider_dispatch_claims
+        WHERE runId = ? AND userId = ? ORDER BY dispatchKey`,
+      args: [reservation.runId, "corpus-user-a"],
+    });
+    expect(dispatchClaims.rows).toHaveLength(2);
+    expect(dispatchClaims.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dispatchKey: "model-round:0:attempt:0",
+          state: "completed",
+        }),
+        expect.objectContaining({
+          dispatchKey: "model-round:1:attempt:0",
+          state: "completed",
+        }),
+      ]),
+    );
+    expect(
+      dispatchClaims.rows.every(
+        (claim) =>
+          claim.providerKey === MOCK_ASSISTANT_MODEL.providerKey &&
+          claim.modelKey === MOCK_ASSISTANT_MODEL.modelKey,
+      ),
+    ).toBe(true);
+    const leases = await client.execute({
+      sql: `SELECT state, releasedAt FROM assistant_run_leases
+        WHERE runId = ? AND userId = ?`,
+      args: [reservation.runId, "corpus-user-a"],
+    });
+    expect(leases.rows).toHaveLength(1);
+    expect(leases.rows[0]).toMatchObject({
+      state: "released",
+      releasedAt: expect.any(Number),
+    });
     const checkpoints = await checkpointStore.listForBranch({
       ownerId: "corpus-user-a",
       branchId: created.branch.id,

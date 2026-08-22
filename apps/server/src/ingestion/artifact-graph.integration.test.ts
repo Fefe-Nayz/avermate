@@ -119,6 +119,25 @@ describe("core artifact graph", () => {
       (await store.getManifest("user-1", regenerated.artifactRevisionId))
         .manifest.output.digest,
     ).toBe("c".repeat(64));
+
+    const runs = await store.listRuns("user-1", {
+      artifactId: planned.artifactId,
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.id).toBe(planned.id);
+    expect(runs[0]?.stages.length).toBeGreaterThan(0);
+    expect(
+      await store.listRuns("another-user", { artifactId: planned.artifactId }),
+    ).toEqual([]);
+
+    const revisions = await store.listRevisions("user-1", planned.artifactId);
+    expect(revisions.map((revision) => revision.revision)).toEqual([2, 1]);
+    expect(revisions[0]?.current).toBe(true);
+    expect(revisions[1]?.current).toBe(false);
+    expect(
+      await store.listRevisions("another-user", planned.artifactId),
+    ).toEqual([]);
+
     await expect(
       client.execute({
         sql: `UPDATE generated_artifact_revisions SET outputMime = 'text/plain' WHERE id = ?`,

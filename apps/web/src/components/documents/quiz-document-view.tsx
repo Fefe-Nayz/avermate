@@ -2,7 +2,14 @@
 
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { CheckCircle2Icon, PlayIcon, RotateCcwIcon } from "lucide-react"
+import {
+  CheckCircle2Icon,
+  Clock3Icon,
+  GraduationCapIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  ShieldCheckIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,10 +39,19 @@ export function QuizDocumentView({
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [questions, setQuestions] = useState<QuizPromptQuestion[] | null>(null)
   const [answers, setAnswers] = useState<QuizAnswer[]>([])
+  const [mode, setMode] = useState<"practice" | "progress">("practice")
   const [result, setResult] = useState<{
     score: number | null
     outOf: number | null
-    feedback: Array<{ correct: boolean; expected: unknown; why: string | null }>
+    feedback: Array<{
+      correct: boolean | null
+      reviewRequired: boolean
+      reviewKind: "human" | "model" | null
+      expected: unknown
+      why: string | null
+    }>
+    evidenceCreated?: boolean
+    pendingReviewCount?: number
   } | null>(null)
   const history = useQuery({
     ...orpc.documents.quiz.list.queryOptions({ input: { documentId } }),
@@ -68,10 +84,45 @@ export function QuizDocumentView({
               count: String(content.questions.length),
             })}
           </p>
+          {content.version === 2 ? (
+            <fieldset className="mx-auto mt-4 grid max-w-xl gap-2 text-left sm:grid-cols-2">
+              <legend className="sr-only">{t("Quiz mode")}</legend>
+              <Button
+                type="button"
+                variant={mode === "practice" ? "default" : "outline"}
+                className="h-auto justify-start py-3"
+                onClick={() => setMode("practice")}
+              >
+                <PlayIcon />
+                <span>
+                  <span className="block">{t("Practice")}</span>
+                  <span className="block text-xs font-normal opacity-80">
+                    {t("Feedback only; mastery stays unchanged.")}
+                  </span>
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "progress" ? "default" : "outline"}
+                className="h-auto justify-start py-3"
+                onClick={() => setMode("progress")}
+              >
+                <GraduationCapIcon />
+                <span>
+                  <span className="block">{t("Measure progress")}</span>
+                  <span className="block text-xs font-normal opacity-80">
+                    {t("Reviewed, sourced questions may create evidence.")}
+                  </span>
+                </span>
+              </Button>
+            </fieldset>
+          ) : null}
           <Button
             className="mt-4"
             disabled={start.isPending}
-            onClick={() => start.mutate({ documentId })}
+            onClick={() =>
+              start.mutate({ documentId, mode, latencyConsent: false })
+            }
           >
             {start.isPending ? <Spinner /> : <PlayIcon />}
             {t("Start quiz")}
@@ -97,8 +148,17 @@ export function QuizDocumentView({
                   <span className="numeric font-medium text-foreground">
                     {attempt.score === null
                       ? t("In progress")
-                      : `${attempt.score}/${attempt.outOf}`}
+                      : attempt.outOf === 0 && attempt.pendingReviewCount > 0
+                        ? t("Pending review")
+                        : `${attempt.score}/${attempt.outOf}`}
                   </span>
+                  {attempt.mode ? (
+                    <span className="text-xs">
+                      {attempt.mode === "progress"
+                        ? t("Progress")
+                        : t("Practice")}
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -198,16 +258,28 @@ export function QuizDocumentView({
             {feedback ? (
               <div
                 className={
-                  feedback.correct
-                    ? "mt-3 text-sm text-positive"
-                    : "mt-3 text-sm text-destructive"
+                  feedback.reviewRequired
+                    ? "mt-3 text-sm text-muted-foreground"
+                    : feedback.correct
+                      ? "mt-3 text-sm text-positive"
+                      : "mt-3 text-sm text-destructive"
                 }
               >
                 <p className="flex items-center gap-1.5 font-medium">
-                  <CheckCircle2Icon className="size-4" />
-                  {feedback.correct ? t("Correct") : t("Review this answer")}
+                  {feedback.reviewRequired ? (
+                    <Clock3Icon className="size-4" />
+                  ) : (
+                    <CheckCircle2Icon className="size-4" />
+                  )}
+                  {feedback.reviewRequired
+                    ? feedback.reviewKind === "model"
+                      ? t("Awaiting configured model review")
+                      : t("Awaiting human review")
+                    : feedback.correct
+                      ? t("Correct")
+                      : t("Review this answer")}
                 </p>
-                {!feedback.correct ? (
+                {!feedback.reviewRequired && !feedback.correct ? (
                   <p className="mt-1 text-foreground">
                     {t("Expected: {answer}", {
                       answer: Array.isArray(feedback.expected)
@@ -227,9 +299,33 @@ export function QuizDocumentView({
 
       {result ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4">
-          <strong className="numeric text-lg">
-            {result.score}/{result.outOf}
-          </strong>
+          <div>
+            <strong className="numeric text-lg">
+              {result.outOf === 0 && (result.pendingReviewCount ?? 0) > 0
+                ? t("Pending review")
+                : `${result.score}/${result.outOf}`}
+            </strong>
+            {(result.pendingReviewCount ?? 0) > 0 ? (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock3Icon className="size-3.5" />
+                {t("{count} answer(s) still require explicit review.", {
+                  count: String(result.pendingReviewCount),
+                })}
+              </p>
+            ) : null}
+            {result.evidenceCreated ? (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ShieldCheckIcon className="size-3.5" />
+                {t("Reviewed question evidence was added to mastery.")}
+              </p>
+            ) : mode === "progress" ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t(
+                  "No evidence was created: questions must be reviewed and sourced."
+                )}
+              </p>
+            ) : null}
+          </div>
           <Button
             variant="outline"
             onClick={() => {

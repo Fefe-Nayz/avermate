@@ -12,7 +12,9 @@
 
 ## Status
 
-- **Status**: TODO — begins after plan 032's current foundation is committed
+- **Status**: DONE (repository/Web) — repository aggregate and hosted Node
+  lifecycle Chromium gate pass; LIVE BLOCKED — strict `verify:038:live`
+  service/image attestation remains external
 - **Priority**: P0
 - **Effort**: XL / multi-release
 - **Risk**: CRITICAL
@@ -21,6 +23,44 @@
 - **Category**: distributed systems, self-hosting, execution, lifecycle, Web
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
+
+### Repository closure amendment — 2026-08-22
+
+The Core now uses libSQL repositories for Node object adoption, signed remote
+deletion and provider-native runtime checkpoint metadata. Artifact promotion
+adopts into the canonical file ledger before publishing the graph revision,
+then tombstones and deletes the Node source through the authenticated relay.
+Reconnect reconciles pending adoptions, deletion receipts and
+captured/expired runtime checkpoint records. These checkpoints remain
+owner/node/logical-snapshot bound and never replace a conversation checkpoint.
+
+Node-owned corpus bodies now follow the same no-plaintext-mirror rule. Core
+keeps authorization, immutable locators and hashes plus an AES-256-GCM recovery
+envelope bound to owner/node/source/version/chunk identity; normal reads use the
+signed `lexical.get-chunks` relay and fail closed offline. Core reauthorizes
+every Node lexical candidate and reconstructs its snippet from a hash-verified
+body. Core→Node, Node→Node and Node→Core migrations rewrite the recovery payload
+inside a transaction-scoped immutable-row lease, verify exact destination
+digests before switching placement, and a startup reconciler seals legacy rows
+only after an identical canonical Node readback.
+
+The loopback configurator covers the complete public schema, secret-vault,
+pairing, validate/apply/rollback, preflight and deployment-preview flows. Its
+persistent FR/EN selector localizes static copy, generated fields and runtime
+messages. `verify:038:server` includes the SQL crash/ownership/expiry suites;
+the repository aggregate reruns Plan 032 protocol, non-Docker storage contracts
+and configurator gates, then complete agent-contract, Node and sandbox-worker
+test suites plus focused server migration/placement/media tests.
+Docker/provider evidence remains solely in the strict live gate.
+
+The production Node entry now constructs the official OpenSandbox SDK adapter
+when the reviewed profile supplies a runtime endpoint, external evidence
+endpoint and exact host/runtime metadata. OpenCode/OpenHands logical snapshots
+are content-addressed and owner-bound in Node storage; native checkpoints remain
+separate provider state. Capability and job advertisement re-runs evidence
+preflight and fails closed. Full self-host relay uses one exact signed and
+credentialed Compose-internal `ws://api:5000/api/node/control` exception; all
+remote profiles remain HTTPS/WSS-only.
 
 ## Outcome
 
@@ -54,6 +94,10 @@ The previously “optional” implementation seams are mandatory deliverables he
 
 None becomes the source of truth for conversations, domain authorization or
 academic data.
+
+Here and in plan 035, “optional” describes activation and deployment profile
+only. LiteLLM plus both specialist adapters are implemented/tested deliverables;
+operators may leave their cells disabled without making them unimplemented.
 
 ## Current-state evidence and gaps
 
@@ -192,8 +236,10 @@ protocol major version, placement authority or secret model changed.
   placement-bound opaque handles.
 - **Conversations**: canonical Node store, durable event append/replay, branch/
   export/delete and explicit offline behavior.
-- **Corpus**: lexical store is mandatory; vector/embedding/rerank spaces are
-  advertised only when ready. Route plan-036 operations with owner/source grants.
+- **Corpus**: lexical store and exact owner-bound chunk reads are mandatory;
+  vector/embedding/rerank spaces are advertised only when ready. Route plan-036
+  operations with owner/source grants. Node placement keeps no readable Core
+  body or FTS mirror and never uses its encrypted recovery envelope offline.
 - **Models**: OpenAI-compatible local/BYOK model catalogue, stream normalization,
   usage and cancellation through plan 035.
 - **Sandbox**: exact plan-031 profiles, images, evidence and artifacts through
@@ -299,6 +345,9 @@ protocol major version, placement authority or secret model changed.
   artifact UI with actionable links, not generic 500 errors.
 - Add complete loading/empty/error/offline/revoked/upgrade-required states,
   accessibility and responsive Web coverage.
+- Localize both hosted Web management and the standalone loopback configurator.
+  The latter persists FR/EN in browser storage and must translate schema-driven
+  labels, validation errors and action results, not only its navigation shell.
 
 ### 10. Produce release profiles and offline bundle
 
@@ -341,6 +390,15 @@ satisfy live requirements, and add `verify:038:*` gates for pairing, relay,
 capabilities, LiteLLM, workers, checkpoints, configurator, lifecycle, fullself and
 airgap.
 
+The repository aggregate uses complete deterministic suites for
+`packages/agent-contracts`, `apps/node` and `apps/sandbox-worker`. Its server
+cells select the whole `src/node` suite plus custom-MCP transport/migration,
+append-only migration history/prefix upgrades, placement migration, signed
+grants, OCR/transcription providers and the materials/recordings integration
+paths. This intentionally captures newly added tests without enumerating a list
+that can silently become stale. No `*:live`, provider-evaluation, Docker
+conformance or operator-evidence command is part of this aggregate.
+
 Mandatory scenarios:
 
 - one-use pairing, account/fingerprint mismatch, expiry, replay, rotation,
@@ -348,6 +406,8 @@ Mandatory scenarios:
 - WSS order/ack/gap/backpressure/cancel/deadline and protocol downgrade attacks;
 - storage/conversation/corpus/model/rerank/sandbox/job contract suites over the
   real relay, including Node offline and no fallback;
+- corpus Core→Node→Node→Core placement, authenticated envelope tamper/AAD,
+  legacy sealing, candidate reauthorization and exact body-hash suites;
 - two-phase adoption/deletion crash windows and durable reconciliation;
 - LiteLLM direct-gateway parity, virtual-key isolation, budget mismatch and
   authoritative usage reconciliation;
@@ -365,6 +425,15 @@ Mandatory scenarios:
 Run root format/lint/types/tests/build, full migration history/prefix/legacy
 fixtures, release guard and image/SBOM/signature verification on the exact release
 candidate.
+
+`verify:038:live` is fail-closed. Run it from a clean checkout whose `HEAD`
+equals `EXPECTED_NODE_RELEASE_REVISION`, set the six explicit health URLs and
+`PLAN038_LIVE_CONFIRM=strict-real-services`, and point
+`PLAN038_LIVE_EVIDENCE` at the operator manifest. Every mandatory scenario above
+must have a current `deployed-drill` or `external-attestation` record bound to
+that release and environment digest, with named run/attestor and a local
+artifact whose SHA-256 is verified by the gate. Health endpoints alone are not
+release evidence.
 
 ## STOP conditions
 

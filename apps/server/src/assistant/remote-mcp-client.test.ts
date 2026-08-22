@@ -61,15 +61,54 @@ describe("remote MCP client boundary", () => {
     ).toThrow("duplicate");
   });
 
-  test("never lets hosted Core reach a node-private endpoint", async () => {
+  test("never falls back to hosted Core for a node-private endpoint", async () => {
     const client = new SdkRemoteMcpClient();
     await expect(
       client.inspect({
         endpointUrl: "http://mcp.internal/mcp",
         placement: "node",
+        ownerId: "owner-a",
+        placementRef: "node-a",
         authKind: "none",
         credential: null,
       }),
-    ).rejects.toThrow("paired Avermate Node transport");
+    ).rejects.toThrow("NODE_MCP_CAPABILITY_OFFLINE");
+  });
+
+  test("binds node calls to the exact owner and node", async () => {
+    const calls: Array<{ nodeId: string; ownerId: string }> = [];
+    const client = new SdkRemoteMcpClient({
+      nodeTransport: {
+        async inspectNodeMcp(input) {
+          calls.push(input);
+          return [];
+        },
+        async invokeNodeMcp(input) {
+          calls.push(input);
+          return { isError: false, text: "ok" };
+        },
+      },
+    });
+    const connection = {
+      endpointUrl: "http://mcp.internal/mcp",
+      placement: "node" as const,
+      ownerId: "owner-a",
+      placementRef: "node-a",
+      authKind: "bearer" as const,
+      credential: "private-node-credential",
+    };
+    await client.inspect(connection);
+    await client.invoke(connection, {
+      remoteToolId: "read.notes",
+      arguments: {},
+    });
+    expect(calls).toEqual([
+      expect.objectContaining({ nodeId: "node-a", ownerId: "owner-a" }),
+      expect.objectContaining({ nodeId: "node-a", ownerId: "owner-a" }),
+    ]);
+    expect(JSON.stringify(calls)).toContain("private-node-credential");
+    await expect(
+      client.inspect({ ...connection, placementRef: null }),
+    ).rejects.toThrow("NODE_MCP_BINDING_INVALID");
   });
 });

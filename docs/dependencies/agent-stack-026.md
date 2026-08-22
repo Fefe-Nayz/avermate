@@ -22,9 +22,10 @@ licence is intentionally reported as unresolved while the repository-level
 licence decision from plan 025 remains unresolved; it must not be published on
 the assumption that `private: true` is a licence.
 
-LiteLLM and Mastra are not installed. LiteLLM remains an optional future
-`ModelGateway`; the Mastra comparison is recorded in
-[`ai-architecture-v2.md`](../ai-architecture-v2.md).
+At the plan-026 baseline LiteLLM and Mastra were not installed. Plan 038 has
+since added LiteLLM as an optional, explicitly selected `ModelGateway` profile;
+it still is not the assistant's source of truth. Mastra remains unselected. The
+comparison is recorded in [`ai-architecture-v2.md`](../ai-architecture-v2.md).
 
 ## Transitive review
 

@@ -15,6 +15,7 @@ COPY --from=install /app/node_modules ./node_modules
 COPY --from=install /app/apps/node/node_modules ./apps/node/node_modules
 COPY --from=install /app/packages/agent-contracts/node_modules ./packages/agent-contracts/node_modules
 COPY apps/node ./apps/node
+COPY apps/server/src/sandbox ./apps/server/src/sandbox
 COPY packages/agent-contracts ./packages/agent-contracts
 RUN mkdir -p /data/node /config && chown -R 10001:10001 /data /config
 USER 10001:10001

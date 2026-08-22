@@ -143,6 +143,8 @@ export const contentSourceRecordSchema = ownedSourceIdentitySchema.extend({
 export type ContentSourceRecord = z.infer<typeof contentSourceRecordSchema>;
 
 export const stagedContentChunkSchema = z.strictObject({
+  /** Stable committed identifier when a corpus index is copied between planes. */
+  chunkId: boundedId.optional(),
   ordinal: z.number().int().nonnegative(),
   text: z.string().max(262_144),
   normalizedText: z.string().max(262_144),
@@ -245,6 +247,11 @@ export const ownedLexicalQuerySchema = z.strictObject({
   originKinds: z.array(corpusOriginKindSchema).max(16),
   limit: z.number().int().positive().max(100),
   cursor: z.string().max(512).nullable(),
+  fallbackPolicy: z
+    .enum(["fail", "lexical-only", "hybrid-without-rerank"])
+    .optional(),
+  operationId: boundedId.optional(),
+  evaluationCorrelationId: boundedId.nullable().optional(),
 });
 export type OwnedLexicalQuery = z.infer<typeof ownedLexicalQuerySchema>;
 
@@ -267,12 +274,13 @@ export type LexicalSearchCapabilities = {
   modes: readonly LexicalSearchMode[];
 };
 
-export type LexicalVersionInput = {
-  ownerId: string;
-  source: ContentSourceRecord;
-  version: ContentVersionRecord;
-  chunks: readonly StagedContentChunk[];
-};
+export const lexicalVersionInputSchema = z.strictObject({
+  ownerId: boundedId,
+  source: contentSourceRecordSchema,
+  version: contentVersionRecordSchema,
+  chunks: z.array(stagedContentChunkSchema).max(100_000),
+});
+export type LexicalVersionInput = z.infer<typeof lexicalVersionInputSchema>;
 
 export type LexicalConsistencyReport = {
   consistent: boolean;
@@ -326,38 +334,176 @@ export interface CitationResolver {
   open(input: OwnedCitationRef): Promise<OwnedOpenTarget>;
 }
 
-export type EmbeddingSpaceDescriptor = {
-  id: string;
-  provider: string;
-  model: string;
-  dimension: number;
-  distance: "cosine" | "dot" | "euclidean";
-  normalization: string;
-  modality: "text" | "image" | "multimodal";
-  preprocessingVersion: string;
+export const embeddingModalitySchema = z.enum([
+  "text",
+  "image",
+  "pdf-page",
+  "audio",
+  "video",
+]);
+export type EmbeddingModality = z.infer<typeof embeddingModalitySchema>;
+
+/**
+ * Every field participates in the immutable space identity. In particular,
+ * dimensions and preprocessing instructions cannot be changed in place.
+ */
+export const embeddingSpaceDescriptorSchema = z.strictObject({
+  id: boundedId,
+  provider: boundedId,
+  model: boundedId,
+  modelRevision: z.string().min(1).max(256),
+  dimensions: z.number().int().positive().max(65_536),
+  modalities: z.array(embeddingModalitySchema).min(1).max(5),
+  normalization: z.enum(["provider-unit", "client-unit"]),
+  preprocessingRevision: z.string().min(1).max(256),
+  placement: z.enum(["core", "node", "managed"]),
+});
+export type EmbeddingSpaceDescriptor = z.infer<
+  typeof embeddingSpaceDescriptorSchema
+>;
+
+export const providerConsentSchema = z.strictObject({
+  provider: boundedId,
+  disclosureRevision: z.string().min(1).max(256),
+  capability: z.enum(["embedding", "rerank"]),
+  grantedAt: z.iso.datetime({ offset: true }),
+});
+export type ProviderConsent = z.infer<typeof providerConsentSchema>;
+
+export type EmbeddingRequestContext = {
+  operationId: string;
+  signal: AbortSignal;
+  consent: ProviderConsent;
 };
 
 export type TextEmbeddingInput = {
   contentHash: string;
   text: string;
+  purpose?: "query" | "document";
+  title?: string | null;
 };
 export type MediaEmbeddingInput = {
   contentHash: string;
+  modality: Exclude<EmbeddingModality, "text">;
   mediaType: string;
   opaqueFileHandle: string;
+  locator: SourceLocatorV1;
+  byteLength: number;
+  estimatedInputTokens: number;
+  durationMs?: number;
+};
+export type EmbeddingUsageMetadata = {
+  inputTokens: number | null;
+  providerRequestId: string | null;
 };
 export type EmbeddingVector = {
   contentHash: string;
   values: readonly number[];
+  usage?: EmbeddingUsageMetadata;
 };
 
 export interface EmbeddingProvider {
   descriptor(): EmbeddingSpaceDescriptor;
-  embedText(input: readonly TextEmbeddingInput[]): Promise<EmbeddingVector[]>;
+  embedText(
+    input: readonly TextEmbeddingInput[],
+    context?: EmbeddingRequestContext,
+  ): Promise<EmbeddingVector[]>;
   embedMedia?(
     input: readonly MediaEmbeddingInput[],
+    context: EmbeddingRequestContext,
   ): Promise<EmbeddingVector[]>;
 }
+
+export const rerankCandidateSchema = z.strictObject({
+  id: boundedId,
+  text: z.string().min(1).max(64 * 1024),
+  tokenEstimate: z.number().int().nonnegative().max(32_768),
+});
+export type RerankCandidate = z.infer<typeof rerankCandidateSchema>;
+
+export const rerankScoreSchema = z.strictObject({
+  operationId: boundedId,
+  candidateId: boundedId,
+  score: z.number().finite(),
+  rank: z.number().int().nonnegative(),
+});
+export type RerankScore = z.infer<typeof rerankScoreSchema>;
+
+export const rerankSpaceDescriptorSchema = z.strictObject({
+  id: boundedId,
+  provider: boundedId,
+  model: boundedId,
+  modelRevision: z.string().min(1).max(256),
+  languages: z.array(z.string().min(1).max(64)).min(1).max(256),
+  modalities: z.array(z.literal("text")).length(1),
+  maximumCandidates: z.number().int().positive().max(10_000),
+  maximumTokensPerCandidate: z.number().int().positive().max(1_000_000),
+  scoreSemantics: z.enum([
+    "relevance-ordered",
+    "sigmoid-relevance",
+    "raw-logit",
+  ]),
+  placement: z.enum(["core", "node", "managed"]),
+  costUnit: z.enum(["search-unit", "compute-token", "none"]),
+});
+export type RerankSpaceDescriptor = z.infer<
+  typeof rerankSpaceDescriptorSchema
+>;
+
+export interface RerankProvider {
+  descriptor(): RerankSpaceDescriptor;
+  rerank(input: {
+    operationId: string;
+    query: string;
+    candidates: readonly RerankCandidate[];
+    topN: number;
+    signal: AbortSignal;
+  }): Promise<readonly RerankScore[]>;
+}
+
+export const retrievalFallbackPolicySchema = z.enum([
+  "fail",
+  "lexical-only",
+  "hybrid-without-rerank",
+]);
+export type RetrievalFallbackPolicy = z.infer<
+  typeof retrievalFallbackPolicySchema
+>;
+
+export const retrievalStageTraceSchema = z.strictObject({
+  stage: z.enum([
+    "scope",
+    "lexical",
+    "dense",
+    "fusion",
+    "diversity",
+    "rerank",
+    "expansion",
+    "packing",
+  ]),
+  descriptorId: boundedId.nullable(),
+  inputCount: z.number().int().nonnegative(),
+  outputCount: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  status: z.enum(["used", "skipped", "degraded", "failed"]),
+  safeReason: z.string().min(1).max(512).nullable(),
+});
+export type RetrievalStageTrace = z.infer<typeof retrievalStageTraceSchema>;
+
+export const retrievalTraceSchema = z.strictObject({
+  operationId: boundedId,
+  ownerId: boundedId,
+  queryDigest: contentHash,
+  corpusGenerationId: boundedId.nullable(),
+  scopeDigest: contentHash,
+  stages: z.array(retrievalStageTraceSchema).max(32),
+  fallbackPolicy: retrievalFallbackPolicySchema,
+  fallbackReason: z.string().min(1).max(512).nullable(),
+  packedEvidenceIds: z.array(boundedId).max(256),
+  evaluationCorrelationId: boundedId.nullable(),
+  createdAt: z.iso.datetime({ offset: true }),
+});
+export type RetrievalTrace = z.infer<typeof retrievalTraceSchema>;
 
 export type IndexedVector = {
   ownerId: string;

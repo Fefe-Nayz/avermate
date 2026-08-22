@@ -68,21 +68,37 @@ import {
 } from "./googledrive-sync";
 import {
   CORPUS_EMBED_CHUNKS_JOB_KIND,
+  CORPUS_EVALUATE_JOB_KIND,
   CORPUS_INDEX_SOURCE_JOB_KIND,
+  CORPUS_PRODUCE_DERIVATIVES_JOB_KIND,
   CORPUS_REBUILD_FTS_JOB_KIND,
   CORPUS_REEMBED_SPACE_JOB_KIND,
   CORPUS_REMOVE_VERSION_JOB_KIND,
   CORPUS_REPAIR_JOB_KIND,
   CORPUS_VERIFY_JOB_KIND,
   runCorpusEmbeddingUnavailableJob,
+  runCorpusEvaluationJob,
   runCorpusIndexSourceJob,
   runCorpusRebuildFtsJob,
   runCorpusRemoveVersionJob,
   runCorpusRepairJob,
   runCorpusVerifyJob,
 } from "./corpus";
+import { runCorpusDerivativeProductionJob } from "./corpus-derivatives";
 import { managedUsage } from "../managed/services";
 import { runConfiguredSandboxWorkerJob } from "../sandbox/worker-services";
+import {
+  ARTIFACT_WORKFLOW_STAGE_JOB_KIND,
+  runArtifactWorkflowStageJob,
+} from "../ingestion/artifact-workflow-dispatcher";
+import {
+  GRADE_COPY_ANALYSIS_JOB_KIND,
+  runGradeCopyAnalysisJob,
+} from "../learning/copy-analysis";
+import {
+  PLACEMENT_MIGRATION_JOB_KIND,
+  runPlacementMigrationJob,
+} from "./placement-migration";
 
 export const MAINTENANCE_JOB_KINDS = [
   "maintenance.reapMcpOperations",
@@ -90,6 +106,7 @@ export const MAINTENANCE_JOB_KINDS = [
   PURGE_MATERIAL_TRASH_JOB_KIND,
   "maintenance.enqueueMaterialPreviews",
   "maintenance.reconcileManagedUsage",
+  "maintenance.reconcileAssistantRuns",
 ] as const;
 
 const DAY_MS = 86_400_000;
@@ -181,16 +198,57 @@ export function registerAllJobHandlers() {
     return { settledReservationIds: settled };
   });
 
+  registerJobHandler(MAINTENANCE_JOB_KINDS[5], async () => {
+    const now = new Date();
+    await scheduleNext(MAINTENANCE_JOB_KINDS[5], now);
+    const { assistantRunService } = await import("../assistant/services");
+    return assistantRunService.recoverInterrupted(undefined, 1_000);
+  });
+
   registerJobHandler("sandbox.execute", ({ payload, signal, jobId }) =>
     runConfiguredSandboxWorkerJob(payload, { signal, jobId }),
   );
 
-  registerJobHandler(OCR_JOB_KIND, ({ payload, signal, jobId }) =>
-    runOcrDocumentJob(payload, { signal, operationId: jobId }),
+  registerJobHandler(PLACEMENT_MIGRATION_JOB_KIND, ({ payload, signal }) =>
+    runPlacementMigrationJob(payload, { signal }),
   );
 
-  registerJobHandler(INGEST_LINK_JOB_KIND, ({ payload, signal }) =>
-    runIngestLinkJob(payload, { signal }),
+  registerJobHandler(
+    ARTIFACT_WORKFLOW_STAGE_JOB_KIND,
+    ({ payload, signal, jobId, attempts, maxAttempts }) =>
+      runArtifactWorkflowStageJob(payload, {
+        signal,
+        jobId,
+        attempts,
+        maxAttempts,
+      }),
+  );
+
+  registerJobHandler(
+    OCR_JOB_KIND,
+    ({ payload, signal, jobId, attempts, identity }) =>
+      runOcrDocumentJob(payload, {
+        signal,
+        operationId: jobId,
+        attempt: attempts,
+        job: identity,
+      }),
+  );
+
+  registerJobHandler(
+    GRADE_COPY_ANALYSIS_JOB_KIND,
+    ({ payload, signal, jobId, attempts, maxAttempts }) =>
+      runGradeCopyAnalysisJob(payload, {
+        jobId,
+        attempts,
+        maxAttempts,
+        signal,
+        operationId: jobId,
+      }),
+  );
+
+  registerJobHandler(INGEST_LINK_JOB_KIND, ({ payload, signal, attempts }) =>
+    runIngestLinkJob(payload, { signal, attempt: attempts }),
   );
 
   registerJobHandler(CLEANUP_UNOWNED_FILE_JOB_KIND, ({ payload }) =>
@@ -213,8 +271,13 @@ export function registerAllJobHandlers() {
 
   registerJobHandler(
     TRANSCRIBE_SEGMENT_JOB_KIND,
-    ({ payload, signal, jobId }) =>
-      runTranscribeSegmentJob(payload, { signal, operationId: jobId }),
+    ({ payload, signal, jobId, attempts, identity }) =>
+      runTranscribeSegmentJob(payload, {
+        signal,
+        operationId: jobId,
+        attempt: attempts,
+        job: identity,
+      }),
   );
 
   registerJobHandler(TRANSCRIBE_FINALIZE_JOB_KIND, ({ payload }) =>
@@ -223,10 +286,12 @@ export function registerAllJobHandlers() {
 
   registerJobHandler(
     TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND,
-    ({ payload, signal, jobId }) =>
+    ({ payload, signal, jobId, attempts, identity }) =>
       runTranscribeMaterialMediaJob(payload, {
         signal,
         operationId: jobId,
+        attempt: attempts,
+        job: identity,
       }),
   );
 
@@ -294,6 +359,14 @@ export function registerAllJobHandlers() {
   registerJobHandler(CORPUS_INDEX_SOURCE_JOB_KIND, ({ payload, signal }) =>
     runCorpusIndexSourceJob(payload, { signal }),
   );
+  registerJobHandler(
+    CORPUS_PRODUCE_DERIVATIVES_JOB_KIND,
+    ({ payload, signal, jobId }) =>
+      runCorpusDerivativeProductionJob(payload, {
+        signal,
+        operationId: jobId,
+      }),
+  );
   registerJobHandler(CORPUS_REMOVE_VERSION_JOB_KIND, ({ payload }) =>
     runCorpusRemoveVersionJob(payload),
   );
@@ -311,6 +384,9 @@ export function registerAllJobHandlers() {
   );
   registerJobHandler(CORPUS_REEMBED_SPACE_JOB_KIND, ({ payload, signal }) =>
     runCorpusEmbeddingUnavailableJob(payload, { signal }),
+  );
+  registerJobHandler(CORPUS_EVALUATE_JOB_KIND, ({ payload, signal }) =>
+    runCorpusEvaluationJob(payload, { signal }),
   );
 }
 

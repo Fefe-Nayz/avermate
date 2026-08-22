@@ -1,6 +1,9 @@
 "use client"
 
-import { historicalBranchPreviewSchema } from "@avermate/agent-contracts"
+import {
+  historicalBranchPreviewSchema,
+  type AssistantMessage,
+} from "@avermate/agent-contracts"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { useEffect, useMemo, useState } from "react"
 import { AssistantWorkspace } from "@/components/assistant/assistant-workspace"
@@ -36,6 +39,74 @@ function initialState(): AssistantWorkspaceState {
     createdAt: now,
     updatedAt: now,
   }
+  const messages: AssistantMessage[] = [
+    {
+      id: "fixture-user-message",
+      threadId: thread.id,
+      parentMessageId: null,
+      role: "user",
+      authorship: "user",
+      status: "complete",
+      partsVersion: 1,
+      parts: [
+        {
+          type: "text",
+          id: "fixture-user-text",
+          markdown: "Create a sourced fractions quiz.",
+        },
+      ],
+      createdByRunId: null,
+      replacesMessageId: null,
+      createdAt: now,
+    },
+    {
+      id: "fixture-assistant-message",
+      threadId: thread.id,
+      parentMessageId: "fixture-user-message",
+      role: "assistant",
+      authorship: "model",
+      status: "complete",
+      partsVersion: 1,
+      parts: [
+        {
+          type: "text",
+          id: "fixture-assistant-text",
+          markdown: "The reviewed quiz workflow is ready.",
+        },
+        {
+          type: "tool",
+          id: "fixture-quiz-tool",
+          toolCallId: "fixture-quiz-call",
+          toolId: "learning.quiz.generate",
+          state: "complete",
+          safeInput: { objectiveId: "fractions" },
+          safeResult: {
+            status: "completed",
+            progress: 1,
+            items: [
+              {
+                id: "fractions-quiz",
+                title: "Fractions quiz",
+                state: "ready",
+              },
+            ],
+          },
+        },
+        {
+          type: "tool",
+          id: "fixture-fallback-tool",
+          toolCallId: "fixture-fallback-call",
+          toolId: "materials.search",
+          state: "complete",
+          safeInput: { query: "fractions" },
+          safeResult: { count: 2 },
+        },
+      ],
+      createdByRunId: "fixture-run",
+      replacesMessageId: null,
+      createdAt: now,
+    },
+  ]
   return {
     threads: [{ ...thread, running: false }],
     detail: {
@@ -47,12 +118,12 @@ function initialState(): AssistantWorkspaceState {
           threadId: thread.id,
           name: "Main",
           forkedFromMessageId: null,
-          headMessageId: null,
+          headMessageId: "fixture-assistant-message",
           createdAt: now,
           updatedAt: now,
         },
       ],
-      messages: [],
+      messages,
       activePathMessageIds: [],
       runs: [],
       attachments: [],
@@ -79,12 +150,14 @@ function initialState(): AssistantWorkspaceState {
         privacyUrl: null,
       },
     ],
+    modelReadiness: [],
     skills: [],
     projects: [],
     referenceOptions: [],
     selectedModelKey: "fixture-model",
     selectedSkillId: null,
     planMode: false,
+    approvalMode: "read-only",
     searchQuery: "",
     loadingThreads: false,
     loadingDetail: false,
@@ -126,6 +199,11 @@ export function AssistantV1Fixture() {
             message: "No committed workspace snapshot exists in this fixture.",
             snapshot: null,
           },
+          dataChanges: {
+            available: false,
+            reason: "no-domain-cursor",
+            message: "No durable data cursor exists in this fixture.",
+          },
         }),
       cancel: async () => undefined,
       answerQuestion: async () => undefined,
@@ -137,6 +215,8 @@ export function AssistantV1Fixture() {
         setState((current) => ({ ...current, selectedSkillId: skillId })),
       setPlanMode: (enabled) =>
         setState((current) => ({ ...current, planMode: enabled })),
+      setApprovalMode: (approvalMode) =>
+        setState((current) => ({ ...current, approvalMode })),
       uploadAttachment: async (file) => ({
         clientId: `fixture:${file.name}`,
         kind: "file",

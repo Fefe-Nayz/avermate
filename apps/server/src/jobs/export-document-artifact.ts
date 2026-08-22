@@ -6,6 +6,7 @@ import {
   files,
   studyDocuments,
   type QuizContentV1,
+  type QuizContentV2,
 } from "../db/schema";
 import { NonRetryableJobError } from "../lib/jobs";
 import { quizContentSchema } from "../lib/study-document-content";
@@ -35,7 +36,7 @@ function oneLine(value: string) {
     .trim();
 }
 
-function quizCards(content: QuizContentV1) {
+function quizCards(content: QuizContentV1 | QuizContentV2) {
   return content.questions.map((question) => {
     if (question.kind === "mcq") {
       return [

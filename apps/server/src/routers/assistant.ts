@@ -1,8 +1,13 @@
 import { ORPCError, createRouterClient } from "@orpc/server";
 import { z } from "zod";
 import {
+  agentApprovalModeSchema,
+  assistantModelFallbackSchema,
+  assistantModelRouteSchema,
+  conversationCheckpointRefSchema,
   assistantAttachmentKindSchema,
   historicalBranchChoiceSchema,
+  historicalDataChangesReviewSchema,
   historicalBranchOperationSchema,
   lexicalSearchModeSchema,
 } from "@avermate/agent-contracts";
@@ -11,6 +16,7 @@ import { coreConversationSearchService } from "../assistant/conversation-search"
 import { ConversationStoreError } from "../assistant/core-conversation-store";
 import {
   assistantRunService,
+  assistantModelPreferenceService,
   coreConversationStore,
   coreHistoricalBranchService,
 } from "../assistant/services";
@@ -25,6 +31,9 @@ import { createFirstPartyToolBroker } from "../tools/first-party";
 import { fileHandleService } from "../routes/file-handles";
 import { assistantToolSourcesRouter } from "./assistant-tool-sources";
 import { createCustomMcpDescriptors } from "../assistant/custom-mcp-tools";
+import { managedToolActionContinuationStore } from "../tools/managed-action-continuation";
+import { actionLedgerService } from "../actions/services";
+import { ActionLedgerError } from "../actions/action-ledger";
 
 const id = z.string().min(1).max(256);
 const cursor = z.string().max(512).nullable().optional();
@@ -36,6 +45,22 @@ const attachmentInput = z.strictObject({
 });
 
 function translate(error: unknown): never {
+  if (error instanceof ActionLedgerError) {
+    if (error.code === "not-found") {
+      throw new ORPCError("NOT_FOUND", { message: error.message });
+    }
+    if (error.code === "forbidden") {
+      throw new ORPCError("FORBIDDEN", { message: error.message });
+    }
+    if (
+      error.code === "conflict" ||
+      error.code === "preview-stale" ||
+      error.code === "dependency-cycle"
+    ) {
+      throw new ORPCError("CONFLICT", { message: error.message });
+    }
+    throw new ORPCError("BAD_REQUEST", { message: error.message });
+  }
   if (error instanceof HistoricalBranchError) {
     if (error.code === "not_found") {
       throw new ORPCError("NOT_FOUND", { message: error.message });
@@ -72,7 +97,10 @@ async function call<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-async function authenticatedReadBroker(context: Context) {
+async function authenticatedAssistantBroker(
+  context: Context,
+  approvalMode: z.infer<typeof agentApprovalModeSchema>,
+) {
   // Deferred import avoids making the router module's own initialization the
   // source of a circular value. The call occurs only after appRouter is ready.
   const { appRouter } = await import("./index");
@@ -80,12 +108,16 @@ async function authenticatedReadBroker(context: Context) {
   const broker = createFirstPartyToolBroker(api, {
     fileHandles: fileHandleService,
     ownerId: context.session!.user.id,
-    includeMutations: false,
+    includeMutations: approvalMode !== "read-only",
+    ...(approvalMode === "read-only"
+      ? {}
+      : { continuations: managedToolActionContinuationStore }),
   });
   try {
     for (const descriptor of await createCustomMcpDescriptors(
       context.session!.user.id,
     )) {
+      if (descriptor.effect !== "read") continue;
       broker.registry.register(descriptor);
     }
   } catch (error) {
@@ -158,7 +190,7 @@ export const assistantRouter = {
         z.strictObject({
           title: z.string().trim().min(1).max(256).optional(),
           projectId: id.nullable().optional(),
-          placement: z.enum(["core", "node"]).default("core"),
+          placement: z.enum(["core", "node"]).optional(),
         }),
       )
       .handler(({ context, input }) =>
@@ -305,7 +337,8 @@ export const assistantRouter = {
           expectedHeadMessageId: id.nullable(),
           clientRequestId: id,
           markdown: z.string().trim().min(1).max(200_000),
-          modelKey: id,
+          modelKey: id.optional(),
+          approvalMode: agentApprovalModeSchema.default("read-only"),
           skillId: id.nullable().optional(),
           planMode: z.boolean().default(false),
           forkOnConflict: z.boolean().default(false),
@@ -313,12 +346,12 @@ export const assistantRouter = {
         }),
       )
       .handler(async ({ context, input }) => {
-        const models = await assistantRunService.listModels(
-          context.session.user.id,
-        );
-        if (!models.some((model) => model.modelKey === input.modelKey)) {
+        const selection = await assistantRunService
+          .resolveModelForNewRun(context.session.user.id, input.modelKey)
+          .catch(() => null);
+        if (!selection) {
           throw new ORPCError("BAD_REQUEST", {
-            message: "Model is unavailable",
+            message: "Model placement is unavailable",
           });
         }
         if (
@@ -337,17 +370,20 @@ export const assistantRouter = {
             expectedHeadMessageId: input.expectedHeadMessageId,
             clientRequestId: input.clientRequestId,
             markdown: input.markdown,
-            modelKey: input.modelKey,
+            modelKey: selection.capability.modelKey,
+            providerKey: selection.capability.providerKey,
+            modelPolicy: selection.runPolicy,
+            approvalMode: input.approvalMode,
             forkOnConflict: input.forkOnConflict,
             attachments: input.attachments,
             skillId: input.skillId,
             planMode: input.planMode,
           }),
         );
-        assistantRunService.start(
+        assistantRunService.launch(
           context.session.user.id,
           reservation.runId,
-          await authenticatedReadBroker(context),
+          await authenticatedAssistantBroker(context, input.approvalMode),
         );
         return reservation;
       }),
@@ -369,6 +405,37 @@ export const assistantRouter = {
         ),
       ),
 
+    dataChangesReview: protectedProcedure
+      .input(
+        z.strictObject({
+          messageId: id,
+          sourceBranchId: id,
+          operation: historicalBranchOperationSchema,
+        }),
+      )
+      .handler(({ context, input }) =>
+        call(async () => {
+          const boundary =
+            await coreHistoricalBranchService.resolveDataChangesBoundary({
+              ownerId: context.session.user.id,
+              ...input,
+            });
+          const review = await actionLedgerService().reviewBranchSince({
+            userId: context.session.user.id,
+            branchId: boundary.sourceBranchId,
+            domainCursorRef: boundary.domainCursorRef,
+          });
+          return historicalDataChangesReviewSchema.parse({
+            operation: boundary.operation,
+            threadId: boundary.threadId,
+            sourceBranchId: boundary.sourceBranchId,
+            messageId: boundary.messageId,
+            domainCursorRef: boundary.domainCursorRef,
+            ...review,
+          });
+        }),
+      ),
+
     edit: protectedProcedure
       .input(
         z.strictObject({
@@ -376,11 +443,26 @@ export const assistantRouter = {
           clientRequestId: id,
           markdown: z.string().trim().min(1).max(200_000),
           modelKey: id,
+          approvalMode: agentApprovalModeSchema.default("read-only"),
           historicalBranch: historicalBranchChoiceSchema,
         }),
       )
       .handler(async ({ context, input }) => {
         const { historicalBranch, ...edit } = input;
+        const selection = await assistantRunService
+          .resolveModelForNewRun(context.session.user.id, edit.modelKey)
+          .catch(() => null);
+        if (!selection) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Model placement is unavailable",
+          });
+        }
+        const resolvedEdit = {
+          ...edit,
+          modelKey: selection.capability.modelKey,
+          providerKey: selection.capability.providerKey,
+          modelPolicy: selection.runPolicy,
+        };
         const result =
           historicalBranch.mode === "conversation-only"
             ? await call(async () => {
@@ -392,7 +474,7 @@ export const assistantRouter = {
                 });
                 const edited = await coreConversationStore.editMessage({
                   ownerId: context.session.user.id,
-                  ...edit,
+                  ...resolvedEdit,
                 });
                 return {
                   ...edited,
@@ -423,7 +505,7 @@ export const assistantRouter = {
                     }) => {
                       const edited = await coreConversationStore.editMessage({
                         ownerId: context.session.user.id,
-                        ...edit,
+                        ...resolvedEdit,
                         destinationBranchId,
                         workspaceSnapshotRef,
                       });
@@ -443,10 +525,10 @@ export const assistantRouter = {
                 };
               });
         if (result.kind === "run-reserved") {
-          assistantRunService.start(
+          assistantRunService.launch(
             context.session.user.id,
             result.reservation.runId,
-            await authenticatedReadBroker(context),
+            await authenticatedAssistantBroker(context, input.approvalMode),
           );
         }
         return result;
@@ -458,11 +540,26 @@ export const assistantRouter = {
           messageId: id,
           clientRequestId: id,
           modelKey: id.optional(),
+          approvalMode: agentApprovalModeSchema.default("read-only"),
           historicalBranch: historicalBranchChoiceSchema,
         }),
       )
       .handler(async ({ context, input }) => {
         const { historicalBranch, ...retry } = input;
+        const selection = await assistantRunService
+          .resolveModelForNewRun(context.session.user.id, retry.modelKey)
+          .catch(() => null);
+        if (!selection) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Model placement is unavailable",
+          });
+        }
+        const resolvedRetry = {
+          ...retry,
+          modelKey: selection.capability.modelKey,
+          providerKey: selection.capability.providerKey,
+          modelPolicy: selection.runPolicy,
+        };
         const result =
           historicalBranch.mode === "conversation-only"
             ? await call(async () => {
@@ -474,7 +571,7 @@ export const assistantRouter = {
                 });
                 const reservation = await coreConversationStore.reserveRetry({
                   ownerId: context.session.user.id,
-                  ...retry,
+                  ...resolvedRetry,
                 });
                 return {
                   reservation,
@@ -501,16 +598,16 @@ export const assistantRouter = {
                   }) =>
                     coreConversationStore.reserveRetry({
                       ownerId: context.session.user.id,
-                      ...retry,
+                      ...resolvedRetry,
                       destinationBranchId,
                       workspaceSnapshotRef,
                     }),
                 }),
               );
-        assistantRunService.start(
+        assistantRunService.launch(
           context.session.user.id,
           result.reservation.runId,
-          await authenticatedReadBroker(context),
+          await authenticatedAssistantBroker(context, input.approvalMode),
         );
         return {
           ...result.reservation,
@@ -520,11 +617,66 @@ export const assistantRouter = {
   },
 
   runs: {
+    inspect: protectedProcedure
+      .input(z.strictObject({ runId: id }))
+      .handler(async ({ context, input }) => {
+        const ownerId = context.session.user.id;
+        const [runtime, run, usageResult, claimsResult, checkpointResult] =
+          await Promise.all([
+            assistantRunService.inspect({ ownerId, runId: input.runId }),
+            coreConversationStore.run(ownerId, input.runId),
+            db.$client.execute({
+              sql: `SELECT u.* FROM assistant_usage u
+                    JOIN assistant_runs r ON r.id = u.runId
+                    WHERE u.runId = ? AND r.userId = ? LIMIT 1`,
+              args: [input.runId, ownerId],
+            }),
+            db.$client.execute({
+              sql: `SELECT c.id, c.dispatchKey, c.requestDigest, c.providerKey,
+                      c.providerRevision, c.modelKey, c.modelRevision,
+                      c.placementJson, c.providerSupportsStableRequestKey,
+                      c.state, c.inspectReason, c.claimedAt, c.updatedAt
+                    FROM assistant_provider_dispatch_claims c
+                    WHERE c.runId = ? AND c.userId = ?
+                    ORDER BY c.claimedAt, c.id`,
+              args: [input.runId, ownerId],
+            }),
+            db.$client.execute({
+              sql: `SELECT c.id, c.afterEventSequence, c.runtimeId,
+                      c.runtimeVersion, c.graphSchemaVersion, c.stateDigest,
+                      c.stateByteLength, c.status, c.committedAt
+                    FROM assistant_conversation_checkpoints c
+                    JOIN assistant_runs r ON r.id = c.runId
+                    WHERE c.id = r.conversationCheckpointRef
+                      AND c.runId = ? AND c.userId = ? AND r.userId = ?
+                    LIMIT 1`,
+              args: [input.runId, ownerId, ownerId],
+            }),
+          ]);
+        return {
+          runtime,
+          run,
+          usage: usageResult.rows[0] ?? null,
+          dispatchClaims: claimsResult.rows.map((row) => ({
+            ...row,
+            placement:
+              typeof row.placementJson === "string"
+                ? JSON.parse(row.placementJson)
+                : row.placementJson,
+            placementJson: undefined,
+            providerSupportsStableRequestKey: Boolean(
+              row.providerSupportsStableRequestKey,
+            ),
+          })),
+          checkpoint: checkpointResult.rows[0] ?? null,
+        };
+      }),
+
     cancel: protectedProcedure
       .input(z.strictObject({ runId: id }))
       .handler(({ context, input }) =>
         call(() =>
-          assistantRunService.cancel(context.session.user.id, input.runId),
+          assistantRunService.cancelRun(context.session.user.id, input.runId),
         ),
       ),
     respond: protectedProcedure
@@ -535,20 +687,106 @@ export const assistantRouter = {
           answer: z.string().trim().min(1).max(20_000),
         }),
       )
-      .handler(({ context, input }) =>
-        call(() =>
-          coreConversationStore.respondToQuestion({
-            ownerId: context.session.user.id,
-            ...input,
-          }),
-        ),
-      ),
+      .handler(async ({ context, input }) => {
+        const run = await coreConversationStore.run(
+          context.session.user.id,
+          input.runId,
+        );
+        await assistantRunService.respondToQuestion({
+          ownerId: context.session.user.id,
+          ...input,
+          broker: await authenticatedAssistantBroker(
+            context,
+            run.approvalMode,
+          ),
+        });
+        return coreConversationStore.run(
+          context.session.user.id,
+          input.runId,
+        );
+      }),
+
+    resume: protectedProcedure
+      .input(
+        z.strictObject({
+          runId: id,
+          conversationCheckpointRef: conversationCheckpointRefSchema,
+          resumeValue: z.unknown(),
+        }),
+      )
+      .handler(async ({ context, input }) => {
+        const handle = await assistantRunService.resume({
+          ownerId: context.session.user.id,
+          ...input,
+        });
+        return {
+          runId: handle.runId,
+          conversationCheckpointRef: handle.conversationCheckpointRef,
+        };
+      }),
   },
 
   models: {
     list: protectedProcedure.handler(async ({ context }) => ({
       items: await assistantRunService.listModels(context.session.user.id),
     })),
+    catalogue: protectedProcedure.handler(async ({ context }) => ({
+      items: await assistantRunService.modelCatalogue(context.session.user.id),
+    })),
+    preference: {
+      get: protectedProcedure.handler(({ context }) =>
+        assistantModelPreferenceService.get(context.session.user.id),
+      ),
+      update: protectedProcedure
+        .input(
+          z.strictObject({
+            defaultModelKey: id.nullable(),
+            route: assistantModelRouteSchema,
+            fallback: assistantModelFallbackSchema,
+            maximumInputTokens: z.number().int().positive().nullable(),
+            maximumOutputTokens: z.number().int().positive().nullable(),
+            maximumEstimatedCostMinor: z
+              .number()
+              .int()
+              .nonnegative()
+              .nullable(),
+            currency: z.string().length(3).nullable(),
+            expectedRevision: z.number().int().positive(),
+          }),
+        )
+        .handler(async ({ context, input }) => {
+          if (input.defaultModelKey) {
+            const catalogue = await assistantRunService.modelCatalogue(
+              context.session.user.id,
+            );
+            if (
+              !catalogue.some(
+                (entry) =>
+                  entry.available &&
+                  entry.capability.modelKey === input.defaultModelKey,
+              )
+            ) {
+              throw new ORPCError("BAD_REQUEST", {
+                message: "Default model placement is unavailable",
+              });
+            }
+          }
+          try {
+            return await assistantModelPreferenceService.update(
+              context.session.user.id,
+              input,
+            );
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              error.message.includes("revision changed")
+            ) {
+              throw new ORPCError("CONFLICT", { message: error.message });
+            }
+            throw error;
+          }
+        }),
+    },
   },
 
   skills: {

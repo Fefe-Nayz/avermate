@@ -32,12 +32,28 @@ export type QuizPromptQuestion =
       prompt: string
       choices: string[]
       answerCount: number
+      id?: string
+      objectiveIds?: string[]
+      difficulty?: number | null
     }
-  | { kind: "open"; prompt: string }
-  | { kind: "cloze"; text: string; blankCount: number }
+  | {
+      kind: "open"
+      prompt: string
+      id?: string
+      objectiveIds?: string[]
+      difficulty?: number | null
+    }
+  | {
+      kind: "cloze"
+      text: string
+      blankCount: number
+      id?: string
+      objectiveIds?: string[]
+      difficulty?: number | null
+    }
 
 export interface QuizPromptContent {
-  version: 1
+  version: 1 | 2
   questions: QuizPromptQuestion[]
 }
 
@@ -114,7 +130,7 @@ export function isMindmapContent(value: unknown): value is MindmapContentV1 {
     value !== null &&
     typeof value === "object" &&
     "version" in value &&
-    value.version === 1 &&
+    (value.version === 1 || value.version === 2) &&
     "root" in value &&
     value.root !== null &&
     typeof value.root === "object" &&
@@ -163,7 +179,7 @@ export function isQuizPromptContent(
     value !== null &&
     typeof value === "object" &&
     "version" in value &&
-    value.version === 1 &&
+    (value.version === 1 || value.version === 2) &&
     "questions" in value &&
     Array.isArray(value.questions) &&
     value.questions.length > 0 &&

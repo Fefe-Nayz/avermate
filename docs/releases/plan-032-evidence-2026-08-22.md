@@ -9,8 +9,8 @@ successful cell, and a current end-to-end run are not treated as interchangeable
 | Check                                         | Result             | Evidence                                                                                                                                                                                                                |
 | --------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Contracts, Node and Server typechecks         | Green              | All three current `tsc --noEmit` runs completed with exit code 0.                                                                                                                                                       |
-| `verify:032:protocol`                         | Green              | 37 tests: 3 harness-diagnostic, 3 contract, 16 Node protocol/control/job/deletion/stream, and 15 Core routing/deletion tests.                                                                                           |
-| `verify:032:configurator`                     | Green              | 10 security/config/preflight tests, generated-schema write, and a real loopback `dev-zero` process health smoke.                                                                                                        |
+| `verify:032:protocol`                         | Green              | 38 tests: 3 harness-diagnostic, 3 contract, 17 Node identity/control/job/deletion/stream tests, and 15 Core routing/deletion tests.                                                                                     |
+| `verify:032:configurator`                     | Green              | 16 security/config/preflight tests, generated-schema write, and a real loopback `dev-zero` process health smoke.                                                                                                        |
 | Storage/corpus/conversation cells             | Green              | 7 storage/corpus contract tests, 4 filesystem provider tests, and 38 Core/Node adapter, adoption, deletion, lexical, citation, corpus and conversation tests.                                                           |
 | Full `verify:032:storage`, last completed run | Green              | The then-current contracts/filesystem/Core↔Node cells and a disposable Garage v2.3 provider passed; cleanup found no labelled container, volume or network. Plan 034 independently consumed the same gate successfully. |
 | `verify:032:selfhost -- --static-only`        | Green, static only | Hosted-domain source assertion and all seven Compose profile configurations passed. The command explicitly says runtime is not proven.                                                                                  |
@@ -48,20 +48,20 @@ before project creation as `PLAN032_DOCKER_HOST_CONTENT_STORE_UNHEALTHY` or
 `PLAN032_DOCKER_HOST_DAEMON_UNAVAILABLE`; it does not mislabel them as an
 Avermate test failure. No restart, prune, or further live probe was performed.
 
-## Plan completion blockers independent of Docker
+## Repository closure and live blockers
 
-Plan 032 remains a developer foundation. The following are still real product
-gaps even if every current gate later turns green:
+After the original evidence run, the repository added and gated the Core
+pairing registry/exchange, sealed credential lifecycle, authenticated relay,
+Node auto-connect and capability dispatch, SQL object-adoption repository and
+remote-deletion reconciliation. Those former foundation gaps are now closed in
+repository tests, so the Plan 032 roadmap row can honestly be marked
+`DONE (repository foundation)`. Plan 038 has now delivered those conversation
+placement, full-self-host Core↔Node storage/relay composition, migration UX and
+specialist-worker contracts in repository evidence; deployed conformance
+remains external.
 
-- the Core pairing registry/exchange and sealed credential lifecycle are not
-  wired to the Node's one-time pairing primitive;
-- the daemon does not automatically enrol with a production Core relay, and no
-  production Core relay/direct data lane connects the local
-  conversation/retrieval/model/sandbox transports;
-- `TwoPhaseObjectAdopter` still lacks a wired durable Core database repository;
-- repository-wide callers have not all migrated to the storage provider facade;
-- the full-self-host profile declares sandbox unavailable, so no real sandbox
-  artifact has been produced.
-
-Do not mark the Plan 032 roadmap row complete from the passing local
-conformance cells or the static Compose checks.
+This does not change the runtime evidence above. The full-self-host and air-gap
+profiles still need successful deployed runs on a healthy Docker host. The
+full-self-host profile also continues to advertise sandbox unavailability until
+a real provider/image passes attested isolation conformance. No local or static
+result in this record is a hosted-relay, sandbox, air-gap or release proof.

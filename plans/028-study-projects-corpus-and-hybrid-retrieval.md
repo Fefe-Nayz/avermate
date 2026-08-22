@@ -24,9 +24,9 @@ apps/server/src/routers apps/server/src/mcp apps/web/src packages/core`. Compare
 
 ## Status
 
-- **Status**: IN PROGRESS — core projects, corpus, lexical retrieval and citation
-  paths are implemented and targeted green; production placement and baseline
-  gates remain
+- **Status**: DONE (repository) — project/corpus/Web paths and mandatory lexical
+  retrieval are green; configured-provider quality evidence remains an external
+  rollout gate
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: HIGH
@@ -41,27 +41,19 @@ apps/server/src/routers apps/server/src/mcp apps/web/src packages/core`. Compare
 
 The current tree contains the owned study-project/source/version/chunk model,
 FTS5 lexical retrieval, exact locator/citation resolution, inline-asset
-normalization, deterministic hybrid primitives, optional configured embedding
-and Qdrant adapters, and the project/API/Web surfaces. Core lexical, corpus and
-project suites are green in the current targeted verification wave:
+normalization, deterministic hybrid primitives, configured embedding/Qdrant
+adapters, and complete project/API/Web surfaces. The current focused search
+gate passes **56 tests with 0 failures**, including provider-neutral vector
+storage, Gemini/Cohere/TEI contracts, deterministic hybrid/rerank degradation,
+PDF page/diagram extraction, owner filtering and the labelled school corpus.
+The project router and Web source-management/search suites are also green.
 
-- `bun run --cwd apps/server test src/search`: **24 passed, 0 failed**;
-- `bun run --cwd apps/server test src/routers/projects.test.ts`: **4 passed, 0
-  failed**;
-- the Web `src` suite, which includes the project/search surface tests: **805
-  passed, 0 failed**.
+Later Node/RAG work additionally wires paired placement transports and advanced
+embedding/reranking adapters. Those repository results do **not** fabricate a
+live provider-quality run or deployed Node corpus migration; those remain
+separately labelled external evidence under plans 032/036.
 
-Plan 032 additionally proves the shared placement cells currently wired in this
-tree: 7 storage/corpus contract tests, 4 filesystem-provider tests, and 38
-Core/Node adapter, adoption, deletion, lexical, citation, corpus and
-conversation tests passed. Its last complete storage run also passed a
-disposable Garage 2.3 conformance cell and cleanup. Those results justify only
-the adapters exercised by that harness. They do **not** prove the missing
-production Core↔Node pairing/relay transports, a live optional embedding
-provider, or a fully deployed Node corpus migration path; see plan 032's own
-checkpoint.
-
-The final repository/migration/clean-clone gates remain inherited from plan 025. Do not promote this checkpoint to `DONE` from core lexical success alone.
+The final licence and post-commit clean-clone gates remain inherited from plan 025. Repository completion does not waive either gate.
 
 ## Scope
 

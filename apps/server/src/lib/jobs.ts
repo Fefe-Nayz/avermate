@@ -1,6 +1,6 @@
 import { and, asc, eq, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { jobs } from "../db/schema";
+import { jobRuntimeMetadata, jobs } from "../db/schema";
 import { env } from "./env";
 
 /**
@@ -15,12 +15,32 @@ export const JOB_LEASE_MS = 60_000;
 export const DEFAULT_JOB_RUNNER_CONCURRENCY = 4;
 const MAX_BACKOFF_MS = 5 * 60_000;
 const BASE_BACKOFF_MS = 2_000;
+const CANCELLATION_POLL_MS = 250;
+
+export interface JobExecutionIdentity {
+  /** Stable queue row identity. */
+  jobId: string;
+  /** Exact registered handler kind selected from the queue row. */
+  kind: string;
+  /** Null only for internal maintenance work. */
+  userId: string | null;
+  /** Monotonic lease attempt for this queue row. */
+  attempt: number;
+  /** Runner lane which owns the current database lease. */
+  leaseOwner: string;
+  /** Opaque generation token unique to this handler execution. */
+  runToken: string;
+}
 
 export type JobHandler = (context: {
   payload: unknown;
   jobId: string;
+  kind: string;
+  userId: string | null;
   attempts: number;
   maxAttempts: number;
+  leaseOwner: string;
+  identity: JobExecutionIdentity;
   signal?: AbortSignal;
 }) => Promise<unknown>;
 
@@ -307,6 +327,45 @@ export async function failJob(
   return failed;
 }
 
+async function acknowledgeRunningCancellation(
+  jobId: string,
+  instanceId: string,
+  now = new Date(),
+) {
+  return db.transaction(async (transaction) => {
+    const [cancelled] = await transaction
+      .update(jobs)
+      .set({
+        status: "cancelled",
+        lockedBy: null,
+        lockedUntil: null,
+        error: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(jobs.id, jobId),
+          eq(jobs.status, "running"),
+          eq(jobs.lockedBy, instanceId),
+        ),
+      )
+      .returning();
+    if (!cancelled) {
+      throw new Error(`Running job ${jobId} changed while cancelling`);
+    }
+    await transaction
+      .update(jobRuntimeMetadata)
+      .set({
+        stage: "terminal",
+        cancellation: "acknowledged",
+        leaseToken: null,
+        updatedAt: now,
+      })
+      .where(eq(jobRuntimeMetadata.jobId, jobId));
+    return cancelled;
+  });
+}
+
 /** Claims and executes at most one job. Exported for deterministic workers/tests. */
 export async function runNextJob(instanceId: string, now = new Date()) {
   const job = await claimNextJob(instanceId, now);
@@ -322,6 +381,8 @@ export async function runNextJob(instanceId: string, now = new Date()) {
 
   const controller = new AbortController();
   let renewing = false;
+  let checkingCancellation = false;
+  let cancellationRequested = false;
   const renewal = setInterval(
     () => {
       if (renewing) return;
@@ -337,22 +398,56 @@ export async function runNextJob(instanceId: string, now = new Date()) {
     },
     Math.floor(JOB_LEASE_MS / 3),
   );
+  const cancellationPoll = setInterval(() => {
+    if (checkingCancellation || cancellationRequested) return;
+    checkingCancellation = true;
+    void db
+      .select({ cancellation: jobRuntimeMetadata.cancellation })
+      .from(jobRuntimeMetadata)
+      .where(eq(jobRuntimeMetadata.jobId, job.id))
+      .limit(1)
+      .then(([metadata]) => {
+        if (metadata?.cancellation !== "requested") return;
+        cancellationRequested = true;
+        controller.abort("User requested job cancellation");
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        checkingCancellation = false;
+      });
+  }, CANCELLATION_POLL_MS);
   try {
+    const identity: JobExecutionIdentity = {
+      jobId: job.id,
+      kind: job.kind,
+      userId: job.userId,
+      attempt: job.attempts,
+      leaseOwner: instanceId,
+      runToken: `${job.id}:${job.attempts}:${crypto.randomUUID()}`,
+    };
     const result = await handler({
       payload: job.payload,
       jobId: job.id,
+      kind: job.kind,
+      userId: job.userId,
       attempts: job.attempts,
       maxAttempts: job.maxAttempts,
+      leaseOwner: instanceId,
+      identity,
       signal: controller.signal,
     });
     return await completeJob(job.id, result, { instanceId });
   } catch (error) {
+    if (cancellationRequested) {
+      return acknowledgeRunningCancellation(job.id, instanceId);
+    }
     return failJob(job.id, error, {
       instanceId,
       retry: !(error instanceof NonRetryableJobError),
     });
   } finally {
     clearInterval(renewal);
+    clearInterval(cancellationPoll);
   }
 }
 

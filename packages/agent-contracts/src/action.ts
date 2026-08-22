@@ -258,6 +258,7 @@ export const agentActionActivityFilterSchema = z.strictObject({
   to: instant.optional(),
   toolId: z.string().min(1).max(256).optional(),
   threadId: opaqueId.optional(),
+  branchId: opaqueId.optional(),
   resourceKind: z.string().min(1).max(128).optional(),
   resourceId: opaqueId.optional(),
   actorKind: agentActionActorKindSchema.optional(),
@@ -293,6 +294,14 @@ export const agentActionApprovalResolutionInputSchema = z.strictObject({
   previewHash: hash,
   decision: z.enum(["approve", "reject"]),
 });
+
+export const agentActionConflictResolutionInputSchema = z.strictObject({
+  actionId: opaqueId,
+  resolution: z.literal("keep-current"),
+});
+export type AgentActionConflictResolutionInput = z.infer<
+  typeof agentActionConflictResolutionInputSchema
+>;
 
 export const agentActionDependencyInputSchema = z.strictObject({
   actionId: opaqueId,

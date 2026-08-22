@@ -11,6 +11,9 @@ import {
   sandboxFileManifestEntrySchema,
   sandboxHandleSchema,
   sandboxPreflightResultSchema,
+  sandboxRuntimeCheckpointCapabilitiesSchema,
+  sandboxRuntimeCheckpointCompatibilityV1Schema,
+  sandboxRuntimeCheckpointRefV1Schema,
   sandboxWorkspaceSnapshotRefSchema,
   storedConversationEventSchema,
   type AppendConversationEvent,
@@ -47,6 +50,9 @@ import {
   type SandboxPreflightResult,
   type SandboxProvider,
   type SandboxProviderId,
+  type SandboxRuntimeCheckpointCapabilities,
+  type SandboxRuntimeCheckpointCompatibilityV1,
+  type SandboxRuntimeCheckpointRefV1,
   type SandboxWorkspaceSnapshotRef,
   type StoredConversationEvent,
   type TranscriptionRequest,
@@ -706,6 +712,127 @@ export class NodeSandboxProvider implements SandboxProvider {
         create: input,
       }),
     );
+  }
+
+  async runtimeCheckpointCapabilities(): Promise<SandboxRuntimeCheckpointCapabilities> {
+    await requireOnline(this.transport, this.nodeId, "sandbox");
+    const capabilities = sandboxRuntimeCheckpointCapabilitiesSchema.parse(
+      await this.transport.sandboxRuntimeCheckpointCapabilities({
+        nodeId: this.nodeId,
+        ownerId: this.ownerId,
+        providerId: this.id,
+      }),
+    );
+    if (capabilities.available && capabilities.provider !== this.id) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_PROVIDER_MISMATCH");
+    }
+    return capabilities;
+  }
+
+  async captureRuntimeCheckpoint(input: {
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: Date;
+  }): Promise<SandboxRuntimeCheckpointRefV1> {
+    this.#assertHandle(input.handle);
+    const source = sandboxWorkspaceSnapshotRefSchema.parse(
+      input.sourceWorkspaceSnapshot,
+    );
+    const compatibility = sandboxRuntimeCheckpointCompatibilityV1Schema.parse(
+      input.compatibility,
+    );
+    if (
+      source.provider !== this.id ||
+      compatibility.provider !== this.id ||
+      compatibility.profileId !== input.handle.profileId ||
+      compatibility.profileVersion !== input.handle.profileVersion ||
+      compatibility.imageDigest !== input.handle.image.imageDigest
+    ) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_COMPATIBILITY_MISMATCH");
+    }
+    if (!Number.isFinite(input.expiresAt.getTime())) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_EXPIRY_INVALID");
+    }
+    await requireOnline(this.transport, this.nodeId, "sandbox");
+    const checkpoint = sandboxRuntimeCheckpointRefV1Schema.parse(
+      await this.transport.captureSandboxRuntimeCheckpoint({
+        nodeId: this.nodeId,
+        ownerId: this.ownerId,
+        providerId: this.id,
+        handle: input.handle,
+        sourceWorkspaceSnapshot: source,
+        compatibility,
+        idempotencyKey: input.idempotencyKey,
+        expiresAt: input.expiresAt.toISOString(),
+      }),
+    );
+    if (
+      checkpoint.captureState !== "captured" ||
+      checkpoint.adoptedObjectRefs.length !== 0 ||
+      checkpoint.captureIdempotencyKey !== input.idempotencyKey ||
+      JSON.stringify(checkpoint.compatibility) !==
+        JSON.stringify(compatibility) ||
+      JSON.stringify(checkpoint.sourceWorkspaceSnapshot) !==
+        JSON.stringify(source)
+    ) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_RESPONSE_MISMATCH");
+    }
+    return checkpoint;
+  }
+
+  async restoreRuntimeCheckpoint(input: {
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }): Promise<SandboxHandle> {
+    assertOwner(this.ownerId, input.create.ownerId);
+    const checkpoint = sandboxRuntimeCheckpointRefV1Schema.parse(
+      input.checkpoint,
+    );
+    if (
+      checkpoint.checkpoint.provider !== this.id ||
+      checkpoint.compatibility.provider !== this.id ||
+      checkpoint.sourceWorkspaceSnapshot.provider !== this.id ||
+      checkpoint.compatibility.profileId !== input.create.profile.id ||
+      checkpoint.compatibility.profileVersion !==
+        input.create.profile.version ||
+      checkpoint.compatibility.imageDigest !==
+        input.create.profile.image.imageDigest
+    ) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_COMPATIBILITY_MISMATCH");
+    }
+    await requireOnline(this.transport, this.nodeId, "sandbox");
+    return this.#acceptHandle(
+      await this.transport.restoreSandboxRuntimeCheckpoint({
+        nodeId: this.nodeId,
+        ownerId: this.ownerId,
+        providerId: this.id,
+        create: input.create,
+        checkpoint,
+      }),
+    );
+  }
+
+  async deleteRuntimeCheckpoint(
+    checkpointValue: SandboxRuntimeCheckpointRefV1,
+  ): Promise<void> {
+    const checkpoint =
+      sandboxRuntimeCheckpointRefV1Schema.parse(checkpointValue);
+    if (
+      checkpoint.checkpoint.provider !== this.id ||
+      checkpoint.compatibility.provider !== this.id ||
+      checkpoint.sourceWorkspaceSnapshot.provider !== this.id
+    ) {
+      throw new Error("NODE_SANDBOX_RUNTIME_CHECKPOINT_PROVIDER_MISMATCH");
+    }
+    await requireOnline(this.transport, this.nodeId, "sandbox");
+    await this.transport.deleteSandboxRuntimeCheckpoint({
+      nodeId: this.nodeId,
+      ownerId: this.ownerId,
+      providerId: this.id,
+      checkpoint,
+    });
   }
 
   async stop(handle: SandboxHandle): Promise<void> {

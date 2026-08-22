@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   historicalBranchChoiceSchema,
+  historicalBranchDecisionSchema,
   historicalBranchPreviewSchema,
 } from "./assistant";
 
@@ -50,6 +51,18 @@ describe("historical branch contracts", () => {
     });
   });
 
+  test("models data review as a distinct non-branching decision", () => {
+    expect(
+      historicalBranchDecisionSchema.parse({
+        mode: "review-data-changes",
+        sourceBranchId: "branch-source",
+      }),
+    ).toEqual({
+      mode: "review-data-changes",
+      sourceBranchId: "branch-source",
+    });
+  });
+
   test("represents incompatibility explicitly instead of substituting another snapshot", () => {
     const digest = `sha256:${"b".repeat(64)}`;
     const preview = historicalBranchPreviewSchema.parse({
@@ -75,6 +88,10 @@ describe("historical branch contracts", () => {
           fileCount: 1,
           committedAt: "2026-08-22T10:00:00.000Z",
         },
+      },
+      dataChanges: {
+        available: true,
+        domainCursorRef: "domain:user-a:42",
       },
     });
     expect(preview.workspaceCopy).toMatchObject({

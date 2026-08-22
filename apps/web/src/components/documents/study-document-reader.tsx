@@ -94,7 +94,14 @@ export function StudyDocumentReader({ documentId }: { documentId: string }) {
 
   const result = query.data as StudyDocumentResult
   const document = result.document
-  const kindLabel = documentKindLabel(document.kind, t)
+  const kindLabel = documentKindLabel(document.kind, {
+    fiche: t("Revision sheet"),
+    note: t("Study note"),
+    mindmap: t("Mind map"),
+    slides: t("Slide deck"),
+    latex: t("LaTeX document"),
+    quiz: t("Quiz"),
+  })
 
   return (
     <>
@@ -293,12 +300,7 @@ export function StudyDocumentReader({ documentId }: { documentId: string }) {
 
 function documentKindLabel(
   kind: StudyDocumentKind,
-  t: ReturnType<typeof useExtracted>
+  labels: Record<StudyDocumentKind, string>
 ): string {
-  if (kind === "fiche") return t("Revision sheet")
-  if (kind === "note") return t("Study note")
-  if (kind === "mindmap") return t("Mind map")
-  if (kind === "slides") return t("Slide deck")
-  if (kind === "latex") return t("LaTeX document")
-  return t("Quiz")
+  return labels[kind]
 }

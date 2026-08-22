@@ -2,13 +2,14 @@ import { env } from "./env";
 import {
   markServiceKeyInvalid,
   operatorServiceKeysEnabled,
-  resolveServiceKey,
+  resolveProviderServiceKey,
   type ResolvedServiceKey,
 } from "./service-keys";
 import {
   reserveManagedProviderUsage,
   settleManagedProviderUsage,
 } from "../usage/managed-provider-accounting";
+import { runPairedNodeOcr, selectedNodeDocumentAi } from "../node/document-ai";
 
 export const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
 const MISTRAL_FILES_URL = "https://api.mistral.ai/v1/files";
@@ -29,17 +30,47 @@ export interface MistralOcrResult {
   pages?: Array<{ providerIndex: number; markdown: string }>;
 }
 
+export interface OcrProvider {
+  id: "mistral" | "node-local";
+  model: string;
+  run(
+    file: { blob: Blob; name: string },
+    options?: Pick<
+      MistralOcrOptions,
+      "maxPages" | "operationId" | "signal" | "language"
+      | "attempt"
+    >,
+  ): Promise<MistralOcrResult>;
+}
+
 export interface MistralOcrOptions {
   fetch?: Fetcher;
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam; production always resolves the user's sealed key first. */
   key?: string;
+  /** Test seam; production always requests the exact Mistral route. */
+  resolveCredential?: typeof resolveProviderServiceKey;
   maxPages?: number;
   model?: string;
   /** Durable run/job id used to make managed accounting idempotent. */
   operationId?: string;
   signal?: AbortSignal;
+  /** ISO/provider language hint. Node defaults to the pinned fra+eng pack. */
+  language?: string;
+  attempt?: number;
 }
+
+type OcrResolverDependencies = {
+  selectNode: typeof selectedNodeDocumentAi;
+  runNode: typeof runPairedNodeOcr;
+  runMistral: typeof runMistralOcr;
+};
+
+const defaultOcrResolverDependencies: OcrResolverDependencies = {
+  selectNode: selectedNodeDocumentAi,
+  runNode: runPairedNodeOcr,
+  runMistral: runMistralOcr,
+};
 
 function ocrDisabled() {
   const runtime = process.env.DISABLE_OCR;
@@ -51,7 +82,14 @@ export async function ocrEnabled(userId?: string) {
   if (!userId) {
     return operatorServiceKeysEnabled() && Boolean(env.MISTRAL_API_KEY);
   }
-  return Boolean(await resolveServiceKey(userId, "mistral"));
+  try {
+    const node = await selectedNodeDocumentAi(userId, "ocr");
+    if (node.selected) return true;
+  } catch {
+    return false;
+  }
+  if (env.OCR_PROVIDER === "node") return false;
+  return Boolean(await resolveProviderServiceKey(userId, "mistral", "mistral"));
 }
 
 function redactSecret(value: string, secret: string) {
@@ -145,7 +183,11 @@ export async function runMistralOcr(
   }
   const credential = options.key
     ? credentialForTests(options.key)
-    : await resolveServiceKey(userId, "mistral");
+    : await (options.resolveCredential ?? resolveProviderServiceKey)(
+        userId,
+        "mistral",
+        "mistral",
+      );
   if (!credential) {
     throw new Error(
       "OCR is not configured. Add a Mistral key in Settings → Integrations.",
@@ -288,3 +330,41 @@ export async function runMistralOcr(
     throw error;
   }
 }
+
+/** Resolve once from persisted models placement; an unavailable Node never falls back. */
+export async function resolveOcrProvider(
+  userId: string,
+  options: MistralOcrOptions = {},
+  overrides: Partial<OcrResolverDependencies> = {},
+): Promise<OcrProvider> {
+  const dependencies = { ...defaultOcrResolverDependencies, ...overrides };
+  const node = await dependencies.selectNode(userId, "ocr");
+  if (node.selected || env.OCR_PROVIDER === "node") {
+    if (!node.selected) throw new Error("NODE_OCR_PLACEMENT_REQUIRED");
+    return {
+      id: "node-local",
+      model: `${node.modelId}@${node.modelRevision}`,
+      run: (file, input = {}) =>
+        dependencies.runNode(userId, file, {
+          maxPages: input.maxPages ?? options.maxPages,
+          operationId: input.operationId ?? options.operationId,
+          attempt: input.attempt ?? options.attempt,
+          signal: input.signal ?? options.signal,
+          language: input.language ?? options.language,
+        }),
+    };
+  }
+  return {
+    id: "mistral",
+    model: options.model ?? MISTRAL_OCR_MODEL,
+    run: (file, input = {}) =>
+      dependencies.runMistral(userId, file, {
+        ...options,
+        maxPages: input.maxPages ?? options.maxPages,
+        operationId: input.operationId ?? options.operationId,
+        signal: input.signal ?? options.signal,
+      }),
+  };
+}
+
+export type OcrResolverTestDependencies = Partial<OcrResolverDependencies>;

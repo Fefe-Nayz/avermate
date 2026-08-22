@@ -1,0 +1,217 @@
+name: avermate
+
+x-plan038-hardened: &plan038-hardened
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+services:
+  # LiteLLM is implemented behind an explicitly activated profile and remains
+  # independent from direct/Core/BYOK adapters. The release preflight requires
+  # a verified tag@sha256; no mutable default or invented digest is committed.
+  litellm-db:
+    profiles: [node-litellm, full-self-host]
+    image: ${LITELLM_POSTGRES_IMAGE:?set an reviewed tag@sha256 image}
+    restart: unless-stopped
+    env_file:
+      - "${LITELLM_DB_ENV_FILE:?set a private PostgreSQL env file}"
+    volumes: [litellm-db:/var/lib/postgresql/data]
+    networks: [full-self-host-internal]
+
+  litellm:
+    <<: *plan038-hardened
+    profiles: [node-litellm, full-self-host]
+    image: ${LITELLM_IMAGE:?set a verified stable tag@sha256 image}
+    command: [--config, /etc/litellm/config.yaml, --port, "4000"]
+    env_file:
+      - "${LITELLM_ENV_FILE:?set a private LiteLLM env file}"
+    volumes:
+      - ../litellm/config.yaml:/etc/litellm/config.yaml:ro
+    tmpfs: [/tmp:rw,noexec,nosuid,size=256m]
+    networks: [full-self-host-internal]
+    depends_on:
+      litellm-db: { condition: service_started }
+      model-api: { condition: service_started }
+      model-api-fallback: { condition: service_started }
+
+  model-api:
+    <<: *plan038-hardened
+    profiles: [node-litellm, full-self-host]
+    image: ${LOCAL_MODEL_IMAGE:?set an exact tag@sha256 OpenAI-compatible image}
+    environment:
+      MODEL_PATH: /models/default
+      MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_MODEL_REVISION:?set an immutable model revision}
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "${LOCAL_MODEL_DIR:?set the reviewed local model directory}:/models/default:ro"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=2g]
+    networks: [full-self-host-internal]
+
+  model-api-fallback:
+    <<: *plan038-hardened
+    profiles: [node-litellm, full-self-host]
+    image: ${LOCAL_MODEL_IMAGE:?set an exact tag@sha256 OpenAI-compatible image}
+    environment:
+      MODEL_PATH: /models/fallback
+      MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_FALLBACK_MODEL_REVISION:?set an immutable fallback revision}
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "${LOCAL_FALLBACK_MODEL_DIR:?set the reviewed fallback model directory}:/models/fallback:ro"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=2g]
+    networks: [full-self-host-internal]
+
+  qdrant:
+    <<: *plan038-hardened
+    profiles: [local-rag, full-self-host]
+    image: ${QDRANT_IMAGE:?set a verified tag@sha256 image}
+    volumes: [qdrant-data:/qdrant/storage]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=256m]
+    networks: [full-self-host-internal]
+
+  tei-embedding:
+    <<: *plan038-hardened
+    profiles: [local-rag, full-self-host]
+    image: ${TEI_IMAGE:?set a verified TEI tag@sha256 image}
+    command:
+      - --model-id
+      - /models/gte-multilingual-base
+      - --revision
+      - "${AVERMATE_NODE_PUBLIC_EMBEDDING_REVISION:?set the exact model revision}"
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "${TEI_EMBEDDING_MODEL_DIR:?set the reviewed embedding model directory}:/models/gte-multilingual-base:ro"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=1g]
+    networks: [full-self-host-internal]
+
+  # Lightweight reviewed GTE reranker. Qwen3 is intentionally a different
+  # worker below because TEI does not implement the Qwen3 reranker contract.
+  tei-gte-reranker:
+    <<: *plan038-hardened
+    profiles: [local-rag-gte]
+    image: ${TEI_IMAGE:?set a verified TEI tag@sha256 image}
+    command:
+      - --model-id
+      - /models/gte-multilingual-reranker-base
+      - --revision
+      - "${TEI_GTE_RERANK_REVISION:?set the exact GTE reranker revision}"
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "${TEI_RERANK_MODEL_DIR:?set the reviewed GTE reranker directory}:/models/gte-multilingual-reranker-base:ro"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=1g]
+    networks: [full-self-host-internal]
+
+  qwen3-reranker:
+    <<: *plan038-hardened
+    profiles: [local-rag-qwen3, full-self-host]
+    image: ${QWEN3_RERANKER_IMAGE:?set the reviewed worker tag@sha256 image}
+    environment:
+      QWEN3_RERANK_MODEL_PATH: /models/qwen3-reranker-0.6b
+      QWEN3_RERANK_MODEL_REVISION: e61197ed45024b0ed8a2d74b80b4d909f1255473
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - "${QWEN3_RERANK_MODEL_DIR:?set the exact reviewed model directory}:/models/qwen3-reranker-0.6b:ro"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=2g]
+    networks: [full-self-host-internal]
+
+  opencode-worker:
+    <<: *plan038-hardened
+    profiles: [specialists, full-self-host]
+    image: ${OPENCODE_IMAGE:?set the reviewed 1.18.17 tag@sha256 image}
+    network_mode: none
+    tmpfs: [/tmp:rw,noexec,nosuid,size=512m, /workspace:rw,nosuid,size=2g]
+
+  openhands-worker:
+    <<: *plan038-hardened
+    profiles: [specialists, full-self-host]
+    image: ${OPENHANDS_IMAGE:?set the reviewed 1.8.0 tag@sha256 image}
+    network_mode: none
+    tmpfs: [/tmp:rw,noexec,nosuid,size=512m, /workspace:rw,nosuid,size=2g]
+
+  opensandbox:
+    <<: *plan038-hardened
+    profiles: [sandbox, full-self-host]
+    image: ${OPENSANDBOX_IMAGE:?set a verified tag@sha256 image}
+    environment:
+      OPENSANDBOX_OFFLINE: "true"
+    tmpfs: [/tmp:rw,noexec,nosuid,size=1g]
+    networks: [full-self-host-internal]
+
+  node-full:
+    environment:
+      AVERMATE_NODE_PUBLIC_EMBEDDING_REVISION: ${AVERMATE_NODE_PUBLIC_EMBEDDING_REVISION:?required}
+      AVERMATE_NODE_PUBLIC_QWEN3_RERANKER_DIGEST: ${AVERMATE_NODE_PUBLIC_QWEN3_RERANKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_MODEL_REVISION:?required}
+      AVERMATE_NODE_PUBLIC_FALLBACK_MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_FALLBACK_MODEL_REVISION:?required}
+      AVERMATE_NODE_PUBLIC_OCR_MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_OCR_MODEL_REVISION:?required}
+      AVERMATE_NODE_PUBLIC_TRANSCRIPTION_MODEL_REVISION: ${AVERMATE_NODE_PUBLIC_TRANSCRIPTION_MODEL_REVISION:?required}
+      AVERMATE_NODE_PUBLIC_SANDBOX_HOST_POLICY_DIGEST: ${AVERMATE_NODE_PUBLIC_SANDBOX_HOST_POLICY_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_SANDBOX_EVIDENCE_ENDPOINT: ${AVERMATE_NODE_PUBLIC_SANDBOX_EVIDENCE_ENDPOINT:?required}
+      AVERMATE_NODE_PUBLIC_SANDBOX_RUNTIME_VERSION: ${AVERMATE_NODE_PUBLIC_SANDBOX_RUNTIME_VERSION:?required}
+      AVERMATE_NODE_PUBLIC_MEDIA_WORKER_IMAGE: ${MEDIA_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_MEDIA_WORKER_DIGEST: ${MEDIA_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_OCR_WORKER_IMAGE: ${OCR_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_OCR_WORKER_DIGEST: ${OCR_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_TRANSCRIPTION_WORKER_IMAGE: ${TRANSCRIPTION_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_TRANSCRIPTION_WORKER_DIGEST: ${TRANSCRIPTION_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_LATEX_WORKER_IMAGE: ${LATEX_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_LATEX_WORKER_DIGEST: ${LATEX_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_SLIDES_WORKER_IMAGE: ${SLIDES_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_SLIDES_WORKER_DIGEST: ${SLIDES_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_MANIM_WORKER_IMAGE: ${MANIM_WORKER_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_MANIM_WORKER_DIGEST: ${MANIM_WORKER_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_OPENCODE_IMAGE: ${OPENCODE_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_OPENCODE_DIGEST: ${OPENCODE_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_OPENHANDS_IMAGE: ${OPENHANDS_IMAGE:?required}
+      AVERMATE_NODE_PUBLIC_OPENHANDS_DIGEST: ${OPENHANDS_DIGEST:?required}
+      AVERMATE_NODE_PUBLIC_RELEASE_VERSION: ${AVERMATE_NODE_PUBLIC_RELEASE_VERSION:?required}
+    secrets: [litellm-admin-key]
+    volumes:
+      - "${PLAN038_RELEASE_MANIFEST_FILE:?required}:/release/release-manifest.json:ro"
+      - "${PLAN038_RELEASE_PUBLIC_KEY_FILE:?required}:/release/release-signing-public.pem:ro"
+    depends_on:
+      litellm: { condition: service_started }
+      qdrant: { condition: service_started }
+      tei-embedding: { condition: service_started }
+      qwen3-reranker: { condition: service_started }
+      opensandbox: { condition: service_started }
+
+  api:
+    environment:
+      DISABLE_OCR: "false"
+      OCR_PROVIDER: node
+      DISABLE_TRANSCRIPTION: "false"
+      TRANSCRIPTION_PROVIDER: node
+      CORPUS_EMBEDDING_ENABLED: "true"
+      CORPUS_EMBEDDING_PROVIDER: openai-compatible
+      CORPUS_EMBEDDING_PLACEMENT: node
+      CORPUS_EMBEDDING_BASE_URL: http://tei-embedding:8080/v1
+      CORPUS_EMBEDDING_MODEL: Alibaba-NLP/gte-multilingual-base
+      CORPUS_EMBEDDING_DIMENSION: "768"
+      CORPUS_EMBEDDING_LOCAL: "true"
+      CORPUS_VECTOR_URL: http://qdrant:6333
+      CORPUS_VECTOR_COLLECTION_PREFIX: avermate
+      CORPUS_RERANK_ENABLED: "true"
+      CORPUS_RERANK_PROVIDER: qwen3
+      CORPUS_RERANK_MODEL: Qwen/Qwen3-Reranker-0.6B
+      CORPUS_RERANK_PLACEMENT: node
+      CORPUS_RERANK_BASE_URL: http://qwen3-reranker:8080
+      CORPUS_RERANK_MODEL_REVISION: e61197ed45024b0ed8a2d74b80b4d909f1255473
+      CORPUS_RERANK_IMAGE_DIGEST: ${AVERMATE_NODE_PUBLIC_QWEN3_RERANKER_DIGEST:?required}
+      CORPUS_RERANK_RUNTIME_REVISION: transformers-4.57.3-sentence-transformers-5.4.0-school-fr-prompt-ef9a802c
+
+volumes:
+  litellm-db:
+  qdrant-data:
+
+secrets:
+  litellm-admin-key:
+    file: ${LITELLM_ADMIN_KEY_FILE:?set a private owner-only key file}

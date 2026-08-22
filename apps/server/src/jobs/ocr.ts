@@ -1,17 +1,27 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
+import { files, materialDocuments, type OcrMetaV1 } from "../db/schema";
 import {
-  files,
-  materialArtifacts,
-  materialDocuments,
-  type OcrMetaV1,
-} from "../db/schema";
-import { MISTRAL_OCR_MODEL, runMistralOcr } from "../lib/ocr";
+  MISTRAL_OCR_MODEL,
+  resolveOcrProvider,
+  runMistralOcr,
+  type OcrProvider,
+} from "../lib/ocr";
+import {
+  isInternalOwnedFileProvider,
+  readOwnedFileBytes,
+} from "../lib/owned-file-storage";
 import { fileAccessUrl } from "../lib/storage";
 import { readStorageObject } from "../lib/storage-backend";
-import { newId } from "../lib/id";
+import { NonRetryableJobError, type JobExecutionIdentity } from "../lib/jobs";
 import { canonicalJson, sha256 } from "../search/values";
+import { requireUserJobExecution } from "./job-authority";
+import {
+  claimMaterialArtifactGeneration,
+  failMaterialArtifactGeneration,
+  publishMaterialArtifactGeneration,
+} from "./material-artifact-generation";
 
 const payloadSchema = z.object({ documentId: z.string().min(1) }).strict();
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
@@ -46,14 +56,26 @@ export async function runOcrDocumentJob(
   options: {
     fetch?: Fetcher;
     runOcr?: typeof runMistralOcr;
+    resolveProvider?: (userId: string) => Promise<OcrProvider>;
     fileAccessUrl?: typeof fileAccessUrl;
     readStorageObject?: typeof readStorageObject;
+    readOwnedFile?: typeof readOwnedFileBytes;
     now?: () => number;
     operationId?: string;
+    attempt?: number;
+    job?: JobExecutionIdentity;
     signal?: AbortSignal;
   } = {},
 ) {
   const { documentId } = payloadSchema.parse(payload);
+  const authority = await requireUserJobExecution(
+    options.job,
+    OCR_JOB_KIND,
+    (storedPayload) => {
+      const parsed = payloadSchema.safeParse(storedPayload);
+      return parsed.success && parsed.data.documentId === documentId;
+    },
+  );
   const [source] = await db
     .select({ document: materialDocuments, file: files })
     .from(materialDocuments)
@@ -65,66 +87,57 @@ export async function runOcrDocumentJob(
         eq(files.status, "stored"),
       ),
     )
-    .where(eq(materialDocuments.id, documentId))
+    .where(
+      and(
+        eq(materialDocuments.id, documentId),
+        authority ? eq(materialDocuments.userId, authority.userId) : undefined,
+      ),
+    )
     .limit(1);
   if (!source || source.document.sourceType !== "file") {
-    throw new Error("OCR source document not found");
+    throw authority
+      ? new NonRetryableJobError("OCR source document not found")
+      : new Error("OCR source document not found");
   }
   if (!isOcrMimeType(source.file.mimeType)) {
     throw new Error("OCR accepts only PDF, PNG, JPEG and WebP documents");
   }
 
-  const now = new Date();
-  const [artifact] = await db
-    .insert(materialArtifacts)
-    .values({
-      documentId,
-      kind: "ocr-markdown",
-      status: "pending",
-      content: null,
-      metaVersion: 1,
-      metaJson: null,
-      error: null,
-      userId: source.document.userId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [materialArtifacts.documentId, materialArtifacts.kind],
-      set: {
-        status: "pending",
-        content: null,
-        metaVersion: 1,
-        metaJson: null,
-        error: null,
-        updatedAt: now,
-      },
-    })
-    .returning({ id: materialArtifacts.id });
-  if (!artifact) throw new Error("OCR artifact could not be initialized");
+  const generation = await claimMaterialArtifactGeneration({
+    documentId,
+    kind: "ocr-markdown",
+    userId: source.document.userId,
+    runToken: authority?.runToken ?? `manual:${crypto.randomUUID()}`,
+    job: authority,
+  });
 
   const clock = options.now ?? Date.now;
   const startedAt = clock();
   try {
     let bytes: ArrayBuffer;
-    if (source.file.provider === "local" || source.file.provider === "s3") {
-      bytes = await (options.readStorageObject ?? readStorageObject)(
-        source.file.provider,
-        source.file.storageKey,
-        { signal: options.signal, maxBytes: MAX_OCR_SOURCE_BYTES },
+    if (
+      isInternalOwnedFileProvider(source.file.provider) ||
+      options.readOwnedFile
+    ) {
+      bytes = await (options.readOwnedFile ?? readOwnedFileBytes)(
+        source.document.userId,
+        source.file,
+        {
+          signal: options.signal,
+          maxBytes: MAX_OCR_SOURCE_BYTES,
+          dependencies: options.readStorageObject
+            ? { readManagedObject: options.readStorageObject }
+            : undefined,
+        },
       );
     } else {
-      if (
-        source.file.provider !== "uploadthing" &&
-        !options.fetch &&
-        !options.fileAccessUrl
-      ) {
+      if (!options.fetch || !options.fileAccessUrl) {
         throw new Error("OCR source uses an unsupported storage provider");
       }
-      const fetcher = options.fetch ?? fetch;
-      const sourceUrl = await (options.fileAccessUrl ?? fileAccessUrl)(
-        source.file,
-      );
-      const response = await fetcher(sourceUrl, { signal: options.signal });
+      const sourceUrl = await options.fileAccessUrl(source.file);
+      const response = await options.fetch(sourceUrl, {
+        signal: options.signal,
+      });
       if (!response.ok) {
         throw new Error(`Stored material download returned ${response.status}`);
       }
@@ -134,85 +147,63 @@ export async function runOcrDocumentJob(
       }
     }
     const blob = new Blob([bytes], { type: source.file.mimeType });
-    const result = await (options.runOcr ?? runMistralOcr)(
-      source.document.userId,
-      { blob, name: source.document.title },
-      { operationId: options.operationId, signal: options.signal },
-    );
+    const provider = options.runOcr
+      ? null
+      : await (options.resolveProvider ?? resolveOcrProvider)(
+          source.document.userId,
+        );
+    const result = options.runOcr
+      ? await options.runOcr(
+          source.document.userId,
+          { blob, name: source.document.title },
+          {
+            operationId: options.operationId,
+            attempt: options.attempt,
+            signal: options.signal,
+          },
+        )
+      : await provider!.run(
+          { blob, name: source.document.title },
+          {
+            operationId: options.operationId,
+            attempt: options.attempt,
+            signal: options.signal,
+          },
+        );
     if (
       new TextEncoder().encode(result.markdown).byteLength > MAX_MARKDOWN_BYTES
     ) {
       throw new Error("OCR transcript is larger than 2 MiB");
     }
     const meta: OcrMetaV1 = {
-      model: MISTRAL_OCR_MODEL,
+      model: provider?.model ?? MISTRAL_OCR_MODEL,
+      provider: provider?.id ?? "mistral",
       pageCount: result.pageCount,
       providerFileId: result.providerFileId,
       durationMs: Math.max(0, clock() - startedAt),
     };
-    const publishedAt = Math.floor(Date.now() / 1_000);
-    await db.$client.batch(
-      [
-        {
-          sql: `DELETE FROM material_artifact_segments WHERE artifactId = ?`,
-          args: [artifact.id],
-        },
-        ...(result.pages ?? []).map((page, ordinal) => ({
-          sql: `
-            INSERT INTO material_artifact_segments (
-              id, artifactId, ordinal, text, locatorJson, contentHash
-            ) VALUES (?, ?, ?, ?, ?, ?)
-          `,
-          args: [
-            newId("maseg"),
-            artifact.id,
-            ordinal,
-            page.markdown,
-            canonicalJson({ kind: "pdf", page: page.providerIndex + 1 }),
-            sha256(page.markdown),
-          ],
-        })),
-        {
-          sql: `
-            UPDATE material_artifacts
-            SET status = 'ready', content = ?, metaVersion = 1,
-              metaJson = ?, error = NULL, updatedAt = ?
-            WHERE id = ? AND status = 'pending'
-          `,
-          args: [
-            result.markdown,
-            JSON.stringify(meta),
-            publishedAt,
-            artifact.id,
-          ],
-        },
-        {
-          sql: `
-            INSERT INTO material_artifact_segments (
-              id, artifactId, ordinal, text, locatorJson, contentHash
-            )
-            SELECT NULL, ?, 0, '', '{}', ? WHERE changes() = 0
-          `,
-          args: [artifact.id, sha256("")],
-        },
-      ],
-      "write",
-    );
+    await publishMaterialArtifactGeneration({
+      generation,
+      content: result.markdown,
+      metaJson: JSON.stringify(meta),
+      segments: (result.pages ?? []).map((page) => ({
+        text: page.markdown,
+        locatorJson: canonicalJson({
+          kind: "pdf",
+          page: page.providerIndex + 1,
+        }),
+        contentHash: sha256(page.markdown),
+      })),
+    });
     return {
-      artifactId: artifact.id,
+      artifactId: generation.artifactId,
       pageCount: result.pageCount,
     };
   } catch (error) {
-    await db
-      .update(materialArtifacts)
-      .set({
-        status: "failed",
-        content: null,
-        metaJson: null,
-        error: errorMessage(error),
-        updatedAt: new Date(),
-      })
-      .where(eq(materialArtifacts.id, artifact.id));
+    await failMaterialArtifactGeneration({
+      generation,
+      error: errorMessage(error),
+    });
     throw error;
   }
 }

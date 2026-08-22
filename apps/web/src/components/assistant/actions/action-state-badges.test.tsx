@@ -1,72 +1,55 @@
 import { expect, test } from "bun:test"
-import { renderToStaticMarkup } from "react-dom/server"
-import { ActionCard } from "./action-card"
-import { ActionStateBadges } from "./action-state-badges"
+import {
+  actionStatePresentation,
+  resourceHref,
+  undoStatePresentation,
+} from "./action-model"
 import { actionFixture } from "./action-test-fixture"
 
-test("renders immutable execution and derived undo status as separate badges", () => {
-  const html = renderToStaticMarkup(
-    <ActionStateBadges
-      action={actionFixture({
-        status: "completed",
-        undoState: "partially-compensated",
-      })}
-    />
-  )
+async function source(fileName: string) {
+  return Bun.file(new URL(fileName, import.meta.url)).text()
+}
 
-  expect(html).toContain('aria-label="Execution: Succeeded"')
-  expect(html).toContain('data-action-state="succeeded"')
-  expect(html).toContain('aria-label="Undo: Partially undone"')
-  expect(html).toContain('data-undo-state="partially-compensated"')
+test("keeps immutable execution and derived undo status separate", () => {
+  const action = actionFixture({
+    status: "completed",
+    undoState: "partially-compensated",
+  })
+  expect(actionStatePresentation(action)).toMatchObject({
+    state: "succeeded",
+    label: "Succeeded",
+  })
+  expect(undoStatePresentation(action)).toMatchObject({
+    label: "Partially undone",
+    attention: true,
+  })
 })
 
-test("exposes the requested compensation_failed UI state without relabelling execution", () => {
-  const html = renderToStaticMarkup(
-    <ActionStateBadges
-      action={actionFixture({ status: "completed", undoState: "failed" })}
-    />
-  )
-
-  expect(html).toContain('data-action-state="compensation_failed"')
-  expect(html).toContain('aria-label="Execution: Succeeded"')
-  expect(html).toContain('aria-label="Undo: Compensation failed"')
+test("exposes compensation failure without relabelling execution", () => {
+  const action = actionFixture({ status: "completed", undoState: "failed" })
+  expect(actionStatePresentation(action)).toMatchObject({
+    state: "compensation_failed",
+    label: "Succeeded",
+  })
+  expect(undoStatePresentation(action).label).toBe("Compensation failed")
 })
 
-test("renders an inspectable action card with an affected-resource link", () => {
-  const html = renderToStaticMarkup(
-    <ActionCard action={actionFixture()} compact />
+test("keeps inspectable resources and localized action controls", async () => {
+  const [card, approval, badges] = await Promise.all([
+    source("./action-card.tsx"),
+    source("./action-approval.tsx"),
+    source("./action-state-badges.tsx"),
+  ])
+
+  expect(resourceHref(actionFixture().resources[0]!)).toBe(
+    "/planning/tasks/task-1/edit"
   )
-
-  expect(html).toContain('data-action-id="action-1"')
-  expect(html).toContain("Create a personal task")
-  expect(html).toContain('aria-label="Affected resources"')
-  expect(html).toContain('href="/planning/tasks/task-1/edit"')
-  expect(html).toContain("One recoverable task will be added")
-})
-
-test("renders concrete confirm and reject controls for a pending approval", () => {
-  const html = renderToStaticMarkup(
-    <ActionCard
-      compact
-      action={actionFixture({
-        status: "awaiting-approval",
-        undoState: "not-applicable",
-        approval: {
-          id: "approval-1",
-          actionId: "action-1",
-          state: "pending",
-          argumentsHash: "a".repeat(64),
-          previewHash: "a".repeat(64),
-          expiresAt: "2099-08-22T10:10:00.000Z",
-          resolvedAt: null,
-        },
-      })}
-      operations={{ onApprovalDecision: () => undefined }}
-    />
-  )
-
-  expect(html).toContain("Approval required")
-  expect(html).toContain("Confirm and continue")
-  expect(html).toContain("Reject")
-  expect(html).toContain("One recoverable task will be added")
+  expect(card).toContain("data-action-id={action.id}")
+  expect(card).toContain('t("Affected resources")')
+  expect(card).toContain('t("Preview undo")')
+  expect(approval).toContain('t("Approval required")')
+  expect(approval).toContain('t("Confirm and continue")')
+  expect(approval).toContain('t("Reject")')
+  expect(badges).toContain('t("Execution: {state}"')
+  expect(badges).toContain('t("Undo: {state}"')
 })

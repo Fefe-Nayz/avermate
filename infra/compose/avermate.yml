@@ -12,6 +12,8 @@ x-node-base: &node-base
     interval: 5s
     timeout: 2s
     retries: 12
+  ports:
+    - "127.0.0.1:${AVERMATE_NODE_SETUP_PORT:-5188}:5189"
   volumes:
     - node-data:/data
 
@@ -19,15 +21,20 @@ services:
   node-dev-zero:
     <<: *node-base
     profiles: [dev-zero]
+    environment:
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
 
   node-lite:
     <<: *node-base
     profiles: [node-lite]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/node-lite.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/node-lite.yaml:/config/profile.yaml:ro
 
   # The S3 daemon path is proven against the disposable Garage conformance
   # harness. Its manifest still advertises only the operations it implements.
@@ -35,10 +42,12 @@ services:
     <<: *node-base
     profiles: [node-storage]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/node-storage.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/node-storage.yaml:/config/profile.yaml:ro
     secrets:
       - source: garage-s3
         target: garage-s3.env
@@ -71,19 +80,23 @@ services:
     <<: *node-base
     profiles: [node-creator]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/node-creator.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/node-creator.yaml:/config/profile.yaml:ro
 
   node-local-gpu:
     <<: *node-base
     profiles: [node-local-gpu]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/node-local-gpu.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/node-local-gpu.yaml:/config/profile.yaml:ro
 
   ollama:
     profiles: [node-local-gpu]
@@ -100,19 +113,23 @@ services:
     <<: *node-base
     profiles: [node-observable]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/node-observable.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/node-observable.yaml:/config/profile.yaml:ro
 
   node-full:
     <<: *node-base
     profiles: [full-self-host]
     environment:
-      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+      AVERMATE_NODE_CONFIG: /data/node/avermate-node.yaml
+      AVERMATE_NODE_CONFIG_TEMPLATE: /config/profile.yaml
+      AVERMATE_NODE_CONTAINER_BRIDGE_PORT: "5189"
     volumes:
       - node-data:/data
-      - ../node/profiles/full-self-host.yaml:/config/avermate-node.yaml:ro
+      - ../node/profiles/full-self-host.yaml:/config/profile.yaml:ro
     dns:
       - 127.0.0.1
     networks:
@@ -140,9 +157,20 @@ services:
       LOCAL_UPLOAD_DIR: /data/uploads
       DISABLE_EMAIL: "true"
       DISABLE_JOBS: "false"
-      DISABLE_OCR: "true"
-      DISABLE_TRANSCRIPTION: "true"
+      OCR_PROVIDER: node
+      TRANSCRIPTION_PROVIDER: node
+      DISABLE_OCR: "false"
+      DISABLE_TRANSCRIPTION: "false"
       DISABLE_TTS: "true"
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      TRANSCRIPTION_API_KEY: ${TRANSCRIPTION_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      INFERENCE_PROVIDER: ${INFERENCE_PROVIDER:-}
+      INFERENCE_API_KEY: ${INFERENCE_API_KEY:-}
       TECTONIC_ONLY_CACHED: "true"
       HTTP_PROXY: ${PLAN032_EGRESS_PROXY:-}
       HTTPS_PROXY: ${PLAN032_EGRESS_PROXY:-}

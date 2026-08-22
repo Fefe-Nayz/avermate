@@ -1,4 +1,5 @@
 import type {
+  ConversationPlacement,
   AppendConversationEvent,
   ConversationRunRecord,
   GetConversationRun,
@@ -10,6 +11,7 @@ import type {
   LexicalSearchCapabilities,
   LexicalVersionInput,
   OwnedLexicalQuery,
+  StagedContentChunk,
 } from "./corpus";
 import type { StoredConversationEvent } from "./events";
 import type {
@@ -34,8 +36,34 @@ import type {
   SandboxPreflightInput,
   SandboxPreflightResult,
   SandboxProviderId,
+  SandboxRuntimeCheckpointCapabilities,
+  SandboxRuntimeCheckpointCompatibilityV1,
+  SandboxRuntimeCheckpointRefV1,
   SandboxWorkspaceSnapshotRef,
 } from "./sandbox";
+import type { ObjectStorageMetadata, OwnedObjectRef } from "./storage";
+import type { NodeWireBytes } from "./node-operations";
+
+export type NodeProviderFetchPurpose = "embedding" | "rerank";
+
+/**
+ * A deliberately tiny HTTP envelope for Node-private inference services.
+ * The Node validates the URL against its own configured endpoint, strips all
+ * Core credentials and injects only its local secret reference.
+ */
+export type NodeProviderFetchRequest = {
+  purpose: NodeProviderFetchPurpose;
+  url: string;
+  method: "POST";
+  headers: Readonly<Record<string, string>>;
+  body: NodeWireBytes;
+};
+
+export type NodeProviderFetchResponse = {
+  status: number;
+  headers: Readonly<Record<string, string>>;
+  body: NodeWireBytes;
+};
 
 /**
  * Authenticated Core-to-Node transports for the provider contracts.
@@ -50,6 +78,16 @@ export interface NodeTransportAvailability {
 }
 
 export interface NodeConversationTransport extends NodeTransportAvailability {
+  provisionConversationRun?(input: {
+    nodeId: string;
+    ownerId: string;
+    run: {
+      threadId: string;
+      branchId: string;
+      runId: string;
+      placement: ConversationPlacement;
+    };
+  }): Promise<ConversationRunRecord>;
   appendConversationEvent(input: {
     nodeId: string;
     ownerId: string;
@@ -65,6 +103,14 @@ export interface NodeConversationTransport extends NodeTransportAvailability {
     ownerId: string;
     run: GetConversationRun;
   }): Promise<ConversationRunRecord | null>;
+  exportNodeConversations?(input: {
+    nodeId: string;
+    ownerId: string;
+  }): Promise<unknown>;
+  deleteNodeConversations?(input: {
+    nodeId: string;
+    ownerId: string;
+  }): Promise<{ deletedRuns: number; deletedEvents: number }>;
 }
 
 /** A node lexical adapter is owner-bound because remove/verify lack owner IDs. */
@@ -88,10 +134,52 @@ export interface NodeLexicalSearchTransport extends NodeTransportAvailability {
     ownerId: string;
     query: OwnedLexicalQuery;
   }): Promise<LexicalCandidate[]>;
+  getLexicalChunks(input: {
+    nodeId: string;
+    ownerId: string;
+    chunkIds: string[];
+  }): Promise<StagedContentChunk[]>;
   verifyLexical(input: {
     nodeId: string;
     ownerId: string;
   }): Promise<LexicalConsistencyReport>;
+  exportLexicalOwner(input: {
+    nodeId: string;
+    ownerId: string;
+  }): Promise<LexicalVersionInput[]>;
+  deleteLexicalOwner(input: {
+    nodeId: string;
+    ownerId: string;
+  }): Promise<{ deletedVersions: number }>;
+}
+
+export interface NodeProviderHttpTransport extends NodeTransportAvailability {
+  fetchNodeProvider(input: {
+    nodeId: string;
+    ownerId: string;
+    request: NodeProviderFetchRequest;
+    signal?: AbortSignal;
+  }): Promise<NodeProviderFetchResponse>;
+}
+
+/**
+ * Read-only, owner-bound object lane used to adopt a reviewed Node result into
+ * Core. Mutating storage operations remain on the dedicated storage protocol.
+ */
+export interface NodeObjectReadTransport extends NodeTransportAvailability {
+  statNodeObject(input: {
+    nodeId: string;
+    ownerId: string;
+    ref: OwnedObjectRef;
+    signal?: AbortSignal;
+  }): Promise<ObjectStorageMetadata | null>;
+  readNodeObject(input: {
+    nodeId: string;
+    ownerId: string;
+    ref: OwnedObjectRef;
+    maxBytes: number;
+    signal?: AbortSignal;
+  }): AsyncIterable<Uint8Array>;
 }
 
 export interface NodeModelGatewayTransport extends NodeTransportAvailability {
@@ -185,5 +273,33 @@ export interface NodeSandboxTransport extends NodeTransportAvailability {
     ownerId: string;
     providerId: SandboxProviderId;
     handle: SandboxHandle;
+  }): Promise<void>;
+  sandboxRuntimeCheckpointCapabilities(input: {
+    nodeId: string;
+    ownerId: string;
+    providerId: SandboxProviderId;
+  }): Promise<SandboxRuntimeCheckpointCapabilities>;
+  captureSandboxRuntimeCheckpoint(input: {
+    nodeId: string;
+    ownerId: string;
+    providerId: SandboxProviderId;
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: string;
+  }): Promise<SandboxRuntimeCheckpointRefV1>;
+  restoreSandboxRuntimeCheckpoint(input: {
+    nodeId: string;
+    ownerId: string;
+    providerId: SandboxProviderId;
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }): Promise<SandboxHandle>;
+  deleteSandboxRuntimeCheckpoint(input: {
+    nodeId: string;
+    ownerId: string;
+    providerId: SandboxProviderId;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
   }): Promise<void>;
 }

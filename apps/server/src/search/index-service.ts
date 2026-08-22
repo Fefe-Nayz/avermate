@@ -6,10 +6,12 @@ import type {
 import { db } from "../db";
 import { deleteFile, storeFile } from "../lib/storage";
 import { CoreCorpusStore } from "./core-corpus-store";
+import { routedCorpusStore } from "./routed-corpus-store";
 import {
   createCoreSourceRegistry,
   stagedVersionFromSnapshot,
   type IndexableSourceRegistry,
+  type SourceExtractionSelector,
 } from "./adapters";
 import { jsonValue } from "./values";
 import type { PendingContentAsset } from "./assets";
@@ -20,7 +22,8 @@ type SqlClient = Pick<Client, "execute" | "batch" | "transaction">;
 export class CorpusIndexService {
   constructor(
     private readonly client: SqlClient = db.$client,
-    readonly store = new CoreCorpusStore(client),
+    readonly store: CoreCorpusStore =
+      client === db.$client ? routedCorpusStore : new CoreCorpusStore(client),
     readonly registry: IndexableSourceRegistry = createCoreSourceRegistry(
       client,
     ),
@@ -38,7 +41,11 @@ export class CorpusIndexService {
 
   async indexSource(
     identity: OwnedSourceIdentity,
-    options: { signal?: AbortSignal } = {},
+    options: {
+      signal?: AbortSignal;
+      selector?: SourceExtractionSelector;
+      projectItemId?: string;
+    } = {},
   ): Promise<CommittedVersionRef> {
     options.signal?.throwIfAborted();
     const source = await this.ensureRegistered(identity);
@@ -49,7 +56,7 @@ export class CorpusIndexService {
     const createdAssetFileIds: string[] = [];
     let published = false;
     try {
-      const snapshot = await this.registry.extract(identity);
+      const snapshot = await this.registry.extract(identity, options.selector);
       options.signal?.throwIfAborted();
       const assets = await this.prepareAssets(
         identity.ownerId,
@@ -74,7 +81,11 @@ export class CorpusIndexService {
         assets,
       });
       published = true;
-      await this.snapshotProjectReferences(identity, committed.versionId);
+      await this.snapshotProjectReferences(
+        identity,
+        committed.versionId,
+        options.projectItemId,
+      );
       return committed;
     } catch (error) {
       if (!published) {
@@ -144,10 +155,11 @@ export class CorpusIndexService {
   private async snapshotProjectReferences(
     identity: OwnedSourceIdentity,
     versionId: string,
+    selectedProjectItemId?: string,
   ) {
     const items = await this.client.execute({
       sql: `
-        SELECT items.id
+        SELECT items.id, items.trackingMode, items.sourceVersionId
         FROM study_project_items AS items
         JOIN study_projects AS projects ON projects.id = items.projectId
         WHERE projects.userId = ? AND items.kind = ? AND items.referenceId = ?
@@ -162,10 +174,21 @@ export class CorpusIndexService {
     const chunk = first.rows[0];
     if (!chunk) return;
     for (const item of items.rows) {
+      const itemId = String(item.id);
+      const followsHead = item.trackingMode === "follow-head";
+      const isSelectedPinnedItem =
+        item.trackingMode === "pinned" && selectedProjectItemId === itemId;
+      if (!followsHead && !isSelectedPinnedItem) continue;
+      const updated = await this.client.execute({
+        sql: `UPDATE study_project_items SET sourceVersionId = ?
+          WHERE id = ? AND (trackingMode = 'follow-head' OR id = ?)`,
+        args: [versionId, itemId, selectedProjectItemId ?? ""],
+      });
+      if (Number(updated.rowsAffected) !== 1) continue;
       await this.store.createReference({
         ownerId: identity.ownerId,
         ownerKind: "project-item",
-        ownerIdWithinKind: String(item.id),
+        ownerIdWithinKind: itemId,
         sourceVersionId: versionId,
         chunkId: null,
         locator: jsonValue(chunk.locatorJson),

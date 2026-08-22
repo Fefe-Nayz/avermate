@@ -53,6 +53,7 @@ export const assistantToolSources = sqliteTable(
     endpointUrl: text().notNull(),
     endpointOrigin: text().notNull(),
     placement: text().$type<CustomMcpPlacement>().notNull(),
+    placementRef: text(),
     authKind: text().$type<CustomMcpAuthKind>().notNull(),
     sealedCredential: text(),
     credentialHint: text(),
@@ -78,7 +79,7 @@ export const assistantToolSources = sqliteTable(
     ),
     check(
       "assistant_tool_sources_placement_check",
-      sql`${table.placement} in ('hosted-core', 'node')`
+      sql`(${table.placement} = 'hosted-core' and ${table.placementRef} is null) or (${table.placement} = 'node' and ${table.placementRef} is not null)`
     ),
     check(
       "assistant_tool_sources_auth_check",

@@ -19,6 +19,96 @@ function jsonResponse(value: unknown, status = 200) {
 }
 
 describe("Mistral OCR client", () => {
+  test("resolves the exact Mistral OCR credential route", async () => {
+    const { runMistralOcr } = await import("./ocr");
+    const routes: string[] = [];
+    let calls = 0;
+    await runMistralOcr(
+      "ocr-key-owner",
+      { blob: new Blob(["pdf"]), name: "lesson.pdf" },
+      {
+        resolveCredential: async (_ownerId, kind, provider) => {
+          routes.push(`${kind}:${provider}`);
+          return {
+            source: "user" as const,
+            key: "exact-mistral-ocr-key",
+            invalidationToken: "sealed-exact-mistral-ocr-key",
+          };
+        },
+        fetch: async (_url, init) => {
+          expect(new Headers(init?.headers).get("authorization")).toBe(
+            "Bearer exact-mistral-ocr-key",
+          );
+          calls += 1;
+          return calls === 1
+            ? jsonResponse({ id: "ocr-file" })
+            : jsonResponse({ pages: [{ index: 0, markdown: "Cours" }] });
+        },
+      },
+    );
+    expect(routes).toEqual(["mistral:mistral"]);
+  });
+
+  test("routes selected Node OCR with exact revision and never falls back", async () => {
+    const { resolveOcrProvider } = await import("./ocr");
+    let nodeCalls = 0;
+    let mistralCalls = 0;
+    const provider = await resolveOcrProvider(
+      "ocr-node-owner",
+      {},
+      {
+        selectNode: async () => ({
+          selected: true,
+          nodeId: "node-ocr",
+          configRevision: `sha256:${"a".repeat(64)}`,
+          profile: {} as never,
+          modelId: "tesseract-ocr",
+          modelRevision: "tesseract-5.5.1-fra-eng",
+        }),
+        runNode: async (_ownerId, _file, options) => {
+          nodeCalls += 1;
+          expect(options?.operationId).toBe("copy-node-op");
+          return {
+            markdown: "Local OCR",
+            pageCount: 1,
+            providerFileId: "node:ocr",
+          };
+        },
+        runMistral: async () => {
+          mistralCalls += 1;
+          throw new Error("cloud fallback must not run");
+        },
+      },
+    );
+    expect(provider.id).toBe("node-local");
+    expect(provider.model).toBe(
+      "tesseract-ocr@tesseract-5.5.1-fra-eng",
+    );
+    await provider.run(
+      { blob: new Blob(["copy"]), name: "copy.png" },
+      { operationId: "copy-node-op" },
+    );
+    expect(nodeCalls).toBe(1);
+    expect(mistralCalls).toBe(0);
+
+    await expect(
+      resolveOcrProvider(
+        "ocr-node-owner",
+        {},
+        {
+          selectNode: async () => {
+            throw new Error("NODE_OCR_MODEL_NOT_ATTESTED");
+          },
+          runMistral: async () => {
+            mistralCalls += 1;
+            throw new Error("cloud fallback must not run");
+          },
+        },
+      ),
+    ).rejects.toThrow("NODE_OCR_MODEL_NOT_ATTESTED");
+    expect(mistralCalls).toBe(0);
+  });
+
   test("uploads once and concatenates provider pages in the stable format", async () => {
     const { runMistralOcr } = await import("./ocr");
     const calls: Array<{ url: string; init?: RequestInit }> = [];

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "avermate.plan-035.live-evidence",
+  "policyVersion": "plan-035-live-v2",
+  "plan": "035",
+  "templateOnly": true,
+  "release": {
+    "revision": "<exact-release-revision>",
+    "checkoutDigest": "sha256:<checkout-tree-digest>"
+  },
+  "deployment": {
+    "environmentDigest": "sha256:<environment-digest>",
+    "configurationArtifactPath": "redacted-deployment-config.json",
+    "configurationDigest": "sha256:<configuration-artifact-digest>"
+  },
+  "expectations": {
+    "qualityPolicyVersion": "assistant-quality-v2",
+    "minimumAnswerableQuestions": 40,
+    "minimumUnanswerableQuestions": 20,
+    "minimumModelConfigurations": 2,
+    "realProvidersRequired": true
+  },
+  "evidence": []
+}

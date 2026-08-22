@@ -37,6 +37,13 @@ export const MCP_SCOPE_GROUPS = [
       { scope: "avermate:documents.write", required: false },
     ],
   },
+  {
+    id: "learning",
+    scopes: [
+      { scope: "avermate:learning.read", required: false },
+      { scope: "avermate:learning.write", required: false },
+    ],
+  },
 ] as const
 
 export type McpScopeGroup = (typeof MCP_SCOPE_GROUPS)[number]["id"]
@@ -49,4 +56,5 @@ export const MCP_SCOPE_OPTIONS = [
   ...MCP_SCOPE_GROUPS[2].scopes,
   ...MCP_SCOPE_GROUPS[3].scopes,
   ...MCP_SCOPE_GROUPS[4].scopes,
+  ...MCP_SCOPE_GROUPS[5].scopes,
 ] as const

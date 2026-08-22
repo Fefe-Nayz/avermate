@@ -212,9 +212,9 @@ export class CoreCorpusStore implements CorpusStore {
     if (!source || source.id !== input.sourceId) {
       throw new Error("The staged source identity is not owned");
     }
-    if (source.placement.kind !== "core") {
-      throw new Error("CoreCorpusStore cannot stage a node-placed source");
-    }
+    // Extraction metadata is committed in Core for authorization/citation
+    // integrity. RoutedCorpusStore publishes the lexical index to the selected
+    // Core or Node plane and removes the non-selected searchable projection.
     const ordinals = new Set(input.chunks.map((chunk) => chunk.ordinal));
     if (ordinals.size !== input.chunks.length) {
       throw new Error("Staged chunk ordinals must be unique");

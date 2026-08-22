@@ -14,7 +14,9 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { useExtracted } from "next-intl"
 import { toast } from "sonner"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { orpc, rpc } from "@/lib/orpc"
 import { ActionApprovalDialog } from "./action-approval"
 import type { ActionCardOperations } from "./action-card"
@@ -32,10 +34,8 @@ const ActionInteractionContext = createContext<ActionInteractionValue | null>(
   null
 )
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : "The action request failed."
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 export function useAssistantToolAction(toolCallId: string | undefined) {
@@ -63,6 +63,8 @@ export function ActionInteractionProvider({
   autoPromptApprovals?: boolean
   onRefresh?: () => Promise<unknown>
 }) {
+  const t = useExtracted()
+  const isOnline = useOnlineStatus()
   const queryClient = useQueryClient()
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [dismissedApprovals, setDismissedApprovals] = useState<Set<string>>(
@@ -105,7 +107,7 @@ export function ActionInteractionProvider({
         limit: 250,
       },
     }),
-    enabled: Boolean(inspectActionId),
+    enabled: Boolean(inspectActionId) && isOnline,
   })
 
   const pendingApproval = actions.find(
@@ -129,7 +131,13 @@ export function ActionInteractionProvider({
   const resolveApproval = useCallback(
     async (action: AgentActionDto, decision: "approve" | "reject") => {
       const approval = action.approval
-      if (!approval || approval.state !== "pending" || pendingActionId) return
+      if (
+        !approval ||
+        approval.state !== "pending" ||
+        pendingActionId ||
+        !isOnline
+      )
+        return
       setPendingActionId(action.id)
       try {
         await rpc.actions.approvals.resolve({
@@ -141,22 +149,30 @@ export function ActionInteractionProvider({
         await refreshActions()
         toast.success(
           decision === "approve"
-            ? "Action approved. Execution resumed from the exact reservation."
-            : "Action rejected. Nothing was executed."
+            ? t(
+                "Action approved. Execution resumed from the exact reservation."
+              )
+            : t("Action rejected. Nothing was executed.")
         )
       } catch (error) {
         await refreshActions().catch(() => undefined)
-        toast.error(errorMessage(error))
+        toast.error(errorMessage(error, t("The action request failed.")))
       } finally {
         setPendingActionId(null)
       }
     },
-    [pendingActionId, refreshActions]
+    [isOnline, pendingActionId, refreshActions, t]
   )
 
   const requestUndo = useCallback(
     async (actionIds: readonly string[]) => {
-      if (actionIds.length === 0 || previewPending || executePending) return
+      if (
+        actionIds.length === 0 ||
+        previewPending ||
+        executePending ||
+        !isOnline
+      )
+        return
       const requested = [...new Set(actionIds)]
       setUndoOpen(true)
       setUndoRequestedIds(requested)
@@ -169,13 +185,13 @@ export function ActionInteractionProvider({
         const preview = await rpc.actions.undo.preview({ actionIds: requested })
         setUndoPreview(preview)
       } catch (error) {
-        setUndoError(errorMessage(error))
+        setUndoError(errorMessage(error, t("The action request failed.")))
       } finally {
         setPreviewPending(false)
         setPendingActionId(null)
       }
     },
-    [executePending, previewPending]
+    [executePending, isOnline, previewPending, t]
   )
 
   const executeUndo = useCallback(async () => {
@@ -187,31 +203,60 @@ export function ActionInteractionProvider({
       setUndoResult(result)
       await refreshActions()
       if (result.complete) {
-        toast.success("Undo completed in safe dependency order.")
+        toast.success(t("Undo completed in safe dependency order."))
       } else if (result.partial) {
         toast.warning(
-          "Undo was partial. Completed compensations were kept; unresolved actions need review."
+          t(
+            "Undo was partial. Completed compensations were kept; unresolved actions need review."
+          )
         )
       } else {
-        toast.error("No selected action could be safely undone.")
+        toast.error(t("No selected action could be safely undone."))
       }
     } catch (error) {
-      setUndoError(errorMessage(error))
+      setUndoError(errorMessage(error, t("The action request failed.")))
       await refreshActions().catch(() => undefined)
     } finally {
       setExecutePending(false)
     }
-  }, [executePending, refreshActions, undoPreview])
+  }, [executePending, refreshActions, t, undoPreview])
+
+  const resolveConflictKeepCurrent = useCallback(
+    async (action: AgentActionDto) => {
+      if (pendingActionId || action.undoState !== "conflicted" || !isOnline)
+        return
+      setPendingActionId(action.id)
+      try {
+        await rpc.actions.undo.resolveConflict({
+          actionId: action.id,
+          resolution: "keep-current",
+        })
+        await refreshActions()
+        setInspectActionId(null)
+        toast.success(
+          t("Conflict resolved. The current version was preserved.")
+        )
+      } catch (error) {
+        toast.error(
+          errorMessage(error, t("The conflict could not be resolved."))
+        )
+      } finally {
+        setPendingActionId(null)
+      }
+    },
+    [isOnline, pendingActionId, refreshActions, t]
+  )
 
   const operations = useMemo<ActionCardOperations>(
     () => ({
       pendingActionId,
+      disabled: !isOnline,
       onApprovalDecision: (action, decision) =>
         void resolveApproval(action, decision),
       onInspect: (action) => setInspectActionId(action.id),
       onRequestUndo: (actionIds) => void requestUndo(actionIds),
     }),
-    [pendingActionId, requestUndo, resolveApproval]
+    [isOnline, pendingActionId, requestUndo, resolveApproval]
   )
   const context = useMemo<ActionInteractionValue>(
     () => ({ actionsById, actionsByToolCallId, operations }),
@@ -256,7 +301,13 @@ export function ActionInteractionProvider({
         open={Boolean(inspectAction)}
         events={eventsQuery.data?.events ?? []}
         loading={eventsQuery.isLoading}
-        error={eventsQuery.error ? errorMessage(eventsQuery.error) : null}
+        error={
+          eventsQuery.error
+            ? errorMessage(eventsQuery.error, t("The action request failed."))
+            : null
+        }
+        resolvingConflict={pendingActionId === inspectAction?.id}
+        onKeepCurrent={(action) => void resolveConflictKeepCurrent(action)}
         onOpenChange={(open) => !open && setInspectActionId(null)}
       />
     </ActionInteractionContext.Provider>
@@ -270,9 +321,11 @@ export function AssistantThreadActionProvider({
   threadId: string
   children: ReactNode
 }) {
+  const isOnline = useOnlineStatus()
   const input = useMemo(() => ({ limit: 100, threadId }), [threadId])
   const query = useQuery({
     ...orpc.actions.activity.list.queryOptions({ input }),
+    enabled: isOnline,
     refetchInterval: (current) =>
       current.state.data?.items.some(actionIsLive) ? 1_500 : false,
   })

@@ -513,7 +513,7 @@ describe("tool adapter parity", () => {
     const descriptors = firstPartyToolDescriptors(apiFixture());
     const keys = descriptors.map(({ id, version }) => `${id}@${version}`);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).toHaveLength(62);
+    expect(keys).toHaveLength(77);
     expect(keys.map((key) => key.replace(/@1$/, "")).sort()).toEqual(
       [...BROKERED_MCP_READ_TOOL_IDS, ...BROKERED_MCP_MUTATION_TOOL_IDS].sort(),
     );

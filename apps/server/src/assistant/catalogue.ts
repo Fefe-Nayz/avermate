@@ -106,3 +106,55 @@ export const MISTRAL_INSTANCE_ASSISTANT_MODEL: ModelCapability =
     label: "Mistral Small (clé de cette instance)",
     placement: "core",
   });
+
+export const OPENAI_ASSISTANT_MODEL: ModelCapability =
+  modelCapabilitySchema.parse({
+    modelKey: "openai-gpt-4.1-mini",
+    providerKey: "openai-byok",
+    label: "OpenAI GPT-4.1 mini (clé personnelle)",
+    placement: "direct-byok",
+    modalities: ["text", "image"],
+    supportsTools: true,
+    supportsReasoningSummary: false,
+    contextTokens: 1_000_000,
+    maxOutputTokens: 32_768,
+    estimatedInputPrice: null,
+    estimatedOutputPrice: null,
+    currency: null,
+    contentLeavesPlacement: true,
+    privacyUrl: "https://openai.com/policies/privacy-policy/",
+  });
+
+export const OPENAI_INSTANCE_ASSISTANT_MODEL: ModelCapability =
+  modelCapabilitySchema.parse({
+    ...OPENAI_ASSISTANT_MODEL,
+    providerKey: "openai-instance",
+    label: "OpenAI GPT-4.1 mini (clé de cette instance)",
+    placement: "core",
+  });
+
+export const OPENROUTER_ASSISTANT_MODEL: ModelCapability =
+  modelCapabilitySchema.parse({
+    modelKey: "openrouter-openai-gpt-4.1-mini",
+    providerKey: "openrouter-byok",
+    label: "GPT-4.1 mini via OpenRouter (clé personnelle)",
+    placement: "direct-byok",
+    modalities: ["text", "image"],
+    supportsTools: true,
+    supportsReasoningSummary: false,
+    contextTokens: 1_000_000,
+    maxOutputTokens: 32_768,
+    estimatedInputPrice: null,
+    estimatedOutputPrice: null,
+    currency: null,
+    contentLeavesPlacement: true,
+    privacyUrl: "https://openrouter.ai/privacy",
+  });
+
+export const OPENROUTER_INSTANCE_ASSISTANT_MODEL: ModelCapability =
+  modelCapabilitySchema.parse({
+    ...OPENROUTER_ASSISTANT_MODEL,
+    providerKey: "openrouter-instance",
+    label: "GPT-4.1 mini via OpenRouter (clé de cette instance)",
+    placement: "core",
+  });

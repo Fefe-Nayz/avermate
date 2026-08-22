@@ -25,6 +25,9 @@ COPY apps/sandbox-worker/tsconfig.json apps/sandbox-worker/tsconfig.json
 RUN mkdir -p /out \
   && bun build --compile apps/sandbox-worker/src/browser-capture.ts --outfile /out/browser-capture \
   && bun build --compile apps/sandbox-worker/src/media-build.ts --outfile /out/media-build \
+  && bun build --compile apps/sandbox-worker/src/corpus-derivatives.ts --outfile /out/corpus-derivatives \
+  && bun build --compile apps/sandbox-worker/src/local-ocr.ts --outfile /out/local-ocr \
+  && bun build --compile apps/sandbox-worker/src/local-transcription.ts --outfile /out/local-transcription \
   && bun build --compile apps/sandbox-worker/src/manim-build.ts --outfile /out/manim-build \
   && bun build --compile apps/sandbox-worker/src/latex-build.ts --outfile /out/latex-build \
   && bun build --compile apps/sandbox-worker/src/slides-build.ts --outfile /out/slides-build
@@ -50,6 +53,31 @@ COPY --from=build --chown=65532:65532 /out/browser-capture /opt/avermate/bin/bro
 
 FROM runtime-base AS profile-media
 COPY --from=build --chown=65532:65532 /out/media-build /opt/avermate/bin/media-build
+COPY --from=build --chown=65532:65532 /out/corpus-derivatives /opt/avermate/bin/corpus-derivatives
+
+FROM runtime-base AS profile-video-audio
+COPY --from=build --chown=65532:65532 /out/media-build /opt/avermate/bin/media-build
+
+# The reviewed runtime image for this target contains Poppler, ImageMagick,
+# Tesseract and the pinned fra/eng traineddata files. The worker itself has no
+# network path and never downloads language packs at runtime.
+FROM runtime-base AS profile-ocr
+RUN test -x /usr/bin/pdfinfo \
+  && test -x /usr/bin/pdftoppm \
+  && test -x /usr/bin/magick \
+  && test -x /usr/bin/tesseract \
+  && test -r /usr/share/tesseract-ocr/5/tessdata/fra.traineddata \
+  && test -r /usr/share/tesseract-ocr/5/tessdata/eng.traineddata
+COPY --from=build --chown=65532:65532 /out/local-ocr /opt/avermate/bin/local-ocr
+
+# The reviewed runtime image contains whisper.cpp plus the exact quantized
+# model at /models/whisper-large-v3-turbo-q5_0.bin. Weights are part of the
+# image digest/offline bundle, never fetched by a job.
+FROM runtime-base AS profile-speech-to-text
+RUN test -x /usr/bin/ffprobe \
+  && test -x /usr/bin/whisper-cli \
+  && test -r /models/whisper-large-v3-turbo-q5_0.bin
+COPY --from=build --chown=65532:65532 /out/local-transcription /opt/avermate/bin/local-transcription
 
 FROM runtime-base AS profile-manim
 COPY --from=build --chown=65532:65532 /out/manim-build /opt/avermate/bin/manim-build

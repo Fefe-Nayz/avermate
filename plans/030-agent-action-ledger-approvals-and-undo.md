@@ -26,8 +26,8 @@
 
 ## Status
 
-- **Status**: IMPLEMENTED FOR THE ENABLED BROKERED ROLLOUT — unreviewed mutations
-  remain disabled and baseline/global gates remain
+- **Status**: DONE for the enabled brokered rollout — unreviewed mutations remain
+  deliberately disabled
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: CRITICAL
@@ -41,7 +41,7 @@
 
 The action ledger, approval binding, revision fences, compensation state,
 private sealed continuations and startup crash recovery are implemented for the
-reviewed ToolBroker descriptors. The focused action-ledger suite passes **22
+reviewed ToolBroker descriptors. The focused action-ledger suite passes **24
 tests with 0 failures**, including the real restart window between an
 `executing` claim and completion. Recovery replays only a descriptor explicitly
 marked `idempotent-retry` after exact continuation/principal/tool/version/input
@@ -49,15 +49,18 @@ validation; missing, mismatched or ambiguous work becomes
 `inspect-required` instead of being guessed or silently retried.
 
 This status applies only to enabled brokered mutations. The MCP rollout
-allowlist currently contains `planning.tasks.create`, the reviewed artifact
-commands, and ledger-control operations; unknown/unreviewed legacy writes fail
-closed. They do not count as implemented action-ledger mutations merely because
-their discovery schema still exists. Enabling another write still requires its
-descriptor, risk/approval policy, crash semantics and compensation tests.
+allowlist currently contains `planning.tasks.create`, seven reviewed learning
+commands (`copy.request_analysis`, `copy.review_analysis`, `evidence.decide`,
+`plan.propose`, `plan.apply`, `quiz.generate`, `quiz.start`), the reviewed
+artifact commands, and ledger-control operations. Unknown/unreviewed legacy
+writes fail closed. They do not count as implemented action-ledger mutations
+merely because their discovery schema still exists. Enabling another write
+still requires its descriptor, risk/approval policy, crash semantics and
+compensation tests.
 
-The final repository, migration and clean-clone gates remain pending under plan
-025; this checkpoint does not claim that every historical mutation surface has
-been migrated.
+Plan 025's licence and post-commit clean-clone gates remain independent; this
+checkpoint does not claim that every historical mutation surface has been
+migrated.
 
 ## Scope
 

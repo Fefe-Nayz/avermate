@@ -1,0 +1,8 @@
+# Reviewed compatibility set for Qwen/Qwen3-Reranker-0.6B.
+# The release image is built once, scanned, signed and then referenced by digest.
+torch==2.8.0
+transformers==4.57.3
+sentence-transformers==5.4.0
+fastapi==0.116.1
+uvicorn==0.35.0
+pydantic==2.11.7

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "avermate.live-evidence-result",
+  "plan": "038",
+  "policyVersion": "plan-038-live-v3",
+  "kind": "full-self-host-flow",
+  "status": "passed",
+  "source": "deployed-drill",
+  "releaseRevision": "REPLACE_WITH_EXACT_RELEASE_REVISION",
+  "checkoutDigest": "REPLACE_WITH_CHECKOUT_SHA256",
+  "configurationDigest": "REPLACE_WITH_REDACTED_CONFIG_SHA256",
+  "environmentDigest": "REPLACE_WITH_ENVIRONMENT_SHA256",
+  "runId": "REPLACE_WITH_IMMUTABLE_RUN_ID",
+  "attestor": "REPLACE_WITH_NAMED_OPERATOR_OR_CI_IDENTITY",
+  "observedAt": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+  "expiresAt": "REPLACE_WITH_ISO_8601_TIMESTAMP_WITHIN_31_DAYS",
+  "measurements": {
+    "scenarioIds": [
+      "auth",
+      "academic-crud",
+      "upload-range-delete",
+      "ocr-index-search-rerank-citation",
+      "local-stt-transcription",
+      "chat-stream-branch",
+      "approved-mutation",
+      "sandbox-artifact"
+    ],
+    "scenarioCount": 8,
+    "failedScenarios": 0,
+    "managedFallbacks": 0,
+    "persistedArtifacts": 1,
+    "releaseImagesPinned": true,
+    "localTranscriptionJobs": 1,
+    "localTranscriptionSegments": 1,
+    "localTranscriptionTimestampedSegments": 1,
+    "localTranscriptionModelId": "selfhost/whisper-large-v3-turbo-q5_0",
+    "localTranscriptionModelRevision": "REPLACE_WITH_EXACT_IMMUTABLE_TRANSCRIPTION_MODEL_REVISION",
+    "localTranscriptionSandboxProfileId": "speech-to-text",
+    "localTranscriptionImageDigest": "REPLACE_WITH_SPEECH_TO_TEXT_IMAGE_SHA256",
+    "localTranscriptionCloudFallbacks": 0
+  }
+}

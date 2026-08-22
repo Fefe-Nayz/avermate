@@ -42,6 +42,26 @@ describe("quiz reader boundary", () => {
     expect(isQuizContent(prompts)).toBe(false)
   })
 
+  test("accepts prompt-only v2 quizzes without exposing corrections", () => {
+    const v2Prompts = {
+      version: 2,
+      questions: [
+        {
+          kind: "mcq",
+          id: "q-v2",
+          prompt: "2 + 2 ?",
+          choices: ["3", "4"],
+          answerCount: 1,
+          objectiveIds: ["objective-1"],
+          difficulty: 0.3,
+        },
+      ],
+    }
+
+    expect(isQuizPromptContent(v2Prompts)).toBe(true)
+    expect(isQuizContent(v2Prompts)).toBe(false)
+  })
+
   test("uses the attempt snapshot and never the document metadata to render questions", async () => {
     const view = await source("./quiz-document-view.tsx")
     expect(view).toContain("setQuestions(attempt.questions)")

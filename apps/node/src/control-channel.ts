@@ -21,6 +21,9 @@ export interface OutboundControlConnector {
 }
 
 export type NodeControlHandlers = {
+  onReady?(
+    frame: Extract<NodeControlFrame, { type: "relay-ready" }>,
+  ): Promise<void>;
   onJobOffer?(
     frame: Extract<NodeControlFrame, { type: "job-offer" }>,
   ): Promise<void>;
@@ -29,6 +32,15 @@ export type NodeControlHandlers = {
   ): Promise<void>;
   onJobAck?(
     frame: Extract<NodeControlFrame, { type: "job-ack" }>,
+  ): Promise<void>;
+  onOperationRequest?(
+    frame: Extract<NodeControlFrame, { type: "operation-request" }>,
+  ): Promise<void>;
+  onOperationCancel?(
+    frame: Extract<NodeControlFrame, { type: "operation-cancel" }>,
+  ): Promise<void>;
+  onHeartbeatAck?(
+    frame: Extract<NodeControlFrame, { type: "heartbeat-ack" }>,
   ): Promise<void>;
   onShutdown?(
     frame: Extract<NodeControlFrame, { type: "shutdown" }>,
@@ -66,6 +78,10 @@ export class OutboundNodeControlChannel {
   readonly #manifest: () => Promise<NodeCapabilityManifestV2>;
   readonly #handlers: NodeControlHandlers;
   readonly #backoff: (attempt: number, signal: AbortSignal) => Promise<void>;
+  #active: OutboundControlConnection | null = null;
+  #connectionEpoch: number | null = null;
+  #nodeId: string | null = null;
+  #sendTail: Promise<void> = Promise.resolve();
 
   constructor(input: {
     connector: OutboundControlConnector;
@@ -78,8 +94,7 @@ export class OutboundNodeControlChannel {
     if (!input.credential || input.credential.length < 32) {
       throw new Error("NODE_CHANNEL_CREDENTIAL_INVALID");
     }
-    if (input.url.protocol !== "wss:")
-      throw new Error("NODE_CHANNEL_TLS_REQUIRED");
+    assertControlChannelUrl(input.url);
     this.#connector = input.connector;
     this.#url = input.url;
     this.#credential = input.credential;
@@ -110,12 +125,18 @@ export class OutboundNodeControlChannel {
       credential: this.#credential,
       signal,
     });
+    if (this.#active) throw new Error("NODE_CHANNEL_DUPLICATE_PRIMARY");
+    this.#active = connection;
+    this.#connectionEpoch = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
     try {
+      const manifest = await this.#manifest();
+      this.#nodeId = manifest.nodeId;
       await connection.send(
         encodeControlFrame({
           type: "hello",
           frameId: `frame_${crypto.randomUUID()}`,
-          manifest: await this.#manifest(),
+          manifest,
         }),
       );
       for await (const payload of connection.incoming) {
@@ -131,16 +152,97 @@ export class OutboundNodeControlChannel {
           case "job-ack":
             await this.#handlers.onJobAck?.(frame);
             break;
+          case "relay-ready":
+            if (
+              this.#connectionEpoch !== null ||
+              frame.nodeId !== manifest.nodeId ||
+              frame.acceptedConfigRevision !== manifest.configRevision
+            ) {
+              throw new Error("NODE_RELAY_NEGOTIATION_INVALID");
+            }
+            this.#connectionEpoch = frame.connectionEpoch;
+            heartbeat = setInterval(() => {
+              void this.send({
+                type: "heartbeat",
+                frameId: `frame_${crypto.randomUUID()}`,
+                nodeId: manifest.nodeId,
+                connectionEpoch: frame.connectionEpoch,
+                sentAt: new Date().toISOString(),
+              }).catch(() => undefined);
+            }, frame.heartbeatIntervalMs);
+            await this.#handlers.onReady?.(frame);
+            break;
+          case "operation-request":
+            this.#assertEpoch(frame.nodeId, frame.connectionEpoch);
+            await this.#handlers.onOperationRequest?.(frame);
+            break;
+          case "operation-cancel":
+            this.#assertEpoch(frame.nodeId, frame.connectionEpoch);
+            await this.#handlers.onOperationCancel?.(frame);
+            break;
+          case "heartbeat-ack":
+            this.#assertEpoch(frame.nodeId, frame.connectionEpoch);
+            await this.#handlers.onHeartbeatAck?.(frame);
+            break;
           case "shutdown":
             await this.#handlers.onShutdown?.(frame);
             return;
           case "hello":
           case "health":
+          case "heartbeat":
+          case "job-event":
+          case "operation-result":
             throw new Error("NODE_CONTROL_DIRECTION_INVALID");
         }
       }
     } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      if (this.#active === connection) {
+        this.#active = null;
+        this.#connectionEpoch = null;
+      }
       await connection.close();
+    }
+  }
+
+  get connectionEpoch() {
+    return this.#connectionEpoch;
+  }
+
+  async send(frame: NodeControlFrame) {
+    const allowed = new Set<NodeControlFrame["type"]>([
+      "health",
+      "heartbeat",
+      "job-event",
+      "operation-result",
+    ]);
+    if (!allowed.has(frame.type)) throw new Error("NODE_CONTROL_DIRECTION_INVALID");
+    const connection = this.#active;
+    if (!connection) throw new Error("NODE_CHANNEL_OFFLINE");
+    if (
+      "connectionEpoch" in frame &&
+      frame.connectionEpoch !== this.#connectionEpoch
+    ) {
+      throw new Error("NODE_CONNECTION_EPOCH_FENCED");
+    }
+    const payload = encodeControlFrame(frame);
+    const previous = this.#sendTail;
+    let release!: () => void;
+    this.#sendTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      if (this.#active !== connection) throw new Error("NODE_CHANNEL_OFFLINE");
+      await connection.send(payload);
+    } finally {
+      release();
+    }
+  }
+
+  #assertEpoch(nodeId: string, epoch: number) {
+    if (nodeId !== this.#nodeId || epoch !== this.#connectionEpoch) {
+      throw new Error("NODE_CONNECTION_EPOCH_FENCED");
     }
   }
 
@@ -229,8 +331,7 @@ export class BunWebSocketControlConnector implements OutboundControlConnector {
     credential: string;
     signal: AbortSignal;
   }): Promise<OutboundControlConnection> {
-    if (input.url.protocol !== "wss:")
-      throw new Error("NODE_CHANNEL_TLS_REQUIRED");
+    assertControlChannelUrl(input.url);
     const queue = new AsyncMessageQueue();
     const WebSocketWithHeaders = WebSocket as unknown as {
       new (
@@ -298,7 +399,32 @@ export class BunWebSocketControlConnector implements OutboundControlConnector {
   }
 }
 
-export function controlChannelUrl(coreUrl: string) {
+const LOCAL_COMPOSE_CORE_URL = "http://api:5000";
+const LOCAL_COMPOSE_CONTROL_URL =
+  "ws://api:5000/api/node/control";
+
+function assertControlChannelUrl(url: URL) {
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== "wss:" && url.toString() !== LOCAL_COMPOSE_CONTROL_URL)
+  ) {
+    throw new Error("NODE_CHANNEL_TLS_REQUIRED");
+  }
+}
+
+export function controlChannelUrl(
+  coreUrl: string,
+  transport: "tls" | "local-compose" = "tls",
+) {
+  if (transport === "local-compose") {
+    if (coreUrl.replace(/\/+$/u, "") !== LOCAL_COMPOSE_CORE_URL) {
+      throw new Error("NODE_RELAY_LOCAL_COMPOSE_TARGET_INVALID");
+    }
+    return new URL(LOCAL_COMPOSE_CONTROL_URL);
+  }
   const url = new URL(coreUrl);
   if (url.protocol !== "https:") throw new Error("NODE_RELAY_TLS_REQUIRED");
   url.protocol = "wss:";

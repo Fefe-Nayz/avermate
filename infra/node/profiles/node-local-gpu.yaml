@@ -8,8 +8,6 @@ storage:
   maxObjectBytes: 536870912
   quotaBytes: 21474836480
 relay: {}
-models:
-  enabled: true
-  providerSecretRefs: [/run/secrets/local-model.env]
+models: { enabled: false, providerSecretRefs: [] }
 sandbox: { enabled: true, provider: opensandbox }
 telemetry: { enabled: false }

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { jobs } from "../db/schema";
+import { jobRuntimeMetadata, jobs } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireJob } from "../lib/ownership";
 
@@ -39,7 +39,11 @@ function publicJob(row: typeof jobs.$inferSelect) {
 export const USER_CANCELLABLE_JOB_KINDS = new Set([
   "ingest.link",
   "ocr.document",
+  "grade-copy.analyze",
   "export.documentPptx",
+  "corpus.reembedSpace",
+  "corpus.produceDerivatives",
+  "corpus.evaluateRetrieval",
 ]);
 
 export const jobsRouter = {
@@ -78,8 +82,24 @@ export const jobsRouter = {
       if (!USER_CANCELLABLE_JOB_KINDS.has(existing.kind)) {
         badRequest("This internal job cannot be cancelled");
       }
+      if (existing.status === "running") {
+        const now = new Date();
+        await db
+          .insert(jobRuntimeMetadata)
+          .values({
+            jobId: existing.id,
+            stage: "running",
+            cancellation: "requested",
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: jobRuntimeMetadata.jobId,
+            set: { cancellation: "requested", updatedAt: now },
+          });
+        return { ...publicJob(existing), cancellationRequested: true };
+      }
       if (existing.status !== "queued") {
-        badRequest("Only a queued job can be cancelled");
+        badRequest("Only queued or running work can be cancelled");
       }
       const [cancelled] = await db
         .update(jobs)

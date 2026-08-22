@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@libsql/client";
-import type { StagedContentVersion } from "@avermate/agent-contracts";
+import type {
+  LexicalVersionInput,
+  NodeLexicalSearchTransport,
+  StagedContentVersion,
+} from "@avermate/agent-contracts";
 import { CoreCorpusStore } from "./core-corpus-store";
 import {
   createCoreSourceRegistry,
@@ -14,6 +18,8 @@ import { lexicalCursor, SqliteFts5LexicalSearchBackend } from "./lexical";
 import { createCorpusTestDatabase, seedSource } from "./test-helpers";
 import { normalizeForSearch, sha256 } from "./values";
 import { InMemoryVectorIndex, reciprocalRankFusion } from "./vector";
+import { RoutedCorpusStore } from "./routed-corpus-store";
+import { RoutedCorpusContentReader } from "./corpus-content-reader";
 
 let client: Client;
 let store: CoreCorpusStore;
@@ -306,6 +312,370 @@ describe("CoreCorpusStore placement conformance", () => {
   });
 });
 
+describe("RoutedCorpusStore sealed Node placement", () => {
+  test("migrates Core → Node A → Node B → Core without a readable Core mirror", async () => {
+    const routedOwnerId = "corpus-user-b";
+    const routedSourceId = "corpus-source-routed";
+    const routedOriginId = "routed-material-a";
+    const plaintext = "La dérivée mesure le taux de variation instantané.";
+    await seedSource(client, {
+      id: routedSourceId,
+      ownerId: routedOwnerId,
+      originKind: "material",
+      originId: routedOriginId,
+    });
+
+    let nodeOnline = true;
+    let tamperCandidateIdentity = false;
+    const remote = new Map<string, LexicalVersionInput[]>();
+    const fakeTransport = {
+      async online() {
+        return nodeOnline;
+      },
+      async lexicalCapabilities() {
+        return {
+          available: true,
+          implementation: "fixture-node-lexical",
+          modes: ["terms", "exact"] as const,
+        };
+      },
+      async upsertLexicalVersion(input: {
+        nodeId: string;
+        version: LexicalVersionInput;
+      }) {
+        const versions = remote.get(input.nodeId) ?? [];
+        remote.set(input.nodeId, [
+          ...versions.filter(
+            (entry) => entry.version.id !== input.version.version.id,
+          ),
+          structuredClone(input.version),
+        ]);
+      },
+      async exportLexicalOwner(input: { nodeId: string; ownerId: string }) {
+        return structuredClone(
+          (remote.get(input.nodeId) ?? []).filter(
+            (entry) => entry.ownerId === input.ownerId,
+          ),
+        );
+      },
+      async getLexicalChunks(input: {
+        nodeId: string;
+        ownerId: string;
+        chunkIds: readonly string[];
+      }) {
+        const chunks = (remote.get(input.nodeId) ?? [])
+          .filter((entry) => entry.ownerId === input.ownerId)
+          .flatMap((entry) => entry.chunks);
+        return input.chunkIds.map((chunkId) => {
+          const chunk = chunks.find((candidate) => candidate.chunkId === chunkId);
+          if (!chunk) throw new Error("NODE_LEXICAL_CHUNK_NOT_FOUND");
+          return structuredClone(chunk);
+        });
+      },
+      async searchLexical(input: { nodeId: string; ownerId: string }) {
+        const version = (remote.get(input.nodeId) ?? []).find(
+          (entry) =>
+            entry.ownerId === input.ownerId &&
+            entry.source.id === routedSourceId,
+        );
+        const chunk = version?.chunks[0];
+        if (!version || !chunk?.chunkId) return [];
+        return [{
+          sourceId: tamperCandidateIdentity
+            ? "forged-source"
+            : version.source.id,
+          versionId: version.version.id,
+          chunkId: chunk.chunkId,
+          ordinal: chunk.ordinal,
+          score: 1,
+          snippet: "untrusted Node snippet",
+          locator: chunk.locator,
+          contentHash: chunk.contentHash,
+          evidenceKind: chunk.evidenceKind,
+        }];
+      },
+    } as unknown as NodeLexicalSearchTransport;
+    const routed = new RoutedCorpusStore(
+      client,
+      fakeTransport,
+      "routed-corpus-test-secret-with-at-least-32-bytes",
+    );
+    const stagedVersion: StagedContentVersion = {
+      identity: {
+        ownerId: routedOwnerId,
+        originKind: "material",
+        originId: routedOriginId,
+      },
+      sourceId: routedSourceId,
+      versionKey: "routed-v1",
+      contentHash: sha256(plaintext),
+      extractorId: "fixture",
+      extractorVersion: "1",
+      mimeType: "text/plain",
+      language: "fr",
+      byteSize: plaintext.length,
+      locatorSchemaVersion: 1,
+      metadata: {},
+      chunks: [{
+        ordinal: 0,
+        text: plaintext,
+        normalizedText: normalizeForSearch(plaintext),
+        tokenEstimate: 12,
+        contentHash: sha256(plaintext),
+        locator: { kind: "text", startOffset: 0, endOffset: plaintext.length },
+        headingPath: ["Analyse"],
+        evidenceKind: "native-text",
+      }],
+    };
+    const stage = await routed.stageVersion(stagedVersion);
+    const committed = await routed.commitVersion({
+      ownerId: routedOwnerId,
+      stagingId: stage.stagingId,
+      expectedSourceId: routedSourceId,
+      expectedPreviousVersionId: null,
+    });
+
+    await routed.migratePlacement({
+      ownerId: routedOwnerId,
+      source: { kind: "core", providerId: "core-lexical" },
+      destination: {
+        kind: "node",
+        nodeId: "node-a",
+        providerId: "node-lexical",
+      },
+    });
+    const sealed = (
+      await client.execute({
+        sql: `SELECT chunks.id, chunks.text, chunks.normalizedText,
+            sources.placement, sources.placementRef
+          FROM content_chunks AS chunks
+          JOIN content_versions AS versions ON versions.id = chunks.versionId
+          JOIN content_sources AS sources ON sources.id = versions.sourceId
+          WHERE versions.id = ?`,
+        args: [committed.versionId],
+      })
+    ).rows[0]!;
+    expect(String(sealed.text)).toStartWith("avermate-node-chunk:v1:");
+    expect(String(sealed.text)).not.toContain(plaintext);
+    expect(String(sealed.normalizedText)).not.toContain(plaintext);
+    expect(sealed).toMatchObject({ placement: "node", placementRef: "node-a" });
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT count(*) AS count FROM content_chunks_fts
+            WHERE versionId = ?`,
+          args: [committed.versionId],
+        })
+      ).rows[0]?.count,
+    ).toBe(0);
+    expect(
+      remote
+        .get("node-a")
+        ?.find((entry) => entry.source.id === routedSourceId)
+        ?.chunks[0]?.text,
+    ).toBe(plaintext);
+
+    const reader = new RoutedCorpusContentReader(client, fakeTransport);
+    expect(
+      (await reader.readOwnedChunk(routedOwnerId, String(sealed.id)))?.text,
+    ).toBe(plaintext);
+    const nodeResults = await routed.search({
+      ownerId: routedOwnerId,
+      query: "variation",
+      mode: "terms",
+      projectIds: [],
+      yearIds: [],
+      subjectIds: [],
+      originKinds: ["material"],
+      limit: 5,
+      cursor: null,
+    });
+    expect(nodeResults).toMatchObject([
+      { chunkId: String(sealed.id), snippet: plaintext },
+    ]);
+    tamperCandidateIdentity = true;
+    await expect(
+      routed.search({
+        ownerId: routedOwnerId,
+        query: "variation",
+        mode: "terms",
+        projectIds: [],
+        yearIds: [],
+        subjectIds: [],
+        originKinds: ["material"],
+        limit: 5,
+        cursor: null,
+      }),
+    ).rejects.toThrow("NODE_RETRIEVAL_CANDIDATE_IDENTITY_MISMATCH");
+    tamperCandidateIdentity = false;
+    nodeOnline = false;
+    await expect(
+      reader.readOwnedChunk(routedOwnerId, String(sealed.id)),
+    ).rejects.toThrow("NODE_RETRIEVAL_CAPABILITY_OFFLINE");
+    nodeOnline = true;
+
+    await routed.migratePlacement({
+      ownerId: routedOwnerId,
+      source: {
+        kind: "node",
+        nodeId: "node-a",
+        providerId: "node-lexical",
+      },
+      destination: {
+        kind: "node",
+        nodeId: "node-b",
+        providerId: "node-lexical",
+      },
+    });
+    expect(
+      remote
+        .get("node-b")
+        ?.find((entry) => entry.source.id === routedSourceId)
+        ?.chunks[0]?.text,
+    ).toBe(plaintext);
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT placementRef, text FROM content_sources
+            JOIN content_versions ON content_versions.sourceId = content_sources.id
+            JOIN content_chunks ON content_chunks.versionId = content_versions.id
+            WHERE content_sources.id = ? LIMIT 1`,
+          args: [routedSourceId],
+        })
+      ).rows[0],
+    ).toMatchObject({ placementRef: "node-b" });
+
+    const directText = "Une primitive de 2x est x².";
+    const directSource = await routed.registerSource({
+      ownerId: routedOwnerId,
+      originKind: "material",
+      originId: "routed-material-direct-node",
+      yearId: "corpus-year-b",
+      subjectId: "corpus-subject-b",
+      coverage: "searchable-native-text",
+      placement: { kind: "node", nodeId: "node-b" },
+    });
+    const directStage = await routed.stageVersion({
+      ...stagedVersion,
+      identity: {
+        ownerId: routedOwnerId,
+        originKind: "material",
+        originId: "routed-material-direct-node",
+      },
+      sourceId: directSource.id,
+      versionKey: "direct-node-v1",
+      contentHash: sha256(directText),
+      byteSize: directText.length,
+      chunks: [{
+        ...stagedVersion.chunks[0]!,
+        text: directText,
+        normalizedText: normalizeForSearch(directText),
+        contentHash: sha256(directText),
+        locator: { kind: "text", startOffset: 0, endOffset: directText.length },
+      }],
+    });
+    const directCommitted = await routed.commitVersion({
+      ownerId: routedOwnerId,
+      stagingId: directStage.stagingId,
+      expectedSourceId: directSource.id,
+      expectedPreviousVersionId: null,
+    });
+    expect(
+      remote
+        .get("node-b")
+        ?.find((entry) => entry.source.id === directSource.id)
+        ?.chunks[0]?.text,
+    ).toBe(directText);
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT text FROM content_chunks WHERE versionId = ? LIMIT 1`,
+          args: [directCommitted.versionId],
+        })
+      ).rows[0]?.text,
+    ).toStartWith("avermate-node-chunk:v1:");
+    await client.execute({
+      sql: `INSERT INTO corpus_payload_rewrite_leases (
+          id, userId, sourceId, sourcePlacement, sourceNodeId,
+          destinationPlacement, destinationNodeId, expiresAt, createdAt
+        ) VALUES ('legacy-direct-node-lease', ?, ?, 'node', 'node-b',
+          'node', 'node-b', 4102444800, 1)`,
+      args: [routedOwnerId, directSource.id],
+    });
+    await client.execute({
+      sql: `UPDATE content_chunks SET text = ?, normalizedText = ?,
+          headingPathJson = '["Analyse"]' WHERE versionId = ?`,
+      args: [
+        directText,
+        normalizeForSearch(directText),
+        directCommitted.versionId,
+      ],
+    });
+    await client.execute(`DELETE FROM corpus_payload_rewrite_leases
+      WHERE id = 'legacy-direct-node-lease'`);
+    expect(await routed.reconcileNodeEnvelopes()).toContainEqual({
+      sourceId: directSource.id,
+      outcome: "sealed",
+    });
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT text FROM content_chunks WHERE versionId = ? LIMIT 1`,
+          args: [directCommitted.versionId],
+        })
+      ).rows[0]?.text,
+    ).toStartWith("avermate-node-chunk:v1:");
+
+    await routed.migratePlacement({
+      ownerId: routedOwnerId,
+      source: {
+        kind: "node",
+        nodeId: "node-b",
+        providerId: "node-lexical",
+      },
+      destination: { kind: "core", providerId: "core-lexical" },
+    });
+    const restored = (
+      await client.execute({
+        sql: `SELECT sources.placement, sources.placementRef, chunks.text,
+            chunks.headingPathJson
+          FROM content_sources AS sources
+          JOIN content_versions AS versions ON versions.sourceId = sources.id
+          JOIN content_chunks AS chunks ON chunks.versionId = versions.id
+          WHERE sources.id = ? LIMIT 1`,
+        args: [routedSourceId],
+      })
+    ).rows[0]!;
+    expect(restored).toMatchObject({
+      placement: "core",
+      placementRef: null,
+      text: plaintext,
+      headingPathJson: '["Analyse"]',
+    });
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT text FROM content_chunks WHERE versionId = ? LIMIT 1`,
+          args: [directCommitted.versionId],
+        })
+      ).rows[0]?.text,
+    ).toBe(directText);
+    expect(
+      await routed.search({
+        ownerId: routedOwnerId,
+        query: "taux de variation",
+        mode: "exact",
+        projectIds: [],
+        yearIds: [],
+        subjectIds: [],
+        originKinds: ["material"],
+        limit: 5,
+        cursor: null,
+      }),
+    ).toMatchObject([{ chunkId: String(sealed.id) }]);
+  }, 120_000);
+});
+
 describe("mandatory lexical retrieval, citations and deterministic hybrid primitives", () => {
   const goldChunks = new Map<string, string>();
   const evalSources = new Map<string, string>();
@@ -557,6 +927,100 @@ describe("mandatory lexical retrieval, citations and deterministic hybrid primit
     );
   });
 
+  test("never keeps or searches a Node-owned source in Core FTS", async () => {
+    const nodeSourceId = `node-source-${crypto.randomUUID()}`;
+    const nodeOriginId = `node-origin-${crypto.randomUUID()}`;
+    const text = "NODE_ONLY_LEXICAL_SECRET zygomatique";
+    await seedSource(client, {
+      id: nodeSourceId,
+      originId: nodeOriginId,
+      originKind: "material",
+    });
+    const input = {
+      ...staged(`node-v-${crypto.randomUUID()}`, text),
+      identity: {
+        ownerId,
+        originKind: "material" as const,
+        originId: nodeOriginId,
+      },
+      sourceId: nodeSourceId,
+    };
+    const stage = await store.stageVersion(input);
+    const committed = await store.commitVersion({
+      ownerId,
+      stagingId: stage.stagingId,
+      expectedSourceId: nodeSourceId,
+      expectedPreviousVersionId: null,
+    });
+    await client.execute({
+      sql: `UPDATE content_sources SET placement = 'node', placementRef = 'node-private'
+        WHERE id = ? AND userId = ?`,
+      args: [nodeSourceId, ownerId],
+    });
+
+    const backend = new SqliteFts5LexicalSearchBackend(client);
+    const source = await store.getSource(input.identity);
+    const version = await store.resolveVersion({
+      ownerId,
+      sourceId: nodeSourceId,
+      versionId: committed.versionId,
+    });
+    await backend.upsertVersion({
+      ownerId,
+      source: source!,
+      version,
+      chunks: input.chunks,
+    });
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT chunkId FROM content_chunks_fts WHERE versionId = ?`,
+          args: [committed.versionId],
+        })
+      ).rows,
+    ).toHaveLength(0);
+
+    // Simulate a stale/pre-migration row and prove both search paths fence it.
+    await client.execute({
+      sql: `INSERT INTO content_chunks_fts
+        (chunkId, versionId, sourceId, ownerId, text, normalizedText)
+        SELECT chunks.id, versions.id, sources.id, sources.userId,
+          chunks.text, chunks.normalizedText
+        FROM content_chunks AS chunks
+        JOIN content_versions AS versions ON versions.id = chunks.versionId
+        JOIN content_sources AS sources ON sources.id = versions.sourceId
+        WHERE versions.id = ?`,
+      args: [committed.versionId],
+    });
+    const query = (mode: "terms" | "exact") =>
+      backend.search({
+        ownerId,
+        query: mode === "exact" ? "NODE_ONLY_LEXICAL_SECRET" : "zygomatique",
+        mode,
+        projectIds: [],
+        yearIds: [],
+        subjectIds: [],
+        originKinds: [],
+        limit: 10,
+        cursor: null,
+      });
+    expect(await query("terms")).toEqual([]);
+    expect(await query("exact")).toEqual([]);
+
+    const inconsistent = await backend.verify();
+    expect(inconsistent.orphanedVersionIds).toContain(committed.versionId);
+    expect(inconsistent.missingVersionIds).not.toContain(committed.versionId);
+    expect((await backend.rebuild()).consistent).toBe(true);
+    expect(
+      (
+        await client.execute({
+          sql: `SELECT chunkId FROM content_chunks_fts WHERE versionId = ?`,
+          args: [committed.versionId],
+        })
+      ).rows,
+    ).toHaveLength(0);
+  });
+
   test("resolves an exact durable locator and immutable content hash", async () => {
     const backend = new SqliteFts5LexicalSearchBackend(client);
     const [candidate] = await backend.search({
@@ -781,6 +1245,14 @@ describe("native adapter locator and truthful coverage conformance", () => {
     const ocr = await owned("material", "adapter-ocr");
     expect(ocr.coverage).toBe("searchable-ocr");
     expect(ocr.blocks[0]?.locator).toEqual({ kind: "pdf", page: 3 });
+    expect(
+      ocr.blocks.some(
+        (block) =>
+          block.evidenceKind === "visual-only" &&
+          block.locator.kind === "pdf" &&
+          block.locator.page === 3,
+      ),
+    ).toBe(true);
     const web = await owned("material", "adapter-web");
     expect(web.blocks[0]?.locator).toEqual({
       kind: "markdown",
@@ -793,6 +1265,11 @@ describe("native adapter locator and truthful coverage conformance", () => {
       kind: "video",
       startMs: 1200,
       endMs: 4500,
+    });
+    expect(media.blocks[0]?.evidenceKind).toBe("transcript");
+    expect(media.blocks[1]).toMatchObject({
+      evidenceKind: "visual-only",
+      locator: { kind: "video", startMs: 1200, endMs: 4500 },
     });
     const legacyScan = await owned("material", "adapter-scan");
     expect(legacyScan.coverage).toBe("metadata-and-locators-only");

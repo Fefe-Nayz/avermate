@@ -1,6 +1,8 @@
 import {
   browserCaptureWorkerManifestV1Schema,
   browserRenderWorkerOutputSchema,
+  corpusDerivativeWorkerManifestV1Schema,
+  corpusDerivativeWorkerOutputV1Schema,
   latexWorkerManifestV1Schema,
   latexWorkerOutputV1Schema,
   manimWorkerManifestV1Schema,
@@ -41,6 +43,7 @@ export interface SandboxWorkerDefinition {
 
 export type SandboxWorkerId =
   | "browser-capture.v1"
+  | "corpus-derivatives.v1"
   | "video-audio-extract.v1"
   | "media-segment.v1"
   | "media-timeline-render.v1"
@@ -51,6 +54,7 @@ export type SandboxWorkerId =
 
 export const SANDBOX_WORKER_IDS = Object.freeze([
   "browser-capture.v1",
+  "corpus-derivatives.v1",
   "video-audio-extract.v1",
   "media-segment.v1",
   "media-timeline-render.v1",
@@ -92,6 +96,37 @@ export const SANDBOX_WORKER_DEFINITIONS = Object.freeze({
     maximumFiles: 1,
     maximumFileBytes: 6 * MIB,
     maximumTotalBytes: 6 * MIB,
+  }),
+  "corpus-derivatives.v1": Object.freeze({
+    id: "corpus-derivatives.v1",
+    version: 1,
+    profileId: "media",
+    executable: "/opt/avermate/bin/corpus-derivatives",
+    argv: Object.freeze([
+      "--input",
+      "/workspace/input/request.json",
+      "--manifest",
+      "/workspace/output/derivatives.json",
+    ]),
+    inputSchema: corpusDerivativeWorkerManifestV1Schema,
+    outputSchema: corpusDerivativeWorkerOutputV1Schema,
+    resultPath: "output/derivatives.json",
+    outputPaths: (value: unknown) => {
+      const result = corpusDerivativeWorkerOutputV1Schema.parse(value);
+      const files =
+        result.kind === "pdf"
+          ? result.units.flatMap((unit) => [unit.pdf.path, unit.image.path])
+          : result.kind === "image"
+            ? [result.image.path]
+            : result.kind === "media-probe"
+              ? []
+              : result.units.map((unit) => unit.file.path);
+      return Object.freeze([...files, "output/derivatives.json"]);
+    },
+    allowedKinds: kinds("pdf", "png", "mp3", "mp4", "json"),
+    maximumFiles: 129,
+    maximumFileBytes: 100 * MIB,
+    maximumTotalBytes: 512 * MIB,
   }),
   "video-audio-extract.v1": Object.freeze({
     id: "video-audio-extract.v1",

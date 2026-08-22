@@ -61,12 +61,52 @@ export interface QuizContentV1 {
   questions: QuizQuestionV1[];
 }
 
+export interface QuizSourceProofV2 {
+  sourceKind: "material" | "study-document" | "grade-copy";
+  sourceId: string;
+  sourceVersion: string;
+  locator: Record<string, unknown>;
+}
+
+/**
+ * Versioned, inspectable grading policy for quiz-v2 questions.
+ *
+ * Unknown keys remain allowed in `QuizQuestionV2.rubric` so older and newer
+ * producers can coexist, but the fields below are the only ones the local
+ * deterministic scorer is allowed to act on. Model and human review modes are
+ * deliberately recorded as pending until a separate reviewed assessment is
+ * published.
+ */
+export interface QuizRubricV2 {
+  scoringMode?: "deterministic" | "human-review" | "model-review";
+  acceptedVariants?: string[];
+  acceptedBlankVariants?: string[][];
+  modelDescriptor?: string;
+}
+
+export type QuizQuestionV2 = QuizQuestionV1 & {
+  id: string;
+  objectiveIds: string[];
+  difficulty: number | null;
+  sourceProofs: QuizSourceProofV2[];
+  rubricRevision: string;
+  rubric: QuizRubricV2 & Record<string, unknown>;
+  generationProvenance?: Record<string, unknown>;
+  validationState: "draft" | "reviewed" | "rejected";
+};
+
+export interface QuizContentV2 {
+  version: 2;
+  questions: QuizQuestionV2[];
+}
+
 export type StudyDocumentMeta =
   | StudyDocumentMetaV1
   | MindmapContentV1
   | SlidesMetaV1
   | LatexMetaV2
-  | QuizContentV1;
+  | QuizContentV1
+  | QuizContentV2;
 export type StudyDocumentBuildStatus =
   "queued" | "running" | "succeeded" | "failed";
 export type DocumentArtifactKind =

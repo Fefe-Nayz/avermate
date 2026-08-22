@@ -35,6 +35,7 @@ describe("OAuth client scope ceiling", () => {
       "planner",
       "materials",
       "documents",
+      "learning",
     ])
   })
 

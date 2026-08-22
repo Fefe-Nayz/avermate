@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { BotIcon, LoaderCircleIcon, XIcon } from "lucide-react"
 import { usePathname } from "next/navigation"
+import { useExtracted } from "next-intl"
 import {
   useEffect,
   useState,
@@ -26,11 +27,13 @@ function clampWidth(width: number): number {
 }
 
 export function AssistantPanel({ userId }: { userId: string }) {
+  const t = useExtracted()
   const pathname = usePathname()
   const storagePrefix = `avermate:assistant-panel:${userId}`
   const [hydrated, setHydrated] = useState(false)
   const [open, setOpen] = useState(false)
   const [width, setWidth] = useState(DEFAULT_WIDTH)
+  const [lastSeenAt, setLastSeenAt] = useState(0)
   const runsQuery = useQuery({
     ...orpc.assistant.threads.list.queryOptions({
       input: {
@@ -45,16 +48,39 @@ export function AssistantPanel({ userId }: { userId: string }) {
   const running = Boolean(
     runsQuery.data?.items.some((item) => item.activeRunId !== null)
   )
+  const latestActivityAt = Math.max(
+    0,
+    ...(runsQuery.data?.items.map((item) =>
+      new Date(item.lastMessageAt ?? item.thread.updatedAt).getTime()
+    ) ?? [])
+  )
+  const unread = hydrated && !open && latestActivityAt > lastSeenAt
 
   useEffect(() => {
     try {
       setOpen(localStorage.getItem(`${storagePrefix}:open`) === "true")
       const storedWidth = Number(localStorage.getItem(`${storagePrefix}:width`))
       if (Number.isFinite(storedWidth)) setWidth(clampWidth(storedWidth))
+      const seenKey = `${storagePrefix}:last-seen-at`
+      const storedSeen = Number(localStorage.getItem(seenKey))
+      if (Number.isFinite(storedSeen) && storedSeen > 0) {
+        setLastSeenAt(storedSeen)
+      } else if (latestActivityAt > 0) {
+        localStorage.setItem(seenKey, String(latestActivityAt))
+        setLastSeenAt(latestActivityAt)
+      }
     } finally {
       setHydrated(true)
     }
-  }, [storagePrefix])
+  }, [latestActivityAt, storagePrefix])
+
+  useEffect(() => {
+    if (!hydrated || !open || latestActivityAt <= lastSeenAt) return
+    localStorage.setItem(
+      `${storagePrefix}:last-seen-at`,
+      String(latestActivityAt)
+    )
+  }, [hydrated, lastSeenAt, latestActivityAt, open, storagePrefix])
 
   useEffect(() => {
     if (!hydrated) return
@@ -65,6 +91,16 @@ export function AssistantPanel({ userId }: { userId: string }) {
     if (!hydrated) return
     localStorage.setItem(`${storagePrefix}:width`, String(width))
   }, [hydrated, storagePrefix, width])
+
+  const setPanelOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (!hydrated || latestActivityAt <= lastSeenAt) return
+    localStorage.setItem(
+      `${storagePrefix}:last-seen-at`,
+      String(latestActivityAt)
+    )
+    setLastSeenAt(latestActivityAt)
+  }
 
   const beginResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
@@ -91,31 +127,40 @@ export function AssistantPanel({ userId }: { userId: string }) {
     <>
       {open ? (
         <aside
-          aria-label="Avermate assistant"
+          aria-label={t("Avermate assistant")}
           className="fixed inset-0 z-50 flex min-h-0 bg-background md:static md:inset-auto md:z-auto md:h-full md:shrink-0 md:border-l"
           style={{ width: `min(100vw, ${width}px)` }}
         >
           <button
             type="button"
-            aria-label="Resize assistant panel"
+            aria-label={t("Resize assistant panel")}
             className="absolute inset-y-0 left-0 z-20 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none md:block"
             onPointerDown={beginResize}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+                return
+              event.preventDefault()
+              setWidth((current) =>
+                clampWidth(current + (event.key === "ArrowLeft" ? 20 : -20))
+              )
+            }}
           >
             <span className="mx-auto block h-full w-px bg-border transition-colors hover:bg-primary" />
           </button>
           <AssistantWorkspaceClient
             className="h-full min-h-0 w-full"
             compactRail
-            onClose={() => setOpen(false)}
+            onClose={() => setPanelOpen(false)}
           />
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             className="absolute top-2 right-2 z-30 md:hidden"
-            onClick={() => setOpen(false)}
+            onClick={() => setPanelOpen(false)}
           >
-            <XIcon /> <span className="sr-only">Close assistant</span>
+            <XIcon />
+            <span className="sr-only">{t("Close assistant")}</span>
           </Button>
         </aside>
       ) : (
@@ -123,23 +168,34 @@ export function AssistantPanel({ userId }: { userId: string }) {
           type="button"
           size="lg"
           className={cn(
-            "fixed right-[max(1rem,var(--spacing-safe-right))] bottom-[calc(var(--height-tabbar)+var(--spacing-safe-bottom)+1rem)] z-40 rounded-full shadow-xl md:bottom-6",
+            "fixed right-[max(1rem,var(--spacing-safe-right))] bottom-[calc(var(--spacing-tabbar)+var(--spacing-safe-bottom)+1rem)] z-40 rounded-full shadow-xl md:bottom-6",
             running && "ring-2 ring-primary/30"
           )}
           aria-label={
-            running ? "Open assistant, response running" : "Open assistant"
+            running
+              ? t("Open assistant, response running")
+              : unread
+                ? t("Open assistant, unread response")
+                : t("Open assistant")
           }
-          onClick={() => setOpen(true)}
+          onClick={() => setPanelOpen(true)}
         >
           {running ? (
             <LoaderCircleIcon
-              className="animate-spin"
+              className="animate-spin motion-reduce:animate-none"
               data-icon="inline-start"
             />
           ) : (
             <BotIcon data-icon="inline-start" />
           )}
-          Assistant
+          {t("Assistant")}
+          {unread ? (
+            <span
+              className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-destructive"
+              aria-hidden="true"
+              data-testid="assistant-unread-indicator"
+            />
+          ) : null}
         </Button>
       )}
     </>

@@ -23,3 +23,6 @@ export * from "./assistant-tools";
 export * from "./actions";
 export * from "./sandbox";
 export * from "./managed";
+export * from "./node";
+export * from "./learning";
+export * from "./managed-beta";

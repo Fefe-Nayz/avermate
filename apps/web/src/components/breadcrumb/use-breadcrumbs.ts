@@ -476,6 +476,7 @@ export function useBreadcrumbs(): Crumb[] {
           averages: t("Custom averages"),
           account: t("Account"),
           integrations: t("Integrations"),
+          node: t("Avermate Node"),
           social: t("Social & sharing"),
           cards: t("Cards"),
           about: t("About"),

@@ -50,12 +50,13 @@ export class ToolBrokerFault extends Error {
   }
 }
 
-type ProjectionResult = {
+export type ToolBrokerResult = {
   model: ToolResultV1<unknown>;
   ui: ToolResultV1<unknown>;
   audit: ToolResultV1<unknown>;
   actionLedgerRef: string | null;
 };
+type ProjectionResult = ToolBrokerResult;
 
 export type ToolBrokerInvocation = {
   toolId: string;

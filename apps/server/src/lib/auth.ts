@@ -36,6 +36,8 @@ export const MCP_SCOPES = [
   "avermate:materials.write",
   "avermate:documents.read",
   "avermate:documents.write",
+  "avermate:learning.read",
+  "avermate:learning.write",
 ] as const;
 
 export const mcpResourceUrl =
@@ -119,6 +121,7 @@ const oauthProviderPlugin = oauthProvider({
     "avermate:social.manage": "30 minutes",
     "avermate:social.moderate": "10 minutes",
     "avermate:materials.write": "30 minutes",
+    "avermate:learning.write": "30 minutes",
   },
 });
 

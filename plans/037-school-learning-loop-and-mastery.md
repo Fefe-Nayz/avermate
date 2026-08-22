@@ -12,7 +12,8 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: DONE (repository/Web) — aggregate and Chromium learning-loop gates
+  pass; LIVE BLOCKED — `verify:037:live` provider evidence remains external
 - **Priority**: P0 — this is Avermate's primary differentiation from a generic
   NotebookLM clone
 - **Effort**: XL (ship in independently guarded vertical slices)
@@ -23,6 +24,10 @@
 - **Category**: academic domain, pedagogy, analytics, agent tools, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
+- **Implemented at**: 2026-08-22; repository evidence is encoded by
+  `verify:037:{schema,copy,mastery,tools,web,evaluation}` and the aggregate
+  `verify:037` gate. Its ratified learning schema is now included in the
+  append-only `0061_fixed_penance.sql` migration and subsequent snapshots.
 
 ## Outcome
 
@@ -380,6 +385,21 @@ an aggregate gate. Required cases include:
 
 Then run root gates, migration history/prefix/legacy fixtures and the relevant
 036 retrieval/provider gates.
+
+The repository `:copy` gate selects the `src/learning/copy-analysis` suite by
+path prefix, so the base workflow and every fencing regression run together.
+In particular, stale/replayed jobs, owner/job/revision/source/model binding,
+cancel/publish CAS behavior and concurrent enqueue convergence cannot be omitted
+when another copy-analysis test file is added.
+
+`bun run verify:037` never promotes fixtures to provider evidence.
+`bun run verify:037:live` runs separately from a clean exact release checkout
+and requires digest-bound artifacts for copy analysis, labelled evaluation,
+the responsive/accessibility Web journey, provider-grade immutability and Node
+export/delete/retention. See
+[`docs/releases/plan-037-live-evidence.md`](../docs/releases/plan-037-live-evidence.md)
+for the manifest schema and mandatory measurements. Missing live evidence fails
+closed.
 
 ## STOP conditions
 

@@ -23,9 +23,9 @@ apps/web/src/app apps/web/src/components/admin infra deploy.yml docs`. Reconcile
 
 ## Status
 
-- **Status**: IN PROGRESS — provider-neutral shadow implementation and numeric
-  repository fixtures are complete; real managed isolation, healthy-host
-  air-gap evidence and operational backup/restore proof remain release blockers
+- **Status**: DONE (shadow repository) — LIVE BLOCKED for commercial activation,
+  real managed isolation, healthy-host air-gap evidence and operated
+  backup/restore proof
 - **Priority**: P2 (P1 before advertising paid AI/storage)
 - **Effort**: XL (multi-release and operational)
 - **Risk**: CRITICAL
@@ -45,9 +45,11 @@ apps/web/src/app apps/web/src/components/admin infra deploy.yml docs`. Reconcile
   inherited disposable Garage cell because Docker Desktop's daemon is unhealthy
   on this workstation. That is host evidence, not an application skip or a
   repository failure.
-- Customer/operator Web surfaces, a healthy-host full self-host/air-gap run,
-  real backup/restore operations and a selected managed provider rollout remain
-  for plan 039.
+- Customer/operator Web surfaces are now present in the repository. A
+  healthy-host full-self-host/air-gap run, real backup/restore operations,
+  on-call evidence and an explicitly selected managed-provider rollout remain
+  operational launch work for plan 039. The repository restore fixture is not
+  represented as a deployed disaster-recovery drill.
 
 ## Scope
 

@@ -12,6 +12,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { JobExecutionIdentity } from "../lib/jobs";
 
 // This file exercises real SQLite transactions, storage ledgers and job
 // reconciliation. Keep a bounded integration-test budget that tolerates a
@@ -32,6 +33,7 @@ process.env.DISABLE_UPLOADS = "true";
 process.env.DISABLE_JOBS = "true";
 process.env.DISABLE_TRANSCRIPTION = "false";
 delete process.env.TRANSCRIPTION_API_KEY;
+delete process.env.MISTRAL_API_KEY;
 
 const migrationDirectory = join(import.meta.dir, "../../drizzle");
 const migration = readdirSync(migrationDirectory)
@@ -45,6 +47,8 @@ const databaseHookTimeout = 120_000;
 
 type StoreFile = typeof import("../lib/storage").storeFile;
 type DeleteFile = typeof import("../lib/storage").deleteFile;
+type ReadOwnedFile =
+  typeof import("../lib/owned-file-storage").readOwnedFileBytes;
 type TestRouter = {
   recordings: ReturnType<
     (typeof import("./recordings"))["createRecordingsRouter"]
@@ -132,6 +136,7 @@ const persistFile: StoreFile = async ({ userId, purpose, file }) => {
     .returning();
   if (!stored) throw new Error("The recording fixture file was not stored");
   storedBodies.set(url, body);
+  storedBodies.set(stored.storageKey, body);
   storedFileIds.push(stored.id);
   return stored;
 };
@@ -308,13 +313,39 @@ async function append(
   });
 }
 
-async function audioFetch(url: string | URL | Request) {
-  const body = storedBodies.get(String(url));
-  if (!body) return new Response("missing", { status: 404 });
-  return new Response(Uint8Array.from(body).buffer, {
-    status: 200,
-    headers: { "content-type": "audio/webm" },
-  });
+const readStoredFileBytes: ReadOwnedFile = async (_ownerId, file) => {
+  const body = storedBodies.get(file.storageKey);
+  if (!body) throw new Error(`Missing stored test body for ${file.id}`);
+  return Uint8Array.from(body).buffer;
+};
+
+async function runningTranscriptionJobIdentity(input: {
+  userId: string;
+  segmentId: string;
+  runId: string;
+}): Promise<JobExecutionIdentity & { userId: string }> {
+  const leaseOwner = `recording-runner-${crypto.randomUUID()}`;
+  const [job] = await database
+    .insert(schema.jobs)
+    .values({
+      kind: "transcribe.segment",
+      payload: { segmentId: input.segmentId, runId: input.runId },
+      status: "running",
+      attempts: 1,
+      lockedBy: leaseOwner,
+      lockedUntil: new Date("2099-01-01T00:00:00.000Z"),
+      userId: input.userId,
+    })
+    .returning({ id: schema.jobs.id });
+  if (!job) throw new Error("The running transcription job was not created");
+  return {
+    jobId: job.id,
+    kind: "transcribe.segment",
+    userId: input.userId,
+    attempt: 1,
+    leaseOwner,
+    runToken: `test-run-${crypto.randomUUID()}`,
+  };
 }
 
 describe("lecture recordings capture protocol", () => {
@@ -1013,6 +1044,7 @@ describe("lecture recordings capture protocol", () => {
         result: {
           segmentId: queued.segmentJobs[0]!.segmentId,
           provider: "mistral",
+          model: "voxtral-mini-latest",
           text: persistedSecret,
           segments: [],
         },
@@ -1157,9 +1189,10 @@ describe("lecture transcription jobs", () => {
       const result = await runTranscribeSegmentJob(
         { segmentId: job.segmentId, runId: queued.runId },
         {
-          fetch: audioFetch,
+          readOwnedFile: readStoredFileBytes,
           getProvider: async () => ({
             id: "mistral",
+            model: "voxtral-mini-latest",
             transcribeSegment: async ({ blob }) => {
               const source = await blob.text();
               const alpha = source === "alpha-audio";
@@ -1200,6 +1233,7 @@ describe("lecture transcription jobs", () => {
       segmentsVersion: 1,
       language: "fr",
       provider: "mistral",
+      model: "voxtral-mini-latest",
       segments: [
         { startMs: 100, endMs: 500, text: "Alpha" },
         { startMs: 1_200, endMs: 1_800, text: "Beta" },
@@ -1216,6 +1250,43 @@ describe("lecture transcription jobs", () => {
       status: "ready",
       recordingId: recording.id,
       runId: queued.runId,
+    });
+  });
+
+  test("rejects a forged cross-tenant segment job before storage and provider access", async () => {
+    const recording = await startRecording("Forged segment authority");
+    const appended = await append(recording.id, 0, 1_000, "private-audio");
+    await apiA.recordings.finish({ recordingId: recording.id });
+    const queued = await apiA.recordings.transcribe({
+      recordingId: recording.id,
+    });
+    const forged = await runningTranscriptionJobIdentity({
+      userId: userB,
+      segmentId: appended.segment.id,
+      runId: queued.runId,
+    });
+    let reads = 0;
+    let providerResolutions = 0;
+    const { runTranscribeSegmentJob } = await import("../jobs/transcription");
+    await expect(
+      runTranscribeSegmentJob(
+        { segmentId: appended.segment.id, runId: queued.runId },
+        {
+          job: forged,
+          readOwnedFile: async () => {
+            reads += 1;
+            return new ArrayBuffer(0);
+          },
+          getProvider: async () => {
+            providerResolutions += 1;
+            throw new Error("provider must not be resolved");
+          },
+        },
+      ),
+    ).rejects.toThrow("Lecture recording segment not found");
+    expect({ reads, providerResolutions }).toEqual({
+      reads: 0,
+      providerResolutions: 0,
     });
   });
 
@@ -1255,6 +1326,7 @@ describe("lecture transcription jobs", () => {
         },
         getProvider: async () => ({
           id: "mistral",
+          model: "voxtral-mini-latest",
           transcribeSegment: async ({ blob }) => ({
             text: await blob.text(),
             segments: [],
@@ -1265,6 +1337,57 @@ describe("lecture transcription jobs", () => {
 
     expect(directReads).toBe(1);
     expect(result.text).toBe("managed-audio");
+  });
+
+  test("reads paired-Node audio through the owner-scoped byte seam", async () => {
+    const recording = await startRecording("Node storage audio");
+    const appended = await append(recording.id, 0, 1_000, "node-audio");
+    await database
+      .update(schema.files)
+      .set({ provider: "node:node_recording_test:relay-storage-v1" })
+      .where(eq(schema.files.id, appended.segment.file.id));
+    await apiA.recordings.finish({ recordingId: recording.id });
+    const queued = await apiA.recordings.transcribe({
+      recordingId: recording.id,
+    });
+    const job = queued.segmentJobs[0];
+    if (!job) throw new Error("Expected a transcription segment job");
+
+    const { runTranscribeSegmentJob } = await import("../jobs/transcription");
+    let directReads = 0;
+    const result = await runTranscribeSegmentJob(
+      { segmentId: job.segmentId, runId: queued.runId },
+      {
+        fileAccessUrl: async () => {
+          throw new Error("Node storage must not use a browser URL");
+        },
+        fetch: async () => {
+          throw new Error("Node storage must not use HTTP");
+        },
+        readOwnedFile: async (ownerId, file, options) => {
+          directReads += 1;
+          expect(ownerId).toBe(userA);
+          expect(file).toMatchObject({
+            id: appended.segment.file.id,
+            userId: userA,
+            provider: "node:node_recording_test:relay-storage-v1",
+          });
+          expect(options?.maxBytes).toBe(32 * 1024 * 1024);
+          return new TextEncoder().encode("node-audio").buffer;
+        },
+        getProvider: async () => ({
+          id: "mistral",
+          model: "voxtral-mini-latest",
+          transcribeSegment: async ({ blob }) => ({
+            text: await blob.text(),
+            segments: [],
+          }),
+        }),
+      },
+    );
+
+    expect(directReads).toBe(1);
+    expect(result.text).toBe("node-audio");
   });
 
   test("lets a successful lease winner repair a stale worker failure", async () => {
@@ -1287,9 +1410,10 @@ describe("lecture transcription jobs", () => {
     const winnerRun = runTranscribeSegmentJob(
       { segmentId: segmentJob.segmentId, runId: queued.runId },
       {
-        fetch: audioFetch,
+        readOwnedFile: readStoredFileBytes,
         getProvider: async () => ({
           id: "mistral",
+          model: "voxtral-mini-latest",
           transcribeSegment: async () => {
             announceWinnerStarted();
             await winnerCanFinish;
@@ -1306,9 +1430,10 @@ describe("lecture transcription jobs", () => {
       runTranscribeSegmentJob(
         { segmentId: segmentJob.segmentId, runId: queued.runId },
         {
-          fetch: audioFetch,
+          readOwnedFile: readStoredFileBytes,
           getProvider: async () => ({
             id: "mistral",
+            model: "voxtral-mini-latest",
             transcribeSegment: async () => {
               throw new Error("stale lease failed");
             },
@@ -1353,6 +1478,7 @@ describe("lecture transcription jobs", () => {
         { segmentId: segmentJob.segmentId, runId: queued.runId },
         {
           downloadTimeoutMs: 5,
+          fileAccessUrl: async (file) => file.url,
           fetch: async (_url, init) => {
             fetchSignal = init?.signal ?? null;
             return new Promise<Response>((_resolve, reject) => {
@@ -1389,6 +1515,7 @@ describe("lecture transcription jobs", () => {
         { segmentId: segmentJob.segmentId, runId: queued.runId },
         {
           downloadTimeoutMs: 5,
+          fileAccessUrl: async (file) => file.url,
           fetch: async (_url, init) => {
             bodySignal = init?.signal ?? null;
             return new Response(
@@ -1425,9 +1552,10 @@ describe("lecture transcription jobs", () => {
       runTranscribeSegmentJob(
         { segmentId: segmentJob.segmentId, runId: queued.runId },
         {
-          fetch: audioFetch,
+          readOwnedFile: readStoredFileBytes,
           getProvider: async () => ({
             id: "mistral",
+            model: "voxtral-mini-latest",
             transcribeSegment: async () => {
               throw new Error("provider exhausted six retries");
             },
@@ -1476,9 +1604,10 @@ describe("lecture transcription jobs", () => {
     const reusableResult = await runTranscribeSegmentJob(
       { segmentId: reusableJob.segmentId, runId: firstRun.runId },
       {
-        fetch: audioFetch,
+        readOwnedFile: readStoredFileBytes,
         getProvider: async () => ({
           id: "mistral",
+          model: "voxtral-mini-latest",
           transcribeSegment: async () => ({
             text: "Reusable success",
             language: "fr",
@@ -1512,9 +1641,10 @@ describe("lecture transcription jobs", () => {
     const inFlightStaleWorker = runTranscribeSegmentJob(
       { segmentId: failedJob.segmentId, runId: firstRun.runId },
       {
-        fetch: audioFetch,
+        readOwnedFile: readStoredFileBytes,
         getProvider: async () => ({
           id: "mistral",
+          model: "voxtral-mini-latest",
           transcribeSegment: async () => {
             announceStaleStarted();
             await staleCanFinish;
@@ -1534,7 +1664,7 @@ describe("lecture transcription jobs", () => {
       runTranscribeSegmentJob(
         { segmentId: failedJob.segmentId, runId: firstRun.runId },
         {
-          fetch: audioFetch,
+          readOwnedFile: readStoredFileBytes,
           getProvider: (userId) =>
             resolveTranscriptionProvider(userId, {
               sleep: async () => undefined,
@@ -1606,7 +1736,7 @@ describe("lecture transcription jobs", () => {
       runTranscribeSegmentJob(
         { segmentId: failedJob.segmentId, runId: firstRun.runId },
         {
-          fetch: audioFetch,
+          readOwnedFile: readStoredFileBytes,
           getProvider: async () => {
             staleProviderCalls += 1;
             throw new Error("A stale worker must not resolve a provider");
@@ -1628,7 +1758,7 @@ describe("lecture transcription jobs", () => {
     const retriedResult = await runTranscribeSegmentJob(
       { segmentId: retriedJob.segmentId, runId: retry.runId },
       {
-        fetch: audioFetch,
+        readOwnedFile: readStoredFileBytes,
         getProvider: (userId) =>
           resolveTranscriptionProvider(userId, {
             fetch: async (_url, init) => {
@@ -1778,6 +1908,7 @@ describe("lecture transcription jobs", () => {
           result: {
             segmentId: job.segmentId,
             provider: "mistral",
+            model: "voxtral-mini-latest",
             text: `Segment ${index}`,
             segments: [{ startMs: 0, endMs: 500, text: `Part ${index}` }],
             ...(index === 0 ? { language: "fr" } : {}),

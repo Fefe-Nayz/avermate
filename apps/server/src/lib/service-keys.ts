@@ -1,15 +1,71 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { userServiceKeys, type ServiceKeyKind } from "../db/schema";
 import { open, seal } from "./crypto";
 import { env } from "./env";
 import { SecurityAuditWriter } from "../observability/audit";
+import {
+  assertProviderServiceKeyRoute,
+  type ProviderServiceKeyProvider,
+} from "./service-key-routing";
+
+export type { ProviderServiceKeyProvider } from "./service-key-routing";
 
 const operatorKeys: Record<ServiceKeyKind, () => string | undefined> = {
   mistral: () => env.MISTRAL_API_KEY,
   transcription: () => env.TRANSCRIPTION_API_KEY,
-  inference: () => env.INFERENCE_API_KEY,
+  // A provider-less resolver cannot safely choose an inference origin.
+  inference: () => undefined,
 };
+
+function legacyDefaultProvider(kind: ServiceKeyKind) {
+  // The legacy transcription setting has always configured Mistral/Voxtral.
+  // Persist its exact adapter id now while retaining read compatibility below.
+  return kind === "transcription" ? "mistral" : kind;
+}
+
+type OperatorProviderKeyEnvironment = Pick<
+  typeof env,
+  | "MISTRAL_API_KEY"
+  | "TRANSCRIPTION_API_KEY"
+  | "OPENAI_API_KEY"
+  | "OPENROUTER_API_KEY"
+  | "ELEVENLABS_API_KEY"
+  | "GEMINI_API_KEY"
+  | "COHERE_API_KEY"
+  | "INFERENCE_PROVIDER"
+  | "INFERENCE_API_KEY"
+>;
+
+/** Exact operator-key origin routing; exported only for fail-closed tests. */
+export function providerOperatorKey(
+  kind: ServiceKeyKind,
+  provider: ProviderServiceKeyProvider,
+  values: OperatorProviderKeyEnvironment = env,
+) {
+  if (provider === "mistral") {
+    return kind === "transcription"
+      ? (values.TRANSCRIPTION_API_KEY ?? values.MISTRAL_API_KEY)
+      : values.MISTRAL_API_KEY;
+  }
+  if (provider === "elevenlabs") return values.ELEVENLABS_API_KEY;
+  if (provider === "gemini") return values.GEMINI_API_KEY;
+  if (provider === "cohere") return values.COHERE_API_KEY;
+  if (provider === "openai") {
+    return (
+      values.OPENAI_API_KEY ??
+      (values.INFERENCE_PROVIDER === "openai"
+        ? values.INFERENCE_API_KEY
+        : undefined)
+    );
+  }
+  return (
+    values.OPENROUTER_API_KEY ??
+    (values.INFERENCE_PROVIDER === "openrouter"
+      ? values.INFERENCE_API_KEY
+      : undefined)
+  );
+}
 
 /**
  * Operator-paid keys are never an implicit production fallback. Development
@@ -70,13 +126,14 @@ export async function setServiceKey(
 ) {
   const key = plaintext.trim();
   if (!key) throw new Error("A service key cannot be empty");
+  const provider = legacyDefaultProvider(kind);
   const now = new Date();
   const sealedKey = seal(key);
   const [row] = await db
     .insert(userServiceKeys)
     .values({
       kind,
-      provider: kind,
+      provider,
       sealedKey,
       hint: key.slice(-4),
       status: "active",
@@ -84,9 +141,13 @@ export async function setServiceKey(
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [userServiceKeys.userId, userServiceKeys.kind],
+      target: [
+        userServiceKeys.userId,
+        userServiceKeys.kind,
+        userServiceKeys.provider,
+      ],
       set: {
-        provider: kind,
+        provider,
         sealedKey,
         hint: key.slice(-4),
         keyVersion: sql`${userServiceKeys.keyVersion} + 1`,
@@ -138,6 +199,7 @@ export async function setProviderServiceKey(input: {
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(provider)) {
     throw new Error("Invalid provider identifier");
   }
+  assertProviderServiceKeyRoute(input.kind, provider);
   const scopes = [...new Set(input.scopes.map((scope) => scope.trim()))]
     .filter(Boolean)
     .sort();
@@ -163,7 +225,11 @@ export async function setProviderServiceKey(input: {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [userServiceKeys.userId, userServiceKeys.kind],
+      target: [
+        userServiceKeys.userId,
+        userServiceKeys.kind,
+        userServiceKeys.provider,
+      ],
       set: {
         provider,
         sealedKey,
@@ -209,9 +275,12 @@ export async function setProviderServiceKey(input: {
 export async function revokeProviderServiceKey(input: {
   userId: string;
   kind: ServiceKeyKind;
+  provider: string;
   reason: string;
   correlationId: string;
 }) {
+  const provider = input.provider.trim().toLowerCase();
+  assertProviderServiceKeyRoute(input.kind, provider);
   const now = new Date();
   const [row] = await db
     .update(userServiceKeys)
@@ -227,6 +296,7 @@ export async function revokeProviderServiceKey(input: {
       and(
         eq(userServiceKeys.userId, input.userId),
         eq(userServiceKeys.kind, input.kind),
+        eq(userServiceKeys.provider, provider),
       ),
     )
     .returning({ id: userServiceKeys.id, provider: userServiceKeys.provider });
@@ -252,6 +322,23 @@ export async function clearServiceKey(userId: string, kind: ServiceKeyKind) {
     .delete(userServiceKeys)
     .where(
       and(eq(userServiceKeys.userId, userId), eq(userServiceKeys.kind, kind)),
+    );
+  return { ok: true };
+}
+
+export async function clearProviderServiceKey(
+  userId: string,
+  kind: ServiceKeyKind,
+  provider: string,
+) {
+  await db
+    .delete(userServiceKeys)
+    .where(
+      and(
+        eq(userServiceKeys.userId, userId),
+        eq(userServiceKeys.kind, kind),
+        eq(userServiceKeys.provider, provider.toLowerCase()),
+      ),
     );
   return { ok: true };
 }
@@ -306,6 +393,55 @@ export async function resolveServiceKey(
 
   const operator = operatorServiceKeysEnabled()
     ? operatorKeys[kind]()?.trim()
+    : undefined;
+  return operator ? { key: operator, source: "operator" } : null;
+}
+
+/** Resolve only the named provider; credentials never bleed across adapters. */
+export async function resolveProviderServiceKey(
+  userId: string,
+  kind: ServiceKeyKind,
+  provider: ProviderServiceKeyProvider,
+): Promise<ResolvedServiceKey | null> {
+  const normalizedProvider = provider.trim().toLowerCase();
+  assertProviderServiceKeyRoute(kind, normalizedProvider);
+  const acceptedProviders =
+    kind === "transcription" && normalizedProvider === "mistral"
+      ? [normalizedProvider, "transcription"]
+      : [normalizedProvider];
+  const [row] = await db
+    .select({
+      sealedKey: userServiceKeys.sealedKey,
+      provider: userServiceKeys.provider,
+    })
+    .from(userServiceKeys)
+    .where(
+      and(
+        eq(userServiceKeys.userId, userId),
+        eq(userServiceKeys.kind, kind),
+        inArray(userServiceKeys.provider, acceptedProviders),
+        eq(userServiceKeys.status, "active"),
+      ),
+    )
+    .orderBy(
+      asc(
+        sql`case when ${userServiceKeys.provider} = ${normalizedProvider} then 0 else 1 end`,
+      ),
+    )
+    .limit(1);
+  if (row) {
+    try {
+      return {
+        key: open(row.sealedKey),
+        source: "user",
+        invalidationToken: row.sealedKey,
+      };
+    } catch {
+      await markServiceKeyInvalid(userId, kind, row.sealedKey);
+    }
+  }
+  const operator = operatorServiceKeysEnabled()
+    ? providerOperatorKey(kind, provider)?.trim()
     : undefined;
   return operator ? { key: operator, source: "operator" } : null;
 }

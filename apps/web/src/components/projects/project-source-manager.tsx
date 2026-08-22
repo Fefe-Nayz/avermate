@@ -1,14 +1,17 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import {
   ArrowDownIcon,
   ArrowUpIcon,
   FilePlus2Icon,
+  PinIcon,
   RefreshCwIcon,
   SearchIcon,
   Trash2Icon,
 } from "lucide-react"
+import { useExtracted } from "next-intl"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -59,6 +62,12 @@ export interface ProjectSourceItem {
   indexStatus: string | null
   coverage: string | null
   missing: boolean
+  currentVersionId: string | null
+  sourceVersionId: string | null
+  conversationBranchId: string | null
+  conversationHeadMessageId: string | null
+  trackingMode: string
+  selectorReviewRequired: boolean
 }
 
 const contextModes = [
@@ -91,6 +100,7 @@ export function ProjectSourceManager({
   onRemove,
   onReorder,
   onRetry,
+  onTracking,
 }: {
   projectId: string
   revision: number
@@ -110,7 +120,13 @@ export function ProjectSourceManager({
     itemIds: string[]
   }) => void
   onRetry: (input: { kind: ProjectSourceKind; referenceId: string }) => void
+  onTracking: (input: {
+    projectId: string
+    itemId: string
+    trackingMode: "pinned" | "follow-head"
+  }) => void
 }) {
+  const t = useExtracted()
   const [filter, setFilter] = useState("")
   const [selected, setSelected] = useState<string | null>(null)
   const [contextMode, setContextMode] = useState<
@@ -301,9 +317,103 @@ export function ProjectSourceManager({
                   </ItemTitle>
                   <ItemDescription>
                     {coverageLabel(item.coverage)} · {item.contextMode}
+                    {item.kind === "conversation"
+                      ? item.selectorReviewRequired
+                        ? t(" · branch needs review")
+                        : t(" · pinned branch {head}…", {
+                            head:
+                              item.conversationHeadMessageId?.slice(0, 10) ??
+                              "—",
+                          })
+                      : item.trackingMode === "pinned"
+                        ? t(" · pinned version {version}…", {
+                            version: item.sourceVersionId?.slice(0, 10) ?? "—",
+                          })
+                        : t(" · follows the latest version")}
                   </ItemDescription>
+                  <div
+                    className="mt-2 flex flex-wrap gap-1.5"
+                    aria-label={t("Indexing stages")}
+                  >
+                    <Badge variant={item.sourceId ? "secondary" : "outline"}>
+                      {item.sourceId
+                        ? t("Source registered")
+                        : t("Registration pending")}
+                    </Badge>
+                    <Badge
+                      variant={
+                        item.currentVersionId || item.sourceVersionId
+                          ? "secondary"
+                          : "outline"
+                      }
+                    >
+                      {item.currentVersionId || item.sourceVersionId
+                        ? t("Immutable version ready")
+                        : t("Version pending")}
+                    </Badge>
+                    <Badge
+                      variant={
+                        item.indexStatus === "ready" ||
+                        item.indexStatus === "indexed"
+                          ? "secondary"
+                          : item.indexStatus === "failed"
+                            ? "destructive"
+                            : "outline"
+                      }
+                    >
+                      {t("Retrieval index: {status}", {
+                        status: item.indexStatus ?? t("not started"),
+                      })}
+                    </Badge>
+                    <Badge variant="outline">
+                      {t("Coverage: {coverage}", {
+                        coverage: coverageLabel(item.coverage),
+                      })}
+                    </Badge>
+                  </div>
                 </ItemContent>
                 <ItemActions>
+                  {item.kind === "conversation" &&
+                  item.selectorReviewRequired ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      render={
+                        <Link
+                          href={`/assistant?thread=${encodeURIComponent(item.referenceId)}`}
+                        />
+                      }
+                    >
+                      {t("Review branch")}
+                    </Button>
+                  ) : item.kind !== "conversation" ? (
+                    <Button
+                      size="icon-sm"
+                      variant={
+                        item.trackingMode === "pinned" ? "secondary" : "ghost"
+                      }
+                      aria-label={
+                        item.trackingMode === "pinned"
+                          ? t("Follow the latest version again")
+                          : t("Pin the current version")
+                      }
+                      disabled={
+                        pendingAction || item.missing || !item.currentVersionId
+                      }
+                      onClick={() =>
+                        onTracking({
+                          projectId,
+                          itemId: item.id,
+                          trackingMode:
+                            item.trackingMode === "pinned"
+                              ? "follow-head"
+                              : "pinned",
+                        })
+                      }
+                    >
+                      <PinIcon />
+                    </Button>
+                  ) : null}
                   <Button
                     size="icon-sm"
                     variant="ghost"

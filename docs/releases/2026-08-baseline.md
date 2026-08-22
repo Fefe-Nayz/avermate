@@ -7,10 +7,10 @@ be recorded only after the clean-clone, migration, security, image and licence
 gates pass. Do not infer a release SHA from the commit that first introduced
 this note, and do not mark plan 025 done from this document alone.
 
-## Current implementation-wave checkpoint
+## Historical implementation-wave checkpoint
 
-The implementation base is commit
-`dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64`; plans 025–034 are still being
+At the time of this candidate, the implementation base was commit
+`dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64` and plans 025–034 were still being
 assembled in the shared working tree. Targeted tests for the agent contracts,
 assistant, citations, action recovery, corpus/Node adapters and OpenSandbox
 transport are green where their plan checkpoints say so. They do not replace a

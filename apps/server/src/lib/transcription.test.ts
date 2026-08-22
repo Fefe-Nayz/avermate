@@ -14,6 +14,121 @@ process.env.NODE_ENV = "test";
 process.env.DISABLE_TRANSCRIPTION = "false";
 
 describe("Mistral transcription provider", () => {
+  test("resolves only the exact Mistral credential and never sends an OpenAI key", async () => {
+    const { runMistralTranscription } = await import("./transcription");
+    const routes: string[] = [];
+    let fetchCalls = 0;
+    const result = await runMistralTranscription(
+      "transcription-key-owner",
+      { blob: new Blob(["audio"]), mimeType: "audio/webm" },
+      {
+        resolveCredential: async (_ownerId, kind, provider) => {
+          routes.push(`${kind}:${provider}`);
+          return {
+            source: "user" as const,
+            key: "mistral-transcription-secret",
+            invalidationToken: "sealed-mistral-transcription-secret",
+          };
+        },
+        fetch: async (_url, init) => {
+          fetchCalls += 1;
+          const authorization = new Headers(init?.headers).get("authorization");
+          expect(authorization).toBe("Bearer mistral-transcription-secret");
+          expect(authorization).not.toContain("openai-secret-must-not-leak");
+          return Response.json({ text: "Bonjour", segments: [] });
+        },
+      },
+    );
+    expect(result.text).toBe("Bonjour");
+    expect(routes).toEqual(["transcription:mistral"]);
+    expect(fetchCalls).toBe(1);
+
+    let leakedFetch = false;
+    await expect(
+      runMistralTranscription(
+        "openai-only-owner",
+        { blob: new Blob(["audio"]), mimeType: "audio/webm" },
+        {
+          resolveCredential: async (_ownerId, kind, provider) => {
+            expect(`${kind}:${provider}`).toBe("transcription:mistral");
+            throw new Error(
+              "SERVICE_KEY_PROVIDER_ROUTE_UNSUPPORTED:transcription:openai",
+            );
+          },
+          fetch: async () => {
+            leakedFetch = true;
+            throw new Error("OpenAI credential was sent to Mistral");
+          },
+        },
+      ),
+    ).rejects.toThrow("SERVICE_KEY_PROVIDER_ROUTE_UNSUPPORTED");
+    expect(leakedFetch).toBe(false);
+  });
+
+  test("routes selected Node STT with exact revision and never falls back", async () => {
+    const { resolveTranscriptionProvider } = await import("./transcription");
+    let nodeCalls = 0;
+    let mistralCalls = 0;
+    const provider = await resolveTranscriptionProvider(
+      "stt-node-owner",
+      {},
+      {
+        selectNode: async () => ({
+          selected: true,
+          nodeId: "node-stt",
+          configRevision: `sha256:${"a".repeat(64)}`,
+          profile: {} as never,
+          modelId: "selfhost/whisper-large-v3-turbo-q5_0",
+          modelRevision: "whisper-large-v3-turbo-q5_0-2026-08",
+        }),
+        runNode: async () => {
+          nodeCalls += 1;
+          return {
+            text: "Local transcript",
+            language: "fr",
+            segments: [{ startMs: 0, endMs: 1_000, text: "Local" }],
+          };
+        },
+        runMistral: async () => {
+          mistralCalls += 1;
+          throw new Error("cloud fallback must not run");
+        },
+      },
+    );
+    expect(provider.id).toBe("node-local");
+    expect(provider.model).toBe(
+      "selfhost/whisper-large-v3-turbo-q5_0@whisper-large-v3-turbo-q5_0-2026-08",
+    );
+    const result = await provider.transcribeSegment({
+      blob: new Blob(["audio"]),
+      mimeType: "audio/webm",
+    });
+    expect(result.segments[0]).toEqual({
+      startMs: 0,
+      endMs: 1_000,
+      text: "Local",
+    });
+    expect(nodeCalls).toBe(1);
+    expect(mistralCalls).toBe(0);
+
+    await expect(
+      resolveTranscriptionProvider(
+        "stt-node-owner",
+        {},
+        {
+          selectNode: async () => {
+            throw new Error("NODE_TRANSCRIPTION_MODEL_NOT_ATTESTED");
+          },
+          runMistral: async () => {
+            mistralCalls += 1;
+            throw new Error("cloud fallback must not run");
+          },
+        },
+      ),
+    ).rejects.toThrow("NODE_TRANSCRIPTION_MODEL_NOT_ATTESTED");
+    expect(mistralCalls).toBe(0);
+  });
+
   test("sends the verified multipart contract and converts seconds to milliseconds", async () => {
     const {
       MISTRAL_TRANSCRIPTION_MODEL,

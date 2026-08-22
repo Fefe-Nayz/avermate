@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadOrCreateNodeIdentity } from "./identity";
 import { NodeJobLedger } from "./job-ledger";
-import { nodeJobEnvelopeDigest, signCapabilityGrant } from "./protocol";
+import {
+  nodeJobEnvelopeDigest,
+  signCapabilityGrant,
+  unsignedNodeJob,
+} from "./protocol";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -172,5 +176,109 @@ describe("durable node job ledger", () => {
     expect(
       (await ledger.requestCancellation(job.id, now + 2)).events,
     ).toHaveLength(cancelled.events.length);
+  });
+
+  test("replays terminal jobs across deadline renewal but fences payload drift", async () => {
+    const { root, now, job } = await createJobFixture();
+    const ledger = new NodeJobLedger(join(root, "terminal-replay.json"));
+    await ledger.offer(job, now);
+    const leased = await ledger.lease({
+      jobId: job.id,
+      workerId: "worker-a",
+      ttlMs: 5_000,
+      now,
+    });
+    await ledger.appendEvent({
+      event: {
+        jobId: job.id,
+        sequence: 3,
+        eventId: "event-running-terminal-replay",
+        stage: "running",
+        emittedAt: new Date(now + 1).toISOString(),
+        terminal: false,
+      },
+      leaseToken: leased.lease!.token,
+      now: now + 1,
+    });
+    await ledger.appendEvent({
+      event: {
+        jobId: job.id,
+        sequence: 4,
+        eventId: "event-completed-terminal-replay",
+        stage: "completed",
+        emittedAt: new Date(now + 2).toISOString(),
+        terminal: true,
+        resultManifest: [],
+      },
+      leaseToken: leased.lease!.token,
+      now: now + 2,
+    });
+    const renewedUnsigned = {
+      ...unsignedNodeJob(job),
+      limits: {
+        ...job.limits,
+        deadline: new Date(now + 120_000).toISOString(),
+      },
+    };
+    const renewed = {
+      ...renewedUnsigned,
+      envelopeDigest: nodeJobEnvelopeDigest(renewedUnsigned),
+      grant: job.grant,
+    };
+    const replay = await ledger.offer(renewed, now + 60_000);
+    expect(replay.replayed).toBe(true);
+    expect(replay.record.stage).toBe("completed");
+
+    const driftedUnsigned = {
+      ...renewedUnsigned,
+      limits: { ...renewed.limits, inputBytes: 1 },
+    };
+    await expect(
+      ledger.offer(
+        {
+          ...driftedUnsigned,
+          envelopeDigest: nodeJobEnvelopeDigest(driftedUnsigned),
+          grant: job.grant,
+        },
+        now + 60_000,
+      ),
+    ).rejects.toThrow("IDEMPOTENCY_PAYLOAD_MISMATCH");
+  });
+
+  test("replays a failed generation and admits a distinct next generation", async () => {
+    const { root, now, job } = await createJobFixture();
+    const ledger = new NodeJobLedger(join(root, "failed-generation.json"));
+    await ledger.offer(job, now);
+    const leased = await ledger.lease({
+      jobId: job.id,
+      workerId: "worker-a",
+      ttlMs: 5_000,
+      now,
+    });
+    await ledger.appendEvent({
+      event: {
+        jobId: job.id,
+        sequence: 3,
+        eventId: "event-failed-generation-one",
+        stage: "failed",
+        emittedAt: new Date(now + 1).toISOString(),
+        terminal: true,
+        safeErrorCode: "TRANSIENT_WORKER_FAILURE",
+      },
+      leaseToken: leased.lease!.token,
+      now: now + 1,
+    });
+    expect((await ledger.offer(job, now + 2)).record.stage).toBe("failed");
+    const generationTwoUnsigned = {
+      ...unsignedNodeJob(job),
+      id: "job-2",
+      idempotencyKey: "idem-2",
+    };
+    const generationTwo = {
+      ...generationTwoUnsigned,
+      envelopeDigest: nodeJobEnvelopeDigest(generationTwoUnsigned),
+      grant: job.grant,
+    };
+    expect((await ledger.offer(generationTwo, now + 2)).replayed).toBe(false);
   });
 });

@@ -7,10 +7,13 @@ import {
   mediaTimelineRenderWorkerOutputV1Schema,
   videoAudioExtractWorkerManifestV1Schema,
   videoAudioExtractWorkerOutputV1Schema,
+  videoAudioExtractWorkerManifestV2Schema,
+  videoAudioExtractWorkerOutputV2Schema,
   type MaterialPreviewWorkerManifestV1,
   type MediaSegmentWorkerManifestV1,
   type MediaTimelineRenderWorkerManifestV1,
   type VideoAudioExtractWorkerManifestV1,
+  type VideoAudioExtractWorkerManifestV2,
 } from "@avermate/agent-contracts";
 import { readdir, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
@@ -38,6 +41,7 @@ const PDFTOPPM = "/usr/bin/pdftoppm";
 
 export type MediaBuildOperation =
   | "extract-video-audio"
+  | "extract-video-audio-segments"
   | "extract-segments"
   | "render-timeline"
   | "material-preview";
@@ -51,6 +55,7 @@ export interface MediaBuildCli {
 
 const operationOutputs = {
   "extract-video-audio": `${OUTPUT_ROOT}/audio.wav`,
+  "extract-video-audio-segments": OUTPUT_ROOT,
   "extract-segments": OUTPUT_ROOT,
   "render-timeline": `${OUTPUT_ROOT}/video.mp4`,
   "material-preview": `${OUTPUT_ROOT}/preview.webp`,
@@ -58,6 +63,7 @@ const operationOutputs = {
 
 const operationManifests = {
   "extract-video-audio": `${OUTPUT_ROOT}/extraction.json`,
+  "extract-video-audio-segments": `${OUTPUT_ROOT}/extraction-segments.json`,
   "extract-segments": `${OUTPUT_ROOT}/segments.json`,
   "render-timeline": `${OUTPUT_ROOT}/render.json`,
   "material-preview": `${OUTPUT_ROOT}/preview.json`,
@@ -85,7 +91,9 @@ export function mediaBuildCli(argv: readonly string[]): MediaBuildCli {
 }
 
 export function youtubeDownloadArguments(
-  manifest: VideoAudioExtractWorkerManifestV1,
+  manifest:
+    | VideoAudioExtractWorkerManifestV1
+    | VideoAudioExtractWorkerManifestV2,
 ): readonly string[] {
   const canonicalUrl = canonicalYoutubeUrl(manifest.request.canonicalUrl);
   return Object.freeze([
@@ -129,6 +137,51 @@ export function audioTranscodeArguments(sourcePath: string): readonly string[] {
     "-f",
     "wav",
     `${OUTPUT_ROOT}/audio.wav`,
+  ]);
+}
+
+export function audioSegmentTranscodeArguments(
+  manifest: VideoAudioExtractWorkerManifestV2,
+  sourcePath: string,
+  root = "/workspace",
+): readonly string[] {
+  assertDiscoveredMediaPath(sourcePath, root);
+  const outputPattern = root.startsWith("/")
+    ? posix.join(root, "output", "audio-segment-%03d.mp3")
+    : join(root, "output", "audio-segment-%03d.mp3");
+  return Object.freeze([
+    "-nostdin",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-threads",
+    "1",
+    "-t",
+    String(manifest.request.maxDurationSeconds),
+    "-i",
+    sourcePath,
+    "-map",
+    "0:a:0",
+    "-map_metadata",
+    "-1",
+    "-map_chapters",
+    "-1",
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "48k",
+    "-f",
+    "segment",
+    "-segment_time",
+    String(manifest.request.segmentSeconds),
+    "-reset_timestamps",
+    "1",
+    outputPattern,
   ]);
 }
 
@@ -360,6 +413,94 @@ export async function extractVideoAudio(
     channels: 1,
   });
   return result;
+}
+
+export async function extractVideoAudioSegments(
+  manifest: VideoAudioExtractWorkerManifestV2,
+  runner: CommandRunner = runCommand,
+  root = "/workspace",
+) {
+  requireCommandSuccess(
+    await runner(YT_DLP, youtubeDownloadArguments(manifest), {
+      cwd: root,
+      timeoutMs: 10 * 60_000,
+    }),
+    "youtube-download",
+  );
+  const entries = (await readdir(join(root, "tmp")))
+    .filter((name) => /^source\.[a-zA-Z0-9]{1,12}$/u.test(name))
+    .sort();
+  if (entries.length !== 1) throw new Error("VIDEO_SOURCE_FILE_INVALID");
+  const sourcePath = join(root, "tmp", entries[0]!);
+  assertDiscoveredMediaPath(sourcePath, root);
+  const sourceProbe = await probeMedia(sourcePath, runner, root);
+  if (
+    sourceProbe.durationMs > manifest.request.maxDurationSeconds * 1_000 ||
+    sourceProbe.streamCount < 1 ||
+    !sourceProbe.audioCodec
+  ) {
+    throw new Error("VIDEO_SOURCE_PROPERTIES_INVALID");
+  }
+  requireCommandSuccess(
+    await runner(FFMPEG, audioSegmentTranscodeArguments(manifest, sourcePath, root), {
+      cwd: root,
+      timeoutMs: 15 * 60_000,
+    }),
+    "audio-segment-transcode",
+  );
+  const names = (await readdir(join(root, "output")))
+    .filter((name) => /^audio-segment-\d{3}\.mp3$/u.test(name))
+    .sort();
+  const expectedCount = Math.ceil(
+    sourceProbe.durationMs / (manifest.request.segmentSeconds * 1_000),
+  );
+  if (
+    names.length !== expectedCount ||
+    names.length < 1 ||
+    names.length > 240
+  ) {
+    throw new Error("VIDEO_AUDIO_SEGMENT_COUNT_INVALID");
+  }
+  const segments = [];
+  let totalBytes = 0;
+  for (const [index, name] of names.entries()) {
+    const startMs = index * manifest.request.segmentSeconds * 1_000;
+    const endMs = Math.min(
+      sourceProbe.durationMs,
+      (index + 1) * manifest.request.segmentSeconds * 1_000,
+    );
+    const absolutePath = join(root, "output", name);
+    const probe = await probeMedia(absolutePath, runner, root);
+    if (
+      probe.audioCodec !== "mp3" ||
+      probe.channels !== 1 ||
+      probe.sampleRate !== 16_000 ||
+      Math.abs(probe.durationMs - (endMs - startMs)) > 2_000
+    ) {
+      throw new Error("VIDEO_AUDIO_SEGMENT_PROPERTIES_INVALID");
+    }
+    const audio = await outputFile(
+      root,
+      `output/${name}`,
+      "audio/mpeg",
+      manifest.request.maximumSegmentBytes,
+    );
+    totalBytes += audio.byteSize;
+    if (totalBytes > 128 * 1024 * 1024) {
+      throw new Error("VIDEO_AUDIO_TOTAL_BYTES_EXCEEDED");
+    }
+    segments.push({ index, startMs, endMs, audio });
+  }
+  return videoAudioExtractWorkerOutputV2Schema.parse({
+    schemaVersion: 2,
+    worker: "video-audio-extract.v2",
+    durationMs: sourceProbe.durationMs,
+    codec: "mp3",
+    bitrateKbps: 48,
+    sampleRate: 16_000,
+    channels: 1,
+    segments,
+  });
 }
 
 export async function extractSegments(
@@ -595,6 +736,10 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
         return extractVideoAudio(
           await readJsonManifest(cli.input, videoAudioExtractWorkerManifestV1Schema),
         );
+      case "extract-video-audio-segments":
+        return extractVideoAudioSegments(
+          await readJsonManifest(cli.input, videoAudioExtractWorkerManifestV2Schema),
+        );
       case "extract-segments":
         return extractSegments(
           await readJsonManifest(cli.input, mediaSegmentWorkerManifestV1Schema),
@@ -632,8 +777,14 @@ function canonicalYoutubeUrl(value: string): string {
   return `https://www.youtube.com/watch?v=${id}`;
 }
 
-function assertDiscoveredMediaPath(path: string): void {
-  if (!/^\/workspace\/tmp\/source\.[a-zA-Z0-9]{1,12}$/u.test(path)) {
+function assertDiscoveredMediaPath(path: string, root = "/workspace"): void {
+  const normalizedRoot = root.replaceAll("\\", "/").replace(/\/$/u, "");
+  const normalizedPath = path.replaceAll("\\", "/");
+  const prefix = `${normalizedRoot}/tmp/source.`;
+  if (
+    !normalizedPath.startsWith(prefix) ||
+    !/^[a-zA-Z0-9]{1,12}$/u.test(normalizedPath.slice(prefix.length))
+  ) {
     throw new Error("VIDEO_INPUT_PATH_INVALID");
   }
 }

@@ -2,6 +2,7 @@ import { createRouterClient, ORPCError } from "@orpc/server";
 import {
   agentActionActivityFilterSchema,
   agentActionApprovalResolutionInputSchema,
+  agentActionConflictResolutionInputSchema,
   agentActionDependencyInputSchema,
   agentActionPreviewSchema,
   agentActionTaskCreateRequestSchema,
@@ -103,15 +104,45 @@ export const actionsRouter = {
     resolve: protectedProcedure
       .input(agentActionApprovalResolutionInputSchema)
       .handler(({ context, input }) =>
-        call(async () =>
-          resolveApprovalAndResume({
+        call(async () => {
+          let runtimeResult: unknown = null;
+          const action = await resolveApprovalAndResume({
             ledger: actionLedgerService(),
             broker: await mutationBroker(context),
             userId: context.session.user.id,
             resolution: input,
             resolutionContext: { channel: "first-party-web" },
-          }),
-        ),
+            onInvocationResolved: ({ result }) => {
+              runtimeResult = result.model;
+            },
+          });
+          if (action.actorKind === "embedded-agent" && action.runId) {
+            const { assistantRunService } = await import(
+              "../assistant/services"
+            );
+            await assistantRunService.resumeApproval(
+              context.session.user.id,
+              action.runId,
+              {
+                actionId: action.id,
+                toolCallId: action.toolCallId,
+                status:
+                  action.status === "completed"
+                    ? "completed"
+                    : action.status === "rejected"
+                      ? "rejected"
+                      : action.status === "expired"
+                        ? "expired"
+                        : action.status === "inspect-required"
+                          ? "inspect-required"
+                          : "failed",
+                modelResult: runtimeResult,
+              },
+              await mutationBroker(context),
+            );
+          }
+          return action;
+        }),
       ),
   },
 
@@ -185,6 +216,16 @@ export const actionsRouter = {
           actionLedgerService().executeUndo({
             userId: context.session.user.id,
             preview: input.preview,
+          }),
+        ),
+      ),
+    resolveConflict: protectedProcedure
+      .input(agentActionConflictResolutionInputSchema)
+      .handler(({ context, input }) =>
+        call(() =>
+          actionLedgerService().resolveConflict({
+            userId: context.session.user.id,
+            ...input,
           }),
         ),
       ),

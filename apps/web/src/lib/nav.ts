@@ -1,8 +1,10 @@
 import {
   BookMarkedIcon,
+  BookOpenCheckIcon,
   BrainCircuitIcon,
   CalendarRangeIcon,
   ChartNoAxesCombinedIcon,
+  CloudCogIcon,
   CompassIcon,
   FunctionSquareIcon,
   FolderOpenIcon,
@@ -13,6 +15,7 @@ import {
   PaletteIcon,
   PlugIcon,
   ScrollTextIcon,
+  ServerCogIcon,
   SlidersHorizontalIcon,
   SettingsIcon,
   ShieldCheckIcon,
@@ -73,6 +76,11 @@ export const NAV_ENTRIES: NavEntry[] = [
     href: "/projects",
     label: "Study projects",
     icon: FolderKanbanIcon,
+  },
+  {
+    href: "/learning",
+    label: "Learning",
+    icon: BookOpenCheckIcon,
   },
   {
     href: "/assistant",
@@ -551,7 +559,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: "Integrations",
     icon: PlugIcon,
     searchTerms: [
-      "moodle pronote ecole directe écoledirecte skolengo mcp api oauth mistral byok",
+      "moodle pronote ecole directe écoledirecte skolengo mcp api oauth mistral openai openrouter gemini cohere elevenlabs embeddings reranking byok",
     ],
     items: [
       {
@@ -620,13 +628,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         href: "/settings/integrations#ai-keys",
         label: "AI service keys",
         searchTerms: [
-          "mistral byok transcription ocr inference api podcast tts voxtral voix synthèse",
+          "mistral openai openrouter gemini cohere elevenlabs embeddings rerank reranking byok transcription ocr inference api podcast tts voxtral voix synthèse",
         ],
       },
       {
         href: "/settings/integrations#ai-keys",
-        label: "My API keys",
-        searchTerms: ["api keys clés byok mistral ocr transcription inference"],
+        label: "AI provider keys",
+        searchTerms: [
+          "my api keys mes clés api keys clés fournisseurs providers byok mistral openai openrouter gemini cohere elevenlabs ocr transcription inference embeddings reranking",
+        ],
       },
       {
         href: "/settings/integrations#ai-keys",
@@ -637,13 +647,94 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       },
       {
         href: "/settings/integrations#ai-keys",
-        label: "Transcription",
-        searchTerms: ["clé cle key api audio cours enregistrement byok"],
+        label: "OpenAI transcription",
+        searchTerms: [
+          "clé cle key api openai audio cours enregistrement dictée speech to text byok",
+        ],
       },
       {
         href: "/settings/integrations#ai-keys",
-        label: "AI inference",
-        searchTerms: ["clé cle key api modèle model ia byok"],
+        label: "OpenAI and OpenRouter models",
+        searchTerms: [
+          "clé cle key api openai openrouter modèle model ia chat inference byok",
+        ],
+      },
+      {
+        href: "/settings/integrations#ai-keys",
+        label: "Gemini multimodal embeddings",
+        searchTerms: [
+          "google ai studio gemini embedding 2 vectoriel vectors multimodal pdf image rag recherche",
+        ],
+      },
+      {
+        href: "/settings/integrations#ai-keys",
+        label: "Cohere reranking",
+        searchTerms: [
+          "cohere rerank reranking cross encoder classement résultats rag recherche",
+        ],
+      },
+      {
+        href: "/settings/integrations#ai-keys",
+        label: "ElevenLabs voices",
+        searchTerms: [
+          "elevenlabs voix synthèse tts podcast audio vidéo narration",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Advanced retrieval",
+        searchTerms: [
+          "rag recherche avancée hybride lexical dense fts rrf citations contexte corpus",
+        ],
+      },
+      {
+        href: "/settings/integrations#assistant-models",
+        label: "Assistant models and routing",
+        searchTerms: [
+          "chat assistant model modèle inference placement byok core node managed litellm routage",
+        ],
+      },
+      {
+        href: "/settings/integrations#assistant-models",
+        label: "Model fallback and limits",
+        searchTerms: [
+          "fallback fournisseur provider tokens contexte output coût cost budget devise route préférence",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Retrieval fallback policy",
+        searchTerms: [
+          "fallback repli lexical only hybride sans reranking fail échec projet",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Immutable embedding spaces",
+        searchTerms: [
+          "gemini embedding 2 vector multimodal génération index pdf image dimensions modèle",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Local and cloud rerankers",
+        searchTerms: [
+          "cohere tei local rerank reranking cross encoder classement rrf",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Corpus reindexing",
+        searchTerms: [
+          "réindexer reindex indexation génération progression jobs corpus projet",
+        ],
+      },
+      {
+        href: "/settings/integrations#retrieval",
+        label: "Retrieval traces and evaluations",
+        searchTerms: [
+          "traces privées évaluation benchmark french school métriques rag qualité consentement",
+        ],
       },
       {
         href: "/settings/integrations#mcp",
@@ -688,6 +779,94 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         href: "/settings/integrations#registered-clients",
         label: "Registered clients",
         searchTerms: ["oauth clients registered enregistrés redirect uri"],
+      },
+      {
+        href: "/settings/integrations#learning-analysis",
+        label: "Learning analysis privacy",
+        searchTerms: [
+          "copie ocr maîtrise evidence preuve analyse consentement confidentialité latency quiz progression",
+        ],
+      },
+    ],
+  },
+  {
+    href: "/settings/node",
+    label: "Avermate Node",
+    icon: ServerCogIcon,
+    searchTerms: [
+      "node self host self-host hybrid pairing placement relay manifest health migration fingerprint credentials sandbox checkpoint opencode openhands serveur auto hébergé appairage placement migration empreinte identifiants",
+    ],
+    items: [
+      {
+        href: "/settings/node#readiness",
+        label: "Deployment readiness",
+        searchTerms: [
+          "full self host onboarding protocol upgrade required capabilities diagnostics déploiement auto hébergé préparation mise à niveau",
+        ],
+      },
+      {
+        href: "/settings/node#pairing",
+        label: "Pair a Node",
+        searchTerms: [
+          "one time code fingerprint confirmation capabilities appairage code unique empreinte confirmation capacités",
+        ],
+      },
+      {
+        href: "/settings/node#nodes",
+        label: "Node health and manifest",
+        searchTerms: [
+          "online offline revoked upgrade config revision heartbeat relay capabilities runtime checkpoint specialist opencode openhands santé manifeste révoqué configuration",
+        ],
+      },
+      {
+        href: "/settings/node#nodes",
+        label: "Rotate or revoke Node credentials",
+        searchTerms: [
+          "rotate revoke generation compromised retire rotation révocation identifiants compromis",
+        ],
+      },
+      {
+        href: "/settings/node#placements",
+        label: "Capability placement",
+        searchTerms: [
+          "storage conversations retrieval models jobs sandbox renderers school connectors core node managed byok residency offline cost stockage recherche modèles exécution résidence coût",
+        ],
+      },
+      {
+        href: "/settings/node#lifecycle",
+        label: "Lifecycle and migration diagnostics",
+        searchTerms: [
+          "planned running verified failed migration append only events lifecycle diagnostic migration planifiée vérifiée événements",
+        ],
+      },
+    ],
+  },
+  {
+    href: "/settings/managed",
+    label: "AI & managed storage",
+    icon: CloudCogIcon,
+    searchTerms: [
+      "managed ai storage usage limits quota consent privacy export deletion beta hosting ia stockage géré usage limites consentement confidentialité",
+    ],
+    items: [
+      {
+        href: "/settings/managed",
+        label: "Managed beta invitation",
+        searchTerms: ["invite waitlist activation invitation liste attente"],
+      },
+      {
+        href: "/settings/managed#managed-execution",
+        label: "Managed execution and limits",
+        searchTerms: [
+          "quota usage reservation stop breaker limites consommation",
+        ],
+      },
+      {
+        href: "/settings/managed",
+        label: "Managed privacy and deletion",
+        searchTerms: [
+          "export delete erase receipts confidentialité suppression reçus",
+        ],
       },
     ],
   },
@@ -752,6 +931,7 @@ export const CUSTOMIZABLE_NAV_HREFS = [
   "/grades",
   "/materials",
   "/projects",
+  "/learning",
   "/assistant",
   "/goals",
   "/planning",

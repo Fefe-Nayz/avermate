@@ -16,10 +16,23 @@ describe("sandbox conformance matrix", () => {
       now,
     });
     expect(report.passed).toBe(true);
-    expect(report.cells).toHaveLength(7);
+    expect(report.cells).toHaveLength(
+      Object.values(SANDBOX_PROFILES_V1).length,
+    );
     expect(report.cells.every((cell) => cell.status === "unavailable")).toBe(
       true,
     );
+    expect(
+      report.cells
+        .filter(
+          (cell) =>
+            cell.profileId === "opencode" || cell.profileId === "openhands",
+        )
+        .map((cell) => [cell.profileId, cell.status]),
+    ).toEqual([
+      ["opencode", "unavailable"],
+      ["openhands", "unavailable"],
+    ]);
   });
 
   test("disabled and mock providers never satisfy required live profiles", async () => {

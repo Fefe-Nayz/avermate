@@ -32,6 +32,13 @@ await runChecked(
   { cwd: resolve(workspaceRoot, "apps/server") },
 );
 
+if (process.argv.includes("--contracts-only")) {
+  console.log(
+    "[plan-032] storage contract subset passed; provider-runtime conformance remains in verify:032:storage.",
+  );
+  process.exit(0);
+}
+
 await runChecked("disposable Garage provider conformance", [
   "bun",
   "scripts/verification/plan-032-garage.ts",

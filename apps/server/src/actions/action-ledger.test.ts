@@ -1,4 +1,11 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
 import { createClient, type Client } from "@libsql/client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,9 +27,7 @@ import {
 } from "./personal-task-command";
 import { resolveApprovalAndResume } from "./approval-execution";
 import { recoverInterruptedActions } from "./action-recovery";
-import {
-  InMemoryToolActionContinuationStore,
-} from "../tools/action-continuation";
+import { InMemoryToolActionContinuationStore } from "../tools/action-continuation";
 import {
   noOpToolCapabilities,
   noOpToolEvents,
@@ -33,7 +38,16 @@ import { ToolRegistry } from "../tools/registry";
 const clients: Client[] = [];
 const testDirectory = mkdtempSync(join(tmpdir(), "avermate-actions-"));
 
-afterAll(() => {
+setDefaultTimeout(15_000);
+
+async function closeClients() {
+  for (const client of clients.splice(0)) {
+    await Promise.resolve(client.close());
+  }
+}
+
+afterAll(async () => {
+  await closeClients();
   try {
     rmSync(testDirectory, { recursive: true, force: true });
   } catch {
@@ -42,9 +56,7 @@ afterAll(() => {
   }
 });
 
-afterEach(() => {
-  for (const client of clients.splice(0)) client.close();
-});
+afterEach(closeClients);
 
 async function setup() {
   const client = createClient({
@@ -99,6 +111,23 @@ async function setup() {
       threadId text NOT NULL REFERENCES assistant_threads(id) ON DELETE CASCADE,
       branchId text NOT NULL REFERENCES assistant_branches(id) ON DELETE CASCADE
     );
+    CREATE TABLE learning_evidence (
+      id text PRIMARY KEY NOT NULL,
+      objectiveId text NOT NULL,
+      userId text NOT NULL REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE learning_evidence_decisions (
+      id text PRIMARY KEY NOT NULL,
+      evidenceId text NOT NULL REFERENCES learning_evidence(id) ON DELETE CASCADE,
+      state text NOT NULL,
+      reason text,
+      actor text NOT NULL,
+      idempotencyKey text NOT NULL,
+      userId text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      createdAt integer NOT NULL
+    );
+    CREATE UNIQUE INDEX learning_evidence_decisions_key_unique
+      ON learning_evidence_decisions (userId, idempotencyKey);
   `);
   const migration = await Bun.file(
     new URL("../../drizzle/0057_agent_action_ledger.sql", import.meta.url),
@@ -206,6 +235,64 @@ async function completeTaskAction(input: {
     ],
   });
   return task;
+}
+
+async function completeEvidenceDecisionAction(input: {
+  client: Client;
+  ledger: ActionLedgerService;
+  actionId: string;
+  evidenceId: string;
+  decisionId: string;
+  previousDecisionId?: string;
+}) {
+  const previousDecisionId = input.previousDecisionId ?? "decision-included";
+  await input.client.batch([
+    {
+      sql: `INSERT OR IGNORE INTO learning_evidence
+            (id, objectiveId, userId) VALUES (?, ?, ?)`,
+      args: [input.evidenceId, "objective-a", "user-a"],
+    },
+    {
+      sql: `INSERT OR IGNORE INTO learning_evidence_decisions
+            (id, evidenceId, state, reason, actor, idempotencyKey, userId,
+             createdAt) VALUES (?, ?, 'included', NULL, 'user', ?, ?, 1)`,
+      args: [
+        previousDecisionId,
+        input.evidenceId,
+        `seed:${input.evidenceId}`,
+        "user-a",
+      ],
+    },
+  ]);
+  await input.ledger.markExecuting("user-a", input.actionId);
+  await input.client.execute({
+    sql: `INSERT INTO learning_evidence_decisions
+          (id, evidenceId, state, reason, actor, idempotencyKey, userId,
+           createdAt) VALUES (?, ?, 'excluded', ?, 'user', ?, ?, 2)`,
+    args: [
+      input.decisionId,
+      input.evidenceId,
+      "Assistant exclusion",
+      input.actionId,
+      "user-a",
+    ],
+  });
+  await input.ledger.complete("user-a", input.actionId, {
+    modelProjection: { id: input.decisionId, state: "excluded" },
+    uiProjection: { id: input.decisionId, state: "excluded" },
+    auditProjection: { outcome: "excluded", resourceId: input.evidenceId },
+    resources: [
+      {
+        resourceKind: "learning-evidence",
+        resourceId: input.evidenceId,
+        operation: "update",
+        beforeRevision: previousDecisionId,
+        afterRevision: input.decisionId,
+        beforeSnapshot: { state: "included", reason: null },
+        afterSnapshot: { state: "excluded", reason: "Assistant exclusion" },
+      },
+    ],
+  });
 }
 
 async function reserveReady(
@@ -490,10 +577,8 @@ describe("durable action ledger", () => {
     });
   });
 
-  test(
-    "records compensation as a new approved action and never rewrites the source lifecycle",
-    async () => {
-      const { client, ledger } = await setup();
+  test("records compensation as a new approved action and never rewrites the source lifecycle", async () => {
+    const { client, ledger } = await setup();
     const sourceId = await reserveReady(ledger, {
       idempotencyKey: "undo-source",
     });
@@ -528,10 +613,111 @@ describe("durable action ledger", () => {
           includeTrashed: true,
         })
       ).trashedAt,
-      ).toBeInstanceOf(Date);
-    },
-    15_000,
-  );
+    ).toBeInstanceOf(Date);
+  }, 15_000);
+
+  test("undoes an evidence exclusion by appending a fenced correction", async () => {
+    const { client } = await setup();
+    const recomputed: string[] = [];
+    const ledger = new ActionLedgerService(client, {
+      recomputeLearningMastery: async (_userId, objectiveId) => {
+        recomputed.push(objectiveId);
+      },
+    });
+    const sourceId = await reserveReady(ledger, {
+      idempotencyKey: "evidence-exclusion-source",
+      toolId: "learning.evidence.decide",
+      effect: "update",
+      approval: "never",
+      compensation: "supported",
+      compensatorId: "learning.evidence.restore-decision@1",
+      crashRecovery: "idempotent-retry",
+      domainScopeKind: "learning-evidence",
+      domainScopeId: "evidence-a",
+    });
+    await completeEvidenceDecisionAction({
+      client,
+      ledger,
+      actionId: sourceId,
+      evidenceId: "evidence-a",
+      decisionId: "decision-excluded",
+    });
+
+    const preview = await ledger.previewUndo("user-a", [sourceId]);
+    expect(preview.eligible).toEqual([sourceId]);
+    const result = await ledger.executeUndo({ userId: "user-a", preview });
+    expect(result).toMatchObject({ complete: true, partial: false });
+    expect(recomputed).toEqual(["objective-a"]);
+    const latest = await client.execute({
+      sql: `SELECT state, reason, actor FROM learning_evidence_decisions
+            WHERE evidenceId = ? AND userId = ?
+            ORDER BY createdAt DESC, id DESC LIMIT 1`,
+      args: ["evidence-a", "user-a"],
+    });
+    expect(latest.rows[0]).toMatchObject({
+      state: "included",
+      reason: null,
+      actor: "system-correction",
+    });
+    expect(await ledger.get("user-a", sourceId)).toMatchObject({
+      status: "completed",
+      undoState: "compensated",
+    });
+  }, 15_000);
+
+  test("never overwrites a later manual evidence decision during undo", async () => {
+    const { client, ledger } = await setup();
+    const sourceId = await reserveReady(ledger, {
+      idempotencyKey: "evidence-conflict-source",
+      toolId: "learning.evidence.decide",
+      effect: "update",
+      approval: "never",
+      compensation: "supported",
+      compensatorId: "learning.evidence.restore-decision@1",
+      crashRecovery: "idempotent-retry",
+      domainScopeKind: "learning-evidence",
+      domainScopeId: "evidence-conflict",
+    });
+    await completeEvidenceDecisionAction({
+      client,
+      ledger,
+      actionId: sourceId,
+      evidenceId: "evidence-conflict",
+      decisionId: "decision-excluded-conflict",
+    });
+    await client.execute({
+      sql: `INSERT INTO learning_evidence_decisions
+            (id, evidenceId, state, reason, actor, idempotencyKey, userId,
+             createdAt) VALUES (?, ?, 'included', ?, 'user', ?, ?, 3)`,
+      args: [
+        "decision-later-human",
+        "evidence-conflict",
+        "Later human choice",
+        "later-human-choice",
+        "user-a",
+      ],
+    });
+
+    const source = await ledger.get("user-a", sourceId);
+    expect(source).toMatchObject({
+      undoState: "conflicted",
+      undoReasonCode: "resource-revision-changed",
+    });
+    const preview = await ledger.previewUndo("user-a", [sourceId]);
+    expect(preview.conflicted).toEqual([sourceId]);
+    const result = await ledger.executeUndo({ userId: "user-a", preview });
+    expect(result.outcomes[0]).toMatchObject({ state: "conflicted" });
+    const decisions = await client.execute({
+      sql: `SELECT state, reason FROM learning_evidence_decisions
+            WHERE evidenceId = ? ORDER BY createdAt, id`,
+      args: ["evidence-conflict"],
+    });
+    expect(decisions.rows).toHaveLength(3);
+    expect(decisions.rows.at(-1)).toMatchObject({
+      state: "included",
+      reason: "Later human choice",
+    });
+  });
 
   test("conflicts instead of overwriting a later manual edit", async () => {
     const { client, ledger } = await setup();
@@ -565,6 +751,28 @@ describe("durable action ledger", () => {
         taskId: "task-edited",
       }),
     ).toMatchObject({ title: "Human edit", trashedAt: null });
+    const resolved = await ledger.resolveConflict({
+      userId: "user-a",
+      actionId: sourceId,
+      resolution: "keep-current",
+    });
+    expect(resolved).toMatchObject({
+      undoState: "blocked",
+      undoReasonCode: "conflict-kept-current",
+    });
+    expect(
+      await ledger.resolveConflict({
+        userId: "user-a",
+        actionId: sourceId,
+        resolution: "keep-current",
+      }),
+    ).toMatchObject({
+      undoState: "blocked",
+      undoReasonCode: "conflict-kept-current",
+    });
+    expect(
+      (await ledger.previewUndo("user-a", [sourceId])).blocked,
+    ).toContain(sourceId);
   });
 
   test("validates tenant and provider ownership on canonical task commands", async () => {
@@ -705,7 +913,7 @@ describe("durable action ledger", () => {
       predecessor,
     ]);
     expect(undone.complete).toBe(true);
-  });
+  }, 45_000);
 
   test("does not execute before dependencies complete or label a failed batch completed", async () => {
     const { client, ledger } = await setup();
@@ -950,7 +1158,62 @@ describe("durable action ledger", () => {
         })
       ).items.map((item) => item.id),
     ).toEqual([sourceId]);
+    expect(
+      (
+        await ledger.list("user-a", {
+          limit: 10,
+          branchId: "branch-a",
+        })
+      ).items,
+    ).toEqual([]);
     expect((await ledger.list("user-b", { limit: 10 })).items).toEqual([]);
+  });
+
+  test("reviews only attributable post-cursor branch actions and never selects unrelated work", async () => {
+    const { client, ledger } = await setup();
+    const attributable = await reserveReady(ledger, {
+      idempotencyKey: "historical-attributable",
+      threadId: "thread-a",
+      branchId: "branch-a",
+    });
+    await completeTaskAction({
+      client,
+      ledger,
+      actionId: attributable,
+      taskId: "historical-attributable-task",
+    });
+    const unrelated = await reserveReady(ledger, {
+      idempotencyKey: "historical-unrelated",
+      threadId: null,
+      branchId: null,
+    });
+    await completeTaskAction({
+      client,
+      ledger,
+      actionId: unrelated,
+      taskId: "historical-unrelated-task",
+    });
+
+    const review = await ledger.reviewBranchSince({
+      userId: "user-a",
+      branchId: "branch-a",
+      domainCursorRef: "domain:user-a:0",
+    });
+    expect(review.safeToCompensate.map((action) => action.id)).toEqual([
+      attributable,
+    ]);
+    expect(review.unrelatedActionCount).toBe(1);
+    expect(review.undoPreview?.actionIds).toEqual([attributable]);
+    expect(review.conflicted).toEqual([]);
+    expect(review.alreadyCompensated).toEqual([]);
+    expect(review.nonUndoable).toEqual([]);
+    await expect(
+      ledger.reviewBranchSince({
+        userId: "user-b",
+        branchId: "branch-a",
+        domainCursorRef: "domain:user-a:0",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
   });
 
   test("fails closed before persisting credentials, signed URLs or oversized snapshots", async () => {

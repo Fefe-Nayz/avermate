@@ -1,7 +1,6 @@
 # AI architecture v2
 
-**Status:** accepted architecture for the plan 026 proof slices; no production
-assistant is enabled yet.
+**Status:** accepted architecture, amended by the plan 035 production audit.
 
 **Decision date:** 2026-08-22.
 
@@ -12,15 +11,15 @@ domain boundaries.
 
 ## Decision summary
 
-| Concern         | Decision                                                                                                                                                   |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conversation UI | Use assistant-ui through `ExternalStoreRuntime` as a projection of Avermate state.                                                                         |
-| Durable stream  | Persist an Avermate v1 event envelope, then adapt stable lifecycle, text, tool, state and activity semantics to AG-UI.                                     |
-| Harness         | Put LangGraph JS Core behind the first-party `AgentRuntime` interface and store checkpoints in an Avermate-controlled database.                            |
-| Model access    | Put explicit AI SDK and OpenAI-compatible adapters behind `ModelGateway`; keep LiteLLM optional.                                                           |
-| Tools           | Give embedded chat, MCP and background jobs the same typed registry and deterministic policy broker.                                                       |
-| Transport       | Use authenticated resumable SSE plus cursor polling. Revisit WebSocket only for measured bidirectional realtime needs.                                     |
-| Placement       | Keep academic truth on the Core role. Place conversation, file and inference data on Core or a paired user node according to an explicit placement record. |
+| Concern         | Decision                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Conversation UI | Use assistant-ui through `ExternalStoreRuntime` as a projection of Avermate state.                                                                           |
+| Durable stream  | Persist an Avermate v1 event envelope, then adapt stable lifecycle, text, tool, state and activity semantics to AG-UI.                                       |
+| Harness         | Put one explicit Avermate graph executor behind `AgentRuntime`; keep LangGraph as a replaceable conformance spike, not a second production checkpoint owner. |
+| Model access    | Put explicit AI SDK and OpenAI-compatible adapters behind `ModelGateway`; ship LiteLLM as an implemented, explicitly activated deployment option.            |
+| Tools           | Give embedded chat, MCP and background jobs the same typed registry and deterministic policy broker.                                                         |
+| Transport       | Use authenticated resumable SSE plus cursor polling. Revisit WebSocket only for measured bidirectional realtime needs.                                       |
+| Placement       | Keep academic truth on the Core role. Place conversation, file and inference data on Core or a paired user node according to an explicit placement record.   |
 
 The interfaces in `packages/agent-contracts` are the stable boundary. They do
 not import assistant-ui, AG-UI, LangGraph or a model provider SDK.
@@ -86,14 +85,24 @@ client may optimistically display a candidate path, but the selected branch
 head and message DAG remain authoritative at the selected conversation
 placement. Replacing the UI library must not require a data migration.
 
-### 5. Why LangGraph is behind `AgentRuntime`
+### 5. Why the harness is behind `AgentRuntime`
 
-LangGraph supplies an interruptible graph and checkpoint primitives, not an
-Avermate product contract. `AgentRuntime.start`, `resume`, `cancel`, `fork` and
-`inspect` use branded Avermate references and provider-independent inputs. The
-SQLite spike records a graph schema version on every checkpoint and fails
-closed when a runtime cannot read it. LangGraph Agent Server, LangSmith and any
-proprietary control plane are not required.
+Plan 026 proved that LangGraph can supply an interruptible graph and checkpoint
+primitives without becoming an Avermate product contract. The plan 035 audit
+then found that adopting its saver in production would duplicate the already
+authoritative conversation checkpoint, dispatch-claim and action histories.
+Production therefore uses the explicit `AssistantGraphExecutor` behind
+`AgentRuntime`; every transition is fenced and its portable checkpoint is
+written through `CoreConversationCheckpointStore`. The LangGraph SQLite graph
+remains a restart/fork conformance spike and a replaceability test, not a
+production call path. LangGraph Agent Server, LangSmith and any proprietary
+control plane are not required.
+
+`AgentRuntime.start`, `resume`, `cancel`, `fork` and `inspect` continue to use
+branded Avermate references and provider-independent inputs. A future engine
+may replace the executor only if it passes the same event, checkpoint,
+dispatch, approval and crash-recovery contracts without owning canonical domain
+tables or creating a parallel user-visible history.
 
 This boundary lets later plans replace the graph engine or run it on a node
 without changing Web, SSE, domain tables or persisted event envelopes.
@@ -117,14 +126,17 @@ all raw reasoning event variants are rejected rather than persisted.
 
 Direct provider instances support operator keys and per-user BYOK without an
 extra service. The OpenAI-compatible adapter covers a paired Ollama/vLLM node,
-OpenRouter and user-controlled gateways. LiteLLM becomes useful for managed
-multi-tenant virtual keys, spend budgets, fallbacks and rate limits, but it is
-not necessary for local development or self-hosting and is not installed by
-plan 026.
+OpenRouter and user-controlled gateways. Plan 038 also implements the
+`LiteLLMProxyGateway`, Node `LiteLLMNodeGateway`, virtual-key issuer, explicit
+fallback chains, per-owner budget/rate limits, pinned Compose cell and
+configurator controls. Activation remains optional: `dev-zero`, direct and
+BYOK profiles do not depend on the Python proxy.
 
-If a deployment chooses LiteLLM later, it is another `ModelGateway` adapter.
-It may not become a second authorization boundary or silently route model-name
-strings. Explicit provider/model descriptors remain authoritative.
+When selected, LiteLLM is another `ModelGateway` adapter. It is not a second
+authorization boundary and may not silently route arbitrary model-name
+strings. Avermate's owner policy, explicit provider/model descriptors, frozen
+revisions and accounting ceilings remain authoritative even when LiteLLM also
+enforces a narrower virtual-key budget.
 
 ### 8. How the four histories relate
 
@@ -144,11 +156,14 @@ the references that exist, but no generic `checkpointRef`, `snapshotId` or
 Plan 031 implements this distinction at the provider boundary. Workspace
 snapshots use a portable digest-addressed reference, provider-native runtime
 checkpoints have a separate non-portable shape, and image templates remain
-pinned profile inputs. The checked-in snapshot ledger is an in-memory
-state-machine reference only, so no durable restore claim is made until its
-tables/outbox and job event stream receive reviewed migrations. See
-[`sandbox-runtime.md`](sandbox-runtime.md) for the evidence and activation
-gates.
+pinned profile inputs. Core placement uses the libSQL-backed
+`CoreSqlSnapshotLedger` and its durable outbox; portable bytes live in the
+configured object store. Paired-Node runtime checkpoint metadata uses the
+owner/node-bound `CoreNodeRuntimeCheckpointRepository` and attaches only to an
+exact committed logical snapshot. Capture, adoption, expiry and deletion never
+write `assistant_runs.conversationCheckpointRef`. The in-memory ledger remains
+a contract-test implementation only. See [`sandbox-runtime.md`](sandbox-runtime.md)
+for provider evidence and activation gates.
 
 ### 9. What undo can and cannot mean
 
@@ -218,6 +233,16 @@ the stream. Reconnect asks the node's canonical store to replay. If the node is
 offline, Core returns placement unavailable and never invents history from its
 cursor metadata. No product copy may claim end-to-end confidentiality until a
 separately versioned encrypted relay actually ships.
+
+Node-owned corpus bodies use a narrower durable recovery mechanism without
+changing that relay claim. Core stores authorization metadata, locators and
+content hashes plus an AES-256-GCM envelope bound to the owner, node, source,
+version key, ordinal and chunk hash. The envelope is migration/recovery state,
+never an offline read fallback. Search candidates are reauthorized against Core
+metadata; readable bodies are fetched with a signed, owner-bound exact-chunk
+operation and checked against the Core SHA-256 before a snippet, citation,
+embedding input or assistant context is produced. Placement migration rewrites
+the envelope transactionally only after exact destination readback.
 
 ### 14. How model endpoint validation prevents network abuse
 
@@ -339,6 +364,7 @@ the exact dependency and bundle review.
 | Cross-user replay or run enumeration                | Authenticate first; owner-bound run lookup and checkpoint references; opaque IDs                                                          | Production conversation schema and authorization tests in plan 029 |
 | Event loss, reordering or duplicate tool execution  | Transactional append-before-publish, exact sequence, terminal invariant, cursor replay, idempotency/revision fences                       | Distributed publisher/lease design in later runtime plans          |
 | A node relay becomes a hidden second database       | Core stores only routing/cursor metadata for node placement; offline means explicit unavailability                                        | Plan 032 protocol and persistence tests                            |
+| Node corpus placement leaves a readable Core mirror | Core retains only authorization/locator/hash metadata plus authenticated recovery envelopes; FTS is purged and normal reads require the Node | Plan 038 envelope, migration and offline tests                     |
 | False end-to-end privacy claim                      | v1 documents Core's transient plaintext visibility                                                                                        | A future versioned encrypted relay, if built                       |
 | Prompt injection elevates privileges                | Typed trust labels; immutable policy snapshot; deterministic broker repeats authorization                                                 | Tool registry/policy implementation in plan 027                    |
 | Tool approval races or replay                       | Approval must bind owner, tool, normalized arguments, revision and expiry before execution                                                | Durable approval/action ledger in plan 030                         |
@@ -353,19 +379,27 @@ the exact dependency and bundle review.
 
 ## Current implementation status
 
-Plan 026 is a proof, not a production assistant:
+Plan 026 remains the replaceability proof, but plans 027–039 now provide the
+production repository paths:
 
-- `packages/agent-contracts` contains the v1 event, context, placement,
-  runtime, reference and model contracts;
-- `apps/server/src/agent` contains SQLite conversation/checkpoint stores,
-  LangGraph and model-gateway proofs, endpoint policy and AG-UI projection;
-- `apps/server/src/routes/agent-events.ts` exposes only authenticated
-  `/agent-spike/*` routes and returns 404 in production;
-- `apps/web/src/app/dev/assistant/page.tsx` returns `notFound()` in production;
-- the page runs one deterministic scripted read-only flow and no live model;
-- no production conversation tables, domain AI mutation path, node transport,
-  sandbox, LiteLLM adapter, billing or realtime voice path are enabled.
+- `packages/agent-contracts` owns the versioned event, context, placement,
+  runtime, reference, model, retrieval, Node and specialist-worker contracts;
+- `apps/server/src/agent` and `apps/server/src/assistant` contain the production
+  graph executor, fenced run control, libSQL conversation/checkpoint stores,
+  model policy and resumable event projection;
+- the authenticated Web assistant uses those services for branches,
+  edit/retry, approvals/questions, attachments, dictation, export and project
+  save; development fixtures remain isolated under `/dev`;
+- direct/BYOK, OpenRouter/OpenAI-compatible, paired-Node and LiteLLM model
+  placements are implemented behind explicit readiness and revision checks;
+- the authenticated Core↔Node relay, SQL operation journal, provider transports,
+  two-phase object adoption, remote deletion and provider-native runtime
+  checkpoint metadata are wired through canonical services;
+- the sandbox, Gemini multimodal embedding, hybrid RRF/reranking, bounded
+  OpenCode/OpenHands and managed-beta paths remain explicitly activated and
+  fail closed when their provider/image evidence is absent.
 
-Production promotion requires plans 027–032, full ownership/approval/retention
-tests and a measured Web bundle budget. A successful spike does not authorize a
-route rename or removal of the development guards.
+Repository implementation is not live release evidence. Real provider,
+healthy-host, air-gap, restore/load and managed-isolation attestations remain
+separate fail-closed operator gates. No raw chain of thought, browser-held
+provider secret or implicit paid fallback is enabled by these repository paths.

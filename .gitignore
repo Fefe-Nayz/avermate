@@ -10,6 +10,7 @@ dist/
 .next/
 test-results/
 playwright-report/
+apps/server/.assistant-e2e-uploads/
 
 # Generated, hash-verified Pyodide runtime (see apps/web/scripts).
 apps/web/public/vendor/pyodide/

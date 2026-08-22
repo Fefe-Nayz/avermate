@@ -54,6 +54,8 @@ export class MeteredExecutionRouter implements ExecutionRouter {
       accountId: string;
       capability: ManagedCapability;
       providerId: string;
+      maximumQuantity: string;
+      unit: UsageUnit;
     }) => Promise<void>,
   ) {}
 
@@ -71,6 +73,8 @@ export class MeteredExecutionRouter implements ExecutionRouter {
       accountId: operation.request.userId,
       capability: estimate.capability,
       providerId: decision.placement.providerId,
+      maximumQuantity: estimate.maximumQuantity,
+      unit: estimate.unit,
     });
     const reserved = await this.ledger.reserve({
       accountId: operation.request.userId,
@@ -80,8 +84,14 @@ export class MeteredExecutionRouter implements ExecutionRouter {
       maximumQuantity: estimate.maximumQuantity,
       idempotencyKey: `dispatch:${operation.operationId}`,
       placement: decision.placement,
-      runId: operation.request.capability === "models" ? operation.operationId : undefined,
-      jobId: operation.request.capability === "jobs" ? operation.operationId : undefined,
+      runId:
+        operation.request.capability === "models"
+          ? operation.operationId
+          : undefined,
+      jobId:
+        operation.request.capability === "jobs"
+          ? operation.operationId
+          : undefined,
       provider: estimate.provider,
       model: estimate.model,
       pricingSnapshotId: estimate.pricingSnapshotId,

@@ -8,6 +8,10 @@ import {
   type ResolvedCitation,
 } from "@avermate/agent-contracts";
 import { db } from "../db";
+import {
+  RoutedCorpusContentReader,
+  type AuthorizedCorpusChunkRow,
+} from "./corpus-content-reader";
 import { jsonValue } from "./values";
 
 type SqlClient = Pick<Client, "execute">;
@@ -87,7 +91,9 @@ export class CoreCitationResolver implements CitationResolver {
     if (!citation.chunkId) return { citation, text: null };
     const result = await this.client.execute({
       sql: `
-        SELECT chunks.text
+        SELECT chunks.id AS chunkId, chunks.text, chunks.normalizedText,
+          chunks.contentHash, chunks.headingPathJson, sources.userId,
+          sources.placement, sources.placementRef
         FROM content_chunks AS chunks
         JOIN content_versions AS versions ON versions.id = chunks.versionId
         JOIN content_sources AS sources ON sources.id = versions.sourceId
@@ -98,10 +104,17 @@ export class CoreCitationResolver implements CitationResolver {
       `,
       args: [input.referenceId, input.ownerId, input.ownerId],
     });
+    const row = result.rows[0] as unknown as
+      | AuthorizedCorpusChunkRow
+      | undefined;
+    const body = row
+      ? (await new RoutedCorpusContentReader(this.client).hydrate([row])).get(
+          citation.chunkId,
+        )
+      : null;
     return {
       citation,
-      text:
-        result.rows[0]?.text === undefined ? null : String(result.rows[0].text),
+      text: body?.text ?? null,
     };
   }
 }

@@ -1,33 +1,32 @@
 import { and, eq } from "drizzle-orm";
 import { mediaSegmentWorkerOutputV1Schema } from "@avermate/agent-contracts";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { db } from "../db";
 import {
   files,
-  materialArtifacts,
   materialDocuments,
   type MediaTranscriptMetaV1,
 } from "../db/schema";
-import { NonRetryableJobError } from "../lib/jobs";
+import { NonRetryableJobError, type JobExecutionIdentity } from "../lib/jobs";
 import {
   MAX_TRANSCRIPTION_AUDIO_BYTES,
   resolveTranscriptionProvider,
   type TranscriptionProvider,
   type TranscriptionResult,
 } from "../lib/transcription";
-import {
-  localObjectPath,
-  readStorageObject,
-  signedStorageObjectUrl,
-  type ManagedStorageProvider,
-} from "../lib/storage-backend";
-import { newId } from "../lib/id";
 import { canonicalJson, sha256 } from "../search/values";
+import { readOwnedFileBytes } from "../lib/owned-file-storage";
 import { FILE_CONSTRAINTS } from "../lib/storage";
 import { runConfiguredSandboxWorker } from "../sandbox/worker-services";
+import { requireUserJobExecution } from "./job-authority";
+import {
+  claimMaterialArtifactGeneration,
+  failMaterialArtifactGeneration,
+  publishMaterialArtifactGeneration,
+} from "./material-artifact-generation";
 
 export const TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND = "materials.media.transcribe";
 export const MEDIA_SEGMENT_SECONDS = 20 * 60;
@@ -54,21 +53,6 @@ function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return copy.buffer;
-}
-
-function managedProvider(value: string): ManagedStorageProvider {
-  if (value === "local" || value === "s3") return value;
-  throw new NonRetryableJobError(
-    "Media transcription requires local or S3-backed storage",
-  );
-}
-
-function sourceUrl(file: typeof files.$inferSelect) {
-  if (file.provider === "local") return localObjectPath(file.storageKey);
-  if (file.provider === "s3") return signedStorageObjectUrl(file.storageKey, 60 * 60);
-  throw new NonRetryableJobError(
-    "Media transcription requires local or S3-backed storage",
-  );
 }
 
 export async function extractAudioSegments(input: {
@@ -185,12 +169,24 @@ export async function runTranscribeMaterialMediaJob(
     signal?: AbortSignal;
     resolveProvider?: (userId: string) => Promise<TranscriptionProvider>;
     operationId?: string;
+    attempt?: number;
+    job?: JobExecutionIdentity;
     extractSegments?: typeof extractAudioSegments;
     readSegment?: typeof readFile;
+    readFile?: typeof readOwnedFileBytes;
+    writeSource?: typeof writeFile;
     now?: () => number;
   } = {},
 ) {
   const { documentId } = payloadSchema.parse(payload);
+  const authority = await requireUserJobExecution(
+    options.job,
+    TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND,
+    (storedPayload) => {
+      const parsed = payloadSchema.safeParse(storedPayload);
+      return parsed.success && parsed.data.documentId === documentId;
+    },
+  );
   const [source] = await db
     .select({ document: materialDocuments, file: files })
     .from(materialDocuments)
@@ -202,7 +198,12 @@ export async function runTranscribeMaterialMediaJob(
         eq(files.status, "stored"),
       ),
     )
-    .where(eq(materialDocuments.id, documentId))
+    .where(
+      and(
+        eq(materialDocuments.id, documentId),
+        authority ? eq(materialDocuments.userId, authority.userId) : undefined,
+      ),
+    )
     .limit(1);
   if (!source || source.document.sourceType !== "file") {
     throw new NonRetryableJobError("Media source document not found");
@@ -213,33 +214,13 @@ export async function runTranscribeMaterialMediaJob(
     );
   }
 
-  const now = new Date();
-  const [artifact] = await db
-    .insert(materialArtifacts)
-    .values({
-      documentId,
-      kind: "media-transcript",
-      status: "pending",
-      content: null,
-      metaVersion: 1,
-      metaJson: null,
-      error: null,
-      userId: source.document.userId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [materialArtifacts.documentId, materialArtifacts.kind],
-      set: {
-        status: "pending",
-        content: null,
-        metaVersion: 1,
-        metaJson: null,
-        error: null,
-        updatedAt: now,
-      },
-    })
-    .returning({ id: materialArtifacts.id });
-  if (!artifact) throw new Error("Media transcript could not be initialized");
+  const generation = await claimMaterialArtifactGeneration({
+    documentId,
+    kind: "media-transcript",
+    userId: source.document.userId,
+    runToken: authority?.runToken ?? `manual:${crypto.randomUUID()}`,
+    job: authority,
+  });
 
   const clock = options.now ?? Date.now;
   const startedAt = clock();
@@ -247,29 +228,35 @@ export async function runTranscribeMaterialMediaJob(
     ? await mkdtemp(join(tmpdir(), "avermate-media-"))
     : null;
   try {
+    const sourceBytes = new Uint8Array(
+      await (options.readFile ?? readOwnedFileBytes)(
+        source.document.userId,
+        source.file,
+        {
+          signal: options.signal,
+          maxBytes: FILE_CONSTRAINTS["course-media"].maxBytes,
+        },
+      ),
+    );
     const segmentBytes = options.extractSegments
-      ? await Promise.all(
-          (
-            await options.extractSegments({
-              source: await sourceUrl(source.file),
-              directory: directory!,
-              signal: options.signal,
-            })
-          ).map(async (path) =>
-            new Uint8Array(await (options.readSegment ?? readFile)(path)),
-          ),
-        )
-      : await extractAudioSegmentsInSandbox({
-          bytes: new Uint8Array(
-            await readStorageObject(
-              managedProvider(source.file.provider),
-              source.file.storageKey,
-              {
+      ? await (async () => {
+          const sourcePath = join(directory!, "source-media");
+          await (options.writeSource ?? writeFile)(sourcePath, sourceBytes);
+          return Promise.all(
+            (
+              await options.extractSegments!({
+                source: sourcePath,
+                directory: directory!,
                 signal: options.signal,
-                maxBytes: FILE_CONSTRAINTS["course-media"].maxBytes,
-              },
+              })
+            ).map(
+              async (path) =>
+                new Uint8Array(await (options.readSegment ?? readFile)(path)),
             ),
-          ),
+          );
+        })()
+      : await extractAudioSegmentsInSandbox({
+          bytes: sourceBytes,
           mimeType: source.file.mimeType,
           ownerId: source.document.userId,
           documentId,
@@ -292,6 +279,7 @@ export async function runTranscribeMaterialMediaJob(
           operationId: options.operationId
             ? `${options.operationId}:segment:${segmentIndex}`
             : undefined,
+          attempt: options.attempt,
           maximumSeconds: MEDIA_SEGMENT_SECONDS,
           signal: options.signal,
         }),
@@ -310,88 +298,41 @@ export async function runTranscribeMaterialMediaJob(
     );
     const meta: MediaTranscriptMetaV1 = {
       provider: provider.id,
+      model: provider.model,
       ...(merged.language ? { language: merged.language } : {}),
       durationMs,
       segmentCount: merged.segments.length,
     };
-    const publishedAt = Math.floor(Date.now() / 1_000);
-    await db.$client
-      .batch(
-        [
-          {
-            sql: `DELETE FROM material_artifact_segments WHERE artifactId = ?`,
-            args: [artifact.id],
-          },
-          ...merged.segments.map((segment, ordinal) => ({
-            sql: `
-            INSERT INTO material_artifact_segments (
-              id, artifactId, ordinal, text, locatorJson, contentHash
-            ) VALUES (?, ?, ?, ?, ?, ?)
-          `,
-            args: [
-              newId("maseg"),
-              artifact.id,
-              ordinal,
-              segment.text,
-              canonicalJson({
-                kind: source.file.mimeType.startsWith("video/")
-                  ? "video"
-                  : "audio",
-                startMs: segment.startMs,
-                endMs: Math.max(segment.startMs + 1, segment.endMs),
-              }),
-              sha256(segment.text),
-            ],
-          })),
-          {
-            sql: `
-            UPDATE material_artifacts
-            SET status = 'ready', content = ?, metaVersion = 1,
-              metaJson = ?, error = NULL, updatedAt = ?
-            WHERE id = ? AND status = 'pending'
-          `,
-            args: [
-              merged.content,
-              JSON.stringify(meta),
-              publishedAt,
-              artifact.id,
-            ],
-          },
-          {
-            sql: `
-            INSERT INTO material_artifact_segments (
-              id, artifactId, ordinal, text, locatorJson, contentHash
-            )
-            SELECT NULL, ?, 0, '', '{}', ? WHERE changes() = 0
-          `,
-            args: [artifact.id, sha256("")],
-          },
-        ],
-        "write",
-      )
-      .catch((error) => {
-        throw new NonRetryableJobError(
-          "The media source was removed while transcribing",
-          { cause: error },
-        );
-      });
+    await publishMaterialArtifactGeneration({
+      generation,
+      content: merged.content,
+      metaJson: JSON.stringify(meta),
+      segments: merged.segments.map((segment) => ({
+        text: segment.text,
+        locatorJson: canonicalJson({
+          kind: source.file.mimeType.startsWith("video/") ? "video" : "audio",
+          startMs: segment.startMs,
+          endMs: Math.max(segment.startMs + 1, segment.endMs),
+        }),
+        contentHash: sha256(segment.text),
+      })),
+    }).catch((error) => {
+      throw new NonRetryableJobError(
+        "The media source was removed while transcribing",
+        { cause: error },
+      );
+    });
     return {
-      artifactId: artifact.id,
+      artifactId: generation.artifactId,
       segmentCount: merged.segments.length,
       durationMs,
       elapsedMs: Math.max(0, clock() - startedAt),
     };
   } catch (error) {
-    await db
-      .update(materialArtifacts)
-      .set({
-        status: "failed",
-        content: null,
-        metaJson: null,
-        error: safeError(error),
-        updatedAt: new Date(),
-      })
-      .where(eq(materialArtifacts.id, artifact.id));
+    await failMaterialArtifactGeneration({
+      generation,
+      error: safeError(error),
+    });
     throw error;
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true });

@@ -12,6 +12,7 @@ import {
   projectAssistantPath,
   type AssistantCanonicalSnapshot,
 } from "./assistant-runtime-adapter"
+import { assistantRunExecutionFixture } from "./assistant-test-fixtures"
 
 const now = "2026-08-22T12:00:00.000Z"
 
@@ -144,6 +145,7 @@ describe("Avermate assistant external-store adapter", () => {
     const current = snapshot()
     current.runs = [
       {
+        ...assistantRunExecutionFixture,
         id: "run-stream",
         threadId: thread.id,
         branchId: "branch-main",
@@ -193,6 +195,7 @@ describe("Avermate assistant external-store adapter", () => {
     const current = snapshot()
     current.runs = [
       {
+        ...assistantRunExecutionFixture,
         id: "run-1",
         threadId: thread.id,
         branchId: "branch-main",

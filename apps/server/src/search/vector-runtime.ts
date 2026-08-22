@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   EmbeddingProvider,
+  EmbeddingRequestContext,
   EmbeddingSpaceDescriptor,
   EmbeddingVector,
   IndexedVector,
@@ -9,9 +10,23 @@ import type {
   VectorCapabilities,
   VectorIndex,
   VectorQuery,
+  ProviderConsent,
 } from "@avermate/agent-contracts";
+import { and, eq, isNull } from "drizzle-orm";
 import type { ModelEndpointPlacement } from "../agent/model-endpoint-policy";
 import { safeModelFetchResponse } from "../agent/model-endpoint-policy";
+import { db } from "../db";
+import { retrievalProviderConsents } from "../db/schema";
+import {
+  resolveProviderServiceKey,
+  type ResolvedServiceKey,
+} from "../lib/service-keys";
+import { requireFile } from "../lib/ownership";
+import { readOwnedFileBytes } from "../lib/owned-file-storage";
+import {
+  GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+  GeminiEmbeddingProvider,
+} from "./gemini-embedding";
 import { canonicalJson, sha256 } from "./values";
 
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -58,6 +73,9 @@ export type OpenAICompatibleEmbeddingOptions = {
   model: string;
   dimension: number;
   providerName: string;
+  modelRevision?: string;
+  preprocessingRevision?: string;
+  placementDescriptor?: EmbeddingSpaceDescriptor["placement"];
   apiKey?: string | null;
   placement?: ModelEndpointPlacement;
   fetch?: Fetcher;
@@ -80,20 +98,24 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
         canonicalJson({
           provider: options.providerName,
           model: options.model,
-          dimension: options.dimension,
-          distance: "cosine",
-          normalization: "provider-output-v1",
-          modality: "text",
-          preprocessingVersion: "avermate-corpus-text-v1",
+          modelRevision: options.modelRevision ?? options.model,
+          dimensions: options.dimension,
+          modalities: ["text"],
+          normalization: "provider-unit",
+          preprocessingRevision:
+            options.preprocessingRevision ?? "avermate-corpus-text-v1",
+          placement: options.placementDescriptor ?? "node",
         }),
       )}`,
       provider: options.providerName,
       model: options.model,
-      dimension: options.dimension,
-      distance: "cosine",
-      normalization: "provider-output-v1",
-      modality: "text",
-      preprocessingVersion: "avermate-corpus-text-v1",
+      modelRevision: options.modelRevision ?? options.model,
+      dimensions: options.dimension,
+      modalities: ["text"],
+      normalization: "provider-unit",
+      preprocessingRevision:
+        options.preprocessingRevision ?? "avermate-corpus-text-v1",
+      placement: options.placementDescriptor ?? "node",
     };
     this.#fetch =
       options.fetch ??
@@ -124,6 +146,7 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
 
   async embedText(
     input: readonly TextEmbeddingInput[],
+    context?: EmbeddingRequestContext,
   ): Promise<EmbeddingVector[]> {
     if (input.length === 0) return [];
     if (input.length > 256)
@@ -137,6 +160,7 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
         dimensions: this.options.dimension,
         encoding_format: "float",
       }),
+      signal: context?.signal,
     });
     if (!response.ok) throw responseError("Embedding provider", response);
     const body = (await response.json()) as {
@@ -203,6 +227,10 @@ export type QdrantVectorIndexOptions = {
   apiKey?: string | null;
   collectionPrefix?: string;
   descriptor: EmbeddingSpaceDescriptor;
+  /** Owned aliases prevent one user's generation switch hiding another's. */
+  ownerId?: string;
+  /** Staging collections are immutable and promoted by one alias transaction. */
+  generationId?: string;
   fetch?: Fetcher;
 };
 
@@ -221,8 +249,21 @@ export class QdrantVectorIndex implements VectorIndex {
     const prefix = collectionToken(
       options.collectionPrefix ?? "avermate_corpus",
     );
-    this.#collection = `${prefix}_${sha256(options.descriptor.id).slice(0, 24)}`;
-    this.#alias = `${prefix}_active`;
+    const spaceToken = sha256(options.descriptor.id).slice(0, 16);
+    if (options.ownerId) {
+      const ownerToken = sha256(options.ownerId).slice(0, 16);
+      const generationToken = sha256(options.generationId ?? "default").slice(
+        0,
+        16,
+      );
+      this.#collection = `${prefix}_${spaceToken}_${ownerToken}_${generationToken}`;
+      this.#alias = `${prefix}_${spaceToken}_${ownerToken}_active`;
+    } else {
+      // Compatibility for explicitly configured single-tenant/self-hosted
+      // installations. Production owned factories always set ownerId.
+      this.#collection = `${prefix}_${sha256(options.descriptor.id).slice(0, 24)}`;
+      this.#alias = `${prefix}_active`;
+    }
   }
 
   get spaceId() {
@@ -230,7 +271,18 @@ export class QdrantVectorIndex implements VectorIndex {
   }
 
   get dimension() {
-    return this.options.descriptor.dimension;
+    return this.options.descriptor.dimensions;
+  }
+
+  forGeneration(ownerId: string, generationId: string) {
+    if (!ownerId.trim() || !generationId.trim()) {
+      throw new Error("Vector generation requires owner and generation ids");
+    }
+    return new QdrantVectorIndex({
+      ...this.options,
+      ownerId,
+      generationId,
+    });
   }
 
   private async request(path: string, init: RequestInit = {}) {
@@ -276,12 +328,7 @@ export class QdrantVectorIndex implements VectorIndex {
         body: JSON.stringify({
           vectors: {
             size: this.dimension,
-            distance:
-              this.options.descriptor.distance === "dot"
-                ? "Dot"
-                : this.options.descriptor.distance === "euclidean"
-                  ? "Euclid"
-                  : "Cosine",
+            distance: "Cosine",
           },
           on_disk_payload: true,
         }),
@@ -330,6 +377,14 @@ export class QdrantVectorIndex implements VectorIndex {
 
   async upsertContent(batch: readonly ContentHashedVector[]) {
     if (batch.length === 0) return;
+    if (
+      this.options.ownerId &&
+      batch.some((entry) => entry.ownerId !== this.options.ownerId)
+    ) {
+      throw new Error(
+        "Owned vector generation received another owner's vector",
+      );
+    }
     await this.ensureCollection();
     for (const vector of batch) this.validateVector(vector);
     const response = await this.request(
@@ -359,47 +414,50 @@ export class QdrantVectorIndex implements VectorIndex {
 
   async reusable(contentHashes: readonly string[], ownerId: string) {
     const unique = [...new Set(contentHashes)];
-    if (unique.length === 0 || !(await this.collectionInfo(this.#collection))) {
-      return new Map<string, readonly number[]>();
-    }
-    const response = await this.request(
-      `/collections/${encodeURIComponent(this.#collection)}/points/scroll`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          filter: {
-            must: [
-              { key: "ownerId", match: { value: ownerId } },
-              { key: "spaceId", match: { value: this.spaceId } },
-              { key: "contentHash", match: { any: unique } },
-            ],
-          },
-          limit: Math.min(10_000, unique.length * 4),
-          with_payload: true,
-          with_vector: true,
-        }),
-      },
-    );
-    if (!response.ok) throw responseError("Vector reuse lookup", response);
-    const body = (await response.json()) as {
-      result?: {
-        points?: Array<{ payload?: QdrantPayload; vector?: unknown }>;
-      };
-    };
+    if (unique.length === 0) return new Map<string, readonly number[]>();
+    const targets = [this.#collection];
+    if (this.options.generationId) targets.push(this.#alias);
     const found = new Map<string, readonly number[]>();
-    for (const point of body.result?.points ?? []) {
-      const payload = point.payload;
-      if (
-        payload?.ownerId !== ownerId ||
-        payload.spaceId !== this.spaceId ||
-        !payload.contentHash ||
-        !Array.isArray(point.vector)
-      ) {
-        continue;
-      }
-      const values = point.vector.map(Number);
-      if (values.length === this.dimension && values.every(Number.isFinite)) {
-        found.set(payload.contentHash, values);
+    for (const target of targets) {
+      if (!(await this.collectionInfo(target))) continue;
+      const response = await this.request(
+        `/collections/${encodeURIComponent(target)}/points/scroll`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            filter: {
+              must: [
+                { key: "ownerId", match: { value: ownerId } },
+                { key: "spaceId", match: { value: this.spaceId } },
+                { key: "contentHash", match: { any: unique } },
+              ],
+            },
+            limit: Math.min(10_000, unique.length * 4),
+            with_payload: true,
+            with_vector: true,
+          }),
+        },
+      );
+      if (!response.ok) throw responseError("Vector reuse lookup", response);
+      const body = (await response.json()) as {
+        result?: {
+          points?: Array<{ payload?: QdrantPayload; vector?: unknown }>;
+        };
+      };
+      for (const point of body.result?.points ?? []) {
+        const payload = point.payload;
+        if (
+          payload?.ownerId !== ownerId ||
+          payload.spaceId !== this.spaceId ||
+          !payload.contentHash ||
+          !Array.isArray(point.vector)
+        ) {
+          continue;
+        }
+        const values = point.vector.map(Number);
+        if (values.length === this.dimension && values.every(Number.isFinite)) {
+          found.set(payload.contentHash, values);
+        }
       }
     }
     return found;
@@ -437,13 +495,13 @@ export class QdrantVectorIndex implements VectorIndex {
   }
 
   async remove(versionIds: readonly string[]) {
-    if (
-      versionIds.length === 0 ||
-      !(await this.collectionInfo(this.#collection))
-    )
-      return;
+    const target =
+      this.options.ownerId && !this.options.generationId
+        ? this.#alias
+        : this.#collection;
+    if (versionIds.length === 0 || !(await this.collectionInfo(target))) return;
     const response = await this.request(
-      `/collections/${encodeURIComponent(this.#collection)}/points/delete?wait=true`,
+      `/collections/${encodeURIComponent(target)}/points/delete?wait=true`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -461,7 +519,9 @@ export class QdrantVectorIndex implements VectorIndex {
   async search(query: VectorQuery): Promise<VectorCandidate[]> {
     if (
       query.spaceId !== this.spaceId ||
-      query.values.length !== this.dimension
+      query.values.length !== this.dimension ||
+      (this.options.ownerId !== undefined &&
+        query.ownerId !== this.options.ownerId)
     )
       return [];
     const capabilities = await this.capabilities();
@@ -515,16 +575,18 @@ export class QdrantVectorIndex implements VectorIndex {
 }
 
 export type CorpusVectorRuntime = {
-  embedding: OpenAICompatibleEmbeddingProvider;
+  embedding: EmbeddingProvider;
   vector: QdrantVectorIndex;
+  consent?: ProviderConsent;
 };
 
 export type CorpusEmbeddingConfiguration = {
   enabled: boolean;
   complete: boolean;
   provider: string | null;
+  placement: "hosted-core" | "node" | "full-self-host" | null;
   sendsSourceContentToThirdParties: boolean;
-  reason: "disabled" | "incomplete" | "configured";
+  reason: "disabled" | "incomplete" | "unsupported-placement" | "configured";
 };
 
 export function corpusEmbeddingConfiguration(
@@ -532,11 +594,21 @@ export function corpusEmbeddingConfiguration(
 ): CorpusEmbeddingConfiguration {
   const enabled = environment.CORPUS_EMBEDDING_ENABLED === "true";
   const provider = required(environment.CORPUS_EMBEDDING_PROVIDER);
+  const rawPlacement = required(environment.CORPUS_EMBEDDING_PLACEMENT);
+  const placement = ["hosted-core", "node", "full-self-host"].includes(
+    rawPlacement ?? "",
+  )
+    ? (rawPlacement as CorpusEmbeddingConfiguration["placement"])
+    : null;
+  const gemini = provider === "gemini";
+  const supportedPlacement = !gemini || placement === "hosted-core";
   const complete = Boolean(
     enabled &&
     provider &&
-    required(environment.CORPUS_EMBEDDING_BASE_URL) &&
-    required(environment.CORPUS_EMBEDDING_MODEL) &&
+    placement &&
+    supportedPlacement &&
+    (gemini || required(environment.CORPUS_EMBEDDING_BASE_URL)) &&
+    (gemini || required(environment.CORPUS_EMBEDDING_MODEL)) &&
     boundedInteger(environment.CORPUS_EMBEDDING_DIMENSION, 1, 65_536) &&
     required(environment.CORPUS_VECTOR_URL),
   );
@@ -544,19 +616,34 @@ export function corpusEmbeddingConfiguration(
     enabled,
     complete,
     provider,
+    placement,
     sendsSourceContentToThirdParties:
-      complete && environment.CORPUS_EMBEDDING_LOCAL !== "true",
-    reason: !enabled ? "disabled" : complete ? "configured" : "incomplete",
+      complete && (gemini || environment.CORPUS_EMBEDDING_LOCAL !== "true"),
+    reason: !enabled
+      ? "disabled"
+      : gemini && placement !== "hosted-core"
+        ? "unsupported-placement"
+        : complete
+          ? "configured"
+          : "incomplete",
   };
 }
 
 export function createConfiguredCorpusVectorRuntime(
   environment: NodeJS.ProcessEnv = process.env,
+  ownerId?: string,
+  options: { nodeProviderFetch?: Fetcher } = {},
 ): CorpusVectorRuntime | null {
   const state = corpusEmbeddingConfiguration(environment);
   if (!state.complete) return null;
+  if (state.provider === "gemini") {
+    throw new Error("GEMINI_EMBEDDING_REQUIRES_OWNED_CONSENT_RUNTIME");
+  }
   const placement = required(environment.CORPUS_EMBEDDING_PLACEMENT);
-  if (placement && !["hosted-core", "node", "full-self-host"].includes(placement)) {
+  if (
+    placement &&
+    !["hosted-core", "node", "full-self-host"].includes(placement)
+  ) {
     throw new Error("CORPUS_EMBEDDING_PLACEMENT is invalid");
   }
   if (!placement || placement === "hosted-core") {
@@ -565,9 +652,14 @@ export function createConfiguredCorpusVectorRuntime(
     );
   }
   if (placement === "node") {
-    throw new Error("CORPUS_NODE_EMBEDDING_REQUIRES_NODE_EXECUTION_ROUTER");
+    if (!options.nodeProviderFetch) {
+      throw new Error("CORPUS_NODE_EMBEDDING_REQUIRES_NODE_EXECUTION_ROUTER");
+    }
   }
-  if (environment.AVERMATE_DEPLOYMENT_MODE !== "full-self-host") {
+  if (
+    placement === "full-self-host" &&
+    environment.AVERMATE_DEPLOYMENT_MODE !== "full-self-host"
+  ) {
     throw new Error("CORPUS_FULL_SELF_HOST_PLACEMENT_REQUIRES_SELF_HOST_MODE");
   }
   const embedding = new OpenAICompatibleEmbeddingProvider({
@@ -577,6 +669,8 @@ export function createConfiguredCorpusVectorRuntime(
     providerName: environment.CORPUS_EMBEDDING_PROVIDER!,
     apiKey: environment.CORPUS_EMBEDDING_API_KEY,
     placement: placement as ModelEndpointPlacement,
+    placementDescriptor: "node",
+    ...(options.nodeProviderFetch ? { fetch: options.nodeProviderFetch } : {}),
   });
   return {
     embedding,
@@ -585,6 +679,136 @@ export function createConfiguredCorpusVectorRuntime(
       apiKey: environment.CORPUS_VECTOR_API_KEY,
       collectionPrefix: environment.CORPUS_VECTOR_COLLECTION_PREFIX,
       descriptor: embedding.descriptor(),
+      ownerId,
+    }),
+  };
+}
+
+export async function loadRetrievalProviderConsent(
+  ownerId: string,
+  provider: string,
+  capability: "embedding" | "rerank",
+  disclosureRevision: string,
+) {
+  const [consent] = await db
+    .select({
+      provider: retrievalProviderConsents.provider,
+      disclosureRevision: retrievalProviderConsents.disclosureRevision,
+      capability: retrievalProviderConsents.capability,
+      grantedAt: retrievalProviderConsents.grantedAt,
+    })
+    .from(retrievalProviderConsents)
+    .where(
+      and(
+        eq(retrievalProviderConsents.userId, ownerId),
+        eq(retrievalProviderConsents.provider, provider),
+        eq(retrievalProviderConsents.capability, capability),
+        eq(retrievalProviderConsents.disclosureRevision, disclosureRevision),
+        isNull(retrievalProviderConsents.revokedAt),
+      ),
+    )
+    .limit(1);
+  return consent
+    ? {
+        provider: consent.provider,
+        disclosureRevision: consent.disclosureRevision,
+        capability: consent.capability,
+        grantedAt: consent.grantedAt.toISOString(),
+      }
+    : null;
+}
+
+/** Build the BYOK Gemini runtime only after both credential and disclosure resolve. */
+export async function createOwnedCorpusVectorRuntime(
+  ownerId: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  dependencies: {
+    createNodeFetcher?: (input: {
+      ownerId: string;
+      nodeId?: string;
+      purpose: "embedding";
+    }) => Promise<Fetcher>;
+    resolveServiceKey?: typeof resolveProviderServiceKey;
+    loadConsent?: typeof loadRetrievalProviderConsent;
+  } = {},
+): Promise<CorpusVectorRuntime | null> {
+  const state = corpusEmbeddingConfiguration(environment);
+  if (!state.complete) return null;
+  if (state.provider !== "gemini") {
+    if (environment.CORPUS_EMBEDDING_PLACEMENT === "node") {
+      const createNodeFetcher =
+        dependencies.createNodeFetcher ??
+        (await import("../node/services")).createPairedNodeProviderFetcher;
+      const nodeId = required(environment.CORPUS_EMBEDDING_NODE_ID);
+      const nodeProviderFetch = await createNodeFetcher({
+        ownerId,
+        ...(nodeId ? { nodeId } : {}),
+        purpose: "embedding",
+      });
+      return createConfiguredCorpusVectorRuntime(environment, ownerId, {
+        nodeProviderFetch,
+      });
+    }
+    return createConfiguredCorpusVectorRuntime(environment, ownerId);
+  }
+  if (state.placement !== "hosted-core") {
+    throw new Error("GEMINI_EMBEDDING_REQUIRES_HOSTED_CORE_BYOK_PLACEMENT");
+  }
+  const dimensions = boundedInteger(
+    environment.CORPUS_EMBEDDING_DIMENSION,
+    768,
+    3072,
+  );
+  if (![768, 1536, 3072].includes(dimensions ?? 0)) {
+    throw new Error("GEMINI_EMBEDDING_DIMENSION_MUST_BE_768_1536_OR_3072");
+  }
+  const [credential, consent] = await Promise.all([
+    (dependencies.resolveServiceKey ?? resolveProviderServiceKey)(
+      ownerId,
+      "inference",
+      "gemini",
+    ) as Promise<ResolvedServiceKey | null>,
+    (dependencies.loadConsent ?? loadRetrievalProviderConsent)(
+      ownerId,
+      "gemini",
+      "embedding",
+      GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+    ),
+  ]);
+  if (!credential || !consent) return null;
+  if (credential.source !== "user") {
+    throw new Error("GEMINI_OPERATOR_KEY_REQUIRES_MANAGED_METERED_ROUTER");
+  }
+  const embedding = new GeminiEmbeddingProvider({
+    apiKey: credential.key,
+    dimensions: dimensions as 768 | 1536 | 3072,
+    resolveMedia: async (input, signal) => {
+      signal.throwIfAborted();
+      const fileId = input.opaqueFileHandle.replace(/^file:/u, "");
+      const file = await requireFile(ownerId, fileId);
+      if (
+        file.status !== "stored" ||
+        file.mimeType !== input.mediaType ||
+        file.byteSize !== input.byteLength
+      ) {
+        throw new Error("GEMINI_EMBEDDING_OWNED_MEDIA_UNAVAILABLE");
+      }
+      const bytes = await readOwnedFileBytes(ownerId, file, {
+        maxBytes: Math.min(100 * 1024 * 1024, input.byteLength),
+      });
+      signal.throwIfAborted();
+      return { bytes: new Uint8Array(bytes), mediaType: file.mimeType };
+    },
+  });
+  return {
+    embedding,
+    consent,
+    vector: new QdrantVectorIndex({
+      baseUrl: environment.CORPUS_VECTOR_URL!,
+      apiKey: environment.CORPUS_VECTOR_API_KEY,
+      collectionPrefix: environment.CORPUS_VECTOR_COLLECTION_PREFIX,
+      descriptor: embedding.descriptor(),
+      ownerId,
     }),
   };
 }

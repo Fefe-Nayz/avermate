@@ -10,11 +10,12 @@ import { users } from "./auth";
 import { materialDocuments } from "./materials";
 
 export type MaterialArtifactKind =
-  "ocr-markdown" | "web-markdown" | "media-transcript";
+  "ocr-markdown" | "web-markdown" | "media-transcript" | "media-metadata";
 export type MaterialArtifactStatus = "pending" | "ready" | "failed";
 
 export interface OcrMetaV1 {
   model: string;
+  provider: string;
   pageCount: number;
   providerFileId: string;
   durationMs: number;
@@ -46,9 +47,21 @@ export interface WebMarkdownMetaV1 {
 
 export interface MediaTranscriptMetaV1 {
   provider: string;
+  /** Exact provider model; Node values include the immutable revision. */
+  model: string;
   language?: string;
   durationMs?: number;
   segmentCount: number;
+}
+
+export interface MediaMetadataMetaV1 {
+  kind: "media-metadata";
+  modality: "audio" | "video";
+  durationMs: number;
+  segmentCount: number;
+  worker: "corpus-derivatives.v1";
+  rendererProfile: string;
+  rendererImageDigest: string;
 }
 
 const timestamps = {
@@ -80,10 +93,13 @@ export const materialArtifacts = sqliteTable(
     content: text(),
     metaVersion: integer().notNull().default(1),
     metaJson: text({ mode: "json" }).$type<
-      OcrMetaV1 | WebMarkdownMetaV1 | MediaTranscriptMetaV1
+      | OcrMetaV1
+      | WebMarkdownMetaV1
+      | MediaTranscriptMetaV1
+      | MediaMetadataMetaV1
     >(),
     error: text(),
-    /** Current link-ingestion generation/execution fence; null for OCR artifacts. */
+    /** Current ingestion/OCR/media generation fence; terminal jobs retain it. */
     runId: text(),
     userId: text()
       .notNull()

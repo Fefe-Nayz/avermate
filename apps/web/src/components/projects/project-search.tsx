@@ -9,9 +9,11 @@ import {
   FileSearchIcon,
   SearchIcon,
 } from "lucide-react"
+import { useExtracted } from "next-intl"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
@@ -30,6 +32,7 @@ import {
   ItemContent,
   ItemDescription,
   ItemGroup,
+  ItemMedia,
   ItemTitle,
 } from "@/components/ui/item"
 import {
@@ -60,24 +63,7 @@ import {
 } from "./project-model"
 import type { ProjectSourceItem } from "./project-source-manager"
 
-const searchModes = [
-  { value: "terms", label: "Mots" },
-  { value: "phrase", label: "Phrase" },
-  { value: "prefix", label: "Préfixe" },
-  { value: "exact", label: "Exact" },
-] as const
-
-const searchableKinds: readonly {
-  value: ProjectSourceKind
-  label: string
-}[] = [
-  { value: "material", label: "Documents" },
-  { value: "study-document", label: "Fiches" },
-  { value: "recording", label: "Cours audio" },
-  { value: "grade", label: "Notes" },
-  { value: "subject", label: "Matières" },
-  { value: "artifact", label: "Artéfacts" },
-]
+type SearchMode = "terms" | "phrase" | "prefix" | "exact"
 
 export function ProjectSearch({
   projectId,
@@ -92,10 +78,12 @@ export function ProjectSearch({
   catalogue: readonly ProjectSourceOption[]
   subjects: readonly { id: string; name: string }[]
 }) {
+  const t = useExtracted()
+  const isOnline = useOnlineStatus()
+  const showDiagnostics = process.env.NODE_ENV === "development"
   const [query, setQuery] = useState("")
   const deferredQuery = useDeferredValue(query.trim())
-  const [mode, setMode] =
-    useState<(typeof searchModes)[number]["value"]>("terms")
+  const [mode, setMode] = useState<SearchMode>("terms")
   const [originKinds, setOriginKinds] = useState<ProjectSourceKind[]>([])
   const [subjectId, setSubjectId] = useState<string | null>(null)
   const [citationId, setCitationId] = useState<string | null>(null)
@@ -113,25 +101,42 @@ export function ProjectSearch({
         cursor: null,
       },
     }),
-    enabled: deferredQuery.length > 0,
+    enabled: deferredQuery.length > 0 && isOnline,
     staleTime: COMMON_QUERY_STALE_TIME,
   })
   const citationQuery = useQuery({
     ...orpc.projects.readCitation.queryOptions({
       input: { citationId: citationId ?? "_" },
     }),
-    enabled: Boolean(citationId),
+    enabled: Boolean(citationId) && isOnline,
     staleTime: Infinity,
   })
 
   const subjectItems = [
-    { value: null, label: "Toutes les matières" },
+    { value: null, label: t("All subjects") },
     ...subjects.map((subject) => ({ value: subject.id, label: subject.name })),
+  ]
+  const searchModes = [
+    { value: "terms" as const, label: t("Terms") },
+    { value: "phrase" as const, label: t("Phrase") },
+    { value: "prefix" as const, label: t("Prefix") },
+    { value: "exact" as const, label: t("Exact") },
+  ]
+  const searchableKinds: readonly {
+    value: ProjectSourceKind
+    label: string
+  }[] = [
+    { value: "material", label: t("Documents") },
+    { value: "study-document", label: t("Study sheets") },
+    { value: "recording", label: t("Course recordings") },
+    { value: "grade", label: t("Grades") },
+    { value: "subject", label: t("Subjects") },
+    { value: "artifact", label: t("Artifacts") },
   ]
 
   function sourceTitle(sourceId: string) {
     const item = items.find((candidate) => candidate.sourceId === sourceId)
-    if (!item) return "Source"
+    if (!item) return t("Source")
     return (
       item.label ??
       catalogue.find(
@@ -155,17 +160,30 @@ export function ProjectSearch({
           id="project-search-title"
           className="font-heading text-lg font-medium"
         >
-          Recherche dans le projet
+          {t("Search this project")}
         </h2>
         <p className="text-sm text-muted-foreground">
-          La recherche lexicale reste disponible sans IA. Chaque résultat pointe
-          vers une version et une position immuables.
+          {t(
+            "The pipeline follows the project policy: local FTS, embeddings, RRF fusion, diversity and reranking when ready. Every result points to an immutable version and location."
+          )}
         </p>
       </div>
 
+      {!isOnline ? (
+        <Alert role="status">
+          <FileSearchIcon />
+          <AlertTitle>{t("You are offline")}</AlertTitle>
+          <AlertDescription>
+            {t(
+              "Previously opened sources remain available when cached. New searches and citation fetches resume after reconnection."
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <FieldGroup className="rounded-xl border p-4">
         <Field>
-          <FieldLabel htmlFor="project-search-query">Requête</FieldLabel>
+          <FieldLabel htmlFor="project-search-query">{t("Query")}</FieldLabel>
           <InputGroup>
             <InputGroupAddon>
               <SearchIcon />
@@ -174,14 +192,17 @@ export function ProjectSearch({
               id="project-search-query"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ex. énergie cinétique, « réaction acide-base », E=mc^2…"
+              placeholder={t(
+                "For example: kinetic energy, ‘acid-base reaction’, E=mc²…"
+              )}
+              disabled={!isOnline}
             />
           </InputGroup>
         </Field>
 
         <div className="flex flex-wrap items-end gap-4">
           <Field className="w-auto">
-            <FieldLabel id="search-mode-label">Mode</FieldLabel>
+            <FieldLabel id="search-mode-label">{t("Mode")}</FieldLabel>
             <ToggleGroup
               aria-labelledby="search-mode-label"
               value={[mode]}
@@ -200,7 +221,7 @@ export function ProjectSearch({
             </ToggleGroup>
           </Field>
           <Field className="min-w-52 flex-1">
-            <FieldLabel>Matière</FieldLabel>
+            <FieldLabel>{t("Subject")}</FieldLabel>
             <Select
               items={subjectItems}
               value={subjectId}
@@ -226,7 +247,7 @@ export function ProjectSearch({
         </div>
 
         <Field>
-          <FieldLabel id="source-kind-label">Types de source</FieldLabel>
+          <FieldLabel id="source-kind-label">{t("Source types")}</FieldLabel>
           <ToggleGroup
             aria-labelledby="source-kind-label"
             multiple
@@ -250,11 +271,16 @@ export function ProjectSearch({
       {resultQuery.isError ? (
         <Alert variant="destructive">
           <FileSearchIcon />
-          <AlertTitle>Recherche indisponible</AlertTitle>
+          <AlertTitle>{t("Search unavailable")}</AlertTitle>
           <AlertDescription>{resultQuery.error.message}</AlertDescription>
         </Alert>
       ) : resultQuery.isFetching && deferredQuery ? (
-        <div className="flex flex-col gap-3" aria-label="Recherche en cours">
+        <div
+          className="flex flex-col gap-3"
+          role="status"
+          aria-label={t("Searching")}
+          aria-busy="true"
+        >
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </div>
@@ -264,50 +290,119 @@ export function ProjectSearch({
             <EmptyMedia variant="icon">
               <FileSearchIcon />
             </EmptyMedia>
-            <EmptyTitle>Aucun passage trouvé</EmptyTitle>
+            <EmptyTitle>{t("No passage found")}</EmptyTitle>
             <EmptyDescription>
-              Ajustez les filtres. Une page scannée non OCRisée ne peut pas
-              produire de résultat textuel.
+              {t(
+                "Adjust the filters. A scanned page without OCR cannot produce a text result."
+              )}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : evidence.length > 0 ? (
-        <ItemGroup aria-live="polite">
-          {evidence.map((result) => (
-            <Item
-              key={result.citationId}
-              variant="outline"
-              render={
-                <button
-                  type="button"
-                  className="cursor-pointer text-left"
-                  onClick={() => setCitationId(result.citationId)}
-                />
-              }
-            >
-              <ItemContent>
-                <ItemTitle>{sourceTitle(result.sourceId)}</ItemTitle>
-                <ItemDescription>{result.snippet}</ItemDescription>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">
-                    {locatorLabel(result.locator)}
-                  </Badge>
-                  <Badge variant="secondary">{result.evidenceKind}</Badge>
-                </div>
-              </ItemContent>
-            </Item>
-          ))}
-        </ItemGroup>
+        <div className="flex flex-col gap-3" aria-live="polite">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>
+              {resultQuery.data?.retrievalMode === "reranked"
+                ? t("Hybrid RAG + reranking")
+                : resultQuery.data?.retrievalMode === "hybrid"
+                  ? t("Hybrid RAG")
+                  : t("Lexical search")}
+            </Badge>
+            {resultQuery.data?.vectorImplementation ? (
+              <Badge variant="outline">{t("Embeddings active")}</Badge>
+            ) : null}
+            {resultQuery.data?.rerankImplementation ? (
+              <Badge variant="outline">{t("Cross-encoder active")}</Badge>
+            ) : null}
+            {showDiagnostics ? (
+              <span className="font-mono text-xs text-muted-foreground">
+                {resultQuery.data?.operationId.slice(0, 12)}…
+              </span>
+            ) : null}
+          </div>
+          {resultQuery.data?.fallbackReason ? (
+            <Alert>
+              <FileSearchIcon />
+              <AlertTitle>{t("Pipeline degraded by policy")}</AlertTitle>
+              <AlertDescription>
+                {resultQuery.data.fallbackReason}.{" "}
+                {t(
+                  "Displayed results follow the project's explicit fallback policy."
+                )}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {showDiagnostics ? (
+            <details className="rounded-lg border px-3 py-2 text-xs">
+              <summary className="cursor-pointer font-medium">
+                {t("Inspect retrieval stages")}
+              </summary>
+              <div className="mt-2 grid gap-1">
+                {resultQuery.data?.stages.map((stage, index) => (
+                  <div
+                    key={`${stage.stage}:${index}`}
+                    className="flex flex-wrap justify-between gap-2 text-muted-foreground"
+                  >
+                    <span>
+                      {stage.stage} · {stage.status}
+                    </span>
+                    <span className="tabular-nums">
+                      {stage.inputCount}→{stage.outputCount} ·{" "}
+                      {stage.durationMs} ms
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <ItemGroup>
+            {evidence.map((result, index) => (
+              <Item
+                key={result.citationId}
+                variant="outline"
+                render={
+                  <button
+                    type="button"
+                    className="cursor-pointer text-left"
+                    onClick={() => setCitationId(result.citationId)}
+                  />
+                }
+              >
+                <ItemMedia variant="icon">
+                  <BookOpenTextIcon />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>
+                    {sourceTitle(result.sourceId)}
+                    <Badge variant={index === 0 ? "default" : "outline"}>
+                      {index === 0
+                        ? t("Top result")
+                        : t("Rank {rank}", { rank: String(index + 1) })}
+                    </Badge>
+                  </ItemTitle>
+                  <ItemDescription>{result.snippet}</ItemDescription>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {locatorLabel(result.locator)}
+                    </Badge>
+                    <Badge variant="secondary">{result.evidenceKind}</Badge>
+                  </div>
+                </ItemContent>
+              </Item>
+            ))}
+          </ItemGroup>
+        </div>
       ) : (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <BookOpenTextIcon />
             </EmptyMedia>
-            <EmptyTitle>Cherchez dans vos sources</EmptyTitle>
+            <EmptyTitle>{t("Search your sources")}</EmptyTitle>
             <EmptyDescription>
-              Les extraits sont classés par BM25 et restent liés à leur source
-              exacte.
+              {t(
+                "Passages stay linked to their exact source and are ranked by the project's active retrieval policy."
+              )}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -321,20 +416,28 @@ export function ProjectSearch({
       >
         <SheetContent className="sm:max-w-lg">
           <SheetHeader>
-            <SheetTitle>{citation?.displayTitle ?? "Citation"}</SheetTitle>
+            <SheetTitle>{citation?.displayTitle ?? t("Citation")}</SheetTitle>
             <SheetDescription>
-              {citation ? locatorLabel(citation.locator) : "Chargement…"}
+              {citation ? locatorLabel(citation.locator) : t("Loading…")}
             </SheetDescription>
           </SheetHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
-            {citationQuery.isLoading ? (
+            {!isOnline && !citation ? (
+              <Alert>
+                <FileSearchIcon />
+                <AlertTitle>{t("Citation unavailable offline")}</AlertTitle>
+                <AlertDescription>
+                  {t("Reconnect to fetch this exact source reference.")}
+                </AlertDescription>
+              </Alert>
+            ) : citationQuery.isLoading ? (
               <div className="flex flex-col gap-3">
                 <Skeleton className="h-5 w-2/3" />
                 <Skeleton className="h-40 w-full" />
               </div>
             ) : citationQuery.isError ? (
               <Alert variant="destructive">
-                <AlertTitle>La citation n’est plus lisible</AlertTitle>
+                <AlertTitle>{t("Citation is no longer readable")}</AlertTitle>
                 <AlertDescription>
                   {citationQuery.error.message}
                 </AlertDescription>
@@ -343,18 +446,20 @@ export function ProjectSearch({
               <div className="flex flex-col gap-4">
                 <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-sm whitespace-pre-wrap">
                   {citationQuery.data?.text ??
-                    "Cette référence ouvre la source originale sans extrait textuel."}
+                    t(
+                      "This reference opens the original source without a text excerpt."
+                    )}
                 </pre>
                 {citation ? (
                   <dl className="grid gap-2 text-xs text-muted-foreground">
                     <div className="flex justify-between gap-3">
-                      <dt>Version</dt>
+                      <dt>{t("Version")}</dt>
                       <dd className="truncate font-mono">
                         {citation.versionId}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <dt>Empreinte</dt>
+                      <dt>{t("Digest")}</dt>
                       <dd className="truncate font-mono">
                         {citation.contentHash}
                       </dd>
@@ -366,13 +471,13 @@ export function ProjectSearch({
           </div>
           {citation ? (
             <SheetFooter>
-              <Button
-                render={<Link href={citationOpenHref(citation.openTarget)} />}
-                nativeButton={false}
+              <Link
+                href={citationOpenHref(citation.openTarget)}
+                className={buttonVariants()}
               >
-                Ouvrir la source exacte
+                {t("Open exact source")}
                 <ArrowUpRightIcon data-icon="inline-end" />
-              </Button>
+              </Link>
             </SheetFooter>
           ) : null}
         </SheetContent>

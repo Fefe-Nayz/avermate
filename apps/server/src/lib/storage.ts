@@ -1,10 +1,12 @@
 import { and, eq, isNull, sum } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { db } from "../db";
 import { files, type FilePurpose } from "../db/schema";
 import { newId } from "./id";
 import { enqueueJob } from "./jobs";
 import { badRequest } from "./orpc";
 import { requireFile } from "./ownership";
+import { DOCUMENT_ARTIFACT_FILE_CONSTRAINT } from "./document-artifact-policy";
 import {
   canonicalFileUrl,
   deleteStorageObject,
@@ -17,6 +19,11 @@ import {
   storageDriver,
   type ManagedStorageProvider,
 } from "./storage-backend";
+import {
+  createPairedNodeObjectStorageProvider,
+  nodeIdFromStorageProvider,
+  selectedNodeObjectStorageProvider,
+} from "../node/services";
 
 /**
  * Shared storage boundary for every provider-backed object.
@@ -134,20 +141,7 @@ export const FILE_CONSTRAINTS: Record<
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ],
   },
-  "document-artifact": {
-    maxBytes: 100 * 1024 * 1024,
-    mimeTypes: [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "audio/mpeg",
-      "audio/mp4",
-      "audio/ogg",
-      "image/png",
-      "image/webp",
-      "text/tab-separated-values",
-      "text/html",
-    ],
-  },
+  "document-artifact": DOCUMENT_ARTIFACT_FILE_CONSTRAINT,
   preview: {
     maxBytes: 2 * 1024 * 1024,
     mimeTypes: ["image/webp"],
@@ -376,23 +370,58 @@ export async function storeFile(input: {
 }) {
   const messages = validationMessages(input.purpose);
   const mimeType = validateFileForPurpose(input.purpose, input.file);
-  if (!storageEnabled()) badRequest(messages.disabled);
+  let nodeProvider: Awaited<
+    ReturnType<typeof selectedNodeObjectStorageProvider>
+  > = null;
+  try {
+    nodeProvider = await selectedNodeObjectStorageProvider(input.userId);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith("NODE_STORAGE_CAPABILITY_")
+    ) {
+      throw new Error(
+        "NODE_STORAGE_CAPABILITY_OFFLINE:Reconnect your Avermate Node or change the storage placement in Settings.",
+      );
+    }
+    throw error;
+  }
+  if (!nodeProvider && !storageEnabled()) badRequest(messages.disabled);
 
-  const provider = storageDriver();
+  const provider = nodeProvider?.id ?? storageDriver();
   const id = newId("file");
   const storageKey = newStorageKey({
     purpose: input.purpose,
     userId: input.userId,
     name: input.nameHint ?? input.file.name,
   });
+  let expectedDigest: `sha256:${string}` | null = null;
   try {
-    await putStorageObject({
-      provider,
-      storageKey,
-      purpose: input.purpose,
-      file: input.file,
-      mimeType,
-    });
+    if (nodeProvider) {
+      const digest = createHash("sha256");
+      for await (const chunk of input.file.stream()) digest.update(chunk);
+      expectedDigest = `sha256:${digest.digest("hex")}`;
+      await nodeProvider.put({
+        ref: {
+          ownerId: input.userId,
+          namespace: "files",
+          key: storageKey,
+        },
+        body: input.file.stream(),
+        byteSize: input.file.size,
+        mimeType,
+        expectedDigest,
+        idempotencyKey: `file-upload:${id}`,
+      });
+    } else {
+      await putStorageObject({
+        provider: provider as ManagedStorageProvider,
+        storageKey,
+        purpose: input.purpose,
+        file: input.file,
+        mimeType,
+      });
+    }
   } catch (error) {
     console.error("[storage] provider upload failed", error);
     badRequest(messages.failed);
@@ -413,7 +442,22 @@ export async function storeFile(input: {
     try {
       await compensateProviderUpload(storageKey, {
         deleteProviderFile: async (key) => {
-          await deleteStorageObject(provider, key);
+          if (nodeProvider) {
+            const result = await nodeProvider.delete({
+              ref: {
+                ownerId: input.userId,
+                namespace: "files",
+                key,
+              },
+              ...(expectedDigest ? { expectedDigest } : {}),
+              idempotencyKey: `file-upload-compensate:${id}`,
+            });
+            return {
+              success: result.deleted || result.alreadyAbsent,
+              deletedCount: result.deleted ? 1 : 0,
+            };
+          }
+          await deleteStorageObject(provider as ManagedStorageProvider, key);
           return { success: true, deletedCount: 1 };
         },
       });
@@ -527,15 +571,30 @@ export async function requireUploadedFile(
   if (file.status !== "stored" || file.purpose !== purpose) {
     badRequest("The uploaded file is unavailable or has the wrong purpose");
   }
-  if (file.provider !== "local" && file.provider !== "s3") {
-    badRequest("The uploaded file is not managed by this storage service");
-  }
-  let object: Awaited<ReturnType<typeof headStorageObject>>;
+  let object: {
+    byteSize: number;
+    mimeType: string | null;
+  };
   try {
-    object = await headStorageObject(
-      file.provider as ManagedStorageProvider,
-      file.storageKey,
-    );
+    const nodeId = nodeIdFromStorageProvider(file.provider);
+    if (nodeId) {
+      const provider = await createPairedNodeObjectStorageProvider({
+        ownerId: userId,
+        nodeId,
+      });
+      const metadata = await provider.stat({
+        ref: { ownerId: userId, namespace: "files", key: file.storageKey },
+      });
+      if (!metadata) throw new Error("OBJECT_NOT_FOUND");
+      object = metadata;
+    } else if (file.provider === "local" || file.provider === "s3") {
+      object = await headStorageObject(
+        file.provider as ManagedStorageProvider,
+        file.storageKey,
+      );
+    } else {
+      badRequest("The uploaded file is not managed by this storage service");
+    }
   } catch {
     badRequest("The uploaded file has not reached storage");
   }
@@ -649,7 +708,38 @@ export async function deleteFile(
   const file = await requireFile(userId, fileId);
   if (file.status === "deleted") return file;
 
-  if (file.provider === "local" || file.provider === "s3") {
+  const nodeId = nodeIdFromStorageProvider(file.provider);
+  if (nodeId) {
+    const handleProviderFailure = async (error: Error) => {
+      if (options.deferOnProviderFailure === false) throw error;
+      await deferProviderDeletion(file, options.enqueueCleanup ?? enqueueJob);
+      return file;
+    };
+    try {
+      const provider = await createPairedNodeObjectStorageProvider({
+        ownerId: userId,
+        nodeId,
+      });
+      const result = await withProviderDeleteDeadline(
+        provider.delete({
+          ref: { ownerId: userId, namespace: "files", key: file.storageKey },
+          idempotencyKey: `file-delete:${file.id}`,
+        }),
+        options.providerTimeoutMs ?? STORAGE_PROVIDER_DELETE_TIMEOUT_MS,
+      );
+      if (!result.deleted && !result.alreadyAbsent) {
+        return handleProviderFailure(
+          new Error("The Node did not confirm file deletion"),
+        );
+      }
+    } catch (error) {
+      return handleProviderFailure(
+        error instanceof Error
+          ? error
+          : new Error("Node storage deletion failed"),
+      );
+    }
+  } else if (file.provider === "local" || file.provider === "s3") {
     const managedProvider = file.provider as ManagedStorageProvider;
     const removeProviderFile =
       options.deleteProviderFile === undefined

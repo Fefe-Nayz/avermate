@@ -11,6 +11,7 @@ import {
   type HistoricalBranchPreview,
   type HistoricalBranchSnapshotPreview,
   type SandboxExecutionProfile,
+  type SandboxCreateInput,
   type SandboxHandle,
   type SandboxPreflightInput,
   type SandboxPreflightResult,
@@ -80,6 +81,9 @@ export interface HistoricalBranchRepository {
     boundary: HistoricalBranchBoundary;
     clientRequestId: string;
   }): Promise<ExistingHistoricalReservation | null>;
+  domainCursorAtBoundary(
+    boundary: HistoricalBranchBoundary,
+  ): Promise<string | null>;
 }
 
 export type HistoricalBranchSandboxProvider = {
@@ -96,6 +100,16 @@ export interface HistoricalBranchSandboxRuntime {
   readonly profiles: readonly SandboxExecutionProfile[];
   readonly hostPolicyDigest: string | null;
   readonly maxEvidenceAgeMs: number;
+  readonly restoreWorkspace?: (input: {
+    snapshot: SnapshotLedgerRecord;
+    create: SandboxCreateInput & {
+      source: NonNullable<SnapshotLedgerRecord["workspaceSnapshotRef"]>;
+    };
+  }) => Promise<{
+    handle: SandboxHandle;
+    path: "runtime-checkpoint" | "logical-workspace";
+    reason?: string;
+  }>;
 }
 
 export type WorkspaceBranchResult = {
@@ -304,6 +318,39 @@ export class CoreHistoricalBranchRepository implements HistoricalBranchRepositor
     });
   }
 
+  async domainCursorAtBoundary(
+    boundary: HistoricalBranchBoundary,
+  ): Promise<string | null> {
+    const result = await this.client.execute({
+      sql: `SELECT runs.domainCursorRef
+        FROM assistant_runs AS runs
+        JOIN assistant_threads AS threads
+          ON threads.id = runs.threadId AND threads.userId = runs.userId
+        WHERE runs.userId = ? AND runs.threadId = ?
+          AND threads.deletedAt IS NULL
+          AND runs.domainCursorRef IS NOT NULL
+          AND (
+            (? = 'user' AND runs.inputMessageId = ?)
+            OR
+            (? = 'assistant' AND (
+              runs.outputMessageId = ? OR runs.reservedOutputMessageId = ?
+            ))
+          )
+        ORDER BY runs.createdAt DESC, runs.id DESC LIMIT 1`,
+      args: [
+        boundary.ownerId,
+        boundary.threadId,
+        boundary.role,
+        boundary.messageId,
+        boundary.role,
+        boundary.messageId,
+        boundary.messageId,
+      ],
+    });
+    const value = (result.rows[0] as Row | undefined)?.domainCursorRef;
+    return value === null || value === undefined ? null : String(value);
+  }
+
   private async findCommittedSnapshot(
     boundary: HistoricalBranchBoundary,
     snapshotId?: string,
@@ -397,7 +444,9 @@ function boundedMessage(error: unknown, fallback: string): string {
 export class HistoricalBranchService {
   constructor(
     private readonly repository: HistoricalBranchRepository,
-    private readonly resolveSandboxRuntime: () =>
+    private readonly resolveSandboxRuntime: (
+      snapshot: SnapshotLedgerRecord,
+    ) =>
       HistoricalBranchSandboxRuntime | Promise<HistoricalBranchSandboxRuntime>,
     private readonly clock: () => Date = () => new Date(),
   ) {}
@@ -413,6 +462,24 @@ export class HistoricalBranchService {
     return this.repository.resolveBoundary(input);
   }
 
+  async resolveDataChangesBoundary(input: {
+    ownerId: string;
+    sourceBranchId: string;
+    messageId: string;
+    operation: HistoricalBranchOperation;
+  }): Promise<HistoricalBranchBoundary & { domainCursorRef: string }> {
+    const boundary = await this.repository.resolveBoundary(input);
+    const domainCursorRef =
+      await this.repository.domainCursorAtBoundary(boundary);
+    if (!domainCursorRef) {
+      throw new HistoricalBranchError(
+        "snapshot_unavailable",
+        "No domain-action cursor was committed at this historical boundary.",
+      );
+    }
+    return Object.freeze({ ...boundary, domainCursorRef });
+  }
+
   async preview(input: {
     ownerId: string;
     sourceBranchId: string;
@@ -420,6 +487,8 @@ export class HistoricalBranchService {
     operation: HistoricalBranchOperation;
   }): Promise<HistoricalBranchPreview> {
     const boundary = await this.repository.resolveBoundary(input);
+    const domainCursorRef =
+      await this.repository.domainCursorAtBoundary(boundary);
     let workspaceCopy: HistoricalBranchPreview["workspaceCopy"];
     if (!boundary.workspaceCopySupported) {
       workspaceCopy = {
@@ -459,6 +528,14 @@ export class HistoricalBranchService {
       messageId: boundary.messageId,
       conversationOnly: { available: true },
       workspaceCopy,
+      dataChanges: domainCursorRef
+        ? { available: true, domainCursorRef }
+        : {
+            available: false,
+            reason: "no-domain-cursor",
+            message:
+              "No domain-action cursor was committed at this historical boundary.",
+          },
     });
   }
 
@@ -551,23 +628,33 @@ export class HistoricalBranchService {
     const expiresAt = new Date(
       now.getTime() + compatibility.profile.resources.wallTimeMs + 15 * 60_000,
     );
+    const create = {
+      operationId: `historical:${sha256(
+        `${input.ownerId}\0${input.clientRequestId}`,
+      ).slice(0, 48)}`,
+      ownerId: input.ownerId,
+      threadId: boundary.threadId,
+      branchId: destinationBranchId,
+      profile: compatibility.profile,
+      expectedHostPolicyDigest: compatibility.runtime.hostPolicyDigest!,
+      maxEvidenceAgeMs: compatibility.runtime.maxEvidenceAgeMs,
+      now,
+      expiresAt,
+      source,
+    } satisfies SandboxCreateInput & {
+      source: NonNullable<SnapshotLedgerRecord["workspaceSnapshotRef"]>;
+    };
     let handle: SandboxHandle;
     try {
       handle = sandboxHandleSchema.parse(
-        await compatibility.runtime.provider.forkWorkspace({
-          operationId: `historical:${sha256(
-            `${input.ownerId}\0${input.clientRequestId}`,
-          ).slice(0, 48)}`,
-          ownerId: input.ownerId,
-          threadId: boundary.threadId,
-          branchId: destinationBranchId,
-          profile: compatibility.profile,
-          expectedHostPolicyDigest: compatibility.runtime.hostPolicyDigest!,
-          maxEvidenceAgeMs: compatibility.runtime.maxEvidenceAgeMs,
-          now,
-          expiresAt,
-          source,
-        }),
+        compatibility.runtime.restoreWorkspace
+          ? (
+              await compatibility.runtime.restoreWorkspace({
+                snapshot,
+                create,
+              })
+            ).handle
+          : await compatibility.runtime.provider.forkWorkspace(create),
       );
     } catch (error) {
       throw new HistoricalBranchError(
@@ -644,7 +731,7 @@ export class HistoricalBranchService {
   ): Promise<Compatibility> {
     let runtime: HistoricalBranchSandboxRuntime;
     try {
-      runtime = await this.resolveSandboxRuntime();
+      runtime = await this.resolveSandboxRuntime(snapshot);
     } catch (error) {
       return {
         ok: false,

@@ -69,6 +69,22 @@ describe("materials scoped read model", () => {
     expect(viewer).toContain('target="_blank"')
   })
 
+  test("requires durable consent and a media placement before audio fallback", async () => {
+    const [viewer, studio, studioPage] = await Promise.all([
+      source("./material-viewer.tsx"),
+      source("../media-studio/media-studio-client.tsx"),
+      source("../../app/(app)/materials/studio/page.tsx"),
+    ])
+
+    expect(viewer).toContain("videoExtractionConsent.queryOptions")
+    expect(viewer).toContain("retryVideoAudio.mutationOptions")
+    expect(viewer).toContain('advancedReason === "captions_unavailable"')
+    expect(viewer).toContain("videoAudioExtraction")
+    expect(studio).toContain("videoExtractionConsent.queryOptions")
+    expect(studio).toContain("videoConsentQuery.data?.notice")
+    expect(studioPage).toContain("videoExtractionConsent.queryOptions")
+  })
+
   test("runs a durable transcribe-all batch with SSE progress and polling fallback", async () => {
     const [client, progress] = await Promise.all([
       source("./materials-client.tsx"),
@@ -92,7 +108,9 @@ describe("materials scoped read model", () => {
     // Once into the phone header's action slot, once in the toolbar the wide
     // layout shows. The same menu both times, so the two cannot drift apart.
     expect(client.match(/\{addMenu\}/g)).toHaveLength(2)
-    expect(client).toContain("<PageActions>{addMenu}</PageActions>")
+    expect(client).toContain("<PageActions>")
+    expect(client).toContain('href="/materials/studio"')
+    expect(client).toContain('t("Studio")')
     expect(client).toContain('t("Upload a file")')
   })
 

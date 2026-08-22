@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type {
   AnyAvermateToolDescriptor,
   AvermateToolDescriptor,
@@ -17,9 +18,11 @@ import { ToolBroker } from "./broker";
 import { ToolRegistry } from "./registry";
 import { coreArtifactGraphStore } from "../ingestion/artifact-graph";
 import { artifactWorkflowStore } from "../ingestion/artifact-workflow-store";
+import { artifactWorkflowDispatcher } from "../ingestion/artifact-workflow-dispatcher";
 import type { ToolActionContinuationStore } from "./action-continuation";
 import { actionLedgerService } from "../actions/services";
 import { cardSurfaceSchema } from "../lib/card-storage";
+import { learningObjectives } from "../db/schema";
 
 const inputBudget = {
   maxBytes: 16 * 1024,
@@ -175,6 +178,9 @@ function mediaMutationDescriptor<I>(input: {
   effect: "create" | "update" | "external";
   risk: "medium" | "high";
   approval: "policy" | "always";
+  compensation?: "none" | "supported" | "guaranteed";
+  compensatorId?: string;
+  crashRecovery?: "idempotent-retry" | "inspect-required";
   inputSchema: z.ZodType<I>;
   preview: (value: I) => unknown;
   actionScope: (value: I) => { kind: string; id: string } | null;
@@ -197,8 +203,9 @@ function mediaMutationDescriptor<I>(input: {
     approval: input.approval,
     idempotency: "required",
     preview: "required",
-    compensation: "none",
-    crashRecovery: "inspect-required",
+    compensation: input.compensation ?? "none",
+    ...(input.compensatorId ? { compensatorId: input.compensatorId } : {}),
+    crashRecovery: input.crashRecovery ?? "inspect-required",
     inputBudget,
     resultBudget: readBudget,
     redact: (value: I) => json(input.preview(value)),
@@ -255,11 +262,14 @@ function advancedMediaMutationDescriptors() {
     id: "artifact.plan",
     title: "Plan an artifact workflow",
     description:
-      "Create an owned artifact identity and a durable, inspectable workflow plan without executing a renderer in the API process.",
+      "Create an owned artifact identity and launch its inspectable stages through the durable job runtime.",
     scope: "avermate:materials.write",
     effect: "create",
     risk: "medium",
     approval: "policy",
+    compensation: "supported",
+    compensatorId: "learning.evidence.restore-decision@1",
+    crashRecovery: "idempotent-retry",
     inputSchema: artifactPlanInputSchema,
     preview: (value) => ({
       consequence: "Create a recoverable artifact workflow plan",
@@ -267,7 +277,7 @@ function advancedMediaMutationDescriptors() {
       title: value.title,
       sourceVersionCount: value.sourceVersionIds.length,
       parentRevisionCount: value.parentArtifactRevisionIds.length,
-      rendererExecution: "not-started",
+      rendererExecution: "durable-dispatch",
     }),
     actionScope: (value) => ({
       kind: value.projectId ? "study-project" : "artifact-studio",
@@ -282,13 +292,24 @@ function advancedMediaMutationDescriptors() {
         value.kind === "video-timeline"
           ? "core"
           : context.capabilities.placement(capability);
-      return coreArtifactGraphStore.plan({
-        ownerId: context.principal.userId,
+      const ownerId = context.principal.userId;
+      const planned = await coreArtifactGraphStore.plan({
+        ownerId,
         ...value,
         placement: requested,
         policyRef: "advanced-media-workflow-policy.v1",
         idempotencyKey: context.actionReference!,
         actionId: context.actionReference,
+      });
+      return artifactWorkflowDispatcher.dispatch({
+        ownerId,
+        runId: planned.id,
+        artifactId: planned.artifactId,
+        kind: value.kind,
+        inputDigest: planned.inputDigest,
+        sourceVersionIds: value.sourceVersionIds,
+        parentArtifactRevisionIds: value.parentArtifactRevisionIds,
+        settings: value.settings,
       });
     },
     resources: (_value, output) => {
@@ -363,11 +384,17 @@ function advancedMediaMutationDescriptors() {
       ...value,
     }),
     actionScope: (value) => ({ kind: "artifact-workflow", id: value.runId }),
-    execute: (context, value) =>
-      artifactWorkflowStore.retry({
-        ownerId: context.principal.userId,
+    execute: async (context, value) => {
+      const ownerId = context.principal.userId;
+      const disposition = await artifactWorkflowStore.retry({
+        ownerId,
         ...value,
-      }),
+      });
+      if (disposition.retry) {
+        await artifactWorkflowDispatcher.resume(ownerId, value.runId);
+      }
+      return disposition;
+    },
     resources: (value, output) => [
       {
         resourceKind: "artifact-workflow-stage",
@@ -461,6 +488,413 @@ function advancedMediaMutationDescriptors() {
     ],
   });
   return [plan, cancel, retry, promote, setState] as const;
+}
+
+function learningMutationDescriptors(api: Api) {
+  const requestCopy = mediaMutationDescriptor({
+    id: "learning.copy.request_analysis",
+    title: "Request grade-copy analysis",
+    description:
+      "Queue OCR for one owned copy. The result remains a proposal and never changes the school grade.",
+    scope: "avermate:learning.write",
+    effect: "external",
+    risk: "high",
+    approval: "always",
+    inputSchema: z.strictObject({ attachmentId: id }),
+    preview: (value) => ({
+      consequence:
+        "Send only the selected owned copy to the configured OCR placement",
+      attachmentId: value.attachmentId,
+      createsEvidence: false,
+      changesGrade: false,
+    }),
+    actionScope: (value) => ({
+      kind: "grade-attachment",
+      id: value.attachmentId,
+    }),
+    execute: (context, value) =>
+      api.learning.copies.request({
+        ...value,
+        idempotencyKey: context.actionReference!,
+      }),
+    resources: (_value, output) => [
+      {
+        resourceKind: "learning-copy-analysis",
+        resourceId: String((output as Record<string, unknown>).id),
+        operation: "create",
+        beforeRevision: null,
+        afterRevision: String(
+          (output as Record<string, unknown>).revision ?? 1,
+        ),
+      },
+    ],
+  });
+  const reviewedRegion = z.strictObject({
+    regionId: id,
+    objectiveIds: z.array(id).min(1).max(12),
+    observedOutcome: z.number().nonnegative().nullable().default(null),
+    denominator: z.number().positive().nullable().default(null),
+    difficulty: z.number().min(0).max(1).nullable().default(null),
+    error: z
+      .strictObject({
+        taxonomy: z.enum([
+          "missing-knowledge",
+          "misunderstood-concept",
+          "method-strategy",
+          "calculation",
+          "notation",
+          "reading-instruction",
+          "justification",
+          "transfer",
+          "time-management",
+          "unclassified",
+        ]),
+        explanation: z.string().trim().min(1).max(2_000),
+        severity: z.number().min(0).max(1),
+        confidence: z.number().min(0).max(1),
+      })
+      .nullable()
+      .default(null),
+  });
+  const reviewCopyInput = z.strictObject({
+    analysisId: id,
+    kind: z.enum(["confirm", "correct", "dismiss", "unconfirm"]),
+    expectedRevision: z.number().int().positive(),
+    regions: z.array(reviewedRegion).max(250).default([]),
+  });
+  const reviewCopy = mediaMutationDescriptor({
+    id: "learning.copy.review_analysis",
+    title: "Review grade-copy analysis",
+    description:
+      "Confirm, correct, dismiss, or undo a copy proposal behind a revision fence. Confirmation appends user-reviewed evidence.",
+    scope: "avermate:learning.write",
+    effect: "update",
+    risk: "high",
+    approval: "always",
+    inputSchema: reviewCopyInput,
+    preview: (value) => ({
+      consequence: `${value.kind} the exact copy-analysis revision`,
+      analysisId: value.analysisId,
+      expectedRevision: value.expectedRevision,
+      regionCount: value.regions.length,
+      changesGrade: false,
+    }),
+    actionScope: (value) => ({
+      kind: "learning-copy-analysis",
+      id: value.analysisId,
+    }),
+    execute: (context, value) =>
+      api.learning.copies.review({
+        ...value,
+        idempotencyKey: context.actionReference!,
+      }),
+    resources: (value, output) => [
+      {
+        resourceKind: "learning-copy-analysis",
+        resourceId: value.analysisId,
+        operation: "update",
+        beforeRevision: String(value.expectedRevision),
+        afterRevision: String((output as Record<string, unknown>).revision),
+      },
+    ],
+  });
+  const evidenceInput = z.strictObject({
+    evidenceId: id,
+    state: z.enum(["included", "excluded"]),
+    reason: z.string().trim().max(1_000).nullable().default(null),
+  });
+  const decideEvidence = mediaMutationDescriptor({
+    id: "learning.evidence.decide",
+    title: "Include or exclude learning evidence",
+    description:
+      "Append an inclusion decision for one owned immutable evidence row and recompute its explainable projection.",
+    scope: "avermate:learning.write",
+    effect: "update",
+    risk: "medium",
+    approval: "policy",
+    inputSchema: evidenceInput,
+    preview: (value) => ({
+      consequence: `${value.state} evidence in future mastery projections`,
+      ...value,
+      immutableObservationPreserved: true,
+    }),
+    actionScope: (value) => ({
+      kind: "learning-evidence",
+      id: value.evidenceId,
+    }),
+    execute: (context, value) =>
+      api.learning.evidence.decide({
+        ...value,
+        idempotencyKey: context.actionReference!,
+      }),
+    resources: (value, output) => {
+      const result = output as Record<string, unknown>;
+      const decision = result.decision as Record<string, unknown> | undefined;
+      const previous = result.previousDecision as
+        Record<string, unknown> | undefined;
+      if (!decision || typeof decision.id !== "string") {
+        throw new Error("The evidence decision revision is missing");
+      }
+      return [
+        {
+          resourceKind: "learning-evidence",
+          resourceId: value.evidenceId,
+          operation: "update",
+          beforeRevision:
+            typeof previous?.id === "string"
+              ? previous.id
+              : "implicit-included",
+          afterRevision: decision.id,
+          beforeSnapshot: {
+            state: previous?.state === "excluded" ? "excluded" : "included",
+            reason:
+              typeof previous?.reason === "string" ? previous.reason : null,
+          },
+          afterSnapshot: {
+            state: decision.state,
+            reason:
+              typeof decision.reason === "string" ? decision.reason : null,
+          },
+        },
+      ];
+    },
+  });
+  const proposeInput = z.strictObject({
+    yearId: id,
+    subjectId: id.nullable().optional(),
+    limit: z.number().int().min(1).max(20).default(5),
+    availableMinutes: z.number().int().min(5).max(240).default(30),
+  });
+  const proposePlan = mediaMutationDescriptor({
+    id: "learning.plan.propose",
+    title: "Propose a learning plan",
+    description:
+      "Create bounded recommendations from current low or uncertain mastery; this does not schedule a second agenda.",
+    scope: "avermate:learning.write",
+    effect: "create",
+    risk: "medium",
+    approval: "policy",
+    inputSchema: proposeInput,
+    preview: (value) => ({
+      consequence: "Create reviewable learning-plan proposals",
+      ...value,
+      createsPlanningTasks: false,
+    }),
+    actionScope: (value) => ({ kind: "academic-year", id: value.yearId }),
+    execute: (_context, value) => api.learning.plan.propose(value),
+    resources: (_value, output) =>
+      (Array.isArray(output) ? output : []).map((row) => ({
+        resourceKind: "learning-plan-item",
+        resourceId: String((row as Record<string, unknown>).id),
+        operation: "create" as const,
+        beforeRevision: null,
+        afterRevision: String((row as Record<string, unknown>).revision ?? 1),
+      })),
+  });
+  const applyInput = z.strictObject({
+    itemId: id,
+    expectedRevision: z.number().int().positive(),
+    scheduledAt: isoDate.nullable().default(null),
+    dueAt: isoDate.nullable().default(null),
+  });
+  const applyPlan = mediaMutationDescriptor({
+    id: "learning.plan.apply",
+    title: "Apply a learning-plan item",
+    description:
+      "Create the authoritative personal planning task for one reviewed recommendation.",
+    scope: "avermate:learning.write",
+    effect: "create",
+    risk: "medium",
+    approval: "always",
+    inputSchema: applyInput,
+    preview: (value) => ({
+      consequence: "Create one recoverable personal planning task",
+      ...value,
+    }),
+    actionScope: (value) => ({ kind: "learning-plan-item", id: value.itemId }),
+    execute: (_context, value) =>
+      api.learning.plan.apply({
+        itemId: value.itemId,
+        expectedRevision: value.expectedRevision,
+        scheduledAt: value.scheduledAt ? new Date(value.scheduledAt) : null,
+        dueAt: value.dueAt ? new Date(value.dueAt) : null,
+      }),
+    resources: (value, output) => [
+      {
+        resourceKind: "learning-plan-item",
+        resourceId: value.itemId,
+        operation: "update",
+        beforeRevision: null,
+        afterRevision: String((output as Record<string, unknown>).revision),
+      },
+      {
+        resourceKind: "planning-task",
+        resourceId: String((output as Record<string, unknown>).planningTaskId),
+        operation: "create",
+        beforeRevision: null,
+        afterRevision: "1",
+      },
+    ],
+  });
+  const startQuizInput = z.strictObject({
+    documentId: id,
+    mode: z.enum(["practice", "progress"]).default("practice"),
+  });
+  const startQuiz = mediaMutationDescriptor({
+    id: "learning.quiz.start",
+    title: "Start a learning quiz",
+    description:
+      "Start an owned quiz in practice or progress mode. Starting never creates mastery evidence.",
+    scope: "avermate:learning.write",
+    effect: "create",
+    risk: "medium",
+    approval: "policy",
+    inputSchema: startQuizInput,
+    preview: (value) => ({
+      consequence: `Start a ${value.mode} quiz attempt`,
+      ...value,
+      createsEvidenceOnStart: false,
+    }),
+    actionScope: (value) => ({ kind: "study-document", id: value.documentId }),
+    execute: (_context, value) =>
+      api.documents.quiz.start({ ...value, latencyConsent: false }),
+    resources: (_value, output) => [
+      {
+        resourceKind: "quiz-attempt",
+        resourceId: String((output as Record<string, unknown>).id),
+        operation: "create",
+        beforeRevision: null,
+        afterRevision: "1",
+      },
+    ],
+  });
+  const generateQuizInput = z.strictObject({
+    projectId: id.nullable().default(null),
+    title: z.string().trim().min(1).max(160),
+    objectiveIds: z.array(id).min(1).max(20),
+    sourceVersionIds: z.array(id).min(1).max(500),
+    questionCount: z.number().int().min(1).max(100).default(10),
+    difficulty: z.number().min(0).max(1).nullable().default(null),
+  });
+  const generateQuiz = mediaMutationDescriptor({
+    id: "learning.quiz.generate",
+    title: "Generate a sourced learning quiz",
+    description:
+      "Plan a bounded quiz artifact from owned source versions and learning objectives. Draft questions must retain proof handles and be reviewed before they can affect mastery.",
+    scope: "avermate:learning.write",
+    effect: "create",
+    risk: "medium",
+    approval: "policy",
+    inputSchema: generateQuizInput,
+    preview: (value) => ({
+      consequence: "Create a reviewable quiz artifact workflow",
+      title: value.title,
+      objectiveIds: value.objectiveIds,
+      sourceVersionCount: value.sourceVersionIds.length,
+      questionCount: value.questionCount,
+      difficulty: value.difficulty,
+      createsMasteryEvidence: false,
+      requiresQuestionReview: true,
+    }),
+    actionScope: (value) => ({
+      kind: value.projectId ? "study-project" : "learning-quiz",
+      id: value.projectId ?? value.objectiveIds[0]!,
+    }),
+    execute: async (context, value) => {
+      const ownerId = context.principal.userId;
+      const objectives = await db
+        .select({
+          id: learningObjectives.id,
+          yearId: learningObjectives.yearId,
+          subjectId: learningObjectives.subjectId,
+        })
+        .from(learningObjectives)
+        .where(
+          and(
+            eq(learningObjectives.userId, ownerId),
+            inArray(learningObjectives.id, value.objectiveIds),
+            isNull(learningObjectives.archivedAt),
+          ),
+        );
+      if (objectives.length !== new Set(value.objectiveIds).size) {
+        throw new Error("Every quiz objective must be active and owned");
+      }
+      const scopes = new Set(
+        objectives.map(
+          (objective) => `${objective.yearId}:${objective.subjectId ?? "none"}`,
+        ),
+      );
+      if (scopes.size !== 1 || objectives.some((row) => !row.subjectId)) {
+        throw new Error("A learning quiz must target one year and subject");
+      }
+      const placement = context.capabilities.placement("artifactGeneration");
+      const planned = await coreArtifactGraphStore.plan({
+        ownerId,
+        projectId: value.projectId,
+        kind: "quiz",
+        title: value.title,
+        sourceVersionIds: value.sourceVersionIds,
+        parentArtifactRevisionIds: [],
+        settings: {
+          learningObjectiveIds: value.objectiveIds,
+          questionCount: value.questionCount,
+          difficulty: value.difficulty,
+          questionValidationState: "draft",
+          requireSourceProofs: true,
+          requireHumanReviewForMastery: true,
+        },
+        placement,
+        policyRef: "learning-quiz-generation-policy.v1",
+        idempotencyKey: context.actionReference!,
+        actionId: context.actionReference,
+      });
+      return artifactWorkflowDispatcher.dispatch({
+        ownerId,
+        runId: planned.id,
+        artifactId: planned.artifactId,
+        kind: "quiz",
+        inputDigest: planned.inputDigest,
+        sourceVersionIds: value.sourceVersionIds,
+        parentArtifactRevisionIds: [],
+        settings: {
+          learningObjectiveIds: value.objectiveIds,
+          questionCount: value.questionCount,
+          difficulty: value.difficulty,
+          questionValidationState: "draft",
+          requireSourceProofs: true,
+          requireHumanReviewForMastery: true,
+        },
+      });
+    },
+    resources: (_value, output) => {
+      const result = output as Record<string, unknown>;
+      return [
+        {
+          resourceKind: "generated-artifact",
+          resourceId: String(result.artifactId),
+          operation: "create",
+          beforeRevision: null,
+          afterRevision: "1",
+        },
+        {
+          resourceKind: "artifact-workflow",
+          resourceId: String(result.id),
+          operation: "create",
+          beforeRevision: null,
+          afterRevision: String(result.inputDigest),
+        },
+      ];
+    },
+  });
+  return [
+    requestCopy,
+    reviewCopy,
+    decideEvidence,
+    proposePlan,
+    applyPlan,
+    generateQuiz,
+    startQuiz,
+  ] as const;
 }
 
 const projectSourceKind = z.enum([
@@ -952,6 +1386,91 @@ export function firstPartyToolDescriptors(
     }),
     readDescriptor({
       api,
+      id: "learning.concepts.get",
+      title: "Read one learning concept",
+      description:
+        "Read one owned concept with its objectives, prerequisite edges and reviewed mapping history.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ conceptId: id }),
+      execute: (client, input) => client.learning.concepts.get(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.concepts.list",
+      title: "List learning concepts",
+      description: "List owned concepts and objectives for one academic scope.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({
+        yearId: id,
+        subjectId: id.nullable().optional(),
+      }),
+      execute: (client, input) => client.learning.concepts.list(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.evidence.get",
+      title: "Read one learning evidence item",
+      description:
+        "Read one immutable owned observation with its exact source locator, latest decision and reviewed errors.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ evidenceId: id }),
+      execute: (client, input) => client.learning.evidence.get(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.evidence.list",
+      title: "List objective evidence",
+      description:
+        "List immutable owned observations with their latest inclusion decision; never exposes copy bytes.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ objectiveId: id }),
+      execute: (client, input) => client.learning.evidence.list(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.mastery.get",
+      title: "Read one mastery projection",
+      description:
+        "Read one current owned estimate with its objective, concept, interval and algorithm revision.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ objectiveId: id }),
+      execute: (client, input) => client.learning.mastery.get(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.mastery.list",
+      title: "List mastery projections",
+      description:
+        "List current estimates, intervals, evidence counts and algorithm revisions for an owned academic scope.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({
+        yearId: id,
+        subjectId: id.nullable().optional(),
+      }),
+      execute: (client, input) => client.learning.mastery.list(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.mastery.explain",
+      title: "Explain one mastery projection",
+      description:
+        "Read the versioned posterior and every included or omitted evidence contribution.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ objectiveId: id }),
+      execute: (client, input) => client.learning.mastery.explain(input),
+    }),
+    readDescriptor({
+      api,
+      id: "learning.plan.list",
+      title: "List learning-plan items",
+      description:
+        "List pedagogical recommendations and their authoritative planning-task links.",
+      scope: "avermate:learning.read",
+      inputSchema: z.strictObject({ yearId: id }),
+      execute: (client, input) => client.learning.plan.list(input),
+    }),
+    readDescriptor({
+      api,
       id: "documents.list",
       title: "List study documents",
       description:
@@ -1298,6 +1817,7 @@ export function firstPartyToolDescriptors(
       inputSchema: z.strictObject({}),
       execute: (client) => client.social.reports.mine(),
     }),
+    ...learningMutationDescriptors(api),
     ...advancedMediaMutationDescriptors(),
     {
       id: "planning.tasks.create",

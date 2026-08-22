@@ -3,6 +3,7 @@ import { createRouterClient } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { JobExecutionIdentity } from "../lib/jobs";
 
 process.env.DATABASE_URL = "file::memory:";
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
@@ -186,23 +187,22 @@ async function storedFile(name: string, mimeType = "application/pdf") {
   return file!;
 }
 
+const readTestFileBytes = async () =>
+  new TextEncoder().encode("pdf bytes").buffer;
+
 async function ingestionPayload(jobId: string) {
   const [job] = await database
     .select({ payload: schema.jobs.payload })
     .from(schema.jobs)
     .where(eq(schema.jobs.id, jobId));
-  const payload = job?.payload as
-    { documentId?: unknown; ingestionId?: unknown } | null | undefined;
+  const payload = job?.payload as Record<string, unknown> | null | undefined;
   if (
     typeof payload?.documentId !== "string" ||
     typeof payload.ingestionId !== "string"
   ) {
     throw new Error(`Missing ingestion payload for job ${jobId}`);
   }
-  return {
-    documentId: payload.documentId,
-    ingestionId: payload.ingestionId,
-  };
+  return payload;
 }
 
 async function fileDocument(
@@ -224,6 +224,36 @@ async function fileDocument(
     })
     .returning();
   return { document: document!, file };
+}
+
+async function runningJobIdentity(input: {
+  kind: string;
+  userId: string;
+  payload: unknown;
+  runToken?: string;
+}): Promise<JobExecutionIdentity & { userId: string }> {
+  const leaseOwner = `materials-runner-${crypto.randomUUID()}`;
+  const [job] = await database
+    .insert(schema.jobs)
+    .values({
+      kind: input.kind,
+      payload: input.payload,
+      status: "running",
+      attempts: 1,
+      lockedBy: leaseOwner,
+      lockedUntil: new Date("2099-01-01T00:00:00.000Z"),
+      userId: input.userId,
+    })
+    .returning({ id: schema.jobs.id });
+  if (!job) throw new Error("The running job fixture was not created");
+  return {
+    jobId: job.id,
+    kind: input.kind,
+    userId: input.userId,
+    attempt: 1,
+    leaseOwner,
+    runToken: input.runToken ?? `test-run-${crypto.randomUUID()}`,
+  };
 }
 
 describe("materials domain", () => {
@@ -615,6 +645,163 @@ describe("materials domain", () => {
       kind: "video",
       startMs: 2_500,
       endMs: 4_750,
+    });
+  });
+
+  test("adopts an explicitly requested attested Node browser render", async () => {
+    const { enqueueLinkIngestion, runIngestLinkJob } =
+      await import("../jobs/ingest-link");
+    const link = await apiA.materials.documents.createLink({
+      yearId: yearA,
+      url: "https://school.example/dynamic-course",
+    });
+    const queued = await enqueueLinkIngestion({
+      documentId: link.document!.id,
+      userId: userA,
+      strategy: "browser-render",
+      nodeId: "node-browser-a",
+      idempotencyKey: `browser-test:${link.document!.id}`,
+    });
+    const result = await runIngestLinkJob(await ingestionPayload(queued.id), {
+      fetchArticle: async () => {
+        throw new Error("Core static fetch must not run for browser-render");
+      },
+      browserRender: async (input) => {
+        expect(input).toMatchObject({
+          ownerId: userA,
+          nodeId: "node-browser-a",
+          canonicalUrl: "https://school.example/dynamic-course",
+        });
+        return {
+          output: {
+            schemaVersion: 1 as const,
+            finalUrl: "https://school.example/course/canonical",
+            redirectChain: ["https://school.example/dynamic-course"],
+            title: "Cours interactif",
+            language: "fr",
+            readableHtml: "<article>Cours interactif</article>",
+            requestCount: 12,
+            responseBytes: 4_096,
+            selectedImages: [],
+          },
+          extracted: {
+            markdown: "# Cours interactif\n\nUne leçon rendue.",
+            title: "Cours interactif",
+            byline: "Ada Teacher",
+            site: "School",
+            wordCount: 4,
+            truncated: false,
+          },
+          profile: {
+            kind: "artifact.browser-render@1",
+            sandboxProfileId: "browser" as const,
+            profileVersion: "browser-v1",
+            imageDigest: `sha256:${"a".repeat(64)}` as const,
+            egressPolicyDigest: `sha256:${"b".repeat(64)}` as const,
+          },
+        };
+      },
+    });
+    expect(result).toMatchObject({
+      kind: "article",
+      title: "Cours interactif",
+    });
+    expect(
+      await apiA.materials.documents.transcript({
+        documentId: link.document!.id,
+      }),
+    ).toMatchObject({
+      status: "ready",
+      content: "# Cours interactif\n\nUne leçon rendue.",
+      meta: {
+        finalUrl: "https://school.example/course/canonical",
+        kind: "web",
+      },
+    });
+  });
+
+  test("publishes the explicit caption-first Node audio fallback transcript", async () => {
+    const { IngestError } = await import("../lib/ingest");
+    const { enqueueLinkIngestion, runIngestLinkJob } =
+      await import("../jobs/ingest-link");
+    const link = await apiA.materials.documents.createLink({
+      yearId: yearA,
+      title: "Cours sans sous-titres",
+      url: "https://youtu.be/dQw4w9WgXcQ",
+    });
+    const queued = await enqueueLinkIngestion({
+      documentId: link.document!.id,
+      userId: userA,
+      strategy: "youtube",
+      requestAudioFallback: true,
+      preferredLanguage: "fr",
+      consentRevision: "video-audio-extraction.v1",
+      nodeId: "node-media-a",
+      idempotencyKey: `audio-test:${link.document!.id}`,
+    });
+    const result = await runIngestLinkJob(await ingestionPayload(queued.id), {
+      ingestYoutube: async () => {
+        throw new IngestError(
+          "This YouTube video has no available captions",
+          false,
+          { reasonCode: "captions_unavailable" },
+        );
+      },
+      videoAudioTranscription: async (input) => {
+        expect(input).toMatchObject({
+          ownerId: userA,
+          nodeId: "node-media-a",
+          consentRevision: "video-audio-extraction.v1",
+        });
+        return {
+          source: {
+            strategy: "extracted-audio" as const,
+            canonicalUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            mediaId: "dQw4w9WgXcQ",
+            title: "Cours sans sous-titres",
+            channel: null,
+            requestedLanguage: "fr",
+            selectedLanguage: "fr",
+            languageMismatch: false,
+            durationMs: 60_000,
+            adapterId: "avermate-node-video-audio",
+            adapterVersion: "video-audio-v1",
+            transcriptProvider: "mistral" as const,
+            transcriptModel: "voxtral-mini-latest",
+            segments: [
+              {
+                startMs: 1_000,
+                endMs: 8_000,
+                text: "Explication du théorème.",
+              },
+            ],
+          },
+          markdown: "## 0:00\n\nExplication du théorème.",
+          wordCount: 3,
+          truncated: false,
+          chapters: [] as const,
+          profile: {
+            kind: "artifact.video-audio-extract@1",
+            sandboxProfileId: "video-audio" as const,
+            profileVersion: "video-audio-v1",
+            imageDigest: `sha256:${"c".repeat(64)}` as const,
+            egressPolicyDigest: `sha256:${"d".repeat(64)}` as const,
+          },
+        };
+      },
+    });
+    expect(result).toMatchObject({
+      kind: "youtube",
+      videoId: "dQw4w9WgXcQ",
+    });
+    expect(
+      await apiA.materials.documents.transcript({
+        documentId: link.document!.id,
+      }),
+    ).toMatchObject({
+      status: "ready",
+      content: "## 0:00\n\nExplication du théorème.",
+      meta: { kind: "youtube", durationSec: 60 },
     });
   });
 
@@ -2571,6 +2758,182 @@ describe("materials domain", () => {
     ).toHaveLength(1);
   });
 
+  test("rejects forged cross-tenant OCR and media jobs before file or provider access", async () => {
+    const { runOcrDocumentJob } = await import("../jobs/ocr");
+    const { runTranscribeMaterialMediaJob } =
+      await import("../jobs/transcribe-material-media");
+    const pdf = await fileDocument(null, "forged-ocr.pdf");
+    const media = await fileDocument(null, "forged-media.mp3", "audio/mpeg");
+    let reads = 0;
+    let providerResolutions = 0;
+    const ocrJob = await runningJobIdentity({
+      kind: "ocr.document",
+      userId: userB,
+      payload: { documentId: pdf.document.id },
+    });
+    await expect(
+      runOcrDocumentJob(
+        { documentId: pdf.document.id },
+        {
+          job: ocrJob,
+          readOwnedFile: async () => {
+            reads += 1;
+            return new ArrayBuffer(0);
+          },
+          resolveProvider: async () => {
+            providerResolutions += 1;
+            throw new Error("provider must not be resolved");
+          },
+        },
+      ),
+    ).rejects.toThrow("OCR source document not found");
+
+    const mediaJob = await runningJobIdentity({
+      kind: "materials.media.transcribe",
+      userId: userB,
+      payload: { documentId: media.document.id },
+    });
+    await expect(
+      runTranscribeMaterialMediaJob(
+        { documentId: media.document.id },
+        {
+          job: mediaJob,
+          readFile: async () => {
+            reads += 1;
+            return new ArrayBuffer(0);
+          },
+          resolveProvider: async () => {
+            providerResolutions += 1;
+            throw new Error("provider must not be resolved");
+          },
+        },
+      ),
+    ).rejects.toThrow("Media source document not found");
+    expect({ reads, providerResolutions }).toEqual({
+      reads: 0,
+      providerResolutions: 0,
+    });
+  });
+
+  test("fences stale OCR success and stale media failure by durable generation", async () => {
+    const {
+      claimMaterialArtifactGeneration,
+      failMaterialArtifactGeneration,
+      publishMaterialArtifactGeneration,
+    } = await import("../jobs/material-artifact-generation");
+
+    const pdf = await fileDocument(null, "stale-success.pdf");
+    const oldOcrJob = await runningJobIdentity({
+      kind: "ocr.document",
+      userId: userA,
+      payload: { documentId: pdf.document.id },
+      runToken: "ocr-old-success",
+    });
+    const newOcrJob = await runningJobIdentity({
+      kind: "ocr.document",
+      userId: userA,
+      payload: { documentId: pdf.document.id },
+      runToken: "ocr-new-success",
+    });
+    const oldOcr = await claimMaterialArtifactGeneration({
+      documentId: pdf.document.id,
+      kind: "ocr-markdown",
+      userId: userA,
+      runToken: oldOcrJob.runToken,
+      job: oldOcrJob,
+    });
+    const newOcr = await claimMaterialArtifactGeneration({
+      documentId: pdf.document.id,
+      kind: "ocr-markdown",
+      userId: userA,
+      runToken: newOcrJob.runToken,
+      job: newOcrJob,
+    });
+    await publishMaterialArtifactGeneration({
+      generation: newOcr,
+      content: "new OCR",
+      metaJson: JSON.stringify({ provider: "test", model: "new" }),
+      segments: [],
+    });
+    await expect(
+      publishMaterialArtifactGeneration({
+        generation: oldOcr,
+        content: "stale OCR",
+        metaJson: JSON.stringify({ provider: "test", model: "old" }),
+        segments: [],
+      }),
+    ).rejects.toBeDefined();
+
+    const media = await fileDocument(null, "stale-failure.mp3", "audio/mpeg");
+    const oldMediaJob = await runningJobIdentity({
+      kind: "materials.media.transcribe",
+      userId: userA,
+      payload: { documentId: media.document.id },
+      runToken: "media-old-failure",
+    });
+    const newMediaJob = await runningJobIdentity({
+      kind: "materials.media.transcribe",
+      userId: userA,
+      payload: { documentId: media.document.id },
+      runToken: "media-new-success",
+    });
+    const oldMedia = await claimMaterialArtifactGeneration({
+      documentId: media.document.id,
+      kind: "media-transcript",
+      userId: userA,
+      runToken: oldMediaJob.runToken,
+      job: oldMediaJob,
+    });
+    const newMedia = await claimMaterialArtifactGeneration({
+      documentId: media.document.id,
+      kind: "media-transcript",
+      userId: userA,
+      runToken: newMediaJob.runToken,
+      job: newMediaJob,
+    });
+    await failMaterialArtifactGeneration({
+      generation: oldMedia,
+      error: "stale failure",
+    });
+    await publishMaterialArtifactGeneration({
+      generation: newMedia,
+      content: "new media transcript",
+      metaJson: JSON.stringify({ provider: "test", model: "new" }),
+      segments: [],
+    });
+
+    const rows = await database
+      .select({
+        documentId: schema.materialArtifacts.documentId,
+        status: schema.materialArtifacts.status,
+        content: schema.materialArtifacts.content,
+        runId: schema.materialArtifacts.runId,
+      })
+      .from(schema.materialArtifacts)
+      .where(
+        inArray(schema.materialArtifacts.documentId, [
+          pdf.document.id,
+          media.document.id,
+        ]),
+      );
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        {
+          documentId: pdf.document.id,
+          status: "ready",
+          content: "new OCR",
+          runId: newOcrJob.runToken,
+        },
+        {
+          documentId: media.document.id,
+          status: "ready",
+          content: "new media transcript",
+          runId: newMediaJob.runToken,
+        },
+      ]),
+    );
+  });
+
   test("writes a ready artifact only after OCR content succeeds", async () => {
     const { runOcrDocumentJob } = await import("../jobs/ocr");
     const fixture = await fileDocument(null, "processed.pdf");
@@ -2578,7 +2941,7 @@ describe("materials domain", () => {
     const result = await runOcrDocumentJob(
       { documentId: fixture.document.id },
       {
-        fetch: async () => new Response("pdf bytes", { status: 200 }),
+        readOwnedFile: readTestFileBytes,
         runOcr: async () => ({
           markdown: "<!-- Page 0 -->\n# Processed",
           pageCount: 1,
@@ -2628,10 +2991,10 @@ describe("materials domain", () => {
           expect(provider).toBe("local");
           expect(storageKey).toBe(fixture.file.storageKey);
           expect(options?.maxBytes).toBe(50 * 1024 * 1024);
-          return new Uint8Array([1, 2, 3]).buffer;
+          return new Uint8Array(fixture.file.byteSize).buffer;
         },
         runOcr: async (_userId, file) => {
-          expect(file.blob.size).toBe(3);
+          expect(file.blob.size).toBe(fixture.file.byteSize);
           return {
             markdown: "Read directly",
             pageCount: 1,
@@ -2649,6 +3012,55 @@ describe("materials domain", () => {
     ).toMatchObject({ status: "ready", content: "Read directly" });
   });
 
+  test("reads paired-Node OCR sources through the owner-scoped byte seam", async () => {
+    const { runOcrDocumentJob } = await import("../jobs/ocr");
+    const fixture = await fileDocument(null, "node-source.pdf");
+    await database
+      .update(schema.files)
+      .set({ provider: "node:node_materials_test:relay-storage-v1" })
+      .where(eq(schema.files.id, fixture.file.id));
+    let directReads = 0;
+
+    await runOcrDocumentJob(
+      { documentId: fixture.document.id },
+      {
+        fileAccessUrl: async () => {
+          throw new Error("Node storage must not use a browser URL");
+        },
+        fetch: async () => {
+          throw new Error("Node storage must not use HTTP");
+        },
+        readOwnedFile: async (ownerId, file, options) => {
+          directReads += 1;
+          expect(ownerId).toBe(userA);
+          expect(file).toMatchObject({
+            id: fixture.file.id,
+            userId: userA,
+            provider: "node:node_materials_test:relay-storage-v1",
+            storageKey: fixture.file.storageKey,
+          });
+          expect(options?.maxBytes).toBe(50 * 1024 * 1024);
+          return new Uint8Array(fixture.file.byteSize).buffer;
+        },
+        runOcr: async (_userId, file) => {
+          expect(file.blob.size).toBe(fixture.file.byteSize);
+          return {
+            markdown: "Read from Node",
+            pageCount: 1,
+            providerFileId: "mistral-file-node",
+          };
+        },
+      },
+    );
+
+    expect(directReads).toBe(1);
+    expect(
+      await apiA.materials.documents.transcript({
+        documentId: fixture.document.id,
+      }),
+    ).toMatchObject({ status: "ready", content: "Read from Node" });
+  });
+
   test("records a failed artifact without partial content and allows a clean retry", async () => {
     const { runOcrDocumentJob } = await import("../jobs/ocr");
     const fixture = await fileDocument(null, "failed.pdf");
@@ -2656,7 +3068,7 @@ describe("materials domain", () => {
       runOcrDocumentJob(
         { documentId: fixture.document.id },
         {
-          fetch: async () => new Response("pdf bytes", { status: 200 }),
+          readOwnedFile: readTestFileBytes,
           runOcr: async () => {
             throw new Error("provider unavailable");
           },
@@ -2677,7 +3089,7 @@ describe("materials domain", () => {
     await runOcrDocumentJob(
       { documentId: fixture.document.id },
       {
-        fetch: async () => new Response("pdf bytes", { status: 200 }),
+        readOwnedFile: readTestFileBytes,
         runOcr: async () => ({
           markdown: "Recovered",
           pageCount: 1,
@@ -2703,7 +3115,7 @@ describe("materials domain", () => {
       runOcrDocumentJob(
         { documentId: fixture.document.id },
         {
-          fetch: async () => new Response("pdf bytes", { status: 200 }),
+          readOwnedFile: readTestFileBytes,
           runOcr: (userId, file, options) =>
             runMistralOcr(userId, file, {
               ...options,

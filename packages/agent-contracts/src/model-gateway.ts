@@ -16,6 +16,26 @@ export const normalizedUsageSchema = z.strictObject({
 });
 export type NormalizedUsage = z.infer<typeof normalizedUsageSchema>;
 
+export const NORMALIZED_USAGE_VERSION = 1 as const;
+
+/** Durable provider-neutral accounting attached to one immutable run. */
+export const normalizedUsageSnapshotSchema = z.strictObject({
+  version: z.literal(NORMALIZED_USAGE_VERSION),
+  ownerId: z.string().min(1).max(256),
+  runId: z.string().min(1).max(256),
+  providerKey: z.string().min(1).max(256),
+  providerRevision: z.string().min(1).max(256),
+  modelKey: z.string().min(1).max(256),
+  modelRevision: z.string().min(1).max(256),
+  source: z.enum(["provider", "estimated", "unknown"]),
+  usage: normalizedUsageSchema,
+  final: z.boolean(),
+  observedAt: z.iso.datetime({ offset: true }),
+});
+export type NormalizedUsageSnapshot = z.infer<
+  typeof normalizedUsageSnapshotSchema
+>;
+
 export const modelDescriptorSchema = z.strictObject({
   id: z.string().min(1).max(256),
   provider: z.string().min(1).max(128),
@@ -43,6 +63,8 @@ export type ModelAccessContext = z.infer<typeof modelAccessContextSchema>;
 export type ModelRequest = {
   ownerId: string;
   runId: string;
+  /** Stable provider key when the selected adapter explicitly supports it. */
+  requestKey?: string;
   modelId: string;
   messages: readonly ContextBlock[];
   tools: readonly {
@@ -50,6 +72,8 @@ export type ModelRequest = {
     description: string;
     inputSchema: unknown;
   }[];
+  /** Frozen run policy output fence propagated to the exact provider call. */
+  maximumOutputTokens?: number;
   abortSignal?: AbortSignal;
 };
 

@@ -71,6 +71,52 @@ describe("sandbox worker image plan", () => {
     expect(plan.command).toContain(`BUILD_INPUT_DIGEST=${plan.buildInputDigest}`);
     expect(plan.command).not.toContain("sh");
     expect(plan.execute).toBe(false);
+    expect(
+      parseBuildImageCli([
+        "--profile",
+        "video-audio",
+        "--profile-version",
+        "video-audio-v1",
+        "--builder-base",
+        pinned,
+        "--runtime-base",
+        pinned,
+        "--tag",
+        "avermate/video-audio:v1",
+      ]).profile,
+    ).toBe("video-audio");
+    for (const profile of ["ocr", "speech-to-text"] as const) {
+      const local = parseBuildImageCli([
+        "--profile",
+        profile,
+        "--profile-version",
+        `${profile}-v1`,
+        "--builder-base",
+        pinned,
+        "--runtime-base",
+        pinned,
+        "--tag",
+        `avermate/${profile}:v1`,
+      ]);
+      expect(local.profile).toBe(profile);
+      expect(
+        (await createWorkerImageBuildPlan(local, workspaceRoot)).command,
+      ).toContain(`WORKER_PROFILE=${profile}`);
+    }
+    expect(() =>
+      parseBuildImageCli([
+        "--profile",
+        "speech-to-text-dev",
+        "--profile-version",
+        "speech-to-text-v1",
+        "--builder-base",
+        pinned,
+        "--runtime-base",
+        pinned,
+        "--tag",
+        "avermate/speech-to-text:v1",
+      ]),
+    ).toThrow("WORKER_IMAGE_PROFILE_INVALID");
   });
 
   test("hashes paths and bytes deterministically and rejects traversal", async () => {

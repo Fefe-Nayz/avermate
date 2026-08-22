@@ -19,6 +19,10 @@ export default async function AssistantPage() {
       })
     ),
     queryClient.prefetchQuery(orpc.assistant.models.list.queryOptions()),
+    queryClient.prefetchQuery(orpc.assistant.models.catalogue.queryOptions()),
+    queryClient.prefetchQuery(
+      orpc.assistant.models.preference.get.queryOptions()
+    ),
     queryClient.prefetchQuery(orpc.assistant.skills.list.queryOptions()),
     queryClient.prefetchQuery(
       orpc.projects.list.queryOptions({ input: { include: "live" } })

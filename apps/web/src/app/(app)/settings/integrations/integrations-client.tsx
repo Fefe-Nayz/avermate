@@ -1,8 +1,10 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState, type FormEvent } from "react"
 import {
   BotIcon,
+  BookOpenCheckIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -45,6 +47,8 @@ import { MoodleSyncSection } from "./moodle-sync-section"
 import { DriveSyncSection, type DriveProvider } from "./drive-sync-section"
 import { SchoolServicesSection } from "./school-services-section"
 import { ServiceKeysSection } from "./service-keys-section"
+import { RetrievalSettingsSection } from "./retrieval-settings-section"
+import { AssistantModelSettingsSection } from "./assistant-model-settings-section"
 import { CustomMcpSection } from "./custom-mcp-section"
 
 /**
@@ -165,6 +169,7 @@ export function IntegrationsClient({
     planner: t("Planning"),
     materials: t("Course materials"),
     documents: t("Study documents"),
+    learning: t("Learning"),
   } satisfies Record<McpScopeGroup, string>
 
   /** `avermate:write` means nothing to a reader; "Write" does. */
@@ -332,6 +337,23 @@ export function IntegrationsClient({
       <SchoolServicesSection />
 
       <ServiceKeysSection />
+
+      <AssistantModelSettingsSection />
+
+      <RetrievalSettingsSection />
+
+      <SettingsSection
+        id="learning-analysis"
+        icon={BookOpenCheckIcon}
+        title={t("Learning analysis privacy")}
+        description={t(
+          "Control copy OCR consent, evidence review and optional quiz latency collection in the learning workspace."
+        )}
+      >
+        <Button variant="outline" render={<Link href="/learning#privacy" />}>
+          {t("Open learning privacy settings")}
+        </Button>
+      </SettingsSection>
 
       <CustomMcpSection />
 

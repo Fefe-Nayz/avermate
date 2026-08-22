@@ -23,8 +23,9 @@ apps/web/src/components apps/web/src/lib`. Reconcile changes to the event,
 
 ## Status
 
-- **Status**: IMPLEMENTED, TARGETED SUITES GREEN — real-provider annotated
-  evaluation and baseline/rollout gates remain pending
+- **Status**: DONE (repository) — persistence, Web and deterministic quality
+  gates are green; a human-reviewed real-provider evaluation remains an
+  external rollout gate
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: HIGH
@@ -56,16 +57,16 @@ Current targeted evidence is green:
 - `bun run verify:029:citations`: **18 passed, 0 failed**, followed by a green
   server typecheck; the machine-readable deterministic fixture reported 40/40
   supported claims, 40/40 precise/covered citations and 20/20 abstentions;
-- `bun run --cwd apps/server test src/assistant`: **39 passed, 0 failed** across
+- `bun run --cwd apps/server test src/assistant`: **48 passed, 0 failed** across
   checkpoint recovery, DAG/finalization, proof membership, read-only runtime,
-  custom MCP and historical branching;
-- the Web `src` suite is **805 passed, 0 failed**;
-- Chromium `assistant-dictation.spec.ts` is **1 passed, 0 failed**.
+  model policy/fallbacks, custom MCP and historical branching;
+- the focused assistant/project/settings Web suites are **59 passed, 0 failed**;
+- Chromium dictation and production assistant flows are **2 passed, 0 failed**.
 
 The deterministic fixture proves protocol and scorer behavior only. A pinned
 real provider/model/version run with human-reviewed annotations still has to
-meet the same thresholds before rollout. The final plan-025 global and
-clean-clone gates also remain outstanding, so this checkpoint is not `DONE`.
+meet the same thresholds before rollout. Repository completion does not waive
+that operational gate or plan 025's licence/post-commit clean-clone gates.
 
 ## Scope
 

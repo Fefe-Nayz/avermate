@@ -2,10 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createRouterClient } from "@orpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import JSZip from "jszip";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.DATABASE_URL = "file::memory:";
+const databaseDirectory = mkdtempSync(
+  join(tmpdir(), "avermate-documents-test-"),
+);
+process.env.DATABASE_URL = `file:${join(databaseDirectory, "documents.db")}`;
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET = "test-secret-that-is-at-least-32-chars";
 process.env.CLIENT_URL = "http://localhost:3001";
@@ -78,6 +82,11 @@ function sessionFor(id: string) {
 
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
+  const { registerSharedTestDatabaseLifecycle } =
+    await import("../testing/database-lifecycle");
+  registerSharedTestDatabaseLifecycle(database.$client, {
+    directories: [databaseDirectory],
+  });
   const migrated = await database.$client.execute(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
   );
@@ -793,9 +802,27 @@ tags: [Exam, Revision]
     });
     expect(completed).toMatchObject({ score: 3, outOf: 3 });
     expect(completed.feedback).toEqual([
-      { correct: true, expected: [1], why: "Four is divisible by two." },
-      { correct: true, expected: "Paris", why: null },
-      { correct: true, expected: ["monotone", "bounded"], why: null },
+      {
+        correct: true,
+        reviewRequired: false,
+        reviewKind: null,
+        expected: [1],
+        why: "Four is divisible by two.",
+      },
+      {
+        correct: true,
+        reviewRequired: false,
+        reviewKind: null,
+        expected: "Paris",
+        why: null,
+      },
+      {
+        correct: true,
+        reviewRequired: false,
+        reviewKind: null,
+        expected: ["monotone", "bounded"],
+        why: null,
+      },
     ]);
     expect(
       await apiA.documents.quiz.list({ documentId: created.document!.id }),

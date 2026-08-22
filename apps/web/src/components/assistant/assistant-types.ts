@@ -1,4 +1,5 @@
 import type {
+  AgentApprovalMode,
   AssistantAttachmentKind,
   AssistantBranch,
   AssistantCitation,
@@ -11,6 +12,7 @@ import type {
   HistoricalBranchOperation,
   HistoricalBranchPreview,
   ModelCapability,
+  ModelReadiness,
 } from "@avermate/agent-contracts"
 import type {
   AssistantCanonicalSnapshot,
@@ -89,12 +91,14 @@ export interface AssistantWorkspaceState {
   threads: readonly AssistantThreadSummary[]
   detail: AssistantThreadDetail | null
   models: readonly ModelCapability[]
+  modelReadiness: readonly ModelReadiness[]
   skills: readonly AssistantSkillOption[]
   projects: readonly AssistantProjectOption[]
   referenceOptions: readonly AssistantReferenceOption[]
   selectedModelKey: string
   selectedSkillId: string | null
   planMode: boolean
+  approvalMode: AgentApprovalMode
   searchQuery: string
   loadingThreads: boolean
   loadingDetail: boolean
@@ -155,6 +159,7 @@ export interface AssistantWorkspaceActions {
   setModel: (modelKey: string) => void
   setSkill: (skillId: string | null) => void
   setPlanMode: (enabled: boolean) => void
+  setApprovalMode: (mode: AgentApprovalMode) => void
   uploadAttachment: (file: File) => Promise<AssistantPendingReference>
   transcribeDictation: (file: File) => Promise<string>
   openCitation: (citationId: string) => Promise<AssistantCitationTarget>

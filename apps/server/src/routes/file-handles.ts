@@ -8,6 +8,7 @@ import { reserveRateLimit } from "../lib/rate-limit";
 import { FILE_CONSTRAINTS, fileAccessUrl } from "../lib/storage";
 import { localObjectPath } from "../lib/storage-backend";
 import { FileHandleService } from "../tools/file-handles";
+import { nodeFileResponse } from "../node/node-file-response";
 import {
   createFileHandleExchangeRoutes,
   type ExchangeOwnedFile,
@@ -105,6 +106,10 @@ export const fileHandleRoutes = createFileHandleExchangeRoutes({
         headers: { Location: location },
       });
     }
+    const response = await nodeFileResponse(request, file, {
+      disposition: operation === "preview" ? "inline" : "attachment",
+    });
+    if (response) return response;
     return new Response("File not found", { status: 404 });
   },
 });

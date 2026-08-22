@@ -1,6 +1,7 @@
 import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
 
 export type ActionSqlClient = Pick<Client, "execute" | "transaction">;
+type TransactionStarter = Pick<Client, "transaction">;
 type SqlTarget = ActionSqlClient | Transaction;
 type Row = Record<string, InValue>;
 
@@ -59,9 +60,11 @@ export function isActionSqlBusy(error: unknown): boolean {
   );
 }
 
-const clientWriteTails = new WeakMap<object, Promise<void>>();
+const clientWriteTails = new WeakMap<TransactionStarter, Promise<void>>();
 
-async function acquireClientWriteTurn(client: object): Promise<() => void> {
+async function acquireClientWriteTurn(
+  client: TransactionStarter,
+): Promise<() => void> {
   const previous = clientWriteTails.get(client) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => {
@@ -90,25 +93,34 @@ async function acquireClientWriteTurn(client: object): Promise<() => void> {
  * statements are never replayed by this helper.
  */
 export async function beginActionWriteTransaction(
-  client: Pick<Client, "transaction">,
+  client: TransactionStarter,
 ): Promise<Transaction> {
-  const release = await acquireClientWriteTurn(client as object);
+  const release = await acquireClientWriteTurn(client);
   let lastError: unknown;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       const transaction = await client.transaction("write");
       return new Proxy(transaction, {
-        get(target, property, receiver) {
-          if (property === "commit" || property === "rollback") {
+        get(target, property) {
+          if (property === "commit") {
             return async () => {
               try {
-                return await target[property]();
+                return await target.commit();
               } finally {
                 release();
               }
             };
           }
-          const value = Reflect.get(target, property, receiver) as unknown;
+          if (property === "rollback") {
+            return async () => {
+              try {
+                return await target.rollback();
+              } finally {
+                release();
+              }
+            };
+          }
+          const value = target[property as keyof Transaction] as unknown;
           return typeof value === "function" ? value.bind(target) : value;
         },
       });
@@ -233,87 +245,99 @@ export async function createPersonalTaskCommand(
   client: ActionSqlClient,
   input: PersonalTaskInput,
 ): Promise<PersonalTaskRecord> {
-  assertTaskDates(input);
   const transaction = await beginActionWriteTransaction(client);
   try {
-    await validateScope(transaction, input);
-    const last = await one(
-      transaction,
-      `SELECT sortOrder FROM planning_tasks
-       WHERE userId = ? AND yearId = ? AND status = 'todo' AND trashedAt IS NULL
-       ORDER BY sortOrder DESC LIMIT 1`,
-      [input.userId, input.yearId],
-    );
-    const now = Math.floor(Date.now() / 1_000);
-    const values: InValue[] = [
-      input.resourceId,
-      input.title,
-      input.notes,
-      input.localNote,
-      unix(input.startsAt),
-      unix(input.scheduledAt),
-      unix(input.dueAt),
-      input.subjectId,
-      Number(last?.sortOrder ?? -1) + 1,
-      input.yearId,
-      input.userId,
-      now,
-      now,
-    ];
-    await execute(transaction, {
-      sql: `INSERT OR IGNORE INTO planning_tasks
-        (id, title, notes, localNote, startsAt, scheduledAt, dueAt, status,
-         completedAt, subjectId, sortOrder, revision, trashedAt, yearId, userId,
-         sourceConnectionId, externalId, syncState, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', NULL, ?, ?, 1, NULL, ?, ?, NULL,
-                NULL, 'detached', ?, ?)`,
-      args: values,
-    });
-    const row = await one(
-      transaction,
-      "SELECT * FROM planning_tasks WHERE id = ? AND userId = ? LIMIT 1",
-      [input.resourceId, input.userId],
-    );
-    if (!row) {
-      throw new PersonalTaskCommandError("conflict", "Task reservation failed");
-    }
-    const expected = [
-      input.title,
-      input.notes,
-      input.localNote,
-      unix(input.startsAt),
-      unix(input.scheduledAt),
-      unix(input.dueAt),
-      input.subjectId,
-      input.yearId,
-    ];
-    const actual: InValue[] = [
-      row.title,
-      row.notes,
-      row.localNote,
-      row.startsAt,
-      row.scheduledAt,
-      row.dueAt,
-      row.subjectId,
-      row.yearId,
-    ];
-    if (
-      String(row.userId) !== input.userId ||
-      row.syncState !== "detached" ||
-      row.trashedAt !== null ||
-      expected.some((value, index) => !sameNullable(value, actual[index]!))
-    ) {
-      throw new PersonalTaskCommandError(
-        "conflict",
-        "The reserved task ID belongs to different content",
-      );
-    }
+    const task = await createPersonalTaskInTransaction(transaction, input);
     await transaction.commit();
-    return taskFromRow(row);
+    return task;
   } catch (error) {
     await transaction.rollback();
     throw error;
   }
+}
+
+/**
+ * Transaction-scoped variant used when task creation is one effect in a wider
+ * atomic domain command. The caller owns commit and rollback.
+ */
+export async function createPersonalTaskInTransaction(
+  transaction: Transaction,
+  input: PersonalTaskInput,
+): Promise<PersonalTaskRecord> {
+  assertTaskDates(input);
+  await validateScope(transaction, input);
+  const last = await one(
+    transaction,
+    `SELECT sortOrder FROM planning_tasks
+     WHERE userId = ? AND yearId = ? AND status = 'todo' AND trashedAt IS NULL
+     ORDER BY sortOrder DESC LIMIT 1`,
+    [input.userId, input.yearId],
+  );
+  const now = Math.floor(Date.now() / 1_000);
+  const values: InValue[] = [
+    input.resourceId,
+    input.title,
+    input.notes,
+    input.localNote,
+    unix(input.startsAt),
+    unix(input.scheduledAt),
+    unix(input.dueAt),
+    input.subjectId,
+    Number(last?.sortOrder ?? -1) + 1,
+    input.yearId,
+    input.userId,
+    now,
+    now,
+  ];
+  await execute(transaction, {
+    sql: `INSERT OR IGNORE INTO planning_tasks
+      (id, title, notes, localNote, startsAt, scheduledAt, dueAt, status,
+       completedAt, subjectId, sortOrder, revision, trashedAt, yearId, userId,
+       sourceConnectionId, externalId, syncState, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', NULL, ?, ?, 1, NULL, ?, ?, NULL,
+              NULL, 'detached', ?, ?)`,
+    args: values,
+  });
+  const row = await one(
+    transaction,
+    "SELECT * FROM planning_tasks WHERE id = ? AND userId = ? LIMIT 1",
+    [input.resourceId, input.userId],
+  );
+  if (!row) {
+    throw new PersonalTaskCommandError("conflict", "Task reservation failed");
+  }
+  const expected = [
+    input.title,
+    input.notes,
+    input.localNote,
+    unix(input.startsAt),
+    unix(input.scheduledAt),
+    unix(input.dueAt),
+    input.subjectId,
+    input.yearId,
+  ];
+  const actual: InValue[] = [
+    row.title,
+    row.notes,
+    row.localNote,
+    row.startsAt,
+    row.scheduledAt,
+    row.dueAt,
+    row.subjectId,
+    row.yearId,
+  ];
+  if (
+    String(row.userId) !== input.userId ||
+    row.syncState !== "detached" ||
+    row.trashedAt !== null ||
+    expected.some((value, index) => !sameNullable(value, actual[index]!))
+  ) {
+    throw new PersonalTaskCommandError(
+      "conflict",
+      "The reserved task ID belongs to different content",
+    );
+  }
+  return taskFromRow(row);
 }
 
 export async function getPersonalTaskCommand(

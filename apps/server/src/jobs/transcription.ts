@@ -9,7 +9,15 @@ import {
   recordingTranscripts,
   type TranscriptSegmentV1,
 } from "../db/schema";
-import { enqueueJob } from "../lib/jobs";
+import {
+  enqueueJob,
+  NonRetryableJobError,
+  type JobExecutionIdentity,
+} from "../lib/jobs";
+import {
+  isInternalOwnedFileProvider,
+  readOwnedFileBytes,
+} from "../lib/owned-file-storage";
 import { fileAccessUrl } from "../lib/storage";
 import { readStorageObject } from "../lib/storage-backend";
 import {
@@ -17,6 +25,11 @@ import {
   resolveTranscriptionProvider,
   type TranscriptionProvider,
 } from "../lib/transcription";
+import {
+  activeUserJobExecutionSql,
+  requireUserJobExecution,
+  supersededJobExecution,
+} from "./job-authority";
 
 export const TRANSCRIBE_SEGMENT_JOB_KIND = "transcribe.segment";
 export const TRANSCRIBE_FINALIZE_JOB_KIND = "transcribe.finalize";
@@ -51,7 +64,8 @@ const finalizePayloadSchema = z
 export const segmentJobResultSchema = z
   .object({
     segmentId: z.string().min(1),
-    provider: z.enum(["mistral", "openai"]),
+    provider: z.enum(["mistral", "openai", "node-local"]),
+    model: z.string().trim().min(1).max(512),
     text: z.string(),
     segments: z
       .array(
@@ -215,13 +229,28 @@ export async function runTranscribeSegmentJob(
     fetch?: Fetcher;
     getProvider?: (userId: string) => Promise<TranscriptionProvider>;
     operationId?: string;
+    attempt?: number;
+    job?: JobExecutionIdentity;
     signal?: AbortSignal;
     downloadTimeoutMs?: number;
     fileAccessUrl?: typeof fileAccessUrl;
     readStorageObject?: typeof readStorageObject;
+    readOwnedFile?: typeof readOwnedFileBytes;
   } = {},
 ): Promise<SegmentJobResult> {
   const { segmentId, runId } = segmentPayloadSchema.parse(payload);
+  const authority = await requireUserJobExecution(
+    options.job,
+    TRANSCRIBE_SEGMENT_JOB_KIND,
+    (storedPayload) => {
+      const parsed = segmentPayloadSchema.safeParse(storedPayload);
+      return (
+        parsed.success &&
+        parsed.data.segmentId === segmentId &&
+        parsed.data.runId === runId
+      );
+    },
+  );
   const [source] = await db
     .select({
       segment: recordingSegments,
@@ -244,10 +273,17 @@ export async function runTranscribeSegmentJob(
         eq(files.status, "stored"),
       ),
     )
-    .where(eq(recordingSegments.id, segmentId))
+    .where(
+      and(
+        eq(recordingSegments.id, segmentId),
+        authority ? eq(recordingSegments.userId, authority.userId) : undefined,
+      ),
+    )
     .limit(1);
   if (!source || source.file.purpose !== "lecture-audio-segment") {
-    throw new Error("Lecture recording segment not found");
+    throw authority
+      ? new NonRetryableJobError("Lecture recording segment not found")
+      : new Error("Lecture recording segment not found");
   }
 
   if (
@@ -272,32 +308,33 @@ export async function runTranscribeSegmentJob(
     );
     let bytes: ArrayBuffer;
     try {
-      if (source.file.provider === "local" || source.file.provider === "s3") {
+      if (
+        isInternalOwnedFileProvider(source.file.provider) ||
+        options.readOwnedFile
+      ) {
         bytes = await awaitWithSignal(
-          (options.readStorageObject ?? readStorageObject)(
-            source.file.provider,
-            source.file.storageKey,
+          (options.readOwnedFile ?? readOwnedFileBytes)(
+            source.recording.userId,
+            source.file,
             {
               signal: deadline.signal,
               maxBytes: MAX_TRANSCRIPTION_AUDIO_BYTES,
+              dependencies: options.readStorageObject
+                ? { readManagedObject: options.readStorageObject }
+                : undefined,
             },
           ),
           deadline.signal,
         );
       } else {
-        if (
-          source.file.provider !== "uploadthing" &&
-          !options.fetch &&
-          !options.fileAccessUrl
-        ) {
+        if (!options.fetch || !options.fileAccessUrl) {
           throw new Error("Lecture audio uses an unsupported storage provider");
         }
-        const sourceUrl = await (options.fileAccessUrl ?? fileAccessUrl)(
-          source.file,
-          { expiresIn: "6h" },
-        );
+        const sourceUrl = await options.fileAccessUrl(source.file, {
+          expiresIn: "6h",
+        });
         const response = await awaitWithSignal(
-          (options.fetch ?? fetch)(sourceUrl, {
+          options.fetch(sourceUrl, {
             signal: deadline.signal,
           }),
           deadline.signal,
@@ -324,12 +361,14 @@ export async function runTranscribeSegmentJob(
       blob: new Blob([bytes], { type: source.file.mimeType }),
       mimeType: source.file.mimeType,
       operationId: options.operationId,
+      attempt: options.attempt,
       maximumSeconds: Math.max(1, Math.ceil(source.segment.durationMs / 1_000)),
       signal: options.signal,
     });
     const normalized = segmentJobResultSchema.parse({
       segmentId: source.segment.id,
       provider: provider.id,
+      model: provider.model,
       text: result.text,
       segments: result.segments,
       ...(result.language ? { language: result.language } : {}),
@@ -350,7 +389,7 @@ export async function runTranscribeSegmentJob(
       );
     }
 
-    await db
+    const [published] = await db
       .update(recordingSegments)
       .set({
         transcriptStatus: "ready",
@@ -362,8 +401,11 @@ export async function runTranscribeSegmentJob(
           eq(recordingSegments.id, source.segment.id),
           inArray(recordingSegments.transcriptStatus, ["pending", "failed"]),
           sql`exists (select 1 from ${lectureRecordings} where ${lectureRecordings.id} = ${recordingSegments.recordingId} and ${lectureRecordings.userId} = ${source.recording.userId} and ${lectureRecordings.status} = 'transcribing' and ${lectureRecordings.transcriptionRunId} = ${runId})`,
+          activeUserJobExecutionSql(authority),
         ),
-      );
+      )
+      .returning({ id: recordingSegments.id });
+    if (!published && authority) throw supersededJobExecution();
     return normalized;
   } catch (error) {
     await db
@@ -378,6 +420,7 @@ export async function runTranscribeSegmentJob(
           eq(recordingSegments.id, source.segment.id),
           eq(recordingSegments.transcriptStatus, "pending"),
           sql`exists (select 1 from ${lectureRecordings} where ${lectureRecordings.id} = ${recordingSegments.recordingId} and ${lectureRecordings.userId} = ${source.recording.userId} and ${lectureRecordings.status} = 'transcribing' and ${lectureRecordings.transcriptionRunId} = ${runId})`,
+          activeUserJobExecutionSql(authority),
         ),
       );
     throw error;
@@ -776,14 +819,14 @@ export async function runFinalizeTranscriptionJob(
   const paragraphs: string[] = [];
   const languages = new Set<string>();
   let everySegmentHasLanguage = true;
-  const providers = new Set<string>();
+  const provenances = new Set<string>();
   for (const segment of segments) {
     const result = results.get(segment.id) as SegmentJobResult;
     const paragraph = result.text.trim();
     if (paragraph) paragraphs.push(paragraph);
     if (result.language) languages.add(result.language);
     else everySegmentHasLanguage = false;
-    providers.add(result.provider);
+    provenances.add(`${result.provider}\0${result.model}`);
     for (const window of result.segments) {
       transcriptSegments.push({
         startMs: segment.startOffsetMs + window.startMs,
@@ -829,8 +872,11 @@ export async function runFinalizeTranscriptionJob(
     };
   }
 
-  const provider =
-    providers.size === 1 ? ([...providers][0] as string) : "mixed";
+  const [exactProvenance] = provenances;
+  const [provider, model] =
+    provenances.size === 1 && exactProvenance
+      ? exactProvenance.split("\0", 2)
+      : ["mixed", "mixed"];
   const language =
     everySegmentHasLanguage && languages.size === 1
       ? ([...languages][0] as string)
@@ -839,13 +885,14 @@ export async function runFinalizeTranscriptionJob(
   await db.$client.batch(
     [
       {
-        sql: `INSERT INTO "recording_transcripts" ("recordingId", "text", "segmentsVersion", "segmentsJson", "language", "provider", "userId", "createdAt", "updatedAt") SELECT ?, ?, 1, ?, ?, ?, ?, ?, ? FROM "lecture_recordings" WHERE "id" = ? AND "userId" = ? AND "status" = 'transcribing' AND "transcriptionRunId" = ? ON CONFLICT("recordingId") DO UPDATE SET "text" = excluded."text", "segmentsVersion" = 1, "segmentsJson" = excluded."segmentsJson", "language" = excluded."language", "provider" = excluded."provider", "userId" = excluded."userId", "updatedAt" = excluded."updatedAt"`,
+        sql: `INSERT INTO "recording_transcripts" ("recordingId", "text", "segmentsVersion", "segmentsJson", "language", "provider", "model", "userId", "createdAt", "updatedAt") SELECT ?, ?, 1, ?, ?, ?, ?, ?, ?, ? FROM "lecture_recordings" WHERE "id" = ? AND "userId" = ? AND "status" = 'transcribing' AND "transcriptionRunId" = ? ON CONFLICT("recordingId") DO UPDATE SET "text" = excluded."text", "segmentsVersion" = 1, "segmentsJson" = excluded."segmentsJson", "language" = excluded."language", "provider" = excluded."provider", "model" = excluded."model", "userId" = excluded."userId", "updatedAt" = excluded."updatedAt"`,
         args: [
           recording.id,
           text,
           JSON.stringify(transcriptSegments),
           language,
           provider,
+          model,
           recording.userId,
           now,
           now,

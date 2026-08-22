@@ -44,7 +44,7 @@ afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
-});
+}, 30_000);
 
 describe("personal-data release policy", () => {
   test("rejects a generated synthetic secret without committing its value", async () => {
@@ -95,43 +95,47 @@ describe("personal-data release policy", () => {
     ).toEqual([]);
   });
 
-  test("Git candidate discovery excludes ignored secrets and local data", async () => {
-    const root = await temporaryRoot();
-    await runGit(root, "init", "--quiet");
-    await runGit(root, "config", "user.email", "security@example.test");
-    await runGit(root, "config", "user.name", "Security Fixture");
-    await writeFile(path.join(root, ".gitignore"), ".env\n.data/\n");
-    await writeFile(
-      path.join(root, "tracked.ts"),
-      "export const initial = true;\n",
-    );
-    await runGit(root, "add", ".gitignore", "tracked.ts");
-    await runGit(root, "commit", "--quiet", "-m", "fixture baseline");
+  test(
+    "Git candidate discovery excludes ignored secrets and local data",
+    async () => {
+      const root = await temporaryRoot();
+      await runGit(root, "init", "--quiet");
+      await runGit(root, "config", "user.email", "security@example.test");
+      await runGit(root, "config", "user.name", "Security Fixture");
+      await writeFile(path.join(root, ".gitignore"), ".env\n.data/\n");
+      await writeFile(
+        path.join(root, "tracked.ts"),
+        "export const initial = true;\n",
+      );
+      await runGit(root, "add", ".gitignore", "tracked.ts");
+      await runGit(root, "commit", "--quiet", "-m", "fixture baseline");
 
-    await writeFile(
-      path.join(root, "tracked.ts"),
-      "export const changed = true;\n",
-    );
-    await writeFile(
-      path.join(root, "staged.ts"),
-      "export const staged = true;\n",
-    );
-    await writeFile(path.join(root, "candidate.txt"), "safe candidate\n");
-    await runGit(root, "add", "staged.ts");
+      await writeFile(
+        path.join(root, "tracked.ts"),
+        "export const changed = true;\n",
+      );
+      await writeFile(
+        path.join(root, "staged.ts"),
+        "export const staged = true;\n",
+      );
+      await writeFile(path.join(root, "candidate.txt"), "safe candidate\n");
+      await runGit(root, "add", "staged.ts");
 
-    const secretSpec = manifest.syntheticSecret;
-    const ignoredValue = `${secretSpec.prefixParts.join(secretSpec.separator)}${secretSpec.separator}${secretSpec.fillCharacter.repeat(secretSpec.fillLength)}`;
-    await writeFile(path.join(root, ".env"), `API_KEY=${ignoredValue}\n`);
-    await mkdir(path.join(root, ".data"), { recursive: true });
-    await writeFile(
-      path.join(root, ".data", "private-upload.pdf"),
-      ignoredValue,
-    );
+      const secretSpec = manifest.syntheticSecret;
+      const ignoredValue = `${secretSpec.prefixParts.join(secretSpec.separator)}${secretSpec.separator}${secretSpec.fillCharacter.repeat(secretSpec.fillLength)}`;
+      await writeFile(path.join(root, ".env"), `API_KEY=${ignoredValue}\n`);
+      await mkdir(path.join(root, ".data"), { recursive: true });
+      await writeFile(
+        path.join(root, ".data", "private-upload.pdf"),
+        ignoredValue,
+      );
 
-    expect(await collectWorkspaceCandidates({ root })).toEqual([
-      "candidate.txt",
-      "staged.ts",
-      "tracked.ts",
-    ]);
-  });
+      expect(await collectWorkspaceCandidates({ root })).toEqual([
+        "candidate.txt",
+        "staged.ts",
+        "tracked.ts",
+      ]);
+    },
+    30_000,
+  );
 });

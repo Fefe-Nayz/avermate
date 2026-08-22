@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "avermate.live-evidence-result",
+  "plan": "039",
+  "policyVersion": "plan-039-launch-v2",
+  "kind": "REPLACE_WITH_PLAN_039_KIND",
+  "status": "passed",
+  "source": "deployed-drill",
+  "releaseRevision": "REPLACE_WITH_EXACT_RELEASE_REVISION",
+  "checkoutDigest": "REPLACE_WITH_CHECKOUT_SHA256",
+  "configurationDigest": "REPLACE_WITH_REDACTED_CONFIG_SHA256",
+  "environmentDigest": "REPLACE_WITH_ENVIRONMENT_SHA256",
+  "runId": "REPLACE_WITH_IMMUTABLE_RUN_ID",
+  "attestor": "REPLACE_WITH_NAMED_OPERATOR_OR_CI_IDENTITY",
+  "observedAt": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+  "expiresAt": "REPLACE_WITH_ISO_8601_TIMESTAMP_WITHIN_31_DAYS",
+  "measurements": {
+    "REPLACE_WITH_THE_EXACT_TYPED_MEASUREMENTS_FROM_THE_CONTRACT": true
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `recording_transcripts` ADD `model` text;

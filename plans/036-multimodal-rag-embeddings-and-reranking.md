@@ -12,7 +12,9 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: DONE (repository/Web) — mandatory retrieval, provider-adapter,
+  migration and Web gates pass; LIVE BLOCKED — operator-produced provider
+  evaluation remains external
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: HIGH
@@ -22,6 +24,29 @@
 - **Category**: retrieval, multimodal documents, search quality, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
+- **Implemented at**: 2026-08-22; repository evidence lives in
+  `apps/server/src/search`, `apps/server/src/jobs/corpus-derivatives.ts`,
+  `apps/sandbox-worker/src/workers`, the retrieval settings/project/assistant
+  Web surfaces, and `verify:036:*`
+
+### Implementation closure amendment — 2026-08-22
+
+- Gemini `gemini-embedding-2` text, image, single-page PDF, audio and video
+  adapters, lexical+dense hybrid retrieval, RRF, Cohere, pinned TEI/GTE and
+  pinned Qwen3 reranking are implemented capabilities, not optional backlog.
+- Activation remains deliberately conditional on an owned project policy,
+  explicit current disclosure consent and a complete cloud or Node-local
+  provider configuration. Lack of consent/configuration keeps lexical search
+  available; it does not turn the advanced implementation into a stub.
+- The checked-in pre-ranked corpus is only a deterministic regression fixture.
+  `verify:036:evaluation:live` is a separate fail-closed operator release gate:
+  it loads a reviewed path-backed French corpus, executes real BM25, Gemini
+  text/media embedding, RRF and a configured Cohere/TEI/Qwen3 reranker, applies
+  reviewed quality thresholds and writes only a redacted revisioned report.
+- Repository verification may pass without secrets. Release-quality claims may
+  not: missing dataset, consent, credentials, immutable provider revisions,
+  pricing metadata when cost-bounded, or a real reranker makes the live command
+  exit non-zero. A deterministic/mock run is never promoted as live evidence.
 
 ## Decision
 
@@ -333,9 +358,10 @@ queries by default outside the conversation that already owns them.
 
 ## Verification matrix
 
-Add dedicated scripts such as `verify:036:contracts`, `:gemini`, `:rerank`,
-`:retrieval`, `:web`, `:evaluation` and an aggregate that cannot pass if an
-advertised provider is only a mock.
+Dedicated scripts include `verify:036:contracts`, `:derivatives`, `:retrieval`,
+`:web`, `:evaluation:regression`, `:evaluation:live`, provider conformance and
+the repository aggregate. The live evaluation remains separate so missing
+operator secrets cannot be converted into a skip or a fake green report.
 
 Minimum cases:
 
@@ -359,6 +385,7 @@ Then run:
 
 ```text
 bun run verify:036
+bun run verify:036:evaluation:live # required in the operator release environment
 bun run verify:029:citations
 bun run --cwd apps/server test src/search src/jobs src/assistant
 bun run --cwd apps/web test
@@ -402,8 +429,12 @@ STOP and request a decision if:
   the selected history.
 - The Web exposes provider setup, consent, indexing progress, retrieval mode,
   degraded states and exact multimodal source navigation.
-- The real labelled evaluation demonstrates the selected defaults and keeps its
-  report/model revisions under version control or immutable release evidence.
+- The checked-in pre-ranked fixture is labelled only as deterministic regression
+  evidence. The separate fail-closed live operator evaluation executes BM25,
+  Gemini text/media embeddings, RRF and the configured real reranker over a
+  reviewed path-backed corpus; only its redacted report may demonstrate the
+  selected defaults, with model/data revisions and digests retained as immutable
+  release evidence.
 - All plan-specific, migration, security, root test and build gates pass; any
   live-provider job that is required for release is not converted to a skip.
 

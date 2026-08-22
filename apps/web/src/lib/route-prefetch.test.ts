@@ -64,7 +64,7 @@ const routes = [
   {
     page: "../app/(app)/settings/integrations/page.tsx",
     client: "../app/(app)/settings/integrations/service-keys-section.tsx",
-    query: "serviceKeys.list.queryOptions",
+    query: "serviceKeys.metadata.queryOptions",
   },
 ] as const
 
@@ -182,7 +182,8 @@ describe("route-specific SSR prefetch", () => {
       "../app/(app)/settings/integrations/service-keys-section.tsx"
     )
     expect(keys).toContain('type="password"')
-    expect(keys).toContain("serviceKeys.list.queryKey")
+    expect(keys).toContain("serviceKeys.metadata.queryKey")
+    expect(keys).not.toContain("serviceKeys.list")
     expect(keys).not.toContain("sealedKey")
   })
 

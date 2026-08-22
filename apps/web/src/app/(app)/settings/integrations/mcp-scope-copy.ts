@@ -98,5 +98,17 @@ export function useMcpScopeCopy(): Record<McpScope, McpScopeCopy> {
         "Create and update study documents, export slide decks to PowerPoint, and request confirmed document deletion."
       ),
     },
+    "avermate:learning.read": {
+      label: t("Read your learning evidence"),
+      description: t(
+        "Read your concepts, objectives, immutable evidence, explainable mastery intervals and learning-plan links without opening copy bytes."
+      ),
+    },
+    "avermate:learning.write": {
+      label: t("Manage reviewed learning actions"),
+      description: t(
+        "Request copy analysis, review proposals, include or exclude evidence, and apply learning plans through previews and approvals."
+      ),
+    },
   }
 }

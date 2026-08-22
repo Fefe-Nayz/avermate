@@ -16,6 +16,10 @@ import {
   protectedProcedure,
 } from "../lib/orpc";
 import { CoreCitationResolver } from "../search/citations";
+import {
+  RoutedCorpusContentReader,
+  type AuthorizedCorpusChunkRow,
+} from "../search/corpus-content-reader";
 import { hybridCorpusSearch } from "../search/hybrid";
 import { coreCorpusIndexService } from "../search/index-service";
 import {
@@ -24,7 +28,7 @@ import {
 } from "../search/lexical";
 import {
   corpusEmbeddingConfiguration,
-  createConfiguredCorpusVectorRuntime,
+  createOwnedCorpusVectorRuntime,
 } from "../search/vector-runtime";
 
 const projectIdInput = z.object({ projectId: z.string().min(1) }).strict();
@@ -62,6 +66,18 @@ function projectProjection(row: Record<string, unknown>) {
         ? null
         : String(row.instructionsMarkdown),
     contextPolicyVersion: Number(row.contextPolicyVersion),
+    retrievalMode: String(row.retrievalMode ?? "lexical-only"),
+    retrievalFallbackPolicy: String(
+      row.retrievalFallbackPolicy ?? "lexical-only",
+    ),
+    embeddingSpaceId:
+      row.embeddingSpaceId === null || row.embeddingSpaceId === undefined
+        ? null
+        : String(row.embeddingSpaceId),
+    rerankSpaceId:
+      row.rerankSpaceId === null || row.rerankSpaceId === undefined
+        ? null
+        : String(row.rerankSpaceId),
     starredAt: date(row.starredAt),
     deletedAt: date(row.deletedAt),
     emoji: row.emoji === null ? null : String(row.emoji),
@@ -117,6 +133,18 @@ async function listItems(userId: string, projectId: string) {
     coverage: row.coverage === null ? null : String(row.coverage),
     currentVersionId:
       row.currentVersionId === null ? null : String(row.currentVersionId),
+    sourceVersionId:
+      row.sourceVersionId === null ? null : String(row.sourceVersionId),
+    conversationBranchId:
+      row.conversationBranchId === null
+        ? null
+        : String(row.conversationBranchId),
+    conversationHeadMessageId:
+      row.conversationHeadMessageId === null
+        ? null
+        : String(row.conversationHeadMessageId),
+    trackingMode: String(row.trackingMode),
+    selectorReviewRequired: Boolean(row.selectorReviewRequired),
     missing: row.sourceId === null,
   }));
 }
@@ -151,13 +179,15 @@ async function enqueueSourceIndex(identity: {
   ownerId: string;
   originKind: z.infer<typeof sourceKindSchema>;
   originId: string;
+  projectItemId?: string;
 }) {
-  const source = await coreCorpusIndexService.store.getSource(identity);
+  const { projectItemId, ...sourceIdentity } = identity;
+  const source = await coreCorpusIndexService.store.getSource(sourceIdentity);
   return enqueueJob({
     kind: CORPUS_INDEX_SOURCE_JOB_KIND,
     payload: identity,
     userId: identity.ownerId,
-    idempotencyKey: `${source?.id ?? identity.originKind}:${identity.originId}`,
+    idempotencyKey: `${source?.id ?? identity.originKind}:${identity.originId}:${projectItemId ?? "head"}`,
     newAttemptAfterTerminal: true,
     maxAttempts: 3,
   });
@@ -409,12 +439,16 @@ export const projectsRouter = {
         );
       try {
         await db.$client.execute({
-          sql: `INSERT INTO study_project_items (id, projectId, kind, referenceId, position, contextMode, label, addedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO study_project_items (
+            id, projectId, kind, referenceId, sourceVersionId, trackingMode,
+            selectorReviewRequired, position, contextMode, label, addedAt
+          ) VALUES (?, ?, ?, ?, ?, 'follow-head', 0, ?, ?, ?, ?)`,
           args: [
             itemId,
             input.projectId,
             input.kind,
             input.referenceId,
+            source.currentVersionId,
             position,
             input.contextMode,
             input.label,
@@ -518,6 +552,77 @@ export const projectsRouter = {
       return { ok: true as const };
     }),
 
+  setItemTracking: protectedProcedure
+    .input(
+      z
+        .object({
+          projectId: z.string().min(1),
+          itemId: z.string().min(1),
+          trackingMode: z.enum(["pinned", "follow-head"]),
+        })
+        .strict(),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      await requireProject(userId, input.projectId);
+      const result = await db.$client.execute({
+        sql: `SELECT items.kind, items.referenceId, sources.currentVersionId
+          FROM study_project_items AS items
+          JOIN study_projects AS projects ON projects.id = items.projectId
+          LEFT JOIN content_sources AS sources
+            ON sources.userId = projects.userId
+            AND sources.originKind = items.kind
+            AND sources.originId = items.referenceId
+          WHERE items.id = ? AND items.projectId = ? AND projects.userId = ?
+          LIMIT 1`,
+        args: [input.itemId, input.projectId, userId],
+      });
+      const row = result.rows[0];
+      if (!row) notFound("Project item");
+      if (String(row.kind) === "conversation") {
+        badRequest(
+          "Conversation references are immutable branch snapshots; review them from the conversation",
+        );
+      }
+      if (row.currentVersionId === null) {
+        badRequest("Index this source before changing its version tracking");
+      }
+      const changed = await db.$client.execute({
+        sql: `UPDATE study_project_items SET trackingMode = ?,
+            sourceVersionId = ?, selectorReviewRequired = 0
+          WHERE id = ? AND projectId = ? AND EXISTS (
+            SELECT 1 FROM study_projects
+            WHERE id = ? AND userId = ? AND deletedAt IS NULL
+          )`,
+        args: [
+          input.trackingMode,
+          row.currentVersionId,
+          input.itemId,
+          input.projectId,
+          input.projectId,
+          userId,
+        ],
+      });
+      if (Number(changed.rowsAffected) !== 1) {
+        conflict("This project source changed elsewhere — reload it");
+      }
+      const kind = sourceKindSchema.parse(row.kind);
+      const job = await enqueueSourceIndex({
+        ownerId: userId,
+        originKind: kind,
+        originId: String(row.referenceId),
+        ...(input.trackingMode === "pinned"
+          ? { projectItemId: input.itemId }
+          : {}),
+      });
+      return {
+        item: (await listItems(userId, input.projectId)).find(
+          (entry) => entry.id === input.itemId,
+        ),
+        indexJobId: job.id,
+      };
+    }),
+
   search: protectedProcedure
     .input(
       z
@@ -573,10 +678,13 @@ export const projectsRouter = {
             ? lexicalCursor(offset + results.length)
             : null,
         lexicalOnly: !search.vectorUsed,
-        retrievalMode: search.vectorUsed
-          ? ("hybrid" as const)
-          : ("lexical" as const),
+        retrievalMode: search.retrievalMode,
         vectorImplementation: search.vectorImplementation,
+        rerankUsed: search.rerankUsed,
+        rerankImplementation: search.rerankImplementation,
+        fallbackReason: search.fallbackReason,
+        operationId: search.operationId,
+        stages: search.stages,
       };
     }),
 
@@ -595,8 +703,10 @@ export const projectsRouter = {
       const result = await db.$client.execute({
         sql: `
           SELECT chunks.id, chunks.versionId, chunks.ordinal, chunks.text,
-            chunks.contentHash, chunks.locatorJson, chunks.evidenceKind,
-            sources.id AS sourceId
+            chunks.normalizedText, chunks.contentHash, chunks.locatorJson,
+            chunks.headingPathJson, chunks.evidenceKind,
+            sources.id AS sourceId, sources.userId, sources.placement,
+            sources.placementRef
           FROM content_chunks AS chunks
           JOIN content_versions AS versions ON versions.id = chunks.versionId
           JOIN content_sources AS sources ON sources.id = versions.sourceId
@@ -606,8 +716,20 @@ export const projectsRouter = {
       });
       const row = result.rows[0];
       if (!row) notFound("Corpus chunk");
+      const body = (
+        await new RoutedCorpusContentReader(db.$client).hydrate([
+          row as unknown as AuthorizedCorpusChunkRow,
+        ])
+      ).get(String(row.id));
+      if (!body) notFound("Corpus chunk body");
       return {
-        ...row,
+        id: String(row.id),
+        versionId: String(row.versionId),
+        ordinal: Number(row.ordinal),
+        text: body.text,
+        contentHash: String(row.contentHash),
+        evidenceKind: row.evidenceKind,
+        sourceId: String(row.sourceId),
         locator: sourceLocatorV1Schema.parse(
           typeof row.locatorJson === "string"
             ? JSON.parse(row.locatorJson)
@@ -654,11 +776,11 @@ export const projectsRouter = {
       return { jobId: job.id };
     }),
 
-  embeddingPrivacy: protectedProcedure.handler(async () => {
+  embeddingPrivacy: protectedProcedure.handler(async ({ context }) => {
     const configuration = corpusEmbeddingConfiguration();
     let runtime = null;
     try {
-      runtime = createConfiguredCorpusVectorRuntime();
+      runtime = await createOwnedCorpusVectorRuntime(context.session.user.id);
     } catch {
       // A malformed or unreachable optional provider must never disable lexical search.
     }

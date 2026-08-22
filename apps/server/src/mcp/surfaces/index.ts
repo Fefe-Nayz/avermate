@@ -14,6 +14,7 @@ import { writeSurface } from "./write";
 import { actionsSurface } from "./actions";
 import { conversationsSurface } from "./conversations";
 import type { McpSurface } from "../shared";
+import { learningSurface } from "./learning";
 
 /** Registration order is part of the deterministic MCP catalog contract. */
 export const SURFACES: readonly McpSurface[] = [
@@ -32,4 +33,5 @@ export const SURFACES: readonly McpSurface[] = [
   plannerSurface,
   materialsSurface,
   documentsSurface,
+  learningSurface,
 ];

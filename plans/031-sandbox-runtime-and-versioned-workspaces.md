@@ -24,8 +24,8 @@
 
 ## Status
 
-- **Status**: IMPLEMENTATION FOUNDATION COMPLETE — live attested-provider
-  activation and conformance are unavailable
+- **Status**: DONE (repository) — LIVE BLOCKED until an attested provider,
+  pinned images and host-policy evidence are available
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: CRITICAL
@@ -41,10 +41,12 @@
 The provider/job/workspace contracts, disabled and mock paths, durable snapshot
 ledger, admission policy and the official OpenSandbox SDK transport are present.
 The production dependency is pinned as `@alibaba-group/opensandbox@0.1.11`;
-provider construction is wired through the environment-aware factory. The
-focused OpenSandbox transport/factory suite passes **8 tests with 0 failures**.
-The checked-in `sandbox:conformance` entrypoint fails closed rather than treating
-a mock or disabled provider as production evidence.
+provider construction is wired through the environment-aware factory. The full
+repository sandbox suite passes **42 tests with 0 failures**, including SQL
+snapshot durability, profile/image attestation policy, artifact adoption and
+provider transport behavior. The checked-in `sandbox:conformance` entrypoint
+fails closed rather than treating a mock or disabled provider as production
+evidence.
 
 There is currently no configured live OpenSandbox control plane with pinned
 profile images and an external, host-produced baseline-evidence endpoint. As a
@@ -55,8 +57,10 @@ be advertised as securely sandboxed, and no mock result may satisfy plan 031's
 live gate, until those provider/image/host-policy inputs exist and the full
 conformance report is recorded.
 
-Plan 025's global, migration and clean-clone gates remain pending independently
-of this activation boundary.
+Plan 025's repository-wide type, lint, format, release-security and migration
+gates are green independently of this activation boundary. Its maintainer
+licence decision and a post-commit clean-clone rerun remain external release
+evidence.
 
 ## Scope
 

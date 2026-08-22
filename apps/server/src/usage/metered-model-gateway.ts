@@ -129,6 +129,8 @@ export class MeteredModelGateway implements ModelGateway {
     private readonly assertDispatch?: (
       capability: ManagedCapability,
       provider: string,
+      maximumQuantity?: string,
+      unit?: "tokens" | "units" | "seconds",
     ) => Promise<void>,
   ) {}
 
@@ -143,20 +145,34 @@ export class MeteredModelGateway implements ModelGateway {
   }
 
   async *stream(request: ModelRequest): AsyncIterable<ModelGatewayEvent> {
-    const policy = await this.registry.require(request.ownerId, request.modelId);
-    await Promise.all(
-      [
-        "model.inputTokens",
-        "model.outputTokens",
-        "model.cachedInputTokens",
-      ].map((capability) =>
-        this.assertDispatch?.(capability as ManagedCapability, policy.provider),
-      ),
+    const policy = await this.registry.require(
+      request.ownerId,
+      request.modelId,
     );
     const inputMaximum =
       policy.descriptor.contextWindow === "unknown"
         ? 128_000
         : policy.descriptor.contextWindow;
+    await Promise.all([
+      this.assertDispatch?.(
+        "model.inputTokens",
+        policy.provider,
+        String(inputMaximum),
+        "tokens",
+      ),
+      this.assertDispatch?.(
+        "model.outputTokens",
+        policy.provider,
+        String(policy.maxOutputTokens),
+        "tokens",
+      ),
+      this.assertDispatch?.(
+        "model.cachedInputTokens",
+        policy.provider,
+        String(inputMaximum),
+        "tokens",
+      ),
+    ]);
     const expiry = new Date(this.clock().getTime() + 60 * 60_000);
     const common = {
       accountId: request.ownerId,
@@ -214,11 +230,12 @@ export class MeteredModelGateway implements ModelGateway {
       );
       throw error;
     }
-    const [inputReservation, outputReservation, cachedReservation] = prepared as [
-      (typeof prepared)[number],
-      (typeof prepared)[number],
-      (typeof prepared)[number],
-    ];
+    const [inputReservation, outputReservation, cachedReservation] =
+      prepared as [
+        (typeof prepared)[number],
+        (typeof prepared)[number],
+        (typeof prepared)[number],
+      ];
     let settled = false;
     for await (const event of this.delegate.stream(request)) {
       if (event.type === "usage") {
@@ -271,14 +288,22 @@ export class MeteredModelGateway implements ModelGateway {
     if (!request.operationId) {
       throw new Error("MANAGED_OPERATION_ID_REQUIRED");
     }
-    const policy = await this.registry.require(request.ownerId, request.modelId);
-    await this.assertDispatch?.("embedding.units", policy.provider);
+    const policy = await this.registry.require(
+      request.ownerId,
+      request.modelId,
+    );
     const maximum = Math.max(
       1,
       request.inputs.reduce(
         (sum, value) => sum + new TextEncoder().encode(value).byteLength,
         0,
       ),
+    );
+    await this.assertDispatch?.(
+      "embedding.units",
+      policy.provider,
+      String(maximum),
+      "units",
     );
     const reservation = await this.usage.reserve({
       accountId: request.ownerId,
@@ -310,7 +335,9 @@ export class MeteredModelGateway implements ModelGateway {
     return result;
   }
 
-  async transcribe(request: TranscriptionRequest): Promise<TranscriptionResult> {
+  async transcribe(
+    request: TranscriptionRequest,
+  ): Promise<TranscriptionResult> {
     if (!request.operationId) {
       throw new Error("MANAGED_OPERATION_ID_REQUIRED");
     }
@@ -320,9 +347,17 @@ export class MeteredModelGateway implements ModelGateway {
     ) {
       throw new Error("MANAGED_MAXIMUM_SECONDS_REQUIRED");
     }
-    const policy = await this.registry.require(request.ownerId, request.modelId);
-    await this.assertDispatch?.("transcription.seconds", policy.provider);
+    const policy = await this.registry.require(
+      request.ownerId,
+      request.modelId,
+    );
     const maximumSeconds = request.maximumSeconds!;
+    await this.assertDispatch?.(
+      "transcription.seconds",
+      policy.provider,
+      String(maximumSeconds),
+      "seconds",
+    );
     const reservation = await this.usage.reserve({
       accountId: request.ownerId,
       userId: request.ownerId,

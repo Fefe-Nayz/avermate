@@ -4,6 +4,7 @@ import type {
   NodeControlFrame,
 } from "@avermate/agent-contracts";
 import {
+  controlChannelUrl,
   decodeControlFrame,
   encodeControlFrame,
   OutboundNodeControlChannel,
@@ -134,5 +135,39 @@ describe("outbound control channel", () => {
     expect(() => decodeControlFrame("x".repeat(256 * 1024 + 1))).toThrow(
       "NODE_CONTROL_FRAME_TOO_LARGE",
     );
+  });
+
+  test("permits only the exact authenticated single-host Compose relay", () => {
+    expect(
+      controlChannelUrl("http://api:5000", "local-compose").toString(),
+    ).toBe("ws://api:5000/api/node/control");
+    expect(
+      controlChannelUrl("http://api:5000/", "local-compose").toString(),
+    ).toBe("ws://api:5000/api/node/control");
+    expect(() =>
+      controlChannelUrl("http://localhost:5000", "local-compose"),
+    ).toThrow("NODE_RELAY_LOCAL_COMPOSE_TARGET_INVALID");
+    expect(() =>
+      controlChannelUrl("http://api:5001", "local-compose"),
+    ).toThrow("NODE_RELAY_LOCAL_COMPOSE_TARGET_INVALID");
+
+    expect(
+      () =>
+        new OutboundNodeControlChannel({
+          connector: new MockConnector([]),
+          url: new URL("ws://api:5000/api/node/control"),
+          credential: "c".repeat(48),
+          manifest: async () => manifest(`sha256:${"0".repeat(64)}`),
+        }),
+    ).not.toThrow();
+    expect(
+      () =>
+        new OutboundNodeControlChannel({
+          connector: new MockConnector([]),
+          url: new URL("ws://api:5000/api/node/other"),
+          credential: "c".repeat(48),
+          manifest: async () => manifest(`sha256:${"0".repeat(64)}`),
+        }),
+    ).toThrow("NODE_CHANNEL_TLS_REQUIRED");
   });
 });

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "artifactType": "avermate.live-evidence-result",
+  "plan": "037",
+  "policyVersion": "plan-037-live-v2",
+  "kind": "labelled-learning-evaluation",
+  "status": "passed",
+  "source": "external-attestation",
+  "releaseRevision": "<exact-release-revision>",
+  "checkoutDigest": "sha256:<checkout-tree-digest>",
+  "configurationDigest": "sha256:<configuration-artifact-digest>",
+  "environmentDigest": "sha256:<environment-digest>",
+  "runId": "<immutable-run-id>",
+  "attestor": "<named-operator-or-ci-identity>",
+  "observedAt": "<iso-8601>",
+  "expiresAt": "<iso-8601-within-31-days>",
+  "measurements": {
+    "evaluationPolicyVersion": "learning-evaluation-v1",
+    "algorithmVersion": "<mastery-algorithm-revision>",
+    "datasetRevision": "<reviewed-dataset-revision>",
+    "sampleCount": 30,
+    "regionRecall": 0.9,
+    "scorePrecision": 0.95,
+    "scoreRecall": 0.9,
+    "objectiveTopKAccuracy": 0.9,
+    "errorTaxonomyAccuracy": 0.85,
+    "unsupportedScoreRate": 0.02,
+    "unsupportedDiagnosisRegressions": 0
+  }
+}

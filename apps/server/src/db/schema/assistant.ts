@@ -9,12 +9,16 @@ import {
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 import type {
+  AgentTerminalReason,
   AssistantAttachmentKind,
   AssistantAuthorship,
   AssistantMessageStatus,
   AssistantPartV1,
   AssistantRole,
   AssistantRunStatus,
+  AssistantRunModelPolicy,
+  ModelPlacement,
+  ProviderDispatchClaimState,
 } from "@avermate/agent-contracts";
 import { newId } from "../../lib/id";
 import { users } from "./auth";
@@ -32,6 +36,11 @@ export type AssistantOutboxState =
   "pending" | "leased" | "published" | "failed";
 export type AssistantOutboxKind =
   "event" | "terminal" | "checkpoint-committed" | "checkpoint-gc";
+export type AssistantRunLeaseState =
+  | "active"
+  | "released"
+  | "expired"
+  | "fenced";
 
 const timestamps = {
   createdAt: integer({ mode: "timestamp" })
@@ -92,6 +101,47 @@ export const assistantThreads = sqliteTable(
       sql`(${table.placement} = 'core' and ${table.placementRef} is null) or (${table.placement} = 'node' and ${table.placementRef} is not null)`,
     ),
     check("assistant_threads_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+/** User-owned routing policy. It never contains credentials or provider URLs. */
+export const assistantModelPreferences = sqliteTable(
+  "assistant_model_preferences",
+  {
+    userId: owner().primaryKey(),
+    defaultModelKey: text(),
+    route: text().notNull().default("selected-only"),
+    fallback: text().notNull().default("none"),
+    maximumInputTokens: integer(),
+    maximumOutputTokens: integer(),
+    maximumEstimatedCostMinor: integer(),
+    currency: text(),
+    revision: integer().notNull().default(1),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      "assistant_model_preferences_route_check",
+      sql`${table.route} in ('selected-only', 'prefer-node', 'prefer-core', 'managed-only')`,
+    ),
+    check(
+      "assistant_model_preferences_fallback_check",
+      sql`${table.fallback} in ('none', 'same-provider', 'configured-routes')`,
+    ),
+    check(
+      "assistant_model_preferences_budget_check",
+      sql`(${table.maximumInputTokens} is null or ${table.maximumInputTokens} > 0)
+        and (${table.maximumOutputTokens} is null or ${table.maximumOutputTokens} > 0)
+        and (${table.maximumEstimatedCostMinor} is null or ${table.maximumEstimatedCostMinor} >= 0)`,
+    ),
+    check(
+      "assistant_model_preferences_currency_check",
+      sql`${table.currency} is null or length(${table.currency}) = 3`,
+    ),
+    check(
+      "assistant_model_preferences_revision_check",
+      sql`${table.revision} > 0`,
+    ),
   ],
 );
 
@@ -220,9 +270,22 @@ export const assistantRuns = sqliteTable(
     clientRequestId: text().notNull(),
     runtimeId: text().notNull(),
     runtimeVersion: text().notNull(),
+    runtimeProtocolVersion: integer().notNull().default(1),
     graphSchemaVersion: integer().notNull(),
     modelKey: text().notNull(),
+    modelRevision: text().notNull().default("legacy/1"),
     providerKey: text().notNull(),
+    providerRevision: text().notNull().default("legacy/1"),
+    modelPlacementJson: text({ mode: "json" })
+      .$type<ModelPlacement>()
+      .notNull()
+      .default({ kind: "core", instanceId: "legacy" }),
+    policyRevision: text().notNull().default("assistant-policy/1"),
+    modelPolicyJson: text({ mode: "json" })
+      .$type<AssistantRunModelPolicy>(),
+    toolCatalogRevision: text().notNull().default("legacy/1"),
+    contextManifestDigest: text(),
+    branchIdentityDigest: text(),
     modelResolvedId: text(),
     status: text().$type<AssistantRunStatus>().notNull().default("reserved"),
     approvalMode: text().notNull().default("read-only"),
@@ -235,6 +298,9 @@ export const assistantRuns = sqliteTable(
     domainCursorRef: text(),
     startedAt: integer({ mode: "timestamp" }),
     completedAt: integer({ mode: "timestamp" }),
+    cancellationRequestedAt: integer({ mode: "timestamp" }),
+    cancellationReason: text(),
+    terminalReason: text().$type<AgentTerminalReason>(),
     errorCode: text(),
     safeError: text(),
     ...timestamps,
@@ -253,7 +319,7 @@ export const assistantRuns = sqliteTable(
     uniqueIndex("assistant_runs_branch_active_unique")
       .on(table.branchId)
       .where(
-        sql`${table.status} in ('reserved', 'running', 'waiting-for-user')`,
+        sql`${table.status} in ('reserved', 'running', 'waiting-for-user', 'waiting-approval', 'cancelling')`,
       ),
     index("assistant_runs_thread_created_idx").on(
       table.threadId,
@@ -262,7 +328,7 @@ export const assistantRuns = sqliteTable(
     uniqueIndex("assistant_runs_thread_id_unique").on(table.threadId, table.id),
     check(
       "assistant_runs_status_check",
-      sql`${table.status} in ('reserved', 'running', 'waiting-for-user', 'complete', 'failed', 'cancelled')`,
+      sql`${table.status} in ('reserved', 'running', 'waiting-for-user', 'waiting-approval', 'cancelling', 'complete', 'failed', 'cancelled')`,
     ),
     check(
       "assistant_runs_approval_mode_check",
@@ -270,7 +336,123 @@ export const assistantRuns = sqliteTable(
     ),
     check(
       "assistant_runs_dispatch_state_check",
-      sql`${table.providerDispatchState} in ('pending', 'dispatching', 'acknowledged', 'failed')`,
+      sql`${table.providerDispatchState} in ('pending', 'dispatching', 'acknowledged', 'completed', 'failed', 'cancelled', 'inspect-required')`,
+    ),
+    check(
+      "assistant_runs_runtime_protocol_check",
+      sql`${table.runtimeProtocolVersion} = 1`,
+    ),
+  ],
+);
+
+/**
+ * Durable worker ownership for a run. Fencing tokens increase monotonically per
+ * run; a stale worker cannot renew or release a newer lease.
+ */
+export const assistantRunLeases = sqliteTable(
+  "assistant_run_leases",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("arle")),
+    userId: owner(),
+    runId: text()
+      .notNull()
+      .references(() => assistantRuns.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    workerId: text().notNull(),
+    fencingToken: integer().notNull(),
+    state: text().$type<AssistantRunLeaseState>().notNull().default("active"),
+    acquiredAt: integer({ mode: "timestamp" }).notNull(),
+    heartbeatAt: integer({ mode: "timestamp" }).notNull(),
+    expiresAt: integer({ mode: "timestamp" }).notNull(),
+    releasedAt: integer({ mode: "timestamp" }),
+  },
+  (table) => [
+    uniqueIndex("assistant_run_leases_run_token_unique").on(
+      table.runId,
+      table.fencingToken,
+    ),
+    uniqueIndex("assistant_run_leases_run_active_unique")
+      .on(table.runId)
+      .where(sql`${table.state} = 'active'`),
+    index("assistant_run_leases_expiry_idx").on(table.state, table.expiresAt),
+    check(
+      "assistant_run_leases_state_check",
+      sql`${table.state} in ('active', 'released', 'expired', 'fenced')`,
+    ),
+    check(
+      "assistant_run_leases_fencing_token_check",
+      sql`${table.fencingToken} > 0`,
+    ),
+  ],
+);
+
+/**
+ * One immutable provider request claim per model attempt. A round can therefore
+ * retain distinct, auditable claims for a bounded fallback without storing any
+ * prompt, credential, response body, or hidden reasoning.
+ */
+export const assistantProviderDispatchClaims = sqliteTable(
+  "assistant_provider_dispatch_claims",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("apdc")),
+    userId: owner(),
+    runId: text()
+      .notNull()
+      .references(() => assistantRuns.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    dispatchKey: text().notNull(),
+    requestDigest: text().notNull(),
+    providerKey: text().notNull(),
+    providerRevision: text().notNull(),
+    modelKey: text().notNull(),
+    modelRevision: text().notNull(),
+    placementJson: text({ mode: "json" }).$type<ModelPlacement>().notNull(),
+    providerSupportsStableRequestKey: integer({ mode: "boolean" })
+      .notNull()
+      .default(false),
+    stableRequestKey: text(),
+    state: text()
+      .$type<ProviderDispatchClaimState>()
+      .notNull()
+      .default("claimed"),
+    inspectReason: text(),
+    claimedAt: integer({ mode: "timestamp" }).notNull(),
+    dispatchStartedAt: integer({ mode: "timestamp" }),
+    acknowledgedAt: integer({ mode: "timestamp" }),
+    completedAt: integer({ mode: "timestamp" }),
+    updatedAt: integer({ mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("assistant_provider_claims_run_dispatch_unique").on(
+      table.userId,
+      table.runId,
+      table.dispatchKey,
+    ),
+    index("assistant_provider_claims_reconcile_idx").on(
+      table.state,
+      table.updatedAt,
+    ),
+    check(
+      "assistant_provider_claims_state_check",
+      sql`${table.state} in ('claimed', 'dispatching', 'acknowledged', 'completed', 'failed', 'cancelled', 'inspect-required')`,
+    ),
+    check(
+      "assistant_provider_claims_request_digest_check",
+      sql`length(${table.requestDigest}) = 64 and ${table.requestDigest} not glob '*[^0-9a-f]*'`,
+    ),
+    check(
+      "assistant_provider_claims_stable_key_check",
+      sql`(${table.providerSupportsStableRequestKey} = 0 and ${table.stableRequestKey} is null) or (${table.providerSupportsStableRequestKey} = 1 and ${table.stableRequestKey} is not null)`,
     ),
   ],
 );
@@ -473,7 +655,11 @@ export const assistantUsage = sqliteTable(
         onUpdate: "cascade",
       }),
     providerKey: text().notNull(),
+    providerRevision: text().notNull().default("legacy/1"),
     modelKey: text().notNull(),
+    modelRevision: text().notNull().default("legacy/1"),
+    usageVersion: integer().notNull().default(1),
+    source: text().notNull().default("unknown"),
     pricingSnapshotId: text(),
     inputTokens: integer(),
     outputTokens: integer(),
@@ -488,6 +674,11 @@ export const assistantUsage = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (table) => [
+    check("assistant_usage_version_check", sql`${table.usageVersion} = 1`),
+    check(
+      "assistant_usage_source_check",
+      sql`${table.source} in ('provider', 'estimated', 'unknown')`,
+    ),
     check(
       "assistant_usage_nonnegative_check",
       sql`coalesce(${table.inputTokens}, 0) >= 0 and coalesce(${table.outputTokens}, 0) >= 0 and coalesce(${table.reasoningTokens}, 0) >= 0 and coalesce(${table.cachedReadTokens}, 0) >= 0 and coalesce(${table.cachedWriteTokens}, 0) >= 0`,

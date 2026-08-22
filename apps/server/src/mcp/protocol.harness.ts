@@ -25,6 +25,7 @@ process.env.MCP_REQUEST_STATE_SECRET =
 process.env.MCP_ENABLE_DCR = "false";
 process.env.NODE_ENV = "test";
 process.env.DISABLE_EMAIL = "true";
+process.env.DISABLE_JOBS = "true";
 process.env.DISABLE_UPLOADS = "true";
 
 const PROTOCOL_VERSION = "2026-07-28";
@@ -53,7 +54,7 @@ type McpHandler = ReturnType<typeof import("./http").createAvermateMcpHandler>;
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
 let createAvermateMcpHandler: typeof import("./http").createAvermateMcpHandler;
-let app: typeof import("../index").default;
+let app: typeof import("../index").default | undefined;
 
 function principal(
   userId: string,
@@ -220,9 +221,13 @@ async function appRequest(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  // Most protocol tests exercise the MCP adapter directly and must not inherit
+  // application-startup recovery side effects. Load the HTTP app only for the
+  // final OAuth/route conformance flow that actually needs it.
+  const application = app ?? (app = (await import("../index")).default);
   const headers = new Headers(init.headers);
   headers.set("host", "localhost:3000");
-  return app.fetch(
+  return application.fetch(
     new Request(`http://localhost:3000${path}`, { ...init, headers }),
   );
 }
@@ -230,12 +235,18 @@ async function appRequest(
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
   await database.$client.executeMultiple(migration);
+  // The final OAuth flow imports the whole application, whose startup
+  // reconciliation performs legitimate concurrent SQLite transactions. Match
+  // production-style contention handling instead of allowing an immediate
+  // SQLITE_BUSY to make the transport proof timing-dependent on Windows.
+  await database.$client.execute("PRAGMA busy_timeout = 30000");
+  const { env } = await import("../lib/env");
+  expect(env.DISABLE_JOBS).toBe(true);
   const mcpHttp = await import("./http");
   createAvermateMcpHandler = (principal) =>
     mcpHttp.createAvermateMcpHandler(principal, {
       testOnlyAllowLegacyMutations: true,
     });
-  ({ default: app } = await import("../index"));
 
   const now = new Date("2026-08-11T12:00:00.000Z");
   const password = await Bun.password.hash(TEST_PASSWORD, "argon2id");
@@ -629,6 +640,7 @@ describe("MCP authorization, scopes and ownership", () => {
       mimeType: "application/pdf",
       byteSize: 2_048,
       purpose: "grade-copy",
+      status: "stored",
       userId: "mcp-user",
     });
     await database.insert(schema.gradeAttachments).values({

@@ -16,9 +16,7 @@ export const SANDBOX_BASELINE_CHECK_IDS = [
   "environment-sanitized",
 ] as const;
 
-export const sandboxBaselineCheckIdSchema = z.enum(
-  SANDBOX_BASELINE_CHECK_IDS,
-);
+export const sandboxBaselineCheckIdSchema = z.enum(SANDBOX_BASELINE_CHECK_IDS);
 export type SandboxBaselineCheckId = z.infer<
   typeof sandboxBaselineCheckIdSchema
 >;
@@ -41,9 +39,7 @@ export const sandboxIsolationClassSchema = z.enum([
   "e2b-managed",
   "microsandbox-experimental",
 ]);
-export type SandboxIsolationClass = z.infer<
-  typeof sandboxIsolationClassSchema
->;
+export type SandboxIsolationClass = z.infer<typeof sandboxIsolationClassSchema>;
 
 export const sandboxProfileIdSchema = z.enum([
   "latex",
@@ -51,8 +47,13 @@ export const sandboxProfileIdSchema = z.enum([
   "browser",
   "slides",
   "media",
+  "video-audio",
+  "ocr",
+  "speech-to-text",
   "manim",
   "image-builder",
+  "opencode",
+  "openhands",
 ]);
 export const SANDBOX_PROFILE_IDS = sandboxProfileIdSchema.options;
 export type SandboxProfileId = z.infer<typeof sandboxProfileIdSchema>;
@@ -64,21 +65,61 @@ const boundedIdSchema = z.string().min(1).max(256);
 
 export const sandboxResourceLimitsSchema = z.strictObject({
   cpuMillis: z.number().int().min(100).max(64_000),
-  memoryBytes: z.number().int().min(16 * 1024 * 1024).max(64 * 1024 ** 3),
-  swapBytes: z.number().int().min(0).max(64 * 1024 ** 3),
+  memoryBytes: z
+    .number()
+    .int()
+    .min(16 * 1024 * 1024)
+    .max(64 * 1024 ** 3),
+  swapBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(64 * 1024 ** 3),
   pids: z.number().int().min(1).max(4_096),
-  wallTimeMs: z.number().int().min(100).max(24 * 60 * 60_000),
+  wallTimeMs: z
+    .number()
+    .int()
+    .min(100)
+    .max(24 * 60 * 60_000),
   cancellationGraceMs: z.number().int().min(0).max(60_000),
-  outputBytes: z.number().int().min(0).max(2 * 1024 ** 3),
-  stdoutBytes: z.number().int().min(0).max(64 * 1024 ** 2),
-  stderrBytes: z.number().int().min(0).max(64 * 1024 ** 2),
-  eventBytes: z.number().int().min(0).max(64 * 1024 ** 2),
-  workspaceBytes: z.number().int().min(1).max(50 * 1024 ** 3),
+  outputBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 * 1024 ** 3),
+  stdoutBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(64 * 1024 ** 2),
+  stderrBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(64 * 1024 ** 2),
+  eventBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(64 * 1024 ** 2),
+  workspaceBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(50 * 1024 ** 3),
   fileCount: z.number().int().min(1).max(1_000_000),
-  tmpfsBytes: z.number().int().min(1).max(8 * 1024 ** 3),
+  tmpfsBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(8 * 1024 ** 3),
   tmpfsInodes: z.number().int().min(1).max(1_000_000),
   openFiles: z.number().int().min(8).max(65_536),
-  networkBytes: z.number().int().min(0).max(2 * 1024 ** 3),
+  networkBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 * 1024 ** 3),
   networkRequests: z.number().int().min(0).max(100_000),
   gpuCount: z.literal(0),
 });
@@ -100,7 +141,11 @@ export const sandboxEgressPolicySchema = z.discriminatedUnion("mode", [
     mode: z.literal("allowlist"),
     destinations: z.array(sandboxEgressDestinationSchema).min(1).max(64),
     maxRequests: z.number().int().min(1).max(100_000),
-    maxResponseBytes: z.number().int().min(1).max(2 * 1024 ** 3),
+    maxResponseBytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(2 * 1024 ** 3),
   }),
 ]);
 export type SandboxEgressPolicy = z.infer<typeof sandboxEgressPolicySchema>;
@@ -140,6 +185,102 @@ export type SandboxProviderRuntimeCheckpointRef = z.infer<
   typeof sandboxProviderRuntimeCheckpointRefSchema
 >;
 
+export const sandboxRuntimeCheckpointCompatibilityV1Schema = z.strictObject({
+  provider: sandboxProviderIdSchema,
+  region: z.string().min(1).max(128),
+  architecture: z.enum(["amd64", "arm64"]),
+  runtimeKind: z.string().min(1).max(128),
+  runtimeVersion: z.string().min(1).max(128),
+  imageDigest: sha256DigestSchema,
+  profileId: sandboxProfileIdSchema,
+  profileVersion: z.string().min(1).max(128),
+});
+export type SandboxRuntimeCheckpointCompatibilityV1 = z.infer<
+  typeof sandboxRuntimeCheckpointCompatibilityV1Schema
+>;
+
+/** Provider-native process/runtime state. It is deliberately non-portable. */
+export const sandboxRuntimeCheckpointRefV1Schema = z
+  .strictObject({
+    version: z.literal(1),
+    checkpoint: sandboxProviderRuntimeCheckpointRefSchema,
+    compatibility: sandboxRuntimeCheckpointCompatibilityV1Schema,
+    sourceWorkspaceSnapshot: sandboxWorkspaceSnapshotRefSchema,
+    /** Stable caller key; providers use it to bind/replay capture requests. */
+    captureIdempotencyKey: boundedIdSchema.optional(),
+    captureState: z.enum(["captured", "adopted"]),
+    adoptedObjectRefs: z.array(z.string().min(1).max(1_024)).max(256),
+    capturedAt: z.iso.datetime({ offset: true }),
+    expiresAt: z.iso.datetime({ offset: true }),
+  })
+  .superRefine((checkpoint, context) => {
+    if (
+      checkpoint.checkpoint.provider !== checkpoint.compatibility.provider ||
+      checkpoint.sourceWorkspaceSnapshot.provider !==
+        checkpoint.compatibility.provider
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["compatibility", "provider"],
+        message:
+          "runtime checkpoint, compatibility and source workspace providers must match",
+      });
+    }
+    if (Date.parse(checkpoint.expiresAt) <= Date.parse(checkpoint.capturedAt)) {
+      context.addIssue({
+        code: "custom",
+        path: ["expiresAt"],
+        message: "runtime checkpoints must expire after capture",
+      });
+    }
+    if (
+      checkpoint.captureState === "captured" &&
+      checkpoint.adoptedObjectRefs.length > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["adoptedObjectRefs"],
+        message: "unadopted runtime checkpoints cannot own adopted objects",
+      });
+    }
+  });
+export type SandboxRuntimeCheckpointRefV1 = z.infer<
+  typeof sandboxRuntimeCheckpointRefV1Schema
+>;
+
+export const sandboxRuntimeCheckpointCapabilitiesSchema = z.discriminatedUnion(
+  "available",
+  [
+    z.strictObject({
+      available: z.literal(false),
+      reason: z.enum([
+        "provider-unsupported",
+        "profile-unsupported",
+        "preflight-unavailable",
+      ]),
+    }),
+    z.strictObject({
+      available: z.literal(true),
+      provider: sandboxProviderIdSchema,
+      regions: z.array(z.string().min(1).max(128)).min(1).max(64),
+      architectures: z
+        .array(z.enum(["amd64", "arm64"]))
+        .min(1)
+        .max(4),
+      runtimeKind: z.string().min(1).max(128),
+      runtimeVersion: z.string().min(1).max(128),
+      maximumTtlSeconds: z
+        .number()
+        .int()
+        .positive()
+        .max(30 * 24 * 60 * 60),
+    }),
+  ],
+);
+export type SandboxRuntimeCheckpointCapabilities = z.infer<
+  typeof sandboxRuntimeCheckpointCapabilitiesSchema
+>;
+
 export const sandboxWorkloadPolicySchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("latex"),
@@ -171,13 +312,43 @@ export const sandboxWorkloadPolicySchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("media"),
-    networkDuringRun: z.literal(false),
+    networkDuringRun: z.boolean(),
     allowedInputCodecs: z.array(z.string().min(1).max(64)).min(1).max(32),
     allowedOutputCodecs: z.array(z.string().min(1).max(64)).min(1).max(32),
-    maxDurationSeconds: z.number().int().min(1).max(24 * 60 * 60),
+    maxDurationSeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 60 * 60),
     maxWidth: z.number().int().min(1).max(16_384),
     maxHeight: z.number().int().min(1).max(16_384),
     maxStreams: z.number().int().min(1).max(64),
+  }),
+  z.strictObject({
+    kind: z.literal("video-audio"),
+    networkDuringRun: z.boolean(),
+    provider: z.literal("youtube"),
+    outputCodec: z.literal("mp3-mono-16khz"),
+    segmentSecondsMin: z.literal(60),
+    segmentSecondsMax: z.literal(20 * 60),
+    maximumSegmentBytes: z.literal(32 * 1024 * 1024),
+    maxDurationSeconds: z.literal(4 * 60 * 60),
+  }),
+  z.strictObject({
+    kind: z.literal("ocr"),
+    networkDuringRun: z.literal(false),
+    engines: z.tuple([z.literal("tesseract"), z.literal("poppler")]),
+    maxPages: z.number().int().min(1).max(1_000),
+    maxPixelsPerPage: z.number().int().min(1).max(100_000_000),
+    maxTotalPixels: z.number().int().min(1).max(5_000_000_000),
+  }),
+  z.strictObject({
+    kind: z.literal("speech-to-text"),
+    networkDuringRun: z.literal(false),
+    engine: z.literal("whisper.cpp"),
+    timestampSegments: z.literal(true),
+    maxDurationSeconds: z.number().int().min(1).max(8 * 60 * 60),
+    maxInputBytes: z.number().int().min(1).max(512 * 1024 * 1024),
   }),
   z.strictObject({
     kind: z.literal("manim"),
@@ -195,66 +366,89 @@ export const sandboxWorkloadPolicySchema = z.discriminatedUnion("kind", [
     requireProvenance: z.literal(true),
     requireSignature: z.literal(true),
   }),
+  z.strictObject({
+    kind: z.enum(["opencode", "openhands"]),
+    reviewedCommandCatalogue: z.literal(true),
+    arbitraryHostCommands: z.literal(false),
+    canonicalHistoryImported: z.literal(false),
+  }),
 ]);
-export type SandboxWorkloadPolicy = z.infer<
-  typeof sandboxWorkloadPolicySchema
->;
+export type SandboxWorkloadPolicy = z.infer<typeof sandboxWorkloadPolicySchema>;
 
-export const sandboxExecutionProfileSchema = z.strictObject({
-  id: sandboxProfileIdSchema,
-  version: z.string().min(1).max(128),
-  enabled: z.boolean(),
-  requiredBaselineVersion: z.literal(SANDBOX_BASELINE_VERSION),
-  image: sandboxImageTemplateRefSchema,
-  entrypoints: z.array(z.string().startsWith("/").max(512)).min(1).max(32),
-  resources: sandboxResourceLimitsSchema,
-  egress: sandboxEgressPolicySchema,
-  workspaceRoot: z.literal("/workspace"),
-  readOnlyRootfs: z.literal(true),
-  allowHostMounts: z.literal(false),
-  allowDevices: z.literal(false),
-  readOnlyInputPaths: z.array(z.string().startsWith("/workspace/input").max(512)).min(1),
-  writablePaths: z.array(z.string().startsWith("/workspace/").max(512)).max(16),
-  outputGlobs: z.array(z.string().min(1).max(512)).max(32),
-  allowSecrets: z.boolean().default(false),
-  workload: sandboxWorkloadPolicySchema,
-}).superRefine((profile, context) => {
-  if (profile.id !== profile.workload.kind) {
-    context.addIssue({
-      code: "custom",
-      path: ["workload", "kind"],
-      message: "Workload policy must match the profile id.",
-    });
-  }
-  if (
-    profile.egress.mode === "none" &&
-    (profile.resources.networkBytes !== 0 || profile.resources.networkRequests !== 0)
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["resources", "networkBytes"],
-      message: "Network ceilings must be zero when egress is disabled.",
-    });
-  }
-  if (
-    profile.egress.mode === "allowlist" &&
-    (profile.resources.networkBytes < profile.egress.maxResponseBytes ||
-      profile.resources.networkRequests < profile.egress.maxRequests)
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["resources", "networkBytes"],
-      message: "Resource ceilings must cover the stricter egress policy ceilings.",
-    });
-  }
-  if (profile.allowSecrets && profile.egress.mode === "none") {
-    context.addIssue({
-      code: "custom",
-      path: ["allowSecrets"],
-      message: "Brokered secret grants require an explicit egress allowlist.",
-    });
-  }
-});
+export const sandboxExecutionProfileSchema = z
+  .strictObject({
+    id: sandboxProfileIdSchema,
+    version: z.string().min(1).max(128),
+    enabled: z.boolean(),
+    requiredBaselineVersion: z.literal(SANDBOX_BASELINE_VERSION),
+    image: sandboxImageTemplateRefSchema,
+    entrypoints: z.array(z.string().startsWith("/").max(512)).min(1).max(32),
+    resources: sandboxResourceLimitsSchema,
+    egress: sandboxEgressPolicySchema,
+    workspaceRoot: z.literal("/workspace"),
+    readOnlyRootfs: z.literal(true),
+    allowHostMounts: z.literal(false),
+    allowDevices: z.literal(false),
+    readOnlyInputPaths: z
+      .array(z.string().startsWith("/workspace/input").max(512))
+      .min(1),
+    writablePaths: z
+      .array(z.string().startsWith("/workspace/").max(512))
+      .max(16),
+    outputGlobs: z.array(z.string().min(1).max(512)).max(32),
+    allowSecrets: z.boolean().default(false),
+    workload: sandboxWorkloadPolicySchema,
+  })
+  .superRefine((profile, context) => {
+    if (profile.id !== profile.workload.kind) {
+      context.addIssue({
+        code: "custom",
+        path: ["workload", "kind"],
+        message: "Workload policy must match the profile id.",
+      });
+    }
+    if (
+      profile.egress.mode === "none" &&
+      (profile.resources.networkBytes !== 0 ||
+        profile.resources.networkRequests !== 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["resources", "networkBytes"],
+        message: "Network ceilings must be zero when egress is disabled.",
+      });
+    }
+    if (
+      profile.egress.mode === "allowlist" &&
+      (profile.resources.networkBytes < profile.egress.maxResponseBytes ||
+        profile.resources.networkRequests < profile.egress.maxRequests)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["resources", "networkBytes"],
+        message:
+          "Resource ceilings must cover the stricter egress policy ceilings.",
+      });
+    }
+    if (profile.allowSecrets && profile.egress.mode === "none") {
+      context.addIssue({
+        code: "custom",
+        path: ["allowSecrets"],
+        message: "Brokered secret grants require an explicit egress allowlist.",
+      });
+    }
+    if (
+      "networkDuringRun" in profile.workload &&
+      profile.workload.networkDuringRun !== (profile.egress.mode === "allowlist")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["workload", "networkDuringRun"],
+        message:
+          "workload network policy must exactly match the sandbox egress mode",
+      });
+    }
+  });
 export type SandboxExecutionProfile = z.infer<
   typeof sandboxExecutionProfileSchema
 >;
@@ -366,7 +560,11 @@ export type SandboxHandle = z.infer<typeof sandboxHandleSchema>;
 export const sandboxFileManifestEntrySchema = z.strictObject({
   relativePath: z.string().min(1).max(1_024),
   digest: sha256DigestSchema,
-  byteSize: z.number().int().min(0).max(50 * 1024 ** 3),
+  byteSize: z
+    .number()
+    .int()
+    .min(0)
+    .max(50 * 1024 ** 3),
   mimeType: z.string().min(1).max(256),
   kind: z.enum([
     "pdf",
@@ -443,18 +641,41 @@ export interface SandboxProvider {
   preflight(input: SandboxPreflightInput): Promise<SandboxPreflightResult>;
   create(input: SandboxCreateInput): Promise<SandboxHandle>;
   execute(input: SandboxExecuteInput): AsyncIterable<SandboxExecutionEvent>;
-  putFiles(handle: SandboxHandle, files: readonly SandboxInputFile[]): Promise<void>;
+  putFiles(
+    handle: SandboxHandle,
+    files: readonly SandboxInputFile[],
+  ): Promise<void>;
   getFiles(
     handle: SandboxHandle,
     paths: readonly string[],
   ): Promise<readonly SandboxFileManifestEntry[]>;
-  readFile(handle: SandboxHandle, relativePath: string): AsyncIterable<Uint8Array>;
-  snapshotWorkspace(handle: SandboxHandle): Promise<SandboxWorkspaceSnapshotRef>;
+  readFile(
+    handle: SandboxHandle,
+    relativePath: string,
+  ): AsyncIterable<Uint8Array>;
+  snapshotWorkspace(
+    handle: SandboxHandle,
+  ): Promise<SandboxWorkspaceSnapshotRef>;
   forkWorkspace(
     input: SandboxCreateInput & { source: SandboxWorkspaceSnapshotRef },
   ): Promise<SandboxHandle>;
   stop(handle: SandboxHandle): Promise<void>;
   destroy(handle: SandboxHandle): Promise<void>;
+  runtimeCheckpointCapabilities?(): Promise<SandboxRuntimeCheckpointCapabilities>;
+  captureRuntimeCheckpoint?(input: {
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: Date;
+  }): Promise<SandboxRuntimeCheckpointRefV1>;
+  restoreRuntimeCheckpoint?(input: {
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }): Promise<SandboxHandle>;
+  deleteRuntimeCheckpoint?(
+    checkpoint: SandboxRuntimeCheckpointRefV1,
+  ): Promise<void>;
 }
 
 export const sandboxConformanceCellSchema = z.strictObject({
@@ -517,39 +738,41 @@ export type SandboxImageBuildAttestation = z.infer<
   typeof sandboxImageBuildAttestationSchema
 >;
 
-export const sandboxDependencyManifestRequestSchema = z.strictObject({
-  ecosystem: z.enum(["ctan", "pypi", "npm", "system"]),
-  packages: z
-    .array(
-      z.strictObject({
-        name: z.string().regex(/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u),
-        version: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9.+_-]*$/u),
-        registry: z.enum(["ctan", "pypi", "npmjs", "debian-snapshot"]),
-        installScripts: z.literal(false),
-        nativeBuild: z.boolean(),
-      }),
-    )
-    .min(1)
-    .max(256),
-  requestedBy: boundedIdSchema,
-  tenantCacheScope: boundedIdSchema,
-}).superRefine((request, context) => {
-  const expectedRegistry = {
-    ctan: "ctan",
-    pypi: "pypi",
-    npm: "npmjs",
-    system: "debian-snapshot",
-  } as const;
-  request.packages.forEach((dependency, index) => {
-    if (dependency.registry !== expectedRegistry[request.ecosystem]) {
-      context.addIssue({
-        code: "custom",
-        path: ["packages", index, "registry"],
-        message: "Dependency registry must match the declared ecosystem.",
-      });
-    }
+export const sandboxDependencyManifestRequestSchema = z
+  .strictObject({
+    ecosystem: z.enum(["ctan", "pypi", "npm", "system"]),
+    packages: z
+      .array(
+        z.strictObject({
+          name: z.string().regex(/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u),
+          version: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9.+_-]*$/u),
+          registry: z.enum(["ctan", "pypi", "npmjs", "debian-snapshot"]),
+          installScripts: z.literal(false),
+          nativeBuild: z.boolean(),
+        }),
+      )
+      .min(1)
+      .max(256),
+    requestedBy: boundedIdSchema,
+    tenantCacheScope: boundedIdSchema,
+  })
+  .superRefine((request, context) => {
+    const expectedRegistry = {
+      ctan: "ctan",
+      pypi: "pypi",
+      npm: "npmjs",
+      system: "debian-snapshot",
+    } as const;
+    request.packages.forEach((dependency, index) => {
+      if (dependency.registry !== expectedRegistry[request.ecosystem]) {
+        context.addIssue({
+          code: "custom",
+          path: ["packages", index, "registry"],
+          message: "Dependency registry must match the declared ecosystem.",
+        });
+      }
+    });
   });
-});
 export type SandboxDependencyManifestRequest = z.infer<
   typeof sandboxDependencyManifestRequestSchema
 >;

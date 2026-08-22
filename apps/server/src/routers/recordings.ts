@@ -1092,6 +1092,7 @@ export function createRecordingsRouter(
               segments: recordingTranscripts.segmentsJson,
               language: recordingTranscripts.language,
               provider: recordingTranscripts.provider,
+              model: recordingTranscripts.model,
               createdAt: recordingTranscripts.createdAt,
               updatedAt: recordingTranscripts.updatedAt,
             })

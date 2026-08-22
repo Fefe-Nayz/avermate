@@ -20,6 +20,41 @@ export const MCP_EXECUTABLE_NON_READ_TOOLS = [
     descriptorKey: "planning.tasks.create@1",
   },
   {
+    id: "learning.copy.request_analysis",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.copy.request_analysis@1",
+  },
+  {
+    id: "learning.copy.review_analysis",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.copy.review_analysis@1",
+  },
+  {
+    id: "learning.evidence.decide",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.evidence.decide@1",
+  },
+  {
+    id: "learning.plan.propose",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.plan.propose@1",
+  },
+  {
+    id: "learning.plan.apply",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.plan.apply@1",
+  },
+  {
+    id: "learning.quiz.generate",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.quiz.generate@1",
+  },
+  {
+    id: "learning.quiz.start",
+    execution: "brokered-ledger-domain",
+    descriptorKey: "learning.quiz.start@1",
+  },
+  {
     id: "artifact.plan",
     execution: "brokered-ledger-domain",
     descriptorKey: "artifact.plan@1",

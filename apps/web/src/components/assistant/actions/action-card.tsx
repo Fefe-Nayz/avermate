@@ -9,6 +9,7 @@ import {
   RotateCcwIcon,
 } from "lucide-react"
 import Link from "next/link"
+import { useExtracted, useFormatter } from "next-intl"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,32 +31,24 @@ import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { ActionApprovalPanel } from "./action-approval"
 import {
-  actionActorLabel,
   actionCanRequestUndo,
   actionConsequence,
-  actionReason,
-  actionTitle,
   resourceHref,
   resourceLabel,
   trimActionJson,
 } from "./action-model"
 import { ActionStateBadges } from "./action-state-badges"
+import { useActionCopy } from "./use-action-copy"
 
 export interface ActionCardOperations {
   pendingActionId?: string | null
+  disabled?: boolean
   onApprovalDecision?: (
     action: AgentActionDto,
     decision: "approve" | "reject"
   ) => void
   onInspect?: (action: AgentActionDto) => void
   onRequestUndo?: (actionIds: readonly string[]) => void
-}
-
-function actionTimestamp(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value))
 }
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
@@ -78,7 +71,10 @@ export function ActionCard({
   compact?: boolean
   operations?: ActionCardOperations
 }) {
-  const reason = actionReason(action)
+  const t = useExtracted()
+  const format = useFormatter()
+  const actionCopy = useActionCopy()
+  const reason = actionCopy.reason(action)
   const consequence = actionConsequence(action)
   const pending = operations.pendingActionId === action.id
   const canUndo = actionCanRequestUndo(action)
@@ -90,9 +86,13 @@ export function ActionCard({
       data-tool-call-id={action.toolCallId ?? undefined}
     >
       <CardHeader>
-        <CardTitle>{actionTitle(action)}</CardTitle>
+        <CardTitle>{actionCopy.title(action)}</CardTitle>
         <CardDescription>
-          {consequence ?? `${action.effect} via ${action.toolId}`}
+          {consequence ??
+            t("{effect} via {tool}", {
+              effect: action.effect,
+              tool: action.toolId,
+            })}
         </CardDescription>
         <CardAction>
           <ActionStateBadges action={action} />
@@ -100,10 +100,21 @@ export function ActionCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-          <span>{actionActorLabel(action.actorKind)}</span>
+          <span>
+            {action.actorKind === "embedded-agent"
+              ? t("Avermate assistant")
+              : action.actorKind === "mcp"
+                ? t("MCP client")
+                : action.actorKind === "user-undo"
+                  ? t("User undo")
+                  : t("Avermate system")}
+          </span>
           <span aria-hidden>·</span>
           <time dateTime={action.createdAt}>
-            {actionTimestamp(action.createdAt)}
+            {format.dateTime(new Date(action.createdAt), {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
           </time>
           <span aria-hidden>·</span>
           <span className="font-mono">
@@ -113,11 +124,11 @@ export function ActionCard({
 
         {action.resources.length > 0 ? (
           <section
-            aria-label="Affected resources"
+            aria-label={t("Affected resources")}
             className="flex flex-col gap-2"
           >
             <h4 className="text-xs font-medium text-muted-foreground">
-              Affected resources
+              {t("Affected resources")}
             </h4>
             <div className="flex flex-wrap gap-1.5">
               {action.resources.map((resource) => {
@@ -163,12 +174,12 @@ export function ActionCard({
             <AlertTriangleIcon />
             <AlertTitle>
               {action.undoState === "partially-compensated"
-                ? "Partial undo"
+                ? t("Partial undo")
                 : action.undoState === "conflicted"
-                  ? "Later changes conflict with undo"
+                  ? t("Later changes conflict with undo")
                   : action.undoState === "blocked"
-                    ? "Blocked by a dependent action"
-                    : "Action detail"}
+                    ? t("Blocked by a dependent action")
+                    : t("Action detail")}
             </AlertTitle>
             <AlertDescription>{reason}</AlertDescription>
           </Alert>
@@ -177,6 +188,7 @@ export function ActionCard({
         <ActionApprovalPanel
           action={action}
           pending={pending}
+          disabled={operations.disabled}
           onDecision={(decision) =>
             operations.onApprovalDecision?.(action, decision)
           }
@@ -187,28 +199,34 @@ export function ActionCard({
             <CollapsibleTrigger
               render={<Button type="button" variant="ghost" size="sm" />}
             >
-              Technical details
+              {t("Technical details")}
               <ChevronDownIcon data-icon="inline-end" />
             </CollapsibleTrigger>
             <CollapsibleContent className="flex flex-col gap-3 pt-3">
               <Separator />
               <div className="grid gap-3 lg:grid-cols-3">
                 <JsonBlock
-                  label="Redacted input"
+                  label={t("Redacted input")}
                   value={action.redactedInput}
                 />
-                <JsonBlock label="Concrete preview" value={action.preview} />
-                <JsonBlock label="Safe result" value={action.resultSummary} />
+                <JsonBlock
+                  label={t("Concrete preview")}
+                  value={action.preview}
+                />
+                <JsonBlock
+                  label={t("Safe result")}
+                  value={action.resultSummary}
+                />
               </div>
               <dl className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <dt className="text-muted-foreground">Action ID</dt>
+                  <dt className="text-muted-foreground">{t("Action ID")}</dt>
                   <dd className="truncate font-mono" title={action.id}>
                     {action.id}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Batch</dt>
+                  <dt className="text-muted-foreground">{t("Batch")}</dt>
                   <dd
                     className="truncate font-mono"
                     title={action.batchId ?? ""}
@@ -217,7 +235,7 @@ export function ActionCard({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Scope</dt>
+                  <dt className="text-muted-foreground">{t("Scope")}</dt>
                   <dd className="truncate font-mono">
                     {action.domainScopeKind && action.domainScopeId
                       ? `${action.domainScopeKind}:${action.domainScopeId}`
@@ -225,7 +243,7 @@ export function ActionCard({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Sequence</dt>
+                  <dt className="text-muted-foreground">{t("Sequence")}</dt>
                   <dd className="font-mono">{action.actionSequence}</dd>
                 </div>
               </dl>
@@ -239,11 +257,13 @@ export function ActionCard({
             type="button"
             variant="ghost"
             size="sm"
-            disabled={pending}
+            disabled={pending || operations.disabled}
             onClick={() => operations.onInspect?.(action)}
           >
             <EyeIcon data-icon="inline-start" />
-            Inspect
+            {action.undoState === "conflicted"
+              ? t("Review conflict")
+              : t("Inspect")}
           </Button>
         ) : null}
         {canUndo && operations.onRequestUndo ? (
@@ -253,7 +273,7 @@ export function ActionCard({
               action.undoState === "eligible" ? "outline" : "destructive"
             }
             size="sm"
-            disabled={pending}
+            disabled={pending || operations.disabled}
             onClick={() => operations.onRequestUndo?.([action.id])}
           >
             {pending ? (
@@ -261,7 +281,9 @@ export function ActionCard({
             ) : (
               <RotateCcwIcon data-icon="inline-start" />
             )}
-            {action.undoState === "eligible" ? "Preview undo" : "Review undo"}
+            {action.undoState === "eligible"
+              ? t("Preview undo")
+              : t("Review undo")}
           </Button>
         ) : null}
       </CardFooter>

@@ -20,7 +20,13 @@ async function call<T>(operation: () => Promise<T>) {
         ? error.message.slice(0, 500)
         : "The MCP connection request failed"
     throw new ORPCError(
-      /not found/i.test(message) ? "NOT_FOUND" : "BAD_REQUEST",
+      /not found/i.test(message)
+        ? "NOT_FOUND"
+        : /^NODE_MCP_CAPABILITY_OFFLINE$/u.test(message)
+          ? "SERVICE_UNAVAILABLE"
+          : /^NODE_MCP_TIMEOUT$/u.test(message)
+            ? "GATEWAY_TIMEOUT"
+            : "BAD_REQUEST",
       { message }
     )
   }
@@ -37,6 +43,7 @@ export const assistantToolSourcesRouter = {
         name: z.string().trim().min(1).max(120),
         endpointUrl: z.string().trim().min(1).max(2_048),
         placement: customMcpPlacementSchema.default("hosted-core"),
+        nodeId: id.nullable().optional(),
         authKind: customMcpAuthKindSchema.default("none"),
         credential: z.string().trim().min(1).max(8_192).nullable().optional(),
       })

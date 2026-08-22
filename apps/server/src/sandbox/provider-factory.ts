@@ -12,6 +12,7 @@ import { OpenSandboxProvider, type OpenSandboxIsolation } from "./opensandbox-pr
 import { enableSandboxProfile, SANDBOX_PROFILES_V1 } from "./profiles";
 import type { RemoteSandboxTransport } from "./remote-provider";
 import { createOpenSandboxSdkTransportFromEnvironment } from "./opensandbox-sdk-transport";
+import { ObjectStoragePortableWorkspaceSnapshotStore } from "./portable-workspace-store";
 
 export interface SandboxProviderFactoryResult {
   provider: SandboxProvider;
@@ -90,7 +91,11 @@ export function createSandboxProviderFromEnvironment(input: {
     const isolation = openSandboxIsolation(environment);
     const transport =
       input.transport ??
-      createOpenSandboxSdkTransportFromEnvironment({ environment, profiles });
+      createOpenSandboxSdkTransportFromEnvironment({
+        environment,
+        profiles,
+        workspaceSnapshots: new ObjectStoragePortableWorkspaceSnapshotStore(),
+      });
     return {
       provider: new OpenSandboxProvider({ ...shared, isolation, transport }),
       profiles,
@@ -187,7 +192,12 @@ function mockDigestCharacter(id: SandboxProfileId): string {
     browser: "a",
     slides: "b",
     media: "c",
+    "video-audio": "f",
+    ocr: "b",
+    "speech-to-text": "c",
     manim: "d",
     "image-builder": "e",
+    opencode: "6",
+    openhands: "7",
   } satisfies Record<SandboxProfileId, string>)[id];
 }

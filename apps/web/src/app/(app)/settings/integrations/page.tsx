@@ -18,7 +18,31 @@ export default async function IntegrationsSettingsPage() {
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({
-      ...orpc.serviceKeys.list.queryOptions(),
+      ...orpc.serviceKeys.metadata.queryOptions(),
+      staleTime: COMMON_QUERY_STALE_TIME,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.assistant.models.catalogue.queryOptions(),
+      staleTime: 30_000,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.assistant.models.preference.get.queryOptions(),
+      staleTime: COMMON_QUERY_STALE_TIME,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.retrieval.readiness.queryOptions(),
+      staleTime: 30_000,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.retrieval.traces.queryOptions({ input: { limit: 10 } }),
+      staleTime: 10_000,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.retrieval.evaluations.queryOptions({ input: { limit: 5 } }),
+      staleTime: 30_000,
+    }),
+    queryClient.prefetchQuery({
+      ...orpc.projects.list.queryOptions({ input: { include: "live" } }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({

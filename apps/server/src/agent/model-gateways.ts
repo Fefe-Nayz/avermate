@@ -206,6 +206,9 @@ function defaultStreamFactory(
     ...(system ? { system } : {}),
     messages,
     tools,
+    ...(request.maximumOutputTokens
+      ? { maxOutputTokens: request.maximumOutputTokens }
+      : {}),
     abortSignal: request.abortSignal,
     telemetry: { isEnabled: false },
     onError: () => undefined,

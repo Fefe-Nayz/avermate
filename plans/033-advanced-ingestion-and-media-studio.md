@@ -24,10 +24,8 @@ apps/web/src/components/materials apps/web/src/components/documents infra`.
 
 ## Status
 
-- **Status**: IN PROGRESS — structured workers, contracts, durable dispatch,
-  artifact lineage and repository gates are implemented; real image
-  attestation, provider isolation and runtime egress conformance remain release
-  blockers
+- **Status**: DONE (repository and Web) — LIVE BLOCKED for capabilities that
+  require an attested sandbox image, provider isolation or runtime egress proof
 - **Priority**: P2
 - **Effort**: XL (three independently shippable slices)
 - **Risk**: HIGH
@@ -47,12 +45,18 @@ apps/web/src/components/materials apps/web/src/components/documents infra`.
   Markdown/citation normalization and a malicious request-limit case.
 - `verify:033:sandbox:repository` audits the API boundary, runs the reviewed
   worker/adoption suite and records the disabled provider as unavailable.
+- `verify:033:repository` aggregates contracts, ingestion, artifacts, the
+  repository-only sandbox suite and the production media-studio Web E2E without
+  consuming operator evidence.
 - `verify:033:sandbox:live` is intentionally strict: without an attested live
   provider it exits non-zero with
   `SANDBOX_CONFORMANCE_LIVE_PROVIDER_REQUIRED:disabled`. A disabled or mock
   provider can no longer be mistaken for live isolation evidence.
-- The remaining work is the complete functional Web media studio, real
-  attested provider/image/egress cells and production placement activation.
+- The functional Web media studio is implemented and covered by focused model,
+  route and production-surface tests. The remaining evidence is operational:
+  real attested provider/image/egress cells and explicit production placement
+  activation. Until those pass, the corresponding execution capabilities stay
+  unavailable rather than falling back to the API process.
 
 ## Scope
 
@@ -592,7 +596,10 @@ As part of this plan, add the following stable scripts to the root
 bun run verify:033:contracts
 bun run verify:033:ingestion
 bun run verify:033:artifacts
+bun run verify:033:sandbox:repository
+bun run verify:033:sandbox:live
 bun run verify:033:sandbox
+bun run verify:033:repository
 bun run verify:033
 ```
 
@@ -603,8 +610,10 @@ bun run verify:033
   integration tests.
 - `verify:033:artifacts` builds the tiny deterministic PDF/PPTX/audio/image/
   Anki/HTML/video fixtures and verifies their manifests and historical digests.
-- `verify:033:sandbox` invokes the exact command below against a disposable
-  runtime:
+- `verify:033:sandbox:repository` checks admission, worker boundaries and the
+  fail-closed disabled-provider path without claiming live isolation.
+- `verify:033:sandbox:live` invokes the exact command below against a disposable
+  attested runtime:
 
   ```text
   bun run --cwd apps/server sandbox:conformance -- --profile web-render.v1 --profile video-audio-extract.v1 --profile ffmpeg-render.v1
@@ -614,9 +623,17 @@ bun run verify:033
 manim.v1` and make its conformance mandatory before activation; disabled
   optional Manim is not a failed or silently skipped required profile.
 
-- `verify:033` runs the four commands above and fails if a required or enabled
-  sandbox job is skipped. Add `.github/workflows/plan-033-media.yml` to execute
-  it on the pinned container/runtime runner and upload only non-sensitive test
+- `verify:033:sandbox` remains the strict sandbox-only convenience aggregate:
+  repository checks followed by live conformance.
+- `verify:033:repository` runs contracts, ingestion, artifacts,
+  `verify:033:sandbox:repository` and the production media-studio Web E2E. It is
+  deterministic with respect to external provider evidence and never invokes a
+  `:live` gate.
+- `verify:033` is the strict release aggregate: it runs
+  `verify:033:repository` and then `verify:033:sandbox:live`, failing if live
+  attestation is missing or a required/enabled sandbox job is skipped. Add
+  `.github/workflows/plan-033-media.yml` to execute both repository and live
+  jobs on the appropriate pinned runners and upload only non-sensitive test
   evidence.
 
 The TypeScript runner must terminate child processes, delete fixtures/scratch

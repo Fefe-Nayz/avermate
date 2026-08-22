@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "rerank.qwen3-text.v1",
+  "license": "Apache-2.0",
+  "model": "Qwen/Qwen3-Reranker-0.6B",
+  "modelRevision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+  "preprocessing": {
+    "promptName": "avermate-french-school-learning-v1",
+    "instructionLanguage": "en",
+    "instruction": "Given a French school-learning query, retrieve passages that directly answer the learner's question using curriculum-relevant evidence. Prefer precise, pedagogically useful passages in the query's language.",
+    "revision": "sha256:ef9a802ca5f4290952f308895a019a475295ef17b9c890cf9375cd3e8bc85cbf"
+  },
+  "runtime": {
+    "torch": "2.8.0",
+    "transformers": "4.57.3",
+    "sentenceTransformers": "5.4.0"
+  },
+  "modalities": ["text"],
+  "maximumCandidates": 128,
+  "maximumRequestBytes": 1048576,
+  "networkAtRuntime": "denied",
+  "imageReferenceEnvironment": "QWEN3_RERANK_IMAGE",
+  "imageDigestCoversModelAdapterAndPreprocessing": true,
+  "advertiseOnlyWhenDigestPinnedAndHealthy": true,
+  "teiCompatible": false
+}

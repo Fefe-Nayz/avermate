@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { agentActionDtoSchema, agentActionPreviewSchema } from "./action";
 import { conversationPlacementSchema } from "./conversation-store";
 import { contentVersionReferenceSchema, sourceLocatorV1Schema } from "./corpus";
 import {
@@ -8,6 +9,7 @@ import {
   sandboxRuntimeCheckpointRefSchema,
   workspaceSnapshotRefSchema,
 } from "./references";
+import { modelPlacementSchema } from "./runtime";
 import { sandboxProfileIdSchema, sandboxProviderIdSchema } from "./sandbox";
 
 export const ASSISTANT_EXPORT_VERSION = 1 as const;
@@ -90,6 +92,12 @@ const toolPartSchema = z.strictObject({
   safeInput: z.unknown().optional(),
   safeResult: z.unknown().optional(),
   safeError: z.string().max(2_000).optional(),
+  /** Authoritative plan-030 ledger references; never client-generated. */
+  actionId: opaqueId.optional(),
+  approvalId: opaqueId.optional(),
+  compensationState: z
+    .enum(["available", "compensating", "compensated", "blocked", "failed"])
+    .optional(),
 });
 
 const citationPartSchema = z.strictObject({
@@ -159,6 +167,17 @@ const runConfigPartSchema = z.strictObject({
   planMode: z.boolean(),
 });
 
+/**
+ * Core-side opaque envelope for a Node-owned message body. It is never a
+ * renderable part and must be resolved through the selected Node placement.
+ */
+const nodeSealedPartSchema = z.strictObject({
+  type: z.literal("node-sealed"),
+  id: opaqueId,
+  algorithm: z.literal("aes-256-gcm-v1"),
+  ciphertext: z.string().min(32).max(16_000_000),
+});
+
 /** Closed registry: model output cannot name an arbitrary component or HTML. */
 export const assistantPartV1Schema = z.discriminatedUnion("type", [
   textPartSchema,
@@ -171,6 +190,7 @@ export const assistantPartV1Schema = z.discriminatedUnion("type", [
   artifactPartSchema,
   safeErrorPartSchema,
   runConfigPartSchema,
+  nodeSealedPartSchema,
 ]);
 export type AssistantPartV1 = z.infer<typeof assistantPartV1Schema>;
 
@@ -221,6 +241,8 @@ export const assistantRunStatusSchema = z.enum([
   "reserved",
   "running",
   "waiting-for-user",
+  "waiting-approval",
+  "cancelling",
   "complete",
   "failed",
   "cancelled",
@@ -237,9 +259,20 @@ export const assistantRunSchema = z.strictObject({
   parentRunId: opaqueId.nullable(),
   runtimeId: boundedLabel,
   runtimeVersion: boundedLabel,
+  runtimeProtocolVersion: z.literal(1).default(1),
   graphSchemaVersion: z.number().int().positive(),
   modelKey: boundedLabel,
+  modelRevision: boundedLabel.default("legacy/1"),
   providerKey: boundedLabel,
+  providerRevision: boundedLabel.default("legacy/1"),
+  modelPlacement: modelPlacementSchema.default({
+    kind: "core",
+    instanceId: "legacy",
+  }),
+  policyRevision: boundedLabel.default("assistant-policy/1"),
+  toolCatalogRevision: boundedLabel.default("legacy/1"),
+  contextManifestDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
+  branchIdentityDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
   modelResolvedId: boundedLabel.nullable(),
   status: assistantRunStatusSchema,
   approvalMode: z.enum(["read-only", "confirm-writes", "auto-reversible"]),
@@ -248,7 +281,10 @@ export const assistantRunSchema = z.strictObject({
     "pending",
     "dispatching",
     "acknowledged",
+    "completed",
     "failed",
+    "cancelled",
+    "inspect-required",
   ]),
   contextManifestId: opaqueId.nullable(),
   conversationCheckpointRef: conversationCheckpointRefSchema.nullable(),
@@ -257,6 +293,27 @@ export const assistantRunSchema = z.strictObject({
   domainCursorRef: domainCursorRefSchema.nullable(),
   safeError: z.string().max(2_000).nullable(),
   errorCode: z.string().max(128).nullable(),
+  cancellationRequestedAt: timestamp.nullable().default(null),
+  cancellationReason: z.string().max(1_000).nullable().default(null),
+  terminalReason: z
+    .enum([
+      "completed",
+      "user-cancelled",
+      "deadline-exceeded",
+      "approval-rejected",
+      "approval-expired",
+      "provider-error",
+      "provider-dispatch-unknown",
+      "placement-unavailable",
+      "model-unavailable",
+      "policy-revision-mismatch",
+      "tool-catalog-revision-mismatch",
+      "checkpoint-corrupt",
+      "quota-denied",
+      "runtime-error",
+    ])
+    .nullable()
+    .default(null),
   startedAt: timestamp.nullable(),
   completedAt: timestamp.nullable(),
   createdAt: timestamp,
@@ -356,7 +413,11 @@ export type AssistantCitation = z.infer<typeof assistantCitationSchema>;
 export const assistantUsageSchema = z.strictObject({
   runId: opaqueId,
   providerKey: boundedLabel,
+  providerRevision: boundedLabel.default("legacy/1"),
   modelKey: boundedLabel,
+  modelRevision: boundedLabel.default("legacy/1"),
+  usageVersion: z.literal(1).default(1),
+  source: z.enum(["provider", "estimated", "unknown"]).default("unknown"),
   pricingSnapshotId: opaqueId.nullable(),
   inputTokens: z.number().int().nonnegative().nullable(),
   outputTokens: z.number().int().nonnegative().nullable(),
@@ -397,6 +458,79 @@ export const modelCapabilitySchema = z.strictObject({
 });
 export type ModelCapability = z.infer<typeof modelCapabilitySchema>;
 
+export const modelUnavailableReasonSchema = z.enum([
+  "missing-key",
+  "invalid-key",
+  "node-offline",
+  "node-capability-stale",
+  "model-removed",
+  "managed-disabled",
+  "quota-denied",
+  "sandbox-unavailable",
+  "policy-disabled",
+  "provider-unavailable",
+]);
+export type ModelUnavailableReason = z.infer<
+  typeof modelUnavailableReasonSchema
+>;
+
+export const modelReadinessSchema = z.strictObject({
+  capability: modelCapabilitySchema,
+  available: z.boolean(),
+  unavailableReason: modelUnavailableReasonSchema.nullable(),
+  modelRevision: boundedLabel,
+  providerRevision: boundedLabel,
+  placement: modelPlacementSchema,
+  routeKey: boundedLabel,
+  /** True only when this exact route may be considered by an explicit policy. */
+  fallbackEligible: z.boolean(),
+});
+export type ModelReadiness = z.infer<typeof modelReadinessSchema>;
+
+export const assistantModelRouteSchema = z.enum([
+  "selected-only",
+  "prefer-node",
+  "prefer-core",
+  "managed-only",
+]);
+export const assistantModelFallbackSchema = z.enum([
+  "none",
+  "same-provider",
+  "configured-routes",
+]);
+export const assistantModelPreferenceSchema = z.strictObject({
+  defaultModelKey: boundedLabel.nullable(),
+  route: assistantModelRouteSchema,
+  fallback: assistantModelFallbackSchema,
+  maximumInputTokens: z.number().int().positive().nullable(),
+  maximumOutputTokens: z.number().int().positive().nullable(),
+  maximumEstimatedCostMinor: z.number().int().nonnegative().nullable(),
+  currency: z.string().length(3).nullable(),
+  revision: z.number().int().positive(),
+  updatedAt: timestamp,
+});
+export type AssistantModelPreference = z.infer<
+  typeof assistantModelPreferenceSchema
+>;
+
+/** Immutable route and budget decision frozen before a run is launched. */
+export const assistantRunModelPolicySchema = z.strictObject({
+  preferenceRevision: z.number().int().positive(),
+  requestedModelKey: boundedLabel.nullable(),
+  selectedModelKey: boundedLabel,
+  route: assistantModelRouteSchema,
+  fallback: assistantModelFallbackSchema,
+  orderedFallbackModelKeys: z.array(boundedLabel).max(256),
+  maximumInputTokens: z.number().int().positive().nullable(),
+  maximumOutputTokens: z.number().int().positive().nullable(),
+  maximumEstimatedCostMinor: z.number().int().nonnegative().nullable(),
+  currency: z.string().length(3).nullable(),
+  frozenAt: timestamp,
+});
+export type AssistantRunModelPolicy = z.infer<
+  typeof assistantRunModelPolicySchema
+>;
+
 export const reserveAssistantTurnSchema = z.strictObject({
   threadId: opaqueId,
   branchId: opaqueId,
@@ -430,6 +564,17 @@ export const historicalBranchChoiceSchema = z.discriminatedUnion("mode", [
 ]);
 export type HistoricalBranchChoice = z.infer<
   typeof historicalBranchChoiceSchema
+>;
+
+export const historicalBranchDecisionSchema = z.discriminatedUnion("mode", [
+  ...historicalBranchChoiceSchema.options,
+  z.strictObject({
+    mode: z.literal("review-data-changes"),
+    sourceBranchId: opaqueId,
+  }),
+]);
+export type HistoricalBranchDecision = z.infer<
+  typeof historicalBranchDecisionSchema
 >;
 
 export const historicalBranchSnapshotPreviewSchema = z.strictObject({
@@ -478,6 +623,37 @@ export type HistoricalWorkspaceCopyPreview = z.infer<
   typeof historicalWorkspaceCopyPreviewSchema
 >;
 
+export const historicalDataChangesAvailabilitySchema =
+  z.discriminatedUnion("available", [
+    z.strictObject({
+      available: z.literal(true),
+      domainCursorRef: domainCursorRefSchema,
+    }),
+    z.strictObject({
+      available: z.literal(false),
+      reason: z.literal("no-domain-cursor"),
+      message: z.string().min(1).max(2_000),
+    }),
+  ]);
+
+export const historicalDataChangesReviewSchema = z.strictObject({
+  operation: historicalBranchOperationSchema,
+  threadId: opaqueId,
+  sourceBranchId: opaqueId,
+  messageId: opaqueId,
+  domainCursorRef: domainCursorRefSchema,
+  safeToCompensate: z.array(agentActionDtoSchema).max(500),
+  conflicted: z.array(agentActionDtoSchema).max(500),
+  alreadyCompensated: z.array(agentActionDtoSchema).max(500),
+  nonUndoable: z.array(agentActionDtoSchema).max(500),
+  unrelatedActionCount: z.number().int().nonnegative(),
+  undoPreview: agentActionPreviewSchema.nullable(),
+  truncated: z.boolean(),
+});
+export type HistoricalDataChangesReview = z.infer<
+  typeof historicalDataChangesReviewSchema
+>;
+
 export const historicalBranchPreviewSchema = z.strictObject({
   operation: historicalBranchOperationSchema,
   threadId: opaqueId,
@@ -485,6 +661,7 @@ export const historicalBranchPreviewSchema = z.strictObject({
   messageId: opaqueId,
   conversationOnly: z.strictObject({ available: z.literal(true) }),
   workspaceCopy: historicalWorkspaceCopyPreviewSchema,
+  dataChanges: historicalDataChangesAvailabilitySchema,
 });
 export type HistoricalBranchPreview = z.infer<
   typeof historicalBranchPreviewSchema

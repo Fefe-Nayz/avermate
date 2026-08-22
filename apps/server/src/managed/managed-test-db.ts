@@ -45,6 +45,120 @@ export async function createManagedTestDatabase(
   await client.executeMultiple(
     migration.replaceAll("--> statement-breakpoint", ""),
   );
+  // Plan 039 tables are appended here until the repository-wide combined
+  // Drizzle migration is generated. Tests must exercise the real SQL service,
+  // not a mocked control plane.
+  await client.executeMultiple(`
+    CREATE TABLE managed_beta_invites (
+      id text PRIMARY KEY NOT NULL,
+      tokenDigest text NOT NULL UNIQUE,
+      emailDigest text,
+      cohort text NOT NULL,
+      region text NOT NULL,
+      capabilitiesJson text NOT NULL,
+      termsRevision text NOT NULL,
+      privacyRevision text NOT NULL,
+      status text DEFAULT 'issued' NOT NULL,
+      expiresAt integer NOT NULL,
+      createdByUserId text NOT NULL REFERENCES users(id),
+      redeemedByAccountId text REFERENCES users(id) ON DELETE SET NULL,
+      redeemedAt integer,
+      createdAt integer NOT NULL
+    );
+    CREATE TABLE managed_beta_waitlist (
+      id text PRIMARY KEY NOT NULL,
+      accountId text NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      preferredRegion text NOT NULL,
+      status text DEFAULT 'waiting' NOT NULL,
+      createdAt integer NOT NULL,
+      updatedAt integer NOT NULL
+    );
+    CREATE TABLE managed_beta_accounts (
+      accountId text PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      inviteId text REFERENCES managed_beta_invites(id) ON DELETE SET NULL,
+      cohort text NOT NULL,
+      region text NOT NULL,
+      state text DEFAULT 'active' NOT NULL,
+      acceptedTermsRevision text NOT NULL,
+      acceptedPrivacyRevision text NOT NULL,
+      managedDataConsent integer DEFAULT 0 NOT NULL,
+      consentedCategoriesJson text NOT NULL,
+      capabilitiesJson text NOT NULL,
+      policyRevision text NOT NULL,
+      activatedAt integer NOT NULL,
+      updatedAt integer NOT NULL
+    );
+    CREATE TABLE managed_quota_policies (
+      id text PRIMARY KEY NOT NULL,
+      scope text NOT NULL,
+      scopeId text NOT NULL,
+      capability text DEFAULT '*' NOT NULL,
+      period text NOT NULL,
+      hardLimit text NOT NULL,
+      concurrency integer NOT NULL,
+      enabled integer DEFAULT 1 NOT NULL,
+      revision text NOT NULL,
+      justification text NOT NULL,
+      updatedByUserId text NOT NULL REFERENCES users(id),
+      createdAt integer NOT NULL,
+      updatedAt integer NOT NULL,
+      UNIQUE(scope, scopeId, capability, period)
+    );
+    CREATE TABLE managed_operational_evidence (
+      id text PRIMARY KEY NOT NULL,
+      kind text NOT NULL,
+      environment text NOT NULL,
+      region text,
+      provider text,
+      releaseRevision text NOT NULL,
+      status text NOT NULL,
+      source text NOT NULL,
+      safeSummary text NOT NULL,
+      metricsJson text NOT NULL,
+      artifactDigest text,
+      reference text,
+      observedAt integer NOT NULL,
+      expiresAt integer,
+      createdByUserId text NOT NULL REFERENCES users(id),
+      createdAt integer NOT NULL
+    );
+    CREATE TABLE managed_incidents (
+      id text PRIMARY KEY NOT NULL,
+      title text NOT NULL,
+      safeSummary text NOT NULL,
+      severity text NOT NULL,
+      status text NOT NULL,
+      affectedCapabilitiesJson text NOT NULL,
+      provider text,
+      publiclyVisible integer DEFAULT 0 NOT NULL,
+      startedAt integer NOT NULL,
+      resolvedAt integer,
+      updatedByUserId text NOT NULL REFERENCES users(id),
+      createdAt integer NOT NULL,
+      updatedAt integer NOT NULL
+    );
+    CREATE TABLE managed_launch_gates (
+      key text PRIMARY KEY NOT NULL,
+      phase text NOT NULL,
+      status text NOT NULL,
+      evidenceId text REFERENCES managed_operational_evidence(id) ON DELETE SET NULL,
+      justification text NOT NULL,
+      updatedByUserId text NOT NULL REFERENCES users(id),
+      updatedAt integer NOT NULL
+    );
+    CREATE TABLE managed_billing_price_mappings (
+      provider text NOT NULL,
+      externalPriceRef text NOT NULL,
+      planRevision text NOT NULL,
+      currency text NOT NULL,
+      entitlementTemplateJson text NOT NULL,
+      active integer DEFAULT 0 NOT NULL,
+      createdByUserId text NOT NULL REFERENCES users(id),
+      createdAt integer NOT NULL,
+      PRIMARY KEY(provider, externalPriceRef),
+      UNIQUE(provider, planRevision)
+    );
+  `);
   for (const id of userIds) {
     await client.execute({
       sql: "INSERT INTO users (id) VALUES (?)",

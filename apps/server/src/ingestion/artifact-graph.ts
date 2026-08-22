@@ -15,12 +15,18 @@ import {
   manifestFromLegacyDocumentArtifact,
   type LegacyDocumentArtifactSnapshot,
 } from "./artifact-manifest";
-import { validateVideoTimeline, type TimelineReferenceResolver } from "./timeline";
+import {
+  validateVideoTimeline,
+  type TimelineReferenceResolver,
+} from "./timeline";
 import { artifactWorkflowPlan, stageInputDigest } from "./workflow";
 
 type SqlClient = Pick<Client, "execute" | "transaction">;
 
-async function execute(target: SqlClient | Transaction, statement: InStatement) {
+async function execute(
+  target: SqlClient | Transaction,
+  statement: InStatement,
+) {
   return target.execute(statement);
 }
 
@@ -82,7 +88,9 @@ export class CoreArtifactGraphStore {
       });
       if (existing.rows[0]) {
         if (String(existing.rows[0].inputDigest) !== inputDigest) {
-          throw new Error("Artifact idempotency key was reused with different input");
+          throw new Error(
+            "Artifact idempotency key was reused with different input",
+          );
         }
         await transaction.commit();
         return this.getRun(input.ownerId, runId);
@@ -92,7 +100,8 @@ export class CoreArtifactGraphStore {
           sql: `SELECT 1 FROM study_projects WHERE id = ? AND userId = ? AND deletedAt IS NULL LIMIT 1`,
           args: [input.projectId, input.ownerId],
         });
-        if (!project.rows[0]) throw new Error("The selected project is unavailable");
+        if (!project.rows[0])
+          throw new Error("The selected project is unavailable");
       }
       for (const sourceVersionId of sourceVersionIds) {
         const source = await execute(transaction, {
@@ -103,14 +112,16 @@ export class CoreArtifactGraphStore {
           `,
           args: [sourceVersionId, input.ownerId],
         });
-        if (!source.rows[0]) throw new Error("An artifact source revision is unavailable");
+        if (!source.rows[0])
+          throw new Error("An artifact source revision is unavailable");
       }
       for (const parentId of parentArtifactRevisionIds) {
         const parent = await execute(transaction, {
           sql: `SELECT 1 FROM generated_artifact_revisions WHERE id = ? AND userId = ? LIMIT 1`,
           args: [parentId, input.ownerId],
         });
-        if (!parent.rows[0]) throw new Error("An artifact parent revision is unavailable");
+        if (!parent.rows[0])
+          throw new Error("An artifact parent revision is unavailable");
       }
       const timestamp = now();
       await execute(transaction, {
@@ -230,15 +241,20 @@ export class CoreArtifactGraphStore {
           sql: `SELECT byteSize, mimeType FROM files WHERE id = ? AND userId = ? AND status = 'stored' LIMIT 1`,
           args: [input.output.fileId, input.ownerId],
         });
-        if (!file.rows[0]) throw new Error("Artifact output file is unavailable");
+        if (!file.rows[0])
+          throw new Error("Artifact output file is unavailable");
         if (
           input.output.bytes !== undefined &&
           Number(file.rows[0].byteSize) !== input.output.bytes
         ) {
-          throw new Error("Artifact output byte size does not match the owned file");
+          throw new Error(
+            "Artifact output byte size does not match the owned file",
+          );
         }
         if (String(file.rows[0].mimeType) !== input.output.mime) {
-          throw new Error("Artifact output MIME type does not match the owned file");
+          throw new Error(
+            "Artifact output MIME type does not match the owned file",
+          );
         }
       }
       const revisionResult = await execute(transaction, {
@@ -248,7 +264,9 @@ export class CoreArtifactGraphStore {
       const revision = Number(revisionResult.rows[0]?.current ?? 0) + 1;
       const artifactRevisionId = newId("garv");
       const kind = generatedArtifactKindSchema.parse(artifact.kind);
-      const parentIds = [...new Set(input.parentArtifactRevisionIds ?? [])].sort();
+      const parentIds = [
+        ...new Set(input.parentArtifactRevisionIds ?? []),
+      ].sort();
       const sourceIds = [...new Set(input.sourceVersionIds ?? [])].sort();
       const prepared = createArtifactManifest({
         artifactId: input.artifactId,
@@ -304,7 +322,9 @@ export class CoreArtifactGraphStore {
       }
       if (input.timeline) {
         if (kind !== "video-timeline") {
-          throw new Error("Only video-timeline revisions can own a timeline manifest");
+          throw new Error(
+            "Only video-timeline revisions can own a timeline manifest",
+          );
         }
         const validated = await validateVideoTimeline({
           ownerId: input.ownerId,
@@ -387,7 +407,8 @@ export class CoreArtifactGraphStore {
         input.expectedIdentityRevision,
       ],
     });
-    if (Number(result.rowsAffected) !== 1) throw new Error("Artifact changed elsewhere");
+    if (Number(result.rowsAffected) !== 1)
+      throw new Error("Artifact changed elsewhere");
     return { state: input.state };
   }
 
@@ -399,7 +420,9 @@ export class CoreArtifactGraphStore {
     const row = result.rows[0];
     if (!row) throw new Error("Artifact revision was not found");
     return Object.freeze({
-      manifest: generatedArtifactManifestV1Schema.parse(jsonValue(row.manifestJson)),
+      manifest: generatedArtifactManifestV1Schema.parse(
+        jsonValue(row.manifestJson),
+      ),
       digest: String(row.manifestDigest),
     });
   }
@@ -426,6 +449,9 @@ export class CoreArtifactGraphStore {
       placement: String(run.placement),
       placementRef: string(run.placementRef),
       reasonCode: string(run.reasonCode),
+      safeError: string(run.safeError),
+      createdAt: new Date(Number(run.createdAt) * 1_000).toISOString(),
+      updatedAt: new Date(Number(run.updatedAt) * 1_000).toISOString(),
       stages: stages.rows.map((stage) => ({
         id: String(stage.id),
         key: String(stage.key),
@@ -439,6 +465,7 @@ export class CoreArtifactGraphStore {
         unit: String(stage.unit),
         message: string(stage.message),
         reasonCode: string(stage.reasonCode),
+        safeError: string(stage.safeError),
         outputArtifactRevisionId: string(stage.outputArtifactRevisionId),
         jobId: string(stage.jobId),
       })),
@@ -472,11 +499,125 @@ export class CoreArtifactGraphStore {
     }));
   }
 
+  async listRuns(
+    ownerId: string,
+    input: {
+      projectId?: string | null;
+      artifactId?: string | null;
+      limit?: number;
+    } = {},
+  ) {
+    const limit = Math.max(1, Math.min(100, input.limit ?? 50));
+    const runs = await this.client.execute({
+      sql: `
+        SELECT run.*
+        FROM artifact_workflow_runs run
+        WHERE run.userId = ?
+          AND (? IS NULL OR run.projectId = ?)
+          AND (? IS NULL OR run.artifactId = ?)
+        ORDER BY run.updatedAt DESC, run.id
+        LIMIT ?
+      `,
+      args: [
+        ownerId,
+        input.projectId ?? null,
+        input.projectId ?? null,
+        input.artifactId ?? null,
+        input.artifactId ?? null,
+        limit,
+      ],
+    });
+
+    if (runs.rows.length === 0) return [];
+    const runIds = runs.rows.map((row) => String(row.id));
+    const placeholders = runIds.map(() => "?").join(", ");
+    const stages = await this.client.execute({
+      sql: `
+        SELECT * FROM artifact_workflow_stages
+        WHERE userId = ? AND runId IN (${placeholders})
+        ORDER BY runId, position
+      `,
+      args: [ownerId, ...runIds],
+    });
+    const stagesByRun = new Map<string, Array<(typeof stages.rows)[number]>>();
+    for (const stage of stages.rows) {
+      const runId = String(stage.runId);
+      const current = stagesByRun.get(runId) ?? [];
+      current.push(stage);
+      stagesByRun.set(runId, current);
+    }
+
+    return runs.rows.map((run) => ({
+      id: String(run.id),
+      artifactId: String(run.artifactId),
+      projectId: string(run.projectId),
+      kind: generatedArtifactKindSchema.parse(run.kind),
+      status: String(run.status),
+      workflowId: String(run.workflowId),
+      workflowVersion: Number(run.workflowVersion),
+      inputDigest: String(run.inputDigest),
+      placement: String(run.placement),
+      placementRef: string(run.placementRef),
+      reasonCode: string(run.reasonCode),
+      safeError: string(run.safeError),
+      createdAt: new Date(Number(run.createdAt) * 1_000).toISOString(),
+      updatedAt: new Date(Number(run.updatedAt) * 1_000).toISOString(),
+      stages: (stagesByRun.get(String(run.id)) ?? []).map((stage) => ({
+        id: String(stage.id),
+        key: String(stage.key),
+        position: Number(stage.position),
+        status: String(stage.status),
+        attempt: Number(stage.attempt),
+        placement: String(stage.placement),
+        processed: Number(stage.processed),
+        total: Number(stage.total),
+        unit: String(stage.unit),
+        message: string(stage.message),
+        reasonCode: string(stage.reasonCode),
+        safeError: string(stage.safeError),
+        outputArtifactRevisionId: string(stage.outputArtifactRevisionId),
+        jobId: string(stage.jobId),
+      })),
+    }));
+  }
+
+  async listRevisions(ownerId: string, artifactId: string) {
+    const result = await this.client.execute({
+      sql: `
+        SELECT revision.id, revision.revision, revision.kind, revision.state,
+          revision.manifestDigest, revision.outputFileId, revision.outputDigest,
+          revision.outputMime, revision.byteSize, revision.workflowRunId,
+          revision.createdAt, artifact.currentRevisionId
+        FROM generated_artifact_revisions revision
+        JOIN generated_artifacts artifact ON artifact.id = revision.artifactId
+        WHERE revision.artifactId = ? AND revision.userId = ?
+        ORDER BY revision.revision DESC
+      `,
+      args: [artifactId, ownerId],
+    });
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      revision: Number(row.revision),
+      kind: generatedArtifactKindSchema.parse(row.kind),
+      state: String(row.state),
+      manifestDigest: String(row.manifestDigest),
+      outputFileId: string(row.outputFileId),
+      outputDigest: String(row.outputDigest),
+      outputMime: String(row.outputMime),
+      byteSize: row.byteSize === null ? null : Number(row.byteSize),
+      workflowRunId: string(row.workflowRunId),
+      current: String(row.currentRevisionId ?? "") === String(row.id),
+      createdAt: new Date(Number(row.createdAt) * 1_000).toISOString(),
+    }));
+  }
+
   legacyManifest(input: LegacyDocumentArtifactSnapshot) {
     return manifestFromLegacyDocumentArtifact(input);
   }
 
-  private timelineResolver(target: SqlClient | Transaction): TimelineReferenceResolver {
+  private timelineResolver(
+    target: SqlClient | Transaction,
+  ): TimelineReferenceResolver {
     return {
       artifactRevision: async (ownerId, id) => {
         const result = await execute(target, {
@@ -516,4 +657,3 @@ export class CoreArtifactGraphStore {
 }
 
 export const coreArtifactGraphStore = new CoreArtifactGraphStore();
-

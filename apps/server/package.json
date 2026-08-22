@@ -17,11 +17,12 @@
     "migrate:legacy": "bun scripts/migrate-legacy.ts",
     "admin:set": "bun scripts/set-admin.ts",
     "sandbox:conformance": "bun scripts/sandbox-conformance.ts",
-    "sandbox:conformance:mock": "bun scripts/sandbox-conformance.ts --mock"
+    "sandbox:conformance:mock": "bun scripts/sandbox-conformance.ts --mock",
+    "verify:036:evaluation:live": "bun src/search/eval/run-live.ts"
   },
   "dependencies": {
     "@ag-ui/core": "0.0.58",
-    "@ai-sdk/openai-compatible": "3.0.34",
+    "@ai-sdk/openai-compatible": "3.0.35",
     "@alibaba-group/opensandbox": "0.1.11",
     "@avermate/agent-contracts": "workspace:*",
     "@avermate/core": "workspace:*",
@@ -40,7 +41,7 @@
     "@orpc/server": "^1.15.0",
     "@orpc/zod": "^1.15.0",
     "@t3-oss/env-core": "^0.13.11",
-    "ai": "7.0.76",
+    "ai": "7.0.77",
     "better-auth": "1.7.1",
     "better-upload": "2.0.3",
     "drizzle-orm": "^0.45.2",

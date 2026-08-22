@@ -1,9 +1,17 @@
-# Optional managed plane: technical shadow contract
+# Optional managed plane: shadow accounting and invite beta contract
 
 The repository contains the provider-neutral foundations for an optional
 Avermate-operated storage, inference and execution placement. This is a
 technical shadow implementation, not a paid product announcement. Checkout,
 the billing portal, charging and managed production dispatch are disabled.
+
+Plan 039 adds a guarded invite beta control plane and complete Web visibility;
+it does not change that commercial default. Admission binds an HMAC-digested,
+one-time invite to optional email, cohort, region, capability eligibility and
+exact terms/privacy revisions. The immutable account record stores explicit
+managed data-category consent. Revocation immediately blocks new managed
+dispatch and cancels queued reservations, while Core, export/delete, BYOK, Node
+and self-host stay available.
 
 The academic core, MCP, BYOK, user-owned Avermate Node and full self-host modes
 do not depend on this plane. A billing customer identifier never authorizes a
@@ -11,13 +19,15 @@ capability; only a versioned entitlement decision can do that.
 
 ## Runtime modes
 
-| Setting | Meaning |
-| --- | --- |
-| `MANAGED_ACCOUNTING_MODE=shadow` | Persist the entitlement decision, reservation and final usage, but record a would-block instead of denying ordinary quota decisions. Emergency disable still fails closed. |
-| `MANAGED_ACCOUNTING_MODE=enforce` | Enforce the published entitlement and concurrency limits. This is implemented for tests and controlled deployments; it is not a launch claim. |
-| `MANAGED_ADAPTERS_ENABLED=false` | Default. Operator-paid provider keys and managed placements cannot be selected in hosted production. |
-| `AVERMATE_DEPLOYMENT_MODE=full-self-host` | Create the local/self-host entitlement policy without contacting Avermate billing or telemetry. Instance-owned provider keys remain an operator choice. |
-| `MANAGED_REGION=<region>` | Filter the immutable model-policy catalogue by residency. It does not move existing data. |
+| Setting                                               | Meaning                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MANAGED_ACCOUNTING_MODE=shadow`                      | Persist the entitlement decision, reservation and final usage, but record a would-block instead of denying ordinary quota decisions. Emergency disable still fails closed.                                                        |
+| `MANAGED_ACCOUNTING_MODE=enforce`                     | Enforce the published entitlement and concurrency limits. This is implemented for tests and controlled deployments; it is not a launch claim.                                                                                     |
+| `MANAGED_ADAPTERS_ENABLED=false`                      | Default. Operator-paid provider keys and managed placements cannot be selected in hosted production.                                                                                                                              |
+| `AVERMATE_DEPLOYMENT_MODE=full-self-host`             | Create the local/self-host entitlement policy without contacting Avermate billing or telemetry. Instance-owned provider keys remain an operator choice.                                                                           |
+| `MANAGED_REGION=<region>`                             | Filter the immutable model-policy catalogue by residency. It does not move existing data.                                                                                                                                         |
+| `MANAGED_BETA_ENFORCEMENT_ENABLED=false`              | Default. Invitation, consent, cohort/capability eligibility and daily/monthly quota policies cannot silently activate operator-funded dispatch. A reviewed beta flips this only with exact capability/provider breakers in place. |
+| `MANAGED_TERMS_REVISION` / `MANAGED_PRIVACY_REVISION` | Exact revisions required at invitation redemption. A mismatch fails closed and requires a newly reviewed action.                                                                                                                  |
 
 `/ready` performs only database/schema/mode checks. It never calls a model,
 storage provider, sandbox or billing endpoint.
@@ -89,6 +99,28 @@ model-policy revisions, reconcile expired reservations, append adjustments,
 inspect non-content operational state and operate audited circuit breakers.
 There is deliberately no checkout or portal route.
 
+The user Web surface is Settings → AI & managed storage. It shows current
+placement mode, region/processors, explicit consent categories, authoritative
+normalized usage and limits, provider/breaker degradation, lifecycle receipts,
+managed metadata export and staged deletion. The plan comparison states that
+academic Core, data ownership, export/delete, BYOK, Node and self-host are not
+paid features. Deletion truthfully stays `pending_remote_deletion` until a
+verified placement receipt arrives.
+
+The role-gated operator surface is `/admin/managed`. It exposes invite/cohort
+state, managed-only account suspension, revisioned quota policies, breakers,
+reservation reconciliation, redacted incidents, non-content correlation,
+backup/restore freshness and evidence-bound launch gates. It has no support
+content viewer. `managed_operational_evidence.source` distinguishes repository
+fixtures, deployed drills, external attestations and operator observations;
+repository fixtures cannot pass a gate.
+
+The billing contract includes a signed, bounded deterministic test-mode adapter
+whose only navigation targets use the reserved `.invalid` domain. Billing
+webhook/subscription rows and immutable external-price mappings remain
+observations. They never grant an entitlement. There is no production checkout
+route or activation environment variable in this beta.
+
 ## Verification and current release blockers
 
 Run `bun run verify:034`. Its aggregate executes every sub-gate and reports all
@@ -121,3 +153,10 @@ matrix; the test-only mock is rejected. The restore runner exercises a clean
 logical database/object-manifest fixture and labels its timing as repository
 fixture evidence. Real provider backups, object versions, key recovery and
 deployment RPO/RTO still require an environment-specific drill before launch.
+
+The same is true for Plan 039: the checked-in control-plane and Web tests prove
+repository behavior, not production isolation, processor terms, on-call
+staffing, alert delivery, load, backup/restore or billing-provider readiness.
+Those states must remain visibly blocked until exact deployed evidence is
+attached and reviewed. `checkoutEnabled`, `billingEnabled` and `launchReady`
+remain `false` regardless of fixture or operator gate state.

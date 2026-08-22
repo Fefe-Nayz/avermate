@@ -162,6 +162,37 @@ describe("owned study projects and corpus API", () => {
     expect(status.source.status).toBe("ready");
     expect(status.lexical.available).toBe(true);
 
+    const indexedProject = await apiA.projects.get({
+      projectId: String(project.id),
+    });
+    expect(indexedProject.items[0]).toMatchObject({
+      trackingMode: "follow-head",
+      selectorReviewRequired: false,
+    });
+    expect(indexedProject.items[0]!.sourceVersionId).toBeString();
+    const pinned = await apiA.projects.setItemTracking({
+      projectId: String(project.id),
+      itemId: indexedProject.items[0]!.id,
+      trackingMode: "pinned",
+    });
+    expect(pinned.item).toMatchObject({
+      trackingMode: "pinned",
+      sourceVersionId: indexedProject.items[0]!.currentVersionId,
+    });
+    await expect(
+      apiB.projects.setItemTracking({
+        projectId: String(project.id),
+        itemId: indexedProject.items[0]!.id,
+        trackingMode: "follow-head",
+      }),
+    ).rejects.toThrow("not found");
+    const followed = await apiA.projects.setItemTracking({
+      projectId: String(project.id),
+      itemId: indexedProject.items[0]!.id,
+      trackingMode: "follow-head",
+    });
+    expect(followed.item?.trackingMode).toBe("follow-head");
+
     const search = await apiA.projects.search({
       query: "cinétique",
       mode: "terms",
@@ -341,26 +372,26 @@ describe("owned study projects and corpus API", () => {
     });
 
     const first = await runCorpusEmbeddingUnavailableJob(
-      {},
+      { ownerId: userA },
       { runtime: { embedding, vector } },
     );
     expect(first).toMatchObject({
       stage: "activated",
-      embedded: first.chunks,
-      reused: 0,
+      vectors: first.chunks,
+      versions: 1,
     });
     expect(first.chunks).toBeGreaterThan(0);
     expect(storedPoints).toHaveLength(first.chunks);
 
     const second = await runCorpusEmbeddingUnavailableJob(
-      {},
+      { ownerId: userA },
       { runtime: { embedding, vector } },
     );
     expect(second).toMatchObject({
       stage: "activated",
       chunks: first.chunks,
-      embedded: 0,
-      reused: first.chunks,
+      vectors: first.chunks,
+      versions: 1,
     });
     expect(embeddingCalls).toBe(1);
     expect(aliasActivations).toBe(2);

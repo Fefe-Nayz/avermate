@@ -2,7 +2,7 @@ import { env } from "./env";
 import {
   markServiceKeyInvalid,
   operatorServiceKeysEnabled,
-  resolveServiceKey,
+  resolveProviderServiceKey,
   type ResolvedServiceKey,
 } from "./service-keys";
 import {
@@ -41,6 +41,8 @@ export interface MistralSpeechOptions {
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam. Production resolves the sealed user key, then operator key. */
   key?: string;
+  /** Test seam; production always requests the exact Mistral route. */
+  resolveCredential?: typeof resolveProviderServiceKey;
   model?: string;
   voiceId?: string | null;
   /** Durable run/job id used to make managed accounting idempotent. */
@@ -59,7 +61,7 @@ export async function textToSpeechEnabled(userId?: string) {
   if (!userId) {
     return operatorServiceKeysEnabled() && Boolean(env.MISTRAL_API_KEY?.trim());
   }
-  return Boolean(await resolveServiceKey(userId, "mistral"));
+  return Boolean(await resolveProviderServiceKey(userId, "mistral", "mistral"));
 }
 
 function abortReason(signal?: AbortSignal) {
@@ -293,7 +295,11 @@ export async function runMistralTextToSpeech(
   }
   const credential = options.key
     ? credentialForTests(options.key)
-    : await resolveServiceKey(userId, "mistral");
+    : await (options.resolveCredential ?? resolveProviderServiceKey)(
+        userId,
+        "mistral",
+        "mistral",
+      );
   if (!credential) {
     throw new Error(
       "Podcast generation is not configured. Add a Mistral key in Settings → Integrations.",

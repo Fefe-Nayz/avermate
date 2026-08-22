@@ -80,6 +80,7 @@ beforeAll(async () => {
       endpointUrl TEXT NOT NULL,
       endpointOrigin TEXT NOT NULL,
       placement TEXT NOT NULL,
+      placementRef TEXT,
       authKind TEXT NOT NULL,
       sealedCredential TEXT,
       credentialHint TEXT,
@@ -137,6 +138,7 @@ describe("custom MCP connection lifecycle", () => {
     })
 
     expect(created.status).toBe("review-required")
+    expect(created.placementRef).toBeNull()
     expect(created.credentialHint).toBe("cret")
     expect(created.tools[0]?.enabled).toBe(false)
     expect(JSON.stringify(created)).not.toContain("private-bearer-secret")
@@ -186,6 +188,38 @@ describe("custom MCP connection lifecycle", () => {
     await expect(
       service.remove("owner-b", created.id)
     ).rejects.toThrow("not found")
+  })
+
+  test("keeps a node connection owner-scoped and immutably node-bound", async () => {
+    const { CustomMcpService } = await import("./custom-mcp-service")
+    const remote = new FakeRemoteMcpClient()
+    const database = drizzle(client, { schema })
+    const service = new CustomMcpService(remote, database)
+    const created = await service.create({
+      ownerId: "owner-a",
+      name: "LAN MCP",
+      endpointUrl: "http://mcp.internal/mcp",
+      placement: "node",
+      nodeId: "node-owner-a",
+      authKind: "none",
+    })
+    expect(created.placementRef).toBe("node-owner-a")
+    expect(remote.connections[0]).toMatchObject({
+      ownerId: "owner-a",
+      placementRef: "node-owner-a",
+    })
+    await expect(
+      service.refresh({ ownerId: "owner-b", sourceId: created.id })
+    ).rejects.toThrow("not found")
+    await expect(
+      service.create({
+        ownerId: "owner-a",
+        name: "Missing binding",
+        endpointUrl: "http://other.internal/mcp",
+        placement: "node",
+        authKind: "none",
+      })
+    ).rejects.toThrow("paired Node")
   })
 
   test("invalidates enablement when the remote catalogue changes", async () => {

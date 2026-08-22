@@ -23,8 +23,8 @@
 
 ## Status
 
-- **Status**: IMPLEMENTED, TARGETED GATES GREEN — baseline ratification in plan
-  025 remains a hard dependency
+- **Status**: DONE (repository) — release publication inherits plan 025's
+  licence decision and post-commit clean-clone evidence
 - **Priority**: P0
 - **Effort**: M–L
 - **Risk**: HIGH
@@ -32,7 +32,7 @@
 - **Blocks**: 027, 028, 029, 030, 031 and 032
 - **Category**: architecture, protocol, security, dependency spike
 - **Planned at**: 2026-08-22, branch `rewrite`
-- **Planning baseline**: replace `37f0aff` with plan 025's clean baseline SHA
+- **Planning baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
 
 ### Implementation checkpoint (2026-08-22)
 
@@ -41,15 +41,15 @@ fork spike, model gateway normalization, endpoint policy and development Web
 projection are implemented. The following commands were rerun against the
 current working tree:
 
-- `bun run --cwd packages/agent-contracts test`: **47 passed, 0 failed**;
-- `bun run --cwd apps/server test src/agent`: **31 passed, 0 failed**;
-- `bun run --cwd apps/web test src/components/assistant-spike`: the Web package
-  script exercised its full `src` suite, **805 passed, 0 failed**.
+- `bun run --cwd packages/agent-contracts test`: **54 passed, 0 failed**;
+- `bun run --cwd apps/server test src/agent`: **34 passed, 0 failed**;
+- the focused assistant/project/media/settings Web wave passes **59 tests with
+  0 failures**, and the production/dictation Playwright slice passes **2 of 2**.
 
 These are targeted implementation proofs, not a substitute for plan 025's
-final global, migration and clean-clone acceptance. The placeholder baseline
-cannot be replaced and this plan must not be marked release-complete until that
-dependency is ratified.
+maintainer licence decision or a post-commit clean-clone acceptance run. The
+repository implementation is complete; those two external release gates remain
+independent.
 
 ## Scope
 

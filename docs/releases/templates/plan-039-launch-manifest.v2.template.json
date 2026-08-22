@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 2,
+  "manifestType": "avermate.plan-039.launch-evidence",
+  "policyVersion": "plan-039-launch-v2",
+  "plan": "039",
+  "templateOnly": true,
+  "release": {
+    "revision": "REPLACE_WITH_EXACT_RELEASE_REVISION",
+    "checkoutDigest": "REPLACE_WITH_GATE_REPORTED_SHA256"
+  },
+  "deployment": {
+    "environmentDigest": "REPLACE_WITH_ENVIRONMENT_SHA256",
+    "configurationArtifactPath": "redacted-managed-config.json",
+    "configurationDigest": "REPLACE_WITH_REDACTED_CONFIG_SHA256"
+  },
+  "expectations": {
+    "airgapRequired": false
+  },
+  "evidence": [
+    {
+      "schemaVersion": 1,
+      "policyVersion": "plan-039-launch-v2",
+      "kind": "REPLACE_WITH_PLAN_039_KIND_AND_DUPLICATE_FOR_REQUIRED_KINDS",
+      "status": "passed",
+      "source": "deployed-drill",
+      "releaseRevision": "REPLACE_WITH_EXACT_RELEASE_REVISION",
+      "checkoutDigest": "REPLACE_WITH_CHECKOUT_SHA256",
+      "configurationDigest": "REPLACE_WITH_REDACTED_CONFIG_SHA256",
+      "environmentDigest": "REPLACE_WITH_ENVIRONMENT_SHA256",
+      "artifactPath": "artifacts/REPLACE_WITH_KIND.json",
+      "artifactDigest": "REPLACE_WITH_RESULT_ARTIFACT_SHA256",
+      "runId": "REPLACE_WITH_IMMUTABLE_RUN_ID",
+      "attestor": "REPLACE_WITH_NAMED_OPERATOR_OR_CI_IDENTITY",
+      "observedAt": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+      "expiresAt": "REPLACE_WITH_ISO_8601_TIMESTAMP_WITHIN_31_DAYS",
+      "measurements": {
+        "REPLACE_WITH_THE_EXACT_TYPED_MEASUREMENTS_FROM_THE_CONTRACT": true
+      }
+    }
+  ]
+}

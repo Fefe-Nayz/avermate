@@ -1,6 +1,8 @@
 import {
   sandboxFileManifestEntrySchema,
   sandboxHandleSchema,
+  sandboxRuntimeCheckpointCapabilitiesSchema,
+  sandboxRuntimeCheckpointRefV1Schema,
   sandboxWorkspaceSnapshotRefSchema,
   type SandboxBaselineEvidence,
   type SandboxCapabilities,
@@ -16,6 +18,9 @@ import {
   type SandboxPreflightResult,
   type SandboxProvider,
   type SandboxProviderId,
+  type SandboxRuntimeCheckpointCapabilities,
+  type SandboxRuntimeCheckpointCompatibilityV1,
+  type SandboxRuntimeCheckpointRefV1,
   type SandboxWorkspaceSnapshotRef,
 } from "@avermate/agent-contracts";
 import { createHash } from "node:crypto";
@@ -30,25 +35,52 @@ export interface RemoteSandboxTransport {
     isolationClass: SandboxIsolationClass;
     expectedHostPolicyDigest: string;
   }): Promise<SandboxBaselineEvidence>;
-  create(input: SandboxCreateInput & {
-    evidence: SandboxBaselineEvidence;
-    isolationClass: SandboxIsolationClass;
-  }): Promise<{ sandboxId: string }>;
+  create(
+    input: SandboxCreateInput & {
+      evidence: SandboxBaselineEvidence;
+      isolationClass: SandboxIsolationClass;
+    },
+  ): Promise<{ sandboxId: string }>;
   execute(input: SandboxExecuteInput): AsyncIterable<SandboxExecutionEvent>;
-  putFiles(handle: SandboxHandle, files: readonly SandboxInputFile[]): Promise<void>;
+  putFiles(
+    handle: SandboxHandle,
+    files: readonly SandboxInputFile[],
+  ): Promise<void>;
   getFiles(
     handle: SandboxHandle,
     paths: readonly string[],
   ): Promise<readonly SandboxFileManifestEntry[]>;
-  readFile(handle: SandboxHandle, relativePath: string): AsyncIterable<Uint8Array>;
-  snapshotWorkspace(handle: SandboxHandle): Promise<SandboxWorkspaceSnapshotRef>;
-  forkWorkspace(input: SandboxCreateInput & {
-    source: SandboxWorkspaceSnapshotRef;
-    evidence: SandboxBaselineEvidence;
-    isolationClass: SandboxIsolationClass;
-  }): Promise<{ sandboxId: string }>;
+  readFile(
+    handle: SandboxHandle,
+    relativePath: string,
+  ): AsyncIterable<Uint8Array>;
+  snapshotWorkspace(
+    handle: SandboxHandle,
+  ): Promise<SandboxWorkspaceSnapshotRef>;
+  forkWorkspace(
+    input: SandboxCreateInput & {
+      source: SandboxWorkspaceSnapshotRef;
+      evidence: SandboxBaselineEvidence;
+      isolationClass: SandboxIsolationClass;
+    },
+  ): Promise<{ sandboxId: string }>;
   stop(handle: SandboxHandle): Promise<void>;
   destroy(handle: SandboxHandle): Promise<void>;
+  runtimeCheckpointCapabilities?(): Promise<SandboxRuntimeCheckpointCapabilities>;
+  captureRuntimeCheckpoint?(input: {
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: Date;
+  }): Promise<SandboxRuntimeCheckpointRefV1>;
+  restoreRuntimeCheckpoint?(input: {
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }): Promise<{ sandboxId: string }>;
+  deleteRuntimeCheckpoint?(
+    checkpoint: SandboxRuntimeCheckpointRefV1,
+  ): Promise<void>;
 }
 
 export interface EvidenceGatedRemoteProviderConfig {
@@ -71,7 +103,9 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
 
   constructor(protected readonly config: EvidenceGatedRemoteProviderConfig) {
     this.id = config.providerId;
-    this.#profiles = new Map(config.profiles.map((profile) => [profile.id, profile]));
+    this.#profiles = new Map(
+      config.profiles.map((profile) => [profile.id, profile]),
+    );
   }
 
   async capabilities(): Promise<SandboxCapabilities> {
@@ -95,7 +129,9 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
     return { providerId: this.id, available: profiles.length > 0, profiles };
   }
 
-  async preflight(input: SandboxPreflightInput): Promise<SandboxPreflightResult> {
+  async preflight(
+    input: SandboxPreflightInput,
+  ): Promise<SandboxPreflightResult> {
     const configured = this.#profiles.get(input.profile.id);
     if (
       !configured ||
@@ -106,7 +142,8 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
       return {
         ok: false,
         reason: "PROFILE_DISABLED",
-        message: "The exact execution profile and image are not enabled for this provider.",
+        message:
+          "The exact execution profile and image are not enabled for this provider.",
       };
     }
     if (!this.config.transport) {
@@ -120,7 +157,8 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
       return {
         ok: false,
         reason: "EVIDENCE_FAILED",
-        message: "The requested host policy does not match provider configuration.",
+        message:
+          "The requested host policy does not match provider configuration.",
       };
     }
     try {
@@ -135,7 +173,10 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
         request: input,
         evidence,
       });
-      if (result.ok && result.evidence.isolationClass !== this.config.isolationClass) {
+      if (
+        result.ok &&
+        result.evidence.isolationClass !== this.config.isolationClass
+      ) {
         return {
           ok: false,
           reason: "ISOLATION_NOT_ALLOWED",
@@ -147,7 +188,10 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
       return {
         ok: false,
         reason: "TRANSPORT_UNAVAILABLE",
-        message: cause instanceof Error ? cause.message : "Provider evidence probe failed.",
+        message:
+          cause instanceof Error
+            ? cause.message
+            : "Provider evidence probe failed.",
       };
     }
   }
@@ -164,37 +208,59 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
     return this.buildHandle(input, created.sandboxId, evidence);
   }
 
-  async *execute(input: SandboxExecuteInput): AsyncIterable<SandboxExecutionEvent> {
+  async *execute(
+    input: SandboxExecuteInput,
+  ): AsyncIterable<SandboxExecutionEvent> {
     const profile = this.assertHandle(input.handle);
     assertExecutionPolicy({ ...input, profile });
     yield* this.requireTransport().execute(input);
   }
 
-  async putFiles(handle: SandboxHandle, files: readonly SandboxInputFile[]): Promise<void> {
+  async putFiles(
+    handle: SandboxHandle,
+    files: readonly SandboxInputFile[],
+  ): Promise<void> {
     const profile = this.assertHandle(handle);
     let bytes = 0;
     const seen = new Set<string>();
     for (const file of files) {
       assertSafeRelativePath(file.relativePath);
       if (!file.relativePath.startsWith("input/")) {
-        throw new SandboxPolicyError("filesystem", "Uploaded inputs must stay under input/.");
+        throw new SandboxPolicyError(
+          "filesystem",
+          "Uploaded inputs must stay under input/.",
+        );
       }
-      const folded = file.relativePath.normalize("NFC").toLocaleLowerCase("en-US");
+      const folded = file.relativePath
+        .normalize("NFC")
+        .toLocaleLowerCase("en-US");
       if (seen.has(folded)) {
-        throw new SandboxPolicyError("filesystem", "Input paths collide after normalization.");
+        throw new SandboxPolicyError(
+          "filesystem",
+          "Input paths collide after normalization.",
+        );
       }
       seen.add(folded);
       const digest = `sha256:${createHash("sha256").update(file.bytes).digest("hex")}`;
       if (digest !== file.digest) {
-        throw new SandboxPolicyError("filesystem", `Input digest mismatch for ${file.relativePath}.`);
+        throw new SandboxPolicyError(
+          "filesystem",
+          `Input digest mismatch for ${file.relativePath}.`,
+        );
       }
       bytes += file.bytes.byteLength;
     }
     if (bytes > profile.resources.workspaceBytes) {
-      throw new SandboxPolicyError("resource", "Input files exceed the workspace ceiling.");
+      throw new SandboxPolicyError(
+        "resource",
+        "Input files exceed the workspace ceiling.",
+      );
     }
     if (files.length > profile.resources.fileCount) {
-      throw new SandboxPolicyError("resource", "Input batch exceeds the file-count ceiling.");
+      throw new SandboxPolicyError(
+        "resource",
+        "Input batch exceeds the file-count ceiling.",
+      );
     }
     await this.requireTransport().putFiles(handle, files);
   }
@@ -205,11 +271,16 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
   ): Promise<readonly SandboxFileManifestEntry[]> {
     const profile = this.assertHandle(handle);
     if (paths.length > profile.resources.fileCount) {
-      throw new SandboxPolicyError("resource", "Requested manifest exceeds the file-count ceiling.");
+      throw new SandboxPolicyError(
+        "resource",
+        "Requested manifest exceeds the file-count ceiling.",
+      );
     }
     paths.forEach(assertSafeRelativePath);
     const manifest = await this.requireTransport().getFiles(handle, paths);
-    const parsed = manifest.map((entry) => sandboxFileManifestEntrySchema.parse(entry));
+    const parsed = manifest.map((entry) =>
+      sandboxFileManifestEntrySchema.parse(entry),
+    );
     const total = parsed.reduce((sum, entry) => sum + entry.byteSize, 0);
     const outputTotal = parsed
       .filter((entry) => entry.relativePath.startsWith("output/"))
@@ -219,31 +290,48 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
       total > profile.resources.workspaceBytes ||
       outputTotal > profile.resources.outputBytes
     ) {
-      throw new SandboxPolicyError("resource", "Provider manifest exceeds profile ceilings.");
+      throw new SandboxPolicyError(
+        "resource",
+        "Provider manifest exceeds profile ceilings.",
+      );
     }
     return parsed;
   }
 
-  async *readFile(handle: SandboxHandle, relativePath: string): AsyncIterable<Uint8Array> {
+  async *readFile(
+    handle: SandboxHandle,
+    relativePath: string,
+  ): AsyncIterable<Uint8Array> {
     const profile = this.assertHandle(handle);
     assertSafeRelativePath(relativePath);
     const ceiling = relativePath.startsWith("output/")
       ? profile.resources.outputBytes
       : profile.resources.workspaceBytes;
     let total = 0;
-    for await (const chunk of this.requireTransport().readFile(handle, relativePath)) {
+    for await (const chunk of this.requireTransport().readFile(
+      handle,
+      relativePath,
+    )) {
       if (!(chunk instanceof Uint8Array)) {
-        throw new SandboxPolicyError("filesystem", "Provider returned a non-byte file chunk.");
+        throw new SandboxPolicyError(
+          "filesystem",
+          "Provider returned a non-byte file chunk.",
+        );
       }
       total += chunk.byteLength;
       if (total > ceiling) {
-        throw new SandboxPolicyError("resource", "Provider file stream exceeds profile ceilings.");
+        throw new SandboxPolicyError(
+          "resource",
+          "Provider file stream exceeds profile ceilings.",
+        );
       }
       yield chunk;
     }
   }
 
-  async snapshotWorkspace(handle: SandboxHandle): Promise<SandboxWorkspaceSnapshotRef> {
+  async snapshotWorkspace(
+    handle: SandboxHandle,
+  ): Promise<SandboxWorkspaceSnapshotRef> {
     this.assertHandle(handle);
     const snapshot = sandboxWorkspaceSnapshotRefSchema.parse(
       await this.requireTransport().snapshotWorkspace(handle),
@@ -286,6 +374,63 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
     await this.requireTransport().destroy(handle);
   }
 
+  async runtimeCheckpointCapabilities(): Promise<SandboxRuntimeCheckpointCapabilities> {
+    const transport = this.requireTransport();
+    if (!transport.runtimeCheckpointCapabilities) {
+      return { available: false, reason: "provider-unsupported" };
+    }
+    return sandboxRuntimeCheckpointCapabilitiesSchema.parse(
+      await transport.runtimeCheckpointCapabilities(),
+    );
+  }
+
+  async captureRuntimeCheckpoint(input: {
+    handle: SandboxHandle;
+    sourceWorkspaceSnapshot: SandboxWorkspaceSnapshotRef;
+    compatibility: SandboxRuntimeCheckpointCompatibilityV1;
+    idempotencyKey: string;
+    expiresAt: Date;
+  }): Promise<SandboxRuntimeCheckpointRefV1> {
+    this.assertHandle(input.handle);
+    const transport = this.requireTransport();
+    if (!transport.captureRuntimeCheckpoint) {
+      throw new SandboxUnavailableError(
+        "SNAPSHOT_INCOMPATIBLE",
+        "Provider-native runtime checkpoints are unavailable.",
+      );
+    }
+    return sandboxRuntimeCheckpointRefV1Schema.parse(
+      await transport.captureRuntimeCheckpoint(input),
+    );
+  }
+
+  async restoreRuntimeCheckpoint(input: {
+    create: SandboxCreateInput;
+    checkpoint: SandboxRuntimeCheckpointRefV1;
+  }): Promise<SandboxHandle> {
+    this.assertLifetime(input.create);
+    const transport = this.requireTransport();
+    if (!transport.restoreRuntimeCheckpoint) {
+      throw new SandboxUnavailableError(
+        "SNAPSHOT_INCOMPATIBLE",
+        "Provider-native runtime checkpoints are unavailable.",
+      );
+    }
+    const evidence = await this.requirePreflight(input.create);
+    const restored = await transport.restoreRuntimeCheckpoint(input);
+    return this.buildHandle(input.create, restored.sandboxId, evidence);
+  }
+
+  async deleteRuntimeCheckpoint(
+    checkpoint: SandboxRuntimeCheckpointRefV1,
+  ): Promise<void> {
+    const transport = this.requireTransport();
+    if (!transport.deleteRuntimeCheckpoint) return;
+    await transport.deleteRuntimeCheckpoint(
+      sandboxRuntimeCheckpointRefV1Schema.parse(checkpoint),
+    );
+  }
+
   protected assertHandle(handle: SandboxHandle): SandboxExecutionProfile {
     const parsed = sandboxHandleSchema.parse(handle);
     const profile = this.#profiles.get(parsed.profileId);
@@ -301,14 +446,18 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
       );
     }
     if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
-      throw new SandboxUnavailableError("EVIDENCE_STALE", "Sandbox handle has expired.");
+      throw new SandboxUnavailableError(
+        "EVIDENCE_STALE",
+        "Sandbox handle has expired.",
+      );
     }
     return profile;
   }
 
   private async requirePreflight(input: SandboxPreflightInput) {
     const result = await this.preflight(input);
-    if (!result.ok) throw new SandboxUnavailableError(result.reason, result.message);
+    if (!result.ok)
+      throw new SandboxUnavailableError(result.reason, result.message);
     return result.evidence;
   }
 
@@ -344,7 +493,11 @@ export class EvidenceGatedRemoteSandboxProvider implements SandboxProvider {
   private assertLifetime(input: SandboxCreateInput): void {
     const now = input.now ?? new Date();
     const lifetime = input.expiresAt.getTime() - now.getTime();
-    if (!Number.isFinite(lifetime) || lifetime <= 0 || lifetime > 24 * 60 * 60_000) {
+    if (
+      !Number.isFinite(lifetime) ||
+      lifetime <= 0 ||
+      lifetime > 24 * 60 * 60_000
+    ) {
       throw new SandboxPolicyError(
         "resource",
         "Sandbox lifetime must be positive and no greater than 24 hours.",

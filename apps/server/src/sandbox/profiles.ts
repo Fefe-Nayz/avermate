@@ -13,8 +13,13 @@ const imageDigests = {
   browser: `sha256:${"3".repeat(64)}`,
   slides: `sha256:${"4".repeat(64)}`,
   media: `sha256:${"5".repeat(64)}`,
+  "video-audio": `sha256:${"a".repeat(64)}`,
+  ocr: `sha256:${"b".repeat(64)}`,
+  "speech-to-text": `sha256:${"c".repeat(64)}`,
   manim: `sha256:${"6".repeat(64)}`,
   "image-builder": `sha256:${"7".repeat(64)}`,
+  opencode: `sha256:${"8".repeat(64)}`,
+  openhands: `sha256:${"9".repeat(64)}`,
 } satisfies Record<SandboxProfileId, string>;
 
 function profile(input: {
@@ -131,7 +136,10 @@ export const SANDBOX_PROFILES_V1 = {
   }),
   media: profile({
     id: "media",
-    entrypoints: ["/opt/avermate/bin/media-build"],
+    entrypoints: [
+      "/opt/avermate/bin/media-build",
+      "/opt/avermate/bin/corpus-derivatives",
+    ],
     outputGlobs: [
       "output/*.mp3",
       "output/*.wav",
@@ -154,6 +162,60 @@ export const SANDBOX_PROFILES_V1 = {
       maxWidth: 3_840,
       maxHeight: 2_160,
       maxStreams: 8,
+    },
+  }),
+  "video-audio": profile({
+    id: "video-audio",
+    entrypoints: ["/opt/avermate/bin/media-build"],
+    outputGlobs: ["output/*.mp3", "output/*.json"],
+    memoryBytes: 2 * GIB,
+    wallTimeMs: 15 * 60_000,
+    outputBytes: 128 * MIB,
+    workspaceBytes: 4 * GIB,
+    workload: {
+      kind: "video-audio",
+      networkDuringRun: false,
+      provider: "youtube",
+      outputCodec: "mp3-mono-16khz",
+      segmentSecondsMin: 60,
+      segmentSecondsMax: 20 * 60,
+      maximumSegmentBytes: 32 * MIB,
+      maxDurationSeconds: 4 * 60 * 60,
+    },
+  }),
+  ocr: profile({
+    id: "ocr",
+    entrypoints: ["/opt/avermate/bin/local-ocr"],
+    outputGlobs: ["output/*.json"],
+    memoryBytes: 2 * GIB,
+    wallTimeMs: 30 * 60_000,
+    outputBytes: 3 * MIB,
+    workspaceBytes: 512 * MIB,
+    workload: {
+      kind: "ocr",
+      networkDuringRun: false,
+      engines: ["tesseract", "poppler"],
+      maxPages: 300,
+      maxPixelsPerPage: 16_777_216,
+      maxTotalPixels: 1_000_000_000,
+    },
+  }),
+  "speech-to-text": profile({
+    id: "speech-to-text",
+    entrypoints: ["/opt/avermate/bin/local-transcription"],
+    outputGlobs: ["output/*.json"],
+    cpuMillis: 64_000,
+    memoryBytes: 8 * GIB,
+    wallTimeMs: 2 * 60 * 60_000,
+    outputBytes: 8 * MIB,
+    workspaceBytes: 512 * MIB,
+    workload: {
+      kind: "speech-to-text",
+      networkDuringRun: false,
+      engine: "whisper.cpp",
+      timestampSegments: true,
+      maxDurationSeconds: 2 * 60 * 60,
+      maxInputBytes: 32 * MIB,
     },
   }),
   manim: profile({
@@ -187,6 +249,36 @@ export const SANDBOX_PROFILES_V1 = {
       requireSignature: true,
     },
   }),
+  opencode: profile({
+    id: "opencode",
+    entrypoints: ["/opt/avermate/bin/opencode", "/usr/bin/git"],
+    outputGlobs: ["output/**"],
+    memoryBytes: 4 * GIB,
+    wallTimeMs: 30 * 60_000,
+    outputBytes: 128 * MIB,
+    workspaceBytes: 4 * GIB,
+    workload: {
+      kind: "opencode",
+      reviewedCommandCatalogue: true,
+      arbitraryHostCommands: false,
+      canonicalHistoryImported: false,
+    },
+  }),
+  openhands: profile({
+    id: "openhands",
+    entrypoints: ["/opt/avermate/bin/openhands", "/usr/bin/git"],
+    outputGlobs: ["output/**"],
+    memoryBytes: 4 * GIB,
+    wallTimeMs: 30 * 60_000,
+    outputBytes: 128 * MIB,
+    workspaceBytes: 4 * GIB,
+    workload: {
+      kind: "openhands",
+      reviewedCommandCatalogue: true,
+      arbitraryHostCommands: false,
+      canonicalHistoryImported: false,
+    },
+  }),
 } satisfies Readonly<Record<SandboxProfileId, SandboxExecutionProfile>>;
 
 export function enableSandboxProfile(
@@ -200,6 +292,7 @@ export function enableSandboxProfile(
   },
 ): SandboxExecutionProfile {
   const base = SANDBOX_PROFILES_V1[id];
+  const egress = input.egress ?? base.egress;
   return sandboxExecutionProfileSchema.parse({
     ...base,
     version: input.version,
@@ -208,8 +301,15 @@ export function enableSandboxProfile(
       imageDigest: input.imageDigest,
       profileVersion: input.version,
     },
-    egress: input.egress ?? base.egress,
+    egress,
     allowSecrets: input.allowSecrets ?? false,
     resources: { ...base.resources, ...input.resources },
+    workload:
+      "networkDuringRun" in base.workload
+        ? {
+            ...base.workload,
+            networkDuringRun: egress.mode === "allowlist",
+          }
+        : base.workload,
   });
 }

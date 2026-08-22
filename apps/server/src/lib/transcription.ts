@@ -2,7 +2,7 @@ import { env } from "./env";
 import {
   markServiceKeyInvalid,
   operatorServiceKeysEnabled,
-  resolveServiceKey,
+  resolveProviderServiceKey,
   type ResolvedServiceKey,
 } from "./service-keys";
 import {
@@ -10,6 +10,10 @@ import {
   settleManagedProviderUsage,
   usesManagedOperatorSpend,
 } from "../usage/managed-provider-accounting";
+import {
+  runPairedNodeTranscription,
+  selectedNodeDocumentAi,
+} from "../node/document-ai";
 
 /**
  * Mistral audio transcription contract, verified against the current API docs:
@@ -45,12 +49,15 @@ export interface TranscriptionResult {
 }
 
 export interface TranscriptionProvider {
-  id: "mistral" | "openai";
+  id: "mistral" | "openai" | "node-local";
+  /** Exact provider model, including the attested revision for local Node. */
+  model: string;
   transcribeSegment(input: {
     blob: Blob;
     mimeType: string;
     language?: string;
     operationId?: string;
+    attempt?: number;
     maximumSeconds?: number;
     signal?: AbortSignal;
   }): Promise<TranscriptionResult>;
@@ -61,6 +68,8 @@ export interface MistralTranscriptionOptions {
   sleep?: (milliseconds: number) => Promise<void>;
   /** Test seam. Production resolves the sealed user key, then operator key. */
   key?: string;
+  /** Test seam; production always requests the exact Mistral route. */
+  resolveCredential?: typeof resolveProviderServiceKey;
   maxBytes?: number;
   model?: string;
   /** Durable run/job id used to make managed accounting idempotent. */
@@ -71,6 +80,18 @@ export interface MistralTranscriptionOptions {
   /** Per-attempt deadline, including response-body consumption. */
   attemptTimeoutMs?: number;
 }
+
+type TranscriptionResolverDependencies = {
+  selectNode: typeof selectedNodeDocumentAi;
+  runNode: typeof runPairedNodeTranscription;
+  runMistral: typeof runMistralTranscription;
+};
+
+const defaultTranscriptionResolverDependencies: TranscriptionResolverDependencies = {
+  selectNode: selectedNodeDocumentAi,
+  runNode: runPairedNodeTranscription,
+  runMistral: runMistralTranscription,
+};
 
 function transcriptionDisabled() {
   const runtime = process.env.DISABLE_TRANSCRIPTION;
@@ -84,7 +105,16 @@ export async function transcriptionEnabled(userId?: string) {
       operatorServiceKeysEnabled() && Boolean(env.TRANSCRIPTION_API_KEY?.trim())
     );
   }
-  return Boolean(await resolveServiceKey(userId, "transcription"));
+  try {
+    const node = await selectedNodeDocumentAi(userId, "transcription");
+    if (node.selected) return true;
+  } catch {
+    return false;
+  }
+  if (env.TRANSCRIPTION_PROVIDER === "node") return false;
+  return Boolean(
+    await resolveProviderServiceKey(userId, "transcription", "mistral"),
+  );
 }
 
 function abortError(signal: AbortSignal | undefined) {
@@ -322,7 +352,11 @@ export async function runMistralTranscription(
   }
   const credential = options.key
     ? credentialForTests(options.key)
-    : await resolveServiceKey(userId, "transcription");
+    : await (options.resolveCredential ?? resolveProviderServiceKey)(
+        userId,
+        "transcription",
+        "mistral",
+      );
   if (!credential) {
     throw new Error(
       "Transcription is not configured. Add a transcription key in Settings → Integrations.",
@@ -440,14 +474,35 @@ export async function runMistralTranscription(
 export async function resolveTranscriptionProvider(
   userId: string,
   options: MistralTranscriptionOptions = {},
+  overrides: Partial<TranscriptionResolverDependencies> = {},
 ): Promise<TranscriptionProvider> {
-  if (env.TRANSCRIPTION_PROVIDER !== "mistral") {
-    throw new Error("The configured transcription provider is not supported");
+  const dependencies = {
+    ...defaultTranscriptionResolverDependencies,
+    ...overrides,
+  };
+  const node = await dependencies.selectNode(userId, "transcription");
+  if (node.selected || env.TRANSCRIPTION_PROVIDER === "node") {
+    if (!node.selected) {
+      throw new Error("NODE_TRANSCRIPTION_PLACEMENT_REQUIRED");
+    }
+    return {
+      id: "node-local",
+      model: `${node.modelId}@${node.modelRevision}`,
+      transcribeSegment: (input) =>
+        dependencies.runNode(userId, {
+          ...input,
+          operationId: input.operationId ?? options.operationId,
+          attempt: input.attempt,
+          maximumSeconds: input.maximumSeconds ?? options.maximumSeconds,
+          signal: input.signal ?? options.signal,
+        }),
+    };
   }
   return {
     id: "mistral",
+    model: options.model ?? MISTRAL_TRANSCRIPTION_MODEL,
     transcribeSegment: (input) =>
-      runMistralTranscription(userId, input, {
+      dependencies.runMistral(userId, input, {
         ...options,
         operationId: input.operationId ?? options.operationId,
         maximumSeconds: input.maximumSeconds ?? options.maximumSeconds,
@@ -455,3 +510,5 @@ export async function resolveTranscriptionProvider(
       }),
   };
 }
+
+export type TranscriptionResolverTestDependencies = Partial<TranscriptionResolverDependencies>;

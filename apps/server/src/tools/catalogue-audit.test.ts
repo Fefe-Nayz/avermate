@@ -19,7 +19,7 @@ describe("plan 027 catalogue audit", () => {
   test("classifies every current MCP registration exactly once", () => {
     const rows = inventoryMcp(root);
     // Any catalogue change requires an explicit classification/policy review.
-    expect(rows).toHaveLength(142);
+    expect(rows).toHaveLength(157);
     expect(new Set(rows.map((row) => row.name)).size).toBe(rows.length);
     for (const id of registryReadyToolIds) {
       expect(rows.some((row) => row.name === id)).toBe(true);
@@ -31,7 +31,7 @@ describe("plan 027 catalogue audit", () => {
     ).toContain("account.export");
     expect(
       rows.filter(({ execution }) => execution === "tool-broker"),
-    ).toHaveLength(62);
+    ).toHaveLength(77);
     expect(
       rows
         .filter(({ execution }) => execution === "tool-broker")
@@ -53,15 +53,38 @@ describe("plan 027 catalogue audit", () => {
 
   test("classifies every directly declared oRPC procedure", () => {
     const rows = inventoryOrpc(root);
-    expect(rows).toHaveLength(385);
+    // Advanced media ingestion adds five reviewed reads and one reviewed
+    // mutation. Keep their individual classifications explicit below.
+    // Keep this fingerprint explicit so every future router change requires a
+    // fresh agent-exposure review rather than silently widening the surface.
+    expect(rows).toHaveLength(468);
     expect(
       new Set(rows.map((row) => `${row.source}:${row.procedure}`)).size,
     ).toBe(rows.length);
+    const serviceKeyRows = rows.filter((row) =>
+      row.source.endsWith("service-keys.ts"),
+    );
+    expect(serviceKeyRows.length).toBeGreaterThan(0);
     expect(
-      rows
-        .filter((row) => row.source.endsWith("service-keys.ts"))
-        .every((row) => row.classification === "never-expose-to-agent"),
+      serviceKeyRows.every(
+        (row) => row.classification === "never-expose-to-agent",
+      ),
     ).toBe(true);
+    for (const [procedure, classification] of [
+      ["mediaStudio.capabilities", "safe-after-output-narrowing"],
+      ["mediaStudio.videoExtractionConsent", "safe-after-output-narrowing"],
+      ["mediaStudio.retryVideoAudio", "requires-preview-or-compensation"],
+      ["mediaStudio.listWorkflows", "safe-after-output-narrowing"],
+      ["mediaStudio.listRevisions", "safe-after-output-narrowing"],
+      ["mediaStudio.getOutputHandles", "safe-after-output-narrowing"],
+    ] as const) {
+      expect(rows).toContainEqual({
+        procedure,
+        source: "apps/server/src/routers/media-studio.ts",
+        classification,
+        fileTransport: "none",
+      });
+    }
   });
 
   test("renders a deterministic review report", () => {

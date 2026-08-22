@@ -1,0 +1,126 @@
+{
+  "revision": "french-school-v1",
+  "reviewedAt": "2026-08-22",
+  "language": "fr",
+  "license": "CC0 synthetic/redacted",
+  "documents": [
+    { "id": "newton-text", "sourceId": "physique-manuel", "modality": "native-pdf", "locator": { "kind": "pdf", "page": 12 } },
+    { "id": "newton-diagram", "sourceId": "physique-schema", "modality": "diagram", "locator": { "kind": "pdf", "page": 4 } },
+    { "id": "thales-scan", "sourceId": "maths-cahier", "modality": "scan-handwriting", "locator": { "kind": "pdf", "page": 7 } },
+    { "id": "derivative-table", "sourceId": "maths-tableur", "modality": "spreadsheet", "locator": { "kind": "spreadsheet", "sheet": "Variations", "range": "B3:F9" } },
+    { "id": "revolution-slide", "sourceId": "histoire-diapo", "modality": "slide", "locator": { "kind": "slides", "slide": 8 } },
+    { "id": "poetry-audio", "sourceId": "francais-oral", "modality": "audio", "locator": { "kind": "audio", "startMs": 42000, "endMs": 61000 } },
+    { "id": "cell-video", "sourceId": "svt-video", "modality": "video", "locator": { "kind": "video", "startMs": 88000, "endMs": 109000 } },
+    { "id": "molar-equation", "sourceId": "chimie-formules", "modality": "equation", "locator": { "kind": "pdf", "page": 3 } },
+    { "id": "moodle-deadline", "sourceId": "moodle-devoir", "modality": "moodle", "locator": { "kind": "text", "startOffset": 0, "endOffset": 94 } },
+    { "id": "noise-a", "sourceId": "bruit-a", "modality": "native-pdf", "locator": { "kind": "pdf", "page": 1 } },
+    { "id": "noise-b", "sourceId": "bruit-b", "modality": "native-pdf", "locator": { "kind": "pdf", "page": 2 } },
+    { "id": "noise-c", "sourceId": "bruit-c", "modality": "slide", "locator": { "kind": "slides", "slide": 2 } }
+  ],
+  "queries": [
+    {
+      "id": "q-newton",
+      "query": "Comment décomposer les forces sur le plan incliné ?",
+      "relevance": [{ "documentId": "newton-diagram", "grade": 3 }, { "documentId": "newton-text", "grade": 2 }],
+      "rankings": {
+        "lexical": ["newton-text", "noise-a", "noise-b", "newton-diagram"],
+        "dense": ["newton-diagram", "newton-text", "noise-c"],
+        "rrf": ["newton-text", "newton-diagram", "noise-a"],
+        "rrf-cohere": ["newton-diagram", "newton-text", "noise-a"],
+        "rrf-tei": ["newton-diagram", "newton-text", "noise-c"],
+        "multimodal": ["newton-diagram", "newton-text", "noise-a"]
+      }
+    },
+    {
+      "id": "q-thales",
+      "query": "Retrouve la démonstration manuscrite du théorème de Thalès",
+      "relevance": [{ "documentId": "thales-scan", "grade": 3 }],
+      "rankings": {
+        "lexical": ["noise-a", "newton-text", "thales-scan"],
+        "dense": ["thales-scan", "newton-diagram", "noise-a"],
+        "rrf": ["thales-scan", "noise-a", "newton-text"],
+        "rrf-cohere": ["thales-scan", "newton-text", "noise-a"],
+        "rrf-tei": ["thales-scan", "noise-a", "newton-text"],
+        "multimodal": ["newton-diagram", "thales-scan", "noise-a"]
+      }
+    },
+    {
+      "id": "q-variations",
+      "query": "Dans quel intervalle la dérivée est-elle négative ?",
+      "relevance": [{ "documentId": "derivative-table", "grade": 3 }],
+      "rankings": {
+        "lexical": ["molar-equation", "noise-b", "derivative-table"],
+        "dense": ["derivative-table", "molar-equation", "noise-b"],
+        "rrf": ["derivative-table", "molar-equation", "noise-b"],
+        "rrf-cohere": ["derivative-table", "molar-equation", "noise-b"],
+        "rrf-tei": ["derivative-table", "noise-b", "molar-equation"],
+        "multimodal": ["molar-equation", "derivative-table", "noise-b"]
+      }
+    },
+    {
+      "id": "q-revolution",
+      "query": "Quelle diapositive résume les causes de 1789 ?",
+      "relevance": [{ "documentId": "revolution-slide", "grade": 3 }],
+      "rankings": {
+        "lexical": ["revolution-slide", "noise-c", "noise-a"],
+        "dense": ["revolution-slide", "noise-c", "poetry-audio"],
+        "rrf": ["revolution-slide", "noise-c", "noise-a"],
+        "rrf-cohere": ["revolution-slide", "noise-a", "noise-c"],
+        "rrf-tei": ["revolution-slide", "noise-c", "noise-a"],
+        "multimodal": ["revolution-slide", "noise-c", "noise-a"]
+      }
+    },
+    {
+      "id": "q-poetry",
+      "query": "À quel moment l'enseignante explique l'alexandrin ?",
+      "relevance": [{ "documentId": "poetry-audio", "grade": 3 }],
+      "rankings": {
+        "lexical": ["noise-a", "revolution-slide", "noise-b"],
+        "dense": ["poetry-audio", "revolution-slide", "noise-a"],
+        "rrf": ["poetry-audio", "noise-a", "revolution-slide"],
+        "rrf-cohere": ["poetry-audio", "revolution-slide", "noise-a"],
+        "rrf-tei": ["poetry-audio", "noise-a", "revolution-slide"],
+        "multimodal": ["poetry-audio", "revolution-slide", "noise-a"]
+      }
+    },
+    {
+      "id": "q-cell",
+      "query": "Montre le passage vidéo sur la mitose",
+      "relevance": [{ "documentId": "cell-video", "grade": 3 }],
+      "rankings": {
+        "lexical": ["noise-c", "noise-b", "newton-text"],
+        "dense": ["cell-video", "newton-diagram", "noise-c"],
+        "rrf": ["cell-video", "noise-c", "newton-text"],
+        "rrf-cohere": ["cell-video", "newton-text", "noise-c"],
+        "rrf-tei": ["cell-video", "noise-c", "newton-text"],
+        "multimodal": ["cell-video", "newton-diagram", "noise-c"]
+      }
+    },
+    {
+      "id": "q-molar",
+      "query": "Quelle formule relie quantité de matière et masse molaire ?",
+      "relevance": [{ "documentId": "molar-equation", "grade": 3 }],
+      "rankings": {
+        "lexical": ["molar-equation", "derivative-table", "noise-b"],
+        "dense": ["molar-equation", "derivative-table", "noise-a"],
+        "rrf": ["molar-equation", "derivative-table", "noise-b"],
+        "rrf-cohere": ["molar-equation", "derivative-table", "noise-b"],
+        "rrf-tei": ["molar-equation", "noise-b", "derivative-table"],
+        "multimodal": ["molar-equation", "derivative-table", "noise-b"]
+      }
+    },
+    {
+      "id": "q-deadline",
+      "query": "Quand faut-il rendre le devoir Moodle ?",
+      "relevance": [{ "documentId": "moodle-deadline", "grade": 3 }],
+      "rankings": {
+        "lexical": ["moodle-deadline", "noise-a", "noise-b"],
+        "dense": ["moodle-deadline", "revolution-slide", "noise-b"],
+        "rrf": ["moodle-deadline", "noise-a", "revolution-slide"],
+        "rrf-cohere": ["moodle-deadline", "revolution-slide", "noise-a"],
+        "rrf-tei": ["moodle-deadline", "noise-a", "revolution-slide"],
+        "multimodal": ["moodle-deadline", "noise-a", "revolution-slide"]
+      }
+    }
+  ]
+}

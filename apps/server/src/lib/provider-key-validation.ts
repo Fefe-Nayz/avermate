@@ -2,7 +2,9 @@ export type SupportedKeyProvider =
   | "mistral"
   | "openai"
   | "openrouter"
-  | "elevenlabs";
+  | "elevenlabs"
+  | "gemini"
+  | "cohere";
 
 const probes: Record<
   SupportedKeyProvider,
@@ -23,6 +25,14 @@ const probes: Record<
   elevenlabs: {
     url: "https://api.elevenlabs.io/v1/user/subscription",
     headers: (key) => ({ "xi-api-key": key }),
+  },
+  gemini: {
+    url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2",
+    headers: (key) => ({ "x-goog-api-key": key }),
+  },
+  cohere: {
+    url: "https://api.cohere.com/v1/models?endpoint=rerank",
+    headers: (key) => ({ authorization: `Bearer ${key}` }),
   },
 };
 

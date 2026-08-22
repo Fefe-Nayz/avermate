@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -9,6 +10,7 @@ import {
   ImageIcon,
   PaperclipIcon,
   PlusIcon,
+  SparklesIcon,
   Trash2Icon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
@@ -24,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
@@ -41,6 +44,7 @@ const COPY_MIME_TYPES = new Set([
 
 export function GradeCopies({ gradeId }: { gradeId: string }) {
   const t = useExtracted()
+  const router = useRouter()
   const queryClient = useQueryClient()
   const input = gradeAttachmentsInput(gradeId)
   const attachments = useQuery(orpc.grades.attachments.queryOptions({ input }))
@@ -71,6 +75,17 @@ export function GradeCopies({ gradeId }: { gradeId: string }) {
       await refresh()
     },
     onError: (error: Error) => toast.error(error.message),
+  })
+  const analyze = useMutation({
+    ...orpc.learning.copies.request.mutationOptions(),
+    onSuccess: (analysis) => router.push(`/learning/copies/${analysis.id}`),
+    onError: (error: Error) =>
+      toast.error(error.message, {
+        action: {
+          label: t("Learning settings"),
+          onClick: () => router.push("/learning#privacy"),
+        },
+      }),
   })
 
   const rows = attachments.data ?? []
@@ -202,6 +217,43 @@ export function GradeCopies({ gradeId }: { gradeId: string }) {
                       </span>
                       <ExternalLinkIcon className="size-4 shrink-0 text-muted-foreground" />
                     </a>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="hidden sm:inline-flex"
+                      aria-label={t("Analyze {name}", {
+                        name: attachment.label ?? t("attached copy"),
+                      })}
+                      disabled={analyze.isPending}
+                      onClick={() =>
+                        analyze.mutate({
+                          attachmentId: attachment.id,
+                          idempotencyKey: `web:${crypto.randomUUID()}`,
+                        })
+                      }
+                    >
+                      {analyze.isPending ? <Spinner /> : <SparklesIcon />}
+                      {t("Analyze")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="sm:hidden"
+                      aria-label={t("Analyze {name}", {
+                        name: attachment.label ?? t("attached copy"),
+                      })}
+                      disabled={analyze.isPending}
+                      onClick={() =>
+                        analyze.mutate({
+                          attachmentId: attachment.id,
+                          idempotencyKey: `web:${crypto.randomUUID()}`,
+                        })
+                      }
+                    >
+                      <SparklesIcon />
+                    </Button>
                     <Button
                       type="button"
                       size="icon-sm"

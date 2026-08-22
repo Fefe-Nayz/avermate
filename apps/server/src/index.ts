@@ -1,6 +1,7 @@
 import { RPCHandler } from "@orpc/server/fetch";
 import { createRouterClient } from "@orpc/server";
 import { Hono } from "hono";
+import { websocket } from "hono/bun";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { auth } from "./lib/auth";
@@ -42,6 +43,9 @@ import type { Context, Session } from "./lib/context";
 import { createCustomMcpDescriptors } from "./assistant/custom-mcp-tools";
 import { managedReadiness } from "./operations/readiness";
 import { managedToolActionContinuationStore } from "./tools/managed-action-continuation";
+import { nodeControlRoutes } from "./node/control-route";
+import { nodePairingRoutes } from "./node/pairing-route";
+import { routedCorpusStore } from "./search/routed-corpus-store";
 
 const app = new Hono();
 
@@ -180,6 +184,8 @@ app.route("/api", agentEventRoutes);
 app.route("/api", fileHandleRoutes);
 app.route("/api", assistantEventRoutes);
 app.route("/api", assistantDictationRoutes);
+app.route("/api", nodeControlRoutes);
+app.route("/api", nodePairingRoutes);
 
 const handler = new RPCHandler(appRouter);
 
@@ -197,63 +203,84 @@ app.use("/rpc/*", async (c, next) => {
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
 registerAllJobHandlers();
-startActionApprovalSweeper();
-void recoverInterruptedActions({
-  ledger: actionLedgerService(),
-  continuations: managedToolActionContinuationStore,
-  brokerForOwner: async (ownerId) =>
-    createFirstPartyToolBroker(
-      await createOwnerRecoveryApi(ownerId, "action"),
-      {
+// Direct protocol harnesses disable jobs to prove request behavior without
+// fire-and-forget startup writers racing their private SQLite fixture. Normal
+// development/production servers still reconcile even when queue workers are
+// intentionally hosted in another process.
+if (env.NODE_ENV !== "test" || !env.DISABLE_JOBS) {
+  startActionApprovalSweeper();
+  void routedCorpusStore
+    .reconcileNodeEnvelopes(1_000)
+    .then((outcomes) => {
+      if (outcomes.length > 0) {
+        console.info("[corpus] Node recovery envelopes reconciled", outcomes);
+      }
+    })
+    .catch((error) =>
+      console.error("[corpus] Node envelope reconciliation failed", error),
+    );
+  void recoverInterruptedActions({
+    ledger: actionLedgerService(),
+    continuations: managedToolActionContinuationStore,
+    brokerForOwner: async (ownerId) =>
+      createFirstPartyToolBroker(
+        await createOwnerRecoveryApi(ownerId, "action"),
+        {
+          fileHandles: fileHandleService,
+          ownerId,
+          includeMutations: true,
+          continuations: managedToolActionContinuationStore,
+        },
+      ),
+  })
+    .then((result) => {
+      const count =
+        result.resumed.length +
+        result.inspectRequired.length +
+        result.failed.length +
+        result.deferred.length;
+      if (count > 0) {
+        console.info("[actions] interrupted executions reconciled", result);
+      }
+    })
+    .catch((error) =>
+      console.error(
+        "[actions] interrupted execution reconciliation failed",
+        error,
+      ),
+    );
+  void assistantRunService
+    .recoverInterrupted(async (ownerId) => {
+      const api = await createOwnerRecoveryApi(ownerId, "assistant");
+      const broker = createFirstPartyToolBroker(api, {
         fileHandles: fileHandleService,
         ownerId,
         includeMutations: true,
         continuations: managedToolActionContinuationStore,
-      },
-    ),
-})
-  .then((result) => {
-    const count =
-      result.resumed.length +
-      result.inspectRequired.length +
-      result.failed.length +
-      result.deferred.length;
-    if (count > 0) {
-      console.info("[actions] interrupted executions reconciled", result);
-    }
-  })
-  .catch((error) =>
-    console.error("[actions] interrupted execution reconciliation failed", error),
-  );
-void assistantRunService
-  .recoverInterrupted(async (ownerId) => {
-    const api = await createOwnerRecoveryApi(ownerId, "assistant");
-    const broker = createFirstPartyToolBroker(api, {
-      fileHandles: fileHandleService,
-      ownerId,
-      includeMutations: false,
-    });
-    for (const descriptor of await createCustomMcpDescriptors(ownerId)) {
-      broker.registry.register(descriptor);
-    }
-    return broker;
-  })
-  .then((result) => {
-    const count =
-      result.resumed.length +
-      result.finalizedFromCheckpoint.length +
-      result.failedClosed.length;
-    if (count > 0) {
-      console.info("[assistant] interrupted runs reconciled", {
-        resumed: result.resumed.length,
-        finalizedFromCheckpoint: result.finalizedFromCheckpoint.length,
-        failedClosed: result.failedClosed.length,
       });
-    }
-  })
-  .catch((error) =>
-    console.error("[assistant] interrupted run reconciliation failed", error),
-  );
+      for (const descriptor of await createCustomMcpDescriptors(ownerId)) {
+        if (descriptor.effect !== "read") continue;
+        broker.registry.register(descriptor);
+      }
+      return broker;
+    })
+    .then((result) => {
+      const count =
+        result.resumed.length +
+        result.finalizedFromCheckpoint.length +
+        result.failedClosed.length;
+      if (count > 0) {
+        console.info("[assistant] interrupted runs reconciled", {
+          resumed: result.resumed.length,
+          finalizedFromCheckpoint: result.finalizedFromCheckpoint.length,
+          failedClosed: result.failedClosed.length,
+        });
+      }
+    })
+    .catch((error) =>
+      console.error("[assistant] interrupted run reconciliation failed", error),
+    );
+}
 if (!env.DISABLE_JOBS) {
   void scheduleDailyMaintenanceJobs().catch((error) =>
     console.error("[jobs] maintenance scheduling failed", error),
@@ -267,4 +294,5 @@ export default {
   // does this by default; saying so keeps it from depending on that default.
   hostname: "0.0.0.0",
   fetch: app.fetch,
+  websocket,
 };

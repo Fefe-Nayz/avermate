@@ -183,7 +183,12 @@ export function MaterialsTable({
         header: ({ column }) => (
           <DataGridColumnHeader title={t("Name")} column={column} />
         ),
-        size: 420,
+        // The phone layout retains selection and row actions. Keeping the
+        // desktop width here made that three-column table 516 px wide, so the
+        // primary action and favourite control started off-screen on a
+        // 390 px viewport. Let the fixed-layout table distribute a compact
+        // name column instead; the title and detail already truncate safely.
+        size: medium ? 420 : 240,
         meta: { headerTitle: "Name" },
         cell: ({ row }) => (
           <NameCell
@@ -440,7 +445,7 @@ function NameCell({
         {presentation.icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
+        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           <span className="truncate text-sm font-medium">{row.title}</span>
           {originBadge?.(row)}
           {tagChips?.(row)}

@@ -25,9 +25,8 @@
 
 ## Status
 
-- **Status**: IN PROGRESS — protocol/static/local provider cells are green;
-  full-self-host runtime is host-blocked and production transports remain
-  incomplete
+- **Status**: DONE (repository foundation) — full Node/product completion is
+  tracked by plan 038; live full-self-host and air-gap proof is host-blocked
 - **Priority**: P1
 - **Effort**: XL (multi-release)
 - **Risk**: CRITICAL
@@ -43,7 +42,7 @@
 
 The current evidence is recorded in
 [`docs/releases/plan-032-evidence-2026-08-22.md`](../docs/releases/plan-032-evidence-2026-08-22.md).
-The protocol gate passed **37 tests**; the configurator gate passed **10 tests**
+The protocol gate passed **38 tests**; the configurator gate passed **16 tests**
 plus a real loopback `dev-zero` health smoke. The storage/corpus/conversation
 cells passed, and the last complete storage run passed a disposable Garage 2.3
 provider conformance suite with no labelled container, volume or network left
@@ -57,12 +56,16 @@ content store/daemon failure (`metadata_v2.db` I/O error, HTTP 500, then
 `PLAN032_DOCKER_HOST_DAEMON_UNAVAILABLE`). The aggregate `verify:032` is
 therefore red by dependency; this is not converted into a skip or a false green.
 
-Independent of Docker, product gaps remain: production Core pairing/exchange
-and sealed-credential lifecycle, automatic relay enrolment and real transport
-lanes, a durable Core repository for two-phase object adoption, remaining
-storage-facade call-site migration, and a real sandbox artifact. Local
-contracts, filesystem/Garage adapters and static Compose checks do not prove
-those production seams. Plan 032 must remain in progress.
+The repository now wires Core pairing/exchange and sealed-credential lifecycle,
+the authenticated relay and durable operation journal, SQL-backed two-phase
+object adoption and remote deletion, plus Node daemon capability dispatch.
+Their focused integration and recovery gates pass. This closes the concrete
+foundation seams that were previously only interfaces; it does not claim the
+full product completion owned by plan 038, including every Core call-site
+placement, full-self-host Core↔Node storage/relay composition and the migration
+wizard. Nor does it turn local tests or static Compose validation into a claim
+that a hosted relay, a live sandbox image or an air-gapped deployment has been
+operated successfully. Those runtime cells remain external release evidence.
 
 ## Scope
 

@@ -1,0 +1,29 @@
+model_list:
+  - model_name: selfhost/default
+    litellm_params:
+      model: openai/selfhost/default
+      api_base: http://model-api:8000/v1
+      api_key: os.environ/LOCAL_MODEL_API_KEY
+  - model_name: selfhost/fallback
+    litellm_params:
+      model: openai/selfhost/fallback
+      api_base: http://model-api-fallback:8000/v1
+      api_key: os.environ/LOCAL_FALLBACK_MODEL_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  disable_spend_logs: false
+
+litellm_settings:
+  telemetry: false
+  drop_params: false
+  request_timeout: 120
+  num_retries: 0
+
+router_settings:
+  # This is the only fallback. It is an ordered, reviewed alias chain and is
+  # mirrored in the signed Node profile; no provider/default fallback exists.
+  fallbacks:
+    - selfhost/default:
+        - selfhost/fallback

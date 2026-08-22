@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { SandboxBaselineEvidence } from "@avermate/agent-contracts";
+import {
+  sandboxRuntimeCheckpointRefV1Schema,
+  sandboxWorkspaceSnapshotRefSchema,
+  type SandboxBaselineEvidence,
+} from "@avermate/agent-contracts";
 import { enableSandboxProfile } from "./profiles";
 import { OpenSandboxSdkTransport } from "./opensandbox-sdk-transport";
 
@@ -100,5 +104,65 @@ describe("official OpenSandbox SDK transport", () => {
           profiles: [profile],
         }),
     ).toThrow("reviewed digest");
+  });
+
+  test("advertises native checkpoints separately from portable workspace refs", async () => {
+    const transport = new OpenSandboxSdkTransport({
+      connection: { domain: "localhost:8080", protocol: "http" },
+      evidenceUrl: "http://127.0.0.1:8081/v1/evidence",
+      imageUris: { latex: `avermate/latex@${imageDigest}` },
+      profiles: [profile],
+      runtimeCheckpoint: {
+        region: "local",
+        architecture: "amd64",
+        runtimeKind: "docker-runc",
+        runtimeVersion: "29.1.2",
+        maximumTtlSeconds: 86_400,
+      },
+    });
+    expect(await transport.runtimeCheckpointCapabilities()).toEqual({
+      available: true,
+      provider: "opensandbox",
+      regions: ["local"],
+      architectures: ["amd64"],
+      runtimeKind: "docker-runc",
+      runtimeVersion: "29.1.2",
+      maximumTtlSeconds: 86_400,
+    });
+    const logical = {
+      provider: "opensandbox" as const,
+      digest: `sha256:${"c".repeat(64)}` as const,
+      format: "avermate-portable-workspace-v1",
+    };
+    const runtime = {
+      version: 1 as const,
+      checkpoint: {
+        provider: "opensandbox" as const,
+        opaqueRef: "native-snapshot-1",
+        portable: false as const,
+      },
+      compatibility: {
+        provider: "opensandbox" as const,
+        region: "local",
+        architecture: "amd64" as const,
+        runtimeKind: "docker-runc",
+        runtimeVersion: "29.1.2",
+        imageDigest,
+        profileId: profile.id,
+        profileVersion: profile.version,
+      },
+      sourceWorkspaceSnapshot: logical,
+      captureState: "captured" as const,
+      adoptedObjectRefs: [],
+      capturedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    expect(sandboxRuntimeCheckpointRefV1Schema.parse(runtime)).toBeDefined();
+    expect(sandboxWorkspaceSnapshotRefSchema.safeParse(runtime).success).toBe(
+      false,
+    );
+    expect(sandboxRuntimeCheckpointRefV1Schema.safeParse(logical).success).toBe(
+      false,
+    );
   });
 });

@@ -22,6 +22,7 @@ import {
   years,
 } from "../db/schema";
 import { protectedProcedure } from "../lib/orpc";
+import { exportLearningData } from "../learning/privacy";
 import { exportSocialData } from "./social/shared";
 
 /**
@@ -336,6 +337,7 @@ export const preferencesRouter = {
       createdAnnouncementTargetRows,
       feedbackRows,
       socialData,
+      learningData,
     ] = await Promise.all([
       db
         .select({
@@ -400,12 +402,13 @@ export const preferencesRouter = {
         .where(eq(announcements.createdByUserId, userId)),
       db.select().from(feedback).where(eq(feedback.userId, userId)),
       exportSocialData(userId),
+      exportLearningData(userId),
     ]);
 
     return {
       exportedAt: new Date().toISOString(),
       // Bumped with the assessment types, which a reader of an older file will not find.
-      version: 6,
+      version: 7,
       account: account[0] ?? null,
       authentication: {
         providers: [...new Set(providerRows.map((row) => row.providerId))],
@@ -435,6 +438,7 @@ export const preferencesRouter = {
       ),
       feedback: feedbackRows,
       social: socialData,
+      learning: learningData,
     };
   }),
 };

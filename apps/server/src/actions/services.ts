@@ -10,7 +10,12 @@ let singleton: ActionLedgerService | null = null;
 let sweeperTimer: ReturnType<typeof setInterval> | null = null;
 
 export function actionLedgerService(): ActionLedgerService {
-  singleton ??= new ActionLedgerService(db.$client);
+  singleton ??= new ActionLedgerService(db.$client, {
+    recomputeLearningMastery: async (userId, objectiveId) => {
+      const { recomputeObjectiveMastery } = await import("../routers/learning");
+      await recomputeObjectiveMastery(userId, objectiveId);
+    },
+  });
   return singleton;
 }
 

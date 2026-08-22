@@ -6,10 +6,14 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 import type {
   CorpusCoverage,
   CorpusOriginKind,
+  EmbeddingSpaceDescriptor,
+  RetrievalFallbackPolicy,
+  RetrievalStageTrace,
   SourceLocatorV1,
 } from "@avermate/agent-contracts";
 import { newId } from "../../lib/id";
@@ -20,6 +24,8 @@ import { files } from "./files";
 
 export type StudyProjectItemKind = CorpusOriginKind;
 export type StudyProjectContextMode = "include" | "on-demand" | "exclude";
+export type StudyProjectTrackingMode = "pinned" | "follow-head";
+export type StudyProjectRetrievalMode = "lexical-only" | "advanced-auto";
 export type ContentSourceStatus =
   "registered" | "indexing" | "ready" | "partial" | "failed";
 export type ContentPlacement = "core" | "node";
@@ -73,6 +79,16 @@ export const studyProjects = sqliteTable(
     emoji: text(),
     color: text(),
     revision: integer().notNull().default(1),
+    retrievalMode: text()
+      .$type<StudyProjectRetrievalMode>()
+      .notNull()
+      .default("lexical-only"),
+    retrievalFallbackPolicy: text()
+      .$type<RetrievalFallbackPolicy>()
+      .notNull()
+      .default("lexical-only"),
+    embeddingSpaceId: text(),
+    rerankSpaceId: text(),
     starredAt: integer({ mode: "timestamp" }),
     deletedAt: integer({ mode: "timestamp" }),
     ...timestamps,
@@ -87,6 +103,14 @@ export const studyProjects = sqliteTable(
     check(
       "study_projects_revision_check",
       sql`${table.revision} >= 1 and ${table.contextPolicyVersion} >= 1`,
+    ),
+    check(
+      "study_projects_retrieval_mode_check",
+      sql`${table.retrievalMode} in ('lexical-only', 'advanced-auto')`,
+    ),
+    check(
+      "study_projects_retrieval_fallback_check",
+      sql`${table.retrievalFallbackPolicy} in ('fail', 'lexical-only', 'hybrid-without-rerank')`,
     ),
   ],
 );
@@ -107,6 +131,19 @@ export const studyProjectItems = sqliteTable(
       }),
     kind: text().$type<StudyProjectItemKind>().notNull(),
     referenceId: text().notNull(),
+    sourceVersionId: text().references(
+      (): AnySQLiteColumn => contentVersions.id,
+      { onDelete: "restrict", onUpdate: "cascade" },
+    ),
+    conversationBranchId: text(),
+    conversationHeadMessageId: text(),
+    trackingMode: text()
+      .$type<StudyProjectTrackingMode>()
+      .notNull()
+      .default("follow-head"),
+    selectorReviewRequired: integer({ mode: "boolean" })
+      .notNull()
+      .default(false),
     position: integer().notNull().default(0),
     contextMode: text()
       .$type<StudyProjectContextMode>()
@@ -135,6 +172,14 @@ export const studyProjectItems = sqliteTable(
     check(
       "study_project_items_context_mode_check",
       sql`${table.contextMode} in ('include', 'on-demand', 'exclude')`,
+    ),
+    check(
+      "study_project_items_tracking_mode_check",
+      sql`${table.trackingMode} in ('pinned', 'follow-head')`,
+    ),
+    check(
+      "study_project_items_conversation_selector_check",
+      sql`(${table.kind} = 'conversation' and ${table.trackingMode} = 'pinned' and ((${table.conversationBranchId} is not null and ${table.conversationHeadMessageId} is not null) or (${table.selectorReviewRequired} = 1 and ${table.conversationBranchId} is null and ${table.conversationHeadMessageId} is null))) or (${table.kind} != 'conversation' and ${table.conversationBranchId} is null and ${table.conversationHeadMessageId} is null)`,
     ),
     check("study_project_items_position_check", sql`${table.position} >= 0`),
   ],
@@ -299,6 +344,47 @@ export const contentChunks = sqliteTable(
   ],
 );
 
+/**
+ * Transaction-scoped authority for changing only the encrypted recovery
+ * payload of immutable chunks while their Core/Node placement is switched.
+ * Rows are inserted and removed in the same write transaction.
+ */
+export const corpusPayloadRewriteLeases = sqliteTable(
+  "corpus_payload_rewrite_leases",
+  {
+    id: text().notNull().primaryKey(),
+    userId: owner(),
+    sourceId: text()
+      .notNull()
+      .references(() => contentSources.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    sourcePlacement: text().$type<ContentPlacement>().notNull(),
+    sourceNodeId: text(),
+    destinationPlacement: text().$type<ContentPlacement>().notNull(),
+    destinationNodeId: text(),
+    expiresAt: integer({ mode: "timestamp" }).notNull(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("corpus_payload_rewrite_source_unique").on(table.sourceId),
+    index("corpus_payload_rewrite_expiry_idx").on(table.expiresAt),
+    check(
+      "corpus_payload_rewrite_source_check",
+      sql`(${table.sourcePlacement} = 'core' and ${table.sourceNodeId} is null)
+        or (${table.sourcePlacement} = 'node' and ${table.sourceNodeId} is not null)`,
+    ),
+    check(
+      "corpus_payload_rewrite_destination_check",
+      sql`(${table.destinationPlacement} = 'core' and ${table.destinationNodeId} is null)
+        or (${table.destinationPlacement} = 'node' and ${table.destinationNodeId} is not null)`,
+    ),
+  ],
+);
+
 export const contentAssets = sqliteTable(
   "content_assets",
   {
@@ -333,6 +419,363 @@ export const contentAssets = sqliteTable(
     check(
       "content_assets_hash_check",
       sql`length(${table.contentHash}) = 64 and ${table.contentHash} not glob '*[^0-9a-f]*'`,
+    ),
+  ],
+);
+
+export type ContentDerivativeKind =
+  | "pdf-page"
+  | "page-image"
+  | "slide-image"
+  | "sheet-image"
+  | "audio-segment"
+  | "video-segment";
+export type ContentDerivativeStatus =
+  | "pending"
+  | "ready"
+  | "failed"
+  | "deleted";
+
+/** Exact, disposable visual/media units produced only by an attested worker. */
+export const contentDerivatives = sqliteTable(
+  "content_derivatives",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("cder")),
+    versionId: text()
+      .notNull()
+      .references(() => contentVersions.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    chunkId: text().references(() => contentChunks.id, {
+      onDelete: "cascade",
+      onUpdate: "cascade",
+    }),
+    fileId: text()
+      .notNull()
+      .references(() => files.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+    kind: text().$type<ContentDerivativeKind>().notNull(),
+    status: text().$type<ContentDerivativeStatus>().notNull().default("pending"),
+    locatorSchemaVersion: integer().notNull().default(1),
+    locatorJson: text({ mode: "json" }).$type<SourceLocatorV1>().notNull(),
+    contentHash: text().notNull(),
+    mimeType: text().notNull(),
+    byteSize: integer().notNull(),
+    estimatedInputTokens: integer().notNull(),
+    durationMs: integer(),
+    rendererProfile: text().notNull(),
+    rendererImageDigest: text().notNull(),
+    metadataJson: text({ mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    errorCode: text(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("content_derivatives_version_kind_locator_unique").on(
+      table.versionId,
+      table.kind,
+      table.locatorJson,
+    ),
+    index("content_derivatives_version_status_idx").on(
+      table.versionId,
+      table.status,
+    ),
+    index("content_derivatives_file_idx").on(table.fileId),
+    check(
+      "content_derivatives_kind_check",
+      sql`${table.kind} in ('pdf-page', 'page-image', 'slide-image', 'sheet-image', 'audio-segment', 'video-segment')`,
+    ),
+    check(
+      "content_derivatives_status_check",
+      sql`${table.status} in ('pending', 'ready', 'failed', 'deleted')`,
+    ),
+    check(
+      "content_derivatives_hash_check",
+      sql`length(${table.contentHash}) = 64 and ${table.contentHash} not glob '*[^0-9a-f]*'`,
+    ),
+    check(
+      "content_derivatives_size_check",
+      sql`${table.byteSize} >= 0 and ${table.estimatedInputTokens} between 1 and 8192 and (${table.durationMs} is null or ${table.durationMs} > 0)`,
+    ),
+    check(
+      "content_derivatives_renderer_digest_check",
+      sql`${table.rendererImageDigest} glob 'sha256:*' and length(${table.rendererImageDigest}) = 71`,
+    ),
+  ],
+);
+
+/** Provider-neutral immutable vector-space registry. */
+export const corpusEmbeddingSpaces = sqliteTable(
+  "corpus_embedding_spaces",
+  {
+    id: text().primaryKey(),
+    descriptorJson: text({ mode: "json" })
+      .$type<EmbeddingSpaceDescriptor>()
+      .notNull(),
+    descriptorDigest: text().notNull(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("corpus_embedding_spaces_digest_unique").on(
+      table.descriptorDigest,
+    ),
+    check(
+      "corpus_embedding_spaces_digest_check",
+      sql`length(${table.descriptorDigest}) = 64 and ${table.descriptorDigest} not glob '*[^0-9a-f]*'`,
+    ),
+  ],
+);
+
+export type CorpusEmbeddingGenerationState =
+  | "staging"
+  | "active"
+  | "failed"
+  | "superseded";
+
+/** A generation is published only after its complete version set is indexed. */
+export const corpusEmbeddingGenerations = sqliteTable(
+  "corpus_embedding_generations",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => newId("egen")),
+    userId: owner(),
+    spaceId: text()
+      .notNull()
+      .references(() => corpusEmbeddingSpaces.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+    state: text()
+      .$type<CorpusEmbeddingGenerationState>()
+      .notNull()
+      .default("staging"),
+    versionSetDigest: text().notNull(),
+    expectedVersionCount: integer().notNull(),
+    indexedVersionCount: integer().notNull().default(0),
+    activatedAt: integer({ mode: "timestamp" }),
+    errorCode: text(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("corpus_embedding_generations_active_unique")
+      .on(table.userId, table.spaceId)
+      .where(sql`${table.state} = 'active'`),
+    index("corpus_embedding_generations_owner_state_idx").on(
+      table.userId,
+      table.state,
+    ),
+    check(
+      "corpus_embedding_generations_state_check",
+      sql`${table.state} in ('staging', 'active', 'failed', 'superseded')`,
+    ),
+    check(
+      "corpus_embedding_generations_counts_check",
+      sql`${table.expectedVersionCount} >= 0 and ${table.indexedVersionCount} >= 0 and ${table.indexedVersionCount} <= ${table.expectedVersionCount}`,
+    ),
+    check(
+      "corpus_embedding_generations_digest_check",
+      sql`length(${table.versionSetDigest}) = 64 and ${table.versionSetDigest} not glob '*[^0-9a-f]*'`,
+    ),
+  ],
+);
+
+export const corpusEmbeddingGenerationVersions = sqliteTable(
+  "corpus_embedding_generation_versions",
+  {
+    generationId: text()
+      .notNull()
+      .references(() => corpusEmbeddingGenerations.id, {
+        onDelete: "cascade",
+        onUpdate: "cascade",
+      }),
+    versionId: text()
+      .notNull()
+      .references(() => contentVersions.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+    vectorCount: integer().notNull().default(0),
+    indexedAt: integer({ mode: "timestamp" }),
+  },
+  (table) => [
+    uniqueIndex("corpus_embedding_generation_versions_unique").on(
+      table.generationId,
+      table.versionId,
+    ),
+    index("corpus_embedding_generation_versions_version_idx").on(
+      table.versionId,
+    ),
+    check(
+      "corpus_embedding_generation_versions_count_check",
+      sql`${table.vectorCount} >= 0`,
+    ),
+  ],
+);
+
+export const retrievalProviderConsents = sqliteTable(
+  "retrieval_provider_consents",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => newId("rcons")),
+    userId: owner(),
+    provider: text().notNull(),
+    capability: text().$type<"embedding" | "rerank">().notNull(),
+    disclosureRevision: text().notNull(),
+    policyRevision: text().notNull(),
+    grantedAt: integer({ mode: "timestamp" }).notNull(),
+    revokedAt: integer({ mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("retrieval_provider_consents_unique").on(
+      table.userId,
+      table.provider,
+      table.capability,
+    ),
+    check(
+      "retrieval_provider_consents_capability_check",
+      sql`${table.capability} in ('embedding', 'rerank')`,
+    ),
+  ],
+);
+
+/** Privacy-safe retrieval execution trace: no raw query or evidence body. */
+export const retrievalTraces = sqliteTable(
+  "retrieval_traces",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => newId("rtrace")),
+    operationId: text().notNull(),
+    userId: owner(),
+    queryDigest: text().notNull(),
+    corpusGenerationId: text().references(() => corpusEmbeddingGenerations.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    scopeDigest: text().notNull(),
+    stagesJson: text({ mode: "json" })
+      .$type<RetrievalStageTrace[]>()
+      .notNull(),
+    fallbackPolicy: text().$type<RetrievalFallbackPolicy>().notNull(),
+    fallbackReason: text(),
+    packedEvidenceIdsJson: text({ mode: "json" }).$type<string[]>().notNull(),
+    evaluationCorrelationId: text(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("retrieval_traces_owner_operation_unique").on(
+      table.userId,
+      table.operationId,
+    ),
+    index("retrieval_traces_owner_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    check(
+      "retrieval_traces_query_digest_check",
+      sql`length(${table.queryDigest}) = 64 and ${table.queryDigest} not glob '*[^0-9a-f]*'`,
+    ),
+    check(
+      "retrieval_traces_scope_digest_check",
+      sql`length(${table.scopeDigest}) = 64 and ${table.scopeDigest} not glob '*[^0-9a-f]*'`,
+    ),
+    check(
+      "retrieval_traces_fallback_check",
+      sql`${table.fallbackPolicy} in ('fail', 'lexical-only', 'hybrid-without-rerank')`,
+    ),
+  ],
+);
+
+export const corpusEmbeddingUsage = sqliteTable(
+  "corpus_embedding_usage",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => newId("eusage")),
+    operationId: text().notNull(),
+    userId: owner(),
+    spaceId: text()
+      .notNull()
+      .references(() => corpusEmbeddingSpaces.id, {
+        onDelete: "restrict",
+        onUpdate: "cascade",
+      }),
+    versionId: text().references(() => contentVersions.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
+    inputCount: integer().notNull(),
+    inputTokens: integer(),
+    providerRequestId: text(),
+    createdAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index("corpus_embedding_usage_owner_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    check(
+      "corpus_embedding_usage_counts_check",
+      sql`${table.inputCount} > 0 and (${table.inputTokens} is null or ${table.inputTokens} >= 0)`,
+    ),
+  ],
+);
+
+export type RetrievalEvaluationStatus = "running" | "succeeded" | "failed";
+
+/** Versioned aggregate evaluation output; fixture questions/bodies stay in git. */
+export const retrievalEvaluations = sqliteTable(
+  "retrieval_evaluations",
+  {
+    id: text()
+      .primaryKey()
+      .$defaultFn(() => newId("reval")),
+    userId: owner(),
+    fixtureRevision: text().notNull(),
+    corpusDigest: text().notNull(),
+    configurationDigest: text().notNull(),
+    status: text().$type<RetrievalEvaluationStatus>().notNull(),
+    metricsJson: text({ mode: "json" }).$type<Record<string, number>>(),
+    ablationsJson: text({ mode: "json" }).$type<
+      Array<{ configuration: string; metrics: Record<string, number> }>
+    >(),
+    errorCode: text(),
+    evaluatedAt: integer({ mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("retrieval_evaluations_owner_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    check(
+      "retrieval_evaluations_status_check",
+      sql`${table.status} in ('running', 'succeeded', 'failed')`,
+    ),
+    check(
+      "retrieval_evaluations_corpus_digest_check",
+      sql`length(${table.corpusDigest}) = 64 and ${table.corpusDigest} not glob '*[^0-9a-f]*'`,
+    ),
+    check(
+      "retrieval_evaluations_configuration_digest_check",
+      sql`length(${table.configurationDigest}) = 64 and ${table.configurationDigest} not glob '*[^0-9a-f]*'`,
     ),
   ],
 );

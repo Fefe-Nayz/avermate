@@ -1,5 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import {
+  ingestionStrategySchema,
+  type IngestionStrategy,
+} from "@avermate/agent-contracts";
 import { db } from "../db";
 import {
   documentArtifacts,
@@ -24,12 +28,19 @@ import { enqueueJob, NonRetryableJobError } from "../lib/jobs";
 import { deleteFile, deleteFilePreview, storeFile } from "../lib/storage";
 import { ingestYoutube, parseYoutubeUrl } from "../lib/youtube";
 import { canonicalJson, sha256 } from "../search/values";
-import { AdvancedIngestionError } from "../ingestion/errors";
+import {
+  AdvancedIngestionError,
+  asAdvancedIngestionError,
+} from "../ingestion/errors";
 import { sourceIngestionRevisionStore } from "../ingestion/revision-store";
 import {
   ExistingYoutubeCaptionProvider,
   VideoSourceAdapter,
 } from "../ingestion/video-source-adapter";
+import {
+  executePairedNodeBrowserRender,
+  executePairedNodeVideoAudioTranscription,
+} from "../ingestion/paired-node-media";
 import { OCR_JOB_KIND } from "./ocr";
 import { enqueueMaterialPreview } from "./material-preview";
 
@@ -38,6 +49,11 @@ const payloadSchema = z
     documentId: z.string().min(1),
     ingestionId: z.string().min(1).optional(),
     advancedRevisionId: z.string().min(1).optional(),
+    strategy: ingestionStrategySchema.optional(),
+    requestAudioFallback: z.boolean().optional(),
+    preferredLanguage: z.string().trim().min(2).max(35).optional(),
+    consentRevision: z.string().trim().min(1).max(128).optional(),
+    nodeId: z.string().trim().min(1).max(256).optional(),
   })
   .strict();
 const cleanupPayloadSchema = z
@@ -438,6 +454,11 @@ export async function enqueueLinkIngestion(input: {
   documentId: string;
   userId: string;
   idempotencyKey?: string;
+  strategy?: IngestionStrategy;
+  requestAudioFallback?: boolean;
+  preferredLanguage?: string;
+  consentRevision?: string;
+  nodeId?: string;
 }) {
   const [document] = await db
     .select({ sourceUrl: materialDocuments.sourceUrl })
@@ -452,13 +473,31 @@ export async function enqueueLinkIngestion(input: {
   if (!document?.sourceUrl) {
     throw new Error("The link material is unavailable");
   }
+  const youtube = Boolean(parseYoutubeUrl(document.sourceUrl));
+  const strategy = input.strategy ?? (youtube ? "youtube" : "static-html");
+  if (
+    (youtube && strategy !== "youtube") ||
+    (!youtube && strategy === "youtube") ||
+    (input.requestAudioFallback &&
+      (!youtube || strategy !== "youtube" || !input.consentRevision))
+  ) {
+    throw new Error("The requested ingestion strategy does not match the source");
+  }
   const advancedRevision = await sourceIngestionRevisionStore.create({
     ownerId: input.userId,
     documentId: input.documentId,
-    strategy: parseYoutubeUrl(document.sourceUrl) ? "youtube" : "static-html",
+    strategy,
     canonicalUrl: document.sourceUrl,
     policyRef: "ingestion-public-url-policy.v1",
-    settings: { captionsFirst: true, dynamicFallback: "explicit-only" },
+    settings: {
+      captionsFirst: true,
+      dynamicFallback: "explicit-only",
+      requestedStrategy: strategy,
+      requestAudioFallback: input.requestAudioFallback ?? false,
+      preferredLanguage: input.preferredLanguage ?? "fr",
+      consentRevision: input.consentRevision ?? null,
+      nodeId: input.nodeId ?? null,
+    },
   });
   const ingestionId = newId("ing");
   await db
@@ -493,9 +532,21 @@ export async function enqueueLinkIngestion(input: {
         documentId: input.documentId,
         ingestionId,
         advancedRevisionId: advancedRevision.id,
+        strategy,
+        requestAudioFallback: input.requestAudioFallback ?? false,
+        preferredLanguage: input.preferredLanguage ?? "fr",
+        ...(input.consentRevision
+          ? { consentRevision: input.consentRevision }
+          : {}),
+        ...(input.nodeId ? { nodeId: input.nodeId } : {}),
       },
       userId: input.userId,
-      idempotencyKey: input.idempotencyKey ?? input.documentId,
+      idempotencyKey:
+        input.idempotencyKey ??
+        (strategy === "static-html" ||
+        (strategy === "youtube" && !input.requestAudioFallback)
+          ? input.documentId
+          : advancedRevision.id),
       maxAttempts: 3,
     });
     await sourceIngestionRevisionStore.queued({
@@ -503,7 +554,7 @@ export async function enqueueLinkIngestion(input: {
       id: advancedRevision.id,
       jobId: job.id,
     });
-    return job;
+    return { ...job, advancedRevisionId: advancedRevision.id };
   } catch (error) {
     await setArtifactFailure(
       input.documentId,
@@ -530,10 +581,22 @@ export async function runIngestLinkJob(
     enqueuePreview?: typeof enqueueMaterialPreview;
     now?: () => Date;
     signal?: AbortSignal;
+    attempt?: number;
     afterPdfTransition?: () => Promise<void> | void;
+    browserRender?: typeof executePairedNodeBrowserRender;
+    videoAudioTranscription?: typeof executePairedNodeVideoAudioTranscription;
   } = {},
 ) {
-  const { documentId, ingestionId, advancedRevisionId } =
+  const {
+    documentId,
+    ingestionId,
+    advancedRevisionId,
+    strategy,
+    requestAudioFallback,
+    preferredLanguage,
+    consentRevision,
+    nodeId,
+  } =
     payloadSchema.parse(payload);
   const [document] = await db
     .select()
@@ -604,20 +667,61 @@ export async function runIngestLinkJob(
             now: () => capturedAt,
           }),
         );
-      const resolution = await adapter.ingest({
-        ownerId: document.userId,
-        threadId: `material:${document.id}`,
-        branchId: `material:${document.id}:ingestion`,
-        sourceVersionId: advancedRevisionId ?? document.id,
-        url: document.sourceUrl,
-        preferredLanguage: "fr",
-        requestAudioFallback: false,
-        idempotencyKey: ingestionId ?? document.id,
-        signal: options.signal,
-      });
-      if (resolution.status !== "ready") {
-        throw new IngestError("Video caption ingestion did not complete", true, {
-          reasonCode: "transcription_unavailable",
+      let resolution;
+      try {
+        const captionResolution = await adapter.ingest({
+          ownerId: document.userId,
+          threadId: `material:${document.id}`,
+          branchId: `material:${document.id}:ingestion`,
+          sourceVersionId: advancedRevisionId ?? document.id,
+          url: document.sourceUrl,
+          preferredLanguage: preferredLanguage ?? "fr",
+          requestAudioFallback: false,
+          idempotencyKey: ingestionId ?? document.id,
+          signal: options.signal,
+        });
+        if (captionResolution.status !== "ready") {
+          throw new IngestError(
+            "Video caption ingestion did not complete",
+            true,
+            { reasonCode: "transcription_unavailable" },
+          );
+        }
+        resolution = captionResolution;
+      } catch (error) {
+        const advanced = asAdvancedIngestionError(error, {
+          reasonCode: "captions_unavailable",
+          retryable: false,
+        });
+        if (
+          !requestAudioFallback ||
+          advanced.reasonCode !== "captions_unavailable"
+        ) {
+          throw advanced;
+        }
+        if (!consentRevision || !nodeId) {
+          throw new AdvancedIngestionError(
+            "permission_required",
+            "Audio extraction requires current consent and an attested Node placement",
+            false,
+          );
+        }
+        resolution = await (
+          options.videoAudioTranscription ??
+          executePairedNodeVideoAudioTranscription
+        )({
+          ownerId: document.userId,
+          nodeId,
+          threadId: `material:${document.id}`,
+          branchId: `material:${document.id}:ingestion`,
+          sourceVersionId: advancedRevisionId ?? document.id,
+          canonicalUrl: document.sourceUrl,
+          title: document.title,
+          requestedLanguage: preferredLanguage ?? "fr",
+          consentRevision,
+          idempotencyKey: ingestionId ?? document.id,
+          attempt: options.attempt,
+          signal: options.signal,
         });
       }
       const extracted = resolution.source;
@@ -667,7 +771,10 @@ export async function runIngestLinkJob(
           language: extracted.selectedLanguage,
           resultDigest: sha256(resolution.markdown),
           diagnostics: {
-            adapter: "youtube-captions-first.v1",
+            adapter:
+              extracted.strategy === "extracted-audio"
+                ? "node-video-audio-transcription.v2"
+                : "youtube-captions-first.v1",
             videoId: extracted.mediaId,
             segmentCount: extracted.segments.length,
             selectedLanguage: extracted.selectedLanguage,
@@ -680,6 +787,71 @@ export async function runIngestLinkJob(
         artifactKind: "web-markdown" as const,
         title: extracted.title,
         videoId: extracted.mediaId,
+      };
+    }
+
+    if (strategy === "browser-render") {
+      if (!nodeId) {
+        throw new AdvancedIngestionError(
+          "placement_unavailable",
+          "Dynamic rendering requires an attested Node placement",
+          false,
+        );
+      }
+      const rendered = await (
+        options.browserRender ?? executePairedNodeBrowserRender
+      )({
+        ownerId: document.userId,
+        nodeId,
+        threadId: `material:${document.id}`,
+        branchId: `material:${document.id}:ingestion`,
+        sourceVersionId: advancedRevisionId ?? document.id,
+        canonicalUrl: document.sourceUrl,
+        idempotencyKey: ingestionId ?? document.id,
+        attempt: options.attempt,
+        signal: options.signal,
+      });
+      const meta: WebMarkdownMetaV1 = {
+        finalUrl: rendered.output.finalUrl,
+        fetchedAt: capturedAt.toISOString(),
+        title: rendered.extracted.title,
+        byline: rendered.extracted.byline,
+        site: rendered.extracted.site,
+        publishedAt: rendered.extracted.publishedAt,
+        wordCount: rendered.extracted.wordCount,
+        truncated: rendered.extracted.truncated,
+        kind: "web",
+      };
+      await publishArticle({
+        documentId: document.id,
+        userId: document.userId,
+        sourceUrl: document.sourceUrl,
+        runId,
+        title: rendered.extracted.title,
+        markdown: rendered.extracted.markdown,
+        meta,
+      });
+      if (advancedRevisionId) {
+        await sourceIngestionRevisionStore.ready({
+          ownerId: document.userId,
+          id: advancedRevisionId,
+          strategy: "browser-render",
+          finalUrl: rendered.output.finalUrl,
+          language: rendered.output.language ?? undefined,
+          resultDigest: sha256(rendered.extracted.markdown),
+          diagnostics: {
+            adapter: "paired-node-browser-capture.v1",
+            requestCount: rendered.output.requestCount,
+            responseBytes: rendered.output.responseBytes,
+            imageDigest: rendered.profile.imageDigest,
+            profileVersion: rendered.profile.profileVersion,
+          },
+        });
+      }
+      return {
+        kind: "article" as const,
+        artifactKind: "web-markdown" as const,
+        title: rendered.extracted.title,
       };
     }
 

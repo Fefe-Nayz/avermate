@@ -15,6 +15,10 @@ export const env = createEnv({
 
     BETTER_AUTH_URL: z.url(),
     BETTER_AUTH_SECRET: z.string().min(32),
+    /** Optional independent root for sealed/hashed Node channel credentials. */
+    NODE_CREDENTIAL_MASTER_SECRET: z.string().min(32).optional(),
+    /** Optional independent root for deterministic Ed25519 Node grants. */
+    NODE_GRANT_SIGNING_SECRET: z.string().min(32).optional(),
     /** Parent domain shared by the web and API services, for authenticated SSR. */
     AUTH_COOKIE_DOMAIN: z.string().min(1).optional(),
     ADMIN_USER_IDS: z.string().optional(),
@@ -44,8 +48,20 @@ export const env = createEnv({
       .default("hosted"),
     /** Costly operator placements remain off until their launch gates pass. */
     MANAGED_ADAPTERS_ENABLED: bool,
+    /** Invite, consent and beta quota gates fail closed before managed dispatch. */
+    MANAGED_BETA_ENFORCEMENT_ENABLED: bool,
     /** Residency-aware managed pool/model catalogue region. */
     MANAGED_REGION: z.string().min(1).max(64).default("local"),
+    MANAGED_TERMS_REVISION: z
+      .string()
+      .min(1)
+      .max(128)
+      .default("managed-beta/1"),
+    MANAGED_PRIVACY_REVISION: z
+      .string()
+      .min(1)
+      .max(128)
+      .default("managed-privacy/1"),
 
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -78,12 +94,23 @@ export const env = createEnv({
     S3_BUCKET: z.string().min(1).default("avermate"),
     S3_PRIVATE_BUCKET: z.string().min(1).default("avermate"),
     MISTRAL_API_KEY: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
+    COHERE_API_KEY: z.string().optional(),
     TRANSCRIPTION_API_KEY: z.string().optional(),
-    TRANSCRIPTION_PROVIDER: z.enum(["mistral"]).default("mistral"),
+    TRANSCRIPTION_PROVIDER: z.enum(["mistral", "node"]).default("mistral"),
+    OCR_PROVIDER: z.enum(["mistral", "node"]).default("mistral"),
     TTS_PROVIDER: z.enum(["mistral"]).default("mistral"),
     TTS_MODEL: z.string().min(1).default("voxtral-mini-tts-2603"),
     /** Optional preset/custom Mistral voice id; empty uses the provider default. */
     TTS_VOICE_ID: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().optional(),
+    OPENROUTER_API_KEY: z.string().optional(),
+    ELEVENLABS_API_KEY: z.string().optional(),
+    /**
+     * Compatibility fence for the former generic inference key. The key is
+     * ignored unless its one exact destination is declared.
+     */
+    INFERENCE_PROVIDER: z.enum(["openai", "openrouter"]).optional(),
     INFERENCE_API_KEY: z.string().optional(),
     OCR_MAX_PAGES_PER_DOCUMENT: z.coerce.number().int().positive().default(300),
     TECTONIC_BIN: z.string().min(1).default("tectonic"),

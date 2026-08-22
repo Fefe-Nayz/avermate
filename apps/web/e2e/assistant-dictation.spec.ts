@@ -92,7 +92,7 @@ test("Chrome dictation releases the microphone and inserts without sending", asy
 
   await expect(
     page.getByRole("textbox", {
-      name: "Ask about your courses, notes, or documents…",
+      name: "Ask about your courses, grades or documents…",
     })
   ).toHaveValue("Texte dicté depuis Chrome")
   await expect

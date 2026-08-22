@@ -4,7 +4,9 @@ import type {
   MindmapContentV1,
   MindmapNodeV1,
   QuizContentV1,
+  QuizContentV2,
   QuizQuestionV1,
+  QuizQuestionV2,
   StudyDocumentKind,
   StudyDocumentMeta,
 } from "../db/schema/documents";
@@ -33,8 +35,14 @@ export type QuizPromptV1 =
   | { kind: "cloze"; text: string; blankCount: number };
 
 export interface QuizPromptContentV1 {
-  version: 1;
-  questions: QuizPromptV1[];
+  version: 1 | 2;
+  questions: Array<
+    QuizPromptV1 & {
+      id?: string;
+      objectiveIds?: string[];
+      difficulty?: number | null;
+    }
+  >;
 }
 
 export function quizPrompt(question: QuizQuestionV1): QuizPromptV1 {
@@ -56,10 +64,21 @@ export function quizPrompt(question: QuizQuestionV1): QuizPromptV1 {
   };
 }
 
-export function quizPromptContent(content: QuizContentV1): QuizPromptContentV1 {
+export function quizPromptContent(
+  content: QuizContentV1 | QuizContentV2,
+): QuizPromptContentV1 {
   return {
-    version: 1,
-    questions: content.questions.map(quizPrompt),
+    version: content.version,
+    questions: content.questions.map((question) => ({
+      ...quizPrompt(question),
+      ...(content.version === 2
+        ? {
+            id: (question as QuizQuestionV2).id,
+            objectiveIds: (question as QuizQuestionV2).objectiveIds,
+            difficulty: (question as QuizQuestionV2).difficulty,
+          }
+        : {}),
+    })),
   };
 }
 
@@ -251,12 +270,47 @@ const quizQuestionSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-export const quizContentSchema = z
+const quizContentV1Schema = z
   .object({
     version: z.literal(1),
     questions: z.array(quizQuestionSchema).min(1).max(QUIZ_MAX_QUESTIONS),
   })
   .strict() satisfies z.ZodType<QuizContentV1>;
+
+const quizSourceProofSchema = z
+  .object({
+    sourceKind: z.enum(["material", "study-document", "grade-copy"]),
+    sourceId: z.string().trim().min(1).max(256),
+    sourceVersion: z.string().trim().min(1).max(256),
+    locator: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+const quizV2MetadataSchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  objectiveIds: z.array(z.string().trim().min(1).max(256)).max(20),
+  difficulty: z.number().min(0).max(1).nullable(),
+  sourceProofs: z.array(quizSourceProofSchema).max(20),
+  rubricRevision: z.string().trim().min(1).max(120),
+  rubric: z.record(z.string(), z.unknown()),
+  generationProvenance: z.record(z.string(), z.unknown()).optional(),
+  validationState: z.enum(["draft", "reviewed", "rejected"]),
+});
+const quizQuestionV2Schema = z.discriminatedUnion("kind", [
+  quizQuestionSchema.options[0].extend(quizV2MetadataSchema.shape),
+  quizQuestionSchema.options[1].extend(quizV2MetadataSchema.shape),
+  quizQuestionSchema.options[2].extend(quizV2MetadataSchema.shape),
+]);
+const quizContentV2Schema = z
+  .object({
+    version: z.literal(2),
+    questions: z.array(quizQuestionV2Schema).min(1).max(QUIZ_MAX_QUESTIONS),
+  })
+  .strict() as z.ZodType<QuizContentV2>;
+
+export const quizContentSchema = z.union([
+  quizContentV1Schema,
+  quizContentV2Schema,
+]);
 
 /**
  * `entry` names the one source file materialised in the isolated build folder.

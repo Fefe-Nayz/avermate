@@ -156,6 +156,9 @@ describe("core historical branch ownership", () => {
       branchId: seeded.created.branch.id,
       status: "committed",
     });
+    expect(await repository.domainCursorAtBoundary(boundary)).toBe(
+      "domain:corpus-user-a:0",
+    );
 
     const pending = await snapshots.requestCapture({
       ownerId: "corpus-user-a",
@@ -195,6 +198,9 @@ describe("core historical branch ownership", () => {
       operation: "edit",
     });
     expect(editedBoundary.cutoffMessageId).toBeNull();
+    expect(await repository.domainCursorAtBoundary(editedBoundary)).toBe(
+      "domain:corpus-user-a:0",
+    );
     expect(await repository.latestCommittedSnapshot(editedBoundary)).toBeNull();
   });
 

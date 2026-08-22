@@ -8,6 +8,7 @@ import {
   MegaphoneIcon,
   MessageSquareIcon,
   ScrollTextIcon,
+  ServerCogIcon,
   ShieldIcon,
   UsersIcon,
   UsersRoundIcon,
@@ -63,6 +64,11 @@ export function AdminNavigation() {
               href: "/admin/presets",
               label: t("Curriculum presets"),
               icon: ScrollTextIcon,
+            },
+            {
+              href: "/admin/managed",
+              label: t("Managed service"),
+              icon: ServerCogIcon,
             },
             {
               href: "/admin/card-templates",

@@ -14,6 +14,7 @@ import {
   Trash2Icon,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -86,6 +87,7 @@ export function ProjectsClient({
 }: {
   selectedProjectId?: string | null
 }) {
+  const t = useExtracted()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { yearId, subjects } = useYear()
@@ -239,6 +241,18 @@ export function ProjectsClient({
     },
     onError: (error) => toast.error(error.message),
   })
+  const setItemTracking = useMutation({
+    ...orpc.projects.setItemTracking.mutationOptions(),
+    onSuccess: async (_, input) => {
+      await refreshProject(input.projectId)
+      toast.success(
+        input.trackingMode === "pinned"
+          ? t("Current version pinned in the project")
+          : t("The source now follows its latest version")
+      )
+    },
+    onError: (error) => toast.error(error.message),
+  })
 
   const selected = projectQuery.data?.project ?? null
   const editable = selected as EditableProject | null
@@ -246,7 +260,8 @@ export function ProjectsClient({
     addItem.isPending ||
     removeItem.isPending ||
     reorder.isPending ||
-    retry.isPending
+    retry.isPending ||
+    setItemTracking.isPending
 
   function submitProject(value: ProjectFormValue) {
     if (editable) {
@@ -401,6 +416,7 @@ export function ProjectsClient({
                   onRemove={(input) => removeItem.mutate(input)}
                   onReorder={(input) => reorder.mutate(input)}
                   onRetry={(input) => retry.mutate(input)}
+                  onTracking={(input) => setItemTracking.mutate(input)}
                 />
               </TabsContent>
               <TabsContent value="search" className="pt-4">

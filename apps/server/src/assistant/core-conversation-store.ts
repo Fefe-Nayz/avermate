@@ -24,6 +24,7 @@ import {
   type AssistantMessage,
   type AssistantPartV1,
   type AssistantRun,
+  type AssistantRunModelPolicy,
   type AssistantRunStatus,
   type AssistantThread,
   type AssistantThreadDetail,
@@ -85,7 +86,10 @@ export type EditedMessageProjection =
 
 export type FinalUsageSnapshot = {
   providerKey: string;
+  providerRevision?: string;
   modelKey: string;
+  modelRevision?: string;
+  source?: "provider" | "estimated" | "unknown";
   pricingSnapshotId?: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -104,6 +108,43 @@ export type FinalizedRunProjection = {
   terminalEvent: AssistantEventProjection;
   branchId: string;
   siblingCreated: boolean;
+};
+
+export type NodeConversationPayloadCodec = {
+  sealParts(input: {
+    ownerId: string;
+    nodeId: string;
+    threadId: string;
+    messageId: string;
+    role: "user" | "assistant" | "system" | "tool";
+    parentMessageId: string | null;
+    parts: AssistantPartV1[];
+  }): AssistantPartV1[];
+  openParts(input: {
+    ownerId: string;
+    nodeId: string;
+    threadId: string;
+    messageId: string;
+    role: "user" | "assistant" | "system" | "tool";
+    parentMessageId: string | null;
+    parts: AssistantPartV1[];
+  }): AssistantPartV1[];
+  sealEvent(input: {
+    ownerId: string;
+    nodeId: string;
+    threadId: string;
+    runId: string;
+    eventId: string;
+    payload: unknown;
+  }): unknown;
+  openEvent(input: {
+    ownerId: string;
+    nodeId: string;
+    threadId: string;
+    runId: string;
+    eventId: string;
+    payload: unknown;
+  }): unknown;
 };
 
 function sqlTimestamp(): number {
@@ -174,9 +215,20 @@ function runFromRow(row: Row): AssistantRun {
     parentRunId: nullString(row.parentRunId),
     runtimeId: String(row.runtimeId),
     runtimeVersion: String(row.runtimeVersion),
+    runtimeProtocolVersion: Number(row.runtimeProtocolVersion ?? 1),
     graphSchemaVersion: Number(row.graphSchemaVersion),
     modelKey: String(row.modelKey),
+    modelRevision: String(row.modelRevision ?? "legacy/1"),
     providerKey: String(row.providerKey),
+    providerRevision: String(row.providerRevision ?? "legacy/1"),
+    modelPlacement:
+      row.modelPlacementJson === undefined || row.modelPlacementJson === null
+        ? { kind: "core", instanceId: "legacy" }
+        : jsonValue(row.modelPlacementJson),
+    policyRevision: String(row.policyRevision ?? "assistant-policy/1"),
+    toolCatalogRevision: String(row.toolCatalogRevision ?? "legacy/1"),
+    contextManifestDigest: nullString(row.contextManifestDigest),
+    branchIdentityDigest: nullString(row.branchIdentityDigest),
     modelResolvedId: nullString(row.modelResolvedId),
     status: row.status,
     approvalMode: row.approvalMode,
@@ -189,6 +241,13 @@ function runFromRow(row: Row): AssistantRun {
     domainCursorRef: nullString(row.domainCursorRef),
     safeError: nullString(row.safeError),
     errorCode: nullString(row.errorCode),
+    cancellationRequestedAt:
+      row.cancellationRequestedAt === undefined ||
+      row.cancellationRequestedAt === null
+        ? null
+        : isoFromSqlite(row.cancellationRequestedAt),
+    cancellationReason: nullString(row.cancellationReason),
+    terminalReason: row.terminalReason ?? null,
     startedAt: row.startedAt === null ? null : isoFromSqlite(row.startedAt),
     completedAt:
       row.completedAt === null ? null : isoFromSqlite(row.completedAt),
@@ -214,7 +273,11 @@ function usageFromRow(row: Row): AssistantUsage {
   return assistantUsageSchema.parse({
     runId: String(row.runId),
     providerKey: String(row.providerKey),
+    providerRevision: String(row.providerRevision ?? "legacy/1"),
     modelKey: String(row.modelKey),
+    modelRevision: String(row.modelRevision ?? "legacy/1"),
+    usageVersion: Number(row.usageVersion ?? 1),
+    source: row.source ?? "unknown",
     pricingSnapshotId: nullString(row.pricingSnapshotId),
     inputTokens: numeric("inputTokens"),
     outputTokens: numeric("outputTokens"),
@@ -274,6 +337,18 @@ async function one(
   );
 }
 
+async function currentDomainCursorRef(
+  target: AssistantSqlClient | Transaction,
+  ownerId: string,
+): Promise<string> {
+  const row = await one(
+    target,
+    "SELECT nextSequence FROM agent_action_sequences WHERE userId = ? LIMIT 1",
+    [ownerId],
+  );
+  return `domain:${ownerId}:${Number(row?.nextSequence ?? 0)}`;
+}
+
 async function ownedThread(
   target: AssistantSqlClient | Transaction,
   ownerId: string,
@@ -288,12 +363,6 @@ async function ownedThread(
     [threadId, ownerId],
   );
   if (!row) throw new ConversationStoreError("not_found", "Thread not found");
-  if (row.placement !== "core") {
-    throw new ConversationStoreError(
-      "placement_unavailable",
-      "This thread belongs to a node placement that is unavailable",
-    );
-  }
   return row;
 }
 
@@ -304,7 +373,8 @@ async function ownedRun(
 ): Promise<Row> {
   const row = await one(
     target,
-    `SELECT r.* FROM assistant_runs r
+    `SELECT r.*, t.placement AS threadPlacement,
+       t.placementRef AS threadPlacementRef FROM assistant_runs r
      JOIN assistant_threads t ON t.id = r.threadId
      WHERE r.id = ? AND r.userId = ? AND t.userId = ? LIMIT 1`,
     [runId, ownerId, ownerId],
@@ -364,8 +434,86 @@ export class CoreConversationStore {
     private readonly scheduleConversationIndex?: (input: {
       ownerId: string;
       threadId: string;
+      selector?: {
+        conversationBranchId: string;
+        conversationHeadMessageId: string;
+      };
+      projectItemId?: string;
     }) => Promise<void>,
+    private readonly nodePayloadCodec?: NodeConversationPayloadCodec,
   ) {}
+
+  private storedParts(
+    thread: Row,
+    ownerId: string,
+    threadId: string,
+    messageId: string,
+    role: "user" | "assistant" | "system" | "tool",
+    parentMessageId: string | null,
+    parts: AssistantPartV1[],
+  ) {
+    if (thread.placement !== "node") return parts;
+    if (!this.nodePayloadCodec || !thread.placementRef) {
+      throw new ConversationStoreError(
+        "placement_unavailable",
+        "Node conversation envelope encryption is unavailable",
+      );
+    }
+    return this.nodePayloadCodec.sealParts({
+      ownerId,
+      nodeId: String(thread.placementRef),
+      threadId,
+      messageId,
+      role,
+      parentMessageId,
+      parts,
+    });
+  }
+
+  private storedEventPayload(run: Row, eventId: string, payload: unknown) {
+    if (run.threadPlacement !== "node") return payload;
+    if (!this.nodePayloadCodec || !run.threadPlacementRef) {
+      throw new ConversationStoreError(
+        "placement_unavailable",
+        "Node conversation envelope encryption is unavailable",
+      );
+    }
+    return this.nodePayloadCodec.sealEvent({
+      ownerId: String(run.userId),
+      nodeId: String(run.threadPlacementRef),
+      threadId: String(run.threadId),
+      runId: String(run.id),
+      eventId,
+      payload,
+    });
+  }
+
+  private openedParts(
+    run: Row,
+    ownerId: string,
+    threadId: string,
+    messageId: string,
+    role: "user" | "assistant" | "system" | "tool",
+    parentMessageId: string | null,
+    parts: AssistantPartV1[],
+  ) {
+    if (run.threadPlacement !== "node") return parts;
+    if (!this.nodePayloadCodec || !run.threadPlacementRef) {
+      throw new ConversationStoreError(
+        "placement_unavailable",
+        "Node conversation envelope decryption is unavailable",
+      );
+    }
+    return this.nodePayloadCodec.openParts({
+      ownerId,
+      nodeId: String(run.threadPlacementRef),
+      threadId,
+      messageId,
+      role,
+      parentMessageId,
+      parts,
+    });
+  }
 
   private async registerConversationSource(
     executor: AssistantSqlClient | Transaction,
@@ -398,9 +546,22 @@ export class CoreConversationStore {
     });
   }
 
-  private async enqueueConversationIndex(ownerId: string, threadId: string) {
+  private async enqueueConversationIndex(
+    ownerId: string,
+    threadId: string,
+    selector?: {
+      conversationBranchId: string;
+      conversationHeadMessageId: string;
+    },
+    projectItemId?: string,
+  ) {
     if (!this.scheduleConversationIndex) return;
-    await this.scheduleConversationIndex({ ownerId, threadId }).catch(
+    await this.scheduleConversationIndex({
+      ownerId,
+      threadId,
+      selector,
+      projectItemId,
+    }).catch(
       (error) => {
         console.error(
           "[assistant] conversation indexing enqueue failed",
@@ -415,11 +576,12 @@ export class CoreConversationStore {
     title?: string;
     projectId?: string | null;
     placement?: "core" | "node";
+    nodeId?: string;
   }): Promise<{ thread: AssistantThread; branch: AssistantBranch }> {
-    if (input.placement === "node") {
+    if (input.placement === "node" && !input.nodeId) {
       throw new ConversationStoreError(
         "placement_unavailable",
-        "Node conversation placement is unavailable until plan 032",
+        "A verified Node conversation placement is required",
       );
     }
     const threadId = newId("athr");
@@ -429,13 +591,16 @@ export class CoreConversationStore {
     try {
       await execute(transaction, {
         sql: `INSERT INTO assistant_threads
-          (id, userId, title, revision, projectId, placement, createdAt, updatedAt)
-          VALUES (?, ?, ?, 1, ?, 'core', ?, ?)`,
+          (id, userId, title, revision, projectId, placement, placementRef,
+           createdAt, updatedAt)
+          VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)`,
         args: [
           threadId,
           input.ownerId,
           input.title?.trim() || "Nouvelle conversation",
           input.projectId ?? null,
+          input.placement ?? "core",
+          input.placement === "node" ? input.nodeId! : null,
           now,
           now,
         ],
@@ -650,6 +815,17 @@ export class CoreConversationStore {
     });
   }
 
+  async messageParts(ownerId: string, threadId: string, messageId: string) {
+    await ownedThread(this.client, ownerId, threadId);
+    const row = await one(
+      this.client,
+      `SELECT partsJson FROM assistant_messages WHERE id = ? AND threadId = ? LIMIT 1`,
+      [messageId, threadId],
+    );
+    if (!row) throw new ConversationStoreError("not_found", "Message not found");
+    return assistantPartV1Schema.array().parse(jsonValue(row.partsJson));
+  }
+
   async reserveTurn(input: {
     ownerId: string;
     threadId: string;
@@ -659,6 +835,8 @@ export class CoreConversationStore {
     markdown: string;
     modelKey: string;
     providerKey?: string;
+    modelPolicy?: AssistantRunModelPolicy;
+    approvalMode?: "read-only" | "confirm-writes" | "auto-reversible";
     forkOnConflict?: boolean;
     replacesMessageId?: string | null;
     attachments?: Array<{
@@ -678,7 +856,11 @@ export class CoreConversationStore {
   }): Promise<TurnReservation> {
     const transaction = await this.client.transaction("write");
     try {
-      await ownedThread(transaction, input.ownerId, input.threadId);
+      const owned = await ownedThread(
+        transaction,
+        input.ownerId,
+        input.threadId,
+      );
       const duplicate = await one(
         transaction,
         `SELECT * FROM assistant_runs WHERE threadId = ? AND clientRequestId = ? LIMIT 1`,
@@ -792,7 +974,7 @@ export class CoreConversationStore {
       const active = await one(
         transaction,
         `SELECT id FROM assistant_runs WHERE branchId = ?
-          AND status IN ('reserved','running','waiting-for-user') LIMIT 1`,
+          AND status IN ('reserved','running','waiting-for-user','waiting-approval','cancelling') LIMIT 1`,
         [targetBranchId],
       );
       if (active) {
@@ -804,6 +986,10 @@ export class CoreConversationStore {
       const messageId = newId("amsg");
       const runId = newId("arun");
       const outputId = newId("amsg");
+      const domainCursorRef = await currentDomainCursorRef(
+        transaction,
+        input.ownerId,
+      );
       await execute(transaction, {
         sql: `INSERT INTO assistant_messages
           (id, threadId, parentMessageId, role, authorship, status,
@@ -814,10 +1000,18 @@ export class CoreConversationStore {
           input.threadId,
           input.expectedHeadMessageId,
           canonicalJson(
-            textParts(input.markdown, {
+            this.storedParts(
+              owned,
+              input.ownerId,
+              input.threadId,
+              messageId,
+              "user",
+              input.expectedHeadMessageId,
+              textParts(input.markdown, {
               skillId: input.skillId,
               planMode: input.planMode,
-            }),
+              }),
+            ),
           ),
           input.replacesMessageId ?? null,
           now,
@@ -844,10 +1038,11 @@ export class CoreConversationStore {
         sql: `INSERT INTO assistant_runs
           (id, userId, threadId, branchId, inputMessageId, reservedOutputMessageId,
            clientRequestId, workspaceSnapshotRef, runtimeId, runtimeVersion, graphSchemaVersion,
-           modelKey, providerKey, status, approvalMode, providerDispatchState,
+           modelKey, providerKey, modelPolicyJson, status, approvalMode,
+           providerDispatchState, domainCursorRef,
            createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'avermate-readonly', '1', 1,
-            ?, ?, 'reserved', 'read-only', 'pending', ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'avermate-agent-runtime', '1', 1,
+            ?, ?, ?, 'reserved', ?, 'pending', ?, ?, ?)`,
         args: [
           runId,
           input.ownerId,
@@ -859,6 +1054,9 @@ export class CoreConversationStore {
           input.workspaceSnapshotRef ?? null,
           input.modelKey,
           input.providerKey ?? "mock",
+          input.modelPolicy ? canonicalJson(input.modelPolicy) : null,
+          input.approvalMode ?? "read-only",
+          domainCursorRef,
           now,
           now,
         ],
@@ -908,6 +1106,9 @@ export class CoreConversationStore {
     messageId: string;
     clientRequestId: string;
     modelKey?: string;
+    providerKey?: string;
+    modelPolicy?: AssistantRunModelPolicy;
+    approvalMode?: "read-only" | "confirm-writes" | "auto-reversible";
     destinationBranchId?: string;
     workspaceSnapshotRef?: string | null;
   }): Promise<TurnReservation> {
@@ -964,6 +1165,10 @@ export class CoreConversationStore {
       const runId = newId("arun");
       const outputId = newId("amsg");
       const now = sqlTimestamp();
+      const domainCursorRef = await currentDomainCursorRef(
+        transaction,
+        input.ownerId,
+      );
       await execute(transaction, {
         sql: `INSERT INTO assistant_branches
           (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
@@ -982,10 +1187,11 @@ export class CoreConversationStore {
           (id, userId, threadId, branchId, inputMessageId, reservedOutputMessageId,
            parentRunId, clientRequestId, workspaceSnapshotRef,
            runtimeId, runtimeVersion, graphSchemaVersion,
-           modelKey, providerKey, status, approvalMode, providerDispatchState,
+           modelKey, providerKey, modelPolicyJson, status, approvalMode,
+           providerDispatchState, domainCursorRef,
            createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'avermate-readonly', '1', 1,
-            ?, ?, 'reserved', 'read-only', 'pending', ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'avermate-agent-runtime', '1', 1,
+            ?, ?, ?, 'reserved', ?, 'pending', ?, ?, ?)`,
         args: [
           runId,
           input.ownerId,
@@ -997,7 +1203,12 @@ export class CoreConversationStore {
           input.clientRequestId,
           input.workspaceSnapshotRef ?? null,
           input.modelKey ?? previousRun?.modelKey ?? "mock-readonly",
-          previousRun?.providerKey ?? "mock",
+          input.providerKey ?? previousRun?.providerKey ?? "mock",
+          input.modelPolicy
+            ? canonicalJson(input.modelPolicy)
+            : (previousRun?.modelPolicyJson ?? null),
+          input.approvalMode ?? previousRun?.approvalMode ?? "read-only",
+          domainCursorRef,
           now,
           now,
         ],
@@ -1028,12 +1239,15 @@ export class CoreConversationStore {
     clientRequestId: string;
     markdown: string;
     modelKey: string;
+    providerKey?: string;
+    modelPolicy?: AssistantRunModelPolicy;
+    approvalMode?: "read-only" | "confirm-writes" | "auto-reversible";
     destinationBranchId?: string;
     workspaceSnapshotRef?: string | null;
   }): Promise<EditedMessageProjection> {
     const row = await one(
       this.client,
-      `SELECT m.*, t.userId FROM assistant_messages m
+      `SELECT m.*, t.userId, t.placement, t.placementRef FROM assistant_messages m
        JOIN assistant_threads t ON t.id = m.threadId
        WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL LIMIT 1`,
       [input.messageId, input.ownerId],
@@ -1052,6 +1266,9 @@ export class CoreConversationStore {
           clientRequestId: input.clientRequestId,
           markdown: input.markdown,
           modelKey: input.modelKey,
+          providerKey: input.providerKey,
+          modelPolicy: input.modelPolicy,
+          approvalMode: input.approvalMode,
           replacesMessageId: input.messageId,
           workspaceSnapshotRef: input.workspaceSnapshotRef ?? null,
           createBranch: {
@@ -1088,7 +1305,19 @@ export class CoreConversationStore {
           messageId,
           row.threadId,
           row.parentMessageId,
-          canonicalJson(textParts(input.markdown)),
+          canonicalJson(
+            this.storedParts(
+              row,
+              input.ownerId,
+              String(row.threadId),
+              messageId,
+              "assistant",
+              row.parentMessageId === null
+                ? null
+                : String(row.parentMessageId),
+              textParts(input.markdown),
+            ),
+          ),
           input.messageId,
           now,
         ],
@@ -1144,7 +1373,7 @@ export class CoreConversationStore {
         });
         await this.appendEventInTransaction(transaction, run, {
           type: "run.started",
-          payload: { approvalMode: "read-only" },
+          payload: { approvalMode: String(run.approvalMode) },
           terminal: false,
           emittedAt: new Date(now * 1_000),
         });
@@ -1327,7 +1556,9 @@ export class CoreConversationStore {
         sequence,
         eventId,
         event.type,
-        canonicalJson(event.payload),
+        canonicalJson(
+          this.storedEventPayload(run, event.eventId, event.payload),
+        ),
         event.terminal ? 1 : 0,
         emittedAt,
         persistedAt,
@@ -1424,6 +1655,7 @@ export class CoreConversationStore {
     usage: FinalUsageSnapshot;
     terminal: "complete" | "failed" | "cancelled";
     safeError?: { code: string; message: string } | null;
+    terminalReason?: import("@avermate/agent-contracts").AgentTerminalReason;
     siblingPolicy: "create-explicit-sibling-on-head-conflict";
   }): Promise<FinalizedRunProjection> {
     const parts = input.finalParts.map((part) =>
@@ -1446,7 +1678,17 @@ export class CoreConversationStore {
         );
         if (
           !existing ||
-          canonicalJson(jsonValue(existing.partsJson)) !==
+          canonicalJson(
+            this.openedParts(
+              run,
+              input.ownerId,
+              String(run.threadId),
+              input.outputMessageId,
+              "assistant",
+              String(run.inputMessageId),
+              assistantPartV1Schema.array().parse(jsonValue(existing.partsJson)),
+            ),
+          ) !==
             canonicalJson(parts) ||
           run.status !== input.terminal
         ) {
@@ -1481,7 +1723,20 @@ export class CoreConversationStore {
           run.inputMessageId,
           messageStatus,
           ASSISTANT_PARTS_VERSION,
-          canonicalJson(parts),
+          canonicalJson(
+            this.storedParts(
+              {
+                placement: run.threadPlacement,
+                placementRef: run.threadPlacementRef,
+              },
+              input.ownerId,
+              String(run.threadId),
+              input.outputMessageId,
+              "assistant",
+              String(run.inputMessageId),
+              parts,
+            ),
+          ),
           run.id,
           now,
         ],
@@ -1489,14 +1744,21 @@ export class CoreConversationStore {
       await execute(transaction, {
         sql: `UPDATE assistant_runs SET outputMessageId = ?, status = ?,
           completedAt = ?, errorCode = ?, safeError = ?,
-          providerDispatchState = CASE WHEN ? = 'complete' THEN 'acknowledged' ELSE providerDispatchState END,
-          updatedAt = ? WHERE id = ? AND status IN ('reserved','running','waiting-for-user')`,
+          terminalReason = ?,
+          providerDispatchState = CASE WHEN ? = 'complete' THEN 'completed' ELSE providerDispatchState END,
+          updatedAt = ? WHERE id = ? AND status IN ('reserved','running','waiting-for-user','waiting-approval','cancelling')`,
         args: [
           input.outputMessageId,
           input.terminal,
           now,
           input.safeError?.code ?? null,
           input.safeError?.message ?? null,
+          input.terminalReason ??
+            (input.terminal === "complete"
+              ? "completed"
+              : input.terminal === "cancelled"
+                ? "user-cancelled"
+                : "runtime-error"),
           input.terminal,
           now,
           run.id,
@@ -1589,14 +1851,19 @@ export class CoreConversationStore {
       }
       await execute(transaction, {
         sql: `INSERT INTO assistant_usage
-          (runId, providerKey, modelKey, pricingSnapshotId, inputTokens,
+          (runId, providerKey, providerRevision, modelKey, modelRevision,
+           usageVersion, source, pricingSnapshotId, inputTokens,
            outputTokens, reasoningTokens, cachedReadTokens, cachedWriteTokens,
            estimatedCost, currency, final, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
         args: [
           run.id,
           input.usage.providerKey,
+          input.usage.providerRevision ??
+            String(run.providerRevision ?? "legacy/1"),
           input.usage.modelKey,
+          input.usage.modelRevision ?? String(run.modelRevision ?? "legacy/1"),
+          input.usage.source ?? "unknown",
           input.usage.pricingSnapshotId ?? null,
           input.usage.inputTokens,
           input.usage.outputTokens,
@@ -2346,13 +2613,73 @@ export class CoreConversationStore {
       }
       return { mode: "markdown", itemId, documentId };
     }
+    const detail = await this.getThreadDetail(
+      input.ownerId,
+      input.threadId,
+      input.branchId,
+    );
+    const selectedBranchId = input.branchId ?? detail.activeBranchId;
+    const selectedBranch = detail.branches.find(
+      (branch) => branch.id === selectedBranchId,
+    );
+    if (!selectedBranch || !selectedBranch.headMessageId) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "The selected conversation branch has no completed head",
+      );
+    }
     const existing = await one(
       this.client,
-      `SELECT id FROM study_project_items WHERE projectId = ? AND kind = 'conversation'
+      `SELECT id, conversationBranchId, conversationHeadMessageId,
+          selectorReviewRequired
+        FROM study_project_items WHERE projectId = ? AND kind = 'conversation'
         AND referenceId = ?`,
       [input.projectId, input.threadId],
     );
-    if (existing) return { mode: "reference", itemId: String(existing.id) };
+    if (existing) {
+      const itemId = String(existing.id);
+      if (Boolean(existing.selectorReviewRequired)) {
+        const updated = await this.client.execute({
+          sql: `UPDATE study_project_items
+            SET conversationBranchId = ?, conversationHeadMessageId = ?,
+              trackingMode = 'pinned', selectorReviewRequired = 0,
+              sourceVersionId = NULL
+            WHERE id = ? AND projectId = ? AND selectorReviewRequired = 1`,
+          args: [
+            selectedBranch.id,
+            selectedBranch.headMessageId,
+            itemId,
+            input.projectId,
+          ],
+        });
+        if (Number(updated.rowsAffected) !== 1) {
+          throw new ConversationStoreError(
+            "invalid_state",
+            "The project conversation selector changed while it was reviewed",
+          );
+        }
+        await this.enqueueConversationIndex(
+          input.ownerId,
+          input.threadId,
+          {
+            conversationBranchId: selectedBranch.id,
+            conversationHeadMessageId: selectedBranch.headMessageId,
+          },
+          itemId,
+        );
+        return { mode: "reference", itemId };
+      }
+      if (
+        existing.conversationBranchId !== selectedBranch.id ||
+        existing.conversationHeadMessageId !== selectedBranch.headMessageId
+      ) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "This project already pins another branch of the conversation",
+        );
+      }
+      return { mode: "reference", itemId };
+    }
     const itemId = newId("pitem");
     const max = await one(
       this.client,
@@ -2384,12 +2711,16 @@ export class CoreConversationStore {
       });
       await execute(transaction, {
         sql: `INSERT INTO study_project_items
-          (id, projectId, kind, referenceId, position, contextMode, addedAt)
-          VALUES (?, ?, 'conversation', ?, ?, 'on-demand', ?)`,
+          (id, projectId, kind, referenceId, conversationBranchId,
+           conversationHeadMessageId, trackingMode, selectorReviewRequired,
+           position, contextMode, addedAt)
+          VALUES (?, ?, 'conversation', ?, ?, ?, 'pinned', 0, ?, 'on-demand', ?)`,
         args: [
           itemId,
           input.projectId,
           input.threadId,
+          selectedBranch.id,
+          selectedBranch.headMessageId,
           Number(max?.position ?? -1) + 1,
           now,
         ],
@@ -2399,7 +2730,15 @@ export class CoreConversationStore {
       await transaction.rollback();
       throw error;
     }
-    await this.enqueueConversationIndex(input.ownerId, input.threadId);
+    await this.enqueueConversationIndex(
+      input.ownerId,
+      input.threadId,
+      {
+        conversationBranchId: selectedBranch.id,
+        conversationHeadMessageId: selectedBranch.headMessageId,
+      },
+      itemId,
+    );
     return { mode: "reference", itemId };
   }
 }

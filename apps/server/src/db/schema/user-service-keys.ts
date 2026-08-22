@@ -41,9 +41,10 @@ export const userServiceKeys = sqliteTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("user_service_keys_user_kind_unique").on(
+    uniqueIndex("user_service_keys_user_kind_provider_unique").on(
       table.userId,
       table.kind,
+      table.provider,
     ),
   ],
 );

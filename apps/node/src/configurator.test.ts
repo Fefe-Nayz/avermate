@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { defaultDevZeroConfig } from "./config";
+import { parseHTML } from "linkedom";
+import { defaultDevZeroConfig, loadNodeConfig, publicConfig } from "./config";
 import { ConfiguratorSecurity } from "./configurator-security";
+import { pairingCoreUrl } from "./configurator";
 import { createNodeDaemon } from "./daemon";
 
 const roots: string[] = [];
@@ -24,6 +26,15 @@ async function fixture() {
     config,
     configPath: join(root, "avermate-node.yaml"),
     bootstrapPath,
+    configuratorFetch: (async (input: Parameters<typeof fetch>[0]) => {
+      expect(String(input)).toBe(
+        "https://core.example/api/node/pairing/register",
+      );
+      return Response.json({
+        pairingAttemptId: "registered",
+        replayed: false,
+      });
+    }) as unknown as typeof fetch,
   });
   const secret = (await readFile(bootstrapPath, "utf8")).trim();
   return { root, config, daemon, bootstrapPath, secret };
@@ -54,7 +65,44 @@ function request(
   });
 }
 
+type PublicNodeConfig = ReturnType<typeof publicConfig>;
+
+async function unlock(
+  daemon: Awaited<ReturnType<typeof fixture>>["daemon"],
+  secret: string,
+) {
+  const response = await daemon.fetch(
+    request("/api/setup/session", {
+      method: "POST",
+      origin: "http://127.0.0.1:51881",
+      body: { secret },
+    }),
+  );
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as {
+    csrf: string;
+    state: { config: PublicNodeConfig };
+  };
+  return {
+    cookie: response.headers.get("set-cookie")!,
+    csrf: response.headers.get("x-csrf-token")!,
+    config: body.state.config,
+  };
+}
+
 describe("local configurator security", () => {
+  test("allows only the exact local Compose Core outside HTTPS", () => {
+    expect(
+      pairingCoreUrl("http://api:5000", "local-compose").toString(),
+    ).toBe("http://api:5000/");
+    expect(() =>
+      pairingCoreUrl("http://localhost:5000", "local-compose"),
+    ).toThrow("PAIRING_CORE_URL_INVALID");
+    expect(() => pairingCoreUrl("http://api:5000", "tls")).toThrow(
+      "PAIRING_CORE_URL_INVALID",
+    );
+  });
+
   test("rejects hostile host/origin and emits restrictive browser headers", async () => {
     const { daemon, secret } = await fixture();
     const hostileHost = await daemon.fetch(
@@ -94,12 +142,16 @@ describe("local configurator security", () => {
     expect(cookie).toContain("SameSite=Strict");
     const csrf = login.headers.get("x-csrf-token")!;
 
+    const resumed = await daemon.fetch(request("/api/setup/state", { cookie }));
+    expect(resumed.status).toBe(200);
+    expect(resumed.headers.get("x-csrf-token")).toBe(csrf);
+
     const noCsrf = await daemon.fetch(
       request("/api/setup/pairing-code", {
         method: "POST",
         origin: "http://127.0.0.1:51881",
         cookie,
-        body: {},
+        body: { coreUrl: "https://core.example" },
       }),
     );
     expect(noCsrf.status).toBe(400);
@@ -111,7 +163,7 @@ describe("local configurator security", () => {
         origin: "http://127.0.0.1:51881",
         cookie,
         csrf,
-        body: {},
+        body: { coreUrl: "https://core.example" },
       }),
     );
     expect(paired.status).toBe(200);
@@ -174,5 +226,269 @@ describe("local configurator security", () => {
       const response = await daemon.fetch(request(path));
       expect(await response.text()).not.toContain(secret);
     }
+  });
+
+  test("serves a parseable, accessible setup UI covering every optional runtime", async () => {
+    const { daemon } = await fixture();
+    const html = await (await daemon.fetch(request("/setup"))).text();
+    const script = await (await daemon.fetch(request("/setup.js"))).text();
+
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-live="assertive"');
+    expect(html).toContain('for="secret"');
+    expect(html).toContain('id="setup-language"');
+    expect(html).toContain('data-i18n-aria-label="language"');
+    expect(html).toContain('id="deployment"');
+    expect(() => new Function(script)).not.toThrow();
+    for (const marker of [
+      "storage.driver",
+      "retrieval.embeddingProvider",
+      "retrieval.rerankProvider",
+      "models.gateway",
+      "sandbox.runtimeCheckpoints",
+      "workers.opencode.commandCatalogue",
+      "workers.openhands.commandCatalogue",
+      "lifecycle.backupDir",
+      "/api/setup/config/validate",
+      "/api/setup/config/apply",
+      "/api/setup/config/rollback",
+      "/api/setup/deployment/preview",
+    ]) {
+      expect(script).toContain(marker);
+    }
+    for (const marker of [
+      "englishGroups[group.id]",
+      "englishLabels[field.path]",
+      "tr('invalidNumber')",
+      "action('valid'",
+      "localStorage.setItem(localeKey,locale)",
+    ]) {
+      expect(script).toContain(marker);
+    }
+  });
+
+  test("persists FR/EN and translates generated fields and runtime messages", async () => {
+    const { daemon, config } = await fixture();
+    const html = await (await daemon.fetch(request("/setup"))).text();
+    const script = await (await daemon.fetch(request("/setup.js"))).text();
+    const { document } = parseHTML(html);
+    const stored = new Map<string, string>([
+      ["avermate-node-setup-locale", "en"],
+    ]);
+    const localStorage = {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+    };
+    const browserFetch = async (path: string) => {
+      if (path === "/api/setup/state") {
+        return {
+          ok: false,
+          headers: new Headers(),
+          json: async () => ({}),
+        };
+      }
+      if (path === "/api/setup/session") {
+        return {
+          ok: true,
+          headers: new Headers({ "x-csrf-token": "csrf-test" }),
+          json: async () => ({
+            csrf: "csrf-test",
+            state: { config: publicConfig(config) },
+          }),
+        };
+      }
+      if (path === "/api/setup/config/rollback") {
+        return {
+          ok: true,
+          headers: new Headers({ "x-csrf-token": "csrf-next" }),
+          json: async () => ({ config: publicConfig(config), restored: true }),
+        };
+      }
+      throw new Error(`UNEXPECTED_BROWSER_FETCH:${path}`);
+    };
+    new Function(
+      "document",
+      "localStorage",
+      "navigator",
+      "fetch",
+      "URL",
+      "Blob",
+      "setTimeout",
+      script,
+    )(
+      document,
+      localStorage,
+      { language: "fr-FR" },
+      browserFetch,
+      URL,
+      Blob,
+      setTimeout,
+    );
+
+    expect(document.documentElement.lang).toBe("en");
+    expect(document.querySelector('[data-i18n="unlock"]')?.textContent).toBe(
+      "Unlock",
+    );
+    await (
+      document.querySelector<HTMLButtonElement>("#unlock")?.onclick as
+        (() => Promise<unknown>) | undefined
+    )?.();
+    expect(
+      document.querySelector('[data-field-path="storage.driver"]')?.textContent,
+    ).toBe("Storage driver");
+    expect(document.querySelector("#status")?.textContent).toBe(
+      "Configurator unlocked",
+    );
+
+    const selector =
+      document.querySelector<HTMLSelectElement>("#setup-language")!;
+    Object.defineProperty(selector, "value", {
+      configurable: true,
+      value: "fr",
+    });
+    (selector.onchange as unknown as (() => void) | null)?.();
+    expect(stored.get("avermate-node-setup-locale")).toBe("fr");
+    expect(
+      document.querySelector('[data-field-path="storage.driver"]')?.textContent,
+    ).toBe("Pilote de stockage");
+    await (
+      document.querySelector<HTMLButtonElement>("#rollback")
+        ?.onclick as unknown as (() => Promise<unknown>) | null
+    )?.();
+    expect(document.querySelector("#error")?.textContent).toBe("");
+    expect(document.querySelector("#status")?.textContent).toBe(
+      "Dernière configuration restaurée",
+    );
+  });
+
+  test("validates, applies and rolls back a browser-safe configuration", async () => {
+    const { daemon, secret, config, root } = await fixture();
+    const session = await unlock(daemon, secret);
+    const next = structuredClone(session.config);
+    next.storage.quotaBytes += 1_024;
+
+    const validated = await daemon.fetch(
+      request("/api/setup/config/validate", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie: session.cookie,
+        csrf: session.csrf,
+        body: next,
+      }),
+    );
+    expect(validated.status).toBe(200);
+    const validation = (await validated.json()) as {
+      changes: { changedSections: string[] };
+    };
+    expect(validation.changes.changedSections).toContain("storage");
+
+    const applied = await daemon.fetch(
+      request("/api/setup/config/apply", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie: session.cookie,
+        csrf: session.csrf,
+        body: next,
+      }),
+    );
+    expect(applied.status).toBe(200);
+    const appliedBody = (await applied.json()) as {
+      applied: boolean;
+      restartRequired: boolean;
+      config: PublicNodeConfig;
+    };
+    expect(appliedBody.applied).toBe(true);
+    expect(appliedBody.restartRequired).toBe(true);
+    expect(appliedBody.config.storage.quotaBytes).toBe(next.storage.quotaBytes);
+    expect(
+      (await loadNodeConfig(join(root, "avermate-node.yaml"))).storage
+        .quotaBytes,
+    ).toBe(next.storage.quotaBytes);
+
+    const rolledBack = await daemon.fetch(
+      request("/api/setup/config/rollback", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie: applied.headers.get("set-cookie")!,
+        csrf: applied.headers.get("x-csrf-token")!,
+        body: {},
+      }),
+    );
+    expect(rolledBack.status).toBe(200);
+    expect(
+      (await loadNodeConfig(join(root, "avermate-node.yaml"))).storage
+        .quotaBytes,
+    ).toBe(config.storage.quotaBytes);
+  });
+
+  test("stores provider secrets without returning values or internal references", async () => {
+    const { daemon, secret, root } = await fixture();
+    const session = await unlock(daemon, secret);
+    const rawSecret = "test-provider-secret-value";
+    const stored = await daemon.fetch(
+      request("/api/setup/secret", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie: session.cookie,
+        csrf: session.csrf,
+        body: { slot: "model-admin", value: rawSecret },
+      }),
+    );
+    expect(stored.status).toBe(200);
+    const storedText = await stored.text();
+    expect(storedText).not.toContain(rawSecret);
+    expect(storedText).not.toContain("secret:");
+    expect(storedText).toContain('"configured":true');
+
+    const next = structuredClone(session.config);
+    next.models.adminSecretRef = "configured";
+    const cookie = stored.headers.get("set-cookie")!;
+    const csrf = stored.headers.get("x-csrf-token")!;
+    const unsafe = structuredClone(session.config);
+    unsafe.models.adminSecretRef = rawSecret;
+    const rejected = await daemon.fetch(
+      request("/api/setup/config/validate", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie,
+        csrf,
+        body: unsafe,
+      }),
+    );
+    expect(rejected.status).toBe(400);
+    expect(await rejected.text()).toContain(
+      "CONFIGURATOR_SECRET_REFERENCE_INVALID",
+    );
+
+    const preview = await daemon.fetch(
+      request("/api/setup/deployment/preview", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie,
+        csrf,
+        body: next,
+      }),
+    );
+    expect(preview.status).toBe(200);
+    const previewText = await preview.text();
+    expect(previewText).not.toContain(rawSecret);
+    expect(previewText).not.toContain("secret:");
+    expect(previewText).toContain("avermate-node.override.yml");
+    expect(previewText).toContain('"backupCreate"');
+
+    const applied = await daemon.fetch(
+      request("/api/setup/config/apply", {
+        method: "POST",
+        origin: "http://127.0.0.1:51881",
+        cookie,
+        csrf,
+        body: next,
+      }),
+    );
+    expect(applied.status).toBe(200);
+    const persisted = await readFile(join(root, "avermate-node.yaml"), "utf8");
+    expect(persisted).not.toContain(rawSecret);
+    expect(persisted).toContain("secret:setup-model-admin-");
+    expect(await applied.text()).not.toContain("secret:");
   });
 });

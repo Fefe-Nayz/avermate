@@ -2,19 +2,58 @@ import { z } from "zod";
 import { protectedProcedure } from "../lib/orpc";
 import {
   clearServiceKey,
+  clearProviderServiceKey,
   listServiceKeys,
   listProviderServiceKeyMetadata,
   revokeProviderServiceKey,
   setServiceKey,
   setProviderServiceKey,
 } from "../lib/service-keys";
+import { providerServiceKeyRouteSchema } from "../lib/service-key-routing";
 import {
   validateProviderCredential,
   type SupportedKeyProvider,
 } from "../lib/provider-key-validation";
 
 const kind = z.enum(["mistral", "transcription", "inference"]);
-const provider = z.enum(["mistral", "openai", "openrouter", "elevenlabs"]);
+const provider = z.enum([
+  "mistral",
+  "openai",
+  "openrouter",
+  "elevenlabs",
+  "gemini",
+  "cohere",
+]);
+// Clear addresses an already stored row exactly. Keep it wider than the
+// creation allow-list so pre-provider-key and future disabled adapters can be
+// removed without deleting every credential of the same capability kind.
+const storedProvider = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z0-9][a-z0-9._-]*$/u);
+
+export const setValidatedProviderKeyInputSchema = z
+  .strictObject({
+    kind,
+    provider,
+    key: z.string().trim().min(1).max(4096),
+    scopes: z.array(z.string().trim().min(1).max(128)).max(64).default([]),
+  })
+  .superRefine((input, context) => {
+    const route = providerServiceKeyRouteSchema.safeParse({
+      kind: input.kind,
+      provider: input.provider,
+    });
+    if (!route.success) {
+      context.addIssue({
+        code: "custom",
+        path: ["provider"],
+        message: "Provider does not implement this credential capability",
+      });
+    }
+  });
 
 export const serviceKeysRouter = {
   list: protectedProcedure.handler(({ context }) =>
@@ -37,14 +76,7 @@ export const serviceKeysRouter = {
     ),
 
   setValidated: protectedProcedure
-    .input(
-      z.strictObject({
-        kind,
-        provider,
-        key: z.string().trim().min(1).max(4096),
-        scopes: z.array(z.string().trim().min(1).max(128)).max(64).default([]),
-      }),
-    )
+    .input(setValidatedProviderKeyInputSchema)
     .handler(({ context, input }) =>
       setProviderServiceKey({
         userId: context.session.user.id,
@@ -66,6 +98,7 @@ export const serviceKeysRouter = {
     .input(
       z.strictObject({
         kind,
+        provider,
         reason: z.string().trim().min(1).max(512),
       }),
     )
@@ -73,6 +106,7 @@ export const serviceKeysRouter = {
       revokeProviderServiceKey({
         userId: context.session.user.id,
         kind: input.kind,
+        provider: input.provider,
         reason: input.reason,
         correlationId:
           context.headers.get("x-request-id") ?? crypto.randomUUID(),
@@ -80,8 +114,14 @@ export const serviceKeysRouter = {
     ),
 
   clear: protectedProcedure
-    .input(z.object({ kind }))
+    .input(z.object({ kind, provider: storedProvider.optional() }))
     .handler(({ context, input }) =>
-      clearServiceKey(context.session.user.id, input.kind),
+      input.provider
+        ? clearProviderServiceKey(
+            context.session.user.id,
+            input.kind,
+            input.provider,
+          )
+        : clearServiceKey(context.session.user.id, input.kind),
     ),
 };

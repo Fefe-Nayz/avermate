@@ -8,10 +8,19 @@ await run033(
     "bun",
     "test",
     "src/ingestion/artifact-graph.integration.test.ts",
+    "src/ingestion/artifact-workflow-dispatcher.test.ts",
     "src/ingestion/workflow.test.ts",
+    "src/jobs/export-document-artifact.test.ts",
+    "src/node/artifact-stage-executor.test.ts",
     "scripts/migration-history.test.ts",
   ],
   { cwd: server },
+);
+
+await run033(
+  "media studio production model",
+  ["bun", "test", "src/components/media-studio/media-studio-model.test.ts"],
+  { cwd: resolve(workspaceRoot, "apps/web") },
 );
 await run033(
   "tool registry and MCP ledger parity",
@@ -23,4 +32,3 @@ await run033(
   ],
   { cwd: server },
 );
-

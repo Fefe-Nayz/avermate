@@ -2338,7 +2338,19 @@ export function MaterialsClient() {
         title={t("Materials")}
         subtitle={t("Files, links and study documents for this school year")}
       />
-      <PageActions>{addMenu}</PageActions>
+      <PageActions>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href="/materials/studio" />}
+          >
+            <PresentationIcon data-icon="inline-start" />
+            {t("Studio")}
+          </Button>
+          {addMenu}
+        </div>
+      </PageActions>
 
       <input
         ref={fileInput}

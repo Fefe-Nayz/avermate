@@ -11,6 +11,7 @@ import {
   GitBranchIcon,
   RotateCcwIcon,
 } from "lucide-react"
+import { useExtracted } from "next-intl"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,11 +34,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  actionTitle,
-  reasonCodeLabel,
   summarizeCompensationResult,
   summarizeUndoPreview,
 } from "./action-model"
+import { useActionCopy } from "./use-action-copy"
 
 function PreviewActionList({
   title,
@@ -50,6 +50,7 @@ function PreviewActionList({
   actions: ReadonlyMap<string, AgentActionDto>
   variant: "outline" | "secondary" | "destructive"
 }) {
+  const actionCopy = useActionCopy()
   if (actionIds.length === 0) return null
   return (
     <section className="flex flex-col gap-2">
@@ -60,7 +61,7 @@ function PreviewActionList({
         {actionIds.map((actionId) => (
           <Badge key={actionId} variant={variant} title={actionId}>
             {actions.has(actionId)
-              ? actionTitle(actions.get(actionId)!)
+              ? actionCopy.title(actions.get(actionId)!)
               : actionId}
           </Badge>
         ))}
@@ -78,61 +79,68 @@ function UndoPreviewContent({
   preview: AgentActionPreview
   actions: ReadonlyMap<string, AgentActionDto>
 }) {
+  const t = useExtracted()
   const summary = summarizeUndoPreview(preview, requestedActionIds)
   return (
     <div className="flex flex-col gap-4">
       {summary.expandedDependencyCount > 0 ? (
         <Alert>
           <GitBranchIcon />
-          <AlertTitle>Dependent actions were added to this preview</AlertTitle>
+          <AlertTitle>
+            {t("Dependent actions were added to this preview")}
+          </AlertTitle>
           <AlertDescription>
-            {summary.expandedDependencyCount} connected action(s) share a
-            persisted branch or domain dependency. They are evaluated in reverse
-            dependency order; unrelated actions remain untouched.
+            {t(
+              "{count, plural, one {# connected action shares} other {# connected actions share}} a persisted branch or domain dependency. They are evaluated in reverse dependency order; unrelated actions remain untouched.",
+              { count: summary.expandedDependencyCount }
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
       {summary.partialExpected ? (
         <Alert variant="destructive">
           <AlertTriangleIcon />
-          <AlertTitle>This undo cannot complete as one clean batch</AlertTitle>
+          <AlertTitle>
+            {t("This undo cannot complete as one clean batch")}
+          </AlertTitle>
           <AlertDescription>
-            Safe independent actions can still be undone. Conflicted,
-            non-undoable, or dependency-blocked actions will remain and be
-            reported individually.
+            {t(
+              "Safe independent actions can still be undone. Conflicted, non-undoable or dependency-blocked actions will remain and be reported individually."
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <PreviewActionList
-          title="Ready to undo"
+          title={t("Ready to undo")}
           actionIds={preview.eligible}
           actions={actions}
           variant="secondary"
         />
         <PreviewActionList
-          title="Conflicted by later changes"
+          title={t("Conflicted by later changes")}
           actionIds={preview.conflicted}
           actions={actions}
           variant="destructive"
         />
         <PreviewActionList
-          title="Blocked by dependencies"
+          title={t("Blocked by dependencies")}
           actionIds={preview.blocked}
           actions={actions}
           variant="destructive"
         />
         <PreviewActionList
-          title="Not undoable"
+          title={t("Not undoable")}
           actionIds={preview.nonUndoable}
           actions={actions}
           variant="outline"
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Preview bound to dependency fence {preview.dependencyFenceVersion}. A
-        revision or dependency change before confirmation will make it stale
-        instead of overwriting newer work.
+        {t(
+          "Preview bound to dependency fence {version}. A revision or dependency change before confirmation will make it stale instead of overwriting newer work.",
+          { version: String(preview.dependencyFenceVersion) }
+        )}
       </p>
     </div>
   )
@@ -145,6 +153,8 @@ function UndoResultContent({
   result: AgentActionBatchCompensationResult
   actions: ReadonlyMap<string, AgentActionDto>
 }) {
+  const t = useExtracted()
+  const actionCopy = useActionCopy()
   const summary = summarizeCompensationResult(result)
   return (
     <div className="flex flex-col gap-4">
@@ -156,23 +166,32 @@ function UndoResultContent({
         )}
         <AlertTitle>
           {summary.kind === "complete"
-            ? "Undo completed"
+            ? t("Undo completed")
             : summary.kind === "partial"
-              ? "Undo completed only partially"
-              : "Undo could not be completed"}
+              ? t("Undo completed only partially")
+              : t("Undo could not be completed")}
         </AlertTitle>
         <AlertDescription>
           {summary.kind === "complete"
-            ? `${summary.compensatedCount} action(s) were compensated in safe dependency order.`
-            : `${summary.compensatedCount} compensation(s) remain completed. ${summary.unresolvedActionIds.length} action(s) need conflict resolution or repair; nothing was rolled back silently.`}
+            ? t(
+                "{count, plural, one {# action was compensated} other {# actions were compensated}} in safe dependency order.",
+                { count: summary.compensatedCount }
+              )
+            : t(
+                "{compensated, plural, one {# compensation remains completed.} other {# compensations remain completed.}} {unresolved, plural, one {# action needs} other {# actions need}} conflict resolution or repair; nothing was rolled back silently.",
+                {
+                  compensated: summary.compensatedCount,
+                  unresolved: summary.unresolvedActionIds.length,
+                }
+              )}
         </AlertDescription>
       </Alert>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Source action</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Reason</TableHead>
+            <TableHead>{t("Source action")}</TableHead>
+            <TableHead>{t("Outcome")}</TableHead>
+            <TableHead>{t("Reason")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -181,7 +200,7 @@ function UndoResultContent({
               <TableCell>
                 <span className="font-medium">
                   {actions.has(outcome.sourceActionId)
-                    ? actionTitle(actions.get(outcome.sourceActionId)!)
+                    ? actionCopy.title(actions.get(outcome.sourceActionId)!)
                     : outcome.sourceActionId}
                 </span>
               </TableCell>
@@ -193,11 +212,21 @@ function UndoResultContent({
                       : "destructive"
                   }
                 >
-                  {outcome.state}
+                  {outcome.state === "compensated"
+                    ? t("Compensated")
+                    : outcome.state === "conflicted"
+                      ? t("Conflicted")
+                      : outcome.state === "failed"
+                        ? t("Failed")
+                        : outcome.state === "blocked"
+                          ? t("Blocked")
+                          : t("Not attempted")}
                 </Badge>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {reasonCodeLabel(outcome.reasonCode)}
+                {outcome.reasonCode
+                  ? actionCopy.reasonCode(outcome.reasonCode)
+                  : t("No additional reason was recorded.")}
               </TableCell>
             </TableRow>
           ))}
@@ -232,6 +261,7 @@ export function ActionUndoDialog({
   onExecute: () => void
   onRetryUnresolved: (actionIds: readonly string[]) => void
 }) {
+  const t = useExtracted()
   const previewSummary = preview
     ? summarizeUndoPreview(preview, requestedActionIds)
     : null
@@ -241,17 +271,20 @@ export function ActionUndoDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Review selective undo</DialogTitle>
+          <DialogTitle>{t("Review selective undo")}</DialogTitle>
           <DialogDescription>
-            Undo creates new compensating actions. It never erases the original
-            audit history or broadly rewinds your data.
+            {t(
+              "Undo creates new compensating actions. It never erases the original audit history or broadly rewinds your data."
+            )}
           </DialogDescription>
         </DialogHeader>
 
         {previewPending ? (
           <div
             className="flex flex-col gap-3"
-            aria-label="Building undo preview"
+            role="status"
+            aria-label={t("Building undo preview")}
+            aria-busy="true"
           >
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-28 w-full" />
@@ -259,7 +292,7 @@ export function ActionUndoDialog({
         ) : error ? (
           <Alert variant="destructive">
             <AlertTriangleIcon />
-            <AlertTitle>Undo preview is unavailable</AlertTitle>
+            <AlertTitle>{t("Undo preview is unavailable")}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : result ? (
@@ -283,7 +316,7 @@ export function ActionUndoDialog({
               }
             >
               <RotateCcwIcon data-icon="inline-start" />
-              Recompute unresolved preview
+              {t("Recompute unresolved preview")}
             </Button>
           ) : null}
           {!result && preview ? (
@@ -297,7 +330,10 @@ export function ActionUndoDialog({
               ) : (
                 <RotateCcwIcon data-icon="inline-start" />
               )}
-              Confirm undo of {previewSummary?.eligibleCount ?? 0} action(s)
+              {t(
+                "Confirm undo of {count, plural, one {# action} other {# actions}}",
+                { count: previewSummary?.eligibleCount ?? 0 }
+              )}
             </Button>
           ) : null}
           <Button
@@ -306,7 +342,7 @@ export function ActionUndoDialog({
             disabled={executePending}
             onClick={() => onOpenChange(false)}
           >
-            {result ? "Close" : "Cancel"}
+            {result ? t("Close") : t("Cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>

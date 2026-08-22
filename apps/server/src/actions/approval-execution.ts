@@ -77,6 +77,11 @@ export async function resolveApprovalAndResume(input: {
   capabilities?: ToolCapabilityResolver;
   events?: ToolEventSink;
   continuations?: ToolActionContinuationStore;
+  onInvocationResolved?: (input: {
+    continuation: ToolActionContinuation;
+    result: Awaited<ReturnType<ToolBroker["invoke"]>>;
+    action: AgentActionDto;
+  }) => void | Promise<void>;
 }): Promise<AgentActionDto> {
   const continuations =
     input.continuations ??
@@ -157,7 +162,7 @@ export async function resolveApprovalAndResume(input: {
     );
   }
 
-  await input.broker.invoke(
+  const invocationResult = await input.broker.invoke(
     input.broker.createContext({
       principal: {
         userId: continuation.userId,
@@ -197,5 +202,14 @@ export async function resolveApprovalAndResume(input: {
       idempotencyKey: continuation.idempotencyKey,
     },
   );
-  return input.ledger.get(input.userId, input.resolution.actionId);
+  const action = await input.ledger.get(
+    input.userId,
+    input.resolution.actionId,
+  );
+  await input.onInvocationResolved?.({
+    continuation,
+    result: invocationResult,
+    action,
+  });
+  return action;
 }

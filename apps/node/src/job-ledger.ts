@@ -80,6 +80,33 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+/**
+ * A terminal replay may carry a renewed delivery/grant deadline. Bind it to
+ * every execution-relevant field while deliberately excluding that deadline
+ * and the freshly signed grant/envelope.
+ */
+function terminalReplayPayloadDigest(job: NodeJobV1) {
+  return canonicalDigest({
+    id: job.id,
+    principalRef: job.principalRef,
+    kind: job.kind,
+    capabilityVersion: job.capabilityVersion,
+    ...(job.executionProfile
+      ? { executionProfile: job.executionProfile }
+      : {}),
+    inputRefs: job.inputRefs,
+    ...(job.resourceRefs ? { resourceRefs: job.resourceRefs } : {}),
+    policyRef: job.policyRef,
+    limits: {
+      cpuMillis: job.limits.cpuMillis,
+      memoryBytes: job.limits.memoryBytes,
+      inputBytes: job.limits.inputBytes,
+      outputBytes: job.limits.outputBytes,
+    },
+    idempotencyKey: job.idempotencyKey,
+  });
+}
+
 export class NodeJobLedger {
   readonly #path: string;
   #state: JobLedgerFile | null = null;
@@ -136,7 +163,14 @@ export class NodeJobLedger {
           record.idempotencyKey === job.idempotencyKey,
       );
       if (collision) {
-        if (collision.envelopeDigest !== job.envelopeDigest) {
+        const terminalDeadlineRefresh =
+          terminalStages.has(collision.stage) &&
+          terminalReplayPayloadDigest(collision.job) ===
+            terminalReplayPayloadDigest(job);
+        if (
+          collision.envelopeDigest !== job.envelopeDigest &&
+          !terminalDeadlineRefresh
+        ) {
           throw new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
         }
         return { record: clone(collision), replayed: true };
@@ -173,6 +207,13 @@ export class NodeJobLedger {
   async get(jobId: string) {
     const state = await this.#load();
     return state.jobs[jobId] ? clone(state.jobs[jobId]) : null;
+  }
+
+  async list() {
+    const state = await this.#load();
+    return Object.values(state.jobs)
+      .map(clone)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
   async lease(input: {
@@ -263,7 +304,12 @@ export class NodeJobLedger {
         throw new Error("JOB_LEASE_EXPIRED");
       if (event.sequence !== record.events.length + 1)
         throw new Error("JOB_EVENT_OUT_OF_ORDER");
-      if (!allowedTransitions[record.stage].includes(event.stage)) {
+      const sameStageProgress =
+        event.stage === record.stage && event.progress !== undefined;
+      if (
+        !sameStageProgress &&
+        !allowedTransitions[record.stage].includes(event.stage)
+      ) {
         throw new Error("JOB_STAGE_TRANSITION_INVALID");
       }
       if (event.terminal !== terminalStages.has(event.stage)) {
@@ -310,6 +356,53 @@ export class NodeJobLedger {
       record.commitAcknowledgedAt ??= new Date(now).toISOString();
       record.updatedAt = record.commitAcknowledgedAt;
       return clone(record);
+    });
+  }
+
+  async pendingRelayEvents(limit = 1_000) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
+      throw new Error("JOB_EVENT_LIMIT_INVALID");
+    }
+    const records = await this.list();
+    const events: NodeJobEvent[] = [];
+    for (const record of records) {
+      if (record.commitAcknowledgedAt) continue;
+      for (const event of record.events) {
+        events.push(event);
+        if (events.length >= limit) return events;
+      }
+    }
+    return events;
+  }
+
+  /** Fence work whose durable lease expired while the Node was offline. */
+  async recoverExpired(now = Date.now()) {
+    return this.#exclusive((state) => {
+      const recovered: NodeJobRecord[] = [];
+      for (const record of Object.values(state.jobs)) {
+        if (
+          terminalStages.has(record.stage) ||
+          !record.lease ||
+          Date.parse(record.lease.expiresAt) > now
+        ) {
+          continue;
+        }
+        const emittedAt = new Date(now).toISOString();
+        record.stage = "inspect-required";
+        record.lease = null;
+        record.events.push({
+          jobId: record.job.id,
+          sequence: record.events.length + 1,
+          eventId: `jobevt_${crypto.randomUUID()}`,
+          stage: "inspect-required",
+          emittedAt,
+          terminal: false,
+          safeErrorCode: "JOB_LEASE_EXPIRED_DURING_RESTART",
+        });
+        record.updatedAt = emittedAt;
+        recovered.push(clone(record));
+      }
+      return recovered;
     });
   }
 

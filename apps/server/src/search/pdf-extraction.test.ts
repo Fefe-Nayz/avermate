@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractNativePdfText } from "./adapters";
+import { extractNativePdfText, visualCompanionBlocks } from "./adapters";
 
 function syntheticPdf(pageTexts: readonly string[]) {
   const objects: string[] = [];
@@ -49,6 +49,25 @@ describe("native PDF text-layer extraction", () => {
     expect(result.pages).toEqual([
       { page: 1, text: "Pythagore page one" },
       { page: 2, text: "Thales page two" },
+    ]);
+  });
+
+  test("keeps lexical text and a distinct visual companion for a diagram page", () => {
+    const lexical = {
+      text: "Théorème avec le schéma ci-dessous",
+      locator: { kind: "pdf" as const, page: 2 },
+      headingPath: null,
+      evidenceKind: "native-text" as const,
+    };
+    const visual = visualCompanionBlocks("Cours de géométrie", lexical.locator);
+    expect(lexical.evidenceKind).toBe("native-text");
+    expect(visual).toEqual([
+      {
+        text: "Cours de géométrie",
+        locator: { kind: "pdf", page: 2 },
+        headingPath: null,
+        evidenceKind: "visual-only",
+      },
     ]);
   });
 });

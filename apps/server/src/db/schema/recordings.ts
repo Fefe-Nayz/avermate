@@ -186,6 +186,8 @@ export const recordingTranscripts = sqliteTable(
       .notNull(),
     language: text(),
     provider: text().notNull(),
+    /** Nullable only for transcripts created before migration 0065. */
+    model: text(),
     userId: owner(),
     ...timestamps,
   },

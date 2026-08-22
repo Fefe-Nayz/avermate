@@ -71,7 +71,14 @@ function brokerWired(name: string, text: string): boolean {
   const invocation = new RegExp(
     `(?:toolId\\s*:\\s*["']${escaped}["']|invokeRead\\(\\s*["']${escaped}["'])`,
   );
-  return text.includes("brokerMeta(") && invocation.test(text);
+  const helperRegistration = new RegExp(
+    `register(?:Read|Write)\\(\\s*["']${escaped}["']`,
+  );
+  return (
+    text.includes("brokerMeta(") &&
+    (invocation.test(text) ||
+      (helperRegistration.test(text) && text.includes("invokeBrokerFromMcp")))
+  );
 }
 
 function filesUnder(directory: string): string[] {
@@ -94,7 +101,7 @@ function looksRead(name: string) {
 }
 
 function mutates(name: string) {
-  return /(?:^|\.)(?:create|update|delete|purge|archive|reorder|replace|set|move|link|unlink|dismiss|restore|detach|trigger|run|cancel|upload|transcribe|build|export|revoke|block|leave|join|invite|accept|decline|remove|submit|mark|reset|rotate)/i.test(
+  return /(?:^|\.)(?:create|update|delete|purge|archive|reorder|replace|set|move|link|unlink|dismiss|restore|detach|trigger|run|retry|cancel|upload|transcribe|build|export|revoke|block|leave|join|invite|accept|decline|remove|submit|mark|reset|rotate)/i.test(
     name,
   );
 }
@@ -134,6 +141,7 @@ function surfaceScope(source: string): string {
     planner: "avermate:planner.read/write",
     materials: "avermate:materials.read/write",
     documents: "avermate:documents.read/write",
+    learning: "avermate:learning.read/write",
   };
   return fixed[name] ?? "surface-specific MCP grant";
 }
@@ -146,6 +154,7 @@ export function inventoryMcp(root: string): McpAuditRow[] {
       const text = readFileSync(file, "utf8");
       const matches = [
         ...text.matchAll(/registerTool\(\s*["']([^"']+)["']/g),
+        ...text.matchAll(/register(?:Read|Write)\(\s*["']([^"']+)["']/g),
         ...(source.endsWith("social-read.ts")
           ? text.matchAll(/\btool\(\s*["']([^"']+)["']/g)
           : []),

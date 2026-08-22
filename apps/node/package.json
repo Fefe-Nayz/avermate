@@ -13,7 +13,9 @@
     "doctor": "bun src/cli.ts doctor"
   },
   "dependencies": {
+    "@alibaba-group/opensandbox": "0.1.11",
     "@avermate/agent-contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "yaml": "2.9.0",
     "zod": "4.4.3"
   },

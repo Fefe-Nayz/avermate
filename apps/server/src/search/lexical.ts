@@ -85,6 +85,13 @@ function filterSql(input: OwnedLexicalQuery, args: InValue[]) {
         AND project_items.kind = sources.originKind
         AND project_items.referenceId = sources.originId
         AND project_items.contextMode != 'exclude'
+        AND project_items.selectorReviewRequired = 0
+        AND (
+          (project_items.trackingMode = 'pinned'
+            AND project_items.sourceVersionId = versions.id)
+          OR (project_items.trackingMode = 'follow-head'
+            AND sources.currentVersionId = versions.id)
+        )
         AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
     )`);
     args.push(input.ownerId, ...input.projectIds);
@@ -147,10 +154,25 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
     }
     const transaction = await this.client.transaction("write");
     try {
+      const placement = await execute(transaction, {
+        sql: `SELECT placement FROM content_sources
+          WHERE id = ? AND userId = ? LIMIT 1`,
+        args: [input.source.id, input.ownerId],
+      });
+      const source = placement.rows[0];
+      if (!source) {
+        throw new Error("The lexical source was not found");
+      }
       await execute(transaction, {
         sql: `DELETE FROM content_chunks_fts WHERE versionId = ?`,
         args: [input.version.id],
       });
+      // A Node-owned corpus must never leave searchable plaintext in the
+      // Core FTS table. Treat a misplaced upsert as an idempotent purge.
+      if (source.placement !== "core") {
+        await transaction.commit();
+        return;
+      }
       const stored = await execute(transaction, {
         sql: `
           SELECT chunks.id, chunks.ordinal
@@ -240,7 +262,8 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
         JOIN content_sources AS sources ON sources.id = versions.sourceId
         WHERE ${predicate}
           AND sources.userId = ?
-          AND sources.currentVersionId = versions.id
+          AND sources.placement = 'core'
+          AND ${input.projectIds.length > 0 ? "1 = 1" : "sources.currentVersionId = versions.id"}
           ${filters}
         ORDER BY score DESC, chunks.id ASC
         LIMIT ? OFFSET ?
@@ -252,6 +275,9 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
     // Deliberately re-check ownership before selecting any body. Candidate ids
     // cannot turn into text merely because they were present in the FTS table.
     const ids = candidates.rows.map((row) => String(row.chunkId));
+    const bodyArgs: InValue[] = [input.ownerId];
+    const bodyFilters = filterSql(input, bodyArgs);
+    bodyArgs.push(...ids);
     const bodies = await this.client.execute({
       sql: `
         SELECT chunks.id, chunks.text
@@ -259,10 +285,12 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
         JOIN content_versions AS versions ON versions.id = chunks.versionId
         JOIN content_sources AS sources ON sources.id = versions.sourceId
         WHERE sources.userId = ?
-          AND sources.currentVersionId = versions.id
+          AND sources.placement = 'core'
+          AND ${input.projectIds.length > 0 ? "1 = 1" : "sources.currentVersionId = versions.id"}
+          ${bodyFilters}
           AND chunks.id IN (${ids.map(() => "?").join(", ")})
       `,
-      args: [input.ownerId, ...ids],
+      args: bodyArgs,
     });
     const textById = new Map(
       bodies.rows.map((row) => [String(row.id), String(row.text)]),
@@ -294,15 +322,17 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
       SELECT DISTINCT versions.id
       FROM content_versions AS versions
       JOIN content_chunks AS chunks ON chunks.versionId = versions.id
+      JOIN content_sources AS sources ON sources.id = versions.sourceId
       LEFT JOIN content_chunks_fts AS fts ON fts.chunkId = chunks.id
-      WHERE fts.chunkId IS NULL
+      WHERE sources.placement = 'core' AND fts.chunkId IS NULL
       ORDER BY versions.id
     `);
     const orphaned = await this.client.execute(`
       SELECT DISTINCT fts.versionId AS id
       FROM content_chunks_fts AS fts
       LEFT JOIN content_versions AS versions ON versions.id = fts.versionId
-      WHERE versions.id IS NULL
+      LEFT JOIN content_sources AS sources ON sources.id = versions.sourceId
+      WHERE versions.id IS NULL OR COALESCE(sources.placement, '') != 'core'
       ORDER BY fts.versionId
     `);
     const indexed = await this.client.execute(
@@ -334,6 +364,7 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
         FROM content_chunks AS chunks
         JOIN content_versions AS versions ON versions.id = chunks.versionId
         JOIN content_sources AS sources ON sources.id = versions.sourceId
+        WHERE sources.placement = 'core'
         ORDER BY chunks.id
       `,
       );

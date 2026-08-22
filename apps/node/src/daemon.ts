@@ -1,12 +1,21 @@
-import { mkdir, readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import type {
+  SandboxProvider,
+  SandboxProviderId,
+} from "@avermate/agent-contracts";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadNodeConfig, type NodeConfig } from "./config";
+import {
+  defaultDevZeroConfig,
+  loadNodeConfig,
+  serializeNodeConfig,
+  type NodeConfig,
+} from "./config";
 import { ConfiguratorSecurity, secureResponse } from "./configurator-security";
 import { LocalConfigurator } from "./configurator";
 import { FilesystemObjectStorageProvider } from "./filesystem-storage";
 import { loadOrCreateNodeIdentity } from "./identity";
-import { PairingManager, buildManifest } from "./protocol";
+import { GrantReplayLedger, PairingManager, buildManifest } from "./protocol";
 import {
   BunWebSocketControlConnector,
   OutboundNodeControlChannel,
@@ -14,6 +23,41 @@ import {
 } from "./control-channel";
 import { NodeJobLedger } from "./job-ledger";
 import { loadS3NodeCredentials, S3ObjectStorageProvider } from "./s3-storage";
+import { FilesystemConversationStore } from "./conversation-store";
+import { FilesystemLexicalSearchBackend } from "./lexical-store";
+import {
+  LiteLLMNodeGateway,
+  OpenAICompatibleNodeGateway,
+} from "./model-gateway";
+import { NodeSecretStore } from "./secret-store";
+import { BoundedNodeProviderFetcher } from "./provider-fetch";
+import { LocalNodeProviderTransport } from "./provider-transport";
+import { LocalNodeMcpTransport } from "./mcp-transport";
+import { NodeCapabilityOperationDispatcher } from "./capability-dispatcher";
+import { NodeOperationResultLedger } from "./operation-ledger";
+import {
+  NodeJobDispatcher,
+  NodeJobHandlerRegistry,
+  type NodeJobHandler,
+} from "./job-dispatcher";
+import { configRevision } from "./config";
+import { sha256Digest } from "./canonical-json";
+import {
+  configuredArtifactSandboxProfiles,
+  createHealthyArtifactHandlers,
+  type ArtifactSandboxJobHandler,
+} from "./artifact-workers";
+import {
+  createSpecialistSandboxProfile,
+  objectStorageManifestReader,
+  ProviderSpecialistSandboxRunner,
+  SpecialistWorkerJobHandler,
+} from "./specialist-workers";
+import { createConfiguredNodeSandboxProvider } from "./opensandbox-runtime";
+import {
+  ARTIFACT_REAPER_INTERVAL_MS,
+  NodeArtifactRetentionReaper,
+} from "./artifact-retention";
 
 async function readSecretReference(reference: string) {
   if (
@@ -36,14 +80,85 @@ async function readSecretReference(reference: string) {
   return value;
 }
 
+async function initializeMutableConfig(path: string, config: NodeConfig) {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, serializeNodeConfig(config), {
+      mode: 0o600,
+      flag: "wx",
+    });
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function resolveDaemonConfig(input: {
+  config?: NodeConfig;
+  configPath?: string;
+  configTemplatePath?: string;
+}) {
+  if (input.config) {
+    return {
+      config: input.config,
+      configPath:
+        input.configPath ?? resolve(input.config.dataDir, "avermate-node.yaml"),
+    };
+  }
+  const configuredPath =
+    input.configPath ?? process.env.AVERMATE_NODE_CONFIG?.trim();
+  if (!configuredPath) {
+    const config = defaultDevZeroConfig();
+    return {
+      config,
+      configPath: resolve(config.dataDir, "avermate-node.yaml"),
+    };
+  }
+  const configPath = resolve(configuredPath);
+  try {
+    return { config: await loadNodeConfig(configPath), configPath };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const templatePath =
+    input.configTemplatePath ??
+    process.env.AVERMATE_NODE_CONFIG_TEMPLATE?.trim();
+  const config = templatePath
+    ? await loadNodeConfig(templatePath)
+    : defaultDevZeroConfig(dirname(configPath));
+  await initializeMutableConfig(configPath, config);
+  return { config, configPath };
+}
+
 export async function createNodeDaemon(
   input: {
     config?: NodeConfig;
     configPath?: string;
+    /** Immutable first-boot profile copied once to the mutable config path. */
+    configTemplatePath?: string;
+    /**
+     * Optional container-namespace listener. Docker must publish it on host
+     * loopback only; the canonical configurator listener remains loopback.
+     */
+    containerBridgePort?: number;
     bootstrapPath?: string;
+    configuratorFetch?: typeof fetch;
+    sandboxes?: (
+      ownerId: string,
+      providerId: SandboxProviderId,
+    ) => SandboxProvider | null;
+    /**
+     * Production provider already configured with the profiles returned by
+     * createSpecialistSandboxProfile. No mock provider is accepted.
+     */
+    specialistProvider?: SandboxProvider;
+    jobHandlers?: readonly NodeJobHandler[];
   } = {},
 ) {
-  const config = input.config ?? (await loadNodeConfig(input.configPath));
+  const resolvedConfig = await resolveDaemonConfig(input);
+  const config = resolvedConfig.config;
   const dataDir = resolve(config.dataDir);
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   const identity = await loadOrCreateNodeIdentity(
@@ -66,6 +181,235 @@ export async function createNodeDaemon(
         });
   await storage.initialize();
   const jobLedger = new NodeJobLedger(resolve(dataDir, "jobs", "ledger.json"));
+  const artifactRetentionReaper = new NodeArtifactRetentionReaper({
+    ledger: jobLedger,
+    storage,
+  });
+  const secretStore = new NodeSecretStore(resolve(dataDir, "secrets"));
+  const conversationStore = config.conversations.enabled
+    ? new FilesystemConversationStore({
+        path: resolve(dataDir, "conversations", "events.json"),
+        maximumBytes: config.conversations.maximumBytes,
+      })
+    : null;
+  await conversationStore?.initialize();
+  const lexicalStores = new Map<string, FilesystemLexicalSearchBackend>();
+  const lexicalStore = (ownerId: string) => {
+    if (!config.retrieval.enabled || !config.retrieval.lexical) return null;
+    const ownerKey = sha256Digest(ownerId).slice("sha256:".length);
+    const existing = lexicalStores.get(ownerKey);
+    if (existing) return existing;
+    const created = new FilesystemLexicalSearchBackend({
+      path: resolve(dataDir, "retrieval", `${ownerKey}.json`),
+      ownerId,
+      maximumBytes: config.retrieval.maximumIndexedBytes,
+    });
+    lexicalStores.set(ownerKey, created);
+    return created;
+  };
+  const modelGateway = config.models.enabled
+    ? config.models.gateway === "litellm"
+      ? new LiteLLMNodeGateway({
+          baseUrl: config.models.endpoint!,
+          models: config.models.catalogue,
+          adminKey: () => secretStore.read(config.models.adminSecretRef!),
+          virtualKeyTtlSeconds: config.models.virtualKeyTtlSeconds,
+          ownerBudgetMinor: config.models.ownerBudgetMinor,
+          ownerRequestsPerMinute: config.models.ownerRequestsPerMinute,
+          ownerTokensPerMinute: config.models.ownerTokensPerMinute,
+          fallbackChains: config.models.fallbackChains,
+        })
+      : new OpenAICompatibleNodeGateway({
+          baseUrl: config.models.endpoint!,
+          models: config.models.catalogue,
+          credential: async () =>
+            config.models.providerSecretRefs[0]
+              ? secretStore.read(config.models.providerSecretRefs[0])
+              : null,
+        })
+    : null;
+  const providerRoutes = [
+    ...(config.retrieval.embeddingEndpoint
+      ? [
+          {
+            purpose: "embedding" as const,
+            baseUrl: config.retrieval.embeddingEndpoint,
+            ...(config.retrieval.embeddingSecretRef
+              ? { secretRef: config.retrieval.embeddingSecretRef }
+              : {}),
+          },
+        ]
+      : []),
+    ...(config.retrieval.rerankEndpoint
+      ? [
+          {
+            purpose: "rerank" as const,
+            baseUrl: config.retrieval.rerankEndpoint,
+            ...(config.retrieval.rerankSecretRef
+              ? { secretRef: config.retrieval.rerankSecretRef }
+              : {}),
+          },
+        ]
+      : []),
+  ];
+  const providerFetcher =
+    config.retrieval.enabled && providerRoutes.length > 0
+      ? new BoundedNodeProviderFetcher({
+          routes: providerRoutes,
+          secrets: secretStore,
+        })
+      : null;
+  const mcpTransport = config.mcp.enabled
+    ? new LocalNodeMcpTransport({
+        allowedEndpoints: config.mcp.allowedEndpoints,
+        maxCatalogueTools: config.mcp.maxCatalogueTools,
+        maxRequestBytes: config.mcp.maxRequestBytes,
+        maxResponseBytes: config.mcp.maxResponseBytes,
+        connectTimeoutMs: config.mcp.connectTimeoutMs,
+        operationTimeoutMs: config.mcp.operationTimeoutMs,
+      })
+    : null;
+  const specialistProvider =
+    input.specialistProvider ??
+    (await createConfiguredNodeSandboxProvider({
+      config,
+      storage,
+      secrets: secretStore,
+    }));
+  const sandboxResolver =
+    input.sandboxes ??
+    (specialistProvider
+      ? (_ownerId: string, providerId: SandboxProviderId) =>
+          specialistProvider.id === providerId ? specialistProvider : null
+      : undefined);
+  const providerTransport = new LocalNodeProviderTransport(identity.nodeId, {
+    storage,
+    ...(config.relay.coreGrantPublicKey && config.relay.coreGrantKeyId
+      ? {
+          deletion: {
+            identity,
+            issuerPublicKeyDer: config.relay.coreGrantPublicKey,
+            expectedIssuerKeyId: config.relay.coreGrantKeyId,
+          },
+        }
+      : {}),
+    conversations: conversationStore ? () => conversationStore : undefined,
+    lexical: lexicalStore,
+    models: modelGateway ? () => modelGateway : undefined,
+    providerHttp: providerFetcher ? () => providerFetcher : undefined,
+    mcp: mcpTransport ?? undefined,
+    sandboxes: sandboxResolver,
+  });
+  const operationResults = new NodeOperationResultLedger({
+    path: resolve(dataDir, "relay", "operation-results.json"),
+    maximumBytes: 64 * 1024 * 1024,
+  });
+  await operationResults.initialize();
+  await operationResults.recoverInterrupted();
+  const operationGrantReplay = new GrantReplayLedger(
+    resolve(dataDir, "relay", "operation-grants.json"),
+  );
+  const jobGrantReplay = new GrantReplayLedger(
+    resolve(dataDir, "relay", "job-grants.json"),
+  );
+  const jobHandlers = new NodeJobHandlerRegistry();
+  for (const handler of input.jobHandlers ?? []) jobHandlers.register(handler);
+  const artifactHandlers: ArtifactSandboxJobHandler[] = [];
+  const specialistHandlers: SpecialistWorkerJobHandler[] = [];
+  const specialistWorkerHealth = new Map<
+    "opencode" | "openhands",
+    { healthy: boolean; safeErrorCode: string | null }
+  >();
+  if (
+    specialistProvider &&
+    specialistProvider.id === config.sandbox.provider &&
+    config.sandbox.hostPolicyDigest
+  ) {
+    const profiles = configuredArtifactSandboxProfiles(config);
+    const healthy = await createHealthyArtifactHandlers({
+      config,
+      provider: specialistProvider,
+      profiles,
+      storage,
+    });
+    for (const handler of healthy) {
+      jobHandlers.register(handler);
+      artifactHandlers.push(handler);
+    }
+  }
+  if (
+    specialistProvider &&
+    specialistProvider.id === config.sandbox.provider &&
+    config.sandbox.hostPolicyDigest
+  ) {
+    const profiles = Object.fromEntries(
+      (["opencode", "openhands"] as const)
+        .filter((worker) => config.workers[worker].enabled)
+        .map((worker) => [
+          worker,
+          createSpecialistSandboxProfile(worker, config.workers[worker]),
+        ]),
+    );
+    const runner = new ProviderSpecialistSandboxRunner({
+      provider: specialistProvider,
+      profiles,
+      hostPolicyDigest: config.sandbox.hostPolicyDigest,
+      maxEvidenceAgeMs: config.sandbox.maxEvidenceAgeSeconds * 1_000,
+      storage,
+    });
+    for (const worker of ["opencode", "openhands"] as const) {
+      if (!config.workers[worker].enabled) continue;
+      const handler = new SpecialistWorkerJobHandler({
+        worker,
+        config: config.workers[worker],
+        readManifest: objectStorageManifestReader(storage),
+        runner,
+      });
+      if (await handler.healthy()) {
+        jobHandlers.register(handler);
+        specialistHandlers.push(handler);
+        specialistWorkerHealth.set(worker, {
+          healthy: true,
+          safeErrorCode: null,
+        });
+      } else {
+        specialistWorkerHealth.set(worker, {
+          healthy: false,
+          safeErrorCode: "SPECIALIST_PREFLIGHT_FAILED",
+        });
+      }
+    }
+  } else {
+    for (const worker of ["opencode", "openhands"] as const) {
+      if (!config.workers[worker].enabled) continue;
+      specialistWorkerHealth.set(worker, {
+        healthy: false,
+        safeErrorCode: "SPECIALIST_PROVIDER_NOT_INJECTED",
+      });
+    }
+  }
+  const advertisedJobKinds = async () => {
+    const unhealthy = new Set<string>();
+    for (const handler of artifactHandlers) {
+      if (!(await handler.healthy())) {
+        unhealthy.add(`${handler.kind}@${handler.capabilityVersion}`);
+      }
+    }
+    for (const handler of specialistHandlers) {
+      if (!(await handler.healthy())) {
+        unhealthy.add(`${handler.kind}@${handler.capabilityVersion}`);
+        specialistWorkerHealth.set(
+          handler.kind.endsWith("opencode") ? "opencode" : "openhands",
+          {
+            healthy: false,
+            safeErrorCode: "SPECIALIST_PREFLIGHT_FAILED",
+          },
+        );
+      }
+    }
+    return jobHandlers.advertisedKinds().filter((kind) => !unhealthy.has(kind));
+  };
+  const initialAdvertisedJobKinds = await advertisedJobKinds();
   const port = config.bind.port;
   const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
   const security = new ConfiguratorSecurity({
@@ -76,14 +420,56 @@ export async function createNodeDaemon(
   });
   await security.initialize();
   const pairing = new PairingManager(identity);
-  const configurator = new LocalConfigurator({
-    security,
-    pairing,
-    config,
-    configPath: input.configPath ?? resolve(dataDir, "avermate-node.yaml"),
-  });
   const manifest = async () => {
     const storageCapabilities = await storage.capabilities();
+    const currentJobKinds = await advertisedJobKinds();
+    const currentKindSet = new Set(currentJobKinds);
+    const currentExecutionProfiles = artifactHandlers
+      .map((handler) => handler.executionProfile())
+      .filter((profile) => currentKindSet.has(profile.kind))
+      .sort((left, right) => left.kind.localeCompare(right.kind));
+    const sandboxCapabilities = specialistProvider
+      ? await specialistProvider.capabilities().catch(() => ({
+          providerId: specialistProvider.id,
+          available: false,
+          profiles: [],
+        }))
+      : null;
+    const runtimeCheckpointCapabilities =
+      sandboxCapabilities?.available &&
+      specialistProvider?.runtimeCheckpointCapabilities
+        ? await specialistProvider
+            .runtimeCheckpointCapabilities()
+            .catch(() => ({
+              available: false as const,
+              reason: "preflight-unavailable" as const,
+            }))
+        : null;
+    const retrievalProviders = [
+      ...(config.retrieval.embeddingEndpoint
+        ? [
+            {
+              purpose: "embedding" as const,
+              provider: config.retrieval.embeddingProvider!,
+              model: config.retrieval.embeddingModel!,
+              modelRevision: config.retrieval.embeddingRevision!,
+              dimensions: config.retrieval.embeddingDimensions[0]!,
+            },
+          ]
+        : []),
+      ...(config.retrieval.rerankEndpoint
+        ? [
+            {
+              purpose: "rerank" as const,
+              provider: config.retrieval.rerankProvider!,
+              model: config.retrieval.rerankModel!,
+              modelRevision: config.retrieval.rerankRevision!,
+              imageDigest: config.retrieval.rerankImageDigest!,
+              runtimeRevision: config.retrieval.rerankRuntimeRevision!,
+            },
+          ]
+        : []),
+    ];
     return buildManifest({
       identity,
       config,
@@ -95,45 +481,220 @@ export async function createNodeDaemon(
           directTransfer: false,
           encryptionModes: ["transport-tls"],
         },
+        ...(conversationStore
+          ? {
+              conversations: {
+                version: 1 as const,
+                search: false,
+                maxBytes: config.conversations.maximumBytes,
+              },
+            }
+          : {}),
+        ...(config.retrieval.enabled && config.retrieval.lexical
+          ? {
+              retrieval: {
+                version: 1 as const,
+                lexical: true as const,
+                vectorSpaces: config.retrieval.embeddingEndpoint
+                  ? [
+                      {
+                        model: config.retrieval.embeddingModel!,
+                        dimensions: config.retrieval.embeddingDimensions,
+                      },
+                    ]
+                  : [],
+                providers: retrievalProviders,
+              },
+            }
+          : {}),
+        ...(modelGateway
+          ? {
+              models: {
+                version: 1 as const,
+                models: config.models.catalogue,
+                revisions: config.models.modelRevisions,
+              },
+            }
+          : {}),
+        ...(config.jobs.enabled && currentJobKinds.length > 0
+          ? {
+              jobs: {
+                version: 1 as const,
+                kinds: currentJobKinds,
+                maxConcurrent: config.jobs.maximumConcurrent,
+                ...(currentExecutionProfiles.length > 0
+                  ? { executionProfiles: currentExecutionProfiles }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(config.sandbox.enabled && sandboxCapabilities?.available
+          ? {
+              sandbox: {
+                version: 1 as const,
+                isolation: config.sandbox.isolation,
+                workspaceSnapshots: true,
+                runtimeCheckpoints:
+                  config.sandbox.runtimeCheckpoints &&
+                  runtimeCheckpointCapabilities?.available === true,
+                browser: false,
+                gpu: config.profile === "node-local-gpu",
+              },
+            }
+          : {}),
+        ...(mcpTransport
+          ? {
+              mcp: {
+                version: 1 as const,
+                transports: ["streamable-http" as const],
+                maxCatalogueTools: config.mcp.maxCatalogueTools,
+                maxRequestBytes: config.mcp.maxRequestBytes,
+                maxResponseBytes: config.mcp.maxResponseBytes,
+              },
+            }
+          : {}),
       },
       storageUsedBytes: await storage.usageBytes(),
     });
   };
-  const controlChannel =
-    config.relay.coreUrl && config.relay.credentialSecretRef
-      ? new OutboundNodeControlChannel({
-          connector: new BunWebSocketControlConnector(),
-          url: controlChannelUrl(config.relay.coreUrl),
-          credential: await readSecretReference(
-            config.relay.credentialSecretRef,
-          ),
-          manifest,
-          handlers: {
-            onJobOffer: async () => {
-              throw new Error("NODE_JOB_EXECUTOR_NOT_ADVERTISED");
-            },
-            onJobCancel: async (frame) => {
-              await jobLedger.requestCancellation(frame.jobId);
-            },
-            onJobAck: async (frame) => {
-              const record = await jobLedger.get(frame.jobId);
-              const finalSequence = record?.events.at(-1)?.sequence;
-              if (finalSequence !== frame.sequence) {
-                throw new Error("NODE_JOB_ACK_SEQUENCE_MISMATCH");
-              }
-              await jobLedger.acknowledgeCommit(frame.jobId);
-            },
+  const configurator = new LocalConfigurator({
+    security,
+    pairing,
+    config,
+    configPath: resolvedConfig.configPath,
+    manifest,
+    secrets: secretStore,
+    fetch: input.configuratorFetch,
+  });
+  let controlChannel: OutboundNodeControlChannel | null = null;
+  const capabilityDispatcher =
+    config.relay.coreGrantPublicKey && config.relay.coreGrantKeyId
+      ? new NodeCapabilityOperationDispatcher({
+          nodeId: identity.nodeId,
+          corePublicKeyDer: config.relay.coreGrantPublicKey,
+          coreKeyId: config.relay.coreGrantKeyId,
+          configRevision: () => configRevision(config),
+          transport: providerTransport,
+          grantReplay: operationGrantReplay,
+          results: operationResults,
+          maximumConcurrent: Math.max(1, config.jobs.maximumConcurrent * 2),
+          publish: async (frame) => {
+            if (!controlChannel) throw new Error("NODE_CHANNEL_OFFLINE");
+            await controlChannel.send(frame);
           },
         })
       : null;
+  await capabilityDispatcher?.initialize();
+  const jobDispatcher =
+    config.jobs.enabled &&
+    initialAdvertisedJobKinds.length > 0 &&
+    config.relay.coreGrantPublicKey
+      ? new NodeJobDispatcher({
+          nodeId: identity.nodeId,
+          corePublicKeyDer: config.relay.coreGrantPublicKey,
+          expectedPolicyRef: () => configRevision(config),
+          ledger: jobLedger,
+          grantReplay: jobGrantReplay,
+          registry: jobHandlers,
+          maximumConcurrent: config.jobs.maximumConcurrent,
+          leaseTtlMs: config.jobs.leaseTtlSeconds * 1_000,
+          publish: async (event) => {
+            const connectionEpoch = controlChannel?.connectionEpoch;
+            if (!controlChannel || connectionEpoch == null) {
+              throw new Error("NODE_CHANNEL_OFFLINE");
+            }
+            await controlChannel.send({
+              type: "job-event",
+              frameId: `frame_${crypto.randomUUID()}`,
+              nodeId: identity.nodeId,
+              connectionEpoch,
+              event,
+            });
+          },
+        })
+      : null;
+  await jobDispatcher?.recover();
+  if (config.relay.coreUrl && config.relay.credentialSecretRef) {
+    controlChannel = new OutboundNodeControlChannel({
+      connector: new BunWebSocketControlConnector(),
+      url: controlChannelUrl(config.relay.coreUrl, config.relay.transport),
+      credential: await secretStore.read(config.relay.credentialSecretRef),
+      manifest,
+      handlers: {
+        onReady: async (frame) => {
+          await jobDispatcher?.replayPending();
+          const health = (await manifest()).features;
+          await controlChannel!.send({
+            type: "health",
+            frameId: `frame_${crypto.randomUUID()}`,
+            nodeId: identity.nodeId,
+            health: Object.keys(health).map((feature) => ({
+              capability:
+                feature === "schoolConnectors"
+                  ? "school-connectors"
+                  : (feature as
+                      | "storage"
+                      | "conversations"
+                      | "retrieval"
+                      | "models"
+                      | "jobs"
+                      | "sandbox"
+                      | "renderers"
+                      | "mcp"),
+              state: "healthy" as const,
+              lastSuccessAt: new Date().toISOString(),
+              lastErrorAt: null,
+              safeErrorCode: null,
+              queued: 0,
+              active:
+                feature === "jobs" ? (jobDispatcher?.activeCount ?? 0) : 0,
+            })),
+          });
+        },
+        onJobOffer: async (frame) => {
+          if (!jobDispatcher) {
+            throw new Error("NODE_JOB_EXECUTOR_NOT_ADVERTISED");
+          }
+          await jobDispatcher.accept(frame.job);
+        },
+        onJobCancel: async (frame) => {
+          if (!jobDispatcher) throw new Error("NODE_JOB_NOT_ADVERTISED");
+          await jobDispatcher.cancel(frame.jobId);
+        },
+        onJobAck: async (frame) => {
+          if (!jobDispatcher) throw new Error("NODE_JOB_NOT_ADVERTISED");
+          await jobDispatcher.acknowledge(frame.jobId, frame.sequence);
+        },
+        onOperationRequest: async (frame) => {
+          if (!capabilityDispatcher) {
+            throw new Error("NODE_CAPABILITY_DISPATCHER_NOT_CONFIGURED");
+          }
+          await capabilityDispatcher.accept(frame);
+        },
+        onOperationCancel: async (frame) => {
+          await capabilityDispatcher?.cancel(frame.operationId);
+        },
+      },
+    });
+  }
 
   return {
     config,
     identity,
     storage,
     jobLedger,
+    artifactRetentionReaper,
+    conversationStore,
+    lexicalStores,
+    modelGateway,
+    providerFetcher,
+    providerTransport,
+    capabilityDispatcher,
+    jobDispatcher,
+    specialistWorkerHealth,
     controlChannel,
     security,
+    manifest,
     async fetch(request: Request) {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health") {
@@ -158,15 +719,24 @@ export async function createNodeDaemon(
             setupOpen: security.setupOpen,
             manifest: currentManifest,
             capabilityLimitations: {
-              jobs: "executor-not-implemented",
-              conversations: "provider-not-activated",
-              retrieval: "lexical-provider-not-activated",
-              models: config.models.enabled
-                ? "provider-not-activated"
-                : "not-configured",
-              sandbox: config.sandbox.enabled
-                ? "provider-not-activated"
+              jobs: currentManifest.features.jobs
+                ? null
+                : "no-reviewed-job-handlers",
+              conversations: currentManifest.features.conversations
+                ? null
                 : "disabled",
+              retrieval: currentManifest.features.retrieval
+                ? null
+                : "not-configured",
+              models: currentManifest.features.models
+                ? null
+                : "not-configured",
+              sandbox:
+                currentManifest.features.sandbox
+                  ? null
+                  : config.sandbox.enabled
+                    ? "provider-not-injected"
+                    : "disabled",
             },
           }),
           { headers: { "content-type": "application/json" } },
@@ -181,6 +751,7 @@ export async function startNodeDaemon(
   input: Parameters<typeof createNodeDaemon>[0] = {},
 ) {
   const daemon = await createNodeDaemon(input);
+  await daemon.artifactRetentionReaper.reap().catch(() => undefined);
   const relayAbort = new AbortController();
   const relayTask = daemon.controlChannel?.run(relayAbort.signal);
   const server = Bun.serve({
@@ -189,12 +760,51 @@ export async function startNodeDaemon(
     fetch: daemon.fetch,
     maxRequestBodySize: 64 * 1024,
   });
+  const configuredBridge =
+    input.containerBridgePort ??
+    (process.env.AVERMATE_NODE_CONTAINER_BRIDGE_PORT
+      ? Number(process.env.AVERMATE_NODE_CONTAINER_BRIDGE_PORT)
+      : null);
+  if (
+    configuredBridge !== null &&
+    (!Number.isSafeInteger(configuredBridge) ||
+      configuredBridge < 1_024 ||
+      configuredBridge > 65_535 ||
+      configuredBridge === daemon.config.bind.port)
+  ) {
+    relayAbort.abort();
+    server.stop(true);
+    await relayTask?.catch(() => undefined);
+    throw new Error("NODE_CONTAINER_BRIDGE_PORT_INVALID");
+  }
+  let containerBridge: ReturnType<typeof Bun.serve> | null = null;
+  if (configuredBridge !== null) {
+    try {
+      containerBridge = Bun.serve({
+        hostname: "0.0.0.0",
+        port: configuredBridge,
+        fetch: daemon.fetch,
+        maxRequestBodySize: 64 * 1024,
+      });
+    } catch (error) {
+      relayAbort.abort();
+      server.stop(true);
+      await relayTask?.catch(() => undefined);
+      throw error;
+    }
+  }
+  const artifactReaperTimer = setInterval(() => {
+    void daemon.artifactRetentionReaper.reap().catch(() => undefined);
+  }, ARTIFACT_REAPER_INTERVAL_MS);
   return {
     daemon,
     server,
+    containerBridge,
     relayTask,
     async stop() {
+      clearInterval(artifactReaperTimer);
       relayAbort.abort();
+      containerBridge?.stop(true);
       server.stop(true);
       await relayTask?.catch(() => undefined);
     },

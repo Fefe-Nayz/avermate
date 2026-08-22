@@ -11,15 +11,23 @@ import {
   ActivityIcon,
   ArrowLeftIcon,
   FilterIcon,
+  GitBranchIcon,
   RotateCcwIcon,
   SearchXIcon,
 } from "lucide-react"
 import Link from "next/link"
+import { useExtracted } from "next-intl"
 import { useMemo, useState } from "react"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -70,49 +78,6 @@ import { actionIsLive, actionUiState, type ActionUiState } from "./action-model"
 interface FilterItem {
   label: string
   value: string
-}
-
-const ACTOR_ITEMS: readonly FilterItem[] = [
-  { label: "Any actor", value: ALL_FILTER_VALUE },
-  { label: "Avermate assistant", value: "embedded-agent" },
-  { label: "MCP client", value: "mcp" },
-  { label: "User undo", value: "user-undo" },
-  { label: "System", value: "system" },
-]
-
-const STATUS_ITEMS: readonly FilterItem[] = [
-  { label: "Any execution status", value: ALL_FILTER_VALUE },
-  { label: "Pending", value: "reserved" },
-  { label: "Pending approval", value: "awaiting-approval" },
-  { label: "Executing", value: "executing" },
-  { label: "Succeeded", value: "completed" },
-  { label: "Failed", value: "failed" },
-  { label: "Needs inspection", value: "inspect-required" },
-  { label: "Rejected", value: "rejected" },
-  { label: "Expired", value: "expired" },
-]
-
-const UNDO_ITEMS: readonly FilterItem[] = [
-  { label: "Any undo state", value: ALL_FILTER_VALUE },
-  { label: "Undo available", value: "eligible" },
-  { label: "Undo approval pending", value: "approval-pending" },
-  { label: "Undoing", value: "in-progress" },
-  { label: "Undone", value: "compensated" },
-  { label: "Partially undone", value: "partially-compensated" },
-  { label: "Conflicted", value: "conflicted" },
-  { label: "Compensation failed", value: "failed" },
-  { label: "Blocked by dependencies", value: "blocked" },
-  { label: "Not undoable", value: "ineligible" },
-  { label: "No undo", value: "not-applicable" },
-]
-
-const UI_STATE_LABELS: Readonly<Record<ActionUiState, string>> = {
-  pending: "Pending",
-  executing: "Executing",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  undone: "Undone",
-  compensation_failed: "Compensation failed",
 }
 
 function FilterSelect({
@@ -170,6 +135,38 @@ function ActionFilters({
   onApply: () => void
   onClear: () => void
 }) {
+  const t = useExtracted()
+  const actorItems: readonly FilterItem[] = [
+    { label: t("Any actor"), value: ALL_FILTER_VALUE },
+    { label: t("Avermate assistant"), value: "embedded-agent" },
+    { label: t("MCP client"), value: "mcp" },
+    { label: t("User undo"), value: "user-undo" },
+    { label: t("System"), value: "system" },
+  ]
+  const statusItems: readonly FilterItem[] = [
+    { label: t("Any execution status"), value: ALL_FILTER_VALUE },
+    { label: t("Pending"), value: "reserved" },
+    { label: t("Pending approval"), value: "awaiting-approval" },
+    { label: t("Executing"), value: "executing" },
+    { label: t("Succeeded"), value: "completed" },
+    { label: t("Failed"), value: "failed" },
+    { label: t("Needs inspection"), value: "inspect-required" },
+    { label: t("Rejected"), value: "rejected" },
+    { label: t("Expired"), value: "expired" },
+  ]
+  const undoItems: readonly FilterItem[] = [
+    { label: t("Any undo state"), value: ALL_FILTER_VALUE },
+    { label: t("Undo available"), value: "eligible" },
+    { label: t("Undo approval pending"), value: "approval-pending" },
+    { label: t("Undoing"), value: "in-progress" },
+    { label: t("Undone"), value: "compensated" },
+    { label: t("Partially undone"), value: "partially-compensated" },
+    { label: t("Conflicted"), value: "conflicted" },
+    { label: t("Compensation failed"), value: "failed" },
+    { label: t("Blocked by dependencies"), value: "blocked" },
+    { label: t("Not undoable"), value: "ineligible" },
+    { label: t("No undo"), value: "not-applicable" },
+  ]
   const update = <K extends keyof ActionActivityFilterDraft>(
     key: K,
     value: ActionActivityFilterDraft[K]
@@ -179,10 +176,10 @@ function ActionFilters({
     <Card size="sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FilterIcon className="size-4" /> Filters
+          <FilterIcon className="size-4" /> {t("Filters")}
         </CardTitle>
         <CardDescription>
-          Search the audit view without exposing raw model telemetry.
+          {t("Search the audit view without exposing raw model telemetry.")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -196,7 +193,7 @@ function ActionFilters({
           <FieldGroup>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field>
-                <FieldLabel htmlFor="action-from-date">From</FieldLabel>
+                <FieldLabel htmlFor="action-from-date">{t("From")}</FieldLabel>
                 <Input
                   id="action-from-date"
                   type="date"
@@ -205,7 +202,7 @@ function ActionFilters({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="action-to-date">To</FieldLabel>
+                <FieldLabel htmlFor="action-to-date">{t("To")}</FieldLabel>
                 <Input
                   id="action-to-date"
                   type="date"
@@ -215,9 +212,9 @@ function ActionFilters({
               </Field>
               <FilterSelect
                 id="action-actor"
-                label="Actor"
+                label={t("Actor")}
                 value={draft.actorKind}
-                items={ACTOR_ITEMS}
+                items={actorItems}
                 onValueChange={(value) =>
                   update(
                     "actorKind",
@@ -227,9 +224,9 @@ function ActionFilters({
               />
               <FilterSelect
                 id="action-status"
-                label="Execution"
+                label={t("Execution")}
                 value={draft.status}
-                items={STATUS_ITEMS}
+                items={statusItems}
                 onValueChange={(value) =>
                   update(
                     "status",
@@ -239,9 +236,9 @@ function ActionFilters({
               />
               <FilterSelect
                 id="action-undo-state"
-                label="Undo eligibility"
+                label={t("Undo eligibility")}
                 value={draft.undoState}
-                items={UNDO_ITEMS}
+                items={undoItems}
                 onValueChange={(value) =>
                   update(
                     "undoState",
@@ -250,7 +247,7 @@ function ActionFilters({
                 }
               />
               <Field>
-                <FieldLabel htmlFor="action-tool">Tool ID</FieldLabel>
+                <FieldLabel htmlFor="action-tool">{t("Tool ID")}</FieldLabel>
                 <Input
                   id="action-tool"
                   value={draft.toolId}
@@ -259,7 +256,9 @@ function ActionFilters({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="action-thread">Conversation ID</FieldLabel>
+                <FieldLabel htmlFor="action-thread">
+                  {t("Conversation ID")}
+                </FieldLabel>
                 <Input
                   id="action-thread"
                   value={draft.threadId}
@@ -268,7 +267,7 @@ function ActionFilters({
               </Field>
               <Field>
                 <FieldLabel htmlFor="action-resource-kind">
-                  Resource kind
+                  {t("Resource kind")}
                 </FieldLabel>
                 <Input
                   id="action-resource-kind"
@@ -281,7 +280,7 @@ function ActionFilters({
               </Field>
               <Field>
                 <FieldLabel htmlFor="action-resource-id">
-                  Resource ID
+                  {t("Resource ID")}
                 </FieldLabel>
                 <Input
                   id="action-resource-id"
@@ -300,10 +299,10 @@ function ActionFilters({
               }
               onClick={onClear}
             >
-              Clear
+              {t("Clear")}
             </Button>
             <Button type="submit">
-              <FilterIcon data-icon="inline-start" /> Apply filters
+              <FilterIcon data-icon="inline-start" /> {t("Apply filters")}
             </Button>
           </div>
         </form>
@@ -323,6 +322,7 @@ function BatchGroup({
   selected: ReadonlySet<string>
   onSelectedChange: (actionId: string, selected: boolean) => void
 }) {
+  const t = useExtracted()
   const operations = useActionInteractionOperations()
   const partial = actions.some(
     (action) => action.undoState === "partially-compensated"
@@ -330,30 +330,38 @@ function BatchGroup({
   return (
     <section
       className="flex flex-col gap-3"
-      aria-label={batchId ? `Batch ${batchId}` : "Individual actions"}
+      aria-label={
+        batchId ? t("Batch {id}", { id: batchId }) : t("Individual actions")
+      }
     >
       {batchId ? (
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-medium">Action batch</h2>
+          <h2 className="text-sm font-medium">{t("Action batch")}</h2>
           <Badge variant="outline" title={batchId}>
             {batchId}
           </Badge>
-          <Badge variant="secondary">{actions.length} actions</Badge>
+          <Badge variant="secondary">
+            {t("{count, plural, one {# action} other {# actions}}", {
+              count: actions.length,
+            })}
+          </Badge>
         </div>
       ) : null}
       {partial ? (
         <Alert variant="destructive">
           <RotateCcwIcon />
-          <AlertTitle>This batch was only partially undone</AlertTitle>
+          <AlertTitle>{t("This batch was only partially undone")}</AlertTitle>
           <AlertDescription>
-            Completed compensations remain recorded. Review each unresolved
-            conflict or dependency below; the batch is not presented as rolled
-            back.
+            {t(
+              "Completed compensations remain recorded. Review each unresolved conflict or dependency below; the batch is not presented as rolled back."
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
       <FieldSet>
-        <FieldLegend className="sr-only">Select actions to undo</FieldLegend>
+        <FieldLegend className="sr-only">
+          {t("Select actions to undo")}
+        </FieldLegend>
         <FieldGroup className="gap-3">
           {actions.map((action) => (
             <Field
@@ -363,7 +371,10 @@ function BatchGroup({
             >
               <Checkbox
                 checked={selected.has(action.id)}
-                aria-label={`Select ${action.toolId} action ${action.actionSequence}`}
+                aria-label={t("Select {tool} action {sequence}", {
+                  tool: action.toolId,
+                  sequence: String(action.actionSequence),
+                })}
                 onCheckedChange={(checked) =>
                   onSelectedChange(action.id, checked === true)
                 }
@@ -392,6 +403,7 @@ function ActivityResults({
   onSelectedChange: (actionId: string, selected: boolean) => void
   onNextPage: () => void
 }) {
+  const t = useExtracted()
   const operations = useActionInteractionOperations()
   const groups = useMemo(() => {
     const grouped = new Map<string | null, AgentActionDto[]>()
@@ -406,7 +418,9 @@ function ActivityResults({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">
-          {selected.size} selected
+          {t("{count, plural, one {# selected} other {# selected}}", {
+            count: selected.size,
+          })}
         </span>
         <Button
           type="button"
@@ -416,7 +430,7 @@ function ActivityResults({
           onClick={() => operations.onRequestUndo?.([...selected])}
         >
           <RotateCcwIcon data-icon="inline-start" />
-          Preview selected undo
+          {t("Preview selected undo")}
         </Button>
       </div>
       {groups.map(([batchId, groupedActions], index) => (
@@ -430,20 +444,27 @@ function ActivityResults({
       ))}
       {nextCursor ? (
         <Button type="button" variant="outline" onClick={onNextPage}>
-          View older actions
+          {t("View older actions")}
         </Button>
       ) : null}
     </div>
   )
 }
 
-export function ActionActivityClient() {
-  const [draft, setDraft] = useState<ActionActivityFilterDraft>(
-    EMPTY_ACTION_ACTIVITY_FILTER
+export function ActionActivityClient({
+  initialThreadId = "",
+}: {
+  initialThreadId?: string
+}) {
+  const t = useExtracted()
+  const isOnline = useOnlineStatus()
+  const initialFilter = useMemo<ActionActivityFilterDraft>(
+    () => ({ ...EMPTY_ACTION_ACTIVITY_FILTER, threadId: initialThreadId }),
+    [initialThreadId]
   )
-  const [applied, setApplied] = useState<ActionActivityFilterDraft>(
-    EMPTY_ACTION_ACTIVITY_FILTER
-  )
+  const [draft, setDraft] = useState<ActionActivityFilterDraft>(initialFilter)
+  const [applied, setApplied] =
+    useState<ActionActivityFilterDraft>(initialFilter)
   const [cursor, setCursor] = useState<number | undefined>()
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const input = useMemo(
@@ -452,6 +473,7 @@ export function ActionActivityClient() {
   )
   const query = useQuery({
     ...orpc.actions.activity.list.queryOptions({ input }),
+    enabled: isOnline,
     refetchInterval: (current) =>
       current.state.data?.items.some(actionIsLive) ? 1_500 : false,
   })
@@ -474,22 +496,46 @@ export function ActionActivityClient() {
   return (
     <>
       <PageMeta
-        title="Action activity"
-        subtitle="Approvals, tool calls, affected resources and selective undo"
+        title={t("Action activity")}
+        subtitle={t(
+          "Approvals, tool calls, affected resources and selective undo"
+        )}
         backHref="/assistant"
       />
       <PageActions>
-        <Button
-          variant="outline"
-          size="sm"
-          render={<Link href="/assistant" />}
-          nativeButton={false}
+        <Link
+          href="/assistant"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
         >
-          <ArrowLeftIcon data-icon="inline-start" /> Assistant
-        </Button>
+          <ArrowLeftIcon data-icon="inline-start" /> {t("Assistant")}
+        </Link>
       </PageActions>
 
       <div className="flex flex-col gap-5">
+        {!isOnline ? (
+          <Alert role="status">
+            <ActivityIcon />
+            <AlertTitle>{t("Action activity is offline")}</AlertTitle>
+            <AlertDescription>
+              {t(
+                "Previously loaded audit entries remain visible. Filters, approvals and undo resume after reconnection."
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {initialThreadId ? (
+          <Alert>
+            <GitBranchIcon />
+            <AlertTitle>
+              {t("Reviewing this conversation's data changes")}
+            </AlertTitle>
+            <AlertDescription>
+              {t(
+                "These ledger entries are the durable study-data mutations associated with the conversation. Creating or editing a conversation branch does not rewind them; conflicted undos must be reviewed explicitly."
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <ActionFilters
           draft={draft}
           appliedCount={actionActivityFilterCount(applied)}
@@ -504,7 +550,7 @@ export function ActionActivityClient() {
         {actions.length > 0 ? (
           <div
             className="flex flex-wrap gap-1.5"
-            aria-label="Visible action states"
+            aria-label={t("Visible action states")}
           >
             {[...stateCounts.entries()].map(([state, count]) => (
               <Badge
@@ -516,7 +562,18 @@ export function ActionActivityClient() {
                 }
                 data-action-state={state}
               >
-                {UI_STATE_LABELS[state]} {count}
+                {state === "pending"
+                  ? t("Pending")
+                  : state === "executing"
+                    ? t("Executing")
+                    : state === "succeeded"
+                      ? t("Succeeded")
+                      : state === "failed"
+                        ? t("Failed")
+                        : state === "undone"
+                          ? t("Undone")
+                          : t("Compensation failed")}{" "}
+                {count}
               </Badge>
             ))}
           </div>
@@ -525,7 +582,9 @@ export function ActionActivityClient() {
         {query.isLoading ? (
           <div
             className="flex flex-col gap-3"
-            aria-label="Loading action activity"
+            role="status"
+            aria-label={t("Loading action activity")}
+            aria-busy="true"
           >
             <Skeleton className="h-40 w-full" />
             <Skeleton className="h-40 w-full" />
@@ -533,8 +592,18 @@ export function ActionActivityClient() {
         ) : query.isError ? (
           <Alert variant="destructive">
             <ActivityIcon />
-            <AlertTitle>Action activity cannot be loaded</AlertTitle>
+            <AlertTitle>{t("Action activity cannot be loaded")}</AlertTitle>
             <AlertDescription>{query.error.message}</AlertDescription>
+            <AlertAction>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!isOnline || query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                {t("Retry")}
+              </Button>
+            </AlertAction>
           </Alert>
         ) : actions.length === 0 ? (
           <Empty className="min-h-72">
@@ -542,10 +611,11 @@ export function ActionActivityClient() {
               <EmptyMedia variant="icon">
                 <SearchXIcon />
               </EmptyMedia>
-              <EmptyTitle>No matching actions</EmptyTitle>
+              <EmptyTitle>{t("No matching actions")}</EmptyTitle>
               <EmptyDescription>
-                Try clearing a filter. Read-only assistant calls do not create
-                mutation-ledger actions.
+                {t(
+                  "Try clearing a filter. Read-only assistant calls do not create mutation-ledger actions."
+                )}
               </EmptyDescription>
             </EmptyHeader>
           </Empty>

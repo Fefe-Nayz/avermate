@@ -2,19 +2,22 @@ import { describe, expect, test } from "bun:test";
 import {
   corpusEmbeddingConfiguration,
   createConfiguredCorpusVectorRuntime,
+  createOwnedCorpusVectorRuntime,
   OpenAICompatibleEmbeddingProvider,
   QdrantVectorIndex,
 } from "./vector-runtime";
+import { GEMINI_EMBEDDING_DISCLOSURE_REVISION } from "./gemini-embedding";
 
 const descriptor = {
   id: "space-test-v1",
   provider: "fixture",
   model: "embed-fixture",
-  dimension: 3,
-  distance: "cosine" as const,
-  normalization: "fixture-v1",
-  modality: "text" as const,
-  preprocessingVersion: "fixture-v1",
+  modelRevision: "embed-fixture@test-1",
+  dimensions: 3,
+  modalities: ["text" as const],
+  normalization: "provider-unit" as const,
+  preprocessingRevision: "fixture-v1",
+  placement: "node" as const,
 };
 
 describe("optional corpus embedding configuration", () => {
@@ -22,6 +25,7 @@ describe("optional corpus embedding configuration", () => {
     expect(corpusEmbeddingConfiguration({})).toMatchObject({
       complete: false,
       reason: "disabled",
+      placement: null,
       sendsSourceContentToThirdParties: false,
     });
     expect(
@@ -34,6 +38,7 @@ describe("optional corpus embedding configuration", () => {
         CORPUS_EMBEDDING_BASE_URL: "http://embeddings.test/v1",
         CORPUS_EMBEDDING_MODEL: "school-v1",
         CORPUS_EMBEDDING_DIMENSION: "3",
+        CORPUS_EMBEDDING_PLACEMENT: "full-self-host",
         CORPUS_VECTOR_URL: "http://qdrant.test",
         CORPUS_EMBEDDING_LOCAL: "true",
       }),
@@ -41,6 +46,39 @@ describe("optional corpus embedding configuration", () => {
       complete: true,
       reason: "configured",
       sendsSourceContentToThirdParties: false,
+      placement: "full-self-host",
+    });
+  });
+
+  test("never presents Gemini as local or silently ignores its placement", () => {
+    const base = {
+      CORPUS_EMBEDDING_ENABLED: "true",
+      CORPUS_EMBEDDING_PROVIDER: "gemini",
+      CORPUS_EMBEDDING_DIMENSION: "768",
+      CORPUS_VECTOR_URL: "https://qdrant.example.test",
+      CORPUS_EMBEDDING_LOCAL: "true",
+    };
+    expect(
+      corpusEmbeddingConfiguration({
+        ...base,
+        CORPUS_EMBEDDING_PLACEMENT: "node",
+      }),
+    ).toMatchObject({
+      complete: false,
+      placement: "node",
+      reason: "unsupported-placement",
+      sendsSourceContentToThirdParties: false,
+    });
+    expect(
+      corpusEmbeddingConfiguration({
+        ...base,
+        CORPUS_EMBEDDING_PLACEMENT: "hosted-core",
+      }),
+    ).toMatchObject({
+      complete: true,
+      placement: "hosted-core",
+      reason: "configured",
+      sendsSourceContentToThirdParties: true,
     });
   });
 
@@ -81,6 +119,89 @@ describe("optional corpus embedding configuration", () => {
         AVERMATE_DEPLOYMENT_MODE: "full-self-host",
       }),
     ).not.toBeNull();
+  });
+
+  test("injects the paired Node provider fetcher for Node embeddings", async () => {
+    let nodeRequest: unknown;
+    let providerBody: unknown;
+    const runtime = await createOwnedCorpusVectorRuntime(
+      "owner-1",
+      {
+        CORPUS_EMBEDDING_ENABLED: "true",
+        CORPUS_EMBEDDING_PROVIDER: "openai-compatible",
+        CORPUS_EMBEDDING_BASE_URL: "http://embedding-worker:8080/v1",
+        CORPUS_EMBEDDING_MODEL: "embedding-fixture",
+        CORPUS_EMBEDDING_DIMENSION: "3",
+        CORPUS_EMBEDDING_PLACEMENT: "node",
+        CORPUS_EMBEDDING_NODE_ID: "node-1",
+        CORPUS_EMBEDDING_LOCAL: "true",
+        CORPUS_VECTOR_URL: "http://qdrant:6333",
+      },
+      {
+        createNodeFetcher: async (input) => {
+          nodeRequest = input;
+          return async (_url, init) => {
+            providerBody = JSON.parse(String(init?.body));
+            return Response.json({
+              data: [{ index: 0, embedding: [1, 0, 0] }],
+            });
+          };
+        },
+      },
+    );
+    expect(nodeRequest).toEqual({
+      ownerId: "owner-1",
+      nodeId: "node-1",
+      purpose: "embedding",
+    });
+    const vectors = await runtime!.embedding.embedText([
+      { contentHash: "a".repeat(64), text: "contenu privé" },
+    ]);
+    expect(providerBody).toMatchObject({
+      model: "embedding-fixture",
+      input: ["contenu privé"],
+      dimensions: 3,
+    });
+    expect(vectors[0]?.values).toEqual([1, 0, 0]);
+  });
+
+  test("carries the exact owner consent into the Gemini indexing and query runtime", async () => {
+    const grantedAt = "2026-08-22T12:00:00.000Z";
+    const runtime = await createOwnedCorpusVectorRuntime(
+      "owner-1",
+      {
+        CORPUS_EMBEDDING_ENABLED: "true",
+        CORPUS_EMBEDDING_PROVIDER: "gemini",
+        CORPUS_EMBEDDING_DIMENSION: "768",
+        CORPUS_EMBEDDING_PLACEMENT: "hosted-core",
+        CORPUS_VECTOR_URL: "https://qdrant.example.test",
+      },
+      {
+        resolveServiceKey: async () => ({
+          key: "fixture-key-never-sent",
+          source: "user",
+          invalidationToken: "fixture-cas-token",
+        }),
+        loadConsent: async () => ({
+          provider: "gemini",
+          capability: "embedding",
+          disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+          grantedAt,
+        }),
+      },
+    );
+
+    expect(runtime?.consent).toEqual({
+      provider: "gemini",
+      capability: "embedding",
+      disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+      grantedAt,
+    });
+    expect(runtime?.embedding.descriptor()).toMatchObject({
+      provider: "gemini",
+      model: "gemini-embedding-2",
+      dimensions: 768,
+    });
   });
 
   test("validates provider ordering, finiteness and exact dimensions", async () => {

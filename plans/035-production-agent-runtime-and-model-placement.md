@@ -13,8 +13,8 @@
 
 ## Status
 
-- **Status**: TODO — execute only after the 025–034 implementation wave is
-  committed and its remaining blockers are recorded
+- **Status**: DONE (repository/Web) — runtime, placement and Chromium gates
+  pass; fail-closed `verify:035:live` evidence remains external
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: CRITICAL
@@ -24,6 +24,19 @@
 - **Category**: agent runtime, model routing, placement, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
+
+### Production implementation amendment — 2026-08-22
+
+The runtime-library choice is adapted without weakening this plan's behavioral
+contract. Plan 026's LangGraph implementation remains a restart/interrupt/fork
+conformance proof. Production uses the explicit Avermate
+`AssistantGraphExecutor` behind `ProductionAgentRuntime`, because its canonical
+checkpoint, dispatch-claim, approval and finalization transitions already live
+in the Avermate stores required below. Adding a LangGraph saver around those
+same transitions would create a second checkpoint history without improving
+recovery correctness. The production gate therefore proves the `AgentRuntime`
+contract, durable interruption/recovery and absence of a direct legacy call
+site; it does not count ceremonial framework invocation as completion.
 
 ## Outcome
 
@@ -40,8 +53,9 @@ provider dispatch or tool effect.
 
 ## Current-state evidence and gaps
 
-1. `docs/ai-architecture-v2.md:15-23` ratifies LangGraph behind the Avermate
-   `AgentRuntime`, not as a domain model or persistence authority.
+1. The original plan-026 ADR ratified LangGraph behind the Avermate
+   `AgentRuntime`; the production amendment above keeps the stable boundary and
+   replaces the engine choice after the canonical-store audit.
 2. `apps/server/src/assistant/services.ts:219-225` still constructs
    `ReadOnlyAssistantRunService` directly for production.
 3. `apps/server/src/assistant/run-service.ts:205-966` contains a second manual
@@ -86,7 +100,7 @@ ledger has been bypassed.
 ## Product and security invariants
 
 - `CoreConversationStore` or the selected Node `ConversationStore` remains the
-  canonical conversation authority. LangGraph checkpoints are execution state,
+  canonical conversation authority. Runtime checkpoints are execution state,
   not message history.
 - One run has immutable `modelKey`, `providerKey`, placement, policy revision,
   tool-catalog revision, context-manifest digest and branch identity.
@@ -103,14 +117,17 @@ ledger has been bypassed.
   stored or rendered.
 - BYOK, Node and managed placements are explicit. There is no silent paid
   fallback, provider substitution or Core mirror of a Node-owned conversation.
-- LiteLLM is an optional OpenAI-compatible managed adapter. It is not the domain
-  gateway and is not required for self-hosting.
-- OpenCode/OpenHands may later run as bounded specialist workers in a sandbox;
-  neither is the Avermate harness.
+- LiteLLM is an implemented OpenAI-compatible adapter with explicit profile
+  activation. It is not the domain gateway, is absent from the minimal dev
+  profile, and remains unnecessary for direct/BYOK routing.
+- OpenCode/OpenHands are implemented by plan 038 as bounded, explicitly enabled
+  specialist workers in an attested sandbox; neither is the Avermate harness or
+  canonical conversation authority.
 
 ## In scope
 
-- One production `AgentRuntime` interface and LangGraph adapter behind it.
+- One production `AgentRuntime` interface and explicit Avermate graph executor
+  behind it; the LangGraph adapter remains a conformance fixture.
 - Migration of the current read-only loop into runtime nodes while preserving
   its citation, context, tool and finalization protections.
 - Provider-neutral model catalogue and placement resolution for configured
@@ -140,7 +157,7 @@ Web assistant / external MCP
             |
             v
        AgentRuntime
-    (LangGraph adapter)
+   (Avermate graph executor)
       /      |       \
 Conversation ToolBroker  Retrieval/Artifact jobs
 Store        |             |
@@ -199,8 +216,9 @@ they do not own the DAG, checkpoint store, approval state or usage ledger.
 - Store model/provider revision and normalized input/output/cached/reasoning
   token accounting with every run. Unknown provider usage is visible as unknown,
   never guessed.
-- Add LiteLLM only as an optional adapter selected by configuration; direct
-  adapters and Node-local OpenAI-compatible models must remain first-class.
+- Ship LiteLLM as a required implementation with explicit configuration/profile
+  activation; direct adapters and Node-local OpenAI-compatible models remain
+  first-class and the zero-config development loop does not start LiteLLM.
 
 ### 4. Route tools, approvals and artifacts without privilege drift
 
@@ -285,6 +303,15 @@ Add dedicated machine-readable gates for:
 - real-provider annotated evaluation with pinned model and prompt revisions;
 - 100 concurrent runs with no cross-owner event, context, usage or credential
   contamination.
+
+`bun run verify:035` is the repository aggregate and deliberately does not
+invoke a real provider. `bun run verify:035:live` is the exact-revision,
+clean-checkout release gate. It requires digest-bound evidence for direct/BYOK
+and paired-Node model contracts, annotated quality, the Chromium production
+flow, 100-run isolation and redaction. Its manifest schema and required
+measurements are documented in
+[`docs/releases/plan-035-live-evidence.md`](../docs/releases/plan-035-live-evidence.md).
+Missing credentials or evidence is a failure, never a skip.
 
 ## STOP conditions
 

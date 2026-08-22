@@ -22,6 +22,7 @@ import {
   TerminalSquareIcon,
   XIcon,
 } from "lucide-react"
+import { useExtracted } from "next-intl"
 import { createContext, useContext, useState, type ReactNode } from "react"
 import { DocumentMarkdown } from "@/components/documents/document-markdown"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +36,8 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { ActionCard } from "./actions/action-card"
 import { useAssistantToolAction } from "./actions/action-interactions"
+import { AssistantSpecializedToolResult } from "./assistant-specialized-tool-result"
+import { usesSpecializedToolResult } from "./tool-result-registry"
 
 export interface AssistantMessageActions {
   openCitation: (citationId: string) => void
@@ -73,10 +76,11 @@ function trimJson(value: unknown): string {
 }
 
 function MarkdownPart({ text }: { text: string }) {
+  const t = useExtracted()
   return (
     <DocumentMarkdown
       markdown={text}
-      ariaLabel="Assistant message"
+      ariaLabel={t("Assistant message")}
       className="min-w-0"
     />
   )
@@ -84,7 +88,9 @@ function MarkdownPart({ text }: { text: string }) {
 
 function StateIcon({ state }: { state: string }) {
   if (state === "active" || state === "pending" || state === "running") {
-    return <LoaderCircleIcon className="size-3.5 animate-spin" />
+    return (
+      <LoaderCircleIcon className="size-3.5 animate-spin motion-reduce:animate-none" />
+    )
   }
   if (state === "complete" || state === "ready") {
     return <CheckIcon className="size-3.5 text-success" />
@@ -96,16 +102,25 @@ function StateIcon({ state }: { state: string }) {
 type AssistantDataProps = Pick<DataMessagePartProps, "data" | "name">
 
 function StatusPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const part = data as {
     state?: string
     label?: string
     detail?: string
   }
+  const label =
+    part.label === "Preparing cited context"
+      ? t("Preparing cited context")
+      : (part.label ?? t("Working"))
   return (
-    <div className="my-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+    <div
+      className="my-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm"
+      role="status"
+      aria-live="polite"
+    >
       <StateIcon state={part.state ?? "pending"} />
       <div className="min-w-0">
-        <div className="font-medium">{part.label ?? "Working"}</div>
+        <div className="font-medium">{label}</div>
         {part.detail ? (
           <div className="mt-0.5 text-xs text-muted-foreground">
             {part.detail}
@@ -117,6 +132,7 @@ function StatusPart({ data }: AssistantDataProps) {
 }
 
 function PlanPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const part = data as {
     title?: string
     items?: readonly { id: string; label: string; status: string }[]
@@ -124,15 +140,15 @@ function PlanPart({ data }: AssistantDataProps) {
   return (
     <section className="my-3 rounded-xl border bg-card p-3">
       <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-        <ListTodoIcon className="size-4" /> {part.title ?? "Plan"}
+        <ListTodoIcon className="size-4" /> {part.title ?? t("Plan")}
       </div>
-      <ol className="space-y-1.5">
+      <ol className="flex flex-col gap-1.5">
         {part.items?.map((item) => (
           <li key={item.id} className="flex items-start gap-2 text-sm">
             {item.status === "complete" ? (
               <CheckIcon className="mt-0.5 size-3.5 text-success" />
             ) : item.status === "active" ? (
-              <LoaderCircleIcon className="mt-0.5 size-3.5 animate-spin" />
+              <LoaderCircleIcon className="mt-0.5 size-3.5 animate-spin motion-reduce:animate-none" />
             ) : (
               <CircleIcon className="mt-0.5 size-3.5 text-muted-foreground" />
             )}
@@ -152,6 +168,7 @@ function PlanPart({ data }: AssistantDataProps) {
 }
 
 function CitationPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const actions = useContext(MessageActionsContext)
   const part = data as { citationId?: string; ordinal?: number }
   if (!part.citationId) return null
@@ -164,12 +181,15 @@ function CitationPart({ data }: AssistantDataProps) {
       onClick={() => actions.openCitation(part.citationId!)}
     >
       <FileSearchIcon data-icon="inline-start" />
-      Source {typeof part.ordinal === "number" ? part.ordinal + 1 : ""}
+      {typeof part.ordinal === "number"
+        ? t("Source {number}", { number: String(part.ordinal + 1) })
+        : t("Source")}
     </Button>
   )
 }
 
 function QuestionPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const actions = useContext(MessageActionsContext)
   const part = data as {
     questionId?: string
@@ -191,8 +211,8 @@ function QuestionPart({ data }: AssistantDataProps) {
     }
   }
   return (
-    <section className="my-3 space-y-3 rounded-xl border bg-accent/20 p-3">
-      <div className="text-sm font-medium">{part.prompt ?? "Question"}</div>
+    <section className="my-3 flex flex-col gap-3 rounded-xl border bg-accent/20 p-3">
+      <div className="text-sm font-medium">{part.prompt ?? t("Question")}</div>
       {part.options?.length ? (
         <div className="flex flex-wrap gap-2">
           {part.options.map((option) => (
@@ -212,7 +232,7 @@ function QuestionPart({ data }: AssistantDataProps) {
       ) : null}
       {part.allowFreeText !== false ? (
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault()
             void submit(answer)
@@ -222,14 +242,15 @@ function QuestionPart({ data }: AssistantDataProps) {
             value={answer}
             disabled={submitting || part.state !== "pending"}
             onChange={(event) => setAnswer(event.target.value)}
-            placeholder="Type your answer"
+            placeholder={t("Type your answer")}
+            aria-label={t("Answer")}
           />
           <Button
             type="submit"
             size="sm"
             disabled={!answer.trim() || submitting}
           >
-            Answer
+            {t("Answer")}
           </Button>
         </form>
       ) : null}
@@ -238,6 +259,7 @@ function QuestionPart({ data }: AssistantDataProps) {
 }
 
 function UsagePart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const part = data as {
     inputTokens?: number | null
     outputTokens?: number | null
@@ -248,13 +270,21 @@ function UsagePart({ data }: AssistantDataProps) {
   }
   return (
     <div className="my-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-      <Badge variant="outline">{part.inputTokens ?? "—"} in</Badge>
-      <Badge variant="outline">{part.outputTokens ?? "—"} out</Badge>
+      <Badge variant="outline">
+        {part.inputTokens ?? "—"} {t("input")}
+      </Badge>
+      <Badge variant="outline">
+        {part.outputTokens ?? "—"} {t("output")}
+      </Badge>
       {part.reasoningTokens ? (
-        <Badge variant="outline">{part.reasoningTokens} reasoning</Badge>
+        <Badge variant="outline">
+          {part.reasoningTokens} {t("reasoning")}
+        </Badge>
       ) : null}
       {part.cachedReadTokens ? (
-        <Badge variant="outline">{part.cachedReadTokens} cached</Badge>
+        <Badge variant="outline">
+          {part.cachedReadTokens} {t("cached")}
+        </Badge>
       ) : null}
       {part.estimatedCost ? (
         <Badge variant="secondary">
@@ -266,6 +296,7 @@ function UsagePart({ data }: AssistantDataProps) {
 }
 
 function ArtifactPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const actions = useContext(MessageActionsContext)
   const part = data as {
     artifactId?: string
@@ -285,10 +316,10 @@ function ArtifactPart({ data }: AssistantDataProps) {
       <FileBoxIcon className="size-5" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">
-          {part.label ?? "Artifact"}
+          {part.label ?? t("Artifact")}
         </span>
         <span className="text-xs text-muted-foreground">
-          {part.state ?? "proposed"}
+          {part.state ?? t("proposed")}
         </span>
       </span>
       <StateIcon state={part.state ?? "proposed"} />
@@ -297,19 +328,25 @@ function ArtifactPart({ data }: AssistantDataProps) {
 }
 
 function SafeErrorPart({ data }: AssistantDataProps) {
+  const t = useExtracted()
   const part = data as { code?: string; message?: string; retryable?: boolean }
+  const message =
+    part.message === "Response cancelled."
+      ? t("Response cancelled.")
+      : part.message === "The response could not be generated."
+        ? t("The response could not be generated.")
+        : (part.message ?? t("The run failed"))
   return (
     <div
       role="alert"
       className="my-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
     >
       <div className="flex items-center gap-2 font-medium">
-        <AlertCircleIcon className="size-4" />{" "}
-        {part.message ?? "The run failed"}
+        <AlertCircleIcon className="size-4" /> {message}
       </div>
       <div className="mt-1 text-xs opacity-80">
         {part.code ?? "assistant_error"}
-        {part.retryable ? " · You can retry this response." : ""}
+        {part.retryable ? t(" · You can retry this response.") : ""}
       </div>
     </div>
   )
@@ -335,15 +372,35 @@ function ToolPart({
   isError,
   status,
 }: ToolCallMessagePartProps) {
+  const t = useExtracted()
   const ledger = useAssistantToolAction(toolCallId)
+  const running = status?.type === "running"
+  const specialized = usesSpecializedToolResult(toolName)
   if (ledger.action) {
     return (
-      <div className="my-3">
+      <div className="my-3 flex flex-col gap-3">
         <ActionCard action={ledger.action} operations={ledger.operations} />
+        {specialized ? (
+          <AssistantSpecializedToolResult
+            toolName={toolName}
+            result={result}
+            status={status?.type ?? "completed"}
+            isError={Boolean(isError)}
+          />
+        ) : null}
       </div>
     )
   }
-  const running = status?.type === "running"
+  if (specialized) {
+    return (
+      <AssistantSpecializedToolResult
+        toolName={toolName}
+        result={result}
+        status={status?.type ?? "completed"}
+        isError={Boolean(isError)}
+      />
+    )
+  }
   return (
     <Collapsible className="my-2 overflow-hidden rounded-xl border bg-muted/20">
       <CollapsibleTrigger
@@ -351,7 +408,7 @@ function ToolPart({
         render={<button type="button" />}
       >
         {running ? (
-          <LoaderCircleIcon className="size-4 animate-spin" />
+          <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" />
         ) : (
           <TerminalSquareIcon className="size-4" />
         )}
@@ -359,7 +416,7 @@ function ToolPart({
           {toolName}
         </span>
         <Badge variant={isError ? "destructive" : "outline"}>
-          {isError ? "failed" : running ? "running" : "done"}
+          {isError ? t("failed") : running ? t("running") : t("done")}
         </Badge>
         <ChevronDownIcon className="size-4" />
       </CollapsibleTrigger>
@@ -367,7 +424,7 @@ function ToolPart({
         <div className="grid gap-3 p-3 md:grid-cols-2">
           <div>
             <div className="mb-1 text-xs font-medium text-muted-foreground">
-              Safe input
+              {t("Safe input")}
             </div>
             <pre className="max-h-52 overflow-auto rounded-lg bg-background p-2 text-xs">
               {trimJson(args)}
@@ -376,7 +433,7 @@ function ToolPart({
           {result !== undefined ? (
             <div>
               <div className="mb-1 text-xs font-medium text-muted-foreground">
-                Safe result
+                {t("Safe result")}
               </div>
               <pre className="max-h-52 overflow-auto rounded-lg bg-background p-2 text-xs">
                 {trimJson(result)}
@@ -396,6 +453,7 @@ const partComponents = {
 }
 
 function MessageActions({ editable = false }: { editable?: boolean }) {
+  const t = useExtracted()
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -404,21 +462,21 @@ function MessageActions({ editable = false }: { editable?: boolean }) {
     >
       <ActionBarPrimitive.Copy
         copiedDuration={1_500}
-        aria-label="Copy message"
+        aria-label={t("Copy message")}
         render={<Button variant="ghost" size="icon-xs" />}
       >
         <ClipboardIcon />
       </ActionBarPrimitive.Copy>
       {editable ? (
         <ActionBarPrimitive.Edit
-          aria-label="Edit into a new branch"
+          aria-label={t("Edit into a new branch")}
           render={<Button variant="ghost" size="icon-xs" />}
         >
           <PencilIcon />
         </ActionBarPrimitive.Edit>
       ) : (
         <ActionBarPrimitive.Reload
-          aria-label="Retry response"
+          aria-label={t("Retry response")}
           render={<Button variant="ghost" size="icon-xs" />}
         >
           <RefreshCcwIcon />
@@ -471,22 +529,24 @@ export function AssistantSystemMessage() {
 }
 
 export function AssistantEditComposer() {
+  const t = useExtracted()
   return (
     <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-3 py-3 md:px-6">
       <ComposerPrimitive.Root className="rounded-2xl border bg-card p-3 shadow-sm">
         <ComposerPrimitive.Input
           autoFocus
           submitMode="ctrlEnter"
+          aria-label={t("Edit message")}
           className="min-h-24 w-full resize-none bg-transparent text-sm outline-none"
         />
         <div className="mt-2 flex justify-end gap-2">
           <ComposerPrimitive.Cancel
             render={<Button type="button" variant="ghost" size="sm" />}
           >
-            Cancel
+            {t("Cancel")}
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send render={<Button type="submit" size="sm" />}>
-            Save as branch
+            {t("Save as branch")}
           </ComposerPrimitive.Send>
         </div>
       </ComposerPrimitive.Root>

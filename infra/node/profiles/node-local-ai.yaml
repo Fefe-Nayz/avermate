@@ -1,0 +1,15 @@
+version: 1
+profile: node-local-ai
+bind: { host: 127.0.0.1, port: 5188 }
+dataDir: /data/node
+storage:
+  driver: filesystem
+  filesystemRoot: /data/node/objects
+  maxObjectBytes: 536870912
+  quotaBytes: 21474836480
+relay: {}
+# Model weights and their immutable revision are operator-selected. Never
+# advertise the local gateway from a mutable default tag.
+models: { enabled: false, providerSecretRefs: [] }
+sandbox: { enabled: false, provider: disabled }
+telemetry: { enabled: false }

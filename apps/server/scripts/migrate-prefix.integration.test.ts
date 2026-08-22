@@ -655,4 +655,308 @@ describe("real migration-prefix upgrades", () => {
     ).rejects.toThrow();
     await expectHealthy(client);
   });
+
+  test("upgrades a populated 0060 agent database with deterministic agent backfills and controlled payload rewrites", async () => {
+    const client = await clientAt(60);
+    const { userId, yearId } = await seedOwner(client, "pre-0061-agent");
+    await client.executeMultiple(`
+      INSERT INTO study_projects (
+        id, userId, title, yearId, createdAt, updatedAt
+      ) VALUES (
+        'project-pre-0061', '${userId}', 'Synthetic project', '${yearId}', 1, 2
+      );
+      INSERT INTO assistant_threads (
+        id, userId, title, projectId, createdAt, updatedAt
+      ) VALUES (
+        'thread-pre-0061', '${userId}', 'Synthetic thread',
+        'project-pre-0061', 1, 2
+      );
+      INSERT INTO assistant_branches (
+        id, threadId, name, createdAt, updatedAt
+      ) VALUES (
+        'branch-pre-0061', 'thread-pre-0061', 'main', 1, 2
+      );
+      INSERT INTO assistant_messages (
+        id, threadId, role, authorship, status, partsJson, createdAt
+      ) VALUES (
+        'message-pre-0061', 'thread-pre-0061', 'user', 'user',
+        'complete', '[]', 1
+      );
+      INSERT INTO assistant_runs (
+        id, userId, threadId, branchId, inputMessageId,
+        reservedOutputMessageId, clientRequestId, runtimeId, runtimeVersion,
+        graphSchemaVersion, modelKey, providerKey, status,
+        providerDispatchState, sandboxRuntimeCheckpointRef, createdAt, updatedAt
+      ) VALUES (
+        'run-pre-0061', '${userId}', 'thread-pre-0061', 'branch-pre-0061',
+        'message-pre-0061', 'reserved-output-pre-0061', 'request-pre-0061',
+        'legacy-runtime', '0.1.0', 1, 'legacy-model', 'legacy-provider',
+        'running', 'acknowledged', 'provider-checkpoint-pre-0061', 1, 2
+      );
+      INSERT INTO assistant_usage (
+        runId, providerKey, modelKey, inputTokens, outputTokens,
+        estimatedCost, currency, final, createdAt
+      ) VALUES (
+        'run-pre-0061', 'legacy-provider', 'legacy-model', 12, 4,
+        '0.01', 'EUR', true, 2
+      );
+      INSERT INTO content_sources (
+        id, userId, yearId, originKind, originId, status, coverage,
+        createdAt, updatedAt
+      ) VALUES (
+        'source-pre-0061', '${userId}', '${yearId}', 'conversation',
+        'thread-pre-0061', 'ready', 'searchable-native-text', 1, 2
+      );
+      INSERT INTO study_project_items (
+        id, projectId, kind, referenceId, position, contextMode, addedAt
+      ) VALUES (
+        'item-pre-0061', 'project-pre-0061', 'conversation',
+        'thread-pre-0061', 0, 'include', 2
+      );
+    `);
+
+    await migrateClient(client);
+
+    expect(
+      (
+        await client.execute(`
+          SELECT runtimeProtocolVersion, modelRevision, providerRevision,
+                 modelPlacementJson, policyRevision, modelPolicyJson,
+                 toolCatalogRevision, contextManifestDigest,
+                 branchIdentityDigest, sandboxRuntimeCheckpointRef,
+                 cancellationRequestedAt, cancellationReason, terminalReason
+          FROM assistant_runs WHERE id = 'run-pre-0061'
+        `)
+      ).rows[0],
+    ).toMatchObject({
+      runtimeProtocolVersion: 1,
+      modelRevision: "legacy/1",
+      providerRevision: "legacy/1",
+      modelPlacementJson: '{"kind":"core","instanceId":"legacy"}',
+      policyRevision: "assistant-policy/1",
+      modelPolicyJson: null,
+      toolCatalogRevision: "legacy/1",
+      contextManifestDigest: null,
+      branchIdentityDigest: null,
+      sandboxRuntimeCheckpointRef: "provider-checkpoint-pre-0061",
+      cancellationRequestedAt: null,
+      cancellationReason: null,
+      terminalReason: null,
+    });
+    expect(
+      (
+        await client.execute(`
+          SELECT providerRevision, modelRevision, usageVersion, source,
+                 inputTokens, outputTokens, estimatedCost, currency, final
+          FROM assistant_usage WHERE runId = 'run-pre-0061'
+        `)
+      ).rows[0],
+    ).toMatchObject({
+      providerRevision: "legacy/1",
+      modelRevision: "legacy/1",
+      usageVersion: 1,
+      source: "unknown",
+      inputTokens: 12,
+      outputTokens: 4,
+      estimatedCost: "0.01",
+      currency: "EUR",
+      final: 1,
+    });
+    expect(
+      (
+        await client.execute(`
+          SELECT retrievalMode, retrievalFallbackPolicy,
+                 embeddingSpaceId, rerankSpaceId
+          FROM study_projects WHERE id = 'project-pre-0061'
+        `)
+      ).rows[0],
+    ).toMatchObject({
+      retrievalMode: "lexical-only",
+      retrievalFallbackPolicy: "lexical-only",
+      embeddingSpaceId: null,
+      rerankSpaceId: null,
+    });
+    expect(
+      (
+        await client.execute(`
+          SELECT sourceVersionId, conversationBranchId,
+                 conversationHeadMessageId, trackingMode,
+                 selectorReviewRequired
+          FROM study_project_items WHERE id = 'item-pre-0061'
+        `)
+      ).rows[0],
+    ).toMatchObject({
+      sourceVersionId: null,
+      conversationBranchId: null,
+      conversationHeadMessageId: null,
+      trackingMode: "pinned",
+      selectorReviewRequired: 1,
+    });
+    const retainedTriggers = await client.execute(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'trigger' AND name IN (
+        'assistant_messages_links_insert',
+        'assistant_messages_immutable_update',
+        'assistant_runs_links_insert',
+        'assistant_runs_links_update',
+        'assistant_run_events_append_only',
+        'assistant_run_events_immutable_update',
+        'assistant_proof_handles_validate_insert',
+        'assistant_citations_validate_insert',
+        'assistant_checkpoints_validate_insert',
+        'assistant_outbox_validate_insert',
+        'study_projects_scope_insert',
+        'study_projects_scope_update',
+        'study_project_items_scope_insert',
+        'study_project_items_scope_update',
+        'assistant_threads_project_owner_insert',
+        'assistant_threads_project_owner_update',
+        'assistant_attachments_validate_insert'
+      )
+      ORDER BY name
+    `);
+    expect(retainedTriggers.rows).toHaveLength(17);
+
+    await expect(
+      client.execute(`UPDATE assistant_messages SET partsJson = '[1]'
+        WHERE id = 'message-pre-0061'`),
+    ).rejects.toThrow("assistant messages are immutable");
+    await client.execute({
+      sql: `INSERT INTO placement_migrations
+        (id, accountId, resourceKind, resourceId, sourcePlacementJson,
+         destinationPlacementJson, state, copiedBytes, idempotencyKey,
+         createdAt, updatedAt)
+        VALUES ('migration-payload-core', ?, 'conversations', 'revision-core',
+          '{"kind":"core"}', '{"kind":"node","nodeId":"node-a"}',
+          'copying', '0', 'migration-payload-core', 3, 3)`,
+      args: [userId],
+    });
+    await expect(
+      client.execute(`UPDATE assistant_messages SET partsJson = '[1]'
+        WHERE id = 'message-pre-0061'`),
+    ).resolves.toMatchObject({ rowsAffected: 1 });
+    await client.execute(`UPDATE placement_migrations SET state = 'verifying'
+      WHERE id = 'migration-payload-core'`);
+    await expect(
+      client.execute(`UPDATE assistant_messages SET partsJson = '[2]'
+        WHERE id = 'message-pre-0061'`),
+    ).rejects.toThrow("assistant messages are immutable");
+
+    await client.executeMultiple(`
+      INSERT INTO assistant_threads (
+        id, userId, title, placement, placementRef, createdAt, updatedAt
+      ) VALUES (
+        'thread-node-0062', '${userId}', 'Node thread', 'node', 'node-a', 3, 3
+      );
+      INSERT INTO assistant_branches (
+        id, threadId, name, createdAt, updatedAt
+      ) VALUES (
+        'branch-node-0062', 'thread-node-0062', 'main', 3, 3
+      );
+      INSERT INTO assistant_messages (
+        id, threadId, role, authorship, status, partsJson, createdAt
+      ) VALUES (
+        'message-node-0062', 'thread-node-0062', 'user', 'user',
+        'complete', '[]', 3
+      );
+      INSERT INTO assistant_runs (
+        id, userId, threadId, branchId, inputMessageId,
+        reservedOutputMessageId, clientRequestId, runtimeId, runtimeVersion,
+        graphSchemaVersion, modelKey, providerKey, status,
+        providerDispatchState, createdAt, updatedAt
+      ) VALUES (
+        'run-node-0062', '${userId}', 'thread-node-0062', 'branch-node-0062',
+        'message-node-0062', 'reserved-output-node-0062', 'request-node-0062',
+        'runtime-node', '1.0.0', 1, 'model-node', 'provider-node',
+        'running', 'acknowledged', 3, 3
+      );
+      INSERT INTO assistant_run_events (
+        id, runId, sequence, eventId, type, payloadJson,
+        terminal, emittedAt, persistedAt
+      ) VALUES (
+        'event-node-0062', 'run-node-0062', 1, 'event-id-node-0062',
+        'avermate.status', '{"phase":"before"}', 0, 3, 3
+      );
+    `);
+    await expect(
+      client.execute(`UPDATE assistant_run_events
+        SET payloadJson = '{"phase":"forbidden"}'
+        WHERE id = 'event-node-0062'`),
+    ).rejects.toThrow("assistant run events are append-only");
+    await client.execute({
+      sql: `INSERT INTO placement_migrations
+        (id, accountId, resourceKind, resourceId, sourcePlacementJson,
+         destinationPlacementJson, state, copiedBytes, idempotencyKey,
+         createdAt, updatedAt)
+        VALUES ('migration-payload-node', ?, 'conversations', 'revision-node',
+          '{"kind":"node","nodeId":"node-a"}', '{"kind":"core"}',
+          'copying', '0', 'migration-payload-node', 4, 4)`,
+      args: [userId],
+    });
+    await expect(
+      client.execute(`UPDATE assistant_run_events
+        SET payloadJson = '{"phase":"rewritten"}'
+        WHERE id = 'event-node-0062'`),
+    ).resolves.toMatchObject({ rowsAffected: 1 });
+
+    await client.execute({
+      sql: `INSERT INTO content_versions (
+          id, sourceId, versionKey, contentHash, extractorId,
+          extractorVersion, locatorSchemaVersion, metadataJson, createdAt
+        ) VALUES ('version-node-0063', 'source-pre-0061', 'v1', ?,
+          'fixture', '1', 1, '{}', 5)`,
+      args: ["a".repeat(64)],
+    });
+    await client.execute({
+      sql: `INSERT INTO content_chunks (
+          id, versionId, ordinal, text, normalizedText, tokenEstimate,
+          contentHash, locatorJson, headingPathJson, evidenceKind, createdAt
+        ) VALUES ('chunk-node-0063', 'version-node-0063', 0,
+          'plain before migration', 'plain before migration', 4, ?,
+          '{"kind":"text","startOffset":0,"endOffset":22}',
+          '["Cours"]', 'native-text', 5)`,
+      args: ["b".repeat(64)],
+    });
+    await expect(
+      client.execute(`UPDATE content_chunks SET text = 'forbidden'
+        WHERE id = 'chunk-node-0063'`),
+    ).rejects.toThrow("content chunks are immutable");
+    await client.execute({
+      sql: `INSERT INTO corpus_payload_rewrite_leases (
+          id, userId, sourceId, sourcePlacement, sourceNodeId,
+          destinationPlacement, destinationNodeId, expiresAt, createdAt
+        ) VALUES ('lease-core-0063', ?, 'source-pre-0061', 'core', NULL,
+          'node', 'node-a', 4102444800, 5)`,
+      args: [userId],
+    });
+    await expect(
+      client.execute(`UPDATE content_chunks SET text = 'sealed payload',
+          normalizedText = 'sealed remainder', headingPathJson = NULL
+        WHERE id = 'chunk-node-0063'`),
+    ).resolves.toMatchObject({ rowsAffected: 1 });
+    await expect(
+      client.execute(`UPDATE content_chunks SET ordinal = 1
+        WHERE id = 'chunk-node-0063'`),
+    ).rejects.toThrow("content chunks are immutable");
+    await client.execute(`DELETE FROM corpus_payload_rewrite_leases
+      WHERE id = 'lease-core-0063'`);
+    await client.execute(`UPDATE content_sources
+      SET placement = 'node', placementRef = 'node-a'
+      WHERE id = 'source-pre-0061'`);
+    await client.execute({
+      sql: `INSERT INTO corpus_payload_rewrite_leases (
+          id, userId, sourceId, sourcePlacement, sourceNodeId,
+          destinationPlacement, destinationNodeId, expiresAt, createdAt
+        ) VALUES ('lease-wrong-source-0063', ?, 'source-pre-0061', 'core', NULL,
+          'node', 'node-b', 4102444800, 6)`,
+      args: [userId],
+    });
+    await expect(
+      client.execute(`UPDATE content_chunks SET text = 'wrong lease'
+        WHERE id = 'chunk-node-0063'`),
+    ).rejects.toThrow("content chunks are immutable");
+    await client.execute(`DELETE FROM corpus_payload_rewrite_leases
+      WHERE id = 'lease-wrong-source-0063'`);
+    await expectHealthy(client);
+  });
 });

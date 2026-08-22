@@ -72,6 +72,7 @@ class FakeRepository implements HistoricalBranchRepository {
   existing: ExistingHistoricalReservation | null = null;
   boundaryReads = 0;
   snapshotReads = 0;
+  domainCursor: string | null = `domain:${boundary.ownerId}:0`;
 
   async resolveBoundary() {
     this.boundaryReads += 1;
@@ -90,6 +91,10 @@ class FakeRepository implements HistoricalBranchRepository {
 
   async existingReservation() {
     return this.existing;
+  }
+
+  async domainCursorAtBoundary() {
+    return this.domainCursor;
   }
 }
 
@@ -281,6 +286,58 @@ describe("historical workspace branching", () => {
     });
     expect(snapshot.workspaceSnapshotRef).toEqual(sourceBefore);
     expect(fixture.destroyed).toHaveLength(0);
+  });
+
+  test("routes a committed snapshot through the configured runtime-checkpoint caller", async () => {
+    const repository = new FakeRepository();
+    const fixture = runtimeFixture();
+    const restores: Array<{ snapshotId: string; ownerId: string }> = [];
+    const service = new HistoricalBranchService(
+      repository,
+      () => ({
+        ...fixture.runtime,
+        restoreWorkspace: async ({ snapshot: selected, create }) => {
+          restores.push({
+            snapshotId: selected.id,
+            ownerId: create.ownerId,
+          });
+          return {
+            path: "runtime-checkpoint" as const,
+            handle: {
+              providerId: fixture.provider.id,
+              sandboxId: "sandbox-native-checkpoint",
+              ownerId: create.ownerId,
+              threadId: create.threadId,
+              branchId: create.branchId,
+              profileId: create.profile.id,
+              profileVersion: create.profile.version,
+              image: create.profile.image,
+              evidenceNonce: "evidence-native-checkpoint",
+              expiresAt: create.expiresAt.toISOString(),
+            },
+          };
+        },
+      }),
+      () => new Date("2026-08-22T10:02:00.000Z"),
+    );
+
+    const result = await service.branchWithWorkspaceCopy({
+      ownerId: boundary.ownerId,
+      sourceBranchId: boundary.sourceBranchId,
+      messageId: boundary.messageId,
+      operation: boundary.operation,
+      clientRequestId: "copy-request-native-checkpoint",
+      snapshotId: snapshot.id,
+      expectedPortableManifestDigest: portableManifestDigest,
+      createDestination: async ({ destinationBranchId }) =>
+        reservation(destinationBranchId),
+    });
+
+    expect(restores).toEqual([
+      { snapshotId: snapshot.id, ownerId: boundary.ownerId },
+    ]);
+    expect(fixture.forkInputs).toHaveLength(0);
+    expect(result.historicalBranch.sandboxId).toBe("sandbox-native-checkpoint");
   });
 
   test("rejects unowned, pending, or stale-confirmation snapshots before any workspace side effect", async () => {

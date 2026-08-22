@@ -36,9 +36,9 @@
 
 ### Completion evidence
 
-- The source-derived inventory freezes **142 MCP registrations** and **385
+- The source-derived inventory freezes **157 MCP registrations** and **468
   directly declared oRPC procedures**.
-- **62 MCP domain tools** (56 reads and 6 ledgered mutations) have a versioned
+- **77 MCP domain tools** (64 reads and 13 ledgered mutations) have a versioned
   first-party descriptor and are wired through `ToolBroker`; the manifest and
   descriptor set must match exactly in tests.
 - The registration guard requires the server-only `tool-broker.v1` marker for

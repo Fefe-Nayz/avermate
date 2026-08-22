@@ -131,6 +131,8 @@ export class RemoteDeletionCoordinator {
     userId: string;
     refs: NodeArtifactRef[];
     now?: number;
+    ttlMs?: number;
+    nonce?: string;
   }) {
     const manifest = createSignedDeletionManifest({
       ...input,

@@ -63,6 +63,14 @@ export type InterruptedActionExecution = {
   crashRecovery: "idempotent-retry" | "inspect-required";
 };
 
+export interface ActionLedgerHooks {
+  /** Runs after an append-only evidence compensation is durable. */
+  recomputeLearningMastery?: (
+    userId: string,
+    objectiveId: string,
+  ) => Promise<void>;
+}
+
 function nowSeconds(now = new Date()): number {
   return Math.floor(now.getTime() / 1_000);
 }
@@ -80,6 +88,31 @@ function nullableIso(value: InValue): string | null {
 
 function nullableString(value: InValue): string | null {
   return value === null ? null : String(value);
+}
+
+type EvidenceDecisionSnapshot = {
+  state: "included" | "excluded";
+  reason: string | null;
+};
+
+function evidenceDecisionSnapshot(
+  value: unknown,
+  label: string,
+): EvidenceDecisionSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ActionLedgerError("invalid-state", `${label} is missing`);
+  }
+  const row = value as Record<string, unknown>;
+  if (row.state !== "included" && row.state !== "excluded") {
+    throw new ActionLedgerError("invalid-state", `${label} state is invalid`);
+  }
+  if (row.reason !== null && typeof row.reason !== "string") {
+    throw new ActionLedgerError("invalid-state", `${label} reason is invalid`);
+  }
+  return {
+    state: row.state,
+    reason: typeof row.reason === "string" ? row.reason.slice(0, 1_000) : null,
+  };
 }
 
 function json<T = unknown>(value: InValue): T {
@@ -256,10 +289,15 @@ type UndoProjection = {
 };
 
 export class ActionLedgerService {
-  constructor(private readonly client: ActionLedgerSqlClient) {}
+  constructor(
+    private readonly client: ActionLedgerSqlClient,
+    private readonly hooks: ActionLedgerHooks = {},
+  ) {}
 
   /** Internal maintenance lookup; request handlers must use owner-bound get. */
-  async getSystem(actionId: string): Promise<{ id: string; userId: string } | null> {
+  async getSystem(
+    actionId: string,
+  ): Promise<{ id: string; userId: string } | null> {
     const row = await one(
       this.client,
       "SELECT id, userId FROM agent_actions WHERE id = ? LIMIT 1",
@@ -1507,6 +1545,21 @@ export class ActionLedgerService {
       };
     }
     const failed = compensationRows.find((row) => row.status === "failed");
+    const acceptedConflict = await one(
+      this.client,
+      `SELECT id FROM agent_action_events
+       WHERE actionId = ? AND type = 'undo.conflict.resolved.keep-current'
+       ORDER BY sequence DESC LIMIT 1`,
+      [action.id],
+    );
+    if (acceptedConflict) {
+      return {
+        state: "blocked",
+        activeCompensationActionId: null,
+        compensationActionIds: compensationIds,
+        reason: "conflict-kept-current",
+      };
+    }
     const failedWithConflict = compensationRows.find(
       (row) =>
         row.status === "failed" &&
@@ -1545,7 +1598,42 @@ export class ActionLedgerService {
       };
     }
     for (const resource of resources) {
-      if (resource.resourceKind !== "planning-task") {
+      if (action.compensatorId === "learning.evidence.restore-decision@1") {
+        if (
+          resource.resourceKind !== "learning-evidence" ||
+          resource.operation !== "update" ||
+          !resource.afterRevision
+        ) {
+          return {
+            state: "ineligible",
+            activeCompensationActionId: null,
+            compensationActionIds: compensationIds,
+            reason: "unsupported-resource-kind",
+          };
+        }
+        const current = await one(
+          this.client,
+          `SELECT d.id
+           FROM learning_evidence_decisions d
+           JOIN learning_evidence e ON e.id = d.evidenceId
+           WHERE d.evidenceId = ? AND d.userId = ? AND e.userId = ?
+           ORDER BY d.createdAt DESC, d.id DESC LIMIT 1`,
+          [resource.resourceId, userId, userId],
+        );
+        if (!current || String(current.id) !== resource.afterRevision) {
+          return {
+            state: "conflicted",
+            activeCompensationActionId: null,
+            compensationActionIds: compensationIds,
+            reason: current ? "resource-revision-changed" : "resource-missing",
+          };
+        }
+        continue;
+      }
+      if (
+        action.compensatorId !== "planning.tasks.trash-created@1" ||
+        resource.resourceKind !== "planning-task"
+      ) {
         return {
           state: "ineligible",
           activeCompensationActionId: null,
@@ -1652,6 +1740,67 @@ export class ActionLedgerService {
     });
   }
 
+  async resolveConflict(input: {
+    userId: string;
+    actionId: string;
+    resolution: "keep-current";
+  }): Promise<AgentActionDto> {
+    const current = await this.get(input.userId, input.actionId);
+    if (
+      current.undoState === "blocked" &&
+      current.undoReasonCode === "conflict-kept-current"
+    ) {
+      return current;
+    }
+    if (current.undoState !== "conflicted") {
+      throw new ActionLedgerError(
+        "invalid-state",
+        "Only an unresolved undo conflict can be resolved",
+      );
+    }
+    const transaction = await beginActionWriteTransaction(this.client);
+    try {
+      const owned = await one(
+        transaction,
+        "SELECT id FROM agent_actions WHERE id = ? AND userId = ? LIMIT 1",
+        [input.actionId, input.userId],
+      );
+      if (!owned) {
+        throw new ActionLedgerError("not-found", "Action not found");
+      }
+      const completedOrActive = await one(
+        transaction,
+        `SELECT id FROM agent_actions
+         WHERE userId = ? AND compensationOfActionId = ?
+           AND status IN ('reserved', 'awaiting-approval', 'executing', 'completed')
+         LIMIT 1`,
+        [input.userId, input.actionId],
+      );
+      if (completedOrActive) {
+        throw new ActionLedgerError(
+          "conflict",
+          "Undo state changed while the conflict was being resolved",
+        );
+      }
+      await appendEvent(transaction, {
+        actionId: input.actionId,
+        eventKey: "undo-conflict-resolution:keep-current",
+        type: "undo.conflict.resolved.keep-current",
+        payload: {
+          resolution: input.resolution,
+          consequence:
+            "The current resource revision is kept and the earlier undo request remains unapplied.",
+        },
+        now: nowSeconds(),
+      });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+    return this.get(input.userId, input.actionId);
+  }
+
   async list(
     userId: string,
     rawFilter: AgentActionActivityFilter,
@@ -1670,6 +1819,7 @@ export class ActionLedgerService {
     for (const [column, value] of [
       ["a.toolId", filter.toolId],
       ["a.threadId", filter.threadId],
+      ["a.branchId", filter.branchId],
       ["a.actorKind", filter.actorKind],
       ["a.status", filter.status],
     ] as const) {
@@ -1724,6 +1874,132 @@ export class ActionLedgerService {
       items: selected,
       nextCursor:
         hasMore && selected.length > 0 ? selected.at(-1)!.actionSequence : null,
+    };
+  }
+
+  async reviewBranchSince(input: {
+    userId: string;
+    branchId: string;
+    domainCursorRef: string;
+  }): Promise<{
+    safeToCompensate: AgentActionDto[];
+    conflicted: AgentActionDto[];
+    alreadyCompensated: AgentActionDto[];
+    nonUndoable: AgentActionDto[];
+    unrelatedActionCount: number;
+    undoPreview: AgentActionPreview | null;
+    truncated: boolean;
+  }> {
+    const prefix = `domain:${input.userId}:`;
+    if (!input.domainCursorRef.startsWith(prefix)) {
+      throw new ActionLedgerError(
+        "forbidden",
+        "Domain cursor is not owned by this account",
+      );
+    }
+    const rawSequence = input.domainCursorRef.slice(prefix.length);
+    if (!/^\d+$/u.test(rawSequence)) {
+      throw new ActionLedgerError("invalid-state", "Domain cursor is invalid");
+    }
+    const sequence = Number(rawSequence);
+    if (!Number.isSafeInteger(sequence) || sequence < 0) {
+      throw new ActionLedgerError("invalid-state", "Domain cursor is invalid");
+    }
+    const rows = await all(
+      this.client,
+      `SELECT id, branchId, actionSequence FROM agent_actions
+       WHERE userId = ? AND actionSequence > ?
+         AND compensationOfActionId IS NULL
+       ORDER BY actionSequence, id LIMIT 501`,
+      [input.userId, sequence],
+    );
+    const truncated = rows.length > 500;
+    const window = rows.slice(0, 500);
+    const attributableRows = window.filter(
+      (row) => row.branchId !== null && String(row.branchId) === input.branchId,
+    );
+    const attributableIds = new Set(
+      attributableRows.map((row) => String(row.id)),
+    );
+    const unrelated = await one(
+      this.client,
+      `SELECT COUNT(*) AS count FROM agent_actions
+       WHERE userId = ? AND actionSequence > ?
+         AND compensationOfActionId IS NULL
+         AND (branchId IS NULL OR branchId <> ?)`,
+      [input.userId, sequence, input.branchId],
+    );
+    const actions = await Promise.all(
+      attributableRows.map((row) => this.get(input.userId, String(row.id))),
+    );
+    const alreadyCompensated = actions.filter((action) =>
+      ["compensated", "partially-compensated"].includes(action.undoState),
+    );
+    const directlyConflicted = new Set(
+      actions
+        .filter((action) => action.undoState === "conflicted")
+        .map((action) => action.id),
+    );
+    const candidates = actions.filter(
+      (action) =>
+        action.undoState === "eligible" ||
+        (action.undoState === "failed" &&
+          action.undoReasonCode === "compensation-failed"),
+    );
+    const safeIds = new Set<string>();
+    for (const candidate of candidates) {
+      const preview = await this.previewUndo(input.userId, [candidate.id]);
+      const remainsAttributable = preview.actionIds.every((id) =>
+        attributableIds.has(id),
+      );
+      const fullyEligible =
+        preview.eligible.length === preview.actionIds.length &&
+        preview.conflicted.length === 0 &&
+        preview.nonUndoable.length === 0 &&
+        preview.blocked.length === 0;
+      if (remainsAttributable && fullyEligible) {
+        for (const id of preview.eligible) safeIds.add(id);
+      } else {
+        for (const id of preview.conflicted) {
+          if (attributableIds.has(id)) directlyConflicted.add(id);
+        }
+      }
+    }
+    let undoPreview: AgentActionPreview | null = null;
+    if (safeIds.size > 0) {
+      const preview = await this.previewUndo(input.userId, [...safeIds]);
+      const safe =
+        preview.actionIds.every((id) => attributableIds.has(id)) &&
+        preview.eligible.length === preview.actionIds.length &&
+        preview.conflicted.length === 0 &&
+        preview.nonUndoable.length === 0 &&
+        preview.blocked.length === 0;
+      if (safe) {
+        undoPreview = preview;
+      } else {
+        safeIds.clear();
+      }
+    }
+    const safeToCompensate = actions.filter((action) =>
+      safeIds.has(action.id),
+    );
+    const conflicted = actions.filter((action) =>
+      directlyConflicted.has(action.id),
+    );
+    const grouped = new Set([
+      ...safeToCompensate.map((action) => action.id),
+      ...conflicted.map((action) => action.id),
+      ...alreadyCompensated.map((action) => action.id),
+    ]);
+    const nonUndoable = actions.filter((action) => !grouped.has(action.id));
+    return {
+      safeToCompensate,
+      conflicted,
+      alreadyCompensated,
+      nonUndoable,
+      unrelatedActionCount: Number(unrelated?.count ?? 0),
+      undoPreview,
+      truncated,
     };
   }
 
@@ -1859,7 +2135,10 @@ export class ActionLedgerService {
           (dto.undoState === "failed" &&
             dto.undoReasonCode === "compensation-failed") ||
           (dto.undoState === "in-progress" &&
-            dto.compensatorId === "planning.tasks.trash-created@1"),
+            [
+              "planning.tasks.trash-created@1",
+              "learning.evidence.restore-decision@1",
+            ].includes(dto.compensatorId ?? "")),
       )
       .map((dto) => dto.id);
     const conflicted = dtos
@@ -2102,6 +2381,289 @@ export class ActionLedgerService {
     }
   }
 
+  /**
+   * Undo an inclusion/exclusion without rewriting immutable evidence or
+   * deleting the decision being compensated. The current decision id is the
+   * revision fence; a later user decision therefore wins with an explicit
+   * conflict instead of being silently overwritten.
+   */
+  private async compensateLearningEvidenceDecision(
+    userId: string,
+    source: AgentActionDto,
+  ): Promise<string> {
+    const resource = source.resources.find(
+      (entry) =>
+        entry.resourceKind === "learning-evidence" &&
+        entry.operation === "update",
+    );
+    if (!resource?.afterRevision) {
+      throw new ActionLedgerError(
+        "invalid-state",
+        "Learning evidence resource fence is missing",
+      );
+    }
+    const restore = evidenceDecisionSnapshot(
+      resource.beforeSnapshot,
+      "Previous evidence decision",
+    );
+    const replaced = evidenceDecisionSnapshot(
+      resource.afterSnapshot,
+      "Current evidence decision",
+    );
+    const argumentsHash = await actionHash({
+      sourceActionId: source.id,
+      evidenceId: resource.resourceId,
+      expectedDecisionId: resource.afterRevision,
+      restore,
+    });
+    const preview = {
+      title: "Restore the previous learning-evidence decision",
+      evidenceId: resource.resourceId,
+      expectedDecisionId: resource.afterRevision,
+      state: restore.state,
+      immutableEvidencePreserved: true,
+    };
+    const previewHash = await actionHash(preview);
+    const now = nowSeconds();
+    const actionTransaction = await beginActionWriteTransaction(this.client);
+    let compensationId: string;
+    try {
+      const attempts = await all(
+        actionTransaction,
+        `SELECT * FROM agent_actions
+         WHERE userId = ? AND compensationOfActionId = ?
+           AND toolId = ? AND toolVersion = 1
+         ORDER BY actionSequence, id`,
+        [userId, source.id, "learning.evidence.restore-decision"],
+      );
+      const completedAttempt = attempts.find(
+        (attempt) => attempt.status === "completed",
+      );
+      if (completedAttempt) {
+        await actionTransaction.commit();
+        return String(completedAttempt.id);
+      }
+      if (attempts.some((attempt) => attempt.status === "inspect-required")) {
+        throw new ActionLedgerError(
+          "invalid-state",
+          "Compensation outcome requires inspection before retry",
+        );
+      }
+      const existing = [...attempts]
+        .reverse()
+        .find((attempt) =>
+          ["reserved", "executing"].includes(String(attempt.status)),
+        );
+      if (existing) {
+        if (existing.argumentsHash !== argumentsHash) {
+          throw new ActionLedgerError(
+            "conflict",
+            "Compensation replay diverged",
+          );
+        }
+        compensationId = String(existing.id);
+        if (existing.status === "reserved") {
+          await execute(actionTransaction, {
+            sql: `UPDATE agent_actions SET status = 'executing',
+                  startedAt = COALESCE(startedAt, ?)
+                  WHERE id = ? AND userId = ? AND status = 'reserved'`,
+            args: [now, compensationId, userId],
+          });
+        }
+      } else {
+        const failedAttemptCount = attempts.filter(
+          (attempt) => attempt.status === "failed",
+        ).length;
+        const idempotencyKey =
+          failedAttemptCount === 0
+            ? `compensate:${source.id}:learning-decision:v1`
+            : `compensate:${source.id}:learning-decision:v1:retry:${failedAttemptCount + 1}`;
+        compensationId = newId("aact");
+        const sequence = await this.allocateSequence(
+          actionTransaction,
+          userId,
+          now,
+        );
+        await execute(actionTransaction, {
+          sql: `INSERT INTO agent_actions
+            (id, userId, actorKind, actorClientId, threadId, branchId, runId,
+             domainScopeKind, domainScopeId, toolId, toolVersion, effect, risk,
+             argumentsHash, idempotencyKey, actionSequence, redactedInputJson,
+             previewJson, previewHash, status, compensationOfActionId,
+             crashRecovery, startedAt, createdAt)
+            VALUES (?, ?, 'user-undo', ?, ?, ?, ?, ?, ?, ?, 1, 'update',
+                    'medium', ?, ?, ?, ?, ?, ?, 'executing', ?,
+                    'idempotent-retry', ?, ?)`,
+          args: [
+            compensationId,
+            userId,
+            source.actorClientId,
+            source.threadId,
+            source.branchId,
+            source.runId,
+            "learning-evidence",
+            resource.resourceId,
+            "learning.evidence.restore-decision",
+            argumentsHash,
+            idempotencyKey,
+            sequence,
+            JSON.stringify({
+              evidenceId: resource.resourceId,
+              state: restore.state,
+            }),
+            JSON.stringify(preview),
+            previewHash,
+            source.id,
+            now,
+            now,
+          ],
+        });
+        await execute(actionTransaction, {
+          sql: `INSERT INTO agent_approvals
+            (id, actionId, userId, state, argumentsHash, previewHash,
+             expiresAt, resolvedAt, resolutionContextJson, createdAt)
+            VALUES (?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?)`,
+          args: [
+            newId("aappr"),
+            compensationId,
+            userId,
+            argumentsHash,
+            previewHash,
+            now + 10 * 60,
+            now,
+            JSON.stringify({
+              source: "user-undo-preview",
+              sourceActionId: source.id,
+            }),
+            now,
+          ],
+        });
+        await appendEvent(actionTransaction, {
+          actionId: compensationId,
+          eventKey: "executing",
+          type: "action.executing",
+          payload: { compensationOfActionId: source.id },
+          now,
+        });
+      }
+      await actionTransaction.commit();
+    } catch (error) {
+      await actionTransaction.rollback();
+      throw error;
+    }
+
+    let mutationApplied = false;
+    try {
+      const decisionIdempotencyKey = `undo:${source.id}:learning-decision:v1`;
+      const mutationTransaction = await beginActionWriteTransaction(
+        this.client,
+      );
+      let decisionId: string;
+      let objectiveId: string;
+      try {
+        const replay = await one(
+          mutationTransaction,
+          `SELECT d.id, e.objectiveId
+           FROM learning_evidence_decisions d
+           JOIN learning_evidence e ON e.id = d.evidenceId
+           WHERE d.userId = ? AND d.idempotencyKey = ? AND e.userId = ?
+           LIMIT 1`,
+          [userId, decisionIdempotencyKey, userId],
+        );
+        if (replay) {
+          decisionId = String(replay.id);
+          objectiveId = String(replay.objectiveId);
+        } else {
+          const current = await one(
+            mutationTransaction,
+            `SELECT d.id, e.objectiveId
+             FROM learning_evidence_decisions d
+             JOIN learning_evidence e ON e.id = d.evidenceId
+             WHERE d.evidenceId = ? AND d.userId = ? AND e.userId = ?
+             ORDER BY d.createdAt DESC, d.id DESC LIMIT 1`,
+            [resource.resourceId, userId, userId],
+          );
+          if (!current) {
+            throw new ActionLedgerError(
+              "conflict",
+              "Learning evidence decision no longer exists",
+            );
+          }
+          if (String(current.id) !== resource.afterRevision) {
+            throw new ActionLedgerError(
+              "conflict",
+              "Learning evidence decision changed after the undo preview",
+            );
+          }
+          decisionId = newId("levd");
+          objectiveId = String(current.objectiveId);
+          await execute(mutationTransaction, {
+            sql: `INSERT INTO learning_evidence_decisions
+              (id, evidenceId, state, reason, actor, idempotencyKey, userId,
+               createdAt) VALUES (?, ?, ?, ?, 'system-correction', ?, ?, ?)`,
+            args: [
+              decisionId,
+              resource.resourceId,
+              restore.state,
+              restore.reason,
+              decisionIdempotencyKey,
+              userId,
+              nowSeconds(),
+            ],
+          });
+        }
+        await mutationTransaction.commit();
+      } catch (error) {
+        await mutationTransaction.rollback();
+        throw error;
+      }
+      mutationApplied = true;
+      await this.hooks.recomputeLearningMastery?.(userId, objectiveId);
+      await this.complete(userId, compensationId, {
+        modelProjection: {
+          evidenceId: resource.resourceId,
+          decisionId,
+          state: restore.state,
+        },
+        uiProjection: {
+          evidenceId: resource.resourceId,
+          decisionId,
+          state: restore.state,
+          reason: restore.reason,
+        },
+        auditProjection: {
+          outcome: "previous-decision-restored",
+          resourceId: resource.resourceId,
+          immutableEvidencePreserved: true,
+        },
+        resources: [
+          {
+            resourceKind: "learning-evidence",
+            resourceId: resource.resourceId,
+            operation: "update",
+            beforeRevision: resource.afterRevision,
+            afterRevision: decisionId,
+            beforeSnapshot: replaced,
+            afterSnapshot: restore,
+          },
+        ],
+      });
+      return compensationId;
+    } catch (error) {
+      const conflict =
+        error instanceof ActionLedgerError && error.code === "conflict";
+      const toolError: ToolError = {
+        code: conflict ? "STALE_REVISION" : "EXECUTION_FAILED",
+        message: error instanceof Error ? error.message : "Compensation failed",
+        retryable: false,
+      };
+      if (!mutationApplied) {
+        await this.fail(userId, compensationId, toolError, false);
+      }
+      throw error;
+    }
+  }
+
   async executeUndo(input: {
     userId: string;
     preview: AgentActionPreview;
@@ -2159,7 +2721,10 @@ export class ActionLedgerService {
       }
       const resumable =
         source.undoState === "in-progress" &&
-        source.compensatorId === "planning.tasks.trash-created@1";
+        [
+          "planning.tasks.trash-created@1",
+          "learning.evidence.restore-decision@1",
+        ].includes(source.compensatorId ?? "");
       const retryableFailure =
         source.undoState === "failed" &&
         source.undoReasonCode === "compensation-failed";
@@ -2173,16 +2738,20 @@ export class ActionLedgerService {
         continue;
       }
       try {
-        if (source.compensatorId !== "planning.tasks.trash-created@1") {
-          throw new ActionLedgerError(
-            "invalid-state",
-            "Unknown reviewed compensator",
-          );
-        }
-        const compensationActionId = await this.compensateTaskCreate(
-          input.userId,
-          source,
-        );
+        const compensationActionId =
+          source.compensatorId === "planning.tasks.trash-created@1"
+            ? await this.compensateTaskCreate(input.userId, source)
+            : source.compensatorId === "learning.evidence.restore-decision@1"
+              ? await this.compensateLearningEvidenceDecision(
+                  input.userId,
+                  source,
+                )
+              : (() => {
+                  throw new ActionLedgerError(
+                    "invalid-state",
+                    "Unknown reviewed compensator",
+                  );
+                })();
         outcomes.set(sourceId, {
           sourceActionId: sourceId,
           compensationActionId,

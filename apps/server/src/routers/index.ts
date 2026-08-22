@@ -32,6 +32,9 @@ import { projectsRouter } from "./projects";
 import { actionsRouter } from "./actions";
 import { mediaStudioRouter } from "./media-studio";
 import { managedRouter } from "./managed";
+import { retrievalRouter } from "./retrieval";
+import { learningRouter } from "./learning";
+import { nodeRouter } from "./node";
 
 export const appRouter = {
   actions: actionsRouter,
@@ -68,6 +71,9 @@ export const appRouter = {
   projects: projectsRouter,
   mediaStudio: mediaStudioRouter,
   managed: managedRouter,
+  retrieval: retrievalRouter,
+  learning: learningRouter,
+  node: nodeRouter,
 };
 
 export type AppRouter = typeof appRouter;

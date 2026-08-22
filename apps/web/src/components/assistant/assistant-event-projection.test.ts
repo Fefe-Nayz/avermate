@@ -6,6 +6,7 @@ import type {
 } from "@avermate/agent-contracts"
 import { applyAssistantEvent } from "./assistant-event-projection"
 import type { AssistantThreadDetail } from "./assistant-types"
+import { assistantRunExecutionFixture } from "./assistant-test-fixtures"
 
 const now = "2026-08-22T12:00:00.000Z"
 
@@ -26,6 +27,7 @@ function detail(): AssistantThreadDetail {
     updatedAt: now,
   }
   const run: AssistantRun = {
+    ...assistantRunExecutionFixture,
     id: "run-1",
     threadId: thread.id,
     branchId: "branch-1",

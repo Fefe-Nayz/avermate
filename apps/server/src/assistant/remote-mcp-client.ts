@@ -28,6 +28,8 @@ const resultBudget = {
 export type RemoteMcpConnection = {
   endpointUrl: string
   placement: CustomMcpPlacement
+  ownerId?: string
+  placementRef?: string | null
   authKind: CustomMcpAuthKind
   credential: string | null
 }
@@ -64,6 +66,48 @@ export interface RemoteMcpClient {
 
 export type SdkRemoteMcpClientOptions = {
   transport?: ModelTransport
+  nodeTransport?: {
+    inspectNodeMcp(input: {
+      nodeId: string
+      ownerId: string
+      connection: {
+        endpointUrl: string
+        authKind: CustomMcpAuthKind
+        credential: string | null
+      }
+      signal?: AbortSignal
+    }): Promise<readonly RemoteMcpTool[]>
+    invokeNodeMcp(input: {
+      nodeId: string
+      ownerId: string
+      connection: {
+        endpointUrl: string
+        authKind: CustomMcpAuthKind
+        credential: string | null
+      }
+      remoteToolId: string
+      arguments: Record<string, unknown>
+      signal?: AbortSignal
+    }): Promise<RemoteMcpCallResult>
+  }
+}
+
+function nodeBinding(connection: RemoteMcpConnection) {
+  if (!connection.ownerId || !connection.placementRef) {
+    throw new Error("NODE_MCP_BINDING_INVALID")
+  }
+  return { ownerId: connection.ownerId, nodeId: connection.placementRef }
+}
+
+function nodeTransportError(error: unknown): never {
+  const code = error instanceof Error ? error.message : ""
+  if (/OFFLINE|UNAVAILABLE|NOT_ADVERTISED|NOT_CONFIGURED/u.test(code)) {
+    throw new Error("NODE_MCP_CAPABILITY_OFFLINE")
+  }
+  if (/CANCELLED|ABORT/u.test(code)) throw new Error("NODE_MCP_CANCELLED")
+  if (/TIMEOUT|DEADLINE/u.test(code)) throw new Error("NODE_MCP_TIMEOUT")
+  if (/^NODE_[A-Z0-9_:-]{3,120}$/u.test(code)) throw new Error(code)
+  throw new Error("NODE_MCP_OPERATION_FAILED")
 }
 
 function endpointPolicy(connection: RemoteMcpConnection): ModelEndpointPolicy {
@@ -210,11 +254,7 @@ export class SdkRemoteMcpClient implements RemoteMcpClient {
     signal: AbortSignal | undefined,
     operation: (client: Client) => Promise<T>
   ): Promise<T> {
-    if (connection.placement === "node") {
-      throw new Error(
-        "Node-hosted MCP requires the paired Avermate Node transport and is unavailable on hosted Core"
-      )
-    }
+    if (connection.placement === "node") throw new Error("NODE_MCP_CORE_FALLBACK_DENIED")
     const endpoint = normalizeRemoteMcpEndpoint(
       connection.endpointUrl,
       connection.placement
@@ -260,7 +300,41 @@ export class SdkRemoteMcpClient implements RemoteMcpClient {
     }
   }
 
-  inspect(connection: RemoteMcpConnection, signal?: AbortSignal) {
+  async inspect(connection: RemoteMcpConnection, signal?: AbortSignal) {
+    if (connection.placement === "node") {
+      const transport = this.options.nodeTransport
+      if (!transport) return Promise.reject(new Error("NODE_MCP_CAPABILITY_OFFLINE"))
+      const binding = nodeBinding(connection)
+      return transport
+        .inspectNodeMcp({
+          ...binding,
+          connection: {
+            endpointUrl: normalizeRemoteMcpEndpoint(
+              connection.endpointUrl,
+              "node"
+            ).href,
+            authKind: connection.authKind,
+            credential: connection.credential,
+          },
+          ...(signal ? { signal } : {}),
+        })
+        .then((tools) =>
+          normalizeRemoteMcpCatalogue(
+            tools.map((tool) => ({
+              name: tool.remoteToolId,
+              title: tool.title,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+              annotations: {
+                readOnlyHint: tool.readOnlyHint,
+                destructiveHint: tool.destructiveHint,
+                openWorldHint: tool.openWorldHint,
+              },
+            }))
+          )
+        )
+        .catch(nodeTransportError)
+    }
     return this.withClient(connection, signal, async (client) => {
       const tools: Array<
         Parameters<typeof normalizeRemoteMcpCatalogue>[0][number]
@@ -281,7 +355,7 @@ export class SdkRemoteMcpClient implements RemoteMcpClient {
     })
   }
 
-  invoke(
+  async invoke(
     connection: RemoteMcpConnection,
     input: {
       remoteToolId: string
@@ -294,6 +368,34 @@ export class SdkRemoteMcpClient implements RemoteMcpClient {
       maxDepth: 16,
       maxItems: 1_000,
     })
+    if (connection.placement === "node") {
+      const transport = this.options.nodeTransport
+      if (!transport) return Promise.reject(new Error("NODE_MCP_CAPABILITY_OFFLINE"))
+      const binding = nodeBinding(connection)
+      return transport
+        .invokeNodeMcp({
+          ...binding,
+          connection: {
+            endpointUrl: normalizeRemoteMcpEndpoint(
+              connection.endpointUrl,
+              "node"
+            ).href,
+            authKind: connection.authKind,
+            credential: connection.credential,
+          },
+          remoteToolId: input.remoteToolId,
+          arguments: input.arguments,
+          ...(input.signal ? { signal: input.signal } : {}),
+        })
+        .then((result) => {
+          enforceBudget(result, resultBudget)
+          return {
+            isError: result.isError,
+            text: result.text.slice(0, 100_000),
+          }
+        })
+        .catch(nodeTransportError)
+    }
     return this.withClient(connection, input.signal, async (client) =>
       textResult(
         await client.callTool(

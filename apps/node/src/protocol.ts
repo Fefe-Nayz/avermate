@@ -1,13 +1,20 @@
 import {
   nodeCapabilityGrantClaimsSchema,
   nodeCapabilityManifestV2Schema,
+  nodeCredentialDeliveryProofSchema,
   nodeJobV1Schema,
+  nodePairingRegistrationSchema,
+  unsignedNodeCredentialDeliveryProofSchema,
+  unsignedNodePairingRegistrationProofSchema,
   unsignedNodeCapabilityManifestV2Schema,
   unsignedNodeJobV1Schema,
   type NodeCapabilityGrantClaims,
   type NodeCapabilityManifestV2,
+  type NodeCredentialDeliveryProof,
   type NodeCapabilityFeatures,
   type NodeJobV1,
+  type NodePairingOffer,
+  type NodePairingRegistration,
   type SignedNodeCapabilityGrant,
   type UnsignedNodeCapabilityManifestV2,
   type UnsignedNodeJobV1,
@@ -26,6 +33,7 @@ import {
 } from "./identity";
 
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const FINGERPRINT_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 function randomToken(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
@@ -45,11 +53,13 @@ function base32(bytes: Uint8Array) {
     value = (value << 8) | byte;
     bits += 8;
     while (bits >= 5) {
-      output += PAIRING_ALPHABET[(value >>> (bits - 5)) & 31];
+      output += FINGERPRINT_ALPHABET[(value >>> (bits - 5)) & 31];
       bits -= 5;
     }
   }
-  if (bits > 0) output += PAIRING_ALPHABET[(value << (5 - bits)) & 31];
+  if (bits > 0) {
+    output += FINGERPRINT_ALPHABET[(value << (5 - bits)) & 31];
+  }
   return output;
 }
 
@@ -154,6 +164,59 @@ export class PairingManager {
     };
   }
 
+  registration(
+    offer: NodePairingOffer,
+    manifest: NodeCapabilityManifestV2,
+    now = new Date(),
+  ): NodePairingRegistration {
+    if (
+      offer.nodeId !== this.#identity.nodeId ||
+      offer.keyId !== this.#identity.keyId ||
+      manifest.nodeId !== this.#identity.nodeId ||
+      manifest.keyId !== this.#identity.keyId
+    ) {
+      throw new Error("NODE_PAIRING_REGISTRATION_IDENTITY_MISMATCH");
+    }
+    const proof = unsignedNodePairingRegistrationProofSchema.parse({
+      protocol: "avermate-node/2",
+      pairingAttemptId: offer.pairingAttemptId,
+      nodeId: this.#identity.nodeId,
+      keyId: this.#identity.keyId,
+      offerDigest: canonicalDigest(offer),
+      manifestDigest: canonicalDigest(manifest),
+      nonce: `nonce_${crypto.randomUUID()}`,
+      issuedAt: now.toISOString(),
+    });
+    return nodePairingRegistrationSchema.parse({
+      offer,
+      manifest,
+      proof: { ...proof, signature: signCanonical(this.#identity, proof) },
+    });
+  }
+
+  credentialProof(input: {
+    action: "deliver" | "ack";
+    pairingAttemptId?: string;
+    credentialIds?: string[];
+    now?: Date;
+  }): NodeCredentialDeliveryProof {
+    const unsigned = unsignedNodeCredentialDeliveryProofSchema.parse({
+      protocol: "avermate-node/2",
+      action: input.action,
+      nodeId: this.#identity.nodeId,
+      ...(input.pairingAttemptId
+        ? { pairingAttemptId: input.pairingAttemptId }
+        : {}),
+      credentialIds: input.credentialIds ?? [],
+      nonce: `nonce_${crypto.randomUUID()}`,
+      issuedAt: (input.now ?? new Date()).toISOString(),
+    });
+    return nodeCredentialDeliveryProofSchema.parse({
+      ...unsigned,
+      signature: signCanonical(this.#identity, unsigned),
+    });
+  }
+
   consume(input: {
     pairingAttemptId: string;
     code: string;
@@ -215,7 +278,11 @@ export function unsignedNodeJob(job: NodeJobV1): UnsignedNodeJobV1 {
     principalRef: job.principalRef,
     kind: job.kind,
     capabilityVersion: job.capabilityVersion,
+    ...(job.executionProfile
+      ? { executionProfile: job.executionProfile }
+      : {}),
     inputRefs: job.inputRefs,
+    ...(job.resourceRefs ? { resourceRefs: job.resourceRefs } : {}),
     policyRef: job.policyRef,
     limits: job.limits,
     idempotencyKey: job.idempotencyKey,
@@ -274,10 +341,10 @@ export function verifyJobGrant(input: {
   const grantedRefs = claims.resources
     .map((resource) => canonicalJson(resource))
     .sort();
-  const inputRefs = job.inputRefs
-    .map((artifact) => canonicalJson(artifact.object))
+  const authorizedRefs = (job.resourceRefs ?? job.inputRefs.map((artifact) => artifact.object))
+    .map((resource) => canonicalJson(resource))
     .sort();
-  if (canonicalJson(grantedRefs) !== canonicalJson(inputRefs)) {
+  if (canonicalJson(grantedRefs) !== canonicalJson(authorizedRefs)) {
     throw new Error("GRANT_RESOURCE_MISMATCH");
   }
   return claims;

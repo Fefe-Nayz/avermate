@@ -10,12 +10,11 @@ import {
   type StagedContentVersion,
 } from "@avermate/agent-contracts";
 import { extractText, getDocumentProxy } from "unpdf";
+import { z } from "zod";
 import { db } from "../db";
-import {
-  readStorageObject,
-  type ManagedStorageProvider,
-} from "../lib/storage-backend";
+import { readOwnedFileBytes } from "../lib/owned-file-storage";
 import { splitMarkdownSlides } from "../lib/study-document-content";
+import { relayNodeProviderTransport } from "../node/services";
 import { captureInlineAssets, type PendingContentAsset } from "./assets";
 import {
   canonicalJson,
@@ -52,6 +51,11 @@ export type IndexableSourceSnapshot = SourceDescriptor & {
   metadata: Record<string, unknown>;
   blocks: readonly ExtractedBlock[];
   assets?: readonly PendingContentAsset[];
+};
+
+export type SourceExtractionSelector = {
+  conversationBranchId: string;
+  conversationHeadMessageId: string;
 };
 
 export type NativePdfExtraction = {
@@ -112,7 +116,10 @@ export async function extractNativePdfText(
 export interface IndexableSourceAdapter {
   readonly kind: CorpusOriginKind;
   describe(identity: OwnedSourceIdentity): Promise<SourceDescriptor>;
-  extract(identity: OwnedSourceIdentity): Promise<IndexableSourceSnapshot>;
+  extract(
+    identity: OwnedSourceIdentity,
+    selector?: SourceExtractionSelector,
+  ): Promise<IndexableSourceSnapshot>;
 }
 
 function record(row: Record<string, unknown> | undefined, label: string) {
@@ -218,10 +225,68 @@ function coverageForBlocks(
     : fallback;
 }
 
+/**
+ * Visual embeddings use their own immutable chunks so a media vector can never
+ * overwrite the text vector keyed by the same chunk id. Long media evidence is
+ * deterministically windowed with overlap while the transcript chunk remains
+ * untouched for lexical search and exact quotes.
+ */
+export function visualCompanionBlocks(
+  text: string,
+  locator: SourceLocatorV1,
+): ExtractedBlock[] {
+  if (locator.kind !== "audio" && locator.kind !== "video") {
+    return [
+      {
+        text,
+        locator,
+        headingPath: null,
+        evidenceKind: "visual-only",
+      },
+    ];
+  }
+  const maximumMs = locator.kind === "audio" ? 180_000 : 120_000;
+  const overlapMs = 10_000;
+  const blocks: ExtractedBlock[] = [];
+  let startMs = locator.startMs;
+  while (startMs < locator.endMs) {
+    const endMs = Math.min(locator.endMs, startMs + maximumMs);
+    blocks.push({
+      text,
+      locator: { kind: locator.kind, startMs, endMs },
+      headingPath: null,
+      evidenceKind: "visual-only",
+    });
+    if (endMs >= locator.endMs) break;
+    startMs = endMs - overlapMs;
+  }
+  return blocks;
+}
+
 export type MaterialSourceAdapterDependencies = {
-  readObject?: typeof readStorageObject;
+  readObject?: typeof readOwnedFileBytes;
   extractPdf?: typeof extractNativePdfText;
 };
+
+const materialOwnedFileRowSchema = z
+  .object({
+    fileId: z.string().min(1),
+    userId: z.string().min(1),
+    provider: z.string().min(1),
+    storageKey: z.string().min(1),
+    mimeType: z.string().min(1),
+    byteSize: z.coerce.number().int().nonnegative(),
+    fileStatus: z.literal("stored"),
+  })
+  .transform((row) => ({
+    id: row.fileId,
+    userId: row.userId,
+    provider: row.provider,
+    storageKey: row.storageKey,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+    status: row.fileStatus,
+  }));
 
 export class MaterialSourceAdapter implements IndexableSourceAdapter {
   readonly kind = "material" as const;
@@ -235,7 +300,7 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
     const result = await this.client.execute({
       sql: `
         SELECT documents.*, files.mimeType, files.byteSize, files.storageKey,
-          files.provider
+          files.provider, files.status AS fileStatus
         FROM material_documents AS documents
         LEFT JOIN files
           ON files.id = documents.fileId AND files.userId = documents.userId
@@ -274,19 +339,21 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
     });
     const blocks: ExtractedBlock[] = [];
     const artifacts: Record<string, unknown>[] = [];
+    const hasMediaTranscript = artifactResult.rows.some(
+      (artifact) => artifact.kind === "media-transcript",
+    );
     let nativePdf: NativePdfExtraction | null = null;
     let nativePdfFailure: string | null = null;
-    if (
-      row.mimeType === "application/pdf" &&
-      (row.provider === "local" || row.provider === "s3") &&
-      typeof row.storageKey === "string"
-    ) {
+    const parsedOwnedFile = materialOwnedFileRowSchema.safeParse(row);
+    const ownedPdfFile =
+      row.mimeType === "application/pdf" && parsedOwnedFile.success
+        ? parsedOwnedFile.data
+        : null;
+    if (ownedPdfFile) {
       try {
-        const bytes = await (this.dependencies.readObject ?? readStorageObject)(
-          row.provider as ManagedStorageProvider,
-          row.storageKey,
-          { maxBytes: MAX_PDF_BYTES },
-        );
+        const bytes = await (
+          this.dependencies.readObject ?? readOwnedFileBytes
+        )(input.ownerId, ownedPdfFile, { maxBytes: MAX_PDF_BYTES });
         nativePdf = await (
           this.dependencies.extractPdf ?? extractNativePdfText
         )(bytes);
@@ -331,6 +398,7 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
         updatedAt: Number(artifact.updatedAt),
         segmentCount: segmentResult.rows.length,
       });
+      if (kind === "media-metadata" && hasMediaTranscript) continue;
       if (segmentResult.rows.length > 0) {
         for (const segment of segmentResult.rows) {
           const locator = sourceLocatorV1Schema.parse(
@@ -343,17 +411,26 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
           ) {
             continue;
           }
+          const evidenceKind =
+            kind === "ocr-markdown"
+              ? "ocr"
+              : kind === "media-metadata"
+                ? "visual-only"
+                : kind === "media-transcript" || meta?.kind === "youtube"
+                  ? "transcript"
+                  : "native-text";
           blocks.push({
             text: String(segment.text),
             locator,
             headingPath: null,
-            evidenceKind:
-              kind === "ocr-markdown"
-                ? "ocr"
-                : kind === "media-transcript" || meta?.kind === "youtube"
-                  ? "transcript"
-                  : "native-text",
+            evidenceKind,
           });
+          if (
+            evidenceKind === "transcript" &&
+            (locator.kind === "audio" || locator.kind === "video")
+          ) {
+            blocks.push(...visualCompanionBlocks(String(row.title), locator));
+          }
           if (locator.kind === "pdf") coveredPdfPages.add(locator.page);
         }
         continue;
@@ -383,30 +460,52 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
         }
       } else if (kind === "media-transcript") {
         const endMs = Math.max(1, Number(meta?.durationMs ?? 1));
-        blocks.push({
-          text: String(row.title),
-          locator: {
+        blocks.push(
+          ...visualCompanionBlocks(String(row.title), {
             kind: String(row.mimeType).startsWith("video/") ? "video" : "audio",
             startMs: 0,
             endMs,
-          },
-          headingPath: null,
-          evidenceKind: "visual-only",
-        });
+          }),
+        );
       }
     }
     if (row.mimeType === "application/pdf") {
-      const pages = nativePdf?.totalPages ?? 1;
-      for (let page = 1; page <= pages; page += 1) {
-        if (coveredPdfPages.has(page)) continue;
-        blocks.push({
-          text: String(row.title),
-          locator: { kind: "pdf", page },
-          headingPath: null,
-          evidenceKind: "visual-only",
-        });
-        coveredPdfPages.add(page);
+      const relevantPages = new Set<number>();
+      for (let page = 1; page <= (nativePdf?.totalPages ?? 1); page += 1) {
+        relevantPages.add(page);
       }
+      for (const block of blocks) {
+        if (block.locator.kind === "pdf") relevantPages.add(block.locator.page);
+      }
+      const visualPages = new Set(
+        blocks.flatMap((block) =>
+          block.evidenceKind === "visual-only" && block.locator.kind === "pdf"
+            ? [block.locator.page]
+            : [],
+        ),
+      );
+      for (const page of [...relevantPages].sort(
+        (left, right) => left - right,
+      )) {
+        if (!visualPages.has(page)) {
+          blocks.push(
+            ...visualCompanionBlocks(String(row.title), { kind: "pdf", page }),
+          );
+        }
+      }
+    } else if (
+      ["image/png", "image/jpeg", "image/webp"].includes(String(row.mimeType))
+    ) {
+      // SourceLocatorV1 predates a region-aware image locator. The whole owned
+      // file is therefore represented by its exact byte range until that
+      // backwards-compatible contract extension is introduced.
+      blocks.push(
+        ...visualCompanionBlocks(String(row.title), {
+          kind: "text",
+          startOffset: 0,
+          endOffset: 1,
+        }),
+      );
     }
     const captured = await captureInlineAssets(blocks);
     const coverage = coverageForBlocks(
@@ -419,11 +518,12 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
       sourceUrl: row.sourceUrl,
       storageKeyHash:
         typeof row.storageKey === "string" ? sha256(row.storageKey) : null,
+      sourceFileId: typeof row.fileId === "string" ? row.fileId : null,
       artifacts,
       pdfTextLayer:
         row.mimeType === "application/pdf"
           ? {
-              attempted: row.provider === "local" || row.provider === "s3",
+              attempted: ownedPdfFile !== null,
               totalPages: nativePdf?.totalPages ?? null,
               searchablePages: nativeTextPages.size,
               failure: nativePdfFailure,
@@ -442,7 +542,7 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
       coverage,
       versionKey: sha256(
         canonicalJson([
-          "material-extractor-v2",
+          "material-extractor-v3",
           row.updatedAt,
           row.fileId,
           row.textContent,
@@ -451,7 +551,7 @@ export class MaterialSourceAdapter implements IndexableSourceAdapter {
         ]),
       ),
       extractorId: "avermate.material",
-      extractorVersion: "2",
+      extractorVersion: "3",
       mimeType:
         row.mimeType === null
           ? row.sourceType === "text"
@@ -777,23 +877,132 @@ export class ConversationSourceAdapter implements IndexableSourceAdapter {
     };
   }
 
-  async extract(input: OwnedSourceIdentity): Promise<IndexableSourceSnapshot> {
+  async extract(
+    input: OwnedSourceIdentity,
+    selector?: SourceExtractionSelector,
+  ): Promise<IndexableSourceSnapshot> {
     const descriptor = await this.describe(input);
-    const result = await this.client.execute({
-      sql: `SELECT messages.id, messages.role, messages.partsJson,
-          messages.partsVersion, messages.createdAt
-        FROM assistant_messages AS messages
-        JOIN assistant_threads AS threads ON threads.id = messages.threadId
-        WHERE messages.threadId = ? AND threads.userId = ?
+    const thread = await this.row(input);
+    const selected = await this.client.execute({
+      sql: `SELECT branches.id AS branchId,
+          coalesce(?, branches.headMessageId) AS headMessageId
+        FROM assistant_branches AS branches
+        JOIN assistant_threads AS threads ON threads.id = branches.threadId
+        WHERE branches.threadId = ? AND threads.userId = ?
           AND threads.deletedAt IS NULL
+          AND branches.id = coalesce(?, threads.activeBranchId)
+        LIMIT 1`,
+      args: [
+        selector?.conversationHeadMessageId ?? null,
+        input.originId,
+        input.ownerId,
+        selector?.conversationBranchId ?? null,
+      ],
+    });
+    const branch = record(selected.rows[0], "Conversation branch");
+    if (!branch.headMessageId) {
+      throw new Error("Conversation branch has no completed head to index");
+    }
+    // A captured historical head must still be on the selected branch path;
+    // callers cannot pair an arbitrary owned message with another branch id.
+    const reachable = await this.client.execute({
+      sql: `WITH RECURSIVE branch_path(id, parentMessageId) AS (
+          SELECT messages.id, messages.parentMessageId
+          FROM assistant_messages AS messages
+          JOIN assistant_branches AS branches ON branches.headMessageId = messages.id
+          WHERE branches.id = ? AND branches.threadId = ?
+          UNION ALL
+          SELECT parent.id, parent.parentMessageId
+          FROM assistant_messages AS parent
+          JOIN branch_path AS child ON child.parentMessageId = parent.id
+          WHERE parent.threadId = ?
+        )
+        SELECT 1 AS reachable FROM branch_path WHERE id = ? LIMIT 1`,
+      args: [
+        String(branch.branchId),
+        input.originId,
+        input.originId,
+        String(branch.headMessageId),
+      ],
+    });
+    if (reachable.rows.length !== 1) {
+      throw new Error(
+        "Conversation head is not reachable from the selected branch",
+      );
+    }
+    const messageRows =
+      thread.placement === "node" && thread.placementRef
+        ? await (async () => {
+            const snapshot =
+              await relayNodeProviderTransport.getConversationDag({
+                nodeId: String(thread.placementRef),
+                ownerId: input.ownerId,
+                threadId: input.originId,
+              });
+            if (!snapshot) throw new Error("NODE_CONVERSATION_DAG_NOT_FOUND");
+            const byId = new Map(
+              snapshot.detail.messages.map((message) => [message.id, message]),
+            );
+            const path = [];
+            const seen = new Set<string>();
+            let cursor: string | null = String(branch.headMessageId);
+            while (cursor) {
+              if (seen.has(cursor)) {
+                throw new Error("Conversation DAG is cyclic");
+              }
+              seen.add(cursor);
+              const message = byId.get(cursor);
+              if (!message) {
+                throw new Error("NODE_CONVERSATION_DAG_INCOMPLETE");
+              }
+              if (
+                message.status === "complete" &&
+                (message.role === "user" || message.role === "assistant")
+              ) {
+                path.push({
+                  id: message.id,
+                  role: message.role,
+                  partsJson: message.parts,
+                  partsVersion: message.partsVersion,
+                  createdAt: message.createdAt,
+                });
+              }
+              cursor = message.parentMessageId;
+            }
+            return path.reverse();
+          })()
+        : (
+            await this.client.execute({
+              sql: `WITH RECURSIVE selected_path(id, parentMessageId, depth) AS (
+          SELECT messages.id, messages.parentMessageId, 0
+          FROM assistant_messages AS messages
+          WHERE messages.id = ? AND messages.threadId = ?
+          UNION ALL
+          SELECT parent.id, parent.parentMessageId, child.depth + 1
+          FROM assistant_messages AS parent
+          JOIN selected_path AS child ON child.parentMessageId = parent.id
+          WHERE parent.threadId = ?
+        )
+        SELECT messages.id, messages.role, messages.partsJson,
+          messages.partsVersion, messages.createdAt, selected_path.depth
+        FROM selected_path
+        JOIN assistant_messages AS messages ON messages.id = selected_path.id
+        JOIN assistant_threads AS threads ON threads.id = messages.threadId
+        WHERE threads.userId = ? AND threads.deletedAt IS NULL
           AND messages.status = 'complete'
           AND messages.role IN ('user', 'assistant')
-        ORDER BY messages.createdAt, messages.id`,
-      args: [input.originId, input.ownerId],
-    });
+        ORDER BY selected_path.depth DESC, messages.createdAt, messages.id`,
+              args: [
+                String(branch.headMessageId),
+                input.originId,
+                input.originId,
+                input.ownerId,
+              ],
+            })
+          ).rows;
     const blocks: ExtractedBlock[] = [];
     const versionParts: unknown[] = [];
-    for (const row of result.rows) {
+    for (const row of messageRows) {
       const rawParts = jsonValue<unknown>(row.partsJson);
       if (!Array.isArray(rawParts)) continue;
       const messageParts: unknown[] = [];
@@ -828,17 +1037,23 @@ export class ConversationSourceAdapter implements IndexableSourceAdapter {
     }
     return {
       ...descriptor,
-      coverage:
-        blocks.length > 0 ? "searchable-native-text" : "unsupported",
+      coverage: blocks.length > 0 ? "searchable-native-text" : "unsupported",
       versionKey: sha256(
-        canonicalJson(["avermate.conversation-text-v1", versionParts]),
+        canonicalJson([
+          "avermate.conversation-branch-text-v2",
+          branch.branchId,
+          branch.headMessageId,
+          versionParts,
+        ]),
       ),
       extractorId: "avermate.conversation-text",
-      extractorVersion: "1",
+      extractorVersion: "2",
       mimeType: "application/vnd.avermate.conversation+markdown",
       language: null,
       metadata: {
         title: descriptor.title,
+        conversationBranchId: String(branch.branchId),
+        conversationHeadMessageId: String(branch.headMessageId),
         completedMessageCount: versionParts.length,
         indexedTextPartCount: blocks.length,
       },
@@ -933,8 +1148,8 @@ export class IndexableSourceRegistry {
     return this.adapter(input.originKind).describe(input);
   }
 
-  extract(input: OwnedSourceIdentity) {
-    return this.adapter(input.originKind).extract(input);
+  extract(input: OwnedSourceIdentity, selector?: SourceExtractionSelector) {
+    return this.adapter(input.originKind).extract(input, selector);
   }
 }
 

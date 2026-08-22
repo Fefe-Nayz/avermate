@@ -360,7 +360,7 @@ describe("Core to Node provider adapters", () => {
       now,
     });
     expect(report.passed).toBe(true);
-    expect(report.cells).toHaveLength(7);
+    expect(report.cells).toHaveLength(profiles.length);
     expect(report.cells.every((cell) => cell.status === "pass")).toBe(true);
   });
 });

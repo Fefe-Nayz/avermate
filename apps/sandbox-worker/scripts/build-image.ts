@@ -5,6 +5,9 @@ import { posix, relative, resolve, sep } from "node:path";
 export const WORKER_IMAGE_PROFILES = Object.freeze([
   "browser",
   "media",
+  "video-audio",
+  "ocr",
+  "speech-to-text",
   "manim",
   "latex",
   "slides",

@@ -8,6 +8,30 @@ process.env.NODE_ENV = "test";
 process.env.DISABLE_TTS = "false";
 
 describe("Mistral text-to-speech provider", () => {
+  test("resolves the exact Mistral TTS credential route", async () => {
+    const { runMistralTextToSpeech } = await import("./text-to-speech");
+    const routes: string[] = [];
+    await runMistralTextToSpeech("tts-key-owner", "Bonjour.", {
+      resolveCredential: async (_ownerId, kind, provider) => {
+        routes.push(`${kind}:${provider}`);
+        return {
+          source: "user" as const,
+          key: "exact-mistral-tts-key",
+          invalidationToken: "sealed-exact-mistral-tts-key",
+        };
+      },
+      fetch: async (_url, init) => {
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          "Bearer exact-mistral-tts-key",
+        );
+        return Response.json({
+          audio_data: Buffer.from([0xff, 0xfb]).toString("base64"),
+        });
+      },
+    });
+    expect(routes).toEqual(["mistral:mistral"]);
+  });
+
   test("uses the official JSON contract and returns MP3 bytes", async () => {
     const {
       DEFAULT_MISTRAL_SPEECH_MODEL,

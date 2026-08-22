@@ -12,7 +12,8 @@
 
 ## Status
 
-- **Status**: TODO — checkout remains off until the final phase
+- **Status**: IMPLEMENTED AS SAFE REPOSITORY BETA — external launch gates remain
+  blocked and checkout remains off
 - **Priority**: P1 after 035/036/038; P0 before advertising managed AI/storage
 - **Effort**: XL / operational
 - **Risk**: CRITICAL
@@ -22,6 +23,23 @@
 - **Category**: multi-tenancy, SRE, billing, privacy, Web product
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Evidence baseline**: `15a8897ce1eb82c2807f5547d9f558a59ad9a2e1`
+
+## Implementation status — 2026-08-22
+
+The repository now contains the invite/consent control plane, guarded
+capability and quota enforcement, customer Web experience, role-gated operator
+console, privacy export/deletion state, redacted evidence/incident/gate model,
+test-mode billing boundary, runbooks and `verify:039` repository aggregate.
+`docs/releases/plan-039-evidence-2026-08-22.md` records the exact checked-in
+evidence and outstanding external proofs.
+
+This does **not** complete the operational launch definition below. Exact
+deployed managed providers, strong isolation, alert/load/privacy exercises,
+encrypted backup/restore with measured RPO/RTO, air-gap evidence and a selected
+billing/legal/tax/price decision remain unavailable. `verify:039:launch` fails
+closed without a current evidence manifest for the exact release revision.
+`checkoutEnabled`, `billingEnabled` and `launchReady` remain hard-coded `false`;
+there is no production checkout or portal procedure.
 
 ## Outcome
 

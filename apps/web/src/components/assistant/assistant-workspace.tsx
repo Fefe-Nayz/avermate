@@ -9,6 +9,7 @@ import type {
   HistoricalBranchChoice,
   HistoricalBranchOperation,
   HistoricalBranchPreview,
+  ModelUnavailableReason,
 } from "@avermate/agent-contracts"
 import {
   ActivityIcon,
@@ -30,10 +31,18 @@ import {
   XIcon,
 } from "lucide-react"
 import Link from "next/link"
+import { useExtracted } from "next-intl"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { AssistantThreadActionProvider } from "./actions/action-interactions"
+import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +78,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { AssistantComposer } from "./assistant-composer"
 import {
@@ -111,6 +121,32 @@ type HistoricalChoiceView = {
   error: string | null
 }
 
+function modelReadinessAction(reasons: readonly ModelUnavailableReason[]) {
+  if (
+    reasons.some((reason) =>
+      ["node-offline", "node-capability-stale", "sandbox-unavailable"].includes(
+        reason
+      )
+    )
+  ) {
+    return { href: "/settings/node", kind: "node" } as const
+  }
+  if (
+    reasons.some((reason) =>
+      ["managed-disabled", "quota-denied"].includes(reason)
+    )
+  ) {
+    return {
+      href: "/settings/managed",
+      kind: "managed",
+    } as const
+  }
+  return {
+    href: "/settings/integrations",
+    kind: "providers",
+  } as const
+}
+
 function createHistoricalChoiceCoordinator() {
   let pending: {
     token: string
@@ -148,28 +184,17 @@ function downloadExport(result: {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-function placementLabel(
-  detail: AssistantThreadDetail,
-  model: AssistantWorkspaceState["models"][number] | undefined
-): string {
-  const placement = detail.thread.placement
-  if (placement.kind === "node") return `Custom node · ${placement.nodeId}`
-  if (!model) return "Avermate core"
-  if (model.placement === "direct-byok") {
-    return model.contentLeavesPlacement
-      ? `BYOK · ${model.providerKey} receives selected context`
-      : `BYOK · ${model.providerKey}`
-  }
-  if (model.placement === "managed") return "Avermate managed AI"
-  if (model.placement === "node") return "Custom node model"
-  return `Avermate core · ${model.providerKey}`
-}
-
 function activeRun(detail: AssistantThreadDetail) {
   return [...detail.runs]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .find((run) =>
-      ["reserved", "running", "waiting-for-user"].includes(run.status)
+      [
+        "reserved",
+        "running",
+        "waiting-for-user",
+        "waiting-approval",
+        "cancelling",
+      ].includes(run.status)
     )
 }
 
@@ -190,6 +215,7 @@ function ConversationHeader({
   projects: readonly AssistantProjectOption[]
   openContext: () => void
 }) {
+  const t = useExtracted()
   const thread = detail.thread
   const exportConversation = async (
     format: "json" | "markdown",
@@ -203,19 +229,31 @@ function ConversationHeader({
         variant="ghost"
         size="icon-sm"
         onClick={onToggleRail}
-        aria-label={railOpen ? "Hide conversations" : "Show conversations"}
+        aria-label={
+          railOpen ? t("Hide conversations") : t("Show conversations")
+        }
       >
         {railOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
       </Button>
       <div className="min-w-0 flex-1">
         <h2 className="truncate text-sm font-medium">{thread.title}</h2>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>{detail.messages.length} messages</span>
+        <div
+          className="flex items-center gap-1 text-xs text-muted-foreground"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <span>
+            {t("{count, plural, one {# message} other {# messages}}", {
+              count: detail.messages.length,
+            })}
+          </span>
           {activeRun(detail) ? (
             <>
               <span>·</span>
               <span className="flex items-center gap-1 text-primary">
-                <LoaderCircleIcon className="size-3 animate-spin" /> Running
+                <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" />{" "}
+                {t("Running")}
               </span>
             </>
           ) : null}
@@ -232,12 +270,13 @@ function ConversationHeader({
           }}
         >
           <SelectTrigger size="sm" className="hidden max-w-40 md:flex">
-            <ListTreeIcon /> <SelectValue placeholder="Branch" />
+            <ListTreeIcon /> <SelectValue placeholder={t("Branch")} />
           </SelectTrigger>
           <SelectContent>
             {detail.branches.map((branch, index) => (
               <SelectItem key={branch.id} value={branch.id}>
-                {branch.name ?? `Branch ${index + 1}`}
+                {branch.name ??
+                  t("Branch {number}", { number: String(index + 1) })}
               </SelectItem>
             ))}
           </SelectContent>
@@ -247,29 +286,27 @@ function ConversationHeader({
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label="Inspect context and usage"
+        aria-label={t("Inspect context and usage")}
         onClick={openContext}
       >
         <InfoIcon />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Open action activity"
-        render={<Link href="/assistant/actions" />}
-        nativeButton={false}
+      <Link
+        href="/assistant/actions"
+        className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+        aria-label={t("Open action activity")}
       >
         <ActivityIcon />
-      </Button>
+      </Link>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label="Conversation actions"
+          aria-label={t("Conversation actions")}
           render={<Button type="button" variant="ghost" size="icon-sm" />}
         >
           <MoreHorizontalIcon />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Conversation</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("Conversation")}</DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() =>
               void actions.updateThread(thread.id, {
@@ -277,7 +314,7 @@ function ConversationHeader({
               })
             }
           >
-            <StarIcon /> {thread.starredAt ? "Unstar" : "Star"}
+            <StarIcon /> {thread.starredAt ? t("Unstar") : t("Star")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() =>
@@ -286,11 +323,12 @@ function ConversationHeader({
               })
             }
           >
-            <ArchiveIcon /> {thread.archivedAt ? "Unarchive" : "Archive"}
+            <ArchiveIcon />
+            {thread.archivedAt ? t("Unarchive") : t("Archive")}
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <DownloadIcon /> Export
+              <DownloadIcon /> {t("Export")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem
@@ -298,23 +336,23 @@ function ConversationHeader({
                   void exportConversation("markdown", "active-branch")
                 }
               >
-                Markdown · active branch
+                {t("Markdown · active branch")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => void exportConversation("json", "active-branch")}
               >
-                JSON · active branch
+                {t("JSON · active branch")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => void exportConversation("json", "whole-dag")}
               >
-                JSON · whole DAG
+                {t("JSON · whole conversation tree")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <SaveIcon /> Save to project
+              <SaveIcon /> {t("Save to project")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {projects.length ? (
@@ -333,7 +371,7 @@ function ConversationHeader({
                       )
                     }
                   >
-                    Add conversation reference
+                    {t("Add conversation reference")}
                   </DropdownMenuItem>,
                   <DropdownMenuItem
                     key={`${project.id}-markdown`}
@@ -345,12 +383,12 @@ function ConversationHeader({
                       )
                     }
                   >
-                    Create Markdown document
+                    {t("Create Markdown document")}
                   </DropdownMenuItem>,
                 ])
               ) : (
                 <DropdownMenuItem disabled>
-                  Create a study project first
+                  {t("Create a study project first")}
                 </DropdownMenuItem>
               )}
             </DropdownMenuSubContent>
@@ -360,7 +398,7 @@ function ConversationHeader({
             variant="destructive"
             onClick={() => void actions.trashThread(thread.id)}
           >
-            <Trash2Icon /> Move to trash
+            <Trash2Icon /> {t("Move to trash")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -369,7 +407,7 @@ function ConversationHeader({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Close assistant"
+          aria-label={t("Close assistant")}
           onClick={onClose}
         >
           <XIcon />
@@ -388,6 +426,7 @@ function AssistantDrawer({
   detail: AssistantThreadDetail
   onClose: () => void
 }) {
+  const t = useExtracted()
   return (
     <Sheet
       open={drawer.kind !== "closed"}
@@ -397,19 +436,19 @@ function AssistantDrawer({
         {drawer.kind === "citation" ? (
           <>
             <SheetHeader>
-              <SheetTitle>Source</SheetTitle>
+              <SheetTitle>{t("Source")}</SheetTitle>
               <SheetDescription>
-                Exact evidence used for this claim.
+                {t("Exact evidence used for this claim.")}
               </SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
               {drawer.loading ? (
-                <div className="space-y-3 pt-4">
+                <div className="flex flex-col gap-3 pt-4">
                   <Skeleton className="h-5 w-2/3" />
                   <Skeleton className="h-24 w-full" />
                 </div>
               ) : drawer.target ? (
-                <div className="space-y-4 pt-4">
+                <div className="flex flex-col gap-4 pt-4">
                   <div>
                     <h3 className="font-medium">{drawer.target.title}</h3>
                     {drawer.target.subtitle ? (
@@ -438,14 +477,14 @@ function AssistantDrawer({
                         />
                       }
                     >
-                      <BookOpenIcon data-icon="inline-start" /> Open exact
-                      source
+                      <BookOpenIcon data-icon="inline-start" />
+                      {t("Open exact source")}
                     </Button>
                   ) : null}
                 </div>
               ) : (
                 <p className="pt-4 text-sm text-muted-foreground">
-                  This source is unavailable.
+                  {t("This source is unavailable.")}
                 </p>
               )}
             </ScrollArea>
@@ -453,16 +492,16 @@ function AssistantDrawer({
         ) : drawer.kind === "context" ? (
           <>
             <SheetHeader>
-              <SheetTitle>Run context</SheetTitle>
+              <SheetTitle>{t("Run context")}</SheetTitle>
               <SheetDescription>
-                Committed manifests, model usage and durable run state.
+                {t("Committed manifests, model usage and durable run state.")}
               </SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
-              <div className="space-y-5 pt-4">
+              <div className="flex flex-col gap-5 pt-4">
                 <section>
-                  <h3 className="text-sm font-medium">Runs</h3>
-                  <div className="mt-2 space-y-2">
+                  <h3 className="text-sm font-medium">{t("Runs")}</h3>
+                  <div className="mt-2 flex flex-col gap-2">
                     {[...detail.runs].reverse().map((run) => (
                       <div
                         key={run.id}
@@ -475,23 +514,61 @@ function AssistantDrawer({
                         <div className="mt-1 text-muted-foreground">
                           {run.runtimeId} {run.runtimeVersion}
                         </div>
+                        <dl className="mt-2 grid gap-1 text-muted-foreground">
+                          <div className="flex justify-between gap-2">
+                            <dt>{t("Placement")}</dt>
+                            <dd className="truncate font-mono">
+                              {run.modelPlacement.kind}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt>{t("Provider")}</dt>
+                            <dd className="truncate font-mono">
+                              {run.providerKey} · {run.providerRevision}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt>{t("Policy")}</dt>
+                            <dd className="truncate font-mono">
+                              {run.policyRevision}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-2">
+                            <dt>{t("Tools")}</dt>
+                            <dd className="truncate font-mono">
+                              {run.toolCatalogRevision}
+                            </dd>
+                          </div>
+                        </dl>
+                        {run.terminalReason ? (
+                          <p className="mt-2 text-destructive">
+                            {run.terminalReason}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
                 </section>
                 <section>
-                  <h3 className="text-sm font-medium">Context manifests</h3>
-                  <div className="mt-2 space-y-2">
+                  <h3 className="text-sm font-medium">
+                    {t("Context manifests")}
+                  </h3>
+                  <div className="mt-2 flex flex-col gap-2">
                     {detail.manifests.map((manifest) => (
                       <div
                         key={manifest.id}
                         className="rounded-lg border p-3 text-xs"
                       >
                         <div className="flex justify-between gap-2">
-                          <span>{manifest.items.length} context items</span>
+                          <span>
+                            {t(
+                              "{count, plural, one {# context item} other {# context items}}",
+                              { count: manifest.items.length }
+                            )}
+                          </span>
                           <span className="text-muted-foreground tabular-nums">
                             {manifest.budget.usedTokens}/
-                            {manifest.budget.maxTokens} tokens
+                            {manifest.budget.maxTokens} {t("tokens")}
                           </span>
                         </div>
                         <div className="mt-1 truncate font-mono text-muted-foreground">
@@ -502,21 +579,21 @@ function AssistantDrawer({
                   </div>
                 </section>
                 <section>
-                  <h3 className="text-sm font-medium">Usage</h3>
-                  <div className="mt-2 space-y-2">
+                  <h3 className="text-sm font-medium">{t("Usage")}</h3>
+                  <div className="mt-2 flex flex-col gap-2">
                     {detail.usage.map((usage) => (
                       <div
                         key={usage.runId}
                         className="flex flex-wrap gap-1.5 rounded-lg border p-3 text-xs"
                       >
                         <Badge variant="outline">
-                          {usage.inputTokens ?? "—"} input
+                          {usage.inputTokens ?? "—"} {t("input")}
                         </Badge>
                         <Badge variant="outline">
-                          {usage.outputTokens ?? "—"} output
+                          {usage.outputTokens ?? "—"} {t("output")}
                         </Badge>
                         <Badge variant="outline">
-                          {usage.cachedReadTokens ?? "—"} cached
+                          {usage.cachedReadTokens ?? "—"} {t("cached")}
                         </Badge>
                         {usage.estimatedCost ? (
                           <Badge variant="secondary">
@@ -549,6 +626,8 @@ function ConversationPane({
   railOpen: boolean
   onToggleRail: () => void
 }) {
+  const t = useExtracted()
+  const isOnline = useOnlineStatus()
   const { detail } = state
   const [references, setReferences] = useState<AssistantPendingReference[]>([])
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "closed" })
@@ -558,6 +637,40 @@ function ConversationPane({
     createHistoricalChoiceCoordinator
   )
   const currentRun = activeRun(detail)
+  const selectedModel = state.models.find(
+    (model) => model.modelKey === state.selectedModelKey
+  )
+  const composerPlacementLabel =
+    detail.thread.placement.kind === "node"
+      ? t("Custom Node · {node}", { node: detail.thread.placement.nodeId })
+      : !selectedModel
+        ? t("Avermate Core")
+        : selectedModel.placement === "direct-byok"
+          ? selectedModel.contentLeavesPlacement
+            ? t("BYOK · {provider} receives selected context", {
+                provider: selectedModel.providerKey,
+              })
+            : t("BYOK · {provider}", {
+                provider: selectedModel.providerKey,
+              })
+          : selectedModel.placement === "managed"
+            ? t("Avermate managed AI")
+            : selectedModel.placement === "node"
+              ? t("Custom Node model")
+              : t("Avermate Core · {provider}", {
+                  provider: selectedModel.providerKey,
+                })
+  const unavailableModels = state.modelReadiness.filter(
+    (entry) => !entry.available && entry.unavailableReason
+  )
+  const unavailableReasons = [
+    ...new Set(
+      unavailableModels.flatMap((entry) =>
+        entry.unavailableReason ? [entry.unavailableReason] : []
+      )
+    ),
+  ]
+  const readinessAction = modelReadinessAction(unavailableReasons)
 
   const finishHistoricalChoice = useCallback(
     (token: string, choice: HistoricalBranchChoice | null) => {
@@ -580,7 +693,7 @@ function ConversationPane({
       messageId: string
     ): Promise<HistoricalBranchChoice | null> => {
       if (!detail.activeBranchId) {
-        return Promise.reject(new Error("No source branch is selected"))
+        return Promise.reject(new Error(t("No source branch is selected")))
       }
       const token = crypto.randomUUID()
       const promise = historicalChoiceCoordinator.request(token)
@@ -609,7 +722,7 @@ function ConversationPane({
           const message =
             previewError instanceof Error && previewError.message
               ? previewError.message
-              : "Historical branch options could not be loaded."
+              : t("Historical branch options could not be loaded.")
           setHistoricalChoice((current) =>
             current?.token === token
               ? { ...current, error: message, loading: false }
@@ -618,7 +731,7 @@ function ConversationPane({
         })
       return promise
     },
-    [actions, detail.activeBranchId, historicalChoiceCoordinator]
+    [actions, detail.activeBranchId, historicalChoiceCoordinator, t]
   )
 
   const runtimeActions = useMemo<AssistantRuntimeActions>(
@@ -714,11 +827,11 @@ function ConversationPane({
       openArtifact: actions.openArtifact,
       answerQuestion: async (questionId: string, answer: string) => {
         const run = activeRun(detail)
-        if (!run) throw new Error("No run is waiting for an answer")
+        if (!run) throw new Error(t("No run is waiting for an answer"))
         await actions.answerQuestion(run.id, questionId, answer)
       },
     }),
-    [actions, detail, openCitation]
+    [actions, detail, openCitation, t]
   )
 
   return (
@@ -743,18 +856,68 @@ function ConversationPane({
                 {state.error}
               </div>
             ) : null}
+            {!isOnline ? (
+              <Alert className="m-3 w-auto" role="status">
+                <InfoIcon />
+                <AlertTitle>{t("You are offline")}</AlertTitle>
+                <AlertDescription>
+                  {t(
+                    "Conversation history remains readable. Sending, approvals and source fetches resume after reconnection."
+                  )}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {state.models.length === 0 ? (
+              <Alert
+                className="m-3 w-auto"
+                data-testid="assistant-model-unavailable"
+              >
+                <InfoIcon />
+                <AlertTitle>{t("No model is ready")}</AlertTitle>
+                <AlertDescription>
+                  {t(
+                    "Add a provider key, pair an Avermate Node or activate a managed placement. Existing conversations remain readable."
+                  )}
+                  {unavailableModels.length > 0 ? (
+                    <span className="mt-2 flex flex-wrap gap-1.5">
+                      {unavailableModels.slice(0, 4).map((entry) => (
+                        <Badge key={entry.routeKey} variant="outline">
+                          {entry.capability.label} · {entry.unavailableReason}
+                        </Badge>
+                      ))}
+                    </span>
+                  ) : null}
+                </AlertDescription>
+                <AlertAction>
+                  <Link
+                    href={readinessAction.href}
+                    className={buttonVariants({
+                      variant: "outline",
+                      size: "sm",
+                    })}
+                  >
+                    {readinessAction.kind === "node"
+                      ? t("Check Node")
+                      : readinessAction.kind === "managed"
+                        ? t("Check managed service")
+                        : t("Configure providers")}
+                  </Link>
+                </AlertAction>
+              </Alert>
+            ) : null}
             <ThreadPrimitive.Root className="relative flex min-h-0 flex-1 flex-col">
-              <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
+              <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
                 <ThreadPrimitive.Empty>
                   <Empty className="min-h-full">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
                         <MessageSquarePlusIcon />
                       </EmptyMedia>
-                      <EmptyTitle>Start a study conversation</EmptyTitle>
+                      <EmptyTitle>{t("Start a study conversation")}</EmptyTitle>
                       <EmptyDescription>
-                        Attach a course, grade, document, image, or simply ask a
-                        question.
+                        {t(
+                          "Attach a course, grade, document or image, or simply ask a question."
+                        )}
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -770,12 +933,14 @@ function ConversationPane({
                 <div className="h-2" />
               </ThreadPrimitive.Viewport>
               <ThreadPrimitive.ScrollToBottom
-                aria-label="Scroll to latest message"
+                aria-label={t("Scroll to latest message")}
                 className="absolute right-4 bottom-36 z-10 rounded-full border bg-background p-2 shadow-md disabled:hidden"
               >
                 <ChevronDownIcon className="size-4" />
               </ThreadPrimitive.ScrollToBottom>
-              {!detail.thread.deletedAt ? (
+              {!detail.thread.deletedAt &&
+              state.models.length > 0 &&
+              isOnline ? (
                 <AssistantComposer
                   models={state.models}
                   skills={state.skills}
@@ -783,13 +948,9 @@ function ConversationPane({
                   selectedModelKey={state.selectedModelKey}
                   selectedSkillId={state.selectedSkillId}
                   planMode={state.planMode}
+                  approvalMode={state.approvalMode}
                   references={references}
-                  placementLabel={placementLabel(
-                    detail,
-                    state.models.find(
-                      (model) => model.modelKey === state.selectedModelKey
-                    )
-                  )}
+                  placementLabel={composerPlacementLabel}
                   actions={actions}
                   onAddReference={(reference) =>
                     setReferences((current) =>
@@ -806,11 +967,13 @@ function ConversationPane({
                     )
                   }
                 />
-              ) : (
+              ) : detail.thread.deletedAt ? (
                 <div className="border-t p-4 text-center text-sm text-muted-foreground">
-                  Restore this conversation before sending another message.
+                  {t(
+                    "Restore this conversation before sending another message."
+                  )}
                 </div>
-              )}
+              ) : null}
             </ThreadPrimitive.Root>
           </section>
           <AssistantDrawer
@@ -855,7 +1018,12 @@ export function AssistantWorkspace({
   className?: string
   compactRail?: boolean
 }) {
-  const [railOpen, setRailOpen] = useState(true)
+  const t = useExtracted()
+  const wideRailDefault = useMediaQuery("(min-width: 768px)")
+  const [railPreference, setRailPreference] = useState<boolean | null>(null)
+  const railOpen = railPreference ?? wideRailDefault
+  const toggleRail = () =>
+    setRailPreference((current) => !(current ?? wideRailDefault))
   const selectedThreadId = state.detail?.thread.id ?? null
 
   return (
@@ -883,9 +1051,9 @@ export function AssistantWorkspace({
       {railOpen ? (
         <button
           type="button"
-          aria-label="Close conversations"
+          aria-label={t("Close conversations")}
           className="absolute inset-0 z-20 bg-black/20 md:hidden"
-          onClick={() => setRailOpen(false)}
+          onClick={() => setRailPreference(false)}
         />
       ) : null}
       {state.detail ? (
@@ -895,14 +1063,14 @@ export function AssistantWorkspace({
           actions={actions}
           onClose={onClose}
           railOpen={railOpen}
-          onToggleRail={() => setRailOpen((current) => !current)}
+          onToggleRail={toggleRail}
         />
       ) : state.loadingDetail ? (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-14 items-center gap-3 border-b px-4">
             <Skeleton className="size-8" /> <Skeleton className="h-4 w-44" />
           </div>
-          <div className="mx-auto w-full max-w-3xl space-y-5 p-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-6">
             <Skeleton className="ml-auto h-20 w-2/3 rounded-2xl" />
             <Skeleton className="h-32 w-full rounded-2xl" />
           </div>
@@ -914,9 +1082,10 @@ export function AssistantWorkspace({
               type="button"
               variant="ghost"
               size="icon-sm"
-              onClick={() => setRailOpen((current) => !current)}
+              onClick={toggleRail}
             >
-              <MenuIcon /> <span className="sr-only">Show conversations</span>
+              <MenuIcon />
+              <span className="sr-only">{t("Show conversations")}</span>
             </Button>
             {onClose ? (
               <Button
@@ -926,7 +1095,8 @@ export function AssistantWorkspace({
                 size="icon-sm"
                 onClick={onClose}
               >
-                <XIcon /> <span className="sr-only">Close assistant</span>
+                <XIcon />
+                <span className="sr-only">{t("Close assistant")}</span>
               </Button>
             ) : null}
           </header>
@@ -935,15 +1105,17 @@ export function AssistantWorkspace({
               <EmptyMedia variant="icon">
                 <MessageSquarePlusIcon />
               </EmptyMedia>
-              <EmptyTitle>Your study assistant</EmptyTitle>
+              <EmptyTitle>{t("Your study assistant")}</EmptyTitle>
               <EmptyDescription>
-                Open a previous conversation or start a new one. Your notes and
-                files stay where the selected placement says they do.
+                {t(
+                  "Open a previous conversation or start a new one. Your notes and files stay where the selected placement says they do."
+                )}
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button onClick={() => void actions.createThread()}>
-                <MessageSquarePlusIcon data-icon="inline-start" /> New chat
+                <MessageSquarePlusIcon data-icon="inline-start" />
+                {t("New chat")}
               </Button>
             </EmptyContent>
           </Empty>

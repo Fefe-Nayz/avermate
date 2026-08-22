@@ -44,6 +44,8 @@ export async function reserveManagedProviderUsage(input: {
     accountId: input.accountId,
     capability: input.capability,
     provider: input.provider,
+    maximumQuantity: input.maximumQuantity,
+    unit: input.unit,
   });
   const reserved = await managedUsage().reserve({
     accountId: input.accountId,

@@ -1,7 +1,9 @@
 "use client"
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import type { AgentApprovalMode } from "@avermate/agent-contracts"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useExtracted } from "next-intl"
 import {
   useCallback,
   useDeferredValue,
@@ -40,10 +42,8 @@ function randomRequestId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
-function messageFromError(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : "The assistant request failed."
+function messageFromError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 function activeRun(detail: AssistantThreadDetail | null) {
@@ -51,7 +51,13 @@ function activeRun(detail: AssistantThreadDetail | null) {
   return [...detail.runs]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .find((run) =>
-      ["reserved", "running", "waiting-for-user"].includes(run.status)
+      [
+        "reserved",
+        "running",
+        "waiting-for-user",
+        "waiting-approval",
+        "cancelling",
+      ].includes(run.status)
     )
 }
 
@@ -92,6 +98,7 @@ export function AssistantWorkspaceClient({
   className?: string
   compactRail?: boolean
 }) {
+  const t = useExtracted()
   const queryClient = useQueryClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -105,6 +112,8 @@ export function AssistantWorkspaceClient({
   const [selectedModelKey, setSelectedModelKey] = useState("")
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [planMode, setPlanMode] = useState(false)
+  const [approvalMode, setApprovalMode] =
+    useState<AgentApprovalMode>("read-only")
   const [error, setError] = useState<string | null>(null)
   const focusedCitationRef = useRef<string | null>(null)
 
@@ -158,6 +167,12 @@ export function AssistantWorkspaceClient({
     enabled: detailInput !== null,
   })
   const modelsQuery = useQuery(orpc.assistant.models.list.queryOptions())
+  const modelCatalogueQuery = useQuery(
+    orpc.assistant.models.catalogue.queryOptions()
+  )
+  const modelPreferenceQuery = useQuery(
+    orpc.assistant.models.preference.get.queryOptions()
+  )
   const skillsQuery = useQuery(orpc.assistant.skills.list.queryOptions())
   const projectsQuery = useQuery(
     orpc.projects.list.queryOptions({ input: { include: "live" } })
@@ -230,7 +245,12 @@ export function AssistantWorkspaceClient({
 
       focusedCitationRef.current = focusKey
       element.dataset.citationTarget = "true"
-      element.scrollIntoView({ behavior: "smooth", block: "center" })
+      element.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "center",
+      })
       highlightTimer = window.setTimeout(() => {
         delete element.dataset.citationTarget
       }, 3_000)
@@ -246,11 +266,14 @@ export function AssistantWorkspaceClient({
     () => modelsQuery.data?.items ?? [],
     [modelsQuery.data]
   )
+  const preferredModelKey = modelPreferenceQuery.data?.defaultModelKey ?? ""
   const effectiveModelKey = models.some(
     (model) => model.modelKey === selectedModelKey
   )
     ? selectedModelKey
-    : (models[0]?.modelKey ?? "")
+    : models.some((model) => model.modelKey === preferredModelKey)
+      ? preferredModelKey
+      : (models[0]?.modelKey ?? "")
   const skills = useMemo(
     () =>
       (skillsQuery.data?.items ?? []).map((skill) => ({
@@ -274,10 +297,10 @@ export function AssistantWorkspaceClient({
   const referenceOptions = useMemo<AssistantReferenceOption[]>(() => {
     const options: AssistantReferenceOption[] = []
     for (const item of year?.years ?? []) {
-      options.push(reference("year", item.id, item.name, "Academic year"))
+      options.push(reference("year", item.id, item.name, t("Academic year")))
     }
     for (const subject of year?.subjects ?? []) {
-      options.push(reference("subject", subject.id, subject.name, "Subject"))
+      options.push(reference("subject", subject.id, subject.name, t("Subject")))
       for (const grade of subject.grades) {
         options.push(reference("grade", grade.id, grade.name, subject.name))
       }
@@ -303,12 +326,14 @@ export function AssistantWorkspaceClient({
           "transcript",
           recording.id,
           recording.title,
-          `Lecture recording · ${recording.status}`
+          t("Course recording · {status}", { status: recording.status })
         )
       )
     }
     for (const project of projects) {
-      options.push(reference("project", project.id, project.title, "Project"))
+      options.push(
+        reference("project", project.id, project.title, t("Project"))
+      )
     }
     return options.sort(
       (left, right) =>
@@ -321,6 +346,7 @@ export function AssistantWorkspaceClient({
     projects,
     recordingsQuery.data,
     studyDocumentsQuery.data,
+    t,
     year?.subjects,
     year?.years,
   ])
@@ -358,31 +384,37 @@ export function AssistantWorkspaceClient({
           window.setTimeout(() => void refresh(), 25)
         }
       },
-      onError: (streamError) => setError(messageFromError(streamError)),
+      onError: (streamError) =>
+        setError(
+          messageFromError(streamError, t("The assistant request failed."))
+        ),
     })
-  }, [activeRunId, detailInput, queryClient, refresh])
+  }, [activeRunId, detailInput, queryClient, refresh, t])
 
   const runAction = useCallback(
-    async <T,>(operation: () => Promise<T>): Promise<T> => {
+    async function runAssistantAction<T>(
+      operation: () => Promise<T>
+    ): Promise<T> {
       setError(null)
       try {
         return await operation()
       } catch (actionError) {
-        const message = messageFromError(actionError)
+        const message = messageFromError(
+          actionError,
+          t("The assistant request failed.")
+        )
         setError(message)
         throw actionError
       }
     },
-    []
+    [t]
   )
 
   const actions = useMemo<AssistantWorkspaceActions>(
     () => ({
       createThread: () =>
         runAction(async () => {
-          const created = await rpc.assistant.threads.create({
-            placement: "core",
-          })
+          const created = await rpc.assistant.threads.create({})
           setSelectedBranchId(created.branch.id)
           setSelectedThreadId(created.thread.id)
           await refresh()
@@ -399,7 +431,7 @@ export function AssistantWorkspaceClient({
             detail?.thread.id === threadId
               ? detail.thread
               : threads.find((item) => item.id === threadId)
-          if (!thread) throw new Error("Conversation not found")
+          if (!thread) throw new Error(t("Conversation not found"))
           await rpc.assistant.threads.update({
             threadId,
             expectedRevision: thread.revision,
@@ -413,7 +445,7 @@ export function AssistantWorkspaceClient({
             detail?.thread.id === threadId
               ? detail.thread
               : threads.find((item) => item.id === threadId)
-          if (!thread) throw new Error("Conversation not found")
+          if (!thread) throw new Error(t("Conversation not found"))
           await rpc.assistant.threads.trash({
             threadId,
             expectedRevision: thread.revision,
@@ -426,7 +458,7 @@ export function AssistantWorkspaceClient({
             detail?.thread.id === threadId
               ? detail.thread
               : threads.find((item) => item.id === threadId)
-          if (!thread) throw new Error("Conversation not found")
+          if (!thread) throw new Error(t("Conversation not found"))
           await rpc.assistant.threads.restore({
             threadId,
             expectedRevision: thread.revision,
@@ -436,8 +468,8 @@ export function AssistantWorkspaceClient({
       send: (intent) =>
         runAction(async () => {
           if (!detail?.activeBranchId)
-            throw new Error("No conversation branch is selected")
-          if (!intent.modelKey) throw new Error("Select a model first")
+            throw new Error(t("No conversation branch is selected"))
+          if (!intent.modelKey) throw new Error(t("Select a model first"))
           await rpc.assistant.messages.send({
             threadId: detail.thread.id,
             branchId: detail.activeBranchId,
@@ -448,6 +480,7 @@ export function AssistantWorkspaceClient({
             skillId: intent.skillId,
             planMode: intent.planMode,
             forkOnConflict: false,
+            approvalMode,
             attachments: intent.references.map((item) => ({
               kind: item.kind,
               referenceId: item.referenceId,
@@ -464,6 +497,7 @@ export function AssistantWorkspaceClient({
             clientRequestId: randomRequestId("edit"),
             markdown: intent.markdown,
             modelKey: intent.modelKey,
+            approvalMode,
             historicalBranch: intent.historicalBranch,
           })
           await refresh()
@@ -474,6 +508,7 @@ export function AssistantWorkspaceClient({
             messageId: input.messageId,
             clientRequestId: randomRequestId("retry"),
             modelKey: input.modelKey || undefined,
+            approvalMode,
             historicalBranch: input.historicalBranch,
           })
           await refresh()
@@ -506,10 +541,13 @@ export function AssistantWorkspaceClient({
       setModel: setSelectedModelKey,
       setSkill: setSelectedSkillId,
       setPlanMode,
+      setApprovalMode,
       uploadAttachment: (file) =>
         runAction(async () => {
           if (!year?.yearId) {
-            throw new Error("Select an academic year before attaching a file")
+            throw new Error(
+              t("Select an academic year before attaching a file")
+            )
           }
           const route =
             file.type.startsWith("audio/") || file.type.startsWith("video/")
@@ -554,7 +592,7 @@ export function AssistantWorkspaceClient({
             throw new Error(
               typeof result?.error === "string"
                 ? result.error
-                : "Dictation transcription is unavailable."
+                : t("Dictation transcription is unavailable.")
             )
           }
           return result.text
@@ -595,31 +633,53 @@ export function AssistantWorkspaceClient({
           await queryClient.invalidateQueries({ queryKey: orpc.projects.key() })
           toast.success(
             mode === "reference"
-              ? "Conversation linked to the project."
-              : "Markdown document created in the project."
+              ? t("Conversation linked to the project.")
+              : t("Markdown document created in the project.")
           )
         }),
     }),
-    [detail, queryClient, refresh, router, runAction, threads, year]
+    [
+      approvalMode,
+      detail,
+      queryClient,
+      refresh,
+      router,
+      runAction,
+      t,
+      threads,
+      year,
+    ]
   )
 
   const state: AssistantWorkspaceState = {
     threads,
     detail,
     models,
+    modelReadiness: modelCatalogueQuery.data?.items ?? [],
     skills,
     projects,
     referenceOptions,
     selectedModelKey: effectiveModelKey,
     selectedSkillId,
     planMode,
+    approvalMode,
     searchQuery,
     loadingThreads: threadsQuery.isLoading,
     loadingDetail: detailQuery.isLoading,
     error:
       error ??
-      (threadsQuery.error ? messageFromError(threadsQuery.error) : null) ??
-      (detailQuery.error ? messageFromError(detailQuery.error) : null),
+      (threadsQuery.error
+        ? messageFromError(
+            threadsQuery.error,
+            t("The assistant request failed.")
+          )
+        : null) ??
+      (detailQuery.error
+        ? messageFromError(
+            detailQuery.error,
+            t("The assistant request failed.")
+          )
+        : null),
   }
 
   return (

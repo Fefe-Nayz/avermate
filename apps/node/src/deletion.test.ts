@@ -13,6 +13,7 @@ import {
   signDeletionManifest,
   verifyDeletionReceipt,
 } from "./deletion";
+import { LocalNodeProviderTransport } from "./provider-transport";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -61,13 +62,18 @@ describe("signed remote deletion", () => {
       issuedAt: new Date(now).toISOString(),
       expiresAt: new Date(now + 60_000).toISOString(),
     });
-    const receipt = await executeDeletionManifest({
-      manifest,
-      issuerPublicKeyDer: core.publicKeyDer,
-      expectedIssuerKeyId: core.keyId,
-      identity: node,
+    const transport = new LocalNodeProviderTransport(node.nodeId, {
       storage,
-      now: now + 1,
+      deletion: {
+        identity: node,
+        issuerPublicKeyDer: core.publicKeyDer,
+        expectedIssuerKeyId: core.keyId,
+      },
+    });
+    const receipt = await transport.executeStorageDeletionManifest({
+      nodeId: node.nodeId,
+      ownerId: "user-1",
+      manifest,
     });
     expect(await storage.stat({ ref })).toBeNull();
     expect(
@@ -77,7 +83,7 @@ describe("signed remote deletion", () => {
         expectedNodeId: node.nodeId,
         expectedNodeKeyId: node.keyId,
         manifest,
-        now: now + 2,
+        now: Date.now() + 30_000,
       }).deletedCount,
     ).toBe(1);
   });

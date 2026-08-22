@@ -8,6 +8,10 @@ const managedTables = [
   "usage_events",
   "managed_storage_objects",
   "privacy_operation_requests",
+  "managed_beta_accounts",
+  "managed_quota_policies",
+  "managed_operational_evidence",
+  "managed_launch_gates",
 ] as const;
 
 /** Dependency probe with no model, sandbox, storage, or billing side effect. */
@@ -38,13 +42,16 @@ export async function managedReadiness(
       ready,
       checks: {
         database: "ready" as const,
-        managedSchema: managedSchemaReady ? ("ready" as const) : ("missing" as const),
+        managedSchema: managedSchemaReady
+          ? ("ready" as const)
+          : ("missing" as const),
         missingManagedTables: missing,
       },
       mode: {
         deployment: deploymentMode,
         accounting: accountingMode,
         managedAdaptersEnabled,
+        betaEnforcementEnabled: env.MANAGED_BETA_ENFORCEMENT_ENABLED,
         billingEnabled: false,
         checkoutEnabled: false,
         telemetryExporter: "none" as const,
@@ -62,6 +69,7 @@ export async function managedReadiness(
         deployment: deploymentMode,
         accounting: accountingMode,
         managedAdaptersEnabled,
+        betaEnforcementEnabled: env.MANAGED_BETA_ENFORCEMENT_ENABLED,
         billingEnabled: false,
         checkoutEnabled: false,
         telemetryExporter: "none" as const,

@@ -31,6 +31,8 @@ import {
   s3StorageConfigured,
   storageDriver,
 } from "../lib/storage-backend";
+import { selectedNodeObjectStorageProvider } from "../node/services";
+import { nodeFileResponse } from "../node/node-file-response";
 
 const uploadPurposes = {
   avatar: "avatar",
@@ -159,14 +161,55 @@ function configuredS3UploadRouter() {
 
 export const uploadRoutes = new Hono();
 
-uploadRoutes.get("/upload/status", (context) =>
-  context.json({
-    enabled: storageEnabled(),
-    mode: storageDriver(),
-  }),
-);
+uploadRoutes.get("/upload/status", async (context) => {
+  const session = await auth.api.getSession({ headers: context.req.raw.headers });
+  let nodeSelected = false;
+  let nodeOffline = false;
+  if (session) {
+    try {
+      nodeSelected = Boolean(
+        await selectedNodeObjectStorageProvider(session.user.id),
+      );
+    } catch {
+      nodeSelected = true;
+      nodeOffline = true;
+    }
+  }
+  return context.json({
+    enabled: nodeSelected || storageEnabled(),
+    mode: nodeSelected ? "node" : storageDriver(),
+    nodeOffline,
+  });
+});
 
 uploadRoutes.post("/upload", async (context) => {
+  const user = await uploadUser(context.req.raw).catch(() => null);
+  if (user) {
+    try {
+      if (await selectedNodeObjectStorageProvider(user.id)) {
+        return context.json(
+          {
+            error: {
+              type: "rejected",
+              message: "Use the relayed upload endpoint for Node storage",
+            },
+          },
+          409,
+        );
+      }
+    } catch {
+      return context.json(
+        {
+          error: {
+            type: "node-unavailable",
+            message:
+              "Reconnect your Avermate Node or change storage placement in Settings.",
+          },
+        },
+        503,
+      );
+    }
+  }
   if (storageDriver() !== "s3") {
     return context.json(
       { error: { type: "rejected", message: "Use the local upload endpoint" } },
@@ -189,9 +232,6 @@ uploadRoutes.post("/upload", async (context) => {
 });
 
 uploadRoutes.post("/upload/local", async (context) => {
-  if (storageDriver() !== "local" || !storageEnabled()) {
-    return context.json({ error: "Local uploads are not enabled" }, 409);
-  }
   let user;
   try {
     user = await uploadUser(context.req.raw);
@@ -200,6 +240,25 @@ uploadRoutes.post("/upload/local", async (context) => {
       { error: error instanceof Error ? error.message : "Upload rejected" },
       401,
     );
+  }
+  let nodeSelected = false;
+  try {
+    nodeSelected = Boolean(await selectedNodeObjectStorageProvider(user.id));
+  } catch {
+    return context.json(
+      {
+        error: {
+          code: "NODE_STORAGE_CAPABILITY_OFFLINE",
+          message:
+            "Reconnect your Avermate Node or change storage placement in Settings.",
+          settingsPath: "/settings/node",
+        },
+      },
+      503,
+    );
+  }
+  if (!nodeSelected && (storageDriver() !== "local" || !storageEnabled())) {
+    return context.json({ error: "Local uploads are not enabled" }, 409);
   }
   const declaredLength = Number(context.req.header("content-length") ?? 0);
   const largestUpload = Math.max(
@@ -321,6 +380,13 @@ uploadRoutes.on(["GET", "HEAD"], "/files/:fileId", async (context) => {
       },
     });
   }
+  const nodeResponse = await nodeFileResponse(context.req.raw, file, {
+    disposition: "inline",
+    cacheControl: isPublicAvatar
+      ? "public, max-age=3600"
+      : "private, no-store",
+  });
+  if (nodeResponse) return nodeResponse;
   if (
     file.url !== canonicalFileUrl(file.id) &&
     /^https?:\/\//i.test(file.url)

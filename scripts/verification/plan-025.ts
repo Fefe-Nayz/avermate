@@ -38,6 +38,7 @@ const commandGate = (id: string, argv: string[]): VerificationGate => ({
 
 export const REQUIRED_GATE_IDS = [
   "release-guard",
+  "dependency-audit",
   "format-check",
   "lint",
   "lint-slop",
@@ -53,6 +54,7 @@ export const REQUIRED_GATE_IDS = [
 
 const STATIC_GATES: VerificationGate[] = [
   commandGate("release-guard", ["bun", "run", "release:guard"]),
+  commandGate("dependency-audit", ["bun", "run", "security:audit"]),
   commandGate("format-check", ["bun", "run", "format:check"]),
   commandGate("lint", ["bun", "run", "lint"]),
   commandGate("lint-slop", ["bun", "run", "lint:slop"]),

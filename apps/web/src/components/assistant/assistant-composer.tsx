@@ -34,10 +34,12 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useExtracted } from "next-intl"
 import type {
   AssistantPendingReference,
   AssistantReferenceOption,
@@ -57,6 +59,7 @@ function DictationControls({
 }: {
   transcribe: (file: File) => Promise<string>
 }) {
+  const t = useExtracted()
   const aui = useAui()
   const audioInputRef = useRef<HTMLInputElement>(null)
   const dictation = useAssistantDictation({
@@ -75,7 +78,7 @@ function DictationControls({
         className="sr-only"
         type="file"
         accept="audio/*"
-        aria-label="Attach audio for dictation"
+        aria-label={t("Attach audio for dictation")}
         onChange={(event) => {
           const file = event.target.files?.[0]
           event.currentTarget.value = ""
@@ -88,7 +91,7 @@ function DictationControls({
           variant="destructive"
           size="sm"
           onClick={() => void dictation.stop()}
-          aria-label="Stop dictation recording"
+          aria-label={t("Stop dictation recording")}
         >
           <SquareIcon data-icon="inline-start" />
           {formatDuration(state.elapsedMs)}
@@ -97,7 +100,7 @@ function DictationControls({
             aria-hidden="true"
           >
             <span
-              className="block h-full bg-current transition-[width]"
+              className="block h-full bg-current transition-[width] motion-reduce:transition-none"
               style={{ width: `${Math.round(state.level * 100)}%` }}
             />
           </span>
@@ -110,7 +113,7 @@ function DictationControls({
           disabled={
             state.phase === "requesting" || state.phase === "transcribing"
           }
-          aria-label="Dictate message"
+          aria-label={t("Dictate message")}
           onClick={() => void dictation.start()}
         >
           <MicIcon />
@@ -119,13 +122,13 @@ function DictationControls({
 
       {state.phase === "review" && state.recording ? (
         <div className="absolute inset-x-3 bottom-full mb-2 rounded-xl border bg-popover p-3 shadow-lg">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <FileAudioIcon className="size-5" />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Review dictation</div>
+              <div className="text-sm font-medium">{t("Review dictation")}</div>
               <div className="text-xs text-muted-foreground">
-                {formatDuration(state.recording.durationMs)} · Nothing will be
-                sent automatically.
+                {formatDuration(state.recording.durationMs)} ·{" "}
+                {t("Nothing will be sent automatically.")}
               </div>
             </div>
             <Button
@@ -135,18 +138,24 @@ function DictationControls({
               onClick={dictation.cancel}
             >
               <Trash2Icon />
-              <span className="sr-only">Discard dictation</span>
+              <span className="sr-only">{t("Discard dictation")}</span>
             </Button>
             <Button
               type="button"
               size="sm"
               onClick={() => void dictation.transcribe()}
             >
-              <CheckIcon data-icon="inline-start" /> Insert transcript
+              <CheckIcon data-icon="inline-start" />
+              {t("Insert transcript")}
             </Button>
           </div>
           {state.previewUrl ? (
-            <audio className="mt-3 w-full" controls src={state.previewUrl} />
+            <audio
+              className="mt-3 w-full"
+              controls
+              src={state.previewUrl}
+              aria-label={t("Dictation preview")}
+            />
           ) : null}
         </div>
       ) : null}
@@ -169,7 +178,7 @@ function DictationControls({
               variant="outline"
               onClick={() => audioInputRef.current?.click()}
             >
-              <UploadIcon data-icon="inline-start" /> Attach audio
+              <UploadIcon data-icon="inline-start" /> {t("Attach audio")}
             </Button>
             <Button
               type="button"
@@ -177,7 +186,7 @@ function DictationControls({
               variant="ghost"
               onClick={dictation.cancel}
             >
-              Dismiss
+              {t("Dismiss")}
             </Button>
           </div>
         </div>
@@ -195,22 +204,23 @@ function ReferencePicker({
   selected: readonly AssistantPendingReference[]
   onAdd: (reference: AssistantPendingReference) => void
 }) {
+  const t = useExtracted()
   const [open, setOpen] = useState(false)
   const selectedIds = new Set(selected.map((item) => item.clientId))
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={<Button type="button" variant="ghost" size="icon-sm" />}
-        aria-label="Reference an Avermate item"
+        aria-label={t("Reference an Avermate item")}
       >
         <AtSignIcon />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Search grades, courses, files…" />
+          <CommandInput placeholder={t("Search grades, courses and files…")} />
           <CommandList>
-            <CommandEmpty>No matching Avermate item.</CommandEmpty>
-            <CommandGroup heading="Reference">
+            <CommandEmpty>{t("No matching Avermate item.")}</CommandEmpty>
+            <CommandGroup heading={t("Reference")}>
               {options.map((option) => (
                 <CommandItem
                   key={option.clientId}
@@ -247,6 +257,7 @@ export function AssistantComposer({
   selectedModelKey,
   selectedSkillId,
   planMode,
+  approvalMode,
   references,
   placementLabel,
   actions,
@@ -259,14 +270,30 @@ export function AssistantComposer({
   selectedModelKey: string
   selectedSkillId: string | null
   planMode: boolean
+  approvalMode: "read-only" | "confirm-writes" | "auto-reversible"
   references: readonly AssistantPendingReference[]
   placementLabel: string
   actions: AssistantWorkspaceActions
   onAddReference: (reference: AssistantPendingReference) => void
   onRemoveReference: (clientId: string) => void
 }) {
+  const t = useExtracted()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const approvalModeOptions = [
+    {
+      value: "read-only" as const,
+      label: t("Read only"),
+    },
+    {
+      value: "confirm-writes" as const,
+      label: t("Confirm changes"),
+    },
+    {
+      value: "auto-reversible" as const,
+      label: t("Automatic when reversible"),
+    },
+  ]
 
   const uploadFiles = async (files: readonly File[]) => {
     if (!files.length || uploading) return
@@ -293,7 +320,7 @@ export function AssistantComposer({
         type="file"
         multiple
         className="sr-only"
-        aria-label="Attach files"
+        aria-label={t("Attach files")}
         onChange={(event) => {
           const files = Array.from(event.target.files ?? [])
           event.currentTarget.value = ""
@@ -314,7 +341,7 @@ export function AssistantComposer({
                   type="button"
                   className="rounded-full hover:bg-foreground/10"
                   onClick={() => onRemoveReference(reference.clientId)}
-                  aria-label={`Remove ${reference.label}`}
+                  aria-label={t("Remove {name}", { name: reference.label })}
                 >
                   <XIcon className="size-3" />
                 </button>
@@ -326,7 +353,7 @@ export function AssistantComposer({
           submitMode="enter"
           addAttachmentOnPaste={false}
           onPaste={onPaste}
-          placeholder="Ask about your courses, notes, or documents…"
+          placeholder={t("Ask about your courses, grades or documents…")}
           className="max-h-52 min-h-20 w-full resize-none bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
         />
         <div className="flex flex-wrap items-center gap-1 border-t px-2 py-2">
@@ -335,7 +362,7 @@ export function AssistantComposer({
             variant="ghost"
             size="icon-sm"
             disabled={uploading}
-            aria-label="Attach a file"
+            aria-label={t("Attach a file")}
             onClick={() => fileInputRef.current?.click()}
           >
             <PaperclipIcon />
@@ -354,14 +381,16 @@ export function AssistantComposer({
               size="sm"
               className="max-w-40 border-0 bg-transparent shadow-none"
             >
-              <SelectValue placeholder="Model" />
+              <SelectValue placeholder={t("Model")} />
             </SelectTrigger>
             <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.modelKey} value={model.modelKey}>
-                  {model.label}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {models.map((model) => (
+                  <SelectItem key={model.modelKey} value={model.modelKey}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Select
@@ -374,17 +403,19 @@ export function AssistantComposer({
               size="sm"
               className="max-w-36 border-0 bg-transparent shadow-none"
             >
-              <SelectValue placeholder="Skill" />
+              <SelectValue placeholder={t("Skill")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No skill</SelectItem>
-              {skills
-                .filter((skill) => skill.enabled)
-                .map((skill) => (
-                  <SelectItem key={skill.id} value={skill.id}>
-                    {skill.label}
-                  </SelectItem>
-                ))}
+              <SelectGroup>
+                <SelectItem value="none">{t("No skill")}</SelectItem>
+                {skills
+                  .filter((skill) => skill.enabled)
+                  .map((skill) => (
+                    <SelectItem key={skill.id} value={skill.id}>
+                      {skill.label}
+                    </SelectItem>
+                  ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Button
@@ -394,14 +425,39 @@ export function AssistantComposer({
             aria-pressed={planMode}
             onClick={() => actions.setPlanMode(!planMode)}
           >
-            Plan
+            {t("Plan")}
           </Button>
+          <Select
+            items={approvalModeOptions}
+            value={approvalMode}
+            onValueChange={(value) => {
+              if (value) actions.setApprovalMode(value)
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="max-w-48 border-0 bg-transparent shadow-none"
+              aria-label={t("Tool approval mode")}
+            >
+              <ShieldCheckIcon />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {approvalModeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <span className="ml-auto hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
             <ShieldCheckIcon className="size-3.5" /> {placementLabel}
           </span>
           <ThreadPrimitive.If running>
             <ComposerPrimitive.Cancel
-              aria-label="Stop generation"
+              aria-label={t("Stop generation")}
               render={
                 <Button type="button" variant="destructive" size="icon-sm" />
               }
@@ -411,7 +467,7 @@ export function AssistantComposer({
           </ThreadPrimitive.If>
           <ThreadPrimitive.If running={false}>
             <ComposerPrimitive.Send
-              aria-label="Send message"
+              aria-label={t("Send message")}
               render={<Button type="submit" size="icon-sm" />}
             >
               <SendIcon />

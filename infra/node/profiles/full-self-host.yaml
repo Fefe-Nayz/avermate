@@ -7,7 +7,181 @@ storage:
   filesystemRoot: /data/node/objects
   maxObjectBytes: 536870912
   quotaBytes: 21474836480
-relay: {}
-models: { enabled: false, providerSecretRefs: [] }
-sandbox: { enabled: false, provider: disabled }
+relay:
+  # Single-host exception: signed/authenticated traffic stays on Compose's
+  # internal network. Every other profile requires HTTPS/WSS.
+  transport: local-compose
+conversations:
+  enabled: true
+  maximumBytes: 2147483648
+retrieval:
+  enabled: true
+  lexical: true
+  maximumIndexedBytes: 10737418240
+  embeddingEndpoint: http://tei-embedding:8080/v1
+  embeddingProvider: tei
+  embeddingModel: Alibaba-NLP/gte-multilingual-base
+  embeddingRevision: ${AVERMATE_NODE_PUBLIC_EMBEDDING_REVISION}
+  embeddingDimensions: [768]
+  rerankEndpoint: http://qwen3-reranker:8080
+  rerankProvider: qwen3
+  rerankModel: Qwen/Qwen3-Reranker-0.6B
+  rerankRevision: e61197ed45024b0ed8a2d74b80b4d909f1255473
+  rerankImageDigest: ${AVERMATE_NODE_PUBLIC_QWEN3_RERANKER_DIGEST}
+  rerankRuntimeRevision: transformers-4.57.3-sentence-transformers-5.4.0-school-fr-prompt-ef9a802c
+models:
+  enabled: true
+  gateway: litellm
+  endpoint: http://litellm:4000
+  providerSecretRefs: []
+  adminSecretRef: /run/secrets/litellm-admin-key
+  catalogue:
+    - id: selfhost/default
+      provider: litellm
+      displayName: Self-hosted default
+      modalities: [text]
+      capabilities:
+        tools: true
+        reasoningSummary: false
+        cachedUsage: true
+        structuredOutput: true
+      contextWindow: 131072
+    - id: selfhost/fallback
+      provider: litellm
+      displayName: Self-hosted reviewed fallback
+      modalities: [text]
+      capabilities:
+        tools: true
+        reasoningSummary: false
+        cachedUsage: true
+        structuredOutput: true
+      contextWindow: 131072
+    - id: tesseract-ocr
+      provider: tesseract+poppler
+      displayName: Tesseract OCR with Poppler
+      modalities: [image]
+      capabilities:
+        tools: false
+        reasoningSummary: false
+        cachedUsage: false
+        structuredOutput: false
+      contextWindow: unknown
+    - id: selfhost/whisper-large-v3-turbo-q5_0
+      provider: whisper.cpp
+      displayName: Whisper large v3 turbo Q5_0
+      modalities: [audio]
+      capabilities:
+        tools: false
+        reasoningSummary: false
+        cachedUsage: false
+        structuredOutput: false
+      contextWindow: unknown
+  modelRevisions:
+    selfhost/default: ${AVERMATE_NODE_PUBLIC_MODEL_REVISION}
+    selfhost/fallback: ${AVERMATE_NODE_PUBLIC_FALLBACK_MODEL_REVISION}
+    tesseract-ocr: ${AVERMATE_NODE_PUBLIC_OCR_MODEL_REVISION}
+    selfhost/whisper-large-v3-turbo-q5_0: ${AVERMATE_NODE_PUBLIC_TRANSCRIPTION_MODEL_REVISION}
+  virtualKeyTtlSeconds: 900
+  ownerBudgetMinor: 10000
+  ownerRequestsPerMinute: 60
+  ownerTokensPerMinute: 120000
+  fallbackChains:
+    - modelId: selfhost/default
+      fallbackModelIds: [selfhost/fallback]
+  currency: USD
+sandbox:
+  enabled: true
+  provider: opensandbox
+  endpoint: http://opensandbox:8080
+  evidenceEndpoint: ${AVERMATE_NODE_PUBLIC_SANDBOX_EVIDENCE_ENDPOINT}
+  isolation: gvisor
+  runtimeCheckpoints: true
+  runtimeRegion: local-compose
+  runtimeArchitecture: amd64
+  runtimeKind: opensandbox
+  runtimeVersion: ${AVERMATE_NODE_PUBLIC_SANDBOX_RUNTIME_VERSION}
+  runtimeCheckpointMaxTtlSeconds: 86400
+  hostPolicyDigest: ${AVERMATE_NODE_PUBLIC_SANDBOX_HOST_POLICY_DIGEST}
+  maxEvidenceAgeSeconds: 300
+  images:
+    - profileId: media
+      image: ${AVERMATE_NODE_PUBLIC_MEDIA_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_MEDIA_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: ocr
+      # The reviewed image contains Tesseract fra/eng data and Poppler tools.
+      image: ${AVERMATE_NODE_PUBLIC_OCR_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_OCR_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: speech-to-text
+      # The reviewed image owns whisper.cpp and the pinned
+      # /models/whisper-large-v3-turbo-q5_0.bin weights.
+      image: ${AVERMATE_NODE_PUBLIC_TRANSCRIPTION_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_TRANSCRIPTION_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: latex
+      image: ${AVERMATE_NODE_PUBLIC_LATEX_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_LATEX_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: slides
+      image: ${AVERMATE_NODE_PUBLIC_SLIDES_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_SLIDES_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: manim
+      image: ${AVERMATE_NODE_PUBLIC_MANIM_WORKER_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_MANIM_WORKER_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: opencode
+      image: ${AVERMATE_NODE_PUBLIC_OPENCODE_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_OPENCODE_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+    - profileId: openhands
+      image: ${AVERMATE_NODE_PUBLIC_OPENHANDS_IMAGE}
+      digest: ${AVERMATE_NODE_PUBLIC_OPENHANDS_DIGEST}
+      architecture: amd64
+      egress: { mode: none }
+jobs:
+  enabled: true
+  maximumConcurrent: 2
+  leaseTtlSeconds: 30
+workers:
+  opencode:
+    enabled: true
+    image: ${AVERMATE_NODE_PUBLIC_OPENCODE_IMAGE}
+    digest: ${AVERMATE_NODE_PUBLIC_OPENCODE_DIGEST}
+    license: MIT
+    maximumInputBytes: 67108864
+    maximumOutputBytes: 134217728
+    maximumCommands: 20
+    commandCatalogue:
+      - id: analyze
+        argv: [/opt/avermate/bin/opencode, run, --format, json, "Read and execute only the reviewed request in /workspace/input/request.json"]
+    network: denied
+    allowedHosts: []
+  openhands:
+    enabled: true
+    image: ${AVERMATE_NODE_PUBLIC_OPENHANDS_IMAGE}
+    digest: ${AVERMATE_NODE_PUBLIC_OPENHANDS_DIGEST}
+    license: MIT
+    maximumInputBytes: 67108864
+    maximumOutputBytes: 134217728
+    maximumCommands: 20
+    commandCatalogue:
+      - id: analyze
+        argv: [/opt/avermate/bin/openhands, --headless, --task, "Read and execute only the reviewed request in /workspace/input/request.json"]
+    network: denied
+    allowedHosts: []
+lifecycle:
+  backupDir: /data/node/backups
+  releaseVersion: ${AVERMATE_NODE_PUBLIC_RELEASE_VERSION}
+  offline: true
+  releaseManifestPath: /release/release-manifest.json
+  releaseSigningPublicKeyPath: /release/release-signing-public.pem
 telemetry: { enabled: false }

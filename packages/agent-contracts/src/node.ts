@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { modelDescriptorSchema } from "./model-gateway";
+import { sandboxProfileIdSchema } from "./sandbox";
 import { objectSha256Schema, ownedObjectRefSchema } from "./storage";
 
 export const AVERMATE_NODE_PROTOCOL = "avermate-node/2" as const;
@@ -27,6 +28,7 @@ export const nodeCapabilityIdSchema = z.enum([
   "sandbox",
   "renderers",
   "school-connectors",
+  "mcp",
 ]);
 export type NodeCapabilityId = z.infer<typeof nodeCapabilityIdSchema>;
 
@@ -53,6 +55,41 @@ export const nodeLimitSnapshotSchema = z.strictObject({
 export type NodeLimitSnapshot = z.infer<typeof nodeLimitSnapshotSchema>;
 
 const versionOneSchema = z.literal(1);
+export const nodeJobExecutionProfileSchema = z.strictObject({
+  /** Versioned job kind exactly as advertised in jobs.kinds. */
+  kind: z.string().min(3).max(128).regex(/^[a-z0-9.-]+@[1-9]\d*$/u),
+  sandboxProfileId: sandboxProfileIdSchema,
+  profileVersion: z.string().min(1).max(128),
+  imageDigest: digestSchema,
+  egressPolicyDigest: digestSchema,
+});
+export type NodeJobExecutionProfile = z.infer<
+  typeof nodeJobExecutionProfileSchema
+>;
+
+const nodeJobsCapabilitySchema = z
+  .strictObject({
+    version: versionOneSchema,
+    kinds: z.array(z.string().min(1).max(128)).max(256),
+    maxConcurrent: z.number().int().positive().max(10_000),
+    executionProfiles: z.array(nodeJobExecutionProfileSchema).max(256).optional(),
+  })
+  .superRefine((jobs, context) => {
+    const advertised = new Set(jobs.kinds);
+    const profiled = new Set<string>();
+    for (const [index, profile] of (jobs.executionProfiles ?? []).entries()) {
+      if (!advertised.has(profile.kind) || profiled.has(profile.kind)) {
+        context.addIssue({
+          code: "custom",
+          path: ["executionProfiles", index, "kind"],
+          message:
+            "execution profile kinds must be unique and present in jobs.kinds",
+        });
+      }
+      profiled.add(profile.kind);
+    }
+  });
+
 // Unknown capability names are preserved so a previous-minor Core can verify
 // the exact signed payload and then ignore capabilities it does not understand.
 export const nodeCapabilityFeaturesSchema = z.looseObject({
@@ -84,21 +121,32 @@ export const nodeCapabilityFeaturesSchema = z.looseObject({
           }),
         )
         .max(64),
+      providers: z
+        .array(
+          z.strictObject({
+            purpose: z.enum(["embedding", "rerank"]),
+            provider: z.string().min(1).max(128),
+            model: z.string().min(1).max(256),
+            modelRevision: z.string().min(1).max(256),
+            dimensions: z.number().int().positive().max(65_536).optional(),
+            imageDigest: digestSchema.optional(),
+            runtimeRevision: z.string().min(1).max(256).optional(),
+          }),
+        )
+        .max(16)
+        .optional(),
     })
     .optional(),
   models: z
     .strictObject({
       version: versionOneSchema,
       models: z.array(modelDescriptorSchema).max(256),
+      revisions: z
+        .record(z.string().min(1).max(256), z.string().min(1).max(256))
+        .optional(),
     })
     .optional(),
-  jobs: z
-    .strictObject({
-      version: versionOneSchema,
-      kinds: z.array(z.string().min(1).max(128)).max(256),
-      maxConcurrent: z.number().int().positive().max(10_000),
-    })
-    .optional(),
+  jobs: nodeJobsCapabilitySchema.optional(),
   sandbox: z
     .strictObject({
       version: versionOneSchema,
@@ -120,6 +168,15 @@ export const nodeCapabilityFeaturesSchema = z.looseObject({
     .strictObject({
       version: versionOneSchema,
       providers: z.array(z.string().min(1).max(128)).max(32),
+    })
+    .optional(),
+  mcp: z
+    .strictObject({
+      version: versionOneSchema,
+      transports: z.array(z.literal("streamable-http")).length(1),
+      maxCatalogueTools: z.number().int().positive().max(500),
+      maxRequestBytes: z.number().int().positive().max(256 * 1024),
+      maxResponseBytes: z.number().int().positive().max(4 * 1024 * 1024),
     })
     .optional(),
 });
@@ -181,6 +238,69 @@ export const nodePairingOfferSchema = z.strictObject({
 });
 export type NodePairingOffer = z.infer<typeof nodePairingOfferSchema>;
 
+export const unsignedNodePairingRegistrationProofSchema = z.strictObject({
+  protocol: z.literal(AVERMATE_NODE_PROTOCOL),
+  pairingAttemptId: boundedIdSchema,
+  nodeId: boundedIdSchema,
+  keyId: boundedIdSchema,
+  offerDigest: digestSchema,
+  manifestDigest: digestSchema,
+  nonce: boundedIdSchema,
+  issuedAt: timestampSchema,
+});
+export const nodePairingRegistrationProofSchema =
+  unsignedNodePairingRegistrationProofSchema.extend({ signature: signatureSchema });
+export const nodePairingRegistrationSchema = z.strictObject({
+  offer: nodePairingOfferSchema,
+  manifest: nodeCapabilityManifestV2Schema,
+  proof: nodePairingRegistrationProofSchema,
+});
+export type NodePairingRegistration = z.infer<
+  typeof nodePairingRegistrationSchema
+>;
+
+export const unsignedNodeCredentialDeliveryProofSchema = z.strictObject({
+  protocol: z.literal(AVERMATE_NODE_PROTOCOL),
+  action: z.enum(["deliver", "ack"]),
+  nodeId: boundedIdSchema,
+  pairingAttemptId: boundedIdSchema.optional(),
+  credentialIds: z.array(boundedIdSchema).max(8).default([]),
+  nonce: boundedIdSchema,
+  issuedAt: timestampSchema,
+});
+export const nodeCredentialDeliveryProofSchema =
+  unsignedNodeCredentialDeliveryProofSchema.extend({ signature: signatureSchema });
+export type NodeCredentialDeliveryProof = z.infer<
+  typeof nodeCredentialDeliveryProofSchema
+>;
+
+export const nodeCredentialDeliverySchema = z.strictObject({
+  nodeId: boundedIdSchema,
+  coreGrantSigningKey: z
+    .strictObject({
+      keyId: boundedIdSchema,
+      publicSigningKey: z.string().min(32).max(512),
+    })
+    .optional(),
+  credentials: z
+    .array(
+      z.strictObject({
+        id: boundedIdSchema,
+        kind: z.enum(["relay", "capability"]),
+        generation: z.number().int().positive(),
+        credential: z.string().min(32).max(8_192),
+        activeFrom: timestampSchema,
+        expiresAt: timestampSchema,
+        overlapUntil: timestampSchema.nullable(),
+      }),
+    )
+    .min(1)
+    .max(8),
+});
+export type NodeCredentialDelivery = z.infer<
+  typeof nodeCredentialDeliverySchema
+>;
+
 export const nodePairingBindingSchema = z.strictObject({
   pairingAttemptId: boundedIdSchema,
   nodeId: boundedIdSchema,
@@ -213,6 +333,12 @@ export const nodeCapabilityGrantClaimsSchema = z.strictObject({
   actorClientId: boundedIdSchema.optional(),
   jobId: boundedIdSchema,
   jti: boundedIdSchema,
+  /** Required by relay operations; omitted only by durable NodeJob envelopes. */
+  operation: z.string().min(1).max(128).optional(),
+  /** Canonical digest of the exact relay request, including config revision. */
+  requestDigest: digestSchema.optional(),
+  /** Signed revision fence for relay operations. */
+  configRevision: digestSchema.optional(),
   capabilities: z.array(z.string().min(1).max(128)).min(1).max(64),
   resources: z.array(ownedObjectRefSchema).max(256),
   limits: nodeGrantLimitsSchema,
@@ -260,10 +386,43 @@ export const unsignedNodeJobV1Schema = z.strictObject({
   }),
   kind: z.string().min(1).max(128),
   capabilityVersion: z.number().int().positive(),
+  /** Exact signed runtime fence selected by Core for sandbox-backed jobs. */
+  executionProfile: nodeJobExecutionProfileSchema.optional(),
   inputRefs: z.array(nodeArtifactRefSchema).max(256),
+  /**
+   * Complete object authority for the job. `inputRefs` stays the small set of
+   * entry manifests while this list also covers immutable objects referenced
+   * by those manifests. Older envelopes omit it and retain the exact
+   * inputRefs-only authority model.
+   */
+  resourceRefs: z.array(ownedObjectRefSchema).min(1).max(256).optional(),
   policyRef: boundedIdSchema,
   limits: nodeJobLimitsSchema,
   idempotencyKey: boundedIdSchema,
+}).superRefine((job, context) => {
+  if (!job.resourceRefs) return;
+  const resources = new Set(
+    job.resourceRefs.map((resource) =>
+      `${resource.ownerId}\0${resource.namespace}\0${resource.key}`,
+    ),
+  );
+  if (resources.size !== job.resourceRefs.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["resourceRefs"],
+      message: "job resource authority cannot contain duplicate objects",
+    });
+  }
+  for (const [index, artifact] of job.inputRefs.entries()) {
+    const key = `${artifact.object.ownerId}\0${artifact.object.namespace}\0${artifact.object.key}`;
+    if (!resources.has(key)) {
+      context.addIssue({
+        code: "custom",
+        path: ["inputRefs", index, "object"],
+        message: "every entry manifest must be included in resource authority",
+      });
+    }
+  }
 });
 export type UnsignedNodeJobV1 = z.infer<typeof unsignedNodeJobV1Schema>;
 
@@ -340,12 +499,102 @@ export const nodeControlFrameSchema = z.discriminatedUnion("type", [
     sequence: z.number().int().nonnegative(),
   }),
   z.strictObject({
+    type: z.literal("relay-ready"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    protocolMajor: z.literal(AVERMATE_NODE_PROTOCOL_MAJOR),
+    connectionEpoch: z.number().int().positive(),
+    credentialGeneration: z.number().int().positive(),
+    acceptedConfigRevision: digestSchema,
+    heartbeatIntervalMs: z.number().int().min(1_000).max(5 * 60_000),
+  }),
+  z.strictObject({
+    type: z.literal("heartbeat"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    sentAt: timestampSchema,
+  }),
+  z.strictObject({
+    type: z.literal("heartbeat-ack"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    sentAt: timestampSchema,
+    receivedAt: timestampSchema,
+  }),
+  z.strictObject({
+    type: z.literal("job-event"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    event: nodeJobEventSchema,
+  }),
+  z.strictObject({
+    type: z.literal("operation-request"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    operationId: boundedIdSchema,
+    capability: nodeCapabilityIdSchema,
+    capabilityVersion: z.number().int().positive(),
+    operation: z.string().min(1).max(128),
+    configRevision: digestSchema,
+    deadline: timestampSchema,
+    grant: signedNodeCapabilityGrantSchema,
+    payload: z.unknown(),
+  }),
+  z.strictObject({
+    type: z.literal("operation-result"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    operationId: boundedIdSchema,
+    sequence: z.number().int().positive(),
+    ok: z.boolean(),
+    payload: z.unknown().optional(),
+    safeErrorCode: z.string().min(1).max(128).optional(),
+    retryable: z.boolean().default(false),
+    terminal: z.boolean(),
+  }),
+  z.strictObject({
+    type: z.literal("operation-cancel"),
+    frameId: boundedIdSchema,
+    nodeId: boundedIdSchema,
+    connectionEpoch: z.number().int().positive(),
+    operationId: boundedIdSchema,
+    reason: z.string().min(1).max(512),
+  }),
+  z.strictObject({
     type: z.literal("shutdown"),
     frameId: boundedIdSchema,
     nodeId: boundedIdSchema,
     reason: z.string().min(1).max(512),
   }),
-]);
+]).superRefine((frame, context) => {
+  if (frame.type !== "operation-result") return;
+  if (frame.ok && frame.safeErrorCode !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["safeErrorCode"],
+      message: "successful operation results cannot contain an error code",
+    });
+  }
+  if (!frame.ok && !frame.safeErrorCode) {
+    context.addIssue({
+      code: "custom",
+      path: ["safeErrorCode"],
+      message: "failed operation results require a safe error code",
+    });
+  }
+  if (!frame.ok && !frame.terminal) {
+    context.addIssue({
+      code: "custom",
+      path: ["terminal"],
+      message: "failed operation results must be terminal",
+    });
+  }
+});
 export type NodeControlFrame = z.infer<typeof nodeControlFrameSchema>;
 
 export const nodeStreamFrameSchema = z.strictObject({
