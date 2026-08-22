@@ -24,6 +24,9 @@ const { persistSkolengoCredentials } = await import("./skolengo");
 const userId = "provider-cas-user";
 const yearId = "provider-cas-year";
 const now = new Date("2026-08-21T12:00:00.000Z");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 beforeAll(async () => {
   registerSharedTestDatabaseLifecycle(db.$client, {
@@ -58,11 +61,11 @@ beforeAll(async () => {
     endsAt: new Date("2027-07-01T00:00:00.000Z"),
     userId,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await db.delete(schema.users).where(eq(schema.users.id, userId));
-}, 30_000);
+}, databaseHookTimeout);
 
 describe("rotating provider credential CAS", () => {
   for (const [provider, persist] of [

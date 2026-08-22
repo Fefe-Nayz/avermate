@@ -10,6 +10,8 @@ import {
 import { MISTRAL_OCR_MODEL, runMistralOcr } from "../lib/ocr";
 import { fileAccessUrl } from "../lib/storage";
 import { readStorageObject } from "../lib/storage-backend";
+import { newId } from "../lib/id";
+import { canonicalJson, sha256 } from "../search/values";
 
 const payloadSchema = z.object({ documentId: z.string().min(1) }).strict();
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
@@ -47,6 +49,7 @@ export async function runOcrDocumentJob(
     fileAccessUrl?: typeof fileAccessUrl;
     readStorageObject?: typeof readStorageObject;
     now?: () => number;
+    operationId?: string;
     signal?: AbortSignal;
   } = {},
 ) {
@@ -134,7 +137,7 @@ export async function runOcrDocumentJob(
     const result = await (options.runOcr ?? runMistralOcr)(
       source.document.userId,
       { blob, name: source.document.title },
-      { signal: options.signal },
+      { operationId: options.operationId, signal: options.signal },
     );
     if (
       new TextEncoder().encode(result.markdown).byteLength > MAX_MARKDOWN_BYTES
@@ -147,17 +150,54 @@ export async function runOcrDocumentJob(
       providerFileId: result.providerFileId,
       durationMs: Math.max(0, clock() - startedAt),
     };
-    await db
-      .update(materialArtifacts)
-      .set({
-        status: "ready",
-        content: result.markdown,
-        metaVersion: 1,
-        metaJson: meta,
-        error: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(materialArtifacts.id, artifact.id));
+    const publishedAt = Math.floor(Date.now() / 1_000);
+    await db.$client.batch(
+      [
+        {
+          sql: `DELETE FROM material_artifact_segments WHERE artifactId = ?`,
+          args: [artifact.id],
+        },
+        ...(result.pages ?? []).map((page, ordinal) => ({
+          sql: `
+            INSERT INTO material_artifact_segments (
+              id, artifactId, ordinal, text, locatorJson, contentHash
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+          args: [
+            newId("maseg"),
+            artifact.id,
+            ordinal,
+            page.markdown,
+            canonicalJson({ kind: "pdf", page: page.providerIndex + 1 }),
+            sha256(page.markdown),
+          ],
+        })),
+        {
+          sql: `
+            UPDATE material_artifacts
+            SET status = 'ready', content = ?, metaVersion = 1,
+              metaJson = ?, error = NULL, updatedAt = ?
+            WHERE id = ? AND status = 'pending'
+          `,
+          args: [
+            result.markdown,
+            JSON.stringify(meta),
+            publishedAt,
+            artifact.id,
+          ],
+        },
+        {
+          sql: `
+            INSERT INTO material_artifact_segments (
+              id, artifactId, ordinal, text, locatorJson, contentHash
+            )
+            SELECT NULL, ?, 0, '', '{}', ? WHERE changes() = 0
+          `,
+          args: [artifact.id, sha256("")],
+        },
+      ],
+      "write",
+    );
     return {
       artifactId: artifact.id,
       pageCount: result.pageCount,

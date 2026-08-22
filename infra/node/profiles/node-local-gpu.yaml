@@ -1,0 +1,15 @@
+version: 1
+profile: node-local-gpu
+bind: { host: 127.0.0.1, port: 5188 }
+dataDir: /data/node
+storage:
+  driver: filesystem
+  filesystemRoot: /data/node/objects
+  maxObjectBytes: 536870912
+  quotaBytes: 21474836480
+relay: {}
+models:
+  enabled: true
+  providerSecretRefs: [/run/secrets/local-model.env]
+sandbox: { enabled: true, provider: opensandbox }
+telemetry: { enabled: false }

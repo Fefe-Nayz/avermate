@@ -1,10 +1,12 @@
 import {
   BookMarkedIcon,
+  BrainCircuitIcon,
   CalendarRangeIcon,
   ChartNoAxesCombinedIcon,
   CompassIcon,
   FunctionSquareIcon,
   FolderOpenIcon,
+  FolderKanbanIcon,
   InfoIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
@@ -66,6 +68,16 @@ export const NAV_ENTRIES: NavEntry[] = [
     href: "/materials",
     label: "Materials",
     icon: FolderOpenIcon,
+  },
+  {
+    href: "/projects",
+    label: "Study projects",
+    icon: FolderKanbanIcon,
+  },
+  {
+    href: "/assistant",
+    label: "Assistant",
+    icon: BrainCircuitIcon,
   },
   {
     href: "/goals",
@@ -649,6 +661,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         searchTerms: ["oauth resource metadata découverte ressource protégée"],
       },
       {
+        href: "/settings/integrations#custom-mcp",
+        label: "External MCP tools",
+        searchTerms: [
+          "custom mcp external server tools read only catalogue permissions data egress serveur outils lecture seule catalogue autorisations données",
+        ],
+      },
+      {
+        href: "/settings/integrations#custom-mcp",
+        label: "Data this tool may receive",
+        searchTerms: [
+          "prompt academic metadata snippets attachments content privacy request cours extraits pièces jointes confidentialité",
+        ],
+      },
+      {
         href: "/settings/integrations#oauth-clients",
         label: "OAuth clients and permissions",
         searchTerms: ["scopes consent access permissions autorisations"],
@@ -725,6 +751,8 @@ export const CUSTOMIZABLE_NAV_HREFS = [
   "/subjects",
   "/grades",
   "/materials",
+  "/projects",
+  "/assistant",
   "/goals",
   "/planning",
   "/insights",

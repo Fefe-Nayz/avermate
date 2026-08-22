@@ -23,6 +23,13 @@ import { newId } from "../lib/id";
 import { enqueueJob, NonRetryableJobError } from "../lib/jobs";
 import { deleteFile, deleteFilePreview, storeFile } from "../lib/storage";
 import { ingestYoutube, parseYoutubeUrl } from "../lib/youtube";
+import { canonicalJson, sha256 } from "../search/values";
+import { AdvancedIngestionError } from "../ingestion/errors";
+import { sourceIngestionRevisionStore } from "../ingestion/revision-store";
+import {
+  ExistingYoutubeCaptionProvider,
+  VideoSourceAdapter,
+} from "../ingestion/video-source-adapter";
 import { OCR_JOB_KIND } from "./ocr";
 import { enqueueMaterialPreview } from "./material-preview";
 
@@ -30,6 +37,7 @@ const payloadSchema = z
   .object({
     documentId: z.string().min(1),
     ingestionId: z.string().min(1).optional(),
+    advancedRevisionId: z.string().min(1).optional(),
   })
   .strict();
 const cleanupPayloadSchema = z
@@ -246,6 +254,7 @@ async function publishArticle(input: {
   markdown: string;
   meta: WebMarkdownMetaV1;
   documentMeta?: MaterialMetaV1;
+  segments?: Array<{ startMs: number; endMs: number; text: string }>;
 }) {
   const now = Math.floor(Date.now() / 1_000);
   const documentMeta = JSON.stringify({
@@ -255,6 +264,26 @@ async function publishArticle(input: {
   } satisfies MaterialMetaV1);
   await db.$client.batch(
     [
+      {
+        sql: `DELETE FROM "material_artifact_segments" WHERE "artifactId" = (SELECT "id" FROM "material_artifacts" WHERE "documentId" = ? AND "kind" = 'web-markdown' AND "runId" = ? LIMIT 1)`,
+        args: [input.documentId, input.runId],
+      },
+      ...(input.segments ?? []).map((segment, ordinal) => ({
+        sql: `INSERT INTO "material_artifact_segments" ("id", "artifactId", "ordinal", "text", "locatorJson", "contentHash") SELECT ?, "id", ?, ?, ?, ? FROM "material_artifacts" WHERE "documentId" = ? AND "kind" = 'web-markdown' AND "runId" = ? LIMIT 1`,
+        args: [
+          newId("maseg"),
+          ordinal,
+          segment.text,
+          canonicalJson({
+            kind: "video",
+            startMs: segment.startMs,
+            endMs: Math.max(segment.startMs + 1, segment.endMs),
+          }),
+          sha256(segment.text),
+          input.documentId,
+          input.runId,
+        ],
+      })),
       {
         sql: `UPDATE "material_documents" SET "title" = CASE WHEN json_extract("metaJson", '$.titleWasDerived') = 1 THEN ? ELSE "title" END, "metaVersion" = 1, "metaJson" = json_patch(COALESCE("metaJson", '{}'), json(?)), "updatedAt" = ? WHERE "id" = ? AND "userId" = ? AND "sourceType" = 'link' AND "sourceUrl" = ?`,
         args: [
@@ -410,6 +439,27 @@ export async function enqueueLinkIngestion(input: {
   userId: string;
   idempotencyKey?: string;
 }) {
+  const [document] = await db
+    .select({ sourceUrl: materialDocuments.sourceUrl })
+    .from(materialDocuments)
+    .where(
+      and(
+        eq(materialDocuments.id, input.documentId),
+        eq(materialDocuments.userId, input.userId),
+      ),
+    )
+    .limit(1);
+  if (!document?.sourceUrl) {
+    throw new Error("The link material is unavailable");
+  }
+  const advancedRevision = await sourceIngestionRevisionStore.create({
+    ownerId: input.userId,
+    documentId: input.documentId,
+    strategy: parseYoutubeUrl(document.sourceUrl) ? "youtube" : "static-html",
+    canonicalUrl: document.sourceUrl,
+    policyRef: "ingestion-public-url-policy.v1",
+    settings: { captionsFirst: true, dynamicFallback: "explicit-only" },
+  });
   const ingestionId = newId("ing");
   await db
     .insert(materialArtifacts)
@@ -437,13 +487,23 @@ export async function enqueueLinkIngestion(input: {
       },
     });
   try {
-    return await enqueueJob({
+    const job = await enqueueJob({
       kind: INGEST_LINK_JOB_KIND,
-      payload: { documentId: input.documentId, ingestionId },
+      payload: {
+        documentId: input.documentId,
+        ingestionId,
+        advancedRevisionId: advancedRevision.id,
+      },
       userId: input.userId,
       idempotencyKey: input.idempotencyKey ?? input.documentId,
       maxAttempts: 3,
     });
+    await sourceIngestionRevisionStore.queued({
+      ownerId: input.userId,
+      id: advancedRevision.id,
+      jobId: job.id,
+    });
+    return job;
   } catch (error) {
     await setArtifactFailure(
       input.documentId,
@@ -451,6 +511,9 @@ export async function enqueueLinkIngestion(input: {
       error,
       ingestionId,
     );
+    await sourceIngestionRevisionStore
+      .failed(input.userId, advancedRevision.id, error)
+      .catch(() => undefined);
     throw error;
   }
 }
@@ -461,6 +524,7 @@ export async function runIngestLinkJob(
     fetchArticle?: typeof fetchArticle;
     extractMarkdown?: typeof extractMarkdown;
     ingestYoutube?: typeof ingestYoutube;
+    videoSourceAdapter?: VideoSourceAdapter;
     storeFile?: typeof storeFile;
     deleteFile?: typeof deleteFile;
     enqueuePreview?: typeof enqueueMaterialPreview;
@@ -469,7 +533,8 @@ export async function runIngestLinkJob(
     afterPdfTransition?: () => Promise<void> | void;
   } = {},
 ) {
-  const { documentId, ingestionId } = payloadSchema.parse(payload);
+  const { documentId, ingestionId, advancedRevisionId } =
+    payloadSchema.parse(payload);
   const [document] = await db
     .select()
     .from(materialDocuments)
@@ -478,13 +543,32 @@ export async function runIngestLinkJob(
   if (!document) {
     throw new NonRetryableJobError("Link source document not found");
   }
+  if (advancedRevisionId) {
+    await sourceIngestionRevisionStore.running(
+      document.userId,
+      advancedRevisionId,
+    );
+  }
   if (document.sourceType !== "link" || !document.sourceUrl) {
     const converted = await convertedPdfResult(
       document.id,
       document.userId,
       options.enqueuePreview,
     );
-    if (converted) return converted;
+    if (converted) {
+      if (advancedRevisionId) {
+        if (!document.metaJson?.externalId) {
+          throw new Error("Converted PDF source URL is unavailable");
+        }
+        await sourceIngestionRevisionStore.ready({
+          ownerId: document.userId,
+          id: advancedRevisionId,
+          strategy: "pdf",
+          finalUrl: document.metaJson.externalId,
+        });
+      }
+      return converted;
+    }
     throw new NonRetryableJobError("Link source document not found");
   }
 
@@ -501,30 +585,58 @@ export async function runIngestLinkJob(
       options.enqueuePreview,
     );
     if (converted) return converted;
-    throw new NonRetryableJobError("Link ingestion was superseded");
+    throw new AdvancedIngestionError(
+      "upstream_changed",
+      "Link ingestion was superseded",
+      false,
+    );
   }
 
   let unownedStoredFileId: string | null = null;
   try {
     const capturedAt = options.now?.() ?? new Date();
     if (parseYoutubeUrl(document.sourceUrl)) {
-      const extracted = await (options.ingestYoutube ?? ingestYoutube)(
-        document.sourceUrl,
-        { now: capturedAt, signal: options.signal },
-      );
+      const adapter =
+        options.videoSourceAdapter ??
+        new VideoSourceAdapter(
+          new ExistingYoutubeCaptionProvider({
+            ingestYoutube: options.ingestYoutube,
+            now: () => capturedAt,
+          }),
+        );
+      const resolution = await adapter.ingest({
+        ownerId: document.userId,
+        threadId: `material:${document.id}`,
+        branchId: `material:${document.id}:ingestion`,
+        sourceVersionId: advancedRevisionId ?? document.id,
+        url: document.sourceUrl,
+        preferredLanguage: "fr",
+        requestAudioFallback: false,
+        idempotencyKey: ingestionId ?? document.id,
+        signal: options.signal,
+      });
+      if (resolution.status !== "ready") {
+        throw new IngestError("Video caption ingestion did not complete", true, {
+          reasonCode: "transcription_unavailable",
+        });
+      }
+      const extracted = resolution.source;
       const meta: WebMarkdownMetaV1 = {
-        finalUrl: extracted.finalUrl,
+        finalUrl: extracted.canonicalUrl,
         fetchedAt: capturedAt.toISOString(),
         title: extracted.title,
         byline: extracted.channel,
         site: "YouTube",
-        wordCount: extracted.wordCount,
-        truncated: extracted.truncated,
+        wordCount: resolution.wordCount,
+        truncated: resolution.truncated,
         kind: "youtube",
-        videoId: extracted.videoId,
+        videoId: extracted.mediaId,
         channel: extracted.channel ?? undefined,
-        durationSec: extracted.durationSec ?? undefined,
-        chapters: extracted.chapters,
+        durationSec:
+          extracted.durationMs === null
+            ? undefined
+            : extracted.durationMs / 1_000,
+        chapters: [...resolution.chapters],
       };
       await publishArticle({
         documentId: document.id,
@@ -532,21 +644,42 @@ export async function runIngestLinkJob(
         sourceUrl: document.sourceUrl,
         runId,
         title: extracted.title,
-        markdown: extracted.markdown,
+        markdown: resolution.markdown,
         meta,
+        segments: extracted.segments.map((segment) => ({ ...segment })),
         documentMeta: {
           kind: "youtube",
-          videoId: extracted.videoId,
+          videoId: extracted.mediaId,
           channel: extracted.channel ?? undefined,
-          durationSec: extracted.durationSec ?? undefined,
-          chapters: extracted.chapters,
+          durationSec:
+            extracted.durationMs === null
+              ? undefined
+              : extracted.durationMs / 1_000,
+          chapters: [...resolution.chapters],
         },
       });
+      if (advancedRevisionId) {
+        await sourceIngestionRevisionStore.ready({
+          ownerId: document.userId,
+          id: advancedRevisionId,
+          strategy: "youtube",
+          finalUrl: extracted.canonicalUrl,
+          language: extracted.selectedLanguage,
+          resultDigest: sha256(resolution.markdown),
+          diagnostics: {
+            adapter: "youtube-captions-first.v1",
+            videoId: extracted.mediaId,
+            segmentCount: extracted.segments.length,
+            selectedLanguage: extracted.selectedLanguage,
+            languageMismatch: extracted.languageMismatch,
+          },
+        });
+      }
       return {
         kind: "youtube" as const,
         artifactKind: "web-markdown" as const,
         title: extracted.title,
-        videoId: extracted.videoId,
+        videoId: extracted.mediaId,
       };
     }
 
@@ -584,6 +717,15 @@ export async function runIngestLinkJob(
       );
       if (!converted)
         throw new Error("The converted PDF could not be resolved");
+      if (advancedRevisionId) {
+        await sourceIngestionRevisionStore.ready({
+          ownerId: document.userId,
+          id: advancedRevisionId,
+          strategy: "pdf",
+          finalUrl: fetched.finalUrl,
+          diagnostics: { adapter: "static-http-pdf.v1" },
+        });
+      }
       return converted;
     }
 
@@ -591,6 +733,7 @@ export async function runIngestLinkJob(
       throw new IngestError(
         `Unsupported source content type: ${fetched.contentType || "unknown"}`,
         false,
+        { reasonCode: "unsupported_content" },
       );
     }
     const extractor = options.extractMarkdown ?? extractMarkdown;
@@ -608,7 +751,9 @@ export async function runIngestLinkJob(
     if (!extracted) {
       throw (
         staticExtractionError ??
-        new IngestError("The page has no extractable article content", false)
+        new IngestError("The page has no extractable article content", false, {
+          reasonCode: "dynamic_required",
+        })
       );
     }
 
@@ -633,12 +778,31 @@ export async function runIngestLinkJob(
       markdown: extracted.markdown,
       meta,
     });
+    if (advancedRevisionId) {
+      await sourceIngestionRevisionStore.ready({
+        ownerId: document.userId,
+        id: advancedRevisionId,
+        strategy: "static-html",
+        finalUrl: fetched.finalUrl,
+        resultDigest: sha256(extracted.markdown),
+        diagnostics: {
+          adapter: "readability-static-html.v1",
+          wordCount: extracted.wordCount,
+          truncated: extracted.truncated,
+        },
+      });
+    }
     return {
       kind: "article" as const,
       artifactKind: "web-markdown" as const,
       title: extracted.title,
     };
   } catch (error) {
+    if (advancedRevisionId) {
+      await sourceIngestionRevisionStore
+        .failed(document.userId, advancedRevisionId, error)
+        .catch(() => undefined);
+    }
     const state = await convertedPdfState(document.id, document.userId).catch(
       () => null,
     );
@@ -670,6 +834,9 @@ export async function runIngestLinkJob(
     if (converted) return converted;
     await setArtifactFailure(document.id, "web-markdown", error, runId);
     if (error instanceof IngestError && !error.retryable) {
+      throw new NonRetryableJobError(error.message, { cause: error });
+    }
+    if (error instanceof AdvancedIngestionError && !error.retryable) {
       throw new NonRetryableJobError(error.message, { cause: error });
     }
     throw error;

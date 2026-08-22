@@ -24,7 +24,9 @@ apps/server/src/routers apps/server/src/mcp apps/web/src packages/core`. Compare
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IN PROGRESS — core projects, corpus, lexical retrieval and citation
+  paths are implemented and targeted green; production placement and baseline
+  gates remain
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: HIGH
@@ -34,6 +36,32 @@ apps/server/src/routers apps/server/src/mcp apps/web/src packages/core`. Compare
 - **Category**: data model, search, materials, NotebookLM product loop
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The current tree contains the owned study-project/source/version/chunk model,
+FTS5 lexical retrieval, exact locator/citation resolution, inline-asset
+normalization, deterministic hybrid primitives, optional configured embedding
+and Qdrant adapters, and the project/API/Web surfaces. Core lexical, corpus and
+project suites are green in the current targeted verification wave:
+
+- `bun run --cwd apps/server test src/search`: **24 passed, 0 failed**;
+- `bun run --cwd apps/server test src/routers/projects.test.ts`: **4 passed, 0
+  failed**;
+- the Web `src` suite, which includes the project/search surface tests: **805
+  passed, 0 failed**.
+
+Plan 032 additionally proves the shared placement cells currently wired in this
+tree: 7 storage/corpus contract tests, 4 filesystem-provider tests, and 38
+Core/Node adapter, adoption, deletion, lexical, citation, corpus and
+conversation tests passed. Its last complete storage run also passed a
+disposable Garage 2.3 conformance cell and cleanup. Those results justify only
+the adapters exercised by that harness. They do **not** prove the missing
+production Core↔Node pairing/relay transports, a live optional embedding
+provider, or a fully deployed Node corpus migration path; see plan 032's own
+checkpoint.
+
+The final repository/migration/clean-clone gates remain inherited from plan 025. Do not promote this checkpoint to `DONE` from core lexical success alone.
 
 ## Scope
 
@@ -579,7 +607,7 @@ Commands:
 ```powershell
 bun run --cwd apps/server test src/search
 bun run --cwd apps/server test src/routers/projects.test.ts
-bun run --cwd apps/web test src/components/search
+bun run --cwd apps/web test src/components/projects src/components/assistant/assistant-citation-navigation.test.ts
 bun run db:migrate
 bun run format:check
 bun run lint
@@ -597,8 +625,11 @@ bun run build
   text, opens exact citations, and labels un-OCRed scans honestly.
 - Core corpus/search/citation implementations pass the shared placement suite;
   node support cannot be advertised until the same suite passes there.
-- Optional embeddings are versioned, pluggable and fully rebuildable.
-- Hybrid ranking is deterministic and evaluated against a committed corpus.
+- Embedding contracts are versioned, pluggable and fully rebuildable; their
+  required multimodal/provider implementations and reranking stage complete in
+  plan 036 rather than being left as an unimplemented option.
+- Hybrid ranking is deterministic and evaluated against a committed corpus; the
+  advanced lexical+dense+rerank production pipeline completes in plan 036.
 - Inline assets are private stored objects, never tracking hotlinks.
 - Index repair, cancellation, progress and GC are covered.
 - Tool and Web surfaces enforce the same ownership rules.

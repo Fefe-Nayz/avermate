@@ -1,8 +1,20 @@
 # Avermate
 
-Avermate is a grade tracker that explains the number, not just records it.
-Model a school year with real coefficients and nested subjects, see what each
-result changed, and work backwards from a target to the marks that can reach it.
+Avermate is a school-first learning workspace. Its implemented foundation
+combines a grade tracker that explains the number, planning, course materials,
+document workflows and an OAuth-protected MCP server. The longer-term product
+direction is a school-focused alternative to NotebookLM in which sources,
+grades, subjects, assignments and generated study artifacts share one owned
+workspace.
+
+That direction is not a claim that the complete assistant platform already
+ships. The current application includes an embedded read-only assistant and a
+versioned retrieval corpus, but it has no production-paired Avermate Node or
+released managed inference offer. A disabled technical shadow for
+provider-neutral managed accounting, storage and operations exists; it is not a
+paid or production service. Compatible external assistants can use the existing
+MCP surface, while plans 025–034 define the remaining hybrid, mutation, sandbox
+and managed release work.
 
 The repository contains an SSR-first web application, a native Expo client, a
 typed oRPC API with a protected MCP server, and one shared calculation engine.
@@ -20,6 +32,24 @@ typed oRPC API with a protected MCP server, and one shared calculation engine.
   streaks, and projected results.
 - Turns goals into concrete required marks and flags targets that are secured,
   at risk, achieved, or unreachable.
+- Separates personal tasks, an academic agenda and calendar/timetable views,
+  while projecting assignments, lessons, school events, holidays and workdays
+  through one Planning model.
+- Stores personal course files locally in development or through an
+  S3-compatible backend in production. Materials can be organized, tagged,
+  searched, previewed, trashed and restored without requiring Garage for local
+  development.
+- Displays PDFs and common study formats in the application, ingests readable
+  web pages and captioned YouTube sources, and runs durable OCR or media
+  transcription jobs with batch progress when a provider is configured.
+- Synchronizes course materials from Moodle, OneDrive and Google Drive, with
+  provider ownership and local deletion boundaries rather than opaque file
+  copies.
+- Creates revision documents, quizzes, mind maps, LaTeX/PDF, PPTX, Anki, HTML
+  and podcast artifacts through revision-fenced durable jobs.
+- Connects ÉcoleDirecte for planning and grades. PRONOTE and Skolengo adapters
+  are implemented for development and tests but remain excluded from
+  production distribution while the project licence is unresolved.
 - Provides 21 configurable dashboard metrics, an immersive year review,
   themes, and English/French localization.
 - Lets administrators publish versioned curriculum presets. Linked years can
@@ -86,8 +116,29 @@ confirmation and idempotent replay protection.
 For implementation details and measured request reductions, see
 [SSR and data loading](docs/ssr-data-loading.md),
 [chart architecture](docs/charts.md), [MCP](docs/mcp.md), and the
-[social privacy contract](docs/social-privacy.md). The current `main` →
-`rewrite` acceptance matrix lives in [feature parity](docs/feature-parity.md).
+[social privacy contract](docs/social-privacy.md). Materials and deployment are
+documented in [materials storage](docs/materials-storage.md) and
+[self-hosting](docs/self-hosting.md). The current `main` → `rewrite` acceptance
+matrix and the post-parity platform baseline live in
+[feature parity](docs/feature-parity.md).
+
+## Deployment shapes and current boundary
+
+| Shape                                  | Baseline status                                                                                                                                                        |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hosted academic core on `avermate.fr`  | Product deployment for accounts, years, grades and related academic data. This repository does not promise hosted file storage or hosted AI inference in the baseline. |
+| Complete self-host                     | Release candidate for Web, API, database, jobs and local/S3 storage; its final Compose/air-gap proof is still blocked by the current Docker test host.                 |
+| Hosted core plus a user-owned backend  | Plan 032 developer foundation. Routing/contracts/configurator/storage exist; production Core pairing/relay and advanced Node providers remain unwired.                 |
+| Optional managed AI and storage        | Plan 034 technical shadow: quotas/reservations, usage, storage isolation, deletion/export and operational fixtures exist, while charging and managed dispatch stay disabled and release-blocked. |
+| External assistant through MCP         | Implemented. The assistant runs elsewhere and receives only the OAuth scopes granted by the user.                                                                      |
+| Embedded branchable Avermate assistant | Read-only conversation/search/citation flows are implemented; mutating tools and real sandbox providers remain gated by their explicit policies and conformance.       |
+
+The current full self-host path and the developing hybrid Node are distinct. A
+self-hosted deployment owns the whole stack; the Node product will let a hosted
+academic account place selected storage, inference, search and execution
+capabilities on a user-owned service. See the
+[baseline candidate release notes](docs/releases/2026-08-baseline.md) for the
+verified scope and remaining release gates.
 
 ## Technology
 
@@ -114,7 +165,10 @@ packages/
 docs/
   charts.md
   feature-parity.md
+  materials-storage.md
   mcp.md
+  school-integrations.md
+  self-hosting.md
   social-privacy.md
   ssr-data-loading.md
 deploy.yml   Reference Traefik/Docker Compose deployment
@@ -335,16 +389,24 @@ before the write run.
 
 ## Project status
 
-The rewrite architecture is active development. The academic, SSR, chart,
-managed-preset, private-social, centralized-feedback, MCP, and Expo surfaces are
-implemented and covered by automated checks; real-device authentication,
-multi-touch, widget, theme, and assistive-technology smoke tests remain release
-gates. TanStack Charts is pinned to a pre-alpha release, so its interaction
-contract tests and manual browser/touch checks are required for upgrades.
-Production email, OAuth, uploads, durable database storage, domains, and reverse
-proxy are operator-configured rather than bundled services. Social rollout also
-requires an explicit administrator decision and jurisdiction-appropriate
-privacy review.
+The rewrite architecture is active development. Academic data, school-source
+projections, planning, materials/storage, cloud and Moodle ingestion, document
+artifacts, SSR, charts, managed presets, private social features, feedback,
+MCP, the embedded read-only assistant, retrieval/citation corpus, and existing
+Expo surfaces are implemented and covered by automated checks. Controlled
+sandbox, production hybrid Node pairing/relay and managed AI/storage still have
+explicit release blockers; their contracts or technical foundations are not a
+claim that those product modes ship.
+
+Real-device authentication, multi-touch, widget, theme and
+assistive-technology smoke tests remain release gates for the existing mobile
+application; plans 025–034 do not add a new React Native parity requirement.
+TanStack Charts is pinned to a pre-alpha release, so its interaction contract
+tests and manual browser/touch checks are required for upgrades. Production
+email, OAuth, uploads, durable database storage, domains and reverse proxy are
+operator-configured rather than bundled services. Social rollout also requires
+an explicit administrator decision and jurisdiction-appropriate privacy
+review.
 
 No project license is currently declared in this repository. Do not assume
 permission to redistribute the code until the maintainers add one.

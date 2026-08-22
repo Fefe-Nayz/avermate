@@ -2889,9 +2889,7 @@ function OutroSlide({
             </motion.div>
           </div>
 
-          <div className="mt-2 shrink-0 text-xs text-[#8b949e]">
-            avermate.fr
-          </div>
+          <div className="mt-2 shrink-0 text-xs text-[#8b949e]">Avermate</div>
         </motion.div>
       </div>
 

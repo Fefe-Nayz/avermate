@@ -21,6 +21,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 const planningTables = `
 CREATE TABLE IF NOT EXISTS planning_tasks (
@@ -213,13 +216,13 @@ beforeAll(async () => {
   apiB = createRouterClient(appRouter, {
     context: { headers: new Headers(), session: sessionFor(userB) },
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
     .delete(schema.users)
     .where(inArray(schema.users.id, [userA, userB]));
-}, 30_000);
+}, databaseHookTimeout);
 
 describe("planning v2", () => {
   test("keeps personal tasks separate and projects them into calendar and day", async () => {

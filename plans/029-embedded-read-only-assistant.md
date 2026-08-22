@@ -23,7 +23,8 @@ apps/web/src/components apps/web/src/lib`. Reconcile changes to the event,
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED, TARGETED SUITES GREEN — real-provider annotated
+  evaluation and baseline/rollout gates remain pending
 - **Priority**: P0
 - **Effort**: XL
 - **Risk**: HIGH
@@ -32,6 +33,39 @@ apps/web/src/components apps/web/src/lib`. Reconcile changes to the event,
 - **Category**: Web product, agent runtime, persistence, streaming
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The citation P0 now uses explicit, claim-local `[[cite:E#]]` markers. Retrieved
+evidence is assigned a run-local key, and finalization persists only the proof
+handles explicitly named next to a claim; it never promotes every proof handle
+in the context manifest into citations. Each normalized citation must target an
+actual persisted text part through `claimPartId`, match its citation part and
+belong to the same committed run manifest. The existing proof-handle schema and
+database trigger were sufficient, so this checkpoint adds no migration.
+
+Run `bun run verify:029:citations` for the protocol, persistence and deterministic
+quality gate. Its checked-in 40-answerable/20-unanswerable fixture validates the
+scorer and expected protocol behavior; a perfect fixture score is **not** a
+claim about a production model. Before rollout, separately record and pass the
+same faithfulness, citation-precision, claim-coverage and abstention thresholds
+against pinned real provider/model/version outputs with human-reviewed labels.
+
+Current targeted evidence is green:
+
+- `bun run verify:029:citations`: **18 passed, 0 failed**, followed by a green
+  server typecheck; the machine-readable deterministic fixture reported 40/40
+  supported claims, 40/40 precise/covered citations and 20/20 abstentions;
+- `bun run --cwd apps/server test src/assistant`: **39 passed, 0 failed** across
+  checkpoint recovery, DAG/finalization, proof membership, read-only runtime,
+  custom MCP and historical branching;
+- the Web `src` suite is **805 passed, 0 failed**;
+- Chromium `assistant-dictation.spec.ts` is **1 passed, 0 failed**.
+
+The deterministic fixture proves protocol and scorer behavior only. A pinned
+real provider/model/version run with human-reviewed annotations still has to
+meet the same thresholds before rollout. The final plan-025 global and
+clean-clone gates also remain outstanding, so this checkpoint is not `DONE`.
 
 ## Scope
 

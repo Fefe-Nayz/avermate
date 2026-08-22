@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
+  canRetryWithDynamicRendering,
+  ingestionReasonMessage,
   normalizedLinkIngestionStatus,
   safeWebSourceHref,
   webIngestionMeta,
@@ -72,5 +74,37 @@ describe("link ingestion presentation", () => {
     expect(safeWebSourceHref("javascript:alert(1)")).toBeNull()
     expect(safeWebSourceHref("ftp://example.edu/file")).toBeNull()
     expect(safeWebSourceHref("not a URL")).toBeNull()
+  })
+
+  test("offers dynamic rendering only for static extraction failures", () => {
+    expect(canRetryWithDynamicRendering("dynamic_required")).toBe(true)
+    expect(canRetryWithDynamicRendering("static_empty")).toBe(true)
+    expect(canRetryWithDynamicRendering("blocked_destination")).toBe(false)
+    expect(ingestionReasonMessage("placement_unavailable")).toContain("sandbox")
+  })
+
+  test("presents every stable advanced ingestion failure", () => {
+    for (const reason of [
+      "static_empty",
+      "dynamic_required",
+      "blocked_destination",
+      "authentication_required",
+      "content_too_large",
+      "publisher_denied",
+      "unsupported_content",
+      "captions_unavailable",
+      "permission_required",
+      "extractor_blocked",
+      "duration_limit",
+      "transcription_unavailable",
+      "upstream_changed",
+      "placement_unavailable",
+      "capability_disabled",
+      "request_limit",
+      "cancelled",
+      "internal_failure",
+    ] as const) {
+      expect(ingestionReasonMessage(reason)).toBeString()
+    }
   })
 })

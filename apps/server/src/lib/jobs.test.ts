@@ -19,6 +19,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 type AppRouter = typeof import("../routers").appRouter;
 type Api = ReturnType<
@@ -105,7 +108,7 @@ beforeAll(async () => {
   apiB = createRouterClient(appRouter, {
     context: { headers: new Headers(), session: sessionFor("jobs-user-b") },
   });
-});
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
@@ -116,7 +119,7 @@ afterAll(async () => {
         inArray(schema.jobs.kind, [...handlers.MAINTENANCE_JOB_KINDS]),
       ),
     );
-});
+}, databaseHookTimeout);
 
 describe("durable jobs", () => {
   test("enqueue, claim and complete preserve state and result", async () => {

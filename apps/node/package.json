@@ -1,0 +1,24 @@
+{
+  "name": "@avermate/node",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "bun build --target=bun --outdir=dist src/index.ts",
+    "check-types": "tsc --noEmit",
+    "test": "bun test --parallel=1 --timeout=30000",
+    "config:schema": "bun scripts/write-config-schema.ts",
+    "doctor": "bun src/cli.ts doctor"
+  },
+  "dependencies": {
+    "@avermate/agent-contracts": "workspace:*",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "typescript": "~6.0.3"
+  }
+}

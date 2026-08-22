@@ -6,6 +6,7 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import type { IngestionReasonCode } from "@avermate/agent-contracts";
 
 export const RESPONSE_MAX_BYTES = 5 * 1024 * 1024;
 export const MARKDOWN_MAX_BYTES = 2 * 1024 * 1024;
@@ -18,11 +19,14 @@ export class IngestError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { reasonCode?: IngestionReasonCode },
   ) {
     super(message, options);
     this.name = "IngestError";
+    this.reasonCode = options?.reasonCode ?? "internal_failure";
   }
+
+  readonly reasonCode: IngestionReasonCode;
 }
 
 export interface DnsAddress {
@@ -170,11 +174,17 @@ async function defaultResolve(hostname: string): Promise<DnsAddress[]> {
 async function awaitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal) {
   if (!signal) return promise;
   if (signal.aborted) {
-    throw new IngestError("The source page timed out", true);
+    throw new IngestError("The source page timed out", true, {
+      reasonCode: "internal_failure",
+    });
   }
   return new Promise<T>((resolve, reject) => {
     const abort = () =>
-      reject(new IngestError("The source page timed out", true));
+      reject(
+        new IngestError("The source page timed out", true, {
+          reasonCode: "internal_failure",
+        }),
+      );
     signal.addEventListener("abort", abort, { once: true });
     promise.then(resolve, reject).finally(() => {
       signal.removeEventListener("abort", abort);
@@ -194,23 +204,30 @@ interface PublicHttpTarget {
  */
 export function parseHttpSourceUrl(value: string | URL): URL {
   if (value.toString().length > SOURCE_URL_MAX_CHARS) {
-    throw new IngestError("The source URL is too long", false);
+    throw new IngestError("The source URL is too long", false, {
+      reasonCode: "content_too_large",
+    });
   }
 
   let url: URL;
   try {
     url = value instanceof URL ? new URL(value) : new URL(value);
   } catch {
-    throw new IngestError("The source URL is invalid", false);
+    throw new IngestError("The source URL is invalid", false, {
+      reasonCode: "unsupported_content",
+    });
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new IngestError(
       "Only public HTTP and HTTPS sources are supported",
       false,
+      { reasonCode: "blocked_destination" },
     );
   }
   if (url.username || url.password) {
-    throw new IngestError("Source URLs cannot contain credentials", false);
+    throw new IngestError("Source URLs cannot contain credentials", false, {
+      reasonCode: "blocked_destination",
+    });
   }
   return url;
 }
@@ -229,6 +246,7 @@ async function publicHttpTarget(
     throw new IngestError(
       "Private or local source addresses are not allowed",
       false,
+      { reasonCode: "blocked_destination" },
     );
   }
 
@@ -243,9 +261,13 @@ async function publicHttpTarget(
       );
     } catch {
       if (options.signal?.aborted) {
-        throw new IngestError("The source page timed out", true);
+        throw new IngestError("The source page timed out", true, {
+          reasonCode: "internal_failure",
+        });
       }
-      throw new IngestError("The source host could not be resolved", true);
+      throw new IngestError("The source host could not be resolved", true, {
+        reasonCode: "blocked_destination",
+      });
     }
   }
   if (
@@ -255,6 +277,7 @@ async function publicHttpTarget(
     throw new IngestError(
       "Private or local source addresses are not allowed",
       false,
+      { reasonCode: "blocked_destination" },
     );
   }
   return { url, addresses };
@@ -295,7 +318,9 @@ async function readBoundedBody(
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     controller.abort("Source body exceeded its byte budget");
-    throw new IngestError(tooLargeMessage, false);
+    throw new IngestError(tooLargeMessage, false, {
+      reasonCode: "content_too_large",
+    });
   }
   if (!response.body) return new Uint8Array();
 
@@ -309,7 +334,9 @@ async function readBoundedBody(
     if (length > maxBytes) {
       await reader.cancel("Source body exceeded its byte budget");
       controller.abort("Source body exceeded its byte budget");
-      throw new IngestError(tooLargeMessage, false);
+      throw new IngestError(tooLargeMessage, false, {
+        reasonCode: "content_too_large",
+      });
     }
     chunks.push(chunk.value);
   }
@@ -389,7 +416,10 @@ export async function fetchArticle(
         const message = controller.signal.aborted
           ? "The source page timed out"
           : "The source page is inaccessible";
-        throw new IngestError(message, true, { cause: lastFetchError });
+        throw new IngestError(message, true, {
+          cause: lastFetchError,
+          reasonCode: "internal_failure",
+        });
       }
 
       if (response.status >= 300 && response.status < 400) {
@@ -399,10 +429,13 @@ export async function fetchArticle(
           throw new IngestError(
             "The source returned an invalid redirect",
             false,
+            { reasonCode: "blocked_destination" },
           );
         }
         if (redirectCount === MAX_REDIRECTS) {
-          throw new IngestError("The source redirected too many times", false);
+          throw new IngestError("The source redirected too many times", false, {
+            reasonCode: "request_limit",
+          });
         }
         current = await publicHttpTarget(new URL(location, current.url), {
           resolve: options.resolve,
@@ -419,6 +452,14 @@ export async function fetchArticle(
         throw new IngestError(
           `The source page returned HTTP ${response.status}`,
           retryable,
+          {
+            reasonCode:
+              response.status === 401 || response.status === 403
+                ? "authentication_required"
+                : response.status === 429
+                  ? "publisher_denied"
+                  : "internal_failure",
+          },
         );
       }
 
@@ -435,7 +476,9 @@ export async function fetchArticle(
         contentType,
       };
     }
-    throw new IngestError("The source redirected too many times", false);
+    throw new IngestError("The source redirected too many times", false, {
+      reasonCode: "request_limit",
+    });
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
@@ -580,7 +623,16 @@ export function buildMarkdownDocument(
   };
 }
 
-function sanitizeDocumentUrls(document: Document, finalUrl: string) {
+function sanitizeDocumentUrls(
+  document: Document,
+  finalUrl: string,
+  options: {
+    imageHrefResolver?: (input: {
+      sourceUrl: string;
+      alt: string;
+    }) => string | null;
+  } = {},
+) {
   for (const anchor of document.querySelectorAll("a[href]")) {
     const value = anchor.getAttribute("href");
     if (!value || value.startsWith("#")) continue;
@@ -602,6 +654,19 @@ function sanitizeDocumentUrls(document: Document, finalUrl: string) {
       continue;
     }
     const alt = truncateCodePoints(image.getAttribute("alt") ?? "", 240);
+    const source = image.getAttribute("src");
+    const resolvedSource = source ? cleanHttpUrl(source, finalUrl) : null;
+    const ownedHref = resolvedSource
+      ? options.imageHrefResolver?.({ sourceUrl: resolvedSource, alt })
+      : null;
+    if (ownedHref && /^asset:\/\/[A-Za-z0-9_-]{1,256}$/u.test(ownedHref)) {
+      image.setAttribute("src", ownedHref);
+      image.removeAttribute("srcset");
+      image.removeAttribute("loading");
+      image.removeAttribute("referrerpolicy");
+      image.removeAttribute("crossorigin");
+      continue;
+    }
     image.replaceWith(document.createTextNode(alt ? `Image: ${alt}` : ""));
   }
   for (const resource of document.querySelectorAll(
@@ -617,17 +682,25 @@ function sanitizeDocumentUrls(document: Document, finalUrl: string) {
 export function extractMarkdown(
   html: string,
   finalUrl: string,
-  options: { now?: Date } = {},
+  options: {
+    now?: Date;
+    imageHrefResolver?: (input: {
+      sourceUrl: string;
+      alt: string;
+    }) => string | null;
+  } = {},
 ): ExtractedMarkdown {
   const { document } = parseHTML(html);
   const base = document.createElement("base");
   base.setAttribute("href", finalUrl);
   document.head?.prepend(base);
-  sanitizeDocumentUrls(document as unknown as Document, finalUrl);
+  sanitizeDocumentUrls(document as unknown as Document, finalUrl, options);
   const article = new Readability(document as unknown as Document).parse();
   const textContent = normalizeExtractedText(article?.textContent ?? "");
   if (!article?.content || textContent.length < MIN_ARTICLE_TEXT_CHARS) {
-    throw new IngestError("The page has no extractable article content", false);
+    throw new IngestError("The page has no extractable article content", false, {
+      reasonCode: "dynamic_required",
+    });
   }
 
   const converter = new TurndownService({

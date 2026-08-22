@@ -179,6 +179,7 @@ export async function runExportDocumentArtifactJob(
     storeFile?: typeof storeFile;
     deleteFile?: typeof deleteFile;
     textToSpeech?: typeof runMistralTextToSpeech;
+    operationId?: string;
     /** Durable queue attempt; attempts after a crashed lease may reclaim `running`. */
     attempt?: number;
   } = {},
@@ -278,7 +279,7 @@ export async function runExportDocumentArtifactJob(
       const speech = await (options.textToSpeech ?? runMistralTextToSpeech)(
         source.document.userId,
         narration,
-        { signal: options.signal },
+        { operationId: options.operationId, signal: options.signal },
       );
       content = Uint8Array.from(speech.audio).buffer as ArrayBuffer;
       extension = "mp3";

@@ -24,6 +24,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
@@ -59,11 +62,11 @@ beforeAll(async () => {
     userId,
   });
   worker = await import("./build-document-latex");
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database.delete(schema.users).where(eq(schema.users.id, userId));
-});
+}, databaseHookTimeout);
 
 async function buildFixture(input: {
   label: string;
@@ -210,6 +213,19 @@ describe("build.documentLatex worker", () => {
     expect(result).toEqual({
       status: "failed",
       log: "pdflatex is not available on this server; the sandboxed Tectonic worker supports xelatex",
+    });
+  });
+
+  test("fails closed instead of compiling untrusted LaTeX in the API process", async () => {
+    const result = await worker.compileDocumentLatex({
+      source: "\\documentclass{article}\\begin{document}test\\end{document}",
+      meta: { engine: "xelatex" },
+      timeoutMs: 100,
+      maxPages: 1,
+    });
+    expect(result).toEqual({
+      status: "failed",
+      log: "LaTeX compilation requires an enabled, attested sandbox latex profile; native API execution is disabled",
     });
   });
 

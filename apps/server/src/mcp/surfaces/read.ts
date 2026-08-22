@@ -1,16 +1,32 @@
 import { z } from "zod";
 import { cardSurfaceSchema } from "../../lib/card-storage";
 import {
-  call,
+  brokerMeta,
   id,
-  meta,
   type McpSurface,
   type McpSurfaceContext,
 } from "../shared";
+import { createFirstPartyToolBroker } from "../../tools/first-party";
+import { invokeBrokerFromMcp } from "../../tools/adapters/mcp";
+import { fileHandleService } from "../../routes/file-handles";
 
-function registerReadSurface({ server, api }: McpSurfaceContext): void {
-  const readMeta = meta("avermate:read");
+function registerReadSurface({
+  server,
+  api,
+  principal,
+}: McpSurfaceContext): void {
+  const readMeta = brokerMeta("avermate:read");
   const readOnly = { readOnlyHint: true };
+  const broker = createFirstPartyToolBroker(api, {
+    fileHandles: fileHandleService,
+    ownerId: principal.userId,
+  });
+  const invokeRead = (toolId: string, input: unknown) =>
+    invokeBrokerFromMcp({
+      broker,
+      principal,
+      invocation: { toolId, toolVersion: 1, input },
+    });
 
   server.registerTool(
     "account.get",
@@ -20,7 +36,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.profile.viewer()),
+    () => invokeRead("account.get", {}),
   );
   server.registerTool(
     "years.list",
@@ -30,7 +46,12 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.years.list()),
+    () =>
+      invokeBrokerFromMcp({
+        broker,
+        principal,
+        invocation: { toolId: "years.list", toolVersion: 1, input: {} },
+      }),
   );
   server.registerTool(
     "years.get",
@@ -40,7 +61,16 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.years.get({ yearId })),
+    ({ yearId }) =>
+      invokeBrokerFromMcp({
+        broker,
+        principal,
+        invocation: {
+          toolId: "years.get",
+          toolVersion: 1,
+          input: { yearId },
+        },
+      }),
   );
   server.registerTool(
     "years.contents",
@@ -51,7 +81,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.years.contents({ yearId })),
+    ({ yearId }) => invokeRead("years.contents", { yearId }),
   );
   server.registerTool(
     "periods.list",
@@ -61,7 +91,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.periods.list({ yearId })),
+    ({ yearId }) => invokeRead("periods.list", { yearId }),
   );
   server.registerTool(
     "subjects.list",
@@ -71,7 +101,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.subjects.list({ yearId })),
+    ({ yearId }) => invokeRead("subjects.list", { yearId }),
   );
   server.registerTool(
     "subjects.get",
@@ -81,7 +111,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ subjectId }) => call(() => api.subjects.get({ subjectId })),
+    ({ subjectId }) => invokeRead("subjects.get", { subjectId }),
   );
   server.registerTool(
     "subjects.delete_impact",
@@ -92,7 +122,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ subjectId }) => call(() => api.subjects.impact({ subjectId })),
+    ({ subjectId }) => invokeRead("subjects.delete_impact", { subjectId }),
   );
   server.registerTool(
     "grades.get",
@@ -102,18 +132,18 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ gradeId }) => call(() => api.grades.get({ gradeId })),
+    ({ gradeId }) => invokeRead("grades.get", { gradeId }),
   );
   server.registerTool(
     "grades.attachments",
     {
       description:
-        "List the labels, public URLs and safe file metadata for copies attached to an owned grade.",
+        "List safe copy metadata for an owned grade. File access uses short-lived opaque owner-bound handles; provider URLs are never returned.",
       inputSchema: z.object({ gradeId: id }),
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ gradeId }) => call(() => api.grades.attachments({ gradeId })),
+    ({ gradeId }) => invokeRead("grades.attachments", { gradeId }),
   );
   server.registerTool(
     "grades.recent",
@@ -126,7 +156,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId, limit }) => call(() => api.grades.recent({ yearId, limit })),
+    ({ yearId, limit }) => invokeRead("grades.recent", { yearId, limit }),
   );
   server.registerTool(
     "averages.list",
@@ -136,7 +166,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.averages.list({ yearId })),
+    ({ yearId }) => invokeRead("averages.list", { yearId }),
   );
   server.registerTool(
     "averages.get",
@@ -146,7 +176,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ averageId }) => call(() => api.averages.get({ averageId })),
+    ({ averageId }) => invokeRead("averages.get", { averageId }),
   );
   server.registerTool(
     "goals.list",
@@ -156,7 +186,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.goals.list({ yearId })),
+    ({ yearId }) => invokeRead("goals.list", { yearId }),
   );
   server.registerTool(
     "cards.list",
@@ -169,7 +199,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId, surface }) => call(() => api.cards.list({ yearId, surface })),
+    ({ yearId, surface }) => invokeRead("cards.list", { yearId, surface }),
   );
   server.registerTool(
     "preferences.get",
@@ -179,7 +209,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.preferences.get()),
+    () => invokeRead("preferences.get", {}),
   );
   server.registerTool(
     "announcements.active",
@@ -190,7 +220,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    (input) => call(() => api.announcements.active(input)),
+    (input) => invokeRead("announcements.active", input),
   );
   server.registerTool(
     "announcements.history",
@@ -201,18 +231,18 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    (input) => call(() => api.announcements.history(input)),
+    (input) => invokeRead("announcements.history", input),
   );
   server.registerTool(
     "analytics.snapshot",
     {
       description:
-        "Read the complete normalized dataset for one year, including subjects, grades, components, periods, averages, goals and cards.",
+        "Read a bounded normalized overview for one year. At most 500 recent grades are included; notes and grade components are excluded.",
       inputSchema: z.object({ yearId: id }),
       annotations: readOnly,
       _meta: readMeta,
     },
-    ({ yearId }) => call(() => api.snapshot.get({ yearId })),
+    ({ yearId }) => invokeRead("analytics.snapshot", { yearId }),
   );
   server.registerTool(
     "recap.status",
@@ -227,7 +257,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       _meta: readMeta,
     },
     ({ yearId, reviewKey }) =>
-      call(() => api.review.status({ yearId, reviewKey })),
+      invokeRead("recap.status", { yearId, reviewKey }),
   );
   server.registerTool(
     "recap.eligible_years",
@@ -237,7 +267,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.review.eligibleYears()),
+    () => invokeRead("recap.eligible_years", {}),
   );
   server.registerTool(
     "feedback.mine",
@@ -247,7 +277,7 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.feedback.mine()),
+    () => invokeRead("feedback.mine", {}),
   );
   server.registerTool(
     "account.export",
@@ -258,7 +288,24 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       annotations: readOnly,
       _meta: readMeta,
     },
-    () => call(() => api.preferences.exportData()),
+    () =>
+      Promise.resolve({
+        isError: true,
+        content: [
+          {
+            type: "text" as const,
+            text: "account.export is not available to agents",
+          },
+        ],
+        structuredContent: {
+          ok: false,
+          error: {
+            code: "AGENT_TOOL_NOT_AVAILABLE",
+            message: "account.export is not available to agents",
+            retryable: false,
+          },
+        },
+      }),
   );
   server.registerTool(
     "jobs.get",
@@ -270,20 +317,10 @@ function registerReadSurface({ server, api }: McpSurfaceContext): void {
       _meta: readMeta,
     },
     (input) =>
-      call(async () => {
-        const job = await api.jobs.get(input);
-        return {
-          id: job.id,
-          kind: job.kind,
-          status: job.status,
-          attempts: job.attempts,
-          maxAttempts: job.maxAttempts,
-          runAt: job.runAt,
-          result: job.result,
-          error: job.error,
-          createdAt: job.createdAt,
-          updatedAt: job.updatedAt,
-        };
+      invokeBrokerFromMcp({
+        broker,
+        principal,
+        invocation: { toolId: "jobs.get", toolVersion: 1, input },
       }),
   );
 }

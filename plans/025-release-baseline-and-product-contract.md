@@ -23,7 +23,9 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: BLOCKED — the technical candidate exists, but the final global and
+  clean-clone gates are pending and the maintainer has not selected a project
+  licence
 - **Priority**: P0
 - **Effort**: L
 - **Risk**: HIGH
@@ -33,6 +35,37 @@
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Planning baseline**: commit `37f0aff`; 277 tracked files modified and 293
   untracked paths at audit time
+
+### Implementation checkpoint (2026-08-22)
+
+The current implementation base is commit
+`dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64`, with the 025–034 work still in the
+shared working tree. On 2026-08-22 the exact working tree passed the root
+monorepo test gate: **7/7 packages**, including **783 server tests passed, 1
+external-network test skipped, 0 failed** and **805 Web tests passed, 0 failed**.
+`bun run check-types`, `bun run lint`, `bun run format:check`, the full release
+security guard and `git diff --check` also pass; the production build passed in
+the same verification wave. Migration history, prefix and representative legacy
+fixtures are green after cross-platform line-ending and test-budget hardening.
+
+This is strong implementation evidence, but `bun run lint:slop` remains red on
+pre-existing/global debt (including excluded React Native code), and
+`bun run verify:025:clean-clone` cannot validate the final commit until it
+exists. There is no release tag or final baseline SHA yet.
+
+The current tree contains **61** SQL migrations and **61** Drizzle snapshots,
+from `0000` through `0060`. It also modifies the already historical
+`0036_lively_shiver_man.sql`, rewrites snapshots `0004` through `0053`, and
+changes the migration journal. That is a release-integrity risk, not a harmless
+formatting change. Before plan 025 can pass, the maintainer must ratify this
+history rewrite with representative before/after upgrade fixtures and a
+documented compatibility decision, or replace it with an append-only migration
+strategy. A fresh-database pass alone is insufficient evidence.
+
+The repository still has no declared project licence. No implementation or
+test result can resolve that governance decision on the maintainer's behalf;
+the open-source claim and plan 025 remain blocked until the licence, notices and
+connector distribution matrix are committed.
 
 ## Outcome
 

@@ -13,11 +13,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check-types": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test src",
+    "test:e2e": "playwright test",
     "test:pyodide-security": "bun scripts/sync-pyodide-assets.ts && bun scripts/pyodide-security-smoke.ts",
     "audit:ui": "bunx @shadscan/cli"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.16",
+    "@avermate/agent-contracts": "workspace:*",
     "@avermate/core": "workspace:*",
     "@base-ui/react": "^1.7.0",
     "@better-auth/core": "1.7.1",
@@ -97,11 +100,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query-devtools": "^5.101.4",
     "@types/bun": "^1.4.0",
     "@types/canvas-confetti": "^1.9.0",
-    "@types/d3-shape": "3.1.8",
+    "@types/d3-shape": "3.2.0",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^26.2.0",
     "@types/react": "^19",

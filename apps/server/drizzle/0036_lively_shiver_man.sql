@@ -1,3 +1,69 @@
+CREATE TABLE IF NOT EXISTS `__better_auth_17_trusted_identity_mappings` (
+	`accountRowId` text PRIMARY KEY NOT NULL,
+	`providerId` text NOT NULL,
+	`userId` text NOT NULL,
+	`legacyAccountId` text NOT NULL,
+	`issuer` text NOT NULL,
+	`accountId` text NOT NULL
+);--> statement-breakpoint
+CREATE TEMP TABLE `__better_auth_17_microsoft_identity_guard` (
+	`ready` integer NOT NULL,
+	CONSTRAINT `better_auth_17_microsoft_oid_mapping_required` CHECK (`ready` = 1)
+);--> statement-breakpoint
+INSERT INTO `__better_auth_17_microsoft_identity_guard` (`ready`)
+SELECT 0
+FROM `accounts`
+WHERE `providerId` IN ('microsoft', 'microsoft-entra-id')
+	AND NOT EXISTS (
+		SELECT 1
+		FROM `__better_auth_17_trusted_identity_mappings` AS `mapping`
+		WHERE `mapping`.`accountRowId` = `accounts`.`id`
+			AND `mapping`.`providerId` = `accounts`.`providerId`
+			AND `mapping`.`userId` = `accounts`.`userId`
+			AND `mapping`.`legacyAccountId` = `accounts`.`accountId`
+			AND `mapping`.`issuer` LIKE 'https://login.microsoftonline.com/%/v2.0'
+			AND length(`mapping`.`accountId`) > 0
+	)
+LIMIT 1;--> statement-breakpoint
+DROP TABLE `__better_auth_17_microsoft_identity_guard`;--> statement-breakpoint
+CREATE TEMP TABLE `__better_auth_17_account_issuer_guard` (
+	`ready` integer NOT NULL,
+	CONSTRAINT `better_auth_17_trusted_account_issuer_mapping_required` CHECK (`ready` = 1)
+);--> statement-breakpoint
+INSERT INTO `__better_auth_17_account_issuer_guard` (`ready`)
+SELECT 0
+FROM `accounts`
+WHERE `providerId` NOT IN (
+	'credential', 'google', 'microsoft', 'microsoft-entra-id'
+)
+LIMIT 1;--> statement-breakpoint
+DROP TABLE `__better_auth_17_account_issuer_guard`;--> statement-breakpoint
+CREATE TEMP TABLE `__better_auth_17_oauth_client_guard` (
+	`ready` integer NOT NULL,
+	CONSTRAINT `better_auth_17_oauth_client_review_required` CHECK (`ready` = 1)
+);--> statement-breakpoint
+INSERT INTO `__better_auth_17_oauth_client_guard` (`ready`)
+SELECT 0
+FROM `oauth_clients`
+WHERE (`type` IS NOT NULL AND `type` NOT IN ('web', 'native'))
+	OR (`public` = true AND `tokenEndpointAuthMethod` IS NOT NULL AND `tokenEndpointAuthMethod` != 'none')
+	OR (`public` = false AND `tokenEndpointAuthMethod` = 'none')
+	OR (`public` IS NULL AND `tokenEndpointAuthMethod` IS NULL)
+	OR (`grantTypes` IS NOT NULL AND json_valid(`grantTypes`) = false)
+LIMIT 1;--> statement-breakpoint
+INSERT INTO `__better_auth_17_oauth_client_guard` (`ready`)
+SELECT 0
+FROM `oauth_clients`,
+	json_each(CASE WHEN json_valid(`grantTypes`) THEN `grantTypes` ELSE '[]' END)
+WHERE json_each.value = 'client_credentials'
+LIMIT 1;--> statement-breakpoint
+DROP TABLE `__better_auth_17_oauth_client_guard`;--> statement-breakpoint
+UPDATE `oauth_clients`
+SET `tokenEndpointAuthMethod` = CASE
+	WHEN `public` = true THEN 'none'
+	WHEN `tokenEndpointAuthMethod` IS NULL THEN 'client_secret_basic'
+	ELSE `tokenEndpointAuthMethod`
+END;--> statement-breakpoint
 ALTER TABLE `oauth_clients` RENAME COLUMN "type" TO "applicationType";--> statement-breakpoint
 CREATE TABLE `oauth_client_assertions` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -227,6 +293,9 @@ CREATE INDEX `subject_period_adjustments_subject_idx` ON `subject_period_adjustm
 CREATE INDEX `subject_period_adjustments_user_idx` ON `subject_period_adjustments` (`userId`);--> statement-breakpoint
 ALTER TABLE `oauth_clients` ADD `clientDiscoveryId` text;--> statement-breakpoint
 ALTER TABLE `oauth_clients` ADD `clientCredentialsScopes` text;--> statement-breakpoint
+UPDATE `oauth_clients`
+SET `clientCredentialsScopes` = '[]'
+WHERE `clientCredentialsScopes` IS NULL;--> statement-breakpoint
 ALTER TABLE `oauth_clients` ADD `backchannelLogoutUri` text;--> statement-breakpoint
 ALTER TABLE `oauth_clients` ADD `backchannelLogoutSessionRequired` integer;--> statement-breakpoint
 ALTER TABLE `oauth_clients` ADD `jwks` text;--> statement-breakpoint
@@ -269,11 +338,24 @@ INSERT INTO `__new_accounts` (
 )
 SELECT
 	`id`,
-	`accountId`,
+	CASE
+		WHEN `providerId` = 'credential' THEN `userId`
+		WHEN `providerId` IN ('microsoft', 'microsoft-entra-id') THEN (
+			SELECT `mapping`.`accountId`
+			FROM `__better_auth_17_trusted_identity_mappings` AS `mapping`
+			WHERE `mapping`.`accountRowId` = `accounts`.`id`
+		)
+		ELSE `accountId`
+	END,
 	`providerId`,
 	CASE
 		WHEN `providerId` = 'credential' THEN 'local:credential'
 		WHEN `providerId` = 'google' THEN 'https://accounts.google.com'
+		WHEN `providerId` IN ('microsoft', 'microsoft-entra-id') THEN (
+			SELECT `mapping`.`issuer`
+			FROM `__better_auth_17_trusted_identity_mappings` AS `mapping`
+			WHERE `mapping`.`accountRowId` = `accounts`.`id`
+		)
 		ELSE 'local:oauth:' || `providerId`
 	END,
 	`userId`,
@@ -287,6 +369,18 @@ SELECT
 	`createdAt`,
 	`updatedAt`
 FROM `accounts`;--> statement-breakpoint
+CREATE TEMP TABLE `__better_auth_17_account_collision_guard` (
+	`ready` integer NOT NULL,
+	CONSTRAINT `better_auth_17_account_identity_collision` CHECK (`ready` = 1)
+);--> statement-breakpoint
+INSERT INTO `__better_auth_17_account_collision_guard` (`ready`)
+SELECT 0
+FROM `__new_accounts`
+GROUP BY `issuer`, `accountId`
+HAVING COUNT(*) > 1
+LIMIT 1;--> statement-breakpoint
+DROP TABLE `__better_auth_17_account_collision_guard`;--> statement-breakpoint
+DROP TABLE `__better_auth_17_trusted_identity_mappings`;--> statement-breakpoint
 DROP TABLE `accounts`;--> statement-breakpoint
 ALTER TABLE `__new_accounts` RENAME TO `accounts`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint

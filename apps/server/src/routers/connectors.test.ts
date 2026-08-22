@@ -31,6 +31,9 @@ const yearB = "connector-year-b";
 const connectionId = "connector-owned-by-a";
 const googleConnectionId = "google-connector-owned-by-a";
 const now = new Date("2026-08-21T12:00:00.000Z");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 const publicLookup: ProviderLookup = async () => [
   { address: "8.8.8.8", family: 4 },
 ];
@@ -225,7 +228,7 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await db
@@ -241,7 +244,7 @@ afterAll(async () => {
     .delete(schema.contentConnections)
     .where(inArray(schema.contentConnections.userId, [userA, userB]));
   await db.delete(schema.users).where(inArray(schema.users.id, [userA, userB]));
-}, 30_000);
+}, databaseHookTimeout);
 
 describe("connectors ownership and disconnect lifecycle", () => {
   test("never resolves another user's connection for browse/scope/disconnect/sync", async () => {

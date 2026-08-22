@@ -1,0 +1,18 @@
+{
+  "name": "@avermate/sandbox-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "bun test",
+    "image:plan": "bun scripts/build-image.ts"
+  },
+  "dependencies": {
+    "@avermate/agent-contracts": "workspace:*",
+    "playwright-core": "1.62.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "typescript": "~6.0.3"
+  }
+}

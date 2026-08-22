@@ -6,7 +6,7 @@ import {
   type PlanningResourceKind,
   type PlanningSyncState,
 } from "@avermate/core/planning";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
@@ -180,11 +180,21 @@ export async function validatePlanningScope(input: {
   assertSameYear("Planning subject", input.yearId, subject.yearId);
 }
 
-export async function requirePlanningTask(userId: string, id: string) {
+export async function requirePlanningTask(
+  userId: string,
+  id: string,
+  options: { includeTrashed?: boolean } = {},
+) {
   const [row] = await db
     .select()
     .from(planningTasks)
-    .where(and(eq(planningTasks.id, id), eq(planningTasks.userId, userId)))
+    .where(
+      and(
+        eq(planningTasks.id, id),
+        eq(planningTasks.userId, userId),
+        options.includeTrashed ? undefined : isNull(planningTasks.trashedAt),
+      ),
+    )
     .limit(1);
   if (!row) notFound("Planning task");
   return row;

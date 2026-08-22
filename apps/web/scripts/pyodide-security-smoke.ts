@@ -231,7 +231,11 @@ try {
     }
   }
   await opened
-  const command = <T>(method: string, params: object = {}) =>
+  interface DevToolsCommandParams {
+    expression?: string
+    returnByValue?: boolean
+  }
+  const command = <T>(method: string, params: DevToolsCommandParams = {}) =>
     new Promise<T>((resolve, reject) => {
       const id = ++commandId
       pending.set(id, {

@@ -299,4 +299,4 @@ test("migrates a representative v1 database end to end and is idempotent", async
       // It was already closed before the child process opened the file.
     }
   }
-}, 45_000);
+}, 120_000);

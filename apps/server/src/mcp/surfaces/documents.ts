@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { studyDocumentMetaSchema } from "../../lib/study-document-content";
 import {
+  brokerMeta,
   call,
   can,
   id,
@@ -9,6 +10,8 @@ import {
   type McpSurface,
   type McpSurfaceContext,
 } from "../shared";
+import { createFirstPartyToolBroker } from "../../tools/first-party";
+import { invokeBrokerFromMcp } from "../../tools/adapters/mcp";
 
 const title = z.string().trim().min(1).max(160);
 const bodyMarkdown = z.string().max(512 * 1024);
@@ -26,8 +29,9 @@ function registerDocumentsSurface({
   codec,
 }: McpSurfaceContext): void {
   if (can(principal, "avermate:documents.read")) {
-    const readMeta = meta("avermate:documents.read");
+    const readMeta = brokerMeta("avermate:documents.read");
     const readOnly = { readOnlyHint: true };
+    const broker = createFirstPartyToolBroker(api);
 
     server.registerTool(
       "documents.list",
@@ -43,24 +47,34 @@ function registerDocumentsSurface({
         annotations: readOnly,
         _meta: readMeta,
       },
-      (input) => call(() => api.documents.list(input)),
+      (input) =>
+        invokeBrokerFromMcp({
+          broker,
+          principal,
+          invocation: { toolId: "documents.list", toolVersion: 1, input },
+        }),
     );
     server.registerTool(
       "documents.get",
       {
         description:
-          "Read one owned study document, including its reader-safe kind-specific body/metaJson, current revision, references and timestamps. Quiz metaJson contains prompts only; corrections are never returned by this read surface.",
+          "Read one owned study document with bounded reader-safe Markdown, current revision, references and timestamps. Quiz corrections are never returned.",
         inputSchema: z.object({ documentId: id }).strict(),
         annotations: readOnly,
         _meta: readMeta,
       },
-      (input) => call(() => api.documents.get(input)),
+      (input) =>
+        invokeBrokerFromMcp({
+          broker,
+          principal,
+          invocation: { toolId: "documents.get", toolVersion: 1, input },
+        }),
     );
     server.registerTool(
       "documents.downloadPptx",
       {
         description:
-          "Mint a short-lived download URL for one completed PPTX export owned by the connected user. Pass the original documentId and the revision returned by jobs.get after documents.exportPptx succeeds. The URL is generated only for this call and is never stored in the job result.",
+          "Compatibility-only PPTX download name. It remains fail-closed until its signed-URL result is replaced by Avermate's opaque file-handle exchange.",
         inputSchema: z
           .object({
             documentId: id,
@@ -70,7 +84,25 @@ function registerDocumentsSurface({
         annotations: readOnly,
         _meta: readMeta,
       },
-      (input) => call(() => api.documents.downloadPptx(input)),
+      () =>
+        Promise.resolve({
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: "documents.downloadPptx requires an opaque file-handle migration",
+            },
+          ],
+          structuredContent: {
+            ok: false,
+            error: {
+              code: "AGENT_TOOL_NOT_AVAILABLE",
+              message:
+                "documents.downloadPptx requires an opaque file-handle migration",
+              retryable: false,
+            },
+          },
+        }),
     );
   }
 

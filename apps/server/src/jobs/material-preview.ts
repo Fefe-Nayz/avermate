@@ -1,7 +1,5 @@
 import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { materialPreviewWorkerOutputV1Schema } from "@avermate/agent-contracts";
 import { z } from "zod";
 import { db } from "../db";
 import { files, type FilePreviewStatus } from "../db/schema";
@@ -15,12 +13,12 @@ import {
   FILE_CONSTRAINTS,
   storeFile,
 } from "../lib/storage";
+import { runConfiguredSandboxWorker } from "../sandbox/worker-services";
+import { sha256 } from "../search/values";
 
 export const MATERIAL_PREVIEW_JOB_KIND = "materials.preview";
 export const MATERIAL_PREVIEW_MAX_DIMENSION = 512;
 export const MATERIAL_PREVIEW_TIMEOUT_MS = 20_000;
-export const MATERIAL_PREVIEW_LOG_MAX_BYTES = 16 * 1024;
-
 const PREVIEW_MIME_TYPE = "image/webp";
 const supportedMimeTypes = new Set([
   "application/pdf",
@@ -42,12 +40,6 @@ export type MaterialPreviewRenderer = (
   input: MaterialPreviewRenderInput,
 ) => Promise<Uint8Array>;
 
-interface CommandResult {
-  exitCode: number;
-  stderr: string;
-  timedOut: boolean;
-}
-
 function safeError(error: unknown) {
   return (error instanceof Error ? error.message : String(error))
     .replace(/https?:\/\/\S+/gi, "the storage service")
@@ -63,167 +55,59 @@ function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-async function boundedText(
-  stream: ReadableStream<Uint8Array>,
-  maxBytes: number,
-) {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let retained = 0;
-  let text = "";
-  let truncated = false;
-  while (true) {
-    const part = await reader.read();
-    if (part.done) break;
-    const remaining = Math.max(0, maxBytes - retained);
-    if (remaining > 0) {
-      const kept = part.value.subarray(0, remaining);
-      retained += kept.byteLength;
-      text += decoder.decode(kept, { stream: true });
-    }
-    if (part.value.byteLength > remaining) truncated = true;
-  }
-  text += decoder.decode();
-  return `${text.trim()}${truncated ? "\n[output truncated]" : ""}`;
-}
-
-async function runCommand(
-  command: string[],
-  input: { cwd: string; timeoutMs: number; signal?: AbortSignal },
-): Promise<CommandResult> {
-  input.signal?.throwIfAborted();
-  const child = Bun.spawn(command, {
-    cwd: input.cwd,
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  let timedOut = false;
-  // Native converters process untrusted inputs. A timeout is a hard resource
-  // boundary, not a graceful-shutdown request.
-  const stop = () => child.kill("SIGKILL");
-  input.signal?.addEventListener("abort", stop, { once: true });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill("SIGKILL");
-  }, input.timeoutMs);
-  try {
-    const [exitCode, stderr] = await Promise.all([
-      child.exited,
-      boundedText(child.stderr, MATERIAL_PREVIEW_LOG_MAX_BYTES),
-    ]);
-    input.signal?.throwIfAborted();
-    return { exitCode, stderr, timedOut };
-  } finally {
-    clearTimeout(timer);
-    input.signal?.removeEventListener("abort", stop);
-  }
-}
-
-function sourceSuffix(mimeType: string) {
-  if (mimeType === "application/pdf") return ".pdf";
-  if (mimeType === "image/png") return ".png";
-  if (mimeType === "image/webp") return ".webp";
-  return ".jpg";
-}
-
-function commandFailure(tool: string, result: CommandResult): Error {
-  if (result.timedOut) {
-    return new Error(
-      `${tool} exceeded the ${MATERIAL_PREVIEW_TIMEOUT_MS} ms preview limit`,
-    );
-  }
-  return new Error(
-    result.stderr || `${tool} exited with status ${result.exitCode}`,
-  );
-}
-
-/** Render through bounded native tools; no source path comes from user input. */
+/**
+ * Production deployments must replace this seam with a broker-backed media
+ * worker. The API process never renders untrusted bytes with native tools.
+ */
 export async function renderMaterialPreview(
   input: MaterialPreviewRenderInput,
 ): Promise<Uint8Array> {
-  const directory = await mkdtemp(join(tmpdir(), "avermate-preview-"));
-  const deadline = Date.now() + input.timeoutMs;
-  const remaining = () => Math.max(1, deadline - Date.now());
-  try {
-    const sourcePath = join(directory, `source${sourceSuffix(input.mimeType)}`);
-    const rasterPath = join(directory, "first-page.png");
-    const outputPath = join(directory, "preview.webp");
-    await writeFile(sourcePath, input.bytes, { flag: "wx" });
+  input.signal?.throwIfAborted();
+  throw new NonRetryableJobError(
+    "SANDBOX_EXECUTION_REQUIRED:media: native API execution is disabled",
+  );
+}
 
-    let imagePath = sourcePath;
-    if (input.mimeType === "application/pdf") {
-      const pdfResult = await runCommand(
-        [
-          process.env.PDFTOPPM_BIN?.trim() || "pdftoppm",
-          "-f",
-          "1",
-          "-l",
-          "1",
-          "-singlefile",
-          "-scale-to",
-          String(MATERIAL_PREVIEW_MAX_DIMENSION),
-          "-png",
-          sourcePath,
-          join(directory, "first-page"),
-        ],
-        { cwd: directory, timeoutMs: remaining(), signal: input.signal },
-      );
-      if (pdfResult.exitCode !== 0 || pdfResult.timedOut) {
-        throw commandFailure("pdftoppm", pdfResult);
-      }
-      imagePath = rasterPath;
-    }
-
-    const magickResult = await runCommand(
-      [
-        process.env.MAGICK_BIN?.trim() || "magick",
-        "-limit",
-        "memory",
-        "128MiB",
-        "-limit",
-        "map",
-        "256MiB",
-        "-limit",
-        "disk",
-        "256MiB",
-        "-limit",
-        "time",
-        String(Math.max(1, Math.ceil(remaining() / 1_000))),
-        "-limit",
-        "thread",
-        "1",
-        imagePath,
-        "-auto-orient",
-        "-thumbnail",
-        `${MATERIAL_PREVIEW_MAX_DIMENSION}x${MATERIAL_PREVIEW_MAX_DIMENSION}>`,
-        "-strip",
-        "-quality",
-        "82",
-        outputPath,
-      ],
-      { cwd: directory, timeoutMs: remaining(), signal: input.signal },
-    );
-    if (magickResult.exitCode !== 0 || magickResult.timedOut) {
-      throw commandFailure("ImageMagick", magickResult);
-    }
-
-    const info = await stat(outputPath);
-    if (
-      info.size < 12 ||
-      info.size > FILE_CONSTRAINTS.preview.maxBytes
-    ) {
-      throw new Error("The generated preview has an invalid size");
-    }
-    const output = new Uint8Array(await readFile(outputPath));
-    const header = new TextDecoder("ascii").decode(output.subarray(0, 12));
-    if (!header.startsWith("RIFF") || !header.endsWith("WEBP")) {
-      throw new Error("The preview renderer did not produce a WebP image");
-    }
-    return output;
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+async function renderMaterialPreviewInSandbox(
+  input: MaterialPreviewRenderInput & {
+    ownerId: string;
+    fileId: string;
+    operationId: string;
+  },
+) {
+  const digest = `sha256:${sha256(input.bytes)}`;
+  const execution = await runConfiguredSandboxWorker({
+    workerId: "material-preview.v1",
+    ownerId: input.ownerId,
+    threadId: input.fileId,
+    branchId: `${input.fileId}-preview-v1`,
+    operationId: input.operationId,
+    manifest: {
+      schemaVersion: 1,
+      worker: "material-preview.v1",
+      source: {
+        path: "input/source",
+        digest,
+        byteSize: input.bytes.byteLength,
+        mimeType: input.mimeType,
+      },
+      maximumDimension: MATERIAL_PREVIEW_MAX_DIMENSION,
+    },
+    inputFiles: [
+      {
+        relativePath: "input/source",
+        bytes: input.bytes,
+        digest,
+        mimeType: input.mimeType,
+      },
+    ],
+    maximumReturnBytes: FILE_CONSTRAINTS.preview.maxBytes + 1024 * 1024,
+    signal: input.signal,
+  });
+  const output = materialPreviewWorkerOutputV1Schema.parse(execution.output);
+  const preview = execution.files.get(output.preview.path);
+  if (!preview) throw new Error("SANDBOX_PREVIEW_OUTPUT_MISSING");
+  return preview;
 }
 
 function managedProvider(value: string): ManagedStorageProvider | null {
@@ -358,6 +242,7 @@ export async function runMaterialPreviewJob(
     /** Current durable queue attempt; omitted direct calls are terminal. */
     attempt?: number;
     maxAttempts?: number;
+    operationId?: string;
   } = {},
 ) {
   const parsed = payloadSchema.safeParse(payload);
@@ -452,12 +337,20 @@ export async function runMaterialPreviewJob(
         maxBytes: FILE_CONSTRAINTS["course-material"].maxBytes,
       },
     );
-    const rendered = await (options.renderPreview ?? renderMaterialPreview)({
+    const renderInput = {
       bytes: new Uint8Array(buffer),
       mimeType: source.mimeType.toLowerCase(),
       signal: options.signal,
       timeoutMs: MATERIAL_PREVIEW_TIMEOUT_MS,
-    });
+    };
+    const rendered = options.renderPreview
+      ? await options.renderPreview(renderInput)
+      : await renderMaterialPreviewInSandbox({
+          ...renderInput,
+          ownerId: source.userId,
+          fileId: source.id,
+          operationId: options.operationId ?? source.id,
+        });
     if (
       rendered.byteLength < 12 ||
       rendered.byteLength > FILE_CONSTRAINTS.preview.maxBytes
@@ -554,6 +447,10 @@ export async function runMaterialPreviewJob(
       options.signal.throwIfAborted();
     }
     const message = safeError(error) || "Preview generation failed";
+    if (error instanceof NonRetryableJobError) {
+      await setPreviewStatus(source, "failed");
+      return { fileId: source.id, status: "failed" as const, error: message };
+    }
     const attempt = options.attempt ?? 1;
     const maxAttempts = options.maxAttempts ?? 1;
     if (attempt < maxAttempts) {

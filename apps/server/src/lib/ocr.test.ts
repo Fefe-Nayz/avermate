@@ -48,6 +48,10 @@ describe("Mistral OCR client", () => {
         "<!-- Page 0 -->\n# Chapter\n\n<!-- Page 1 -->\nEquation $x=1$.",
       pageCount: 2,
       providerFileId: "provider-file-1",
+      pages: [
+        { providerIndex: 0, markdown: "# Chapter" },
+        { providerIndex: 1, markdown: "Equation $x=1$." },
+      ],
     });
     expect(calls).toHaveLength(2);
     expect(calls[0]?.url).toEndWith("/v1/files");

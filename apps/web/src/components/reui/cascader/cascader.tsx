@@ -173,20 +173,26 @@ function useControllable<V>(
 /*                              Shallow stability                             */
 /* -------------------------------------------------------------------------- */
 
-function shallowEqualRecords(a: object, b: object): boolean {
-  const left = a as Record<string, unknown>
-  const right = b as Record<string, unknown>
-  const keys = Object.keys(left)
-  if (keys.length !== Object.keys(right).length) return false
-  for (const key of keys) {
-    if (!Object.is(left[key], right[key])) return false
+type CascaderShallowRecord = Partial<CascaderLabels> | CascaderActionItem
+
+function shallowEqualRecords<T extends CascaderShallowRecord>(
+  a: T,
+  b: T
+): boolean {
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  for (const rawKey of keys) {
+    // SAFETY: Object.keys returned this own enumerable key from `a`; `a` and
+    // `b` share the same generic record contract for the comparison.
+    const key = rawKey as keyof T
+    if (!Object.is(a[key], b[key])) return false
   }
   return true
 }
 
 function shallowEqualItemLists(
-  a: readonly object[],
-  b: readonly object[]
+  a: readonly CascaderActionItem[],
+  b: readonly CascaderActionItem[]
 ): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i += 1) {
@@ -2855,11 +2861,12 @@ function CascaderEmpty({
       data-slot="cascader-empty"
       data-state={state?.error ? "error" : state?.loading ? "loading" : "empty"}
       className={cn(EMPTY_CLASS, className)}
-      /* The ONE place an explicit `undefined` is right: it DELETES Base UI's
-         live region, which is wanted. `CascaderStatus` is the single one, and
-         leaving this one spoke "No results found." on every level swap, which
-         renders one deliberately empty frame to reset the highlight. */
-      role={undefined}
+      /* Neutralize Base UI's default status role: `CascaderStatus` is the
+         single live region. Leaving this as a status spoke "No results found."
+         on every level swap, including the deliberately empty highlight-reset
+         frame. Presentation is valid here because the retry remains a real
+         descendant button with its own semantics. */
+      role="presentation"
       aria-live={undefined}
       aria-atomic={undefined}
       {...props}

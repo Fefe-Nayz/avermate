@@ -24,6 +24,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
@@ -51,11 +54,11 @@ beforeAll(async () => {
     banned: false,
   });
   worker = await import("./material-preview");
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database.delete(schema.users).where(eq(schema.users.id, userId));
-});
+}, databaseHookTimeout);
 
 async function sourceFile(label: string, mimeType: string) {
   const [file] = await database
@@ -80,6 +83,19 @@ const webp = Uint8Array.from([
 ]);
 
 describe("materials.preview worker", () => {
+  test("fails closed instead of running native preview tools in the API process", async () => {
+    await expect(
+      worker.renderMaterialPreview({
+        bytes: Uint8Array.from([1, 2, 3]),
+        mimeType: "image/png",
+        timeoutMs: 100,
+      }),
+    ).rejects.toMatchObject({
+      name: "NonRetryableJobError",
+      message: expect.stringContaining("SANDBOX_EXECUTION_REQUIRED:media"),
+    });
+  });
+
   test("rejects malformed payloads without retrying unsafe input", async () => {
     await expect(worker.runMaterialPreviewJob({ fileId: "x", extra: true }))
       .rejects.toMatchObject({ name: "NonRetryableJobError" });

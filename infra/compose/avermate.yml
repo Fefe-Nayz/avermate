@@ -1,0 +1,209 @@
+name: avermate
+
+x-node-base: &node-base
+  build:
+    context: ../..
+    dockerfile: apps/node/Dockerfile
+  image: avermate-node:local
+  init: true
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5188/health"]
+    interval: 5s
+    timeout: 2s
+    retries: 12
+  volumes:
+    - node-data:/data
+
+services:
+  node-dev-zero:
+    <<: *node-base
+    profiles: [dev-zero]
+
+  node-lite:
+    <<: *node-base
+    profiles: [node-lite]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/node-lite.yaml:/config/avermate-node.yaml:ro
+
+  # The S3 daemon path is proven against the disposable Garage conformance
+  # harness. Its manifest still advertises only the operations it implements.
+  node-storage:
+    <<: *node-base
+    profiles: [node-storage]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/node-storage.yaml:/config/avermate-node.yaml:ro
+    secrets:
+      - source: garage-s3
+        target: garage-s3.env
+    depends_on:
+      garage:
+        condition: service_healthy
+
+  garage:
+    profiles: [node-storage]
+    image: dxflrs/garage:v2.3.0
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-}
+      GARAGE_DEFAULT_ACCESS_KEY: ${GARAGE_ACCESS_KEY_ID:-}
+      GARAGE_DEFAULT_SECRET_KEY: ${GARAGE_SECRET_ACCESS_KEY:-}
+      GARAGE_DEFAULT_BUCKET: avermate
+    ports:
+      - "127.0.0.1:${GARAGE_S3_PORT:-3900}:3900"
+    volumes:
+      - ../garage/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  node-creator:
+    <<: *node-base
+    profiles: [node-creator]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/node-creator.yaml:/config/avermate-node.yaml:ro
+
+  node-local-gpu:
+    <<: *node-base
+    profiles: [node-local-gpu]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/node-local-gpu.yaml:/config/avermate-node.yaml:ro
+
+  ollama:
+    profiles: [node-local-gpu]
+    image: ollama/ollama:0.11.4
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  node-observable:
+    <<: *node-base
+    profiles: [node-observable]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/node-observable.yaml:/config/avermate-node.yaml:ro
+
+  node-full:
+    <<: *node-base
+    profiles: [full-self-host]
+    environment:
+      AVERMATE_NODE_CONFIG: /config/avermate-node.yaml
+    volumes:
+      - node-data:/data
+      - ../node/profiles/full-self-host.yaml:/config/avermate-node.yaml:ro
+    dns:
+      - 127.0.0.1
+    networks:
+      - full-self-host-internal
+
+  api:
+    profiles: [full-self-host]
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    image: avermate-api:local
+    environment:
+      DATABASE_URL: file:/data/avermate.db
+      BETTER_AUTH_URL: ${AVERMATE_API_ORIGIN:-http://localhost:5000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      MCP_REQUEST_STATE_SECRET: ${MCP_REQUEST_STATE_SECRET:-}
+      CLIENT_URL: ${AVERMATE_PUBLIC_ORIGIN:-http://localhost:3000}
+      PORT: "5000"
+      NODE_ENV: production
+      AVERMATE_DEPLOYMENT_MODE: full-self-host
+      MANAGED_ACCOUNTING_MODE: shadow
+      MANAGED_ADAPTERS_ENABLED: "false"
+      MANAGED_REGION: local
+      STORAGE_DRIVER: local
+      LOCAL_UPLOAD_DIR: /data/uploads
+      DISABLE_EMAIL: "true"
+      DISABLE_JOBS: "false"
+      DISABLE_OCR: "true"
+      DISABLE_TRANSCRIPTION: "true"
+      DISABLE_TTS: "true"
+      TECTONIC_ONLY_CACHED: "true"
+      HTTP_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      HTTPS_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      ALL_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      NO_PROXY: api,web,node-full,localhost,127.0.0.1
+    ports:
+      - "127.0.0.1:${PLAN032_API_PORT:-5000}:5000"
+    # Docker's embedded resolver still resolves Compose service names, while
+    # external names are forwarded to this intentionally unreachable resolver.
+    dns:
+      - 127.0.0.1
+    networks:
+      - full-self-host-internal
+    volumes:
+      - core-data:/data
+      - tectonic-cache:/var/cache/avermate/tectonic
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  web:
+    profiles: [full-self-host]
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${AVERMATE_API_ORIGIN:-http://127.0.0.1:5000}
+        NEXT_PUBLIC_APP_URL: ${AVERMATE_PUBLIC_ORIGIN:-http://127.0.0.1:3000}
+    image: avermate-web:local
+    environment:
+      NEXT_PUBLIC_API_URL: ${AVERMATE_API_ORIGIN:-http://localhost:5000}
+      NEXT_PUBLIC_APP_URL: ${AVERMATE_PUBLIC_ORIGIN:-http://localhost:3000}
+      API_INTERNAL_URL: http://api:5000
+      HTTP_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      HTTPS_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      ALL_PROXY: ${PLAN032_EGRESS_PROXY:-}
+      NO_PROXY: api,web,node-full,localhost,127.0.0.1
+    ports:
+      - "127.0.0.1:${PLAN032_WEB_PORT:-3000}:3000"
+    dns:
+      - 127.0.0.1
+    networks:
+      - full-self-host-internal
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  node-data:
+  core-data:
+  garage-meta:
+  garage-data:
+  ollama-data:
+  tectonic-cache:
+
+secrets:
+  garage-s3:
+    file: ${GARAGE_S3_SECRET_FILE:-../node/secrets/garage-s3.env}
+
+networks:
+  full-self-host-internal:
+    internal: true

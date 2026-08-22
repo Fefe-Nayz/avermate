@@ -26,7 +26,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 import { DocumentMarkdown } from "@/components/documents/document-markdown"
-import { safeWebSourceHref } from "./link-ingestion-model"
+import {
+  canRetryWithDynamicRendering,
+  ingestionReasonMessage,
+  safeWebSourceHref,
+} from "./link-ingestion-model"
 import { OnlyOfficeEditor } from "./onlyoffice-editor"
 import { isOfficeEditable, officeEditorKind } from "./onlyoffice-model"
 import { useOfficeSession } from "./use-office-session"
@@ -107,6 +111,12 @@ export function MaterialViewer({
     refetchInterval: (query) =>
       query.state.data?.status === "pending" ? 1_500 : false,
   })
+  const ingestionRevisions = useQuery({
+    ...orpc.mediaStudio.ingestionRevisions.queryOptions({
+      input: { documentId },
+    }),
+    enabled: row.document.sourceType === "link",
+  })
   const transcribe = useMutation({
     ...orpc.materials.documents.transcribe.mutationOptions(),
     onSuccess: async (result) => {
@@ -142,6 +152,21 @@ export function MaterialViewer({
       toast.error(error.message || t("The link could not be imported."))
     },
   })
+  const retryDynamic = useMutation({
+    ...orpc.mediaStudio.retryDynamic.mutationOptions(),
+    onSuccess: async (result) => {
+      haptic(result.status === "failed" ? "error" : "success")
+      await ingestionRevisions.refetch()
+      const message = ingestionReasonMessage(result.reasonCode)
+      if (result.status === "failed") {
+        toast.error(message ?? result.message)
+      }
+    },
+    onError: (error: Error) => {
+      haptic("error")
+      toast.error(error.message || t("Dynamic ingestion could not be started."))
+    },
+  })
   const download = useMutation({
     ...orpc.materials.documents.download.mutationOptions(),
     onError: (error: Error) => {
@@ -172,6 +197,9 @@ export function MaterialViewer({
     row.document.sourceType === "link"
       ? safeWebSourceHref(row.document.sourceUrl)
       : null
+  const latestIngestionRevision = ingestionRevisions.data?.[0] ?? null
+  const advancedReason = latestIngestionRevision?.reasonCode ?? null
+  const advancedReasonText = ingestionReasonMessage(advancedReason)
   const canOpenUploadedFile =
     row.document.sourceType === "file" &&
     (row.file?.status === "stored" || row.file?.status === "ready")
@@ -624,13 +652,27 @@ export function MaterialViewer({
                 </div>
               </div>
             ) : transcriptStatus === "failed" ? (
-              <p
+              <div
                 role="alert"
-                className="rounded-lg border p-4 text-sm text-destructive"
+                className="space-y-3 rounded-lg border p-4 text-sm text-destructive"
               >
-                {transcript.data?.error ||
-                  t("Transcription failed. Try again.")}
-              </p>
+                <p>
+                  {advancedReasonText ||
+                    transcript.data?.error ||
+                    t("Transcription failed. Try again.")}
+                </p>
+                {canRetryWithDynamicRendering(advancedReason) ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={retryDynamic.isPending}
+                    onClick={() => retryDynamic.mutate({ documentId })}
+                  >
+                    {retryDynamic.isPending ? <Spinner /> : <RefreshCwIcon />}
+                    {t("Try sandboxed browser rendering")}
+                  </Button>
+                ) : null}
+              </div>
             ) : active ? (
               <div className="grid min-h-48 place-items-center rounded-lg border border-dashed text-center text-sm text-muted-foreground">
                 {t("The transcript will appear here when processing finishes.")}

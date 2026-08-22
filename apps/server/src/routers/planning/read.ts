@@ -113,6 +113,7 @@ export async function readPlanningWindow(input: PlanningWindowInput) {
         and(
           eq(planningTasks.userId, input.userId),
           eq(planningTasks.yearId, input.yearId),
+          isNull(planningTasks.trashedAt),
           inArray(planningTasks.syncState, activeStates),
           or(
             and(

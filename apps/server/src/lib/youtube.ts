@@ -18,6 +18,12 @@ export interface YoutubeChapter {
   title: string;
 }
 
+export interface YoutubeTranscriptSegment {
+  startMs: number;
+  endMs: number;
+  text: string;
+}
+
 export interface YoutubeIngestion {
   markdown: string;
   title: string;
@@ -26,6 +32,8 @@ export interface YoutubeIngestion {
   videoId: string;
   durationSec: number | null;
   chapters: YoutubeChapter[];
+  /** Caption-native ranges. These boundaries are persisted for exact citations. */
+  segments: YoutubeTranscriptSegment[];
   wordCount: number;
   truncated: boolean;
 }
@@ -139,6 +147,47 @@ function durationFromSubtitles(subtitles: readonly Subtitle[]) {
   );
 }
 
+/**
+ * Preserve publisher-provided caption timing without trying to recover it from
+ * the flattened Markdown later. Adjacent captions are only coalesced inside a
+ * bounded 30 second window; the emitted range always uses the first and last
+ * native caption boundaries.
+ */
+export function youtubeTranscriptSegments(
+  subtitles: readonly Subtitle[],
+): YoutubeTranscriptSegment[] {
+  const segments: YoutubeTranscriptSegment[] = [];
+  let previousText = "";
+  let current: YoutubeTranscriptSegment | null = null;
+
+  for (const subtitle of subtitles.slice(0, 100_000)) {
+    const text = normalizeText(subtitle.text, 8_000);
+    if (!text || text === previousText) continue;
+    previousText = text;
+    const startSeconds = secondsFromSubtitle(subtitle.start);
+    const durationSeconds = secondsFromSubtitle(subtitle.dur);
+    const startMs = Math.max(0, Math.round(startSeconds * 1_000));
+    const endMs = Math.max(
+      startMs + 1,
+      Math.round((startSeconds + durationSeconds) * 1_000),
+    );
+
+    if (
+      current &&
+      startMs - current.startMs < 30_000 &&
+      current.text.length + text.length + 1 <= 8_000
+    ) {
+      current.text += ` ${text}`;
+      current.endMs = Math.max(current.endMs, endMs);
+      continue;
+    }
+
+    current = { startMs, endMs, text };
+    segments.push(current);
+  }
+  return segments;
+}
+
 function formatTimestamp(seconds: number) {
   const value = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(value / 3_600);
@@ -218,7 +267,9 @@ async function boundedYoutubeResponse(response: Response) {
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > RESPONSE_MAX_BYTES) {
     await response.body?.cancel().catch(() => undefined);
-    throw new IngestError("The YouTube response is larger than 5 MiB", false);
+    throw new IngestError("The YouTube response is larger than 5 MiB", false, {
+      reasonCode: "content_too_large",
+    });
   }
   if (!response.body) return response;
   const reader = response.body.getReader();
@@ -230,7 +281,9 @@ async function boundedYoutubeResponse(response: Response) {
     length += part.value.byteLength;
     if (length > RESPONSE_MAX_BYTES) {
       await reader.cancel().catch(() => undefined);
-      throw new IngestError("The YouTube response is larger than 5 MiB", false);
+      throw new IngestError("The YouTube response is larger than 5 MiB", false, {
+        reasonCode: "content_too_large",
+      });
     }
     chunks.push(part.value);
   }
@@ -261,7 +314,9 @@ export function createYoutubeFetcher(
           : input,
     );
     if (!isAllowedYoutubeRequest(url)) {
-      throw new IngestError("YouTube returned an unsafe external URL", false);
+      throw new IngestError("YouTube returned an unsafe external URL", false, {
+        reasonCode: "blocked_destination",
+      });
     }
     const captionRequest = isCaptionRequest(url);
     let response: Response;
@@ -353,7 +408,11 @@ export async function ingestYoutube(
   } = {},
 ): Promise<YoutubeIngestion> {
   const parsed = parseYoutubeUrl(value);
-  if (!parsed) throw new IngestError("The YouTube URL is invalid", false);
+  if (!parsed) {
+    throw new IngestError("The YouTube URL is invalid", false, {
+      reasonCode: "unsupported_content",
+    });
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -384,6 +443,7 @@ export async function ingestYoutube(
         /(?:429|408|5\d\d|timed?\s*out|network|fetch)/i.test(message);
       throw new IngestError("The YouTube video could not be read", retryable, {
         cause: error,
+        reasonCode: "upstream_changed",
       });
     }
     if (details.subtitles.length === 0) {
@@ -391,12 +451,16 @@ export async function ingestYoutube(
         throw new IngestError(
           "YouTube captions could not be fetched",
           diagnostics.captionFailure.retryable,
-          { cause: diagnostics.captionFailure.cause },
+          {
+            cause: diagnostics.captionFailure.cause,
+            reasonCode: "upstream_changed",
+          },
         );
       }
       throw new IngestError(
         "This YouTube video has no available captions",
         false,
+        { reasonCode: "captions_unavailable" },
       );
     }
 
@@ -411,6 +475,7 @@ export async function ingestYoutube(
     const channel = normalizeText(oEmbed?.author_name ?? "", 160) || null;
     const durationSec = durationFromSubtitles(details.subtitles);
     const chapters = parseYoutubeChapters(details.description, durationSec);
+    const segments = youtubeTranscriptSegments(details.subtitles);
     const transcript = transcriptMarkdown(details.subtitles, chapters);
     const built = buildMarkdownDocument(transcript, {
       title,
@@ -427,6 +492,7 @@ export async function ingestYoutube(
       videoId: parsed.videoId,
       durationSec,
       chapters,
+      segments,
     };
   } finally {
     clearTimeout(timeout);

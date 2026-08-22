@@ -1,0 +1,41 @@
+name: Release security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AVERMATE_SECURITY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      GITLEAKS_CACHE_DIR: ${{ runner.temp }}/avermate-security-tools/gitleaks
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install pinned dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify security fixtures and policy
+        run: bun run security:test
+
+      - name: Scan release candidates and reachable history
+        run: bun run release:guard

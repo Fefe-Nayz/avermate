@@ -9,6 +9,7 @@ import {
   materialFolders,
 } from "../../db/schema";
 import { OCR_JOB_KIND, isOcrMimeType } from "../../jobs/ocr";
+import { enqueueCorpusSourceIndex } from "../../jobs/corpus";
 import {
   TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND,
   isTranscribableMediaMimeType,
@@ -600,6 +601,9 @@ export interface MaterialDocumentsRouterDependencies {
   storageEnabled?: typeof storageEnabled;
   reserveUpload?: typeof reserveDurableRateLimit;
   enqueuePreview?: typeof enqueueMaterialPreview;
+  enqueueCorpusIndex?: (
+    identity: Parameters<typeof enqueueCorpusSourceIndex>[0],
+  ) => Promise<unknown>;
   requireUploadedFile?: typeof requireUploadedFile;
 }
 
@@ -612,6 +616,8 @@ export function createMaterialDocumentsRouter(
   const canUpload = dependencies.storageEnabled ?? storageEnabled;
   const reserveUpload = dependencies.reserveUpload ?? reserveDurableRateLimit;
   const queuePreview = dependencies.enqueuePreview ?? enqueueMaterialPreview;
+  const queueCorpusIndex =
+    dependencies.enqueueCorpusIndex ?? enqueueCorpusSourceIndex;
   const resolveUploadedFile =
     dependencies.requireUploadedFile ?? requireUploadedFile;
 
@@ -1029,6 +1035,18 @@ export function createMaterialDocumentsRouter(
           await queuePreview({ fileId: stored.id, userId }).catch((error) => {
             console.error(
               "[materials] preview enqueue failed",
+              error instanceof Error ? error.message : "Unknown queue error",
+            );
+          });
+          await queueCorpusIndex({
+            ownerId: userId,
+            originKind: "material",
+            originId: document.id,
+          }).catch((error) => {
+            // Adoption is already committed. Repair will find this source if
+            // the durable queue is temporarily unavailable.
+            console.error(
+              "[materials] corpus index enqueue failed",
               error instanceof Error ? error.message : "Unknown queue error",
             );
           });

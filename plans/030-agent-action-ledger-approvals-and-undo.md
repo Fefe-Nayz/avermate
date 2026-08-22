@@ -26,7 +26,8 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED FOR THE ENABLED BROKERED ROLLOUT — unreviewed mutations
+  remain disabled and baseline/global gates remain
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: CRITICAL
@@ -35,6 +36,28 @@
 - **Category**: domain integrity, agent safety, audit, UX
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The action ledger, approval binding, revision fences, compensation state,
+private sealed continuations and startup crash recovery are implemented for the
+reviewed ToolBroker descriptors. The focused action-ledger suite passes **22
+tests with 0 failures**, including the real restart window between an
+`executing` claim and completion. Recovery replays only a descriptor explicitly
+marked `idempotent-retry` after exact continuation/principal/tool/version/input
+validation; missing, mismatched or ambiguous work becomes
+`inspect-required` instead of being guessed or silently retried.
+
+This status applies only to enabled brokered mutations. The MCP rollout
+allowlist currently contains `planning.tasks.create`, the reviewed artifact
+commands, and ledger-control operations; unknown/unreviewed legacy writes fail
+closed. They do not count as implemented action-ledger mutations merely because
+their discovery schema still exists. Enabling another write still requires its
+descriptor, risk/approval policy, crash semantics and compensation tests.
+
+The final repository, migration and clean-clone gates remain pending under plan
+025; this checkpoint does not claim that every historical mutation surface has
+been migrated.
 
 ## Scope
 

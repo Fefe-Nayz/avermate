@@ -5,10 +5,17 @@ import {
   createWidgetDefinition,
   WIDGET_DEFINITION_VERSION,
 } from "@avermate/core";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
-process.env.DATABASE_URL = "file::memory:";
+// libSQL may use more than one connection for background job runners and
+// transactions. A private file keeps the protocol harness isolated while
+// ensuring every connection observes the migrated schema.
+const protocolDatabaseDirectory = mkdtempSync(
+  join(tmpdir(), "avermate-mcp-protocol-"),
+);
+process.env.DATABASE_URL = `file:${join(protocolDatabaseDirectory, "protocol.db")}`;
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET = "mcp-protocol-test-secret-that-is-long-enough";
 process.env.CLIENT_URL = "http://localhost:3001";
@@ -30,6 +37,8 @@ const migration = readdirSync(join(import.meta.dir, "../../drizzle"))
     readFileSync(join(import.meta.dir, "../../drizzle", file), "utf8"),
   )
   .join("\n");
+
+const databaseHookTimeout = 120_000;
 
 type JsonObject = Record<string, unknown>;
 type JsonRpcResponse = {
@@ -221,7 +230,11 @@ async function appRequest(
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
   await database.$client.executeMultiple(migration);
-  ({ createAvermateMcpHandler } = await import("./http"));
+  const mcpHttp = await import("./http");
+  createAvermateMcpHandler = (principal) =>
+    mcpHttp.createAvermateMcpHandler(principal, {
+      testOnlyAllowLegacyMutations: true,
+    });
   ({ default: app } = await import("../index"));
 
   const now = new Date("2026-08-11T12:00:00.000Z");
@@ -300,11 +313,17 @@ beforeAll(async () => {
     yearId: "year-owned",
     userId: "mcp-user",
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   database.$client.close();
-});
+  try {
+    rmSync(protocolDatabaseDirectory, { recursive: true, force: true });
+  } catch {
+    // Windows can retain a SQLite handle briefly; the OS temp directory will
+    // reclaim it after the worker exits.
+  }
+}, databaseHookTimeout);
 
 describe("MCP 2026-07-28 transport and discovery", () => {
   test("is stateless, self-described and cache-hinted", async () => {
@@ -447,14 +466,14 @@ describe("MCP 2026-07-28 transport and discovery", () => {
       toolNames(plannerOne.json.result).filter((name) =>
         name.startsWith("planner."),
       ),
-    ).toEqual([
-      "planner.agenda",
-      "planner.list",
-      "planner.create",
-      "planner.update",
-      "planner.setStatus",
-      "planner.delete",
-    ]);
+    ).toEqual(["planner.agenda", "planner.list"]);
+    expect(toolNames(plannerOne.json.result)).toContain(
+      "planning.tasks.create",
+    );
+    expect(toolNames(plannerOne.json.result)).toContain(
+      "actions.resolve_approval",
+    );
+    expect(toolNames(plannerOne.json.result)).toContain("actions.undo_execute");
 
     const materialsHandler = createAvermateMcpHandler(
       principal("mcp-user", [
@@ -641,23 +660,35 @@ describe("MCP authorization, scopes and ownership", () => {
     expect(response.json.result?.isError).not.toBe(true);
     expect(response.json.result?.structuredContent).toMatchObject({
       ok: true,
-      data: {
-        value: [
-          {
-            id: "mcp-grade-copy-attachment",
-            label: "Scanned algebra copy",
-            sortOrder: 0,
-            file: {
-              id: "mcp-grade-copy-file",
-              url: "https://cdn.example.test/grade-copy.pdf",
-              mimeType: "application/pdf",
-              byteSize: 2_048,
+      data: [
+        {
+          id: "mcp-grade-copy-attachment",
+          label: "Scanned algebra copy",
+          sortOrder: 0,
+          file: {
+            id: "mcp-grade-copy-file",
+            mimeType: "application/pdf",
+            byteSize: 2_048,
+            handles: {
+              preview: {
+                handle: expect.any(String),
+                audience: "preview",
+                mimeType: "application/pdf",
+                byteSize: 2_048,
+              },
+              download: {
+                handle: expect.any(String),
+                audience: "download",
+                mimeType: "application/pdf",
+                byteSize: 2_048,
+              },
             },
           },
-        ],
-      },
+        },
+      ],
     });
     const serialized = JSON.stringify(response.json.result?.structuredContent);
+    expect(serialized).not.toContain("https://cdn.example.test");
     expect(serialized).not.toContain("mcp-provider-secret-grade-copy");
     expect(serialized).not.toContain('"storageKey"');
     expect(serialized).not.toContain('"provider"');
@@ -688,15 +719,26 @@ describe("MCP authorization, scopes and ownership", () => {
       "planner.agenda",
       "planner.list",
     ]);
-    expect(plannerNames(plannerWrite.json.result)).toEqual([
-      "planner.create",
-      "planner.update",
-      "planner.setStatus",
-      "planner.delete",
-    ]);
+    expect(plannerNames(plannerWrite.json.result)).toEqual([]);
+    expect(toolNames(legacy.json.result)).not.toContain(
+      "planning.tasks.create",
+    );
+    expect(toolNames(plannerRead.json.result)).not.toContain(
+      "planning.tasks.create",
+    );
+    expect(toolNames(plannerWrite.json.result)).toContain(
+      "planning.tasks.create",
+    );
+    expect(toolNames(plannerWrite.json.result)).toContain(
+      "actions.resolve_approval",
+    );
+    expect(toolNames(plannerWrite.json.result)).toContain(
+      "actions.undo_execute",
+    );
     expect(
       JSON.stringify(
-        toolDefinition(plannerWrite.json.result, "planner.delete")?.inputSchema,
+        toolDefinition(plannerWrite.json.result, "planning.tasks.create")
+          ?.inputSchema,
       ),
     ).toContain("idempotencyKey");
   });
@@ -1120,7 +1162,7 @@ describe("MCP authorization, scopes and ownership", () => {
       .where(eq(schema.jobs.id, "job-mcp-foreign"));
   });
 
-  test("mints PPTX download URLs only on demand for owned exports", async () => {
+  test("keeps the signed-URL PPTX compatibility name fail-closed", async () => {
     const mimeType =
       "application/vnd.openxmlformats-officedocument.presentationml.presentation";
     await database.insert(schema.studyDocuments).values([
@@ -1191,14 +1233,16 @@ describe("MCP authorization, scopes and ownership", () => {
         arguments: { documentId: "slides-mcp-owned", revision: 1 },
       });
       expect(owned.json.result?.structuredContent).toEqual({
-        ok: true,
-        data: {
-          url: "https://downloads.example.test/owned.pptx?signature=short-lived",
-          mimeType,
-          byteSize: 4_096,
+        ok: false,
+        error: {
+          code: "AGENT_TOOL_NOT_AVAILABLE",
+          message:
+            "documents.downloadPptx is discoverable for compatibility but unavailable to agents until it has a bounded descriptor and safe transport.",
+          retryable: false,
         },
       });
       const serialized = JSON.stringify(owned.json.result?.structuredContent);
+      expect(serialized).not.toContain("downloads.example.test");
       expect(serialized).not.toContain("pptx-mcp-owned");
       expect(serialized).not.toContain("private-owned-pptx-key");
       expect(serialized).not.toContain("mcp-user");
@@ -1208,6 +1252,9 @@ describe("MCP authorization, scopes and ownership", () => {
         arguments: { documentId: "slides-mcp-foreign", revision: 1 },
       });
       expect(foreign.json.result?.isError).toBe(true);
+      expect(foreign.json.result?.structuredContent).toEqual(
+        owned.json.result?.structuredContent,
+      );
       const serializedForeign = JSON.stringify(foreign.json.result);
       expect(serializedForeign).not.toContain("foreign.pptx");
       expect(serializedForeign).not.toContain("private-foreign-pptx-key");
@@ -1217,6 +1264,9 @@ describe("MCP authorization, scopes and ownership", () => {
         arguments: { documentId: "slides-mcp-owned", revision: 2 },
       });
       expect(unavailableRevision.json.result?.isError).toBe(true);
+      expect(unavailableRevision.json.result?.structuredContent).toEqual(
+        owned.json.result?.structuredContent,
+      );
     } finally {
       await database
         .delete(schema.studyDocumentExports)
@@ -1531,6 +1581,123 @@ describe("MCP authorization, scopes and ownership", () => {
     expect(foreign.json.result?.isError).toBe(true);
     expect(JSON.stringify(foreign.json.result)).not.toContain("Foreign year");
   });
+});
+
+describe("durable task mutation round trip", () => {
+  test("approves, executes once, replays and compensates through MCP", async () => {
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read", "avermate:planner.write"]),
+    );
+    const taskArguments = {
+      yearId: "year-owned",
+      subjectId: "subject-owned",
+      title: "Revise the durable ledger",
+      idempotencyKey: "mcp-durable-task-round-trip",
+    };
+
+    const reservation = await callMcp(handler, "tools/call", {
+      name: "planning.tasks.create",
+      arguments: taskArguments,
+    });
+    expect(reservation.json.result?.structuredContent).toMatchObject({
+      ok: false,
+      error: { code: "APPROVAL_REQUIRED" },
+    });
+    const reservationEnvelope = reservation.json.result?.structuredContent as {
+      error?: {
+        actionId?: unknown;
+        approvalId?: unknown;
+        previewHash?: unknown;
+      };
+    };
+    const actionId = reservationEnvelope.error?.actionId;
+    const approvalId = reservationEnvelope.error?.approvalId;
+    const previewHash = reservationEnvelope.error?.previewHash;
+    expect(typeof actionId).toBe("string");
+    expect(typeof approvalId).toBe("string");
+    expect(typeof previewHash).toBe("string");
+    const approvalArguments = { actionId, approvalId, previewHash };
+
+    const approvalPrompt = await callMcp(handler, "tools/call", {
+      name: "actions.resolve_approval",
+      arguments: approvalArguments,
+    });
+    expect(approvalPrompt.json.result?.resultType).toBe("input_required");
+    const approved = await callMcp(handler, "tools/call", {
+      name: "actions.resolve_approval",
+      arguments: approvalArguments,
+      requestState: approvalPrompt.json.result?.requestState,
+      inputResponses: {
+        confirmation: { action: "accept", content: { confirm: true } },
+      },
+    });
+    expect(approved.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: { status: "completed" },
+    });
+    const taskId = (
+      approved.json.result?.structuredContent as {
+        data?: { resources?: Array<{ resourceId?: unknown }> };
+      }
+    ).data?.resources?.find(
+      (resource) => typeof resource.resourceId === "string",
+    )?.resourceId;
+    expect(typeof taskId).toBe("string");
+
+    const executed = await callMcp(handler, "tools/call", {
+      name: "planning.tasks.create",
+      arguments: taskArguments,
+    });
+    expect(executed.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: { title: taskArguments.title, revision: 1 },
+      replayed: true,
+    });
+    expect(
+      await database
+        .select()
+        .from(schema.planningTasks)
+        .where(eq(schema.planningTasks.id, String(taskId))),
+    ).toHaveLength(1);
+
+    const replay = await callMcp(handler, "tools/call", {
+      name: "planning.tasks.create",
+      arguments: taskArguments,
+    });
+    expect(replay.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      replayed: true,
+    });
+    expect(
+      await database
+        .select()
+        .from(schema.planningTasks)
+        .where(eq(schema.planningTasks.id, String(taskId))),
+    ).toHaveLength(1);
+
+    const undoPrompt = await callMcp(handler, "tools/call", {
+      name: "actions.undo_execute",
+      arguments: { actionIds: [actionId] },
+    });
+    expect(undoPrompt.json.result?.resultType).toBe("input_required");
+    const undone = await callMcp(handler, "tools/call", {
+      name: "actions.undo_execute",
+      arguments: { actionIds: [actionId] },
+      requestState: undoPrompt.json.result?.requestState,
+      inputResponses: {
+        confirmation: { action: "accept", content: { confirm: true } },
+      },
+    });
+    expect(undone.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: { complete: true, partial: false },
+    });
+    const [trashed] = await database
+      .select({ trashedAt: schema.planningTasks.trashedAt })
+      .from(schema.planningTasks)
+      .where(eq(schema.planningTasks.id, String(taskId)));
+    expect(trashed?.trashedAt).toBeInstanceOf(Date);
+  }, 30_000);
 });
 
 describe("destructive MCP multi-round trips", () => {

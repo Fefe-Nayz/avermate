@@ -1,29 +1,25 @@
 import { z } from "zod";
 import {
-  call,
+  brokerMeta,
   can,
   id,
   isoDate,
-  mapDate,
-  meta,
-  optionalDate,
-  runDestructive,
   type McpSurface,
   type McpSurfaceContext,
 } from "../shared";
-
-const plannerKind = z.enum(["task", "event"]);
-const plannerStatus = z.enum(["todo", "doing", "done"]);
+import { createFirstPartyToolBroker } from "../../tools/first-party";
+import { invokeBrokerFromMcp } from "../../tools/adapters/mcp";
+import { managedToolActionContinuationStore } from "../../tools/managed-action-continuation";
 
 function registerPlannerSurface({
   server,
   api,
   principal,
-  codec,
 }: McpSurfaceContext): void {
   if (can(principal, "avermate:planner.read")) {
-    const readMeta = meta("avermate:planner.read");
+    const readMeta = brokerMeta("avermate:planner.read");
     const readOnly = { readOnlyHint: true };
+    const broker = createFirstPartyToolBroker(api);
 
     server.registerTool(
       "planner.agenda",
@@ -38,14 +34,16 @@ function registerPlannerSurface({
         annotations: readOnly,
         _meta: readMeta,
       },
-      ({ yearId, from, to }) =>
-        call(() =>
-          api.planner.agenda({
-            yearId,
-            from: new Date(from),
-            to: new Date(to),
-          }),
-        ),
+      (input) =>
+        invokeBrokerFromMcp({
+          broker,
+          principal,
+          invocation: {
+            toolId: "planner.agenda",
+            toolVersion: 1,
+            input,
+          },
+        }),
     );
     server.registerTool(
       "planner.list",
@@ -61,108 +59,51 @@ function registerPlannerSurface({
         annotations: readOnly,
         _meta: readMeta,
       },
-      ({ from, to, ...input }) =>
-        call(() =>
-          api.planner.list({
-            ...input,
-            from: mapDate(from) ?? undefined,
-            to: mapDate(to) ?? undefined,
-          }),
-        ),
+      (input) =>
+        invokeBrokerFromMcp({
+          broker,
+          principal,
+          invocation: { toolId: "planner.list", toolVersion: 1, input },
+        }),
     );
   }
 
   if (can(principal, "avermate:planner.write")) {
-    const writeMeta = meta("avermate:planner.write");
-    const itemFields = {
-      kind: plannerKind,
-      title: z.string().trim().min(1).max(160),
-      notes: z.string().trim().max(2_000).nullable(),
-      startsAt: optionalDate,
-      endsAt: optionalDate,
-      allDay: z.boolean(),
-      subjectId: id.nullable(),
-    };
+    const writeMeta = brokerMeta("avermate:planner.write");
+    const broker = createFirstPartyToolBroker(api, {
+      includeMutations: true,
+      continuations: managedToolActionContinuationStore,
+    });
 
     server.registerTool(
-      "planner.create",
+      "planning.tasks.create",
       {
-        description: "Create a planner task or calendar event.",
+        description:
+          "Create one personal planning task through Avermate's durable action ledger.",
         inputSchema: z.object({
           yearId: id,
-          kind: itemFields.kind.default("task"),
-          title: itemFields.title,
-          notes: itemFields.notes.default(null),
-          startsAt: itemFields.startsAt.default(null),
-          endsAt: itemFields.endsAt.default(null),
-          allDay: itemFields.allDay.default(true),
-          subjectId: itemFields.subjectId.default(null),
+          title: z.string().trim().min(1).max(160),
+          notes: z.string().trim().max(10_000).nullable().default(null),
+          localNote: z.string().trim().max(4_000).nullable().default(null),
+          startsAt: isoDate.nullable().default(null),
+          scheduledAt: isoDate.nullable().default(null),
+          dueAt: isoDate.nullable().default(null),
+          subjectId: id.nullable().default(null),
+          idempotencyKey: z.string().trim().min(1).max(256),
         }),
+        annotations: { idempotentHint: true, destructiveHint: false },
         _meta: writeMeta,
       },
-      ({ startsAt, endsAt, ...input }) =>
-        call(() =>
-          api.planner.create({
-            ...input,
-            startsAt: mapDate(startsAt) ?? null,
-            endsAt: mapDate(endsAt) ?? null,
-          }),
-        ),
-    );
-    server.registerTool(
-      "planner.update",
-      {
-        description: "Update an owned planner task or event.",
-        inputSchema: z.object({
-          itemId: id,
-          kind: itemFields.kind.optional(),
-          title: itemFields.title.optional(),
-          notes: itemFields.notes.optional(),
-          startsAt: itemFields.startsAt,
-          endsAt: itemFields.endsAt,
-          allDay: itemFields.allDay.optional(),
-          subjectId: itemFields.subjectId.optional(),
-        }),
-        _meta: writeMeta,
-      },
-      ({ startsAt, endsAt, ...input }) =>
-        call(() =>
-          api.planner.update({
-            ...input,
-            startsAt: mapDate(startsAt),
-            endsAt: mapDate(endsAt),
-          }),
-        ),
-    );
-    server.registerTool(
-      "planner.setStatus",
-      {
-        description: "Move a planner task to a different status lane.",
-        inputSchema: z.object({ itemId: id, status: plannerStatus }),
-        _meta: writeMeta,
-      },
-      (input) => call(() => api.planner.setStatus(input)),
-    );
-    server.registerTool(
-      "planner.delete",
-      {
-        description: "Permanently delete a planner task or event.",
-        inputSchema: z.object({
-          itemId: id,
-          idempotencyKey: z.string().uuid(),
-        }),
-        annotations: { destructiveHint: true, idempotentHint: true },
-        _meta: writeMeta,
-      },
-      (input, context) =>
-        runDestructive({
+      ({ idempotencyKey, ...input }) =>
+        invokeBrokerFromMcp({
+          broker,
           principal,
-          codec,
-          toolName: "planner.delete",
-          input,
-          context,
-          description: `Delete planner item ${input.itemId}.`,
-          execute: () => api.planner.delete({ itemId: input.itemId }),
+          invocation: {
+            toolId: "planning.tasks.create",
+            toolVersion: 1,
+            input,
+            idempotencyKey,
+          },
         }),
     );
   }

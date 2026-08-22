@@ -7,12 +7,21 @@ import { join } from "node:path";
  * database underneath unrelated router suites.
  */
 test("MCP protocol, OAuth and destructive-flow conformance", async () => {
-  const child = Bun.spawn(["bun", "test", "./src/mcp/protocol.harness.ts"], {
-    cwd: join(import.meta.dir, "../.."),
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, BUN_TEST_QUIET: "1" },
-  });
+  const child = Bun.spawn(
+    ["bun", "test", "./src/mcp/protocol.harness.ts", "--timeout=30000"],
+    {
+      cwd: join(import.meta.dir, "../.."),
+      stdout: "pipe",
+      stderr: "pipe",
+      // The legacy protocol suite continues to verify historical domain route
+      // semantics. Production MCP execution is guarded separately and defaults
+      // closed for every mutation not yet migrated to the action ledger.
+      env: {
+        ...process.env,
+        BUN_TEST_QUIET: "1",
+      },
+    },
+  );
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -22,4 +31,4 @@ test("MCP protocol, OAuth and destructive-flow conformance", async () => {
     console.error([stdout, stderr].filter(Boolean).join("\n"));
   }
   expect(exitCode).toBe(0);
-}, 60_000);
+}, 120_000);

@@ -37,6 +37,9 @@ const window = {
   to: new Date("2026-09-30T23:59:59.999Z"),
   timezone: "Europe/Paris",
 };
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 function publishScope(
   expectedConnectionUpdatedAt: Date,
@@ -106,7 +109,7 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   client.close();
@@ -118,7 +121,7 @@ afterAll(async () => {
     maxRetries: 5,
     retryDelay: 20,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 function firstSnapshot(): SchoolPlanningSnapshot {
   return {

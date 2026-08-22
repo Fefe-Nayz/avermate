@@ -155,7 +155,9 @@ export async function sendOtpEmail(input: {
 }): Promise<void> {
   const copy = OTP_COPY[input.locale ?? "fr"][input.kind];
   if (env.DISABLE_EMAIL || !resend) {
-    console.info(`[email] OTP ${input.kind} for ${input.to}: ${input.otp}`);
+    // OTPs are credentials. A disabled delivery adapter must not turn logs
+    // into a second, long-lived delivery channel.
+    console.info(`[email] OTP ${input.kind} delivery disabled`);
     return;
   }
   await send(

@@ -3,7 +3,7 @@ import { newId } from "../../lib/id";
 import { users } from "./auth";
 
 export type ServiceKeyKind = "mistral" | "transcription" | "inference";
-export type ServiceKeyStatus = "active" | "invalid";
+export type ServiceKeyStatus = "active" | "invalid" | "revoked";
 
 const timestamps = {
   createdAt: integer({ mode: "timestamp" })
@@ -23,7 +23,12 @@ export const userServiceKeys = sqliteTable(
       .primaryKey()
       .$defaultFn(() => newId("ukey")),
     kind: text().$type<ServiceKeyKind>().notNull(),
+    provider: text().notNull().default("legacy"),
     sealedKey: text().notNull(),
+    keyVersion: integer().notNull().default(1),
+    scopesJson: text({ mode: "json" }).$type<string[]>().notNull().default([]),
+    lastValidatedAt: integer({ mode: "timestamp" }),
+    revokedAt: integer({ mode: "timestamp" }),
     /** At most the final four characters, solely for recognition in settings. */
     hint: text().notNull(),
     status: text().$type<ServiceKeyStatus>().notNull().default("active"),

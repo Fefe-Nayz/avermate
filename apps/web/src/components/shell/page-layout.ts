@@ -11,7 +11,7 @@
  * before the page does, so a page that announced this through context would
  * paint narrow for one frame and then jump.
  */
-const FULL_BLEED_ROUTES: readonly string[] = ["/materials"]
+const FULL_BLEED_ROUTES: readonly string[] = ["/materials", "/assistant"]
 
 /** Trailing slashes are the same route; a sub-route is not. */
 function normalise(pathname: string): string {

@@ -27,8 +27,15 @@ import { socialRouter } from "./social";
 import { subjectsRouter } from "./subjects";
 import { syncRouter } from "./sync";
 import { yearsRouter } from "./years";
+import { assistantRouter } from "./assistant";
+import { projectsRouter } from "./projects";
+import { actionsRouter } from "./actions";
+import { mediaStudioRouter } from "./media-studio";
+import { managedRouter } from "./managed";
 
 export const appRouter = {
+  actions: actionsRouter,
+  assistant: assistantRouter,
   academicAdjustments: academicAdjustmentsRouter,
   public: publicRouter,
   gradeTypes: gradeTypesRouter,
@@ -58,6 +65,9 @@ export const appRouter = {
   social: socialRouter,
   sync: syncRouter,
   admin: adminRouter,
+  projects: projectsRouter,
+  mediaStudio: mediaStudioRouter,
+  managed: managedRouter,
 };
 
 export type AppRouter = typeof appRouter;

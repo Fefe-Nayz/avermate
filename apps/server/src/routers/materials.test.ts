@@ -20,6 +20,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 type AppRouter = typeof import("./index").appRouter;
 type Api = ReturnType<
@@ -150,7 +153,7 @@ beforeAll(async () => {
   apiB = createRouterClient(appRouter, {
     context: { headers: new Headers(), session: sessionFor(userB) },
   });
-});
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
@@ -165,7 +168,7 @@ afterAll(async () => {
   await database
     .delete(schema.users)
     .where(inArray(schema.users.id, [userA, userB]));
-});
+}, databaseHookTimeout);
 
 async function storedFile(name: string, mimeType = "application/pdf") {
   const [file] = await database
@@ -552,6 +555,7 @@ describe("materials domain", () => {
             { at: 30, title: "Proof" },
             { at: 90, title: "Exercises" },
           ],
+          segments: [{ startMs: 2_500, endMs: 4_750, text: "A caption." }],
           wordCount: 2,
           truncated: false,
         }),
@@ -595,6 +599,23 @@ describe("materials domain", () => {
     ).find((row) => row.document.id === link.document!.id);
     expect(summary?.document.sourceKind).toBe("youtube");
     expect(summary?.document.thumbnailUrl).toBeNull();
+    const exactSegments = await database.$client.execute({
+      sql: `
+        SELECT segments.text, segments.locatorJson
+        FROM material_artifact_segments AS segments
+        JOIN material_artifacts AS artifacts ON artifacts.id = segments.artifactId
+        WHERE artifacts.documentId = ? AND artifacts.kind = 'web-markdown'
+        ORDER BY segments.ordinal
+      `,
+      args: [link.document!.id],
+    });
+    expect(exactSegments.rows).toHaveLength(1);
+    expect(exactSegments.rows[0]?.text).toBe("A caption.");
+    expect(JSON.parse(String(exactSegments.rows[0]?.locatorJson))).toEqual({
+      kind: "video",
+      startMs: 2_500,
+      endMs: 4_750,
+    });
   });
 
   test("never delegates a sparse page to an unpinned remote renderer", async () => {
@@ -1180,6 +1201,11 @@ describe("materials domain", () => {
   test("uploads a personal PDF into an owned folder and exposes it immediately", async () => {
     const { createMaterialDocumentsRouter } =
       await import("./materials/documents");
+    const corpusEnqueues: Array<{
+      ownerId: string;
+      originKind: string;
+      originId: string;
+    }> = [];
     const router = {
       materials: {
         documents: createMaterialDocumentsRouter({
@@ -1199,6 +1225,14 @@ describe("materials domain", () => {
               .returning();
             if (!stored) throw new Error("Upload fixture was not stored");
             return stored;
+          },
+          enqueueCorpusIndex: async (identity) => {
+            const [adopted] = await database
+              .select({ id: schema.materialDocuments.id })
+              .from(schema.materialDocuments)
+              .where(eq(schema.materialDocuments.id, identity.originId));
+            expect(adopted?.id).toBe(identity.originId);
+            corpusEnqueues.push(identity);
           },
         }),
       },
@@ -1243,6 +1277,13 @@ describe("materials domain", () => {
         status: "stored",
       },
     });
+    expect(corpusEnqueues).toEqual([
+      {
+        ownerId: userA,
+        originKind: "material",
+        originId: uploaded.document!.id,
+      },
+    ]);
 
     expect(
       await uploadApi.materials.documents.download({
@@ -1362,6 +1403,17 @@ describe("materials domain", () => {
         .select({ id: schema.materialDocuments.id })
         .from(schema.materialDocuments)
         .where(eq(schema.materialDocuments.fileId, candidate.id)),
+    ).toHaveLength(1);
+    const corpusJobs = await database
+      .select({ payload: schema.jobs.payload })
+      .from(schema.jobs)
+      .where(eq(schema.jobs.kind, "corpus.indexSource"));
+    expect(
+      corpusJobs.filter(
+        (job) =>
+          (job.payload as { originId?: string } | null)?.originId ===
+          first.document?.id,
+      ),
     ).toHaveLength(1);
   });
 

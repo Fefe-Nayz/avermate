@@ -20,6 +20,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 type AppRouter = typeof import("./index").appRouter;
 type Api = ReturnType<
@@ -180,7 +183,7 @@ beforeAll(async () => {
   apiB = createRouterClient(appRouter, {
     context: { headers: new Headers(), session: sessionFor(userB) },
   });
-});
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
@@ -189,7 +192,7 @@ afterAll(async () => {
   await database
     .delete(schema.users)
     .where(inArray(schema.users.id, [userA, userB]));
-});
+}, databaseHookTimeout);
 
 describe("grade copy attachments", () => {
   test("rejects a valid upload when provider storage is disabled", async () => {

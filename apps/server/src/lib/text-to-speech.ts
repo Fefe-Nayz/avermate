@@ -1,9 +1,14 @@
 import { env } from "./env";
 import {
   markServiceKeyInvalid,
+  operatorServiceKeysEnabled,
   resolveServiceKey,
   type ResolvedServiceKey,
 } from "./service-keys";
+import {
+  reserveManagedProviderUsage,
+  settleManagedProviderUsage,
+} from "../usage/managed-provider-accounting";
 
 /** Official Mistral Voxtral TTS request contract. */
 export const MISTRAL_SPEECH_URL = "https://api.mistral.ai/v1/audio/speech";
@@ -38,6 +43,8 @@ export interface MistralSpeechOptions {
   key?: string;
   model?: string;
   voiceId?: string | null;
+  /** Durable run/job id used to make managed accounting idempotent. */
+  operationId?: string;
   signal?: AbortSignal;
   attemptTimeoutMs?: number;
 }
@@ -49,7 +56,9 @@ function ttsDisabled() {
 
 export async function textToSpeechEnabled(userId?: string) {
   if (ttsDisabled() || env.TTS_PROVIDER !== "mistral") return false;
-  if (!userId) return Boolean(env.MISTRAL_API_KEY?.trim());
+  if (!userId) {
+    return operatorServiceKeysEnabled() && Boolean(env.MISTRAL_API_KEY?.trim());
+  }
   return Boolean(await resolveServiceKey(userId, "mistral"));
 }
 
@@ -304,6 +313,18 @@ export async function runMistralTextToSpeech(
     options.voiceId === undefined
       ? (env.TTS_VOICE_ID ?? null)
       : options.voiceId?.trim() || null;
+  const characterCount = Array.from(text).length;
+  const reservation = await reserveManagedProviderUsage({
+    credential,
+    accountId: userId,
+    operationId: options.operationId,
+    capability: "tts.characters",
+    unit: "characters",
+    maximumQuantity: String(characterCount),
+    provider: "mistral",
+    model,
+    estimatorVersion: "tts-unicode-codepoints/1",
+  });
   const fetcher = options.fetch ?? fetch;
   const sleep =
     options.sleep ??
@@ -311,35 +332,57 @@ export async function runMistralTextToSpeech(
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const audioChunks: Uint8Array[] = [];
   let total = 0;
-  for (const chunk of chunks) {
-    const audio = await generateChunk(chunk, {
-      credential,
-      userId,
-      fetcher,
-      sleep,
+  let providerStarted = false;
+  let accountingSettled = false;
+  try {
+    for (const chunk of chunks) {
+      providerStarted = true;
+      const audio = await generateChunk(chunk, {
+        credential,
+        userId,
+        fetcher,
+        sleep,
+        model,
+        voiceId,
+        signal: options.signal,
+        attemptTimeoutMs: options.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS,
+      });
+      total += audio.byteLength;
+      if (total > SPEECH_MAX_AUDIO_BYTES) {
+        throw new Error("Generated podcast is larger than 100 MiB");
+      }
+      audioChunks.push(audio);
+    }
+    await settleManagedProviderUsage(reservation, {
+      actualQuantity: String(characterCount),
+      outcome: "completed",
+      authoritative: false,
+      evidenceRef: "mistral-tts-request-characters",
+    });
+    accountingSettled = true;
+    const combined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of audioChunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return {
+      audio: combined,
+      mimeType: "audio/mpeg",
       model,
       voiceId,
-      signal: options.signal,
-      attemptTimeoutMs: options.attemptTimeoutMs ?? ATTEMPT_TIMEOUT_MS,
-    });
-    total += audio.byteLength;
-    if (total > SPEECH_MAX_AUDIO_BYTES) {
-      throw new Error("Generated podcast is larger than 100 MiB");
+      chunkCount: chunks.length,
+      characterCount,
+    };
+  } catch (error) {
+    if (reservation && providerStarted && !accountingSettled) {
+      await settleManagedProviderUsage(reservation, {
+        actualQuantity: reservation.maximumQuantity,
+        outcome: options.signal?.aborted ? "cancelled" : "failed",
+        authoritative: false,
+        evidenceRef: "mistral-tts-ambiguous-failure",
+      }).catch(() => undefined);
     }
-    audioChunks.push(audio);
+    throw error;
   }
-  const combined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of audioChunks) {
-    combined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return {
-    audio: combined,
-    mimeType: "audio/mpeg",
-    model,
-    voiceId,
-    chunkCount: chunks.length,
-    characterCount: Array.from(text).length,
-  };
 }

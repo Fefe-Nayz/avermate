@@ -1,14 +1,25 @@
 # Avermate implementation plans
 
-This registry covers the completed foundation wave (000–024) and the next
-NotebookLM-for-school wave (025–034). It was reconciled against the working tree
-on 2026-08-22 at `37f0aff` on branch `rewrite`.
+This registry covers the completed foundation wave (000–024), the implemented
+agent-platform foundation (025–034), and the production/product-completion wave
+(035–039). It was reconciled against the working tree on 2026-08-22 at
+`dbd4fe8` on branch `rewrite`; replace that evidence SHA with the committed
+025–034 implementation baseline before executing plan 035.
 
 > [!IMPORTANT]
-> The next wave starts with plan 025. At planning time, the implementation of the
-> preceding plans exists in a 570-path working tree rather than a reviewable
-> release baseline. Preserve it, split/review it, validate every migration and
-> reproduce it from a clean clone before adding the agent platform.
+> The 025–034 implementation currently exists in a large reviewed working tree.
+> Its root tests, types, lint, formatting and release security gates are green,
+> but plan 025 remains blocked by the unratified historical migration rewrite,
+> the global slop gate, clean-clone evidence and the maintainer's licence choice.
+> Preserve and commit the migration block atomically; never turn those release
+> blockers or unavailable live providers into skips.
+>
+> The 033/034 gates now distinguish repository/shadow evidence from live
+> provider evidence. Real Chromium ingestion passes locally; disabled sandbox
+> providers are reported unavailable and the live gates fail explicitly. The
+> 034 shadow aggregate reaches the Garage conformance cell and is blocked by the
+> unhealthy Docker Desktop host, while its non-Docker accounting, isolation,
+> deletion, restore and load cells pass.
 
 ## Product thesis
 
@@ -36,43 +47,48 @@ first-class; it is no longer a reason to exclude an embedded assistant.
 
 ## Execution order and status
 
-| Plan | Title                                                            | Priority | Effort | Depends on              | Status                                      |
-| ---- | ---------------------------------------------------------------- | -------- | ------ | ----------------------- | ------------------------------------------- |
-| 000  | Pre-merge hygiene                                                | P1       | S      | —                       | DONE                                        |
-| 001  | First-class files entity and shared storage                      | P1       | M      | —                       | DONE                                        |
-| 002  | Durable background-job substrate                                 | P1       | L      | —                       | DONE                                        |
-| 003  | Modular MCP surfaces and unified admin gate                      | P1       | M      | —                       | DONE                                        |
-| 004  | Agenda/todo domain, unified feed and kanban                      | P2       | L      | 003 for MCP             | DONE                                        |
-| 005  | Course-materials vertical slice                                  | P2       | L      | 001, 003                | DONE                                        |
-| 006  | Grade-copy attachments                                           | P2       | S–M    | 001                     | DONE                                        |
-| 007  | AI architecture v1: MCP-first and key policy                     | P1       | S–M    | —                       | DONE; superseded in part by 026             |
-| 008  | Provider-sync framework and Moodle                               | P2       | L      | 001, 002, 005           | DONE                                        |
-| 009  | OCR to Markdown artifacts                                        | P2       | M–L    | 002, 005                | DONE                                        |
-| 010  | Documents/fiches and rich Markdown                               | P2       | L      | 005                     | DONE                                        |
-| 011  | MCP authoring surface and workflows                              | P2       | M      | 003, 005, 010           | DONE                                        |
-| 012  | Lecture recording and transcription                              | P3       | XL     | 001, 002, 005, 007      | DONE for current Web/Core scope             |
-| 013  | Static Web source ingestion                                      | P2       | M      | 002, 005, 009           | DONE                                        |
-| 014  | Fluid type with `tailwind-clamp`                                 | P3       | S–M    | —                       | DONE                                        |
-| 015  | Card-template gallery                                            | P3       | M–L    | —                       | DONE                                        |
-| 016  | Cross-platform design tokens and Web density                     | P3       | L      | —                       | DONE for Web/Core; React Native excluded    |
-| 017  | Mind maps, slides and PPTX artifacts                             | P3       | L      | 002, 010                | DONE                                        |
-| 018  | Pronote/EcoleDirecte/Skolengo connector spike                    | P3       | M      | 008                     | DONE                                        |
-| 019  | Sustainability, BYOK and self-host ADR                           | P2       | M      | 007                     | DONE; satellite expanded by 032             |
-| 020  | Materials explorer roadmap                                       | P1–P3    | XL     | 001, 002, 005, 008, 010 | DONE                                        |
-| 021  | Connected school-year design rationale                           | —        | —      | 008, 018                | SUPERSEDED by `docs/school-integrations.md` |
-| 022  | Defensive Web ingestion and caption-first YouTube                | P2       | M      | 009, 012, 013           | DONE for static/caption path                |
-| 023  | Read-only Google Drive connector                                 | P3       | M–L    | 020                     | DONE                                        |
-| 024  | Document kinds, rich rendering, quiz, LaTeX, Pyodide and podcast | P1–P2    | XL     | 020, 022                | DONE                                        |
-| 025  | Reproducible release baseline and product contract               | P0       | L      | completed current work  | TODO — next                                 |
-| 026  | Agent architecture v2 and protocol spikes                        | P0       | M–L    | 025                     | TODO                                        |
-| 027  | Unified tool registry and policy broker                          | P0       | L–XL   | 025, 026                | TODO                                        |
-| 028  | Study projects, versioned corpus and hybrid retrieval            | P0       | XL     | 025–027                 | TODO                                        |
-| 029  | Embedded, durable, branchable read-only assistant                | P0       | XL     | 026–028                 | TODO                                        |
-| 030  | Agent approvals, action ledger and selective undo                | P1       | XL     | 026, 027, 029, 031      | TODO                                        |
-| 031  | Sandbox provider and versioned workspaces                        | P1       | XL     | 026–029                 | TODO                                        |
-| 032  | Avermate Node hybrid data plane and configurator                 | P1       | XL     | 025–031 as scoped       | TODO                                        |
-| 033  | Dynamic ingestion and generated media studio                     | P2       | XL     | 025–032                 | TODO                                        |
-| 034  | Optional managed AI/storage and production operations            | P2       | XL     | 025–032; consumes 033   | TODO                                        |
+| Plan | Title                                                            | Priority | Effort | Depends on              | Status                                                   |
+| ---- | ---------------------------------------------------------------- | -------- | ------ | ----------------------- | -------------------------------------------------------- |
+| 000  | Pre-merge hygiene                                                | P1       | S      | —                       | DONE                                                     |
+| 001  | First-class files entity and shared storage                      | P1       | M      | —                       | DONE                                                     |
+| 002  | Durable background-job substrate                                 | P1       | L      | —                       | DONE                                                     |
+| 003  | Modular MCP surfaces and unified admin gate                      | P1       | M      | —                       | DONE                                                     |
+| 004  | Agenda/todo domain, unified feed and kanban                      | P2       | L      | 003 for MCP             | DONE                                                     |
+| 005  | Course-materials vertical slice                                  | P2       | L      | 001, 003                | DONE                                                     |
+| 006  | Grade-copy attachments                                           | P2       | S–M    | 001                     | DONE                                                     |
+| 007  | AI architecture v1: MCP-first and key policy                     | P1       | S–M    | —                       | DONE; superseded in part by 026                          |
+| 008  | Provider-sync framework and Moodle                               | P2       | L      | 001, 002, 005           | DONE                                                     |
+| 009  | OCR to Markdown artifacts                                        | P2       | M–L    | 002, 005                | DONE                                                     |
+| 010  | Documents/fiches and rich Markdown                               | P2       | L      | 005                     | DONE                                                     |
+| 011  | MCP authoring surface and workflows                              | P2       | M      | 003, 005, 010           | DONE                                                     |
+| 012  | Lecture recording and transcription                              | P3       | XL     | 001, 002, 005, 007      | DONE for current Web/Core scope                          |
+| 013  | Static Web source ingestion                                      | P2       | M      | 002, 005, 009           | DONE                                                     |
+| 014  | Fluid type with `tailwind-clamp`                                 | P3       | S–M    | —                       | DONE                                                     |
+| 015  | Card-template gallery                                            | P3       | M–L    | —                       | DONE                                                     |
+| 016  | Cross-platform design tokens and Web density                     | P3       | L      | —                       | DONE for Web/Core; React Native excluded                 |
+| 017  | Mind maps, slides and PPTX artifacts                             | P3       | L      | 002, 010                | DONE                                                     |
+| 018  | Pronote/EcoleDirecte/Skolengo connector spike                    | P3       | M      | 008                     | DONE                                                     |
+| 019  | Sustainability, BYOK and self-host ADR                           | P2       | M      | 007                     | DONE; satellite expanded by 032                          |
+| 020  | Materials explorer roadmap                                       | P1–P3    | XL     | 001, 002, 005, 008, 010 | DONE                                                     |
+| 021  | Connected school-year design rationale                           | —        | —      | 008, 018                | SUPERSEDED by `docs/school-integrations.md`              |
+| 022  | Defensive Web ingestion and caption-first YouTube                | P2       | M      | 009, 012, 013           | DONE for static/caption path                             |
+| 023  | Read-only Google Drive connector                                 | P3       | M–L    | 020                     | DONE                                                     |
+| 024  | Document kinds, rich rendering, quiz, LaTeX, Pyodide and podcast | P1–P2    | XL     | 020, 022                | DONE                                                     |
+| 025  | Reproducible release baseline and product contract               | P0       | L      | completed current work  | BLOCKED — migration/licence/slop/clean clone             |
+| 026  | Agent architecture v2 and protocol spikes                        | P0       | M–L    | 025                     | DONE — implementation; release inherits 025              |
+| 027  | Unified tool registry and policy broker                          | P0       | L–XL   | 025, 026                | DONE                                                     |
+| 028  | Study projects, versioned corpus and hybrid retrieval            | P0       | XL     | 025–027                 | IN PROGRESS — core green; production/UI gap              |
+| 029  | Embedded, durable, branchable read-only assistant                | P0       | XL     | 026–028                 | IN PROGRESS — implementation green; rollout eval pending |
+| 030  | Agent approvals, action ledger and selective undo                | P1       | XL     | 026, 027, 029, 031      | DONE for reviewed brokered rollout                       |
+| 031  | Sandbox provider and versioned workspaces                        | P1       | XL     | 026–029                 | BLOCKED — live attested provider required                |
+| 032  | Avermate Node hybrid data plane and configurator                 | P1       | XL     | 025–031 as scoped       | IN PROGRESS — relay/product lifecycle gaps               |
+| 033  | Dynamic ingestion and generated media studio                     | P2       | XL     | 025–032                 | IN PROGRESS — real browser green; live sandbox/UI gaps   |
+| 034  | Optional managed AI/storage and production operations            | P2       | XL     | 025–032; consumes 033   | IN PROGRESS — shadow green except host Docker/live ops   |
+| 035  | Production agent runtime and model placement                     | P0       | XL     | 025–034 as scoped       | TODO                                                     |
+| 036  | Multimodal school RAG, embeddings and reranking                  | P0       | XL     | 028, 029, 033, 035, 038 | TODO                                                     |
+| 037  | School learning loop and measurable mastery                      | P0       | XL     | 004, 006, 024, 027–036  | TODO                                                     |
+| 038  | Complete Node, full self-host and specialist workers             | P0       | XL     | 025–037                 | TODO                                                     |
+| 039  | Managed beta and commercial readiness                            | P1       | XL     | 025, 031–038            | TODO                                                     |
 
 Status values are `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED` with a reason, or
 `SUPERSEDED` with a current source of truth. An executor reads the entire plan,
@@ -97,39 +113,42 @@ The foundation is much further ahead than the top-level README suggests:
 - MCP already exposes a broad domain surface, and the durable job substrate is
   suitable for expansion.
 
-The missing product loop is equally concrete:
+The remaining product loop is now more precise:
 
-- search is currently lexical SQL matching rather than a versioned cited corpus;
-- there is no current embedded conversation model, event stream or harness;
-- Pyodide and specialized render commands are not a general isolated agent
-  workspace;
-- destructive MCP replay fencing is not an undoable domain-action ledger;
-- the documented satellite is storage-oriented and is not implemented as a
-  capability-routed user node;
-- dynamic Web rendering, bounded media fallback and generated video are not
-  implemented;
-- multi-tenant quotas, metering, managed isolation and billing operations do not
-  exist;
-- the project has no published open-source license yet.
+- the production assistant still bypasses the proved `AgentRuntime` seam and
+  advertises only one direct model provider;
+- the cited corpus is lexical/text-dense today; visual pages, Gemini multimodal
+  embeddings, cross-encoder reranking and branch-pinned project conversations
+  are not implemented end to end;
+- the assistant shell is substantial, but Node settings, full configurator,
+  media studio, learning-evidence/mastery and managed customer/operator Web
+  experiences are incomplete;
+- sandbox and specialist-worker contracts exist, but no live attested provider,
+  runtime checkpoint, OpenCode/OpenHands worker or production media placement has
+  passed release conformance;
+- Avermate Node has local contracts/providers but lacks production Core pairing,
+  relay, durable capability transports and lifecycle tooling;
+- managed accounting is a correct shadow foundation, not an isolated operated
+  service or enabled billing product;
+- the project still has no published open-source licence.
 
-The planning estimate is therefore about **45% of the complete stated product**:
-roughly 60–75% of the reusable foundations, but only the beginning of the
-NotebookLM/agent/self-host-node experience. This is a product-completeness
-estimate, not a percentage derived from issue counts.
+The current estimate is **65–75% of the complete technical vision** and roughly
+**45–55% of production/operational readiness**. Academic Core is substantially
+more mature than the new AI/Node/managed surfaces. These are judgement ranges,
+not percentages derived from issue counts.
 
 ## Next-wave dependency graph
 
 ```text
-025 release baseline + license/product contract
- └─ 026 architecture/protocol proof
-     └─ 027 unified tools/policy
-         └─ 028 projects/corpus/search/citations
-             └─ 029 read-only assistant
-                 └─ 031 sandbox/workspace + atomic checkpoint integration
-                     └─ 030 controlled mutations/undo
-                         └─ 032 Avermate Node/routing
-                             ├─ 033 advanced ingestion/media
-                             └─ 034 managed plane/operations
+025 release baseline + licence/product contract
+ └─ 026–034 agent/tool/corpus/chat/action/sandbox/Node/media/managed foundations
+     ├─ 035 production AgentRuntime + model placements
+     │   └─ 036 multimodal corpus + embeddings + reranking
+     │       └─ 037 evidence-driven school learning loop
+     ├─ 038 production Node + full-self-host lifecycle + specialist workers
+     │   └─ 036 Node-local embedding/rerank placement
+     └─ 039 managed beta/operations/billing readiness
+         └─ consumes the live isolation and runtime proofs from 031/038
 ```
 
 Safe parallelism after 026:
@@ -192,16 +211,49 @@ explicit unavailable state rather than a silent Core mirror.
 | Agenda, calendar, todo and kanban                                         | 004                                                                         |
 | Own files, PDF view, OCR and transcription-all progress                   | 001, 002, 005, 009, 012, 020, 024                                           |
 | OneDrive/Google Drive/Moodle sources                                      | 008, 020, 023                                                               |
-| Projects/notebooks, corpus search and inline citations                    | 028                                                                         |
-| Embedded streaming chat, models, dictation, attachments, branches, export | 026, 029                                                                    |
+| Projects/notebooks, corpus search and inline citations                    | 028; advanced multimodal/rerank completion in 036                           |
+| Embedded streaming chat, models, dictation, attachments, branches, export | 026, 029; production provider/placement completion in 035                   |
 | Custom MCP/skills and any external AI client                              | 027, 029; existing MCP remains supported                                    |
 | Agent mutations, approval modes, logs and undo                            | 030                                                                         |
-| Versioned virtual execution environment                                   | 031; linked rather than confused with 029/030 history                       |
-| Hybrid avermate.fr plus user backend                                      | 032                                                                         |
-| Full self-host and visual Compose/config builder                          | 032                                                                         |
-| Dynamic pages, video transcription fallback and private inline images     | 033                                                                         |
-| LaTeX/PPTX/podcast/video/Manim and visual review loops                    | 024, 031, 033                                                               |
-| BYOK, managed quotas and optional paid convenience tier                   | 019, 026, 032, 034                                                          |
+| Versioned virtual execution environment                                   | 031; runtime checkpoints and specialist workers complete in 038             |
+| Hybrid avermate.fr plus user backend                                      | 032; production relay and Web completion in 038                             |
+| Full self-host and visual Compose/config builder                          | 032; distribution/lifecycle completion in 038                               |
+| Dynamic pages, video transcription fallback and private inline images     | 033, including its required Web studio completion                           |
+| LaTeX/PPTX/podcast/video/Manim and visual review loops                    | 024, 031, 033, 035, 038                                                     |
+| Copy diagnosis, concepts, plans, practice and measured progress           | 037                                                                         |
+| Gemini multimodal embeddings, local/cloud reranking and advanced RAG      | 036                                                                         |
+| BYOK, managed quotas and optional paid convenience tier                   | 019, 026, 032, 034, 038, 039                                                |
+
+## Audit-closure matrix for plans 025–039
+
+The wave is not complete merely because backend contracts exist. Each row below
+requires its server/domain path, durable lifecycle, security/placement proof and
+functional Web experience unless explicitly described as external-client only.
+
+| Audited requirement                                                                                                                                    | Owning completion plan(s)                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Production branchable chat runtime, replay, edit/retry, status/tool/usage parts, dictation, attachments, export and project save                       | 029 foundation; 035 production runtime and Web acceptance                              |
+| Model catalogue, BYOK/OpenRouter/direct/local/managed placements, optional LiteLLM actually usable                                                     | 026 foundation; 035 and 038 implementation; 039 managed operations                     |
+| One ToolBroker for embedded/MCP, scoped custom MCP/skills, approvals, audit and undo                                                                   | 027 and 030; production projection in 035                                              |
+| No raw chain of thought; visible plan/todo/status/sources/provider-approved summaries                                                                  | 026, 029 and 035                                                                       |
+| Projects/notebooks, exact source versions, branch-aware conversations and private inline images                                                        | 028, 033 and 036                                                                       |
+| Advanced RAG: FTS, multimodal Gemini adapter, provider-neutral vectors, RRF, cloud/local cross-encoder reranking and measured French-school evaluation | 028 foundation; 036 completion                                                         |
+| Original PDF/page/image/audio/video evidence, OCR/transcript on demand and exact page/region/timecode citations                                        | 020, 024, 028, 033 and 036                                                             |
+| YouTube captions plus authorized audio fallback, dynamic public Web ingestion, thumbnails and source assets                                            | 022 and 033, including the required Web studio                                         |
+| LaTeX/PDF/PPTX/quiz/Anki/podcast/narrated video/Manim creation, preview, visual review, revision, export and durable progress                          | 024 and 033; runtime/worker activation in 035/038                                      |
+| Versioned logical workspaces, provider-native runtime checkpoints and bounded OpenCode/OpenHands specialists                                           | 031 foundation; 038 completion                                                         |
+| Hosted Core + custom Node pairing/relay and per-capability file/chat/search/model/sandbox placement                                                    | 032 foundation; 038 production and Web completion                                      |
+| Visual self-host configurator, Garage/S3/filesystem, Compose profiles, offline bundle, backup/restore and N−1 upgrade                                  | 032 foundation; 038 completion                                                         |
+| Copy/photo analysis, concepts/objectives/errors, learning plan, quiz evidence and measurable longitudinal progress                                     | 037, including all critical Web workflows                                              |
+| Managed storage/inference/sandbox, isolation, quotas, usage, privacy, customer/operator UI and eventual billing                                        | 034 shadow foundation; 039 staged activation                                           |
+| School provider-owned grades/subjects/years with local overlays and honest provider-vs-Avermate averages                                               | Existing 008/018/021 implementation and `docs/school-integrations.md`; consumed by 037 |
+| Distinct agenda, calendar, todo and kanban with learning-task integration                                                                              | 004 foundation; 037 integration                                                        |
+| Settings search inside pages, service-key/provider setup and capability readiness                                                                      | Existing settings search; 035, 036, 038 and 039 provider/placement pages               |
+| Responsive, accessible, localized Web loading/empty/error/offline/cancelled states for every new flow                                                  | Explicit release criterion in 033 and 035–039                                          |
+
+React Native remains excluded by maintainer instruction. External provider/live
+host/licence prerequisites may block release evidence, but they may not be
+relabelled as optional implementation or omitted from these plans.
 
 ## Decisions that remain explicit
 

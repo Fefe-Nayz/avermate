@@ -1,12 +1,9 @@
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { latexWorkerOutputV1Schema } from "@avermate/agent-contracts";
 import { z } from "zod";
 import { db } from "../db";
 import {
   documentArtifacts,
-  files,
   studyDocumentBuilds,
   studyDocuments,
   type LatexMetaV2,
@@ -14,6 +11,8 @@ import {
 import { NonRetryableJobError } from "../lib/jobs";
 import { latexMetaSchema } from "../lib/study-document-content";
 import { deleteFile, FILE_CONSTRAINTS, storeFile } from "../lib/storage";
+import { runConfiguredSandboxWorker } from "../sandbox/worker-services";
+import { sha256 } from "../search/values";
 
 export const BUILD_DOCUMENT_LATEX_JOB_KIND = "build.documentLatex";
 export const LATEX_BUILD_TIMEOUT_MS = 30_000;
@@ -45,13 +44,6 @@ export interface LatexCompileInput {
 export type LatexCompiler = (
   input: LatexCompileInput,
 ) => Promise<LatexCompileResult>;
-
-interface CommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
 
 type TectonicEnvironment = Partial<
   Record<
@@ -171,33 +163,6 @@ export function tectonicCompileCommand(
   return command;
 }
 
-function packageResolutionLog(
-  source: string,
-  environment: TectonicEnvironment,
-) {
-  const packages = declaredLatexPackages(source);
-  return [
-    packages.length > 0
-      ? `Declared packages: ${packages.join(", ")}`
-      : "Declared packages: none",
-    `Package bundle: ${environment.TECTONIC_BUNDLE?.trim() ? "configured" : "Tectonic default"}; resolution: ${
-      enabledEnvironmentFlag(environment.TECTONIC_ONLY_CACHED)
-        ? "cache only"
-        : "automatic with persistent cache"
-    }`,
-  ].join("\n");
-}
-
-function redactConfiguredBundle(
-  value: string,
-  environment: TectonicEnvironment,
-) {
-  const bundle = environment.TECTONIC_BUNDLE?.trim();
-  return bundle
-    ? value.replaceAll(bundle, "[configured Tectonic bundle]")
-    : value;
-}
-
 function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
@@ -212,84 +177,6 @@ export function truncateLatexLog(value: string): string {
   return `${new TextDecoder().decode(
     bytes.subarray(0, LATEX_BUILD_MAX_LOG_BYTES),
   )}\n[compiler output truncated]`;
-}
-
-async function boundedText(
-  stream: ReadableStream<Uint8Array>,
-  maxBytes: number,
-) {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let retained = 0;
-  let text = "";
-  let truncated = false;
-  while (true) {
-    const part = await reader.read();
-    if (part.done) break;
-    const remaining = Math.max(0, maxBytes - retained);
-    if (remaining > 0) {
-      const kept = part.value.subarray(0, remaining);
-      retained += kept.byteLength;
-      text += decoder.decode(kept, { stream: true });
-    }
-    if (part.value.byteLength > remaining) truncated = true;
-  }
-  text += decoder.decode();
-  return `${text.trim()}${truncated ? "\n[process output truncated]" : ""}`;
-}
-
-async function runCommand(
-  command: string[],
-  input: {
-    cwd: string;
-    timeoutMs: number;
-    signal?: AbortSignal;
-    environment?: Record<string, string>;
-  },
-): Promise<CommandResult> {
-  input.signal?.throwIfAborted();
-  const child = Bun.spawn(command, {
-    cwd: input.cwd,
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-    env: input.environment ?? latexNativeEnvironment(),
-  });
-  let timedOut = false;
-  // Compilation is an untrusted native workload, so abort and timeout must
-  // terminate it even when the child does not handle SIGTERM.
-  const stop = () => child.kill("SIGKILL");
-  input.signal?.addEventListener("abort", stop, { once: true });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill("SIGKILL");
-  }, input.timeoutMs);
-  try {
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      boundedText(child.stdout, LATEX_BUILD_MAX_LOG_BYTES),
-      boundedText(child.stderr, LATEX_BUILD_MAX_LOG_BYTES),
-    ]);
-    input.signal?.throwIfAborted();
-    return { exitCode, stdout, stderr, timedOut };
-  } finally {
-    clearTimeout(timer);
-    input.signal?.removeEventListener("abort", stop);
-  }
-}
-
-function combinedLog(result: Pick<CommandResult, "stdout" | "stderr">) {
-  return truncateLatexLog(
-    [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
-  );
-}
-
-async function optionalCompilerLog(path: string) {
-  try {
-    return await readFile(path, "utf8");
-  } catch {
-    return "";
-  }
 }
 
 function failureLog(message: string, compilerLog = "") {
@@ -322,115 +209,62 @@ export async function compileDocumentLatex(
       log: `${meta.engine} is not available on this server; the sandboxed Tectonic worker supports xelatex`,
     };
   }
-  const entry = meta.entry ?? "main.tex";
-  const directory = await mkdtemp(join(tmpdir(), "avermate-latex-"));
-  const entryPath = join(directory, entry);
-  const outputName = `${entry.slice(0, -4)}.pdf`;
-  const outputPath = join(directory, outputName);
-  const nativeLogPath = join(directory, `${entry.slice(0, -4)}.log`);
-  const deadline = Date.now() + input.timeoutMs;
-  const remaining = () => Math.max(1, deadline - Date.now());
-  const environment = processTectonicEnvironment();
+  return {
+    status: "failed",
+    log: "LaTeX compilation requires an enabled, attested sandbox latex profile; native API execution is disabled",
+  };
+}
 
-  try {
-    await writeFile(entryPath, input.source, { encoding: "utf8", flag: "wx" });
-    const compile = await runCommand(
-      tectonicCompileCommand(entryPath, directory, environment),
-      { cwd: directory, timeoutMs: remaining(), signal: input.signal },
-    );
-    const nativeLog = await optionalCompilerLog(nativeLogPath);
-    const log = truncateLatexLog(
-      redactConfiguredBundle(
-        [
-          `Requested engine: ${meta.engine}; compiler: Tectonic`,
-          packageResolutionLog(input.source, environment),
-          nativeLog,
-          combinedLog(compile),
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        environment,
-      ),
-    );
-    if (compile.timedOut) {
-      return {
-        status: "failed",
-        log: failureLog(
-          `Tectonic exceeded the ${input.timeoutMs} ms build limit`,
-          log,
-        ),
-      };
-    }
-    if (compile.exitCode !== 0) {
-      return {
-        status: "failed",
-        log: failureLog(`Tectonic exited with status ${compile.exitCode}`, log),
-      };
-    }
-
-    let outputInfo;
-    try {
-      outputInfo = await stat(outputPath);
-    } catch {
-      return {
-        status: "failed",
-        log: failureLog("Tectonic did not produce a PDF", log),
-      };
-    }
-    if (
-      outputInfo.size < 5 ||
-      outputInfo.size > FILE_CONSTRAINTS["latex-build"].maxBytes
-    ) {
-      return {
-        status: "failed",
-        log: failureLog("The generated PDF has an invalid size", log),
-      };
-    }
-
-    const pdfInfo = await runCommand(
-      [process.env.PDFINFO_BIN?.trim() || "pdfinfo", outputPath],
-      { cwd: directory, timeoutMs: remaining(), signal: input.signal },
-    );
-    if (pdfInfo.timedOut || pdfInfo.exitCode !== 0) {
-      return {
-        status: "failed",
-        log: failureLog(
-          pdfInfo.timedOut
-            ? "PDF inspection exceeded the build time limit"
-            : pdfInfo.stderr || "The generated PDF could not be inspected",
-          log,
-        ),
-      };
-    }
-    const pageMatch = /^Pages:\s*(\d+)\s*$/im.exec(pdfInfo.stdout);
-    const pageCount = pageMatch ? Number(pageMatch[1]) : Number.NaN;
-    if (!Number.isSafeInteger(pageCount) || pageCount < 1) {
-      return {
-        status: "failed",
-        log: failureLog("The generated PDF page count is invalid", log),
-      };
-    }
-    if (pageCount > input.maxPages) {
-      return {
-        status: "failed",
-        log: failureLog(
-          `The generated PDF has ${pageCount} pages; the limit is ${input.maxPages}`,
-          log,
-        ),
-      };
-    }
-
-    const pdfBytes = new Uint8Array(await readFile(outputPath));
-    if (new TextDecoder("ascii").decode(pdfBytes.subarray(0, 5)) !== "%PDF-") {
-      return {
-        status: "failed",
-        log: failureLog("Tectonic produced an invalid PDF", log),
-      };
-    }
-    return { status: "succeeded", pdfBytes, pageCount, log };
-  } finally {
-    await rm(directory, { recursive: true, force: true });
+async function compileDocumentLatexInSandbox(
+  input: LatexCompileInput & {
+    ownerId: string;
+    documentId: string;
+    revision: number;
+    operationId: string;
+  },
+): Promise<LatexCompileResult> {
+  const sourceBytes = new TextEncoder().encode(input.source);
+  const execution = await runConfiguredSandboxWorker({
+    workerId: "latex-build.v1",
+    ownerId: input.ownerId,
+    threadId: input.documentId,
+    branchId: `${input.documentId}-r${input.revision}`,
+    operationId: input.operationId,
+    manifest: {
+      schemaVersion: 1,
+      worker: "latex-build.v1",
+      source: {
+        path: "input/main.tex",
+        digest: `sha256:${sha256(sourceBytes)}`,
+        byteSize: sourceBytes.byteLength,
+      },
+      engine: "tectonic",
+      shellEscape: false,
+      maximumPages: input.maxPages,
+    },
+    inputFiles: [
+      {
+        relativePath: "input/main.tex",
+        bytes: sourceBytes,
+        digest: `sha256:${sha256(sourceBytes)}`,
+        mimeType: "application/x-tex",
+      },
+    ],
+    maximumReturnBytes: FILE_CONSTRAINTS["latex-build"].maxBytes + 2 * LATEX_BUILD_MAX_LOG_BYTES,
+    signal: input.signal,
+  });
+  const output = latexWorkerOutputV1Schema.parse(execution.output);
+  const pdfBytes = execution.files.get(output.pdf.path);
+  const logBytes = execution.files.get(output.log.path);
+  if (!pdfBytes || !logBytes) {
+    throw new Error("SANDBOX_LATEX_OUTPUT_MISSING");
   }
+  return {
+    status: "succeeded",
+    pdfBytes,
+    pageCount: output.pageCount,
+    log: new TextDecoder("utf-8", { fatal: false }).decode(logBytes),
+  };
 }
 
 async function buildWithDocument(buildId: string) {
@@ -746,13 +580,22 @@ export async function runBuildDocumentLatexJob(
   let candidateId: string | null = null;
   try {
     options.signal?.throwIfAborted();
-    const compiled = await (options.compileLatex ?? compileDocumentLatex)({
+    const compileInput = {
       source: document.bodyMarkdown,
       meta: meta.data,
       signal: options.signal,
       timeoutMs: LATEX_BUILD_TIMEOUT_MS,
       maxPages: LATEX_BUILD_MAX_PAGES,
-    });
+    };
+    const compiled = options.compileLatex
+      ? await options.compileLatex(compileInput)
+      : await compileDocumentLatexInSandbox({
+          ...compileInput,
+          ownerId: document.userId,
+          documentId: document.id,
+          revision: document.revision,
+          operationId: build.id,
+        });
     if (compiled.status === "failed") {
       const failed = await publishFailure(build, compiled.log);
       return {

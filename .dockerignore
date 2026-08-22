@@ -1,4 +1,16 @@
 node_modules
+**/node_modules
+.git
+.agents
+.claude
+.playwright-mcp
+.tmp
+**/.tmp*
+.data
+**/.data
+.turbo
+**/.turbo
+reports
 Dockerfile*
 docker-compose*
 .dockerignore
@@ -12,10 +24,19 @@ helm-charts
 .editorconfig
 .idea
 coverage*
+**/coverage
+**/dist
+**/.next
+**/test-results
+apps/mobile
 # Based on https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore
 
 dev.db
 dev.db-*
+test-media.db
+test-media.db-*
+*.db-shm
+*.db-wal
 
 # Logs
 

@@ -5,20 +5,35 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json bun.lock ./
+COPY patches patches
 COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/core/package.json packages/core/package.json
+COPY packages/agent-contracts/package.json packages/agent-contracts/package.json
 RUN bun install --frozen-lockfile
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
+
+# The asset synchronizer intentionally addresses the workspace-root package.
+# Bun keeps web-only dependencies in the app workspace, so expose that exact
+# installed package at the path the verified copy step expects.
+RUN ln -s /app/apps/web/node_modules/pyodide /app/node_modules/pyodide && \
+    ln -s /app/apps/web/node_modules/zod /app/node_modules/zod
 
 WORKDIR /app/apps/web
 ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_API_URL=https://api.avermate.nayz.fr
-ENV NEXT_PUBLIC_APP_URL=https://avermate.nayz.fr
+
+# Public origins are compile-time inputs in Next.js. Safe loopback defaults keep
+# a standalone/self-host build from silently embedding the hosted deployment;
+# hosted releases must pass their own explicit build args.
+ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:5000
+ARG NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 
 # Next's standalone output needs a real node binary at build time. The
 # hash-pinned Pyodide subset is generated into public/ first, because invoking

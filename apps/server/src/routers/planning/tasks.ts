@@ -1,9 +1,31 @@
 import { planningManagement } from "@avermate/core/planning";
-import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { planningTasks } from "../../db/schema";
-import { badRequest, protectedProcedure } from "../../lib/orpc";
+import {
+  badRequest,
+  conflict,
+  notFound,
+  protectedProcedure,
+} from "../../lib/orpc";
+import { newId } from "../../lib/id";
+import {
+  createPersonalTaskCommand,
+  PersonalTaskCommandError,
+  restorePersonalTaskCommand,
+  trashPersonalTaskCommand,
+} from "../../actions/personal-task-command";
 import {
   assertActive,
   assertEditablePatch,
@@ -70,6 +92,13 @@ function assertTaskDates(
   }
 }
 
+function rethrowTaskCommand(error: unknown): never {
+  if (!(error instanceof PersonalTaskCommandError)) throw error;
+  if (error.code === "not-found") notFound("Planning task");
+  if (error.code === "conflict") conflict(error.message);
+  badRequest(error.message);
+}
+
 export const planningTasksRouter = {
   list: protectedProcedure
     .input(
@@ -93,6 +122,7 @@ export const planningTasksRouter = {
           and(
             eq(planningTasks.userId, userId),
             eq(planningTasks.yearId, input.yearId),
+            isNull(planningTasks.trashedAt),
             input.includeCompleted
               ? undefined
               : ne(planningTasks.status, "done"),
@@ -114,30 +144,17 @@ export const planningTasksRouter = {
     .input(createInput)
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await validatePlanningScope({ userId, ...input });
-      assertTaskDates(input.startsAt, input.scheduledAt, input.dueAt);
-      const [last] = await db
-        .select({ sortOrder: planningTasks.sortOrder })
-        .from(planningTasks)
-        .where(
-          and(
-            eq(planningTasks.userId, userId),
-            eq(planningTasks.yearId, input.yearId),
-            eq(planningTasks.status, "todo"),
-          ),
-        )
-        .orderBy(desc(planningTasks.sortOrder))
-        .limit(1);
-      const [created] = await db
-        .insert(planningTasks)
-        .values({
-          ...input,
-          sortOrder: (last?.sortOrder ?? -1) + 1,
-          syncState: "detached",
-          userId,
-        })
-        .returning();
-      return publicTask(created!);
+      try {
+        return publicTask(
+          await createPersonalTaskCommand(db.$client, {
+            resourceId: newId("ptask"),
+            userId,
+            ...input,
+          }),
+        );
+      } catch (error) {
+        rethrowTaskCommand(error);
+      }
     }),
 
   update: protectedProcedure
@@ -165,11 +182,21 @@ export const planningTasksRouter = {
       });
       const [updated] = await db
         .update(planningTasks)
-        .set({ ...patch, updatedAt: new Date() })
+        .set({
+          ...patch,
+          revision: sql`${planningTasks.revision} + 1`,
+          updatedAt: new Date(),
+        })
         .where(
-          and(eq(planningTasks.id, taskId), eq(planningTasks.userId, userId)),
+          and(
+            eq(planningTasks.id, taskId),
+            eq(planningTasks.userId, userId),
+            eq(planningTasks.revision, existing.revision),
+            isNull(planningTasks.trashedAt),
+          ),
         )
         .returning();
+      if (!updated) conflict("Planning task changed before update");
       return publicTask(updated!);
     }),
 
@@ -190,14 +217,18 @@ export const planningTasksRouter = {
               ? (existing.completedAt ?? new Date())
               : null,
           updatedAt: new Date(),
+          revision: sql`${planningTasks.revision} + 1`,
         })
         .where(
           and(
             eq(planningTasks.id, input.taskId),
             eq(planningTasks.userId, userId),
+            eq(planningTasks.revision, existing.revision),
+            isNull(planningTasks.trashedAt),
           ),
         )
         .returning();
+      if (!updated) conflict("Planning task changed before status update");
       return publicTask(updated!);
     }),
 
@@ -226,6 +257,7 @@ export const planningTasksRouter = {
             eq(planningTasks.yearId, existing.yearId),
             eq(planningTasks.status, input.status),
             inArray(planningTasks.syncState, ["managed", "detached"]),
+            isNull(planningTasks.trashedAt),
           ),
         )
         .orderBy(asc(planningTasks.sortOrder), asc(planningTasks.createdAt));
@@ -252,6 +284,7 @@ export const planningTasksRouter = {
                   eq(planningTasks.status, existing.status),
                   ne(planningTasks.id, existing.id),
                   inArray(planningTasks.syncState, ["managed", "detached"]),
+                  isNull(planningTasks.trashedAt),
                 ),
               )
               .orderBy(
@@ -275,6 +308,7 @@ export const planningTasksRouter = {
                   }
                 : {}),
               updatedAt: now,
+              revision: sql`${planningTasks.revision} + 1`,
             })
             .where(
               and(eq(planningTasks.id, id), eq(planningTasks.userId, userId)),
@@ -283,7 +317,11 @@ export const planningTasksRouter = {
         for (const [sortOrder, row] of previousLane.entries()) {
           await tx
             .update(planningTasks)
-            .set({ sortOrder, updatedAt: now })
+            .set({
+              sortOrder,
+              revision: sql`${planningTasks.revision} + 1`,
+              updatedAt: now,
+            })
             .where(
               and(
                 eq(planningTasks.id, row.id),
@@ -305,15 +343,79 @@ export const planningTasksRouter = {
           "Dismiss or detach a provider-managed task instead of deleting it",
         );
       }
-      await db
-        .delete(planningTasks)
+      try {
+        const task = await trashPersonalTaskCommand(db.$client, {
+          userId,
+          taskId: input.taskId,
+          expectedRevision: existing.revision,
+        });
+        return { ok: true, revision: task.revision, trashedAt: task.trashedAt };
+      } catch (error) {
+        rethrowTaskCommand(error);
+      }
+    }),
+
+  trash: protectedProcedure
+    .input(
+      z.object({
+        taskId: idSchema,
+        expectedRevision: z.number().int().positive(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        return publicTask(
+          await trashPersonalTaskCommand(db.$client, {
+            userId: context.session.user.id,
+            ...input,
+          }),
+        );
+      } catch (error) {
+        rethrowTaskCommand(error);
+      }
+    }),
+
+  restore: protectedProcedure
+    .input(
+      z.object({
+        taskId: idSchema,
+        expectedRevision: z.number().int().positive(),
+      }),
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        return publicTask(
+          await restorePersonalTaskCommand(db.$client, {
+            userId: context.session.user.id,
+            ...input,
+          }),
+        );
+      } catch (error) {
+        rethrowTaskCommand(error);
+      }
+    }),
+
+  trashList: protectedProcedure
+    .input(z.object({ yearId: idSchema }))
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      await validatePlanningScope({
+        userId,
+        yearId: input.yearId,
+        subjectId: null,
+      });
+      const rows = await db
+        .select()
+        .from(planningTasks)
         .where(
           and(
-            eq(planningTasks.id, input.taskId),
             eq(planningTasks.userId, userId),
+            eq(planningTasks.yearId, input.yearId),
+            isNotNull(planningTasks.trashedAt),
           ),
-        );
-      return { ok: true };
+        )
+        .orderBy(desc(planningTasks.trashedAt));
+      return rows.map((row) => publicTask(row));
     }),
 
   dismiss: protectedProcedure
@@ -324,7 +426,11 @@ export const planningTasksRouter = {
       assertManaged(existing, "Planning task");
       const [updated] = await db
         .update(planningTasks)
-        .set({ syncState: "dismissed", updatedAt: new Date() })
+        .set({
+          syncState: "dismissed",
+          revision: sql`${planningTasks.revision} + 1`,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(planningTasks.id, input.taskId),
@@ -363,7 +469,11 @@ export const planningTasksRouter = {
           .returning();
         await tx
           .update(planningTasks)
-          .set({ syncState: "dismissed", updatedAt: now })
+          .set({
+            syncState: "dismissed",
+            revision: sql`${planningTasks.revision} + 1`,
+            updatedAt: now,
+          })
           .where(
             and(
               eq(planningTasks.id, input.taskId),

@@ -39,6 +39,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 type StoreFile = typeof import("../lib/storage").storeFile;
 type DeleteFile = typeof import("../lib/storage").deleteFile;
@@ -264,7 +267,7 @@ beforeAll(async () => {
   apiB = createRouterClient(router, {
     context: { headers: new Headers(), session: sessionFor(userB) },
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterEach(() => {
   storeBehavior = persistFile;
@@ -285,7 +288,7 @@ afterAll(async () => {
   await database
     .delete(schema.users)
     .where(inArray(schema.users.id, [userA, userB]));
-}, 30_000);
+}, databaseHookTimeout);
 
 async function startRecording(title = `Lecture ${crypto.randomUUID()}`) {
   return apiA.recordings.start({ yearId: yearA, title });

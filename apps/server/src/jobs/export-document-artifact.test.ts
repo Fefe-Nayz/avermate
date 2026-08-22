@@ -25,6 +25,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
@@ -55,11 +58,11 @@ beforeAll(async () => {
     userId,
   });
   worker = await import("./export-document-artifact");
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database.delete(schema.users).where(eq(schema.users.id, userId));
-});
+}, databaseHookTimeout);
 
 async function podcastFixture(input: {
   label: string;

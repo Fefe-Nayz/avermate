@@ -24,6 +24,9 @@ const migration = readdirSync(migrationDirectory)
   .sort((left, right) => left.localeCompare(right))
   .map((file) => readFileSync(join(migrationDirectory, file), "utf8"))
   .join("\n");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 let database: typeof import("../db").db;
 let schema: typeof import("../db/schema");
@@ -64,7 +67,7 @@ beforeAll(async () => {
   });
   maintenance = await import("./material-trash-maintenance");
   storage = await import("../lib/storage");
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
@@ -75,7 +78,7 @@ afterAll(async () => {
     .where(eq(schema.materialDocuments.userId, userId));
   await database.delete(schema.files).where(eq(schema.files.userId, userId));
   await database.delete(schema.users).where(eq(schema.users.id, userId));
-});
+}, databaseHookTimeout);
 
 async function insertTrashedDocument(input: { id: string; fileId?: string }) {
   await database.insert(schema.materialDocuments).values({

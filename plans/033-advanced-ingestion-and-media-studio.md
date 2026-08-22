@@ -24,7 +24,10 @@ apps/web/src/components/materials apps/web/src/components/documents infra`.
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IN PROGRESS — structured workers, contracts, durable dispatch,
+  artifact lineage and repository gates are implemented; real image
+  attestation, provider isolation and runtime egress conformance remain release
+  blockers
 - **Priority**: P2
 - **Effort**: XL (three independently shippable slices)
 - **Risk**: HIGH
@@ -37,16 +40,32 @@ apps/web/src/components/materials apps/web/src/components/documents infra`.
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
 
+### 2026-08-22 implementation checkpoint
+
+- `verify:033:ingestion` runs 65 deterministic tests and a real local Chromium
+  fixture covering static HTML, dynamic redirect rendering, trusted
+  Markdown/citation normalization and a malicious request-limit case.
+- `verify:033:sandbox:repository` audits the API boundary, runs the reviewed
+  worker/adoption suite and records the disabled provider as unavailable.
+- `verify:033:sandbox:live` is intentionally strict: without an attested live
+  provider it exits non-zero with
+  `SANDBOX_CONFORMANCE_LIVE_PROVIDER_REQUIRED:disabled`. A disabled or mock
+  provider can no longer be mistaken for live isolation evidence.
+- The remaining work is the complete functional Web media studio, real
+  attested provider/image/egress cells and production placement activation.
+
 ## Scope
 
 **In scope**: sandboxed dynamic public-page rendering, private source assets,
 caption-first video plus opt-in bounded audio extraction, immutable artifact
 lineage/workflows, migration of current generators, narrated-slide timelines,
-FFmpeg, thumbnails/visual checks and optional template/DSL Manim.
+FFmpeg, thumbnails/visual checks, template/DSL Manim, and the complete Web media
+studio needed to configure, launch, monitor, review, revise and export them.
 
 **Out of scope**: a general downloader/browser/shell, authenticated/private/DRM
-content, arbitrary hosted Python, a complete studio UI redesign, public artifact
-sharing and enabling managed execution before 034's launch gates.
+content, arbitrary hosted Python, public artifact sharing and enabling managed
+execution before 034's launch gates. Visual polish may reuse existing design
+components, but the functional studio UI is not optional or deferred.
 
 ## Outcome
 
@@ -494,8 +513,19 @@ artifact orchestrator and cannot receive core/node credentials. Any experiment:
 
 ## API, tool and UI boundary
 
-This plan implements server/domain/tool contracts and minimal existing-screen
-controls needed to exercise them; a dedicated studio redesign is separate.
+This plan implements server/domain/tool contracts and a production Web studio;
+the critical workflow may not exist only through raw APIs, MCP or chat widgets.
+Reuse the existing materials/project/document shell and rich renderers rather
+than creating a second artifact system.
+
+The Web studio must include source/timeline/artifact navigation, template and
+placement selection, source/citation review, durable live progress, stage logs,
+cancel/retry, revision comparison, visual preview, approval/publish, export and
+actionable unavailable/degraded states. It must cover dynamic Web retry, video
+caption/audio ingestion, narrated slides, thumbnails and enabled Manim profiles.
+Every control needs loading/empty/error/offline/cancelled states, keyboard and
+screen-reader behavior, responsive Web layout and French copy. No browser may
+construct a command line or receive a sandbox/provider credential.
 
 Add registry operations along these lines:
 
@@ -682,6 +712,8 @@ health and queue saturation without exposing private source names.
   trusted FFmpeg code; Manim is an optional isolated adapter.
 - Every pipeline supports cancel/retry, explicit placement, usage accounting,
   capability kill switches and cleanup.
+- The complete Web media studio can create, monitor, review, revise, preview and
+  export every enabled pipeline without requiring chat or developer routes.
 - No general shell, downloader, browser or code-execution surface is exposed to
   the core, Web client, MCP client or model.
 - `bun run verify:033` passes on the required isolated CI runner; no mandatory

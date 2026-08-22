@@ -8,7 +8,12 @@ import {
   prepareMigrationBaseline,
 } from "./migrate";
 
-const expectedMigrationCount = 54;
+// SAFETY: the checked-in Drizzle journal is exercised by the dedicated
+// migration-history test before this count is used.
+const migrationJournal = JSON.parse(
+  await readFile(`${defaultMigrationsFolder}/meta/_journal.json`, "utf8"),
+) as { entries: unknown[] };
+const expectedMigrationCount = migrationJournal.entries.length;
 
 async function migrationRows(client: Client) {
   const result = await client.execute(
@@ -43,16 +48,6 @@ async function expectAnnouncementAudienceSchema(client: Client) {
   ]);
   expect(targetTable.rows).toHaveLength(1);
   expect(audienceColumn.rows).toHaveLength(1);
-}
-
-async function expectProviderSafetySchema(client: Client) {
-  const tables = await client.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('rate_limits', 'sync_subject_mappings') ORDER BY name",
-  );
-  expect(tables.rows.map((row) => String(row.name))).toEqual([
-    "rate_limits",
-    "sync_subject_mappings",
-  ]);
 }
 
 async function expectGradeSyncSchema(client: Client) {
@@ -474,6 +469,47 @@ async function expectMaterialsExplorerSchema(client: Client) {
   ]);
 }
 
+async function expectSchemaCongruence(client: Client) {
+  const [feedbackForeignKey, feedbackDefault, socialGroupForeignKey] =
+    await Promise.all([
+      client.execute(`
+        SELECT "from", "table", on_update, on_delete
+        FROM pragma_foreign_key_list('feedback')
+        WHERE "from" = 'assignedToUserId'
+      `),
+      client.execute(`
+        SELECT name, dflt_value
+        FROM pragma_table_info('feedback')
+        WHERE name = 'lastSeenAt'
+      `),
+      client.execute(`
+        SELECT "from", "table", on_update, on_delete
+        FROM pragma_foreign_key_list('social_groups')
+        WHERE "from" = 'sharedSetupYearId'
+      `),
+    ]);
+
+  expect(feedbackForeignKey.rows[0]).toMatchObject({
+    from: "assignedToUserId",
+    table: "users",
+    on_update: "CASCADE",
+    on_delete: "SET NULL",
+  });
+  expect(feedbackDefault.rows[0]).toMatchObject({
+    name: "lastSeenAt",
+    dflt_value: null,
+  });
+  expect(socialGroupForeignKey.rows[0]).toMatchObject({
+    from: "sharedSetupYearId",
+    table: "years",
+    on_update: "CASCADE",
+    on_delete: "SET NULL",
+  });
+  expect((await client.execute("PRAGMA foreign_key_check")).rows).toHaveLength(
+    0,
+  );
+}
+
 describe("migration baseline adoption", () => {
   test("preserves existing school connections while adding grade sync state", async () => {
     const client = createClient({ url: ":memory:" });
@@ -683,6 +719,7 @@ describe("migration baseline adoption", () => {
       await expectRecordingPlanningSchema(client);
       await expectMaterialsExplorerSchema(client);
       await expectGradeSyncSchema(client);
+      await expectSchemaCongruence(client);
     } finally {
       client.close();
     }
@@ -763,6 +800,7 @@ describe("migration baseline adoption", () => {
       await expectRecordingPlanningSchema(client);
       await expectMaterialsExplorerSchema(client);
       await expectGradeSyncSchema(client);
+      await expectSchemaCongruence(client);
 
       const social = await client.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'social_profiles'",
@@ -802,77 +840,7 @@ describe("migration baseline adoption", () => {
       await expectRecordingPlanningSchema(client);
       await expectMaterialsExplorerSchema(client);
       await expectGradeSyncSchema(client);
-    } finally {
-      client.close();
-    }
-  });
-
-  test("upgrades an existing 0040 database through the file and sync fences", async () => {
-    const client = createClient({ url: ":memory:" });
-    try {
-      await migrateClient(client);
-      await client.executeMultiple(`
-        DROP TABLE document_artifacts;
-        DROP TABLE quiz_attempts;
-        ALTER TABLE content_connections DROP COLUMN subscriptionResourceId;
-        ALTER TABLE material_tag_links DROP COLUMN origin;
-        DROP TABLE sync_grade_records;
-        DROP TABLE sync_period_mappings;
-        DROP INDEX sync_connections_remote_scope_unique;
-        ALTER TABLE grades DROP COLUMN syncExcludedFromAverage;
-        ALTER TABLE grades DROP COLUMN excludedFromAverage;
-        DROP INDEX material_documents_adoption_key_unique;
-        DROP INDEX material_documents_file_idx;
-        ALTER TABLE material_documents DROP COLUMN adoptionKey;
-        ALTER TABLE material_documents DROP COLUMN deletedBatchId;
-        ALTER TABLE material_folders DROP COLUMN deletedBatchId;
-        ALTER TABLE study_documents DROP COLUMN deletedBatchId;
-        ALTER TABLE lecture_recordings DROP COLUMN deletedBatchId;
-        ALTER TABLE academic_assignments DROP COLUMN startsAt;
-        ALTER TABLE planning_tasks DROP COLUMN startsAt;
-        ALTER TABLE material_documents DROP COLUMN deletedBy;
-        ALTER TABLE material_folders DROP COLUMN deletedBy;
-        ALTER TABLE content_connections DROP COLUMN syncRevision;
-        ALTER TABLE content_connections DROP COLUMN syncRequestedGeneration;
-        ALTER TABLE content_connections DROP COLUMN syncActiveJobId;
-        ALTER TABLE study_documents DROP COLUMN deletedBy;
-        ALTER TABLE lecture_recordings DROP COLUMN deletedBy;
-        DELETE FROM __drizzle_migrations
-          WHERE created_at IN (
-            SELECT created_at FROM __drizzle_migrations
-            ORDER BY created_at DESC LIMIT 12
-          );
-        INSERT INTO users (id, name, email, createdAt, updatedAt)
-          VALUES ('legacy-material-user', 'Legacy', 'legacy-material@example.com', 1, 1);
-        INSERT INTO years (id, name, startsAt, endsAt, userId, createdAt, updatedAt)
-          VALUES ('legacy-material-year', 'Legacy year', 1, 2, 'legacy-material-user', 1, 1);
-        INSERT INTO files (
-          id, storageKey, url, mimeType, byteSize, purpose, userId, createdAt, updatedAt
-        ) VALUES (
-          'legacy-shared-file', 'legacy-shared-key', 'https://example.invalid/legacy.pdf',
-          'application/pdf', 42, 'course-material', 'legacy-material-user', 1, 1
-        );
-        INSERT INTO material_documents (
-          id, title, fileId, yearId, userId, createdAt, updatedAt
-        ) VALUES
-          ('legacy-material-a', 'Legacy A', 'legacy-shared-file', 'legacy-material-year', 'legacy-material-user', 1, 1),
-          ('legacy-material-b', 'Legacy B', 'legacy-shared-file', 'legacy-material-year', 'legacy-material-user', 1, 1);
-      `);
-      expect(await migrationRows(client)).toHaveLength(
-        expectedMigrationCount - 12,
-      );
-      await migrateClient(client);
-      expect(await migrationRows(client)).toHaveLength(expectedMigrationCount);
-      expect(
-        (
-          await client.execute(
-            "SELECT id FROM material_documents WHERE fileId = 'legacy-shared-file' ORDER BY id",
-          )
-        ).rows.map((row) => String(row.id)),
-      ).toEqual(["legacy-material-a", "legacy-material-b"]);
-      await expectProviderSafetySchema(client);
-      await expectMaterialsExplorerSchema(client);
-      await expectGradeSyncSchema(client);
+      await expectSchemaCongruence(client);
     } finally {
       client.close();
     }

@@ -25,6 +25,10 @@ export default async function IntegrationsSettingsPage() {
       ...orpc.sync.providers.queryOptions(),
       staleTime: Number.POSITIVE_INFINITY,
     }),
+    queryClient.prefetchQuery({
+      ...orpc.assistant.toolSources.list.queryOptions(),
+      staleTime: COMMON_QUERY_STALE_TIME,
+    }),
   ])
 
   await Promise.all(

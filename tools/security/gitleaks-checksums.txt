@@ -1,0 +1,14 @@
+# Gitleaks v8.24.3 official release checksums.
+# Source: https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_checksums.txt
+32c03d1406d08cff32c9fd89366deaef22fcdd6695f197b03d05b8b6e9ae78a7  gitleaks_8.24.3_linux_armv6.tar.gz
+3525a1eef1b0028bc8394da4861313eef80bcdaca030868a49bf752262f81894  gitleaks_8.24.3_windows_armv7.zip
+3f1a35578631dbfe633cc5b49e6c906e55ff14a4bfd7336a10fb27fe33b6dcd2  gitleaks_8.24.3_windows_x64.zip
+41c44ae8ad1d6eef57d4526ad0fd67d8129eee9a856f55c2b3b9395fd3d9ec0f  gitleaks_8.24.3_darwin_x64.tar.gz
+5f2edbe1f49f7b920f9e06e90759947d3c5dfc16f752fb93aaafc17e9d14cf07  gitleaks_8.24.3_linux_arm64.tar.gz
+9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  gitleaks_8.24.3_linux_x64.tar.gz
+ac21226b71f3e7d2b2a9195b791e8747cb5965f8d06b147f33b0501b63a0710b  gitleaks_8.24.3_linux_armv7.tar.gz
+aeadfee7feeedc061a9789a84b05995bf1755723f2d1027756d4ee78f56a0751  gitleaks_8.24.3_windows_x32.zip
+b90f13bb8c90ab72083d9b0c842e39dafb82c0e5c3f872f407366b7a58909013  gitleaks_8.24.3_darwin_arm64.tar.gz
+e79f682dcaf5a03c9fa13ba46538e1ff63c9d9aec66e316f9eb7823397fb436e  gitleaks_8.24.3_linux_x32.tar.gz
+f35d97e029ab21d01b6f806095a05caa6f58cc1f4456e35f3d4fd712427b8297  gitleaks_8.24.3_windows_armv6.zip
+

@@ -4,16 +4,28 @@ import type {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
-  call,
+  brokerMeta,
   id,
-  meta,
   type McpSurface,
   type McpSurfaceContext,
 } from "../shared";
+import { createFirstPartyToolBroker } from "../../tools/first-party";
+import { invokeBrokerFromMcp } from "../../tools/adapters/mcp";
 
-function registerSocialReadSurface({ server, api }: McpSurfaceContext): void {
-  const readMeta = meta("avermate:social.read");
+function registerSocialReadSurface({
+  server,
+  api,
+  principal,
+}: McpSurfaceContext): void {
+  const readMeta = brokerMeta("avermate:social.read");
   const readOnly = { readOnlyHint: true };
+  const broker = createFirstPartyToolBroker(api);
+  const invokeRead = (toolId: string, input: unknown) =>
+    invokeBrokerFromMcp({
+      broker,
+      principal,
+      invocation: { toolId, toolVersion: 1, input },
+    });
   const tool = <Schema extends z.ZodObject<any>>(
     name: string,
     description: string,
@@ -33,55 +45,55 @@ function registerSocialReadSurface({ server, api }: McpSurfaceContext): void {
     "social.sharing",
     "Read the connected user's sharing locks and the exact view friends receive.",
     z.object({}),
-    () => call(() => api.social.sharing.get()),
+    () => invokeRead("social.sharing", {}),
   );
   tool(
     "social.friends",
     "List friends and whether each shares anything.",
     z.object({}),
-    () => call(() => api.social.friends.list()),
+    () => invokeRead("social.friends", {}),
   );
   tool(
     "social.friend",
     "Read one friend and the averages they currently share.",
     z.object({ friendshipId: id }),
-    (input) => call(() => api.social.friends.detail(input)),
+    (input) => invokeRead("social.friend", input),
   );
   tool(
     "social.friend_requests",
     "List incoming and outgoing friend requests.",
     z.object({}),
-    () => call(() => api.social.friends.requests()),
+    () => invokeRead("social.friend_requests", {}),
   );
   tool(
     "social.blocks",
     "List accounts blocked by the connected user.",
     z.object({}),
-    () => call(() => api.social.blocks.list()),
+    () => invokeRead("social.blocks", {}),
   );
   tool(
     "social.groups",
     "List the connected user's classes.",
     z.object({}),
-    () => call(() => api.social.groups.list()),
+    () => invokeRead("social.groups", {}),
   );
   tool(
     "social.group",
     "Read a class with its members and their shared averages.",
     z.object({ groupId: id }),
-    (input) => call(() => api.social.groups.get(input)),
+    (input) => invokeRead("social.group", input),
   );
   tool(
     "social.notifications",
     "Read privacy-safe social notifications.",
     z.object({ unreadOnly: z.boolean().default(false) }),
-    (input) => call(() => api.social.notifications.list(input)),
+    (input) => invokeRead("social.notifications", input),
   );
   tool(
     "social.reports",
     "Read moderation reports submitted by the connected user.",
     z.object({}),
-    () => call(() => api.social.reports.mine()),
+    () => invokeRead("social.reports", {}),
   );
 }
 

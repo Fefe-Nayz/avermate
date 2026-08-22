@@ -37,6 +37,9 @@ const {
 const userId = "google-sync-user";
 const yearId = "google-sync-year";
 const now = new Date("2026-08-21T15:00:00.000Z");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 const publicLookup: ProviderLookup = async () => [
   { address: "8.8.8.8", family: 4 },
@@ -109,7 +112,7 @@ beforeAll(async () => {
     endsAt: new Date("2027-07-01T00:00:00.000Z"),
     userId,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await db.transaction(async (transaction) => {
@@ -127,7 +130,7 @@ afterAll(async () => {
       .where(eq(schema.contentConnections.userId, userId));
     await transaction.delete(schema.users).where(eq(schema.users.id, userId));
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 function snapshotFetch(
   options: { onExport?: () => Promise<void> | void } = {},

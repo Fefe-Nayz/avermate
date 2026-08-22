@@ -24,7 +24,8 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IMPLEMENTATION FOUNDATION COMPLETE — live attested-provider
+  activation and conformance are unavailable
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: CRITICAL
@@ -34,6 +35,28 @@
 - **Category**: execution plane, isolation, storage, jobs
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The provider/job/workspace contracts, disabled and mock paths, durable snapshot
+ledger, admission policy and the official OpenSandbox SDK transport are present.
+The production dependency is pinned as `@alibaba-group/opensandbox@0.1.11`;
+provider construction is wired through the environment-aware factory. The
+focused OpenSandbox transport/factory suite passes **8 tests with 0 failures**.
+The checked-in `sandbox:conformance` entrypoint fails closed rather than treating
+a mock or disabled provider as production evidence.
+
+There is currently no configured live OpenSandbox control plane with pinned
+profile images and an external, host-produced baseline-evidence endpoint. As a
+result, no real isolation profile has passed the required attested conformance
+suite in this checkout. Unit mocks prove contract behavior only. E2B and
+Microsandbox also have no activated production transport here. No workload may
+be advertised as securely sandboxed, and no mock result may satisfy plan 031's
+live gate, until those provider/image/host-policy inputs exist and the full
+conformance report is recorded.
+
+Plan 025's global, migration and clean-clone gates remain pending independently
+of this activation boundary.
 
 ## Scope
 

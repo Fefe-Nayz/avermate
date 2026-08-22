@@ -3,6 +3,9 @@ import { join } from "node:path";
 
 const IS_HARNESS = process.env.MCP_ADMIN_GATE_HARNESS === "true";
 const PROTOCOL_VERSION = "2026-07-28";
+// Applying the complete migration history through 0060 can take about 90s on
+// slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 type McpPrincipal = import("./auth").McpPrincipal;
 
@@ -101,7 +104,7 @@ if (IS_HARNESS) {
     // unhandled rejection after the assertions have passed.
     const { auth } = await import("../lib/auth");
     await auth.$context;
-  });
+  }, databaseHookTimeout);
 
   describe("MCP administrator surface gate", () => {
     test("uses the authoritative bootstrap and exact-role admin check", async () => {

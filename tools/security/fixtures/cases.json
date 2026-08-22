@@ -1,0 +1,19 @@
+{
+  "syntheticSecret": {
+    "fileName": "synthetic-secret.txt",
+    "prefixParts": ["sk", "proj"],
+    "separator": "-",
+    "fillCharacter": "S",
+    "fillLength": 48
+  },
+  "personalPath": {
+    "fileName": "personal-path.txt",
+    "drive": "C:",
+    "segments": ["Users", "fixture-person", "private", "notes.txt"]
+  },
+  "database": {
+    "stem": "synthetic-fixture",
+    "extension": ".db",
+    "payload": "SQLite fixture placeholder"
+  }
+}

@@ -3,6 +3,8 @@ node_modules/
 .next/
 .turbo/
 coverage/
+test-results/
+playwright-report/
 public/vendor/pyodide/
 pnpm-lock.yaml
 .pnpm-store/

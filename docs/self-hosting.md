@@ -4,6 +4,67 @@ The reference deployment runs the API and web application behind Traefik. A
 remote libSQL/Turso database is the simplest durable database; a local `file:`
 database also works when its directory is mounted persistently.
 
+This guide describes the current **complete self-host** shape: one operator
+runs the Web application, account/academic API, jobs, database connection and
+file storage. It must not be confused with the developing Avermate Node product,
+which will pair selected user-owned capabilities with an account hosted on
+`avermate.fr`.
+
+## Deployment modes
+
+| Mode                                  | Current status       | Data and execution boundary                                                                                                                         |
+| ------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local development                     | Implemented          | Local SQLite-compatible database and local file storage work without Garage; optional provider keys enable OCR/transcription                        |
+| Complete self-host                    | Release candidate    | Operator owns Web, API, local database/storage and configured providers; final Compose/air-gap proof is still blocked by the test host              |
+| Hosted academic core                  | Product mode         | Accounts and academic data may be hosted on `avermate.fr`; this baseline promises neither hosted file storage nor hosted inference                  |
+| Hosted core plus user Avermate Node   | Developer foundation | Protocol, filesystem storage, local configurator and fail-closed routing exist; the hosted Core registry/relay and advanced providers are not wired |
+| Optional managed AI and file capacity | Planned              | Plan 034 owns quotas, metering, tenant-isolated execution, managed storage/inference and billing                                                    |
+
+The current repository exposes scoped MCP and an embedded read-only assistant
+with a deterministic local fixture model. It does not yet include a proven
+general execution runtime. It contains fail-closed sandbox/provider contracts
+and a conformance matrix described in
+[`sandbox-runtime.md`](sandbox-runtime.md), but every real provider remains
+unavailable until its transport, immutable images and host-produced baseline
+evidence pass conformance. Self-hosting the current stack does not manufacture
+those future capabilities.
+
+The Plan 032 foundation is documented in
+[`avermate-node-protocol.md`](avermate-node-protocol.md). In particular,
+`dev-zero` can boot directly with filesystem storage and no Garage. The
+`node-storage` profile and disposable Garage v2.3 provider pass the shared
+storage conformance suite. That does not make the custom-node product flow
+complete: hosted pairing/relay, production conversation/retrieval/model/sandbox
+transports, durable adoption repository wiring and the final full-self-host
+air-gap proof still fail closed.
+
+The profile-aware Compose source is `infra/compose/avermate.yml`; public Node
+configuration is generated/validated against
+`infra/node/config.schema.json`. `docker compose ... config` is only a static
+syntax/interpolation check. It is not boot, backup, restore, isolation or
+air-gap evidence.
+
+The Plan 032 runtime harness uses loopback-only published ports and an internal
+Docker network. Its release proof signs in, performs academic CRUD, uploads and
+range-reads a local object, runs local-fixture chat/search/export/delete, calls
+OAuth-protected MCP, scans the built Web bundle/HTML for hosted Avermate domains,
+and actively verifies that DNS/HTTP egress cannot leave API, Web or Node. A
+profile with no conforming sandbox reports that capability unavailable; it does
+not fabricate a sandbox artifact.
+
+The latest local run is not release evidence: Docker Desktop's
+containerd/BuildKit content store failed first with an input/output error in
+`metadata_v2.db` and then returned HTTP 500 for the read-only `/system/df`
+probe. A final read-only retry timed out on `docker info`. The gate classifies
+these as `PLAN032_DOCKER_HOST_CONTENT_STORE_UNHEALTHY` and
+`PLAN032_DOCKER_HOST_DAEMON_UNAVAILABLE` before creating a Compose project. Fix
+the host and rerun both commands; do not replace them with `--static-only`:
+
+```sh
+bun run verify:032:selfhost
+bun run verify:032:selfhost-airgap
+```
+
 ## Prerequisites
 
 - Docker with Compose support;
@@ -12,6 +73,10 @@ database also works when its directory is mounted persistently.
 - three DNS names: web, API and the Garage S3 endpoint;
 - a durable libSQL database or a persistent volume for a local database;
 - the `webgateway` Docker network expected by `deploy.yml`.
+
+For a workstation checkout, Docker, Traefik, DNS and Garage are unnecessary:
+use the local setup in the root README. The prerequisites below apply to the
+reference production Compose topology.
 
 ## Configure
 
@@ -77,6 +142,14 @@ The API applies reviewed migrations before starting. Confirm the API health
 endpoint, then open the web origin and create the first account. Set its ID in
 `ADMIN_USER_IDS` for bootstrap administration.
 
+This startup check is not the plan 025 clean-clone acceptance run. Before
+calling an image releasable, also run the repository formatting, lint, type,
+test and production-build gates, migrate both an empty and a representative
+upgrade database, inspect the production dependency graph and exercise a file
+upload plus one MCP read. The current candidate evidence and unresolved gates
+are recorded in the
+[2026-08 baseline notes](releases/2026-08-baseline.md).
+
 ## Optional integrations
 
 The checked-in `apps/server/.env.example` is the canonical inventory. OAuth,
@@ -127,7 +200,42 @@ volume as a backup.
 
 ## Parity statement
 
-Self-hosted instances receive every Avermate capability. Paid integrations use
-the operator's or student's own keys; no application feature is licence-gated.
-The future satellite is an additional deployment shape, not a requirement for
-full self-hosting.
+Complete self-hosting exposes the capabilities implemented in this repository:
+the academic core, Planning, Materials, supported synchronization providers,
+document jobs, embedded read-only assistant and MCP. Paid upstream integrations
+use the operator's or student's own supported key where BYOK exists. The
+repository does not yet contain a production Avermate Node data plane, managed
+capacity or an enabled general sandbox described by plans 026–034. Sandbox
+contracts and corpus foundations are not the same as an operational provider or
+complete product surface.
+
+PRONOTE/Pawnote and Skolengo are an explicit exception to feature parity in a
+production image. Their GPL dependencies and adapters are development/test-only
+while the project itself has no declared licence. See
+[school integrations](school-integrations.md) for the enforced matrix.
+
+No project licence is currently declared. Possessing a checkout or running it
+locally does not by itself grant redistribution rights. Plan 025 remains
+incomplete until the maintainer publishes an explicit licence, third-party
+notices and a compatible connector distribution decision.
+
+## Optional managed-plane independence
+
+The Plan 034 technical shadow modules are optional. For a deployment that does
+not use Avermate-operated inference or storage, set:
+
+```env
+AVERMATE_DEPLOYMENT_MODE=full-self-host
+MANAGED_ACCOUNTING_MODE=shadow
+MANAGED_ADAPTERS_ENABLED=false
+MANAGED_REGION=local
+```
+
+This creates the operator-controlled local entitlement policy and keeps
+checkout/billing absent. The default operational exporter is `none`; the code
+does not contact Avermate telemetry. Instance-owned provider keys and BYOK are
+resolved locally, and an operator key is never relabeled as a paid managed
+placement. Run `bun run verify:034:selfhost-airgap` against exact release images
+before making an air-gap claim; an environment-variable check alone is not
+network evidence. Architecture, shadow-accounting semantics and current launch
+blockers are documented in [managed-plane.md](managed-plane.md).

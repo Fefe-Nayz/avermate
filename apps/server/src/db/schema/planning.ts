@@ -86,6 +86,10 @@ export const planningTasks = sqliteTable(
     completedAt: integer({ mode: "timestamp" }),
     subjectId: subject(),
     sortOrder: integer().notNull().default(0),
+    /** Optimistic concurrency fence for every canonical task mutation. */
+    revision: integer().notNull().default(1),
+    /** Recoverable deletion. Normal planning queries exclude trashed rows. */
+    trashedAt: integer({ mode: "timestamp" }),
     yearId: year(),
     userId: owner(),
     ...managed(),
@@ -98,6 +102,7 @@ export const planningTasks = sqliteTable(
       table.dueAt,
     ),
     index("planning_tasks_user_status_idx").on(table.userId, table.status),
+    index("planning_tasks_user_trash_idx").on(table.userId, table.trashedAt),
     uniqueIndex("planning_tasks_source_external_unique").on(
       table.sourceConnectionId,
       table.externalId,

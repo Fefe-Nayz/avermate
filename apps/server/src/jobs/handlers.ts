@@ -66,12 +66,30 @@ import {
   runGoogleDriveChannelRenewalJob,
   runGoogleDriveSyncJob,
 } from "./googledrive-sync";
+import {
+  CORPUS_EMBED_CHUNKS_JOB_KIND,
+  CORPUS_INDEX_SOURCE_JOB_KIND,
+  CORPUS_REBUILD_FTS_JOB_KIND,
+  CORPUS_REEMBED_SPACE_JOB_KIND,
+  CORPUS_REMOVE_VERSION_JOB_KIND,
+  CORPUS_REPAIR_JOB_KIND,
+  CORPUS_VERIFY_JOB_KIND,
+  runCorpusEmbeddingUnavailableJob,
+  runCorpusIndexSourceJob,
+  runCorpusRebuildFtsJob,
+  runCorpusRemoveVersionJob,
+  runCorpusRepairJob,
+  runCorpusVerifyJob,
+} from "./corpus";
+import { managedUsage } from "../managed/services";
+import { runConfiguredSandboxWorkerJob } from "../sandbox/worker-services";
 
 export const MAINTENANCE_JOB_KINDS = [
   "maintenance.reapMcpOperations",
   "maintenance.purgeExpiredAutomaticFeedback",
   PURGE_MATERIAL_TRASH_JOB_KIND,
   "maintenance.enqueueMaterialPreviews",
+  "maintenance.reconcileManagedUsage",
 ] as const;
 
 const DAY_MS = 86_400_000;
@@ -156,8 +174,19 @@ export function registerAllJobHandlers() {
     return enqueuePendingMaterialPreviews();
   });
 
-  registerJobHandler(OCR_JOB_KIND, ({ payload, signal }) =>
-    runOcrDocumentJob(payload, { signal }),
+  registerJobHandler(MAINTENANCE_JOB_KINDS[4], async () => {
+    const now = new Date();
+    await scheduleNext(MAINTENANCE_JOB_KINDS[4], now);
+    const settled = await managedUsage().reconcileExpired(1_000);
+    return { settledReservationIds: settled };
+  });
+
+  registerJobHandler("sandbox.execute", ({ payload, signal, jobId }) =>
+    runConfiguredSandboxWorkerJob(payload, { signal, jobId }),
+  );
+
+  registerJobHandler(OCR_JOB_KIND, ({ payload, signal, jobId }) =>
+    runOcrDocumentJob(payload, { signal, operationId: jobId }),
   );
 
   registerJobHandler(INGEST_LINK_JOB_KIND, ({ payload, signal }) =>
@@ -174,12 +203,18 @@ export function registerAllJobHandlers() {
 
   registerJobHandler(
     EXPORT_DOCUMENT_ARTIFACT_JOB_KIND,
-    ({ payload, signal, attempts }) =>
-      runExportDocumentArtifactJob(payload, { signal, attempt: attempts }),
+    ({ payload, signal, attempts, jobId }) =>
+      runExportDocumentArtifactJob(payload, {
+        signal,
+        attempt: attempts,
+        operationId: jobId,
+      }),
   );
 
-  registerJobHandler(TRANSCRIBE_SEGMENT_JOB_KIND, ({ payload, signal }) =>
-    runTranscribeSegmentJob(payload, { signal }),
+  registerJobHandler(
+    TRANSCRIBE_SEGMENT_JOB_KIND,
+    ({ payload, signal, jobId }) =>
+      runTranscribeSegmentJob(payload, { signal, operationId: jobId }),
   );
 
   registerJobHandler(TRANSCRIBE_FINALIZE_JOB_KIND, ({ payload }) =>
@@ -188,7 +223,11 @@ export function registerAllJobHandlers() {
 
   registerJobHandler(
     TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND,
-    ({ payload, signal }) => runTranscribeMaterialMediaJob(payload, { signal }),
+    ({ payload, signal, jobId }) =>
+      runTranscribeMaterialMediaJob(payload, {
+        signal,
+        operationId: jobId,
+      }),
   );
 
   registerJobHandler(REAP_UNOWNED_FILES_JOB_KIND, ({ payload }) =>
@@ -201,11 +240,12 @@ export function registerAllJobHandlers() {
 
   registerJobHandler(
     MATERIAL_PREVIEW_JOB_KIND,
-    ({ payload, signal, attempts, maxAttempts }) =>
+    ({ payload, signal, attempts, maxAttempts, jobId }) =>
       runMaterialPreviewJob(payload, {
         signal,
         attempt: attempts,
         maxAttempts,
+        operationId: jobId,
       }),
   );
 
@@ -249,6 +289,28 @@ export function registerAllJobHandlers() {
     GOOGLE_DRIVE_CHANNEL_RECONCILE_JOB_KIND,
     ({ payload, signal }) =>
       runGoogleDriveChannelReconciliationJob(payload, { signal }),
+  );
+
+  registerJobHandler(CORPUS_INDEX_SOURCE_JOB_KIND, ({ payload, signal }) =>
+    runCorpusIndexSourceJob(payload, { signal }),
+  );
+  registerJobHandler(CORPUS_REMOVE_VERSION_JOB_KIND, ({ payload }) =>
+    runCorpusRemoveVersionJob(payload),
+  );
+  registerJobHandler(CORPUS_REBUILD_FTS_JOB_KIND, ({ payload, signal }) =>
+    runCorpusRebuildFtsJob(payload, { signal }),
+  );
+  registerJobHandler(CORPUS_VERIFY_JOB_KIND, ({ payload }) =>
+    runCorpusVerifyJob(payload),
+  );
+  registerJobHandler(CORPUS_REPAIR_JOB_KIND, ({ payload, signal }) =>
+    runCorpusRepairJob(payload, { signal }),
+  );
+  registerJobHandler(CORPUS_EMBED_CHUNKS_JOB_KIND, ({ payload, signal }) =>
+    runCorpusEmbeddingUnavailableJob(payload, { signal }),
+  );
+  registerJobHandler(CORPUS_REEMBED_SPACE_JOB_KIND, ({ payload, signal }) =>
+    runCorpusEmbeddingUnavailableJob(payload, { signal }),
   );
 }
 

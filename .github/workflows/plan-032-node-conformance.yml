@@ -1,0 +1,130 @@
+name: Plan 032 node conformance
+
+on:
+  pull_request:
+    paths:
+      - "apps/node/**"
+      - "apps/server/Dockerfile"
+      - "apps/server/src/node/**"
+      - "apps/server/src/agent/conversation-store*"
+      - "apps/server/src/sandbox/**"
+      - "packages/agent-contracts/src/index.ts"
+      - "packages/agent-contracts/src/node*"
+      - "packages/agent-contracts/src/storage*"
+      - "packages/agent-contracts/src/conversation-store*"
+      - "packages/agent-contracts/src/corpus*"
+      - "packages/agent-contracts/src/model-gateway*"
+      - "packages/agent-contracts/src/sandbox*"
+      - "infra/compose/**"
+      - "infra/node/**"
+      - "apps/web/Dockerfile"
+      - ".dockerignore"
+      - "scripts/verification/plan-032*"
+      - ".github/workflows/plan-032-node-conformance.yml"
+      - "package.json"
+      - "bun.lock"
+  push:
+    branches: [main]
+    paths:
+      - "apps/node/**"
+      - "apps/server/Dockerfile"
+      - "apps/server/src/node/**"
+      - "apps/server/src/agent/conversation-store*"
+      - "apps/server/src/sandbox/**"
+      - "packages/agent-contracts/src/index.ts"
+      - "packages/agent-contracts/src/node*"
+      - "packages/agent-contracts/src/storage*"
+      - "packages/agent-contracts/src/conversation-store*"
+      - "packages/agent-contracts/src/corpus*"
+      - "packages/agent-contracts/src/model-gateway*"
+      - "packages/agent-contracts/src/sandbox*"
+      - "infra/compose/**"
+      - "infra/node/**"
+      - "apps/web/Dockerfile"
+      - ".dockerignore"
+      - "scripts/verification/plan-032*"
+      - ".github/workflows/plan-032-node-conformance.yml"
+      - "package.json"
+      - "bun.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plan-032-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  DATABASE_URL: file:./plan-032-ci.db
+  BETTER_AUTH_URL: http://localhost:5000
+  BETTER_AUTH_SECRET: plan-032-ci-secret-longer-than-thirty-two-characters
+  CLIENT_URL: http://localhost:3000
+  API_INTERNAL_URL: http://localhost:5000
+  NEXT_PUBLIC_API_URL: http://localhost:5000
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  DISABLE_EMAIL: "true"
+  DISABLE_UPLOADS: "true"
+  DISABLE_JOBS: "true"
+
+jobs:
+  provider-conformance:
+    name: Protocol and provider conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck Plan 032 packages
+        run: |
+          bun run --cwd packages/agent-contracts check-types
+          bun run --cwd apps/node check-types
+          bun run --cwd apps/server check-types
+
+      - name: Verify protocol, routing and fail-closed dispatch
+        run: bun run verify:032:protocol
+
+      - name: Verify storage and Node provider adapters
+        run: bun run verify:032:storage
+
+      - name: Verify local configurator security
+        run: bun run verify:032:configurator
+
+      - name: Reject config-schema drift
+        run: git diff --exit-code -- infra/node/config.schema.json
+
+      - name: Validate every Compose profile without claiming runtime proof
+        run: bun run verify:032:selfhost -- --static-only
+
+  full-runtime-proof:
+    name: Full self-host and air-gap proof
+    needs: provider-conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Boot every applicable self-host profile
+        run: bun run verify:032:selfhost
+
+      - name: Prove the deployed functional and air-gap boundary
+        run: bun run verify:032:selfhost-airgap

@@ -1,5 +1,12 @@
 # Avermate satellite protocol
 
+> **Superseded design sketch.** This storage-only v1 predates conversation
+> placement, inference, durable event replay and the paired-node threat model.
+> The replacement is defined in
+> [`avermate-node-protocol.md`](avermate-node-protocol.md). Do not implement a
+> new satellite or infer the v2 wire contract from this document; it is retained
+> only as historical input.
+
 This is the design contract for a future user-run satellite. No satellite
 implementation ships in the current phase.
 

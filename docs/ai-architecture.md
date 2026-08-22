@@ -1,10 +1,20 @@
 # AI access architecture
 
+> **Superseded on 2026-08-22.** The revisit conditions below occurred: Avermate
+> now has provider-backed inference features and an in-app learning assistant
+> is an explicit product requirement. The accepted direction is
+> [`AI architecture v2`](./ai-architecture-v2.md). This historical record is
+> retained to explain why MCP shipped first; MCP remains a first-class client
+> of the shared tool and policy boundary.
+
 This document records how Avermate exposes its study workspace to AI systems.
 It is a product and security decision, not a description of one particular
 model provider.
 
 ## Decision
+
+The following was the original decision and is no longer the current
+architecture.
 
 1. **Avermate is MCP-first.** The current product does not embed a chat agent.
    OAuth-scoped MCP tools, resources and prompts let students use the agent of

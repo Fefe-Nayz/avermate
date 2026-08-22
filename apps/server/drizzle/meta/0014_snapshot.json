@@ -1906,7 +1906,8 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "unixepoch()"
         },
         "resolvedAt": {
           "name": "resolvedAt",
@@ -1997,8 +1998,8 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "cascade"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "feedback_userId_users_id_fk": {
           "name": "feedback_userId_users_id_fk",
@@ -4461,8 +4462,8 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "cascade"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},

@@ -214,6 +214,7 @@ export async function runTranscribeSegmentJob(
   options: {
     fetch?: Fetcher;
     getProvider?: (userId: string) => Promise<TranscriptionProvider>;
+    operationId?: string;
     signal?: AbortSignal;
     downloadTimeoutMs?: number;
     fileAccessUrl?: typeof fileAccessUrl;
@@ -322,6 +323,8 @@ export async function runTranscribeSegmentJob(
     const result = await provider.transcribeSegment({
       blob: new Blob([bytes], { type: source.file.mimeType }),
       mimeType: source.file.mimeType,
+      operationId: options.operationId,
+      maximumSeconds: Math.max(1, Math.ceil(source.segment.durationMs / 1_000)),
       signal: options.signal,
     });
     const normalized = segmentJobResultSchema.parse({

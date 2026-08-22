@@ -25,7 +25,9 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IN PROGRESS — protocol/static/local provider cells are green;
+  full-self-host runtime is host-blocked and production transports remain
+  incomplete
 - **Priority**: P1
 - **Effort**: XL (multi-release)
 - **Risk**: CRITICAL
@@ -36,6 +38,31 @@
 - **Category**: distributed systems, self-hosting, storage, execution routing
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The current evidence is recorded in
+[`docs/releases/plan-032-evidence-2026-08-22.md`](../docs/releases/plan-032-evidence-2026-08-22.md).
+The protocol gate passed **37 tests**; the configurator gate passed **10 tests**
+plus a real loopback `dev-zero` health smoke. The storage/corpus/conversation
+cells passed, and the last complete storage run passed a disposable Garage 2.3
+provider conformance suite with no labelled container, volume or network left
+behind. Before the Docker host failure, disposable `dev-zero`, `node-lite`,
+`node-storage` with Garage, and `node-observable` profiles booted and cleaned up.
+
+The current static-only self-host and air-gap checks pass Compose/source
+assertions, but they explicitly do not prove runtime independence. The required
+deployed full-self-host and air-gap runs are blocked by the Docker Desktop
+content store/daemon failure (`metadata_v2.db` I/O error, HTTP 500, then
+`PLAN032_DOCKER_HOST_DAEMON_UNAVAILABLE`). The aggregate `verify:032` is
+therefore red by dependency; this is not converted into a skip or a false green.
+
+Independent of Docker, product gaps remain: production Core pairing/exchange
+and sealed-credential lifecycle, automatic relay enrolment and real transport
+lanes, a durable Core repository for two-phase object adoption, remaining
+storage-facade call-site migration, and a real sandbox artifact. Local
+contracts, filesystem/Garage adapters and static Compose checks do not prove
+those production seams. Plan 032 must remain in progress.
 
 ## Scope
 

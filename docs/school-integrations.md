@@ -4,6 +4,29 @@ This document is the current product and implementation contract for school
 connections. Historical design reasoning remains in plan 021, but that plan is
 not an execution checklist.
 
+## Deployment matrix
+
+“Implemented” below describes the reviewed code path, not a promise that an
+operator has configured credentials for a particular deployment.
+
+| Provider                | Baseline purpose                                    | Development and tests | Production distribution                                                                                   |
+| ----------------------- | --------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| Moodle                  | Course structure and Materials file synchronization | Enabled               | Available when configured; it does not create authoritative grade or subject projections in this baseline |
+| ÉcoleDirecte            | Homework, timetable, calendar/workdays and grades   | Enabled               | Included in the production provider registry                                                              |
+| PRONOTE through Pawnote | Homework, timetable, calendar/workdays and grades   | Enabled explicitly    | Blocked as `license-unresolved`; dependency and adapter are excluded from the production image            |
+| Skolengo                | Homework, timetable, calendar/workdays and grades   | Enabled explicitly    | Blocked as `license-unresolved`; dependency and adapter are excluded from the production image            |
+| AppScho / Blockscho     | Separate possible provider, not a Skolengo alias    | No adapter            | Not implemented; requires its own protocol, dependency and licence review                                 |
+
+Moodle appears here only to prevent a common product ambiguity: its current
+connector synchronizes learning materials. It is not part of the
+one-authoritative-school-grade-source contract described below. OneDrive and
+Google Drive are likewise Materials connectors and are documented in the
+self-hosting guide rather than presented as school-information systems.
+
+The repository currently has no project licence. The production blocks above
+are enforced release boundaries, not a legal conclusion and not a switch an
+operator should bypass in a redistributed build.
+
 ## Connected-year contract
 
 ### The local year belongs to the user
@@ -276,6 +299,15 @@ adapters, and a plain server start with no environment mode does not enable
 them. Local activation is implicit only for Bun's `--hot` development runtime
 and `NODE_ENV=test`. The static catalogue remains blocked; the public catalogue
 creates a detached development-only overlay when that gate is active.
+
+## AppScho is not Skolengo
+
+BlocksHub's Blockscho/AppScho work targets a distinct service. It cannot be
+used as a drop-in implementation of the existing Skolengo adapter and must not
+be labelled as Skolengo in settings or release notes. A future AppScho
+connection needs its own canonical provider identifier, credential and student
+identity contract, capability probe, network boundary, fixtures, dependency
+pin and licence row before it can enter the catalogue.
 
 ## Upstream references
 

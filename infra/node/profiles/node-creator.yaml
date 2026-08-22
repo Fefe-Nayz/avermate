@@ -1,0 +1,13 @@
+version: 1
+profile: node-creator
+bind: { host: 127.0.0.1, port: 5188 }
+dataDir: /data/node
+storage:
+  driver: filesystem
+  filesystemRoot: /data/node/objects
+  maxObjectBytes: 536870912
+  quotaBytes: 21474836480
+relay: {}
+models: { enabled: false, providerSecretRefs: [] }
+sandbox: { enabled: true, provider: opensandbox }
+telemetry: { enabled: false }

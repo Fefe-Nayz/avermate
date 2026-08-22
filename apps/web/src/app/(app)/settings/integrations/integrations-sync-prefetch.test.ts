@@ -51,6 +51,8 @@ describe("Moodle integration read model", () => {
 
     expect(page).toContain("orpc.serviceKeys.list.queryOptions")
     expect(client).toContain("<ServiceKeysSection />")
+    expect(page).toContain("orpc.assistant.toolSources.list.queryOptions")
+    expect(client).toContain("<CustomMcpSection />")
     expect(section).not.toContain("connection.sealedCredentials")
     expect(section).not.toContain("connection.caCertPem")
     expect(section).toContain("current.hasCustomCa")

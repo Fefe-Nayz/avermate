@@ -23,7 +23,8 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED, TARGETED GATES GREEN — baseline ratification in plan
+  025 remains a hard dependency
 - **Priority**: P0
 - **Effort**: M–L
 - **Risk**: HIGH
@@ -32,6 +33,23 @@
 - **Category**: architecture, protocol, security, dependency spike
 - **Planned at**: 2026-08-22, branch `rewrite`
 - **Planning baseline**: replace `37f0aff` with plan 025's clean baseline SHA
+
+### Implementation checkpoint (2026-08-22)
+
+The shared contracts, durable event/replay projection, LangGraph checkpoint and
+fork spike, model gateway normalization, endpoint policy and development Web
+projection are implemented. The following commands were rerun against the
+current working tree:
+
+- `bun run --cwd packages/agent-contracts test`: **47 passed, 0 failed**;
+- `bun run --cwd apps/server test src/agent`: **31 passed, 0 failed**;
+- `bun run --cwd apps/web test src/components/assistant-spike`: the Web package
+  script exercised its full `src` suite, **805 passed, 0 failed**.
+
+These are targeted implementation proofs, not a substitute for plan 025's
+final global, migration and clean-clone acceptance. The placeholder baseline
+cannot be replaced and this plan must not be marked release-complete until that
+dependency is ratified.
 
 ## Scope
 

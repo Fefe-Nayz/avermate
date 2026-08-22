@@ -45,6 +45,7 @@ import { MoodleSyncSection } from "./moodle-sync-section"
 import { DriveSyncSection, type DriveProvider } from "./drive-sync-section"
 import { SchoolServicesSection } from "./school-services-section"
 import { ServiceKeysSection } from "./service-keys-section"
+import { CustomMcpSection } from "./custom-mcp-section"
 
 /**
  * The personal drives this build knows about.
@@ -331,6 +332,8 @@ export function IntegrationsClient({
       <SchoolServicesSection />
 
       <ServiceKeysSection />
+
+      <CustomMcpSection />
 
       <SettingsSection
         id="oauth-clients"

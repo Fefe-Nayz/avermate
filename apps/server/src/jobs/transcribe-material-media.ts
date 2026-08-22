@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mediaSegmentWorkerOutputV1Schema } from "@avermate/agent-contracts";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -19,18 +20,21 @@ import {
 } from "../lib/transcription";
 import {
   localObjectPath,
+  readStorageObject,
   signedStorageObjectUrl,
+  type ManagedStorageProvider,
 } from "../lib/storage-backend";
+import { newId } from "../lib/id";
+import { canonicalJson, sha256 } from "../search/values";
+import { FILE_CONSTRAINTS } from "../lib/storage";
+import { runConfiguredSandboxWorker } from "../sandbox/worker-services";
 
-export const TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND =
-  "materials.media.transcribe";
+export const TRANSCRIBE_MATERIAL_MEDIA_JOB_KIND = "materials.media.transcribe";
 export const MEDIA_SEGMENT_SECONDS = 20 * 60;
 export const MEDIA_EXTRACTION_TIMEOUT_MS = 15 * 60_000;
 
 const payloadSchema = z.object({ documentId: z.string().min(1) }).strict();
 const MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
-const MAX_MEDIA_DURATION_SECONDS = 8 * 60 * 60;
-const MAX_FFMPEG_LOG_BYTES = 16 * 1024;
 const MEDIA_MIME_PREFIXES = ["audio/", "video/"] as const;
 
 export function isTranscribableMediaMimeType(value: string) {
@@ -46,112 +50,86 @@ function safeError(error: unknown) {
     .slice(0, 8_000);
 }
 
-async function boundedText(
-  stream: ReadableStream<Uint8Array>,
-  maxBytes: number,
-) {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let retained = 0;
-  let text = "";
-  while (true) {
-    const part = await reader.read();
-    if (part.done) break;
-    const remaining = Math.max(0, maxBytes - retained);
-    if (remaining > 0) {
-      const kept = part.value.subarray(0, remaining);
-      retained += kept.byteLength;
-      text += decoder.decode(kept, { stream: true });
-    }
-  }
-  return `${text}${decoder.decode()}`.trim();
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
-function sourceUrl(file: typeof files.$inferSelect) {
-  if (file.provider === "local") return localObjectPath(file.storageKey);
-  if (file.provider === "s3") {
-    // ffmpeg reads the private object as a stream. This avoids buffering a
-    // potentially 500 MiB lecture in the worker merely to extract its audio.
-    return signedStorageObjectUrl(file.storageKey, 60 * 60);
-  }
+function managedProvider(value: string): ManagedStorageProvider {
+  if (value === "local" || value === "s3") return value;
   throw new NonRetryableJobError(
     "Media transcription requires local or S3-backed storage",
   );
 }
 
-async function extractAudioSegments(input: {
+function sourceUrl(file: typeof files.$inferSelect) {
+  if (file.provider === "local") return localObjectPath(file.storageKey);
+  if (file.provider === "s3") return signedStorageObjectUrl(file.storageKey, 60 * 60);
+  throw new NonRetryableJobError(
+    "Media transcription requires local or S3-backed storage",
+  );
+}
+
+export async function extractAudioSegments(input: {
   source: string;
   directory: string;
   signal?: AbortSignal;
   timeoutMs?: number;
-}) {
+}): Promise<string[]> {
   input.signal?.throwIfAborted();
-  const outputPattern = join(input.directory, "segment-%03d.mp3");
-  const child = Bun.spawn(
-    [
-      process.env.FFMPEG_BIN?.trim() || "ffmpeg",
-      "-nostdin",
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-threads",
-      "1",
-      "-t",
-      String(MAX_MEDIA_DURATION_SECONDS),
-      "-i",
-      input.source,
-      "-map",
-      "0:a:0",
-      "-vn",
-      "-ac",
-      "1",
-      "-ar",
-      "16000",
-      "-b:a",
-      "48k",
-      "-f",
-      "segment",
-      "-segment_time",
-      String(MEDIA_SEGMENT_SECONDS),
-      "-reset_timestamps",
-      "1",
-      outputPattern,
-    ],
-    {
-      cwd: input.directory,
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "pipe",
-    },
+  void input;
+  throw new NonRetryableJobError(
+    "SANDBOX_EXECUTION_REQUIRED:media: native API execution is disabled",
   );
-  let timedOut = false;
-  const stop = () => child.kill("SIGKILL");
-  input.signal?.addEventListener("abort", stop, { once: true });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill("SIGKILL");
-  }, input.timeoutMs ?? MEDIA_EXTRACTION_TIMEOUT_MS);
-  try {
-    const [exitCode, stderr] = await Promise.all([
-      child.exited,
-      boundedText(child.stderr, MAX_FFMPEG_LOG_BYTES),
-    ]);
-    input.signal?.throwIfAborted();
-    if (timedOut) throw new Error("Media audio extraction timed out");
-    if (exitCode !== 0) {
-      throw new Error(stderr || `ffmpeg exited with status ${exitCode}`);
-    }
-    const entries = (await readdir(input.directory))
-      .filter((name) => /^segment-\d{3}\.mp3$/.test(name))
-      .sort();
-    if (entries.length === 0) {
-      throw new NonRetryableJobError("This media file has no audio track");
-    }
-    return entries.map((name) => join(input.directory, name));
-  } finally {
-    clearTimeout(timer);
-    input.signal?.removeEventListener("abort", stop);
-  }
+}
+
+async function extractAudioSegmentsInSandbox(input: {
+  bytes: Uint8Array;
+  mimeType: string;
+  ownerId: string;
+  documentId: string;
+  operationId: string;
+  signal?: AbortSignal;
+}) {
+  const digest = `sha256:${sha256(input.bytes)}`;
+  const execution = await runConfiguredSandboxWorker({
+    workerId: "media-segment.v1",
+    ownerId: input.ownerId,
+    threadId: input.documentId,
+    branchId: `${input.documentId}-media-transcription-v1`,
+    operationId: input.operationId,
+    manifest: {
+      schemaVersion: 1,
+      worker: "media-segment.v1",
+      source: {
+        path: "input/source",
+        digest,
+        byteSize: input.bytes.byteLength,
+        mimeType: input.mimeType,
+      },
+      segmentSeconds: MEDIA_SEGMENT_SECONDS,
+      maxDurationSeconds: 8 * 60 * 60,
+      outputCodec: "mp3-mono-16khz",
+    },
+    inputFiles: [
+      {
+        relativePath: "input/source",
+        bytes: input.bytes,
+        digest,
+        mimeType: input.mimeType,
+      },
+    ],
+    maximumReturnBytes:
+      FILE_CONSTRAINTS["course-media"].maxBytes + 8 * 1024 * 1024,
+    signal: input.signal,
+  });
+  const output = mediaSegmentWorkerOutputV1Schema.parse(execution.output);
+  return output.segments.map((segment) => {
+    const bytes = execution.files.get(segment.file.path);
+    if (!bytes) throw new Error("SANDBOX_MEDIA_SEGMENT_OUTPUT_MISSING");
+    return bytes;
+  });
 }
 
 function pad(value: number) {
@@ -166,9 +144,7 @@ export function transcriptTimestamp(milliseconds: number) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
-export function mergeMediaTranscriptionResults(
-  results: TranscriptionResult[],
-) {
+export function mergeMediaTranscriptionResults(results: TranscriptionResult[]) {
   const segments = results.flatMap((result, index) => {
     const offsetMs = index * MEDIA_SEGMENT_SECONDS * 1_000;
     const sourceSegments = result.segments.length
@@ -208,6 +184,7 @@ export async function runTranscribeMaterialMediaJob(
   options: {
     signal?: AbortSignal;
     resolveProvider?: (userId: string) => Promise<TranscriptionProvider>;
+    operationId?: string;
     extractSegments?: typeof extractAudioSegments;
     readSegment?: typeof readFile;
     now?: () => number;
@@ -231,7 +208,9 @@ export async function runTranscribeMaterialMediaJob(
     throw new NonRetryableJobError("Media source document not found");
   }
   if (!isTranscribableMediaMimeType(source.file.mimeType)) {
-    throw new NonRetryableJobError("Only audio and video materials can be transcribed");
+    throw new NonRetryableJobError(
+      "Only audio and video materials can be transcribed",
+    );
   }
 
   const now = new Date();
@@ -264,34 +243,65 @@ export async function runTranscribeMaterialMediaJob(
 
   const clock = options.now ?? Date.now;
   const startedAt = clock();
-  const directory = await mkdtemp(join(tmpdir(), "avermate-media-"));
+  const directory = options.extractSegments
+    ? await mkdtemp(join(tmpdir(), "avermate-media-"))
+    : null;
   try {
-    const paths = await (options.extractSegments ?? extractAudioSegments)({
-      source: await sourceUrl(source.file),
-      directory,
-      signal: options.signal,
-    });
+    const segmentBytes = options.extractSegments
+      ? await Promise.all(
+          (
+            await options.extractSegments({
+              source: await sourceUrl(source.file),
+              directory: directory!,
+              signal: options.signal,
+            })
+          ).map(async (path) =>
+            new Uint8Array(await (options.readSegment ?? readFile)(path)),
+          ),
+        )
+      : await extractAudioSegmentsInSandbox({
+          bytes: new Uint8Array(
+            await readStorageObject(
+              managedProvider(source.file.provider),
+              source.file.storageKey,
+              {
+                signal: options.signal,
+                maxBytes: FILE_CONSTRAINTS["course-media"].maxBytes,
+              },
+            ),
+          ),
+          mimeType: source.file.mimeType,
+          ownerId: source.document.userId,
+          documentId,
+          operationId: options.operationId ?? documentId,
+          signal: options.signal,
+        });
     const provider = await (
       options.resolveProvider ?? resolveTranscriptionProvider
     )(source.document.userId);
     const results: TranscriptionResult[] = [];
-    for (const path of paths) {
+    for (const [segmentIndex, bytes] of segmentBytes.entries()) {
       options.signal?.throwIfAborted();
-      const bytes = await (options.readSegment ?? readFile)(path);
       if (bytes.byteLength > MAX_TRANSCRIPTION_AUDIO_BYTES) {
         throw new Error("An extracted audio segment is larger than 32 MiB");
       }
       results.push(
         await provider.transcribeSegment({
-          blob: new Blob([bytes], { type: "audio/mpeg" }),
+          blob: new Blob([exactArrayBuffer(bytes)], { type: "audio/mpeg" }),
           mimeType: "audio/mpeg",
+          operationId: options.operationId
+            ? `${options.operationId}:segment:${segmentIndex}`
+            : undefined,
+          maximumSeconds: MEDIA_SEGMENT_SECONDS,
           signal: options.signal,
         }),
       );
     }
     const merged = mergeMediaTranscriptionResults(results);
     if (!merged.content) throw new Error("The media transcript is empty");
-    if (new TextEncoder().encode(merged.content).byteLength > MAX_TRANSCRIPT_BYTES) {
+    if (
+      new TextEncoder().encode(merged.content).byteLength > MAX_TRANSCRIPT_BYTES
+    ) {
       throw new Error("Media transcript is larger than 2 MiB");
     }
     const durationMs = merged.segments.reduce(
@@ -304,21 +314,67 @@ export async function runTranscribeMaterialMediaJob(
       durationMs,
       segmentCount: merged.segments.length,
     };
-    const [published] = await db
-      .update(materialArtifacts)
-      .set({
-        status: "ready",
-        content: merged.content,
-        metaVersion: 1,
-        metaJson: meta,
-        error: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(materialArtifacts.id, artifact.id))
-      .returning({ id: materialArtifacts.id });
-    if (!published) {
-      throw new NonRetryableJobError("The media source was removed while transcribing");
-    }
+    const publishedAt = Math.floor(Date.now() / 1_000);
+    await db.$client
+      .batch(
+        [
+          {
+            sql: `DELETE FROM material_artifact_segments WHERE artifactId = ?`,
+            args: [artifact.id],
+          },
+          ...merged.segments.map((segment, ordinal) => ({
+            sql: `
+            INSERT INTO material_artifact_segments (
+              id, artifactId, ordinal, text, locatorJson, contentHash
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+            args: [
+              newId("maseg"),
+              artifact.id,
+              ordinal,
+              segment.text,
+              canonicalJson({
+                kind: source.file.mimeType.startsWith("video/")
+                  ? "video"
+                  : "audio",
+                startMs: segment.startMs,
+                endMs: Math.max(segment.startMs + 1, segment.endMs),
+              }),
+              sha256(segment.text),
+            ],
+          })),
+          {
+            sql: `
+            UPDATE material_artifacts
+            SET status = 'ready', content = ?, metaVersion = 1,
+              metaJson = ?, error = NULL, updatedAt = ?
+            WHERE id = ? AND status = 'pending'
+          `,
+            args: [
+              merged.content,
+              JSON.stringify(meta),
+              publishedAt,
+              artifact.id,
+            ],
+          },
+          {
+            sql: `
+            INSERT INTO material_artifact_segments (
+              id, artifactId, ordinal, text, locatorJson, contentHash
+            )
+            SELECT NULL, ?, 0, '', '{}', ? WHERE changes() = 0
+          `,
+            args: [artifact.id, sha256("")],
+          },
+        ],
+        "write",
+      )
+      .catch((error) => {
+        throw new NonRetryableJobError(
+          "The media source was removed while transcribing",
+          { cause: error },
+        );
+      });
     return {
       artifactId: artifact.id,
       segmentCount: merged.segments.length,
@@ -338,6 +394,6 @@ export async function runTranscribeMaterialMediaJob(
       .where(eq(materialArtifacts.id, artifact.id));
     throw error;
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    if (directory) await rm(directory, { recursive: true, force: true });
   }
 }

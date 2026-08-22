@@ -37,6 +37,15 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    /** Plan 034 ships accounting in non-blocking shadow mode only. */
+    MANAGED_ACCOUNTING_MODE: z.enum(["shadow", "enforce"]).default("shadow"),
+    AVERMATE_DEPLOYMENT_MODE: z
+      .enum(["hosted", "full-self-host"])
+      .default("hosted"),
+    /** Costly operator placements remain off until their launch gates pass. */
+    MANAGED_ADAPTERS_ENABLED: bool,
+    /** Residency-aware managed pool/model catalogue region. */
+    MANAGED_REGION: z.string().min(1).max(64).default("local"),
 
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),

@@ -37,6 +37,9 @@ const recordingId = "storage-reaper-recording";
 
 const now = new Date("2026-08-20T12:30:00.000Z");
 const old = new Date(now.getTime() - 48 * 60 * 60 * 1_000);
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
@@ -106,7 +109,7 @@ beforeAll(async () => {
     createdAt: old,
     updatedAt: old,
   });
-});
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
@@ -130,7 +133,7 @@ afterAll(async () => {
     .where(eq(schema.files.userId, userId));
   await database.delete(schema.files).where(eq(schema.files.userId, userId));
   await database.delete(schema.users).where(eq(schema.users.id, userId));
-});
+}, databaseHookTimeout);
 
 async function storedFile(
   label: string,

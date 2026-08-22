@@ -30,6 +30,9 @@ let schema: typeof import("../db/schema");
 let storage: typeof import("./storage");
 let storageBackend: typeof import("./storage-backend");
 let ownership: typeof import("./ownership");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 beforeAll(async () => {
   ({ db: database, schema } = await import("../db"));
@@ -81,13 +84,13 @@ beforeAll(async () => {
       },
     ])
     .onConflictDoNothing();
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await database
     .delete(schema.files)
     .where(like(schema.files.storageKey, "storage-test-%"));
-}, 30_000);
+}, databaseHookTimeout);
 
 describe("shared file storage", () => {
   test("defaults to zero-config local storage outside production", () => {

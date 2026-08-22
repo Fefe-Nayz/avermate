@@ -23,7 +23,9 @@ apps/web/src/app apps/web/src/components/admin infra deploy.yml docs`. Reconcile
 
 ## Status
 
-- **Status**: TODO
+- **Status**: IN PROGRESS — provider-neutral shadow implementation and numeric
+  repository fixtures are complete; real managed isolation, healthy-host
+  air-gap evidence and operational backup/restore proof remain release blockers
 - **Priority**: P2 (P1 before advertising paid AI/storage)
 - **Effort**: XL (multi-release and operational)
 - **Risk**: CRITICAL
@@ -32,6 +34,20 @@ apps/web/src/app apps/web/src/components/admin infra deploy.yml docs`. Reconcile
 - **Category**: multi-tenancy, entitlements, usage, billing, observability, SRE
 - **Planned at**: 2026-08-22
 - **Planning baseline**: plan 025 baseline SHA
+
+### 2026-08-22 implementation checkpoint
+
+- Accounting, storage-contract, tenant-isolation shadow, deletion, logical
+  restore and 30-day/100-tenant/10,000-run load fixtures are implemented.
+- Managed isolation is split into `verify:034:isolation:shadow` and the strict
+  live cell. The live cell cannot pass with the disabled/mock sandbox provider.
+- The complete local shadow aggregate currently stops only when it reaches the
+  inherited disposable Garage cell because Docker Desktop's daemon is unhealthy
+  on this workstation. That is host evidence, not an application skip or a
+  repository failure.
+- Customer/operator Web surfaces, a healthy-host full self-host/air-gap run,
+  real backup/restore operations and a selected managed provider rollout remain
+  for plan 039.
 
 ## Scope
 

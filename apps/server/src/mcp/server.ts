@@ -8,8 +8,12 @@ import { appRouter } from "../routers";
 import type { McpPrincipal } from "./auth";
 import { can, requestStateSecret, type DestructiveState } from "./shared";
 import { SURFACES } from "./surfaces";
+import { guardMcpMutationRegistrations } from "./mutation-rollout";
 
-export function createAvermateMcpServer(principal: McpPrincipal): McpServer {
+export function createAvermateMcpServer(
+  principal: McpPrincipal,
+  options: { testOnlyAllowLegacyMutations?: boolean } = {},
+): McpServer {
   const api = createRouterClient(appRouter, { context: principal.context });
   const codec = createRequestStateCodec<DestructiveState>({
     key: requestStateSecret,
@@ -34,6 +38,9 @@ export function createAvermateMcpServer(principal: McpPrincipal): McpServer {
       inputRequired: { maxRounds: 2, legacyShim: false },
     },
   );
+  const registeredServer = guardMcpMutationRegistrations(server, {
+    testOnlyAllowLegacyMutations: options.testOnlyAllowLegacyMutations,
+  });
 
   for (const surface of SURFACES) {
     if (!can(principal, ...surface.scopes)) continue;
@@ -41,7 +48,7 @@ export function createAvermateMcpServer(principal: McpPrincipal): McpServer {
       const user = principal.context.session?.user;
       if (!user || !isAdmin(user)) continue;
     }
-    surface.register({ server, api, principal, codec });
+    surface.register({ server: registeredServer, api, principal, codec });
   }
 
   return server;

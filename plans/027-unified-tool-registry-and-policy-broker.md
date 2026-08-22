@@ -23,7 +23,7 @@
 
 ## Status
 
-- **Status**: TODO
+- **Status**: DONE
 - **Priority**: P0
 - **Effort**: L–XL
 - **Risk**: HIGH
@@ -31,7 +31,33 @@
 - **Blocks**: 028, 029, 030, 031 and 032
 - **Category**: server architecture, MCP, authorization, developer platform
 - **Planned at**: 2026-08-22
-- **Planning baseline**: plan 025 baseline SHA
+- **Planning baseline**: `dbd4fe87957fb23cbfd4b0815a029fc21ff6aa64`
+- **Completed at**: 2026-08-22
+
+### Completion evidence
+
+- The source-derived inventory freezes **142 MCP registrations** and **385
+  directly declared oRPC procedures**.
+- **62 MCP domain tools** (56 reads and 6 ledgered mutations) have a versioned
+  first-party descriptor and are wired through `ToolBroker`; the manifest and
+  descriptor set must match exactly in tests.
+- The registration guard requires the server-only `tool-broker.v1` marker for
+  every brokered name. A `readOnlyHint` alone never makes a callback executable.
+- **59 legacy domain mutations** remain discoverable for client compatibility
+  but fail closed before their callback. **Two action-ledger controls** retain
+  their reviewed approval/undo paths, and **17 admin/moderation tools** remain
+  explicitly human/admin-only rather than entering the agent registry.
+- `account.export` and `documents.downloadPptx` are discovery-only: the first is
+  an unbounded account dump and the second exposes the wrong signed-URL
+  transport. Both return `AGENT_TOOL_NOT_AVAILABLE` until a bounded replacement
+  exists.
+- Academic snapshot, study-document and transcript reads are narrowed before
+  projection. Grade-copy URLs are replaced with short-lived opaque,
+  audience-bound handles. Signed URLs and audio segment internals do not enter
+  model/UI/audit tool projections.
+- Catalogue, marker, descriptor parity, adapter parity, federated transport,
+  broker and file-handle suites are the deterministic Plan 027 gates. The
+  repository-wide release gate remains owned by Plan 025.
 
 ## Problem
 

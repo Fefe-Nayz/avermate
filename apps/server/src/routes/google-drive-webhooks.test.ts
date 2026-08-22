@@ -29,6 +29,9 @@ let webhookHash: typeof import("../lib/googledrive").googleDriveWebhookTokenHash
 const userId = "google-route-user";
 const yearId = "google-route-year";
 const fixedNow = new Date("2026-08-21T12:00:00.000Z");
+// Applying the complete migration history through 0060 and releasing its
+// relational fixtures can take about 90s on slower Windows/libSQL runners.
+const databaseHookTimeout = 120_000;
 
 beforeAll(async () => {
   ({ db } = await import("../db"));
@@ -72,11 +75,11 @@ beforeAll(async () => {
     endsAt: new Date("2027-07-01T00:00:00.000Z"),
     userId,
   });
-}, 30_000);
+}, databaseHookTimeout);
 
 afterAll(async () => {
   await db.delete(schema.users).where(eq(schema.users.id, userId));
-}, 30_000);
+}, databaseHookTimeout);
 
 async function oauthState(state: string, expiresAt: Date) {
   await db.insert(schema.contentOauthStates).values({

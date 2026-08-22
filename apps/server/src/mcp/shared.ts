@@ -18,6 +18,10 @@ import { cardSurfaceSchema } from "../lib/card-storage";
 import { env } from "../lib/env";
 import type { AppRouter } from "../routers";
 import type { McpPrincipal } from "./auth";
+import {
+  MCP_BROKER_EXECUTION_META_KEY,
+  MCP_BROKER_EXECUTION_META_VALUE,
+} from "../tools/exposure-policy";
 
 export const requestStateSecret =
   env.MCP_REQUEST_STATE_SECRET ?? env.BETTER_AUTH_SECRET;
@@ -406,6 +410,14 @@ export function can(principal: McpPrincipal, ...scopes: string[]): boolean {
 
 export function meta(...scopes: string[]) {
   return { "io.avermate/requiredScopes": scopes };
+}
+
+/** Marker consumed by the central MCP rollout guard. */
+export function brokerMeta(...scopes: string[]) {
+  return {
+    ...meta(...scopes),
+    [MCP_BROKER_EXECUTION_META_KEY]: MCP_BROKER_EXECUTION_META_VALUE,
+  };
 }
 
 export function mapDate(

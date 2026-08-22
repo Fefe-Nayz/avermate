@@ -177,7 +177,7 @@ export default function LandingPage() {
                   <span className="size-2.5 rounded-full bg-band-fair/80" />
                   <span className="size-2.5 rounded-full bg-band-excellent/75" />
                   <span className="mx-auto -translate-x-4 rounded-md bg-muted px-12 py-1 font-mono text-[10px] text-muted-foreground">
-                    avermate.fr
+                    Avermate
                   </span>
                 </div>
                 <div className="overflow-hidden rounded-b-[1.25rem]">

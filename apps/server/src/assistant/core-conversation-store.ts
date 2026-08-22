@@ -1,0 +1,2414 @@
+import type { Client, InStatement, InValue, Transaction } from "@libsql/client";
+import {
+  ASSISTANT_PARTS_VERSION,
+  assistantBranchSchema,
+  assistantCitationSchema,
+  assistantContextManifestSchema,
+  assistantDagExportSchema,
+  assistantMessageSchema,
+  assistantPartV1Schema,
+  assistantRunSchema,
+  assistantThreadDetailSchema,
+  assistantThreadListItemSchema,
+  assistantThreadSchema,
+  assistantUsageSchema,
+  avermateAgentEventV1Schema,
+  storedConversationEventSchema,
+  type AssistantAttachment,
+  type AssistantAttachmentKind,
+  type AssistantBranch,
+  type AssistantCitation,
+  type AssistantContextManifest,
+  type AssistantDagExport,
+  type AssistantEventProjection,
+  type AssistantMessage,
+  type AssistantPartV1,
+  type AssistantRun,
+  type AssistantRunStatus,
+  type AssistantThread,
+  type AssistantThreadDetail,
+  type AssistantThreadListItem,
+  type AssistantUsage,
+  type SourceLocatorV1,
+} from "@avermate/agent-contracts";
+import { newId } from "../lib/id";
+import {
+  canonicalJson,
+  isoFromSqlite,
+  jsonValue,
+  sha256,
+} from "../search/values";
+
+export type AssistantSqlClient = Pick<
+  Client,
+  "execute" | "batch" | "transaction"
+>;
+
+type Row = Record<string, InValue>;
+
+export type ConversationStoreErrorCode =
+  | "not_found"
+  | "forbidden"
+  | "head_conflict"
+  | "active_run"
+  | "divergent_replay"
+  | "placement_unavailable"
+  | "invalid_state";
+
+export class ConversationStoreError extends Error {
+  constructor(
+    readonly code: ConversationStoreErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ConversationStoreError";
+  }
+}
+
+export type TurnReservation = {
+  threadId: string;
+  branchId: string;
+  userMessageId: string;
+  runId: string;
+  reservedOutputMessageId: string;
+  idempotent: boolean;
+};
+
+export type EditedMessageProjection =
+  | { kind: "run-reserved"; reservation: TurnReservation }
+  | {
+      kind: "user-curated-model";
+      threadId: string;
+      branchId: string;
+      messageId: string;
+    };
+
+export type FinalUsageSnapshot = {
+  providerKey: string;
+  modelKey: string;
+  pricingSnapshotId?: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  cachedReadTokens: number | null;
+  cachedWriteTokens: number | null;
+  estimatedCost: string | null;
+  currency: string | null;
+};
+
+export type FinalizedRunProjection = {
+  run: AssistantRun;
+  output: AssistantMessage;
+  citations: AssistantCitation[];
+  usage: AssistantUsage;
+  terminalEvent: AssistantEventProjection;
+  branchId: string;
+  siblingCreated: boolean;
+};
+
+function sqlTimestamp(): number {
+  return Math.floor(Date.now() / 1_000);
+}
+
+function nullString(value: unknown): string | null {
+  return value === null || value === undefined ? null : String(value);
+}
+
+function threadFromRow(row: Row): AssistantThread {
+  return assistantThreadSchema.parse({
+    id: String(row.id),
+    userId: String(row.userId),
+    title: String(row.title),
+    activeBranchId: nullString(row.activeBranchId),
+    projectId: nullString(row.projectId),
+    placement:
+      row.placement === "node"
+        ? { kind: "node", nodeId: String(row.placementRef) }
+        : { kind: "core" },
+    revision: Number(row.revision),
+    starredAt: row.starredAt === null ? null : isoFromSqlite(row.starredAt),
+    archivedAt: row.archivedAt === null ? null : isoFromSqlite(row.archivedAt),
+    deletedAt: row.deletedAt === null ? null : isoFromSqlite(row.deletedAt),
+    purgeAfter: row.purgeAfter === null ? null : isoFromSqlite(row.purgeAfter),
+    createdAt: isoFromSqlite(row.createdAt),
+    updatedAt: isoFromSqlite(row.updatedAt),
+  });
+}
+
+function branchFromRow(row: Row): AssistantBranch {
+  return assistantBranchSchema.parse({
+    id: String(row.id),
+    threadId: String(row.threadId),
+    name: nullString(row.name),
+    forkedFromMessageId: nullString(row.forkedFromMessageId),
+    headMessageId: nullString(row.headMessageId),
+    createdAt: isoFromSqlite(row.createdAt),
+    updatedAt: isoFromSqlite(row.updatedAt),
+  });
+}
+
+function messageFromRow(row: Row): AssistantMessage {
+  return assistantMessageSchema.parse({
+    id: String(row.id),
+    threadId: String(row.threadId),
+    parentMessageId: nullString(row.parentMessageId),
+    role: row.role,
+    authorship: row.authorship,
+    status: row.status,
+    partsVersion: Number(row.partsVersion),
+    parts: jsonValue(row.partsJson),
+    createdByRunId: nullString(row.createdByRunId),
+    replacesMessageId: nullString(row.replacesMessageId),
+    createdAt: isoFromSqlite(row.createdAt),
+  });
+}
+
+function runFromRow(row: Row): AssistantRun {
+  return assistantRunSchema.parse({
+    id: String(row.id),
+    threadId: String(row.threadId),
+    branchId: String(row.branchId),
+    inputMessageId: String(row.inputMessageId),
+    outputMessageId: nullString(row.outputMessageId),
+    reservedOutputMessageId: String(row.reservedOutputMessageId),
+    parentRunId: nullString(row.parentRunId),
+    runtimeId: String(row.runtimeId),
+    runtimeVersion: String(row.runtimeVersion),
+    graphSchemaVersion: Number(row.graphSchemaVersion),
+    modelKey: String(row.modelKey),
+    providerKey: String(row.providerKey),
+    modelResolvedId: nullString(row.modelResolvedId),
+    status: row.status,
+    approvalMode: row.approvalMode,
+    providerRequestKey: nullString(row.providerRequestKey),
+    providerDispatchState: row.providerDispatchState,
+    contextManifestId: nullString(row.contextManifestId),
+    conversationCheckpointRef: nullString(row.conversationCheckpointRef),
+    workspaceSnapshotRef: nullString(row.workspaceSnapshotRef),
+    sandboxRuntimeCheckpointRef: nullString(row.sandboxRuntimeCheckpointRef),
+    domainCursorRef: nullString(row.domainCursorRef),
+    safeError: nullString(row.safeError),
+    errorCode: nullString(row.errorCode),
+    startedAt: row.startedAt === null ? null : isoFromSqlite(row.startedAt),
+    completedAt:
+      row.completedAt === null ? null : isoFromSqlite(row.completedAt),
+    createdAt: isoFromSqlite(row.createdAt),
+    updatedAt: isoFromSqlite(row.updatedAt),
+  });
+}
+
+function citationFromRow(row: Row): AssistantCitation {
+  return assistantCitationSchema.parse({
+    id: String(row.id),
+    messageId: String(row.messageId),
+    runId: String(row.runId),
+    ordinal: Number(row.ordinal),
+    proofHandleId: String(row.proofHandleId),
+    claimPartId: nullString(row.claimPartId),
+  });
+}
+
+function usageFromRow(row: Row): AssistantUsage {
+  const numeric = (name: string) =>
+    row[name] === null ? null : Number(row[name]);
+  return assistantUsageSchema.parse({
+    runId: String(row.runId),
+    providerKey: String(row.providerKey),
+    modelKey: String(row.modelKey),
+    pricingSnapshotId: nullString(row.pricingSnapshotId),
+    inputTokens: numeric("inputTokens"),
+    outputTokens: numeric("outputTokens"),
+    reasoningTokens: numeric("reasoningTokens"),
+    cachedReadTokens: numeric("cachedReadTokens"),
+    cachedWriteTokens: numeric("cachedWriteTokens"),
+    estimatedCost: nullString(row.estimatedCost),
+    currency: nullString(row.currency),
+    final: Boolean(row.final),
+    createdAt: isoFromSqlite(row.createdAt),
+  });
+}
+
+function attachmentFromRow(row: Row): AssistantAttachment {
+  return {
+    id: String(row.id),
+    messageId: String(row.messageId),
+    kind: row.kind as AssistantAttachmentKind,
+    referenceId: String(row.referenceId),
+    snapshotVersion: nullString(row.snapshotVersion),
+    label: String(row.label),
+    fileId: nullString(row.fileId),
+    createdAt: isoFromSqlite(row.createdAt),
+  };
+}
+
+function eventFromRow(row: Row): AssistantEventProjection {
+  return storedConversationEventSchema.parse({
+    protocolVersion: 1,
+    eventId: String(row.eventId),
+    sequence: Number(row.sequence),
+    threadId: String(row.threadId),
+    branchId: String(row.branchId),
+    runId: String(row.runId),
+    emittedAt: isoFromSqlite(row.emittedAt),
+    persistedAt: isoFromSqlite(row.persistedAt),
+    type: String(row.type),
+    payload: jsonValue(row.payloadJson),
+    terminal: Boolean(row.terminal),
+  });
+}
+
+async function execute(
+  target: AssistantSqlClient | Transaction,
+  input: InStatement,
+) {
+  return target.execute(input);
+}
+
+async function one(
+  target: AssistantSqlClient | Transaction,
+  sql: string,
+  args: InValue[] = [],
+): Promise<Row | null> {
+  return (
+    ((await execute(target, { sql, args })).rows[0] as Row | undefined) ?? null
+  );
+}
+
+async function ownedThread(
+  target: AssistantSqlClient | Transaction,
+  ownerId: string,
+  threadId: string,
+  includeDeleted = false,
+): Promise<Row> {
+  const row = await one(
+    target,
+    `SELECT * FROM assistant_threads
+     WHERE id = ? AND userId = ? ${includeDeleted ? "" : "AND deletedAt IS NULL"}
+     LIMIT 1`,
+    [threadId, ownerId],
+  );
+  if (!row) throw new ConversationStoreError("not_found", "Thread not found");
+  if (row.placement !== "core") {
+    throw new ConversationStoreError(
+      "placement_unavailable",
+      "This thread belongs to a node placement that is unavailable",
+    );
+  }
+  return row;
+}
+
+async function ownedRun(
+  target: AssistantSqlClient | Transaction,
+  ownerId: string,
+  runId: string,
+): Promise<Row> {
+  const row = await one(
+    target,
+    `SELECT r.* FROM assistant_runs r
+     JOIN assistant_threads t ON t.id = r.threadId
+     WHERE r.id = ? AND r.userId = ? AND t.userId = ? LIMIT 1`,
+    [runId, ownerId, ownerId],
+  );
+  if (!row) throw new ConversationStoreError("not_found", "Run not found");
+  return row;
+}
+
+function textParts(
+  markdown: string,
+  config?: { skillId?: string | null; planMode?: boolean },
+): AssistantPartV1[] {
+  return [
+    assistantPartV1Schema.parse({
+      type: "text",
+      id: newId("apart"),
+      markdown,
+    }),
+    ...(config
+      ? [
+          assistantPartV1Schema.parse({
+            type: "run-config",
+            id: newId("apart"),
+            skillId: config.skillId ?? null,
+            planMode: config.planMode ?? false,
+          }),
+        ]
+      : []),
+  ];
+}
+
+function activePath(
+  branch: AssistantBranch | undefined,
+  messages: readonly AssistantMessage[],
+): string[] {
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const reversed: string[] = [];
+  const seen = new Set<string>();
+  let cursor = branch?.headMessageId ?? null;
+  while (cursor) {
+    if (seen.has(cursor)) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Conversation DAG is cyclic",
+      );
+    }
+    seen.add(cursor);
+    reversed.push(cursor);
+    cursor = byId.get(cursor)?.parentMessageId ?? null;
+  }
+  return reversed.reverse();
+}
+
+export class CoreConversationStore {
+  constructor(
+    private readonly client: AssistantSqlClient,
+    private readonly scheduleConversationIndex?: (input: {
+      ownerId: string;
+      threadId: string;
+    }) => Promise<void>,
+  ) {}
+
+  private async registerConversationSource(
+    executor: AssistantSqlClient | Transaction,
+    ownerId: string,
+    threadId: string,
+    now: number,
+  ) {
+    const sourceId = `csrc_conv_${sha256(`${ownerId}\0${threadId}`).slice(0, 24)}`;
+    await execute(executor, {
+      sql: `INSERT INTO content_sources
+        (id, userId, yearId, subjectId, originKind, originId, status,
+         coverage, placement, createdAt, updatedAt)
+        SELECT ?, threads.userId, projects.yearId, projects.subjectId,
+          'conversation', threads.id, 'registered',
+          'searchable-native-text', 'core', ?, ?
+        FROM assistant_threads AS threads
+        LEFT JOIN study_projects AS projects
+          ON projects.id = threads.projectId AND projects.userId = threads.userId
+        WHERE threads.id = ? AND threads.userId = ?
+        ON CONFLICT(userId, originKind, originId) DO UPDATE SET
+          yearId = excluded.yearId,
+          subjectId = excluded.subjectId,
+          status = CASE
+            WHEN content_sources.currentVersionId IS NULL THEN 'registered'
+            ELSE content_sources.status
+          END,
+          error = NULL,
+          updatedAt = excluded.updatedAt`,
+      args: [sourceId, now, now, threadId, ownerId],
+    });
+  }
+
+  private async enqueueConversationIndex(ownerId: string, threadId: string) {
+    if (!this.scheduleConversationIndex) return;
+    await this.scheduleConversationIndex({ ownerId, threadId }).catch(
+      (error) => {
+        console.error(
+          "[assistant] conversation indexing enqueue failed",
+          error instanceof Error ? error.message : "Unknown queue error",
+        );
+      },
+    );
+  }
+
+  async createThread(input: {
+    ownerId: string;
+    title?: string;
+    projectId?: string | null;
+    placement?: "core" | "node";
+  }): Promise<{ thread: AssistantThread; branch: AssistantBranch }> {
+    if (input.placement === "node") {
+      throw new ConversationStoreError(
+        "placement_unavailable",
+        "Node conversation placement is unavailable until plan 032",
+      );
+    }
+    const threadId = newId("athr");
+    const branchId = newId("abrn");
+    const now = sqlTimestamp();
+    const transaction = await this.client.transaction("write");
+    try {
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_threads
+          (id, userId, title, revision, projectId, placement, createdAt, updatedAt)
+          VALUES (?, ?, ?, 1, ?, 'core', ?, ?)`,
+        args: [
+          threadId,
+          input.ownerId,
+          input.title?.trim() || "Nouvelle conversation",
+          input.projectId ?? null,
+          now,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_branches
+          (id, threadId, name, createdAt, updatedAt)
+          VALUES (?, ?, 'Principal', ?, ?)`,
+        args: [branchId, threadId, now, now],
+      });
+      await execute(transaction, {
+        sql: `UPDATE assistant_threads SET activeBranchId = ? WHERE id = ?`,
+        args: [branchId, threadId],
+      });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+    const thread = await this.thread(input.ownerId, threadId);
+    const branchRow = await one(
+      this.client,
+      `SELECT * FROM assistant_branches WHERE id = ?`,
+      [branchId],
+    );
+    return { thread, branch: branchFromRow(branchRow!) };
+  }
+
+  async thread(ownerId: string, threadId: string, includeDeleted = false) {
+    return threadFromRow(
+      await ownedThread(this.client, ownerId, threadId, includeDeleted),
+    );
+  }
+
+  async listThreads(input: {
+    ownerId: string;
+    cursor?: string | null;
+    limit?: number;
+    includeArchived?: boolean;
+    includeDeleted?: boolean;
+    starredOnly?: boolean;
+    query?: string;
+  }): Promise<{ items: AssistantThreadListItem[]; nextCursor: string | null }> {
+    const limit = Math.min(Math.max(input.limit ?? 30, 1), 100);
+    const cursor = input.cursor
+      ? Number(input.cursor)
+      : Number.MAX_SAFE_INTEGER;
+    const clauses = ["t.userId = ?", "t.updatedAt < ?"];
+    const args: Array<string | number> = [input.ownerId, cursor];
+    const selectArgs: Array<string | number> = [];
+    let matchedMessagePreviewSql = "NULL";
+    if (!input.includeDeleted) clauses.push("t.deletedAt IS NULL");
+    if (!input.includeArchived) clauses.push("t.archivedAt IS NULL");
+    if (input.starredOnly) clauses.push("t.starredAt IS NOT NULL");
+    if (input.query?.trim()) {
+      clauses.push(`(lower(t.title) LIKE ? OR EXISTS (
+        SELECT 1 FROM assistant_messages sm, json_each(sm.partsJson) AS part
+        WHERE sm.threadId = t.id AND sm.status = 'complete'
+          AND sm.role IN ('user', 'assistant')
+          AND json_extract(part.value, '$.type') = 'text'
+          AND lower(CAST(json_extract(part.value, '$.markdown') AS TEXT)) LIKE ?
+      ))`);
+      const query = `%${input.query.trim().toLocaleLowerCase()}%`;
+      args.push(query, query);
+      selectArgs.push(query);
+      matchedMessagePreviewSql = `(SELECT substr(
+          CAST(json_extract(part.value, '$.markdown') AS TEXT), 1, 500)
+        FROM assistant_messages sm, json_each(sm.partsJson) AS part
+        WHERE sm.threadId = t.id AND sm.status = 'complete'
+          AND sm.role IN ('user', 'assistant')
+          AND json_extract(part.value, '$.type') = 'text'
+          AND lower(CAST(json_extract(part.value, '$.markdown') AS TEXT)) LIKE ?
+        ORDER BY sm.createdAt DESC, sm.id DESC LIMIT 1)`;
+    }
+    const result = await this.client.execute({
+      sql: `SELECT t.*,
+        (SELECT count(*) FROM assistant_messages m WHERE m.threadId = t.id) AS messageCount,
+        (SELECT max(m.createdAt) FROM assistant_messages m WHERE m.threadId = t.id) AS lastMessageAt,
+        (SELECT r.id FROM assistant_runs r WHERE r.threadId = t.id
+          AND r.status IN ('reserved','running','waiting-for-user')
+          ORDER BY r.createdAt DESC LIMIT 1) AS activeRunId,
+        ${matchedMessagePreviewSql} AS matchedMessagePreview
+        FROM assistant_threads t
+        WHERE ${clauses.join(" AND ")}
+        ORDER BY t.updatedAt DESC, t.id DESC LIMIT ?`,
+      args: [...selectArgs, ...args, limit + 1],
+    });
+    const rows = result.rows.slice(0, limit);
+    const items = rows.map((row) =>
+      assistantThreadListItemSchema.parse({
+        thread: threadFromRow(row),
+        messageCount: Number(row.messageCount),
+        lastMessageAt:
+          row.lastMessageAt === null ? null : isoFromSqlite(row.lastMessageAt),
+        activeRunId: nullString(row.activeRunId),
+        matchedMessagePreview: nullString(row.matchedMessagePreview),
+      }),
+    );
+    return {
+      items,
+      nextCursor:
+        result.rows.length > limit && rows.at(-1)
+          ? String(rows.at(-1)!.updatedAt)
+          : null,
+    };
+  }
+
+  async getThreadDetail(
+    ownerId: string,
+    threadId: string,
+    branchId?: string | null,
+  ): Promise<AssistantThreadDetail> {
+    const thread = await this.thread(ownerId, threadId, true);
+    const [
+      branchRows,
+      messageRows,
+      runRows,
+      citationRows,
+      attachmentRows,
+      usageRows,
+    ] = await Promise.all([
+      this.client.execute({
+        sql: `SELECT * FROM assistant_branches WHERE threadId = ? ORDER BY createdAt, id`,
+        args: [threadId],
+      }),
+      this.client.execute({
+        sql: `SELECT * FROM assistant_messages WHERE threadId = ? ORDER BY createdAt, id`,
+        args: [threadId],
+      }),
+      this.client.execute({
+        sql: `SELECT * FROM assistant_runs WHERE threadId = ? ORDER BY createdAt, id`,
+        args: [threadId],
+      }),
+      this.client.execute({
+        sql: `SELECT c.* FROM assistant_citations c
+            JOIN assistant_runs r ON r.id = c.runId WHERE r.threadId = ?
+            ORDER BY c.messageId, c.ordinal`,
+        args: [threadId],
+      }),
+      this.client.execute({
+        sql: `SELECT a.* FROM assistant_attachments a
+            JOIN assistant_messages m ON m.id = a.messageId WHERE m.threadId = ?
+            ORDER BY a.createdAt, a.id`,
+        args: [threadId],
+      }),
+      this.client.execute({
+        sql: `SELECT u.* FROM assistant_usage u
+            JOIN assistant_runs r ON r.id = u.runId WHERE r.threadId = ?
+            ORDER BY u.createdAt, u.runId`,
+        args: [threadId],
+      }),
+    ]);
+    const branches = branchRows.rows.map(branchFromRow);
+    const messages = messageRows.rows.map(messageFromRow);
+    const selectedBranchId = branchId ?? thread.activeBranchId;
+    const selected = branches.find((branch) => branch.id === selectedBranchId);
+    if (selectedBranchId && !selected) {
+      throw new ConversationStoreError("not_found", "Branch not found");
+    }
+    const runs = runRows.rows.map(runFromRow);
+    const activeRunProjections = [];
+    for (const run of runs.filter((candidate) =>
+      ["reserved", "running", "waiting-for-user"].includes(candidate.status),
+    )) {
+      const eventRows = await this.client.execute({
+        sql: `SELECT e.*, r.threadId, r.branchId FROM assistant_run_events e
+          JOIN assistant_runs r ON r.id = e.runId
+          WHERE e.runId = ? ORDER BY e.sequence`,
+        args: [run.id],
+      });
+      const events = eventRows.rows.map(eventFromRow);
+      const markdown = events
+        .filter((event) => event.type === "text.message.delta")
+        .map((event) => {
+          const payload = event.payload as { delta?: unknown };
+          return typeof payload?.delta === "string" ? payload.delta : "";
+        })
+        .join("");
+      const parts: AssistantPartV1[] = markdown
+        ? [{ type: "text", id: `stream-${run.id}`, markdown }]
+        : [
+            {
+              type: "status",
+              id: `stream-${run.id}`,
+              state: run.status === "reserved" ? "pending" : "active",
+              label:
+                run.status === "waiting-for-user"
+                  ? "En attente de votre réponse"
+                  : "Réponse en cours",
+            },
+          ];
+      activeRunProjections.push({
+        runId: run.id,
+        outputMessageId: run.reservedOutputMessageId,
+        parts,
+        lastSequence: events.at(-1)?.sequence ?? 0,
+        status: run.status,
+      });
+    }
+    return assistantThreadDetailSchema.parse({
+      thread,
+      branches,
+      activeBranchId: selectedBranchId,
+      activePathMessageIds: activePath(selected, messages),
+      messages,
+      runs,
+      citations: citationRows.rows.map(citationFromRow),
+      attachments: attachmentRows.rows.map(attachmentFromRow),
+      usage: usageRows.rows.map(usageFromRow),
+      manifests: await this.manifests(ownerId, threadId),
+      activeRunProjections,
+    });
+  }
+
+  async reserveTurn(input: {
+    ownerId: string;
+    threadId: string;
+    branchId: string;
+    expectedHeadMessageId: string | null;
+    clientRequestId: string;
+    markdown: string;
+    modelKey: string;
+    providerKey?: string;
+    forkOnConflict?: boolean;
+    replacesMessageId?: string | null;
+    attachments?: Array<{
+      kind: AssistantAttachmentKind;
+      referenceId: string;
+      snapshotVersion?: string | null;
+      label: string;
+    }>;
+    skillId?: string | null;
+    planMode?: boolean;
+    workspaceSnapshotRef?: string | null;
+    createBranch?: {
+      id: string;
+      name: string;
+      forkedFromMessageId: string | null;
+    };
+  }): Promise<TurnReservation> {
+    const transaction = await this.client.transaction("write");
+    try {
+      await ownedThread(transaction, input.ownerId, input.threadId);
+      const duplicate = await one(
+        transaction,
+        `SELECT * FROM assistant_runs WHERE threadId = ? AND clientRequestId = ? LIMIT 1`,
+        [input.threadId, input.clientRequestId],
+      );
+      if (duplicate) {
+        if (
+          nullString(duplicate.workspaceSnapshotRef) !==
+          (input.workspaceSnapshotRef ?? null)
+        ) {
+          throw new ConversationStoreError(
+            "divergent_replay",
+            "The request id was already used with a different workspace branch choice",
+          );
+        }
+        await transaction.commit();
+        return {
+          threadId: String(duplicate.threadId),
+          branchId: String(duplicate.branchId),
+          userMessageId: String(duplicate.inputMessageId),
+          runId: String(duplicate.id),
+          reservedOutputMessageId: String(duplicate.reservedOutputMessageId),
+          idempotent: true,
+        };
+      }
+      const now = sqlTimestamp();
+      if (input.createBranch) {
+        if (
+          input.createBranch.id !== input.branchId ||
+          input.createBranch.forkedFromMessageId !==
+            input.expectedHeadMessageId ||
+          !input.createBranch.name.trim()
+        ) {
+          throw new ConversationStoreError(
+            "invalid_state",
+            "The explicit branch boundary is invalid",
+          );
+        }
+        if (input.expectedHeadMessageId) {
+          const boundary = await one(
+            transaction,
+            `SELECT id FROM assistant_messages WHERE id = ? AND threadId = ? LIMIT 1`,
+            [input.expectedHeadMessageId, input.threadId],
+          );
+          if (!boundary) {
+            throw new ConversationStoreError(
+              "head_conflict",
+              "The requested branch boundary is not in this thread",
+            );
+          }
+        }
+        await execute(transaction, {
+          sql: `INSERT INTO assistant_branches
+            (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            input.createBranch.id,
+            input.threadId,
+            input.createBranch.name.trim(),
+            input.createBranch.forkedFromMessageId,
+            input.expectedHeadMessageId,
+            now,
+            now,
+          ],
+        });
+      }
+      const branch = await one(
+        transaction,
+        `SELECT * FROM assistant_branches WHERE id = ? AND threadId = ? LIMIT 1`,
+        [input.branchId, input.threadId],
+      );
+      if (!branch)
+        throw new ConversationStoreError("not_found", "Branch not found");
+      let targetBranchId = input.branchId;
+      const currentHead = nullString(branch.headMessageId);
+      if (currentHead !== input.expectedHeadMessageId) {
+        if (!input.forkOnConflict) {
+          throw new ConversationStoreError(
+            "head_conflict",
+            "The branch head changed; reload or explicitly create a sibling",
+          );
+        }
+        if (input.expectedHeadMessageId) {
+          const expected = await one(
+            transaction,
+            `SELECT id FROM assistant_messages WHERE id = ? AND threadId = ?`,
+            [input.expectedHeadMessageId, input.threadId],
+          );
+          if (!expected) {
+            throw new ConversationStoreError(
+              "head_conflict",
+              "The requested sibling base is not in this thread",
+            );
+          }
+        }
+        targetBranchId = newId("abrn");
+        await execute(transaction, {
+          sql: `INSERT INTO assistant_branches
+            (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
+            VALUES (?, ?, 'Branche concurrente', ?, ?, ?, ?)`,
+          args: [
+            targetBranchId,
+            input.threadId,
+            input.expectedHeadMessageId,
+            input.expectedHeadMessageId,
+            now,
+            now,
+          ],
+        });
+      }
+      const active = await one(
+        transaction,
+        `SELECT id FROM assistant_runs WHERE branchId = ?
+          AND status IN ('reserved','running','waiting-for-user') LIMIT 1`,
+        [targetBranchId],
+      );
+      if (active) {
+        throw new ConversationStoreError(
+          "active_run",
+          "This branch already has an active run",
+        );
+      }
+      const messageId = newId("amsg");
+      const runId = newId("arun");
+      const outputId = newId("amsg");
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_messages
+          (id, threadId, parentMessageId, role, authorship, status,
+           partsVersion, partsJson, replacesMessageId, createdAt)
+          VALUES (?, ?, ?, 'user', 'user', 'complete', 1, ?, ?, ?)`,
+        args: [
+          messageId,
+          input.threadId,
+          input.expectedHeadMessageId,
+          canonicalJson(
+            textParts(input.markdown, {
+              skillId: input.skillId,
+              planMode: input.planMode,
+            }),
+          ),
+          input.replacesMessageId ?? null,
+          now,
+        ],
+      });
+      for (const attachment of input.attachments ?? []) {
+        await execute(transaction, {
+          sql: `INSERT INTO assistant_attachments
+            (id, messageId, kind, referenceId, snapshotVersion, label, fileId, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            newId("aatt"),
+            messageId,
+            attachment.kind,
+            attachment.referenceId,
+            attachment.snapshotVersion ?? null,
+            attachment.label,
+            attachment.kind === "file" ? attachment.referenceId : null,
+            now,
+          ],
+        });
+      }
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_runs
+          (id, userId, threadId, branchId, inputMessageId, reservedOutputMessageId,
+           clientRequestId, workspaceSnapshotRef, runtimeId, runtimeVersion, graphSchemaVersion,
+           modelKey, providerKey, status, approvalMode, providerDispatchState,
+           createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'avermate-readonly', '1', 1,
+            ?, ?, 'reserved', 'read-only', 'pending', ?, ?)`,
+        args: [
+          runId,
+          input.ownerId,
+          input.threadId,
+          targetBranchId,
+          messageId,
+          outputId,
+          input.clientRequestId,
+          input.workspaceSnapshotRef ?? null,
+          input.modelKey,
+          input.providerKey ?? "mock",
+          now,
+          now,
+        ],
+      });
+      const headUpdate = await execute(transaction, {
+        sql: `UPDATE assistant_branches SET headMessageId = ?, updatedAt = ?
+          WHERE id = ? AND headMessageId IS ?`,
+        args: [messageId, now, targetBranchId, input.expectedHeadMessageId],
+      });
+      if (headUpdate.rowsAffected !== 1) {
+        throw new ConversationStoreError(
+          "head_conflict",
+          "Branch head changed",
+        );
+      }
+      await execute(transaction, {
+        sql: `UPDATE assistant_threads SET activeBranchId = ?, revision = revision + 1,
+          updatedAt = ? WHERE id = ?`,
+        args: [targetBranchId, now, input.threadId],
+      });
+      await transaction.commit();
+      return {
+        threadId: input.threadId,
+        branchId: targetBranchId,
+        userMessageId: messageId,
+        runId,
+        reservedOutputMessageId: outputId,
+        idempotent: false,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      if (
+        error instanceof Error &&
+        error.message.includes("assistant_runs_branch_active_unique")
+      ) {
+        throw new ConversationStoreError(
+          "active_run",
+          "This branch already has an active run",
+        );
+      }
+      throw error;
+    }
+  }
+
+  async reserveRetry(input: {
+    ownerId: string;
+    messageId: string;
+    clientRequestId: string;
+    modelKey?: string;
+    destinationBranchId?: string;
+    workspaceSnapshotRef?: string | null;
+  }): Promise<TurnReservation> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const message = await one(
+        transaction,
+        `SELECT m.*, t.userId FROM assistant_messages m
+         JOIN assistant_threads t ON t.id = m.threadId
+         WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL LIMIT 1`,
+        [input.messageId, input.ownerId],
+      );
+      if (
+        !message ||
+        message.role !== "assistant" ||
+        !message.parentMessageId
+      ) {
+        throw new ConversationStoreError(
+          "not_found",
+          "Retryable message not found",
+        );
+      }
+      const duplicate = await one(
+        transaction,
+        `SELECT * FROM assistant_runs WHERE threadId = ? AND clientRequestId = ?`,
+        [message.threadId, input.clientRequestId],
+      );
+      if (duplicate) {
+        if (
+          nullString(duplicate.workspaceSnapshotRef) !==
+          (input.workspaceSnapshotRef ?? null)
+        ) {
+          throw new ConversationStoreError(
+            "divergent_replay",
+            "The request id was already used with a different workspace branch choice",
+          );
+        }
+        await transaction.commit();
+        return {
+          threadId: String(duplicate.threadId),
+          branchId: String(duplicate.branchId),
+          userMessageId: String(duplicate.inputMessageId),
+          runId: String(duplicate.id),
+          reservedOutputMessageId: String(duplicate.reservedOutputMessageId),
+          idempotent: true,
+        };
+      }
+      const previousRun = await one(
+        transaction,
+        `SELECT * FROM assistant_runs WHERE outputMessageId = ? LIMIT 1`,
+        [input.messageId],
+      );
+      const branchId = input.destinationBranchId ?? newId("abrn");
+      const runId = newId("arun");
+      const outputId = newId("amsg");
+      const now = sqlTimestamp();
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_branches
+          (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
+          VALUES (?, ?, 'Nouvel essai', ?, ?, ?, ?)`,
+        args: [
+          branchId,
+          message.threadId,
+          message.parentMessageId,
+          message.parentMessageId,
+          now,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_runs
+          (id, userId, threadId, branchId, inputMessageId, reservedOutputMessageId,
+           parentRunId, clientRequestId, workspaceSnapshotRef,
+           runtimeId, runtimeVersion, graphSchemaVersion,
+           modelKey, providerKey, status, approvalMode, providerDispatchState,
+           createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'avermate-readonly', '1', 1,
+            ?, ?, 'reserved', 'read-only', 'pending', ?, ?)`,
+        args: [
+          runId,
+          input.ownerId,
+          message.threadId,
+          branchId,
+          message.parentMessageId,
+          outputId,
+          previousRun?.id ?? null,
+          input.clientRequestId,
+          input.workspaceSnapshotRef ?? null,
+          input.modelKey ?? previousRun?.modelKey ?? "mock-readonly",
+          previousRun?.providerKey ?? "mock",
+          now,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `UPDATE assistant_threads SET activeBranchId = ?, revision = revision + 1,
+          updatedAt = ? WHERE id = ?`,
+        args: [branchId, now, message.threadId],
+      });
+      await transaction.commit();
+      return {
+        threadId: String(message.threadId),
+        branchId,
+        userMessageId: String(message.parentMessageId),
+        runId,
+        reservedOutputMessageId: outputId,
+        idempotent: false,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async editMessage(input: {
+    ownerId: string;
+    messageId: string;
+    clientRequestId: string;
+    markdown: string;
+    modelKey: string;
+    destinationBranchId?: string;
+    workspaceSnapshotRef?: string | null;
+  }): Promise<EditedMessageProjection> {
+    const row = await one(
+      this.client,
+      `SELECT m.*, t.userId FROM assistant_messages m
+       JOIN assistant_threads t ON t.id = m.threadId
+       WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL LIMIT 1`,
+      [input.messageId, input.ownerId],
+    );
+    if (!row)
+      throw new ConversationStoreError("not_found", "Message not found");
+    if (row.role === "user") {
+      const branchId = input.destinationBranchId ?? newId("abrn");
+      return {
+        kind: "run-reserved",
+        reservation: await this.reserveTurn({
+          ownerId: input.ownerId,
+          threadId: String(row.threadId),
+          branchId,
+          expectedHeadMessageId: nullString(row.parentMessageId),
+          clientRequestId: input.clientRequestId,
+          markdown: input.markdown,
+          modelKey: input.modelKey,
+          replacesMessageId: input.messageId,
+          workspaceSnapshotRef: input.workspaceSnapshotRef ?? null,
+          createBranch: {
+            id: branchId,
+            name: "Message modifié",
+            forkedFromMessageId: nullString(row.parentMessageId),
+          },
+        }),
+      };
+    }
+    if (row.role !== "assistant") {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "This message cannot be edited",
+      );
+    }
+    if (input.workspaceSnapshotRef) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Workspace copy is unavailable when curating an assistant response",
+      );
+    }
+    const transaction = await this.client.transaction("write");
+    try {
+      const branchId = input.destinationBranchId ?? newId("abrn");
+      const messageId = newId("amsg");
+      const now = sqlTimestamp();
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_messages
+          (id, threadId, parentMessageId, role, authorship, status, partsVersion,
+           partsJson, replacesMessageId, createdAt)
+          VALUES (?, ?, ?, 'assistant', 'user-edited-model', 'complete', 1, ?, ?, ?)`,
+        args: [
+          messageId,
+          row.threadId,
+          row.parentMessageId,
+          canonicalJson(textParts(input.markdown)),
+          input.messageId,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_branches
+          (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
+          VALUES (?, ?, 'Réponse modifiée', ?, ?, ?, ?)`,
+        args: [
+          branchId,
+          row.threadId,
+          row.parentMessageId,
+          messageId,
+          now,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `UPDATE assistant_threads SET activeBranchId = ?, revision = revision + 1,
+          updatedAt = ? WHERE id = ?`,
+        args: [branchId, now, row.threadId],
+      });
+      await transaction.commit();
+      return {
+        kind: "user-curated-model",
+        threadId: String(row.threadId),
+        branchId,
+        messageId,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async startRun(ownerId: string, runId: string): Promise<AssistantRun> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, ownerId, runId);
+      if (run.status !== "reserved" && run.status !== "running") {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Run cannot be started",
+        );
+      }
+      if (run.status === "reserved") {
+        const now = sqlTimestamp();
+        await execute(transaction, {
+          sql: `UPDATE assistant_runs SET status = 'running', startedAt = ?,
+            providerDispatchState = 'pending', updatedAt = ?
+            WHERE id = ? AND status = 'reserved'`,
+          args: [now, now, runId],
+        });
+        await this.appendEventInTransaction(transaction, run, {
+          type: "run.started",
+          payload: { approvalMode: "read-only" },
+          terminal: false,
+          emittedAt: new Date(now * 1_000),
+        });
+      }
+      const updated = await ownedRun(transaction, ownerId, runId);
+      await transaction.commit();
+      return runFromRow(updated);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async markProviderDispatch(input: {
+    ownerId: string;
+    runId: string;
+    state: "dispatching" | "acknowledged" | "failed";
+    providerRequestKey: string;
+  }): Promise<AssistantRun> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, input.ownerId, input.runId);
+      if (run.status !== "running") {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Only a running assistant turn can change provider dispatch state",
+        );
+      }
+      if (
+        run.providerRequestKey !== null &&
+        String(run.providerRequestKey) !== input.providerRequestKey
+      ) {
+        throw new ConversationStoreError(
+          "divergent_replay",
+          "Provider request key is immutable once dispatch begins",
+        );
+      }
+      const current = String(run.providerDispatchState);
+      const allowed =
+        current === input.state ||
+        (current === "pending" && input.state === "dispatching") ||
+        (current === "dispatching" &&
+          (input.state === "acknowledged" || input.state === "failed"));
+      if (!allowed) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          `Provider dispatch cannot move from ${current} to ${input.state}`,
+        );
+      }
+      await execute(transaction, {
+        sql: `UPDATE assistant_runs
+          SET providerRequestKey = ?, providerDispatchState = ?, updatedAt = ?
+          WHERE id = ? AND userId = ?`,
+        args: [
+          input.providerRequestKey,
+          input.state,
+          sqlTimestamp(),
+          input.runId,
+          input.ownerId,
+        ],
+      });
+      const updated = await ownedRun(transaction, input.ownerId, input.runId);
+      await transaction.commit();
+      return runFromRow(updated);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async bindConversationCheckpoint(input: {
+    ownerId: string;
+    runId: string;
+    checkpointId: string;
+  }): Promise<AssistantRun> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, input.ownerId, input.runId);
+      const checkpoint = await one(
+        transaction,
+        `SELECT id FROM assistant_conversation_checkpoints
+          WHERE id = ? AND userId = ? AND runId = ? AND threadId = ?
+            AND branchId = ? AND status = 'committed' LIMIT 1`,
+        [
+          input.checkpointId,
+          input.ownerId,
+          input.runId,
+          run.threadId,
+          run.branchId,
+        ],
+      );
+      if (!checkpoint) {
+        throw new ConversationStoreError(
+          "forbidden",
+          "Conversation checkpoint is not a committed boundary of this run",
+        );
+      }
+      if (
+        run.conversationCheckpointRef !== null &&
+        String(run.conversationCheckpointRef) !== input.checkpointId
+      ) {
+        const current = await one(
+          transaction,
+          `SELECT afterEventSequence FROM assistant_conversation_checkpoints
+            WHERE id = ? AND userId = ? LIMIT 1`,
+          [run.conversationCheckpointRef, input.ownerId],
+        );
+        const next = await one(
+          transaction,
+          `SELECT afterEventSequence FROM assistant_conversation_checkpoints
+            WHERE id = ? AND userId = ? LIMIT 1`,
+          [input.checkpointId, input.ownerId],
+        );
+        if (
+          !current ||
+          !next ||
+          Number(next.afterEventSequence) < Number(current.afterEventSequence)
+        ) {
+          throw new ConversationStoreError(
+            "invalid_state",
+            "Conversation checkpoint cannot move backwards",
+          );
+        }
+      }
+      await execute(transaction, {
+        sql: `UPDATE assistant_runs SET conversationCheckpointRef = ?, updatedAt = ?
+          WHERE id = ? AND userId = ?`,
+        args: [input.checkpointId, sqlTimestamp(), input.runId, input.ownerId],
+      });
+      const updated = await ownedRun(transaction, input.ownerId, input.runId);
+      await transaction.commit();
+      return runFromRow(updated);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  private async appendEventInTransaction(
+    transaction: Transaction,
+    run: Row,
+    input: {
+      type: string;
+      payload: unknown;
+      terminal?: boolean;
+      emittedAt?: Date;
+      eventId?: string;
+    },
+  ): Promise<AssistantEventProjection> {
+    const latest = await one(
+      transaction,
+      `SELECT max(sequence) AS sequence FROM assistant_run_events WHERE runId = ?`,
+      [run.id],
+    );
+    const sequence = Number(latest?.sequence ?? 0) + 1;
+    const emittedAt = Math.floor(
+      (input.emittedAt ?? new Date()).getTime() / 1_000,
+    );
+    const persistedAt = sqlTimestamp();
+    const eventId = input.eventId ?? newId("aevt");
+    const event = avermateAgentEventV1Schema.parse({
+      protocolVersion: 1,
+      eventId,
+      sequence,
+      threadId: String(run.threadId),
+      branchId: String(run.branchId),
+      runId: String(run.id),
+      emittedAt: new Date(emittedAt * 1_000).toISOString(),
+      type: input.type,
+      payload: input.payload,
+      terminal: input.terminal ?? false,
+    });
+    await execute(transaction, {
+      sql: `INSERT INTO assistant_run_events
+        (id, runId, sequence, eventId, type, payloadJson, terminal, emittedAt, persistedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        newId("aevtrow"),
+        run.id,
+        sequence,
+        eventId,
+        event.type,
+        canonicalJson(event.payload),
+        event.terminal ? 1 : 0,
+        emittedAt,
+        persistedAt,
+      ],
+    });
+    await execute(transaction, {
+      sql: `INSERT INTO assistant_outbox
+        (id, userId, runId, eventId, kind, state, attempt, availableAt,
+         payloadDigest, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)`,
+      args: [
+        newId("aout"),
+        run.userId,
+        run.id,
+        eventId,
+        event.terminal ? "terminal" : "event",
+        persistedAt,
+        sha256(canonicalJson(event)),
+        persistedAt,
+        persistedAt,
+      ],
+    });
+    return {
+      ...event,
+      persistedAt: new Date(persistedAt * 1_000).toISOString(),
+    };
+  }
+
+  async appendRunEvent(input: {
+    ownerId: string;
+    runId: string;
+    type: string;
+    payload: unknown;
+    eventId?: string;
+  }): Promise<AssistantEventProjection> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, input.ownerId, input.runId);
+      if (
+        !["reserved", "running", "waiting-for-user"].includes(
+          String(run.status),
+        )
+      ) {
+        throw new ConversationStoreError("invalid_state", "Run is terminal");
+      }
+      const event = await this.appendEventInTransaction(transaction, run, {
+        type: input.type,
+        payload: input.payload,
+        eventId: input.eventId,
+      });
+      await transaction.commit();
+      return event;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async replayEvents(input: {
+    ownerId: string;
+    runId: string;
+    afterSequence?: number;
+    limit?: number;
+  }): Promise<AssistantEventProjection[]> {
+    const run = await ownedRun(this.client, input.ownerId, input.runId);
+    const result = await this.client.execute({
+      sql: `SELECT e.*, r.threadId, r.branchId FROM assistant_run_events e
+        JOIN assistant_runs r ON r.id = e.runId
+        WHERE e.runId = ? AND e.sequence > ? ORDER BY e.sequence LIMIT ?`,
+      args: [
+        run.id,
+        Math.max(0, input.afterSequence ?? 0),
+        Math.min(Math.max(input.limit ?? 250, 1), 1_000),
+      ],
+    });
+    return result.rows.map(eventFromRow);
+  }
+
+  async run(ownerId: string, runId: string): Promise<AssistantRun> {
+    return runFromRow(await ownedRun(this.client, ownerId, runId));
+  }
+
+  async finalizeRun(input: {
+    ownerId: string;
+    runId: string;
+    expectedInputHeadId: string;
+    outputMessageId: string;
+    finalParts: AssistantPartV1[];
+    citations: Array<{
+      ordinal: number;
+      proofHandleId: string;
+      claimPartId?: string | null;
+    }>;
+    usage: FinalUsageSnapshot;
+    terminal: "complete" | "failed" | "cancelled";
+    safeError?: { code: string; message: string } | null;
+    siblingPolicy: "create-explicit-sibling-on-head-conflict";
+  }): Promise<FinalizedRunProjection> {
+    const parts = input.finalParts.map((part) =>
+      assistantPartV1Schema.parse(part),
+    );
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, input.ownerId, input.runId);
+      if (String(run.reservedOutputMessageId) !== input.outputMessageId) {
+        throw new ConversationStoreError(
+          "divergent_replay",
+          "Output ID differs from the durable reservation",
+        );
+      }
+      if (["complete", "failed", "cancelled"].includes(String(run.status))) {
+        const existing = await one(
+          transaction,
+          `SELECT * FROM assistant_messages WHERE id = ?`,
+          [input.outputMessageId],
+        );
+        if (
+          !existing ||
+          canonicalJson(jsonValue(existing.partsJson)) !==
+            canonicalJson(parts) ||
+          run.status !== input.terminal
+        ) {
+          throw new ConversationStoreError(
+            "divergent_replay",
+            "Finalization replay is not byte-identical",
+          );
+        }
+        await transaction.commit();
+        await this.enqueueConversationIndex(
+          input.ownerId,
+          String(run.threadId),
+        );
+        return this.finalizedProjection(input.ownerId, input.runId, false);
+      }
+      if (String(run.inputMessageId) !== input.expectedInputHeadId) {
+        throw new ConversationStoreError(
+          "divergent_replay",
+          "Finalizer input does not match the run reservation",
+        );
+      }
+      const now = sqlTimestamp();
+      const messageStatus = input.terminal;
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_messages
+          (id, threadId, parentMessageId, role, authorship, status, partsVersion,
+           partsJson, createdByRunId, createdAt)
+          VALUES (?, ?, ?, 'assistant', 'model', ?, ?, ?, ?, ?)`,
+        args: [
+          input.outputMessageId,
+          run.threadId,
+          run.inputMessageId,
+          messageStatus,
+          ASSISTANT_PARTS_VERSION,
+          canonicalJson(parts),
+          run.id,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `UPDATE assistant_runs SET outputMessageId = ?, status = ?,
+          completedAt = ?, errorCode = ?, safeError = ?,
+          providerDispatchState = CASE WHEN ? = 'complete' THEN 'acknowledged' ELSE providerDispatchState END,
+          updatedAt = ? WHERE id = ? AND status IN ('reserved','running','waiting-for-user')`,
+        args: [
+          input.outputMessageId,
+          input.terminal,
+          now,
+          input.safeError?.code ?? null,
+          input.safeError?.message ?? null,
+          input.terminal,
+          now,
+          run.id,
+        ],
+      });
+      let siblingCreated = false;
+      let branchId = String(run.branchId);
+      const head = await one(
+        transaction,
+        `SELECT headMessageId FROM assistant_branches WHERE id = ?`,
+        [run.branchId],
+      );
+      if (nullString(head?.headMessageId) === String(run.inputMessageId)) {
+        await execute(transaction, {
+          sql: `UPDATE assistant_branches SET headMessageId = ?, updatedAt = ?
+            WHERE id = ? AND headMessageId = ?`,
+          args: [input.outputMessageId, now, run.branchId, run.inputMessageId],
+        });
+      } else {
+        siblingCreated = true;
+        branchId = newId("abrn");
+        await execute(transaction, {
+          sql: `INSERT INTO assistant_branches
+            (id, threadId, name, forkedFromMessageId, headMessageId, createdAt, updatedAt)
+            VALUES (?, ?, 'Réponse concurrente', ?, ?, ?, ?)`,
+          args: [
+            branchId,
+            run.threadId,
+            run.inputMessageId,
+            input.outputMessageId,
+            now,
+            now,
+          ],
+        });
+      }
+      const claimPartIds = new Set(
+        parts
+          .filter(
+            (part): part is Extract<AssistantPartV1, { type: "text" }> =>
+              part.type === "text",
+          )
+          .map((part) => part.id),
+      );
+      const citationParts = parts.filter(
+        (part): part is Extract<AssistantPartV1, { type: "citation" }> =>
+          part.type === "citation",
+      );
+      if (citationParts.length !== input.citations.length) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Every citation part must have one normalized citation",
+        );
+      }
+      const citationOrdinals = new Set<number>();
+      for (const citation of [...input.citations].sort(
+        (a, b) => a.ordinal - b.ordinal,
+      )) {
+        const matchingParts = citationParts.filter(
+          (part) => part.ordinal === citation.ordinal,
+        );
+        const citationPart = matchingParts[0];
+        if (
+          matchingParts.length !== 1 ||
+          !citationPart ||
+          citationOrdinals.has(citation.ordinal) ||
+          !citation.claimPartId ||
+          citationPart.claimPartId !== citation.claimPartId ||
+          !claimPartIds.has(citation.claimPartId)
+        ) {
+          throw new ConversationStoreError(
+            "invalid_state",
+            "Every normalized citation must target one matching text claim part",
+          );
+        }
+        citationOrdinals.add(citation.ordinal);
+        await execute(transaction, {
+          sql: `INSERT INTO assistant_citations
+            (id, messageId, runId, ordinal, proofHandleId, claimPartId, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            citationPart.citationId,
+            input.outputMessageId,
+            run.id,
+            citation.ordinal,
+            citation.proofHandleId,
+            citation.claimPartId ?? null,
+            now,
+          ],
+        });
+      }
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_usage
+          (runId, providerKey, modelKey, pricingSnapshotId, inputTokens,
+           outputTokens, reasoningTokens, cachedReadTokens, cachedWriteTokens,
+           estimatedCost, currency, final, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        args: [
+          run.id,
+          input.usage.providerKey,
+          input.usage.modelKey,
+          input.usage.pricingSnapshotId ?? null,
+          input.usage.inputTokens,
+          input.usage.outputTokens,
+          input.usage.reasoningTokens,
+          input.usage.cachedReadTokens,
+          input.usage.cachedWriteTokens,
+          input.usage.estimatedCost,
+          input.usage.currency,
+          now,
+        ],
+      });
+      const terminalType =
+        input.terminal === "complete"
+          ? "run.finished"
+          : input.terminal === "failed"
+            ? "run.failed"
+            : "run.cancelled";
+      await this.appendEventInTransaction(
+        transaction,
+        { ...run, status: input.terminal },
+        {
+          type: terminalType,
+          payload: input.safeError
+            ? { code: input.safeError.code, message: input.safeError.message }
+            : { outputMessageId: input.outputMessageId },
+          terminal: true,
+        },
+      );
+      await execute(transaction, {
+        sql: `UPDATE assistant_threads SET activeBranchId = ?, revision = revision + 1,
+          updatedAt = ? WHERE id = ?`,
+        args: [branchId, now, run.threadId],
+      });
+      await this.registerConversationSource(
+        transaction,
+        input.ownerId,
+        String(run.threadId),
+        now,
+      );
+      await transaction.commit();
+      await this.enqueueConversationIndex(input.ownerId, String(run.threadId));
+      return this.finalizedProjection(
+        input.ownerId,
+        input.runId,
+        siblingCreated,
+      );
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  private async finalizedProjection(
+    ownerId: string,
+    runId: string,
+    siblingCreated: boolean,
+  ): Promise<FinalizedRunProjection> {
+    const runRow = await ownedRun(this.client, ownerId, runId);
+    const outputRow = await one(
+      this.client,
+      `SELECT * FROM assistant_messages WHERE id = ?`,
+      [runRow.outputMessageId],
+    );
+    const citationRows = await this.client.execute({
+      sql: `SELECT * FROM assistant_citations WHERE runId = ? ORDER BY ordinal`,
+      args: [runId],
+    });
+    const usageRow = await one(
+      this.client,
+      `SELECT * FROM assistant_usage WHERE runId = ?`,
+      [runId],
+    );
+    const terminalRow = await one(
+      this.client,
+      `SELECT e.*, r.threadId, r.branchId FROM assistant_run_events e
+       JOIN assistant_runs r ON r.id = e.runId
+       WHERE e.runId = ? AND e.terminal = 1 LIMIT 1`,
+      [runId],
+    );
+    return {
+      run: runFromRow(runRow),
+      output: messageFromRow(outputRow!),
+      citations: citationRows.rows.map(citationFromRow),
+      usage: usageFromRow(usageRow!),
+      terminalEvent: eventFromRow(terminalRow!),
+      branchId: String(runRow.branchId),
+      siblingCreated,
+    };
+  }
+
+  async cancelRun(ownerId: string, runId: string): Promise<AssistantRun> {
+    const run = await this.run(ownerId, runId);
+    if (["complete", "failed", "cancelled"].includes(run.status)) return run;
+    await this.finalizeRun({
+      ownerId,
+      runId,
+      expectedInputHeadId: run.inputMessageId,
+      outputMessageId: run.reservedOutputMessageId,
+      finalParts: [
+        {
+          type: "safe-error",
+          id: newId("apart"),
+          code: "cancelled",
+          message: "Réponse interrompue par l’utilisateur.",
+          retryable: true,
+        },
+      ],
+      citations: [],
+      usage: {
+        providerKey: run.providerKey,
+        modelKey: run.modelKey,
+        inputTokens: null,
+        outputTokens: null,
+        reasoningTokens: null,
+        cachedReadTokens: null,
+        cachedWriteTokens: null,
+        estimatedCost: null,
+        currency: null,
+      },
+      terminal: "cancelled",
+      safeError: { code: "cancelled", message: "Run cancelled" },
+      siblingPolicy: "create-explicit-sibling-on-head-conflict",
+    });
+    return this.run(ownerId, runId);
+  }
+
+  async respondToQuestion(input: {
+    ownerId: string;
+    runId: string;
+    questionId: string;
+    answer: string;
+  }): Promise<AssistantRun> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const run = await ownedRun(transaction, input.ownerId, input.runId);
+      if (run.status !== "waiting-for-user") {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Run is not waiting for an answer",
+        );
+      }
+      const now = sqlTimestamp();
+      await execute(transaction, {
+        sql: `UPDATE assistant_runs SET status = 'running', updatedAt = ? WHERE id = ?`,
+        args: [now, run.id],
+      });
+      await this.appendEventInTransaction(transaction, run, {
+        type: "avermate.approval.resolved",
+        payload: { questionId: input.questionId, answer: input.answer },
+      });
+      await transaction.commit();
+      return this.run(input.ownerId, input.runId);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async updateThread(input: {
+    ownerId: string;
+    threadId: string;
+    expectedRevision: number;
+    title?: string;
+    starred?: boolean;
+    archived?: boolean;
+    activeBranchId?: string;
+  }): Promise<AssistantThread> {
+    const current = await this.thread(input.ownerId, input.threadId, true);
+    if (input.activeBranchId) {
+      const branch = await one(
+        this.client,
+        `SELECT id FROM assistant_branches WHERE id = ? AND threadId = ?`,
+        [input.activeBranchId, input.threadId],
+      );
+      if (!branch)
+        throw new ConversationStoreError("not_found", "Branch not found");
+    }
+    const now = sqlTimestamp();
+    const result = await this.client.execute({
+      sql: `UPDATE assistant_threads SET title = ?, activeBranchId = ?,
+        starredAt = ?, archivedAt = ?, revision = revision + 1, updatedAt = ?
+        WHERE id = ? AND userId = ? AND revision = ?`,
+      args: [
+        input.title?.trim() || current.title,
+        input.activeBranchId ?? current.activeBranchId,
+        input.starred === undefined
+          ? current.starredAt
+            ? Math.floor(new Date(current.starredAt).getTime() / 1_000)
+            : null
+          : input.starred
+            ? now
+            : null,
+        input.archived === undefined
+          ? current.archivedAt
+            ? Math.floor(new Date(current.archivedAt).getTime() / 1_000)
+            : null
+          : input.archived
+            ? now
+            : null,
+        now,
+        input.threadId,
+        input.ownerId,
+        input.expectedRevision,
+      ],
+    });
+    if (result.rowsAffected !== 1) {
+      throw new ConversationStoreError(
+        "head_conflict",
+        "Thread revision changed",
+      );
+    }
+    return this.thread(input.ownerId, input.threadId, true);
+  }
+
+  async trashThread(input: {
+    ownerId: string;
+    threadId: string;
+    expectedRevision: number;
+    retentionDays?: number;
+  }): Promise<AssistantThread> {
+    const now = sqlTimestamp();
+    const result = await this.client.execute({
+      sql: `UPDATE assistant_threads SET deletedAt = ?, purgeAfter = ?,
+        revision = revision + 1, updatedAt = ?
+        WHERE id = ? AND userId = ? AND revision = ? AND deletedAt IS NULL`,
+      args: [
+        now,
+        now + Math.min(Math.max(input.retentionDays ?? 30, 1), 365) * 86_400,
+        now,
+        input.threadId,
+        input.ownerId,
+        input.expectedRevision,
+      ],
+    });
+    if (result.rowsAffected !== 1) {
+      throw new ConversationStoreError(
+        "head_conflict",
+        "Thread revision changed",
+      );
+    }
+    return this.thread(input.ownerId, input.threadId, true);
+  }
+
+  async restoreThread(input: {
+    ownerId: string;
+    threadId: string;
+    expectedRevision: number;
+  }): Promise<AssistantThread> {
+    const now = sqlTimestamp();
+    const result = await this.client.execute({
+      sql: `UPDATE assistant_threads SET deletedAt = NULL, purgeAfter = NULL,
+        revision = revision + 1, updatedAt = ?
+        WHERE id = ? AND userId = ? AND revision = ? AND deletedAt IS NOT NULL`,
+      args: [now, input.threadId, input.ownerId, input.expectedRevision],
+    });
+    if (result.rowsAffected !== 1) {
+      throw new ConversationStoreError(
+        "head_conflict",
+        "Thread revision changed",
+      );
+    }
+    return this.thread(input.ownerId, input.threadId, true);
+  }
+
+  async purgeExpired(ownerId?: string): Promise<string[]> {
+    const now = sqlTimestamp();
+    const result = await this.client.execute({
+      sql: `SELECT id FROM assistant_threads WHERE deletedAt IS NOT NULL
+        AND purgeAfter <= ? ${ownerId ? "AND userId = ?" : ""}`,
+      args: ownerId ? [now, ownerId] : [now],
+    });
+    const ids = result.rows.map((row) => String(row.id));
+    if (ids.length) {
+      const placeholders = ids.map(() => "?").join(",");
+      const transaction = await this.client.transaction("write");
+      try {
+        await execute(transaction, {
+          sql: `UPDATE content_versions SET gcRequestedAt = ?
+            WHERE id IN (
+              SELECT currentVersionId FROM content_sources
+              WHERE originKind = 'conversation'
+                AND originId IN (${placeholders})
+                AND currentVersionId IS NOT NULL
+            )`,
+          args: [now, ...ids],
+        });
+        await execute(transaction, {
+          sql: `UPDATE content_sources
+            SET currentVersionId = NULL, status = 'failed',
+              error = 'source_purged', updatedAt = ?
+            WHERE originKind = 'conversation'
+              AND originId IN (${placeholders})`,
+          args: [now, ...ids],
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM study_project_items
+            WHERE kind = 'conversation' AND referenceId IN (${placeholders})`,
+          args: ids,
+        });
+        // The conversation graph deliberately uses RESTRICT edges to keep
+        // immutable messages/checkpoints from disappearing through ordinary
+        // writes. A retention purge is the one authorized exception, so remove
+        // the dependent graph explicitly and from leaves to roots. Relying on
+        // a thread-level cascade fails as soon as a run still references its
+        // immutable input/output messages.
+        await execute(transaction, {
+          sql: `DELETE FROM workspace_snapshots
+            WHERE threadId IN (${placeholders})`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_outbox
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            ) OR checkpointId IN (
+              SELECT id FROM assistant_conversation_checkpoints
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: [...ids, ...ids],
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_citations
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_context_proof_handles
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM content_version_references
+            WHERE ownerKind = 'assistant-citation'
+              AND ownerId IN (
+                SELECT id FROM assistant_runs
+                WHERE threadId IN (${placeholders})
+              )`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_context_manifests
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_usage
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_run_events
+            WHERE runId IN (
+              SELECT id FROM assistant_runs
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        while (true) {
+          const deleted = await execute(transaction, {
+            sql: `DELETE FROM assistant_conversation_checkpoints
+              WHERE threadId IN (${placeholders})
+                AND NOT EXISTS (
+                  SELECT 1 FROM assistant_conversation_checkpoints AS child
+                  WHERE child.parentCheckpointId = assistant_conversation_checkpoints.id
+                )`,
+            args: ids,
+          });
+          if (Number(deleted.rowsAffected) === 0) break;
+        }
+        const remainingCheckpoints = await execute(transaction, {
+          sql: `SELECT count(*) AS count
+            FROM assistant_conversation_checkpoints
+            WHERE threadId IN (${placeholders})`,
+          args: ids,
+        });
+        if (Number(remainingCheckpoints.rows[0]?.count ?? 0) !== 0) {
+          throw new Error("Conversation checkpoint graph could not be purged");
+        }
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_runs
+            WHERE threadId IN (${placeholders})`,
+          args: ids,
+        });
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_attachments
+            WHERE messageId IN (
+              SELECT id FROM assistant_messages
+              WHERE threadId IN (${placeholders})
+            )`,
+          args: ids,
+        });
+        while (true) {
+          const deleted = await execute(transaction, {
+            sql: `DELETE FROM assistant_messages
+              WHERE threadId IN (${placeholders})
+                AND NOT EXISTS (
+                  SELECT 1 FROM assistant_messages AS child
+                  WHERE child.parentMessageId = assistant_messages.id
+                    OR child.replacesMessageId = assistant_messages.id
+                )`,
+            args: ids,
+          });
+          if (Number(deleted.rowsAffected) === 0) break;
+        }
+        const remainingMessages = await execute(transaction, {
+          sql: `SELECT count(*) AS count FROM assistant_messages
+            WHERE threadId IN (${placeholders})`,
+          args: ids,
+        });
+        if (Number(remainingMessages.rows[0]?.count ?? 0) !== 0) {
+          throw new Error("Conversation message graph could not be purged");
+        }
+        await execute(transaction, {
+          sql: `DELETE FROM assistant_threads WHERE id IN (${placeholders})`,
+          args: ids,
+        });
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    }
+    return ids;
+  }
+
+  async createAttachment(input: {
+    ownerId: string;
+    messageId: string;
+    kind: AssistantAttachmentKind;
+    referenceId: string;
+    snapshotVersion?: string | null;
+    label: string;
+  }): Promise<AssistantAttachment> {
+    const message = await one(
+      this.client,
+      `SELECT m.* FROM assistant_messages m JOIN assistant_threads t ON t.id = m.threadId
+       WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL`,
+      [input.messageId, input.ownerId],
+    );
+    if (!message)
+      throw new ConversationStoreError("not_found", "Message not found");
+    if (message.role !== "user") {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Attachments may only be added to a user message",
+      );
+    }
+    const id = newId("aatt");
+    const now = sqlTimestamp();
+    await this.client.execute({
+      sql: `INSERT INTO assistant_attachments
+        (id, messageId, kind, referenceId, snapshotVersion, label, fileId, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        id,
+        input.messageId,
+        input.kind,
+        input.referenceId,
+        input.snapshotVersion ?? null,
+        input.label,
+        input.kind === "file" ? input.referenceId : null,
+        now,
+      ],
+    });
+    const row = await one(
+      this.client,
+      `SELECT * FROM assistant_attachments WHERE id = ?`,
+      [id],
+    );
+    return attachmentFromRow(row!);
+  }
+
+  async manifests(
+    ownerId: string,
+    threadId: string,
+  ): Promise<AssistantContextManifest[]> {
+    await ownedThread(this.client, ownerId, threadId, true);
+    const manifests = await this.client.execute({
+      sql: `SELECT m.* FROM assistant_context_manifests m
+        JOIN assistant_runs r ON r.id = m.runId WHERE r.threadId = ?
+        ORDER BY m.runId, m.revision`,
+      args: [threadId],
+    });
+    const output: AssistantContextManifest[] = [];
+    for (const manifest of manifests.rows) {
+      const handles = await this.client.execute({
+        sql: `SELECT p.*, r.userId AS referenceUserId, r.ownerKind,
+          r.ownerId AS referenceOwnerId, r.referenceKey, r.createdAt AS referenceCreatedAt
+          FROM assistant_context_proof_handles p
+          JOIN content_version_references r ON r.id = p.contentVersionReferenceId
+          WHERE p.contextManifestId = ? ORDER BY p.ordinal`,
+        args: [manifest.id],
+      });
+      output.push(
+        assistantContextManifestSchema.parse({
+          id: String(manifest.id),
+          runId: String(manifest.runId),
+          version: Number(manifest.version),
+          revision: Number(manifest.revision),
+          budget: jsonValue(manifest.budgetJson),
+          items: jsonValue(manifest.itemsJson),
+          proofHandles: handles.rows.map((handle) => ({
+            id: String(handle.id),
+            contextManifestId: String(handle.contextManifestId),
+            runId: String(handle.runId),
+            ordinal: Number(handle.ordinal),
+            contentVersionReference: {
+              id: String(handle.contentVersionReferenceId),
+              ownerId: String(handle.referenceUserId),
+              ownerKind: handle.ownerKind,
+              ownerIdWithinKind: String(handle.referenceOwnerId),
+              sourceVersionId: String(handle.sourceVersionId),
+              chunkId: nullString(handle.chunkId),
+              locatorSchemaVersion: 1,
+              locator: jsonValue(handle.locatorJson),
+              quotedContentHash: nullString(handle.quotedContentHash),
+              referenceKey: String(handle.referenceKey),
+              createdAt: isoFromSqlite(handle.referenceCreatedAt),
+            },
+            locator: jsonValue(handle.locatorJson),
+            evidenceDigest: String(handle.evidenceDigest),
+            quotedContentHash: nullString(handle.quotedContentHash),
+            createdAt: isoFromSqlite(handle.createdAt),
+          })),
+          digest: String(manifest.digest),
+          committedAt: isoFromSqlite(manifest.committedAt),
+        }),
+      );
+    }
+    return output;
+  }
+
+  async exportThread(input: {
+    ownerId: string;
+    threadId: string;
+    mode: "active-branch" | "whole-dag";
+    branchId?: string | null;
+  }): Promise<AssistantDagExport> {
+    const detail = await this.getThreadDetail(
+      input.ownerId,
+      input.threadId,
+      input.branchId,
+    );
+    const included = new Set(detail.activePathMessageIds);
+    const messages =
+      input.mode === "whole-dag"
+        ? detail.messages
+        : detail.messages.filter((message) => included.has(message.id));
+    const runIds = new Set(
+      detail.runs
+        .filter(
+          (run) =>
+            included.has(run.inputMessageId) ||
+            (run.outputMessageId ? included.has(run.outputMessageId) : false),
+        )
+        .map((run) => run.id),
+    );
+    const branches =
+      input.mode === "whole-dag"
+        ? detail.branches
+        : detail.branches.filter(
+            (branch) => branch.id === detail.activeBranchId,
+          );
+    return assistantDagExportSchema.parse({
+      exportVersion: 1,
+      exportedAt: new Date().toISOString(),
+      mode: input.mode,
+      thread: detail.thread,
+      branches,
+      messages,
+      runs:
+        input.mode === "whole-dag"
+          ? detail.runs
+          : detail.runs.filter((run) => runIds.has(run.id)),
+      attachments: detail.attachments.filter((attachment) =>
+        messages.some((message) => message.id === attachment.messageId),
+      ),
+      citations: detail.citations.filter((citation) =>
+        messages.some((message) => message.id === citation.messageId),
+      ),
+      manifests:
+        input.mode === "whole-dag"
+          ? detail.manifests
+          : detail.manifests.filter((manifest) => runIds.has(manifest.runId)),
+      usage:
+        input.mode === "whole-dag"
+          ? detail.usage
+          : detail.usage.filter((usage) => runIds.has(usage.runId)),
+    });
+  }
+
+  async exportMarkdown(input: {
+    ownerId: string;
+    threadId: string;
+    branchId?: string | null;
+  }): Promise<string> {
+    const detail = await this.getThreadDetail(
+      input.ownerId,
+      input.threadId,
+      input.branchId,
+    );
+    const byId = new Map(
+      detail.messages.map((message) => [message.id, message]),
+    );
+    const lines = [`# ${detail.thread.title}`, ""];
+    for (const id of detail.activePathMessageIds) {
+      const message = byId.get(id)!;
+      lines.push(`## ${message.role === "user" ? "Vous" : "Assistant"}`, "");
+      for (const part of message.parts) {
+        if (part.type === "text") lines.push(part.markdown, "");
+        if (part.type === "safe-error") lines.push(`> ${part.message}`, "");
+      }
+    }
+    const citations = detail.citations.filter((citation) =>
+      detail.activePathMessageIds.includes(citation.messageId),
+    );
+    if (citations.length) {
+      lines.push("## Sources", "");
+      for (const citation of citations) {
+        lines.push(
+          `- [${citation.ordinal + 1}] Preuve ${citation.proofHandleId}`,
+        );
+      }
+    }
+    return lines.join("\n").trimEnd() + "\n";
+  }
+
+  async saveConversationToProject(input: {
+    ownerId: string;
+    threadId: string;
+    projectId: string;
+    mode: "reference" | "markdown";
+    branchId?: string | null;
+  }): Promise<
+    | { mode: "reference"; itemId: string }
+    | { mode: "markdown"; itemId: string; documentId: string }
+  > {
+    await ownedThread(this.client, input.ownerId, input.threadId);
+    const project = await one(
+      this.client,
+      `SELECT * FROM study_projects WHERE id = ? AND userId = ? AND deletedAt IS NULL`,
+      [input.projectId, input.ownerId],
+    );
+    if (!project)
+      throw new ConversationStoreError("not_found", "Project not found");
+    if (input.mode === "markdown") {
+      if (!project.yearId) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Select an academic year on the project before creating a study document",
+        );
+      }
+      const markdown = await this.exportMarkdown({
+        ownerId: input.ownerId,
+        threadId: input.threadId,
+        branchId: input.branchId,
+      });
+      const detail = await this.getThreadDetail(
+        input.ownerId,
+        input.threadId,
+        input.branchId,
+      );
+      const digest = sha256(
+        canonicalJson([
+          input.projectId,
+          input.threadId,
+          input.branchId ?? detail.activeBranchId,
+          markdown,
+        ]),
+      );
+      const documentId = `sdoc_asst_${digest.slice(0, 24)}`;
+      const itemId = `pitem_asst_${digest.slice(0, 24)}`;
+      const now = sqlTimestamp();
+      const transaction = await this.client.transaction("write");
+      try {
+        await execute(transaction, {
+          sql: `INSERT INTO study_documents
+            (id, kind, title, bodyMarkdown, revision, metaVersion, yearId,
+             subjectId, userId, createdAt, updatedAt)
+            VALUES (?, 'fiche', ?, ?, 1, 1, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING`,
+          args: [
+            documentId,
+            `${detail.thread.title} — conversation`,
+            markdown,
+            project.yearId,
+            project.subjectId,
+            input.ownerId,
+            now,
+            now,
+          ],
+        });
+        const max = await one(
+          transaction,
+          `SELECT coalesce(max(position), -1) AS position
+            FROM study_project_items WHERE projectId = ?`,
+          [input.projectId],
+        );
+        await execute(transaction, {
+          sql: `INSERT INTO content_sources
+            (id, userId, yearId, subjectId, originKind, originId, status,
+             coverage, placement, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, 'study-document', ?, 'registered',
+              'searchable-native-text', 'core', ?, ?)
+            ON CONFLICT(userId, originKind, originId) DO NOTHING`,
+          args: [
+            `csrc_asst_${digest.slice(0, 24)}`,
+            input.ownerId,
+            project.yearId,
+            project.subjectId,
+            documentId,
+            now,
+            now,
+          ],
+        });
+        await execute(transaction, {
+          sql: `INSERT INTO study_project_items
+            (id, projectId, kind, referenceId, position, contextMode, label, addedAt)
+            VALUES (?, ?, 'study-document', ?, ?, 'include', ?, ?)
+            ON CONFLICT(projectId, kind, referenceId) DO NOTHING`,
+          args: [
+            itemId,
+            input.projectId,
+            documentId,
+            Number(max?.position ?? -1) + 1,
+            detail.thread.title,
+            now,
+          ],
+        });
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+      return { mode: "markdown", itemId, documentId };
+    }
+    const existing = await one(
+      this.client,
+      `SELECT id FROM study_project_items WHERE projectId = ? AND kind = 'conversation'
+        AND referenceId = ?`,
+      [input.projectId, input.threadId],
+    );
+    if (existing) return { mode: "reference", itemId: String(existing.id) };
+    const itemId = newId("pitem");
+    const max = await one(
+      this.client,
+      `SELECT coalesce(max(position), -1) AS position FROM study_project_items WHERE projectId = ?`,
+      [input.projectId],
+    );
+    const now = sqlTimestamp();
+    const transaction = await this.client.transaction("write");
+    try {
+      await execute(transaction, {
+        sql: `INSERT INTO content_sources
+          (id, userId, yearId, subjectId, originKind, originId, status,
+           coverage, placement, createdAt, updatedAt)
+          VALUES (?, ?, ?, ?, 'conversation', ?, 'registered',
+            'searchable-native-text', 'core', ?, ?)
+          ON CONFLICT(userId, originKind, originId) DO UPDATE SET
+            yearId = coalesce(content_sources.yearId, excluded.yearId),
+            subjectId = coalesce(content_sources.subjectId, excluded.subjectId),
+            updatedAt = excluded.updatedAt`,
+        args: [
+          `csrc_conv_${sha256(`${input.ownerId}\0${input.threadId}`).slice(0, 24)}`,
+          input.ownerId,
+          project.yearId,
+          project.subjectId,
+          input.threadId,
+          now,
+          now,
+        ],
+      });
+      await execute(transaction, {
+        sql: `INSERT INTO study_project_items
+          (id, projectId, kind, referenceId, position, contextMode, addedAt)
+          VALUES (?, ?, 'conversation', ?, ?, 'on-demand', ?)`,
+        args: [
+          itemId,
+          input.projectId,
+          input.threadId,
+          Number(max?.position ?? -1) + 1,
+          now,
+        ],
+      });
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+    await this.enqueueConversationIndex(input.ownerId, input.threadId);
+    return { mode: "reference", itemId };
+  }
+}
+
+export const coreConversationInternals = {
+  threadFromRow,
+  branchFromRow,
+  messageFromRow,
+  runFromRow,
+  eventFromRow,
+  activePath,
+};

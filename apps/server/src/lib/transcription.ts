@@ -1,9 +1,15 @@
 import { env } from "./env";
 import {
   markServiceKeyInvalid,
+  operatorServiceKeysEnabled,
   resolveServiceKey,
   type ResolvedServiceKey,
 } from "./service-keys";
+import {
+  reserveManagedProviderUsage,
+  settleManagedProviderUsage,
+  usesManagedOperatorSpend,
+} from "../usage/managed-provider-accounting";
 
 /**
  * Mistral audio transcription contract, verified against the current API docs:
@@ -44,6 +50,8 @@ export interface TranscriptionProvider {
     blob: Blob;
     mimeType: string;
     language?: string;
+    operationId?: string;
+    maximumSeconds?: number;
     signal?: AbortSignal;
   }): Promise<TranscriptionResult>;
 }
@@ -55,6 +63,10 @@ export interface MistralTranscriptionOptions {
   key?: string;
   maxBytes?: number;
   model?: string;
+  /** Durable run/job id used to make managed accounting idempotent. */
+  operationId?: string;
+  /** Conservative duration bound required for operator-paid transcription. */
+  maximumSeconds?: number;
   signal?: AbortSignal;
   /** Per-attempt deadline, including response-body consumption. */
   attemptTimeoutMs?: number;
@@ -67,7 +79,11 @@ function transcriptionDisabled() {
 
 export async function transcriptionEnabled(userId?: string) {
   if (transcriptionDisabled()) return false;
-  if (!userId) return Boolean(env.TRANSCRIPTION_API_KEY?.trim());
+  if (!userId) {
+    return (
+      operatorServiceKeysEnabled() && Boolean(env.TRANSCRIPTION_API_KEY?.trim())
+    );
+  }
   return Boolean(await resolveServiceKey(userId, "transcription"));
 }
 
@@ -313,57 +329,112 @@ export async function runMistralTranscription(
     );
   }
 
+  const model = options.model ?? MISTRAL_TRANSCRIPTION_MODEL;
+  const maximumSeconds = options.maximumSeconds;
+  if (
+    maximumSeconds !== undefined &&
+    (!Number.isSafeInteger(maximumSeconds) || maximumSeconds <= 0)
+  ) {
+    throw new Error("Transcription duration limit must be a positive integer");
+  }
+  if (usesManagedOperatorSpend(credential) && maximumSeconds === undefined) {
+    throw new Error("MANAGED_MAXIMUM_SECONDS_REQUIRED");
+  }
+  const reservation = await reserveManagedProviderUsage({
+    credential,
+    accountId: userId,
+    operationId: options.operationId,
+    capability: "transcription.seconds",
+    unit: "seconds",
+    maximumQuantity:
+      maximumSeconds === undefined ? "0" : String(maximumSeconds),
+    provider: "mistral",
+    model,
+    estimatorVersion: "transcription-source-duration/1",
+  });
+
   const fetcher = options.fetch ?? fetch;
   const sleep =
     options.sleep ??
     ((milliseconds: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const signal = options.signal;
-  const { response, body } = await requestWithRetry(
-    (attemptSignal) => {
-      const form = new FormData();
-      form.append("model", options.model ?? MISTRAL_TRANSCRIPTION_MODEL);
-      form.append("timestamp_granularities", "segment");
-      form.append(
-        "file",
-        new File([input.blob], `segment${extensionFor(input.mimeType)}`, {
-          type: input.mimeType,
-        }),
-      );
-      return fetcher(MISTRAL_TRANSCRIPTION_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${credential.key}` },
-        body: form,
-        signal: attemptSignal,
-      });
-    },
-    sleep,
-    credential.key,
-    {
-      signal,
-      attemptTimeoutMs:
-        options.attemptTimeoutMs ?? TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
-    },
-  );
-  if (response.status === 401 && credential.source === "user") {
-    await markServiceKeyInvalid(
-      userId,
-      "transcription",
-      credential.invalidationToken,
-    );
-  }
-  if (!response.ok) {
-    throw new Error(
-      redactedProviderMessage(response.status, body, credential.key),
-    );
-  }
-  let parsed: unknown;
+  let providerStarted = false;
+  let accountingSettled = false;
   try {
-    parsed = JSON.parse(body);
-  } catch {
-    throw new Error("Mistral transcription returned malformed JSON");
+    providerStarted = true;
+    const { response, body } = await requestWithRetry(
+      (attemptSignal) => {
+        const form = new FormData();
+        form.append("model", model);
+        form.append("timestamp_granularities", "segment");
+        form.append(
+          "file",
+          new File([input.blob], `segment${extensionFor(input.mimeType)}`, {
+            type: input.mimeType,
+          }),
+        );
+        return fetcher(MISTRAL_TRANSCRIPTION_URL, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${credential.key}` },
+          body: form,
+          signal: attemptSignal,
+        });
+      },
+      sleep,
+      credential.key,
+      {
+        signal,
+        attemptTimeoutMs:
+          options.attemptTimeoutMs ?? TRANSCRIPTION_ATTEMPT_TIMEOUT_MS,
+      },
+    );
+    if (response.status === 401 && credential.source === "user") {
+      await markServiceKeyInvalid(
+        userId,
+        "transcription",
+        credential.invalidationToken,
+      );
+    }
+    if (!response.ok) {
+      throw new Error(
+        redactedProviderMessage(response.status, body, credential.key),
+      );
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      throw new Error("Mistral transcription returned malformed JSON");
+    }
+    const result = parseResponse(parsed);
+    const observedMilliseconds = result.segments.reduce(
+      (maximum, segment) => Math.max(maximum, segment.endMs),
+      0,
+    );
+    const estimatedSeconds = Math.max(
+      0,
+      Math.ceil(observedMilliseconds / 1_000) || maximumSeconds || 0,
+    );
+    await settleManagedProviderUsage(reservation, {
+      actualQuantity: String(estimatedSeconds),
+      outcome: "completed",
+      authoritative: false,
+      evidenceRef: "mistral-segment-timestamps",
+    });
+    accountingSettled = true;
+    return result;
+  } catch (error) {
+    if (reservation && providerStarted && !accountingSettled) {
+      await settleManagedProviderUsage(reservation, {
+        actualQuantity: reservation.maximumQuantity,
+        outcome: options.signal?.aborted ? "cancelled" : "failed",
+        authoritative: false,
+        evidenceRef: "mistral-transcription-ambiguous-failure",
+      }).catch(() => undefined);
+    }
+    throw error;
   }
-  return parseResponse(parsed);
 }
 
 export async function resolveTranscriptionProvider(
@@ -378,6 +449,8 @@ export async function resolveTranscriptionProvider(
     transcribeSegment: (input) =>
       runMistralTranscription(userId, input, {
         ...options,
+        operationId: input.operationId ?? options.operationId,
+        maximumSeconds: input.maximumSeconds ?? options.maximumSeconds,
         signal: input.signal ?? options.signal,
       }),
   };

@@ -1,11 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extractAudioSegments,
   isTranscribableMediaMimeType,
   mergeMediaTranscriptionResults,
   transcriptTimestamp,
 } from "./transcribe-material-media";
 
 describe("material media transcription", () => {
+  test("fails closed instead of invoking ffmpeg in the API process", async () => {
+    await expect(
+      extractAudioSegments({ source: "untrusted.mp4", directory: "." }),
+    ).rejects.toMatchObject({
+      name: "NonRetryableJobError",
+      message: expect.stringContaining("SANDBOX_EXECUTION_REQUIRED:media"),
+    });
+  });
+
   test("recognizes audio and video without accepting arbitrary documents", () => {
     expect(isTranscribableMediaMimeType("audio/mpeg")).toBe(true);
     expect(isTranscribableMediaMimeType("video/mp4")).toBe(true);

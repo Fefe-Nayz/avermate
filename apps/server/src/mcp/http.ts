@@ -14,8 +14,11 @@ import {
 import { createAvermateMcpServer } from "./server";
 
 /** Exposed for protocol tests: one stateless handler, one authenticated principal. */
-export function createAvermateMcpHandler(principal: McpPrincipal) {
-  return createMcpHandler(() => createAvermateMcpServer(principal), {
+export function createAvermateMcpHandler(
+  principal: McpPrincipal,
+  options: { testOnlyAllowLegacyMutations?: boolean } = {},
+) {
+  return createMcpHandler(() => createAvermateMcpServer(principal, options), {
     legacy: "reject",
     responseMode: "auto",
     onerror: (error) => console.error("[mcp]", error.message),

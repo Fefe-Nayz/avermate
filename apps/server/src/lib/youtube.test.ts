@@ -83,6 +83,23 @@ describe("caption-only YouTube ingestion", () => {
       finalUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     });
     expect(result.chapters).toHaveLength(3);
+    expect(result.segments).toEqual([
+      {
+        startMs: 0,
+        endMs: 3_000,
+        text: "Welcome to the course.",
+      },
+      {
+        startMs: 31_000,
+        endMs: 35_000,
+        text: "A limit is a finite value.",
+      },
+      {
+        startMs: 62_000,
+        endMs: 65_000,
+        text: "Let us solve an example.",
+      },
+    ]);
     expect(result.markdown).toContain('site: "YouTube"');
     expect(result.markdown).toContain("[TOC]");
     expect(result.markdown).toContain("## 0:00 — Introduction");
