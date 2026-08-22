@@ -324,12 +324,21 @@ function parseNode(
   }
 }
 
-export function parseWidgetFormula(value: unknown): {
+/**
+ * `root` is where this formula lives in the document, so an issue points at the field a
+ * reader can actually edit. It used to be hard-coded, which was fine while there was one
+ * measure and wrong the moment there were several: every error would have pointed at the
+ * first one's formula.
+ */
+export function parseWidgetFormula(
+  value: unknown,
+  root = "analysis.measures.0.expression.formula",
+): {
   formula: WidgetFormula | null;
   issues: WidgetValidationIssue[];
 } {
   const state: FormulaParseState = { nodes: 0, metricNodes: 0, issues: [] };
-  const formula = parseNode(value, "analysis.measure.formula", 1, state);
+  const formula = parseNode(value, root, 1, state);
   return { formula, issues: state.issues };
 }
 

@@ -7,12 +7,17 @@ import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requirePeriod, requireYear } from "../lib/ownership";
 import { assertPeriodRangesWithinYear } from "../lib/academic-periods";
 
-const periodInput = z.object({
+const periodFields = {
   name: z.string().trim().min(1).max(64),
   startAt: z.coerce.date(),
   endAt: z.coerce.date(),
-  isCumulative: z.boolean().default(false),
+  isCumulative: z.boolean(),
+};
+const periodInput = z.object({
+  ...periodFields,
+  isCumulative: periodFields.isCumulative.default(false),
 });
+const periodPatchInput = z.object(periodFields).partial();
 
 export const periodsRouter = {
   list: protectedProcedure
@@ -57,7 +62,7 @@ export const periodsRouter = {
     }),
 
   update: protectedProcedure
-    .input(periodInput.partial().extend({ periodId: z.string() }))
+    .input(periodPatchInput.extend({ periodId: z.string() }))
     .handler(async ({ context, input }) => {
       const { periodId, ...patch } = input;
       const existing = await requirePeriod(context.session.user.id, periodId);
@@ -232,11 +237,7 @@ export const periodsRouter = {
       );
       const insertAdditions =
         additions.length > 0 ? [db.insert(periods).values(additions)] : [];
-      const statements = [
-        deleteRemoved,
-        ...updates,
-        ...insertAdditions,
-      ];
+      const statements = [deleteRemoved, ...updates, ...insertAdditions];
 
       // libSQL batches are atomic and, unlike opening a transaction on a
       // `file::memory:` test database, stay on the client's existing

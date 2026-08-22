@@ -10,8 +10,9 @@ import {
   createWidgetDefinition,
   resolveWidgetFlow,
   type CardMetric,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
+  widgetPrimaryMeasure,
 } from "@avermate/core";
 import { ChoiceField, TextField } from "@/components/field";
 import {
@@ -43,14 +44,20 @@ function widgetSurface(value: string | undefined): WidgetSurface {
 function initialDefinition(
   surface: WidgetSurface,
   requestedMetric: string | undefined,
-): WidgetDefinitionV1 {
+): WidgetDefinition {
   const definition = createWidgetDefinition(surface);
   if (requestedMetric && CARD_METRICS.includes(requestedMetric as CardMetric)) {
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: requestedMetric as CardMetric,
-      goalId: null,
-    };
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "metric",
+          metric: requestedMetric as CardMetric,
+          goalId: null,
+        },
+      },
+    ];
   }
   return resolveWidgetFlow(definition, { surface }).prunedDefinition;
 }

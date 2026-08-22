@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { ChevronRight, Home, MoreHorizontal } from "lucide-react";
+import * as React from "react"
+import { ChevronRight, Home, MoreHorizontal } from "lucide-react"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -9,27 +9,27 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+} from "@/components/ui/breadcrumb"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
-} from "@/components/ui/drawer";
+} from "@/components/ui/drawer"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/popover"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import type {
   BreadcrumbData,
   BreadcrumbFocusRing,
@@ -38,47 +38,47 @@ import type {
   ResponsiveBreadcrumbProps,
   ResponsiveBreadcrumbStrings,
   SeparatorNavItem,
-} from "./types";
+} from "./types"
 
-type OverlayId = string | null;
+type OverlayId = string | null
 export interface BreadcrumbRendererProps {
-  items: BreadcrumbData[];
-  layout: LayoutNode[];
-  className?: string;
-  mode: MeasurementMode;
-  isMobile: boolean;
-  openOverlay: OverlayId;
-  onOpenOverlayChange: (id: OverlayId) => void;
-  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"];
-  renderItem?: ResponsiveBreadcrumbProps["renderItem"];
-  renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"];
-  renderTitleOnly?: ResponsiveBreadcrumbProps["renderTitleOnly"];
-  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-  renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"];
-  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-  showHomeIcon: boolean;
-  showNextArrow: boolean;
-  nextItems: SeparatorNavItem[];
-  separatorNavItems: Record<string, SeparatorNavItem[]>;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  titleOnlyFallback: React.ReactNode;
-  titleOnlyIcon?: React.ReactNode;
-  titleOnlyCustomElement?: React.ReactNode;
-  customEllipsisElement?: React.ReactNode;
-  lastItemClickable: boolean;
-  showCollapsedCount: boolean;
-  strings: ResponsiveBreadcrumbStrings;
-  clickableLeftOfEllipsis: boolean;
-  separatorNavSide: "right" | "left";
-  overflowBehavior: "collapse" | "scroll" | "wrap";
-  focusRing: BreadcrumbFocusRing;
-  truncatedWidths: Record<number, number>;
-  showTooltipOnTruncate: boolean;
-  schema: "json-ld" | "microdata" | "none";
-  showCurrentInNav: "never" | "with-others" | "always";
-  debug: boolean;
-  isRtl: boolean;
-  measurementScope?: "full" | "ellipsis" | "title-only";
+  items: BreadcrumbData[]
+  layout: LayoutNode[]
+  className?: string
+  mode: MeasurementMode
+  isMobile: boolean
+  openOverlay: OverlayId
+  onOpenOverlayChange: (id: OverlayId) => void
+  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"]
+  renderItem?: ResponsiveBreadcrumbProps["renderItem"]
+  renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"]
+  renderTitleOnly?: ResponsiveBreadcrumbProps["renderTitleOnly"]
+  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+  renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"]
+  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+  showHomeIcon: boolean
+  showNextArrow: boolean
+  nextItems: SeparatorNavItem[]
+  separatorNavItems: Record<string, SeparatorNavItem[]>
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  titleOnlyFallback: React.ReactNode
+  titleOnlyIcon?: React.ReactNode
+  titleOnlyCustomElement?: React.ReactNode
+  customEllipsisElement?: React.ReactNode
+  lastItemClickable: boolean
+  showCollapsedCount: boolean
+  strings: ResponsiveBreadcrumbStrings
+  clickableLeftOfEllipsis: boolean
+  separatorNavSide: "right" | "left"
+  overflowBehavior: "collapse" | "scroll" | "wrap"
+  focusRing: BreadcrumbFocusRing
+  truncatedWidths: Record<number, number>
+  showTooltipOnTruncate: boolean
+  schema: "json-ld" | "microdata" | "none"
+  showCurrentInNav: "never" | "with-others" | "always"
+  debug: boolean
+  isRtl: boolean
+  measurementScope?: "full" | "ellipsis" | "title-only"
 }
 
 export function BreadcrumbRenderer({
@@ -120,29 +120,29 @@ export function BreadcrumbRenderer({
   isRtl,
   measurementScope,
 }: BreadcrumbRendererProps) {
-  const isMeasure = mode === "measure";
-  const titleOnlyNode = layout.find((node) => node.type === "title-only");
-  const focusRingClass = getFocusRingClass(focusRing);
+  const isMeasure = mode === "measure"
+  const titleOnlyNode = layout.find((node) => node.type === "title-only")
+  const focusRingClass = getFocusRingClass(focusRing)
 
   if (titleOnlyNode) {
     return (
       <Breadcrumb
-        className={cn("min-w-0 max-w-full", className)}
+        className={cn("max-w-full min-w-0", className)}
         dir={isRtl ? "rtl" : "ltr"}
       >
         <BreadcrumbList
           className={cn(
-            "!flex-nowrap whitespace-nowrap overflow-hidden",
-            debug && "outline outline-1 outline-amber-500/60",
+            "!flex-nowrap overflow-hidden whitespace-nowrap",
+            debug && "outline outline-1 outline-amber-500/60"
           )}
         >
           <BreadcrumbItem
             data-measure-title-only={
               isMeasure && measurementScope === "title-only" ? "" : undefined
             }
-            className="min-w-0 max-w-full"
+            className="max-w-full min-w-0"
           >
-            <BreadcrumbPage className="inline-flex min-w-0 max-w-full items-center gap-1.5 truncate">
+            <BreadcrumbPage className="inline-flex max-w-full min-w-0 items-center gap-1.5 truncate">
               {renderTitleOnly?.({
                 item: items.at(-1),
                 fallback: titleOnlyFallback,
@@ -157,17 +157,17 @@ export function BreadcrumbRenderer({
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
-    );
+    )
   }
 
   return (
     <Breadcrumb
-      className={cn("min-w-0 max-w-full", className)}
+      className={cn("max-w-full min-w-0", className)}
       dir={isRtl ? "rtl" : "ltr"}
     >
       <BreadcrumbList
         className={cn(
-          "min-w-0 max-w-full",
+          "max-w-full min-w-0",
           overflowBehavior === "wrap"
             ? "flex-wrap whitespace-normal"
             : "!flex-nowrap whitespace-nowrap",
@@ -175,7 +175,7 @@ export function BreadcrumbRenderer({
             (focusRing === "clip-margin"
               ? "overflow-clip [overflow-clip-margin:4px]"
               : "overflow-hidden"),
-          debug && "outline outline-1 outline-blue-500/50",
+          debug && "outline outline-1 outline-blue-500/50"
         )}
         {...(schema === "microdata"
           ? {
@@ -189,10 +189,10 @@ export function BreadcrumbRenderer({
       >
         {layout.map((node, nodeIndex) => {
           if (node.type === "item") {
-            const item = items[node.index];
+            const item = items[node.index]
 
             if (!item) {
-              return null;
+              return null
             }
 
             return (
@@ -216,7 +216,7 @@ export function BreadcrumbRenderer({
                 strings={strings}
                 focusRingClass={focusRingClass}
               />
-            );
+            )
           }
 
           if (node.type === "separator") {
@@ -245,7 +245,7 @@ export function BreadcrumbRenderer({
                 debug={debug}
                 focusRingClass={focusRingClass}
               />
-            );
+            )
           }
 
           if (node.type === "ellipsis") {
@@ -270,7 +270,7 @@ export function BreadcrumbRenderer({
                 debug={debug}
                 focusRingClass={focusRingClass}
               />
-            );
+            )
           }
 
           if (node.type === "next" && showNextArrow) {
@@ -291,26 +291,26 @@ export function BreadcrumbRenderer({
                 debug={debug}
                 focusRingClass={focusRingClass}
               />
-            );
+            )
           }
 
-          return null;
+          return null
         })}
       </BreadcrumbList>
     </Breadcrumb>
-  );
+  )
 }
 
 function getFocusRingClass(focusRing: BreadcrumbFocusRing) {
   if (focusRing === "none") {
-    return "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none";
+    return "focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
   }
 
   if (focusRing === "inset") {
-    return "outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset";
+    return "outline-none transition-all focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
   }
 
-  return "outline-none transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  return "outline-none transition-all focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 }
 
 function RenderedItem({
@@ -332,41 +332,41 @@ function RenderedItem({
   strings,
   focusRingClass,
 }: {
-  item: BreadcrumbData;
-  index: number;
-  current: boolean;
-  mode: MeasurementMode;
-  isMeasure: boolean;
-  measurementScope?: BreadcrumbRendererProps["measurementScope"];
-  renderItem?: ResponsiveBreadcrumbProps["renderItem"];
-  renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"];
-  showHomeIcon: boolean;
-  lastItemClickable: boolean;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  debug: boolean;
-  truncatedWidth?: number;
-  showTooltipOnTruncate: boolean;
-  schema: "json-ld" | "microdata" | "none";
-  strings: ResponsiveBreadcrumbStrings;
-  focusRingClass: string;
+  item: BreadcrumbData
+  index: number
+  current: boolean
+  mode: MeasurementMode
+  isMeasure: boolean
+  measurementScope?: BreadcrumbRendererProps["measurementScope"]
+  renderItem?: ResponsiveBreadcrumbProps["renderItem"]
+  renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"]
+  showHomeIcon: boolean
+  lastItemClickable: boolean
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  debug: boolean
+  truncatedWidth?: number
+  showTooltipOnTruncate: boolean
+  schema: "json-ld" | "microdata" | "none"
+  strings: ResponsiveBreadcrumbStrings
+  focusRingClass: string
 }) {
-  const interactive = isInteractiveItem(item, current, lastItemClickable);
+  const interactive = isInteractiveItem(item, current, lastItemClickable)
   const content = renderItem?.({ item, index, mode, current }) ?? (
     <ItemContent
       item={item}
       showHomeIcon={showHomeIcon && index === 0}
       mode={mode}
     />
-  );
+  )
   const contentWithSchema =
-    schema === "microdata" ? <span itemProp="name">{content}</span> : content;
+    schema === "microdata" ? <span itemProp="name">{content}</span> : content
   const itemStyle = truncatedWidth
     ? ({ maxWidth: `${truncatedWidth}px` } satisfies React.CSSProperties)
-    : undefined;
+    : undefined
   const itemClassName = cn(
-    "inline-flex min-w-0 max-w-full shrink-0 items-center gap-1.5 truncate rounded-md transition-all",
-    focusRingClass,
-  );
+    "inline-flex max-w-full min-w-0 shrink-0 items-center gap-1.5 truncate rounded-md transition-all",
+    focusRingClass
+  )
   const itemElement =
     interactive && item.href ? (
       <BreadcrumbLink
@@ -399,8 +399,8 @@ function RenderedItem({
       <button
         type="button"
         className={cn(
-          "hover:text-foreground transition-colors disabled:pointer-events-none disabled:opacity-50",
-          itemClassName,
+          "transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+          itemClassName
         )}
         style={itemStyle}
         disabled={item.disabled}
@@ -412,7 +412,7 @@ function RenderedItem({
       <BreadcrumbPage className={itemClassName} style={itemStyle}>
         {contentWithSchema}
       </BreadcrumbPage>
-    );
+    )
   const renderedItem =
     truncatedWidth && showTooltipOnTruncate ? (
       <Tooltip>
@@ -420,13 +420,13 @@ function RenderedItem({
         <TooltipContent>
           {resolveLabel(
             strings.truncatedItemTooltip,
-            readableLabel(item.label, resolveLabel(strings.itemLabelFallback)),
+            readableLabel(item.label, resolveLabel(strings.itemLabelFallback))
           )}
         </TooltipContent>
       </Tooltip>
     ) : (
       itemElement
-    );
+    )
 
   return (
     <BreadcrumbItem
@@ -439,8 +439,8 @@ function RenderedItem({
         schema === "microdata" ? "https://schema.org/ListItem" : undefined
       }
       className={cn(
-        "min-w-0 max-w-full shrink-0",
-        debug && "outline outline-1 outline-green-500/60",
+        "max-w-full min-w-0 shrink-0",
+        debug && "outline outline-1 outline-green-500/60"
       )}
     >
       {renderedItem}
@@ -448,7 +448,7 @@ function RenderedItem({
         <meta itemProp="position" content={(index + 1).toString()} />
       ) : null}
     </BreadcrumbItem>
-  );
+  )
 }
 
 function ItemContent({
@@ -456,16 +456,16 @@ function ItemContent({
   showHomeIcon,
   mode,
 }: {
-  item: BreadcrumbData;
-  showHomeIcon: boolean;
-  mode: MeasurementMode;
+  item: BreadcrumbData
+  showHomeIcon: boolean
+  mode: MeasurementMode
 }) {
   if (mode === "measure" && item.measureElement) {
-    return <>{item.measureElement}</>;
+    return <>{item.measureElement}</>
   }
 
   if (item.customElement) {
-    return <>{item.customElement}</>;
+    return <>{item.customElement}</>
   }
 
   return (
@@ -475,7 +475,7 @@ function ItemContent({
       <span className="min-w-0 truncate">{item.label}</span>
       {mode === "measure" ? null : null}
     </>
-  );
+  )
 }
 
 function RenderedSeparator({
@@ -501,52 +501,52 @@ function RenderedSeparator({
   debug,
   focusRingClass,
 }: {
-  node: Extract<LayoutNode, { type: "separator" }>;
-  layout: LayoutNode[];
-  nodeIndex: number;
-  items: BreadcrumbData[];
-  mode: MeasurementMode;
-  isMeasure: boolean;
-  measurementScope?: BreadcrumbRendererProps["measurementScope"];
-  isMobile: boolean;
-  openOverlay: OverlayId;
-  onOpenOverlayChange: (id: OverlayId) => void;
-  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"];
-  separatorNavItems: Record<string, SeparatorNavItem[]>;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-  strings: ResponsiveBreadcrumbStrings;
-  clickableLeftOfEllipsis: boolean;
-  separatorNavSide: "right" | "left";
-  showCurrentInNav: "never" | "with-others" | "always";
-  debug: boolean;
-  focusRingClass: string;
+  node: Extract<LayoutNode, { type: "separator" }>
+  layout: LayoutNode[]
+  nodeIndex: number
+  items: BreadcrumbData[]
+  mode: MeasurementMode
+  isMeasure: boolean
+  measurementScope?: BreadcrumbRendererProps["measurementScope"]
+  isMobile: boolean
+  openOverlay: OverlayId
+  onOpenOverlayChange: (id: OverlayId) => void
+  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"]
+  separatorNavItems: Record<string, SeparatorNavItem[]>
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+  strings: ResponsiveBreadcrumbStrings
+  clickableLeftOfEllipsis: boolean
+  separatorNavSide: "right" | "left"
+  showCurrentInNav: "never" | "with-others" | "always"
+  debug: boolean
+  focusRingClass: string
 }) {
-  const previousItem = items[node.after];
-  const nextNode = layout[nodeIndex + 1];
+  const previousItem = items[node.after]
+  const nextNode = layout[nodeIndex + 1]
   const nextIndex =
     nextNode?.type === "item"
       ? nextNode.index
       : nextNode?.type === "ellipsis"
         ? nextNode.from
-        : node.after + 1;
-  const nextItem = items[nextIndex];
-  const anchorItem = separatorNavSide === "left" ? previousItem : nextItem;
-  const leftOfEllipsis = nextNode?.type === "ellipsis";
+        : node.after + 1
+  const nextItem = items[nextIndex]
+  const anchorItem = separatorNavSide === "left" ? previousItem : nextItem
+  const leftOfEllipsis = nextNode?.type === "ellipsis"
   const baseNavItems = getSeparatorNavItems(
     separatorNavItems,
     previousItem,
     nextItem,
-    separatorNavSide,
-  );
+    separatorNavSide
+  )
   const navItems = withCurrentItem({
     navItems: baseNavItems,
     nextItem: anchorItem,
     showCurrentInNav,
-  });
+  })
   const interactive =
-    navItems.length > 0 && (!leftOfEllipsis || clickableLeftOfEllipsis);
+    navItems.length > 0 && (!leftOfEllipsis || clickableLeftOfEllipsis)
 
   if (!interactive) {
     return renderDecorativeSeparator({
@@ -556,15 +556,15 @@ function RenderedSeparator({
       measureIndex:
         isMeasure && measurementScope === "full" ? node.after : null,
       debug,
-    });
+    })
   }
 
-  const overlayId = `separator-${anchorItem?.key ?? node.after}`;
+  const overlayId = `separator-${anchorItem?.key ?? node.after}`
   const nextLabel = readableLabel(
     anchorItem?.label,
-    resolveLabel(strings.itemLabelFallback),
-  );
-  const label = resolveLabel(strings.showSiblingItems, nextLabel);
+    resolveLabel(strings.itemLabelFallback)
+  )
+  const label = resolveLabel(strings.showSiblingItems, nextLabel)
 
   return (
     <BreadcrumbItem
@@ -607,7 +607,7 @@ function RenderedSeparator({
         />
       </ResponsiveOverlay>
     </BreadcrumbItem>
-  );
+  )
 }
 
 function RenderedEllipsis({
@@ -629,32 +629,32 @@ function RenderedEllipsis({
   debug,
   focusRingClass,
 }: {
-  node: Extract<LayoutNode, { type: "ellipsis" }>;
-  items: BreadcrumbData[];
-  mode: MeasurementMode;
-  isMeasure: boolean;
-  measurementScope?: BreadcrumbRendererProps["measurementScope"];
-  isMobile: boolean;
-  openOverlay: OverlayId;
-  onOpenOverlayChange: (id: OverlayId) => void;
-  renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"];
-  customEllipsisElement?: React.ReactNode;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-  showCollapsedCount: boolean;
-  strings: ResponsiveBreadcrumbStrings;
-  debug: boolean;
-  focusRingClass: string;
+  node: Extract<LayoutNode, { type: "ellipsis" }>
+  items: BreadcrumbData[]
+  mode: MeasurementMode
+  isMeasure: boolean
+  measurementScope?: BreadcrumbRendererProps["measurementScope"]
+  isMobile: boolean
+  openOverlay: OverlayId
+  onOpenOverlayChange: (id: OverlayId) => void
+  renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"]
+  customEllipsisElement?: React.ReactNode
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+  showCollapsedCount: boolean
+  strings: ResponsiveBreadcrumbStrings
+  debug: boolean
+  focusRingClass: string
 }) {
-  const hiddenItems = items.slice(node.from, node.to + 1);
-  const overlayId = `ellipsis-${node.from}-${node.to}`;
-  const label = resolveLabel(strings.showCollapsedItems, hiddenItems.length);
-  const title = resolveLabel(strings.moreOptions);
+  const hiddenItems = items.slice(node.from, node.to + 1)
+  const overlayId = `ellipsis-${node.from}-${node.to}`
+  const label = resolveLabel(strings.showCollapsedItems, hiddenItems.length)
+  const title = resolveLabel(strings.moreOptions)
   const content =
     renderEllipsis?.({ hiddenItems, mode }) ??
     customEllipsisElement ??
-    defaultEllipsisContent(hiddenItems.length, showCollapsedCount);
+    defaultEllipsisContent(hiddenItems.length, showCollapsedCount)
 
   return (
     <BreadcrumbItem
@@ -693,7 +693,7 @@ function RenderedEllipsis({
         />
       </ResponsiveOverlay>
     </BreadcrumbItem>
-  );
+  )
 }
 
 function RenderedNext({
@@ -711,21 +711,21 @@ function RenderedNext({
   debug,
   focusRingClass,
 }: {
-  nextItems: SeparatorNavItem[];
-  mode: MeasurementMode;
-  isMeasure: boolean;
-  measurementScope?: BreadcrumbRendererProps["measurementScope"];
-  isMobile: boolean;
-  openOverlay: OverlayId;
-  onOpenOverlayChange: (id: OverlayId) => void;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-  strings: ResponsiveBreadcrumbStrings;
-  debug: boolean;
-  focusRingClass: string;
+  nextItems: SeparatorNavItem[]
+  mode: MeasurementMode
+  isMeasure: boolean
+  measurementScope?: BreadcrumbRendererProps["measurementScope"]
+  isMobile: boolean
+  openOverlay: OverlayId
+  onOpenOverlayChange: (id: OverlayId) => void
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+  strings: ResponsiveBreadcrumbStrings
+  debug: boolean
+  focusRingClass: string
 }) {
-  const overlayId = "next";
+  const overlayId = "next"
 
   return (
     <BreadcrumbItem
@@ -746,7 +746,7 @@ function RenderedNext({
             size="icon-sm"
             className={cn(
               "group size-8 px-0 text-muted-foreground",
-              focusRingClass,
+              focusRingClass
             )}
             aria-label={resolveLabel(strings.nextItems)}
             disabled={nextItems.length === 0}
@@ -771,7 +771,7 @@ function RenderedNext({
         />
       </ResponsiveOverlay>
     </BreadcrumbItem>
-  );
+  )
 }
 
 function ResponsiveOverlay({
@@ -782,12 +782,12 @@ function ResponsiveOverlay({
   trigger,
   children,
 }: {
-  title: string;
-  isMobile: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  trigger: React.ReactElement;
-  children: React.ReactNode;
+  title: string
+  isMobile: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  trigger: React.ReactElement
+  children: React.ReactNode
 }) {
   if (isMobile) {
     return (
@@ -800,17 +800,17 @@ function ResponsiveOverlay({
           <div className="px-4 pb-4">{children}</div>
         </DrawerContent>
       </Drawer>
-    );
+    )
   }
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger render={trigger} />
-      <PopoverContent align="start" className="w-auto min-w-40 max-w-64 p-1">
+      <PopoverContent align="start" className="w-auto max-w-64 min-w-40 p-1">
         {children}
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
 function MenuItems({
@@ -823,21 +823,21 @@ function MenuItems({
   onSelect,
   strings,
 }: {
-  items: Array<BreadcrumbData | SeparatorNavItem>;
-  mode: MeasurementMode;
-  compact: boolean;
-  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"];
-  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-  onSelect: () => void;
-  strings: ResponsiveBreadcrumbStrings;
+  items: Array<BreadcrumbData | SeparatorNavItem>
+  mode: MeasurementMode
+  compact: boolean
+  onItemClick?: ResponsiveBreadcrumbProps["onItemClick"]
+  renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+  renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+  onSelect: () => void
+  strings: ResponsiveBreadcrumbStrings
 }) {
   if (items.length === 0) {
     return (
       <p className="px-2 py-3 text-sm text-muted-foreground">
         {resolveLabel(strings.noItemsAvailable)}
       </p>
-    );
+    )
   }
 
   return (
@@ -845,16 +845,16 @@ function MenuItems({
       {items.map((item) => {
         const itemLabel = readableLabel(
           item.label,
-          resolveLabel(strings.itemLabelFallback),
-        );
-        const itemAriaLabel = resolveLabel(strings.navigateTo, itemLabel);
-        const disabled = item.disabled || item.clickable === false;
+          resolveLabel(strings.itemLabelFallback)
+        )
+        const itemAriaLabel = resolveLabel(strings.navigateTo, itemLabel)
+        const disabled = item.disabled || item.clickable === false
         const content = renderMenuItem?.({ item, mode: "menu", disabled }) ?? (
           <>
             {item.icon}
             <span className="min-w-0 truncate">{item.label}</span>
           </>
-        );
+        )
 
         if (item.href && !disabled) {
           return (
@@ -863,7 +863,7 @@ function MenuItems({
               variant="ghost"
               className={cn(
                 "justify-start",
-                compact ? "h-7 px-2 text-sm" : "h-auto px-2 py-2",
+                compact ? "h-7 px-2 text-sm" : "h-auto px-2 py-2"
               )}
               render={
                 renderMenuLink?.({
@@ -873,16 +873,16 @@ function MenuItems({
                   children: content,
                   ariaLabel: itemAriaLabel,
                   onClick: () => {
-                    onItemClick?.(item);
-                    onSelect();
+                    onItemClick?.(item)
+                    onSelect()
                   },
                 }) ?? (
                   <a
                     href={item.href}
                     aria-label={itemAriaLabel}
                     onClick={() => {
-                      onItemClick?.(item);
-                      onSelect();
+                      onItemClick?.(item)
+                      onSelect()
                     }}
                   >
                     {content}
@@ -891,7 +891,7 @@ function MenuItems({
               }
               nativeButton={false}
             />
-          );
+          )
         }
 
         return (
@@ -901,22 +901,22 @@ function MenuItems({
             variant="ghost"
             className={cn(
               "justify-start",
-              compact ? "h-7 px-2 text-sm" : "h-auto px-2 py-2",
+              compact ? "h-7 px-2 text-sm" : "h-auto px-2 py-2"
             )}
             aria-label={itemAriaLabel}
             disabled={disabled}
             onClick={() => {
-              onItemClick?.(item);
-              onSelect();
+              onItemClick?.(item)
+              onSelect()
             }}
             tabIndex={mode === "measure" ? -1 : undefined}
           >
             {content}
           </Button>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function defaultEllipsisContent(count: number, showCollapsedCount: boolean) {
@@ -929,7 +929,7 @@ function defaultEllipsisContent(count: number, showCollapsedCount: boolean) {
         </Badge>
       ) : null}
     </span>
-  );
+  )
 }
 
 function renderDecorativeSeparator({
@@ -939,20 +939,20 @@ function renderDecorativeSeparator({
   measureIndex,
   debug,
 }: {
-  previousKey: string;
-  nextKey: string;
-  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"];
-  measureIndex: number | null;
-  debug: boolean;
+  previousKey: string
+  nextKey: string
+  renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"]
+  measureIndex: number | null
+  debug: boolean
 }) {
-  const rendered = renderSeparator?.(previousKey, nextKey);
-  const debugClassName = debug ? "outline outline-1 outline-slate-500/60" : "";
+  const rendered = renderSeparator?.(previousKey, nextKey)
+  const debugClassName = debug ? "outline outline-1 outline-slate-500/60" : ""
 
   if (React.isValidElement<{ className?: string }>(rendered)) {
     return React.cloneElement(rendered, {
       "data-measure-separator": measureIndex ?? undefined,
       className: cn(rendered.props.className, debugClassName),
-    } as React.HTMLAttributes<HTMLElement>);
+    } as React.HTMLAttributes<HTMLElement>)
   }
 
   return (
@@ -962,19 +962,19 @@ function renderDecorativeSeparator({
     >
       {rendered}
     </BreadcrumbSeparator>
-  );
+  )
 }
 
 function getSeparatorNavItems(
   separatorNavItems: Record<string, SeparatorNavItem[]>,
   previousItem: BreadcrumbData | undefined,
   nextItem: BreadcrumbData | undefined,
-  side: "right" | "left",
+  side: "right" | "left"
 ) {
-  const anchorItem = side === "left" ? previousItem : nextItem;
+  const anchorItem = side === "left" ? previousItem : nextItem
 
   if (!anchorItem) {
-    return [];
+    return []
   }
 
   return (
@@ -983,7 +983,7 @@ function getSeparatorNavItems(
       ? separatorNavItems[`${previousItem.key}:${nextItem.key}`]
       : undefined) ??
     []
-  );
+  )
 }
 
 function withCurrentItem({
@@ -991,21 +991,21 @@ function withCurrentItem({
   nextItem,
   showCurrentInNav,
 }: {
-  navItems: SeparatorNavItem[];
-  nextItem: BreadcrumbData | undefined;
-  showCurrentInNav: "never" | "with-others" | "always";
+  navItems: SeparatorNavItem[]
+  nextItem: BreadcrumbData | undefined
+  showCurrentInNav: "never" | "with-others" | "always"
 }) {
   const shouldInclude =
     nextItem &&
     (showCurrentInNav === "always" ||
-      (showCurrentInNav === "with-others" && navItems.length > 0));
+      (showCurrentInNav === "with-others" && navItems.length > 0))
 
   if (!shouldInclude) {
-    return navItems;
+    return navItems
   }
 
   if (navItems.some((item) => item.key === nextItem.key)) {
-    return navItems;
+    return navItems
   }
 
   return [
@@ -1018,31 +1018,31 @@ function withCurrentItem({
       disabled: nextItem.disabled,
     },
     ...navItems,
-  ];
+  ]
 }
 
 function isInteractiveItem(
   item: BreadcrumbData,
   current: boolean,
-  lastItemClickable: boolean,
+  lastItemClickable: boolean
 ) {
   if (item.disabled || item.clickable === false) {
-    return false;
+    return false
   }
 
   if (current && !lastItemClickable) {
-    return false;
+    return false
   }
 
-  return item.clickable === true || Boolean(item.href);
+  return item.clickable === true || Boolean(item.href)
 }
 
 function readableLabel(label: React.ReactNode, fallback: string) {
   if (typeof label === "string" || typeof label === "number") {
-    return String(label);
+    return String(label)
   }
 
-  return fallback;
+  return fallback
 }
 
 function resolveLabel<TArgs extends unknown[]>(
@@ -1051,5 +1051,5 @@ function resolveLabel<TArgs extends unknown[]>(
 ) {
   return typeof label === "function"
     ? (label as (...args: TArgs) => string)(...args)
-    : label;
+    : label
 }

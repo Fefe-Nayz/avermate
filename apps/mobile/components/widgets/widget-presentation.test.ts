@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createWidgetDefinition,
   createWidgetVisualization,
+  widgetPrimaryMeasure,
 } from "@avermate/core";
 import {
   widgetDefinitionShowsDelta,
@@ -68,17 +69,21 @@ describe("widget presentation", () => {
 
   test("does not invent a delta for activity and passing streaks", () => {
     const activity = createWidgetDefinition("overview");
-    activity.analysis.measure = {
-      kind: "metric",
-      metric: "activityStreak",
-      goalId: null,
-    };
+    activity.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "activityStreak", goalId: null },
+      },
+    ];
     const passing = createWidgetDefinition("overview");
-    passing.analysis.measure = {
-      kind: "metric",
-      metric: "passStreak",
-      goalId: null,
-    };
+    passing.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "passStreak", goalId: null },
+      },
+    ];
     const streak = {
       kind: "streak",
       current: 3,
@@ -109,11 +114,13 @@ describe("widget presentation", () => {
 
   test("only materializes list and table adornments allowed by the definition", () => {
     const definition = createWidgetDefinition("overview");
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "subjectRanking",
-      goalId: null,
-    };
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "subjectRanking", goalId: null },
+      },
+    ];
     const values = [
       {
         key: "math",
@@ -147,7 +154,13 @@ describe("widget presentation", () => {
       }).showCount,
     ).toBe(false);
 
-    definition.analysis.measure.metric = "steadiest";
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "steadiest", goalId: null },
+      },
+    ];
     expect(widgetDefinitionShowsDelta(definition)).toBe(false);
     expect(
       widgetSeriesColumnVisibility(definition, values, {
@@ -156,7 +169,13 @@ describe("widget presentation", () => {
       }).showDelta,
     ).toBe(false);
 
-    definition.analysis.measure.metric = "mostImproved";
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "mostImproved", goalId: null },
+      },
+    ];
     expect(widgetDefinitionShowsDelta(definition)).toBe(true);
   });
 

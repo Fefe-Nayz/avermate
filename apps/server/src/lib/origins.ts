@@ -18,7 +18,9 @@ function isPrivateAddress(hostname: string): boolean {
   if (parts.length !== 4) return false;
 
   const octets = parts.map((part) => Number(part));
-  if (octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) {
+  if (
+    octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)
+  ) {
     return false;
   }
 

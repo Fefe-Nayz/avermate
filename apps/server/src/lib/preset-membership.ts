@@ -3,6 +3,7 @@ import { db } from "../db";
 import {
   customAverageEntries,
   customAverages,
+  gradeTypes,
   grades,
   subjects,
   yearPresetMemberships,
@@ -34,6 +35,9 @@ export interface PresetChangeSummary {
   averagesAdded: number;
   averagesChanged: number;
   averagesRemoved: number;
+  gradeTypesAdded: number;
+  gradeTypesChanged: number;
+  gradeTypesRemoved: number;
 }
 
 function flattenSubjects(
@@ -69,6 +73,8 @@ export function summarizePresetChanges(
   );
   const fromAverages = new Map(from.averages.map((row) => [row.key, row]));
   const toAverages = new Map(to.averages.map((row) => [row.key, row]));
+  const fromTypes = new Map(from.gradeTypes.map((row) => [row.key, row]));
+  const toTypes = new Map(to.gradeTypes.map((row) => [row.key, row]));
   const changed = <T>(left: T, right: T) =>
     JSON.stringify(left) !== JSON.stringify(right);
 
@@ -93,6 +99,13 @@ export function summarizePresetChanges(
     averagesRemoved: [...fromAverages.keys()].filter(
       (key) => !toAverages.has(key),
     ).length,
+    gradeTypesAdded: [...toTypes.keys()].filter((key) => !fromTypes.has(key))
+      .length,
+    gradeTypesChanged: [...toTypes].filter(
+      ([key, row]) => fromTypes.has(key) && changed(fromTypes.get(key), row),
+    ).length,
+    gradeTypesRemoved: [...fromTypes.keys()].filter((key) => !toTypes.has(key))
+      .length,
   };
 }
 
@@ -133,6 +146,7 @@ export function materializePresetConfiguration(
   userId: string,
   existingSubjectIds: ReadonlyMap<string, string> = new Map(),
   existingAverageIds: ReadonlyMap<string, string> = new Map(),
+  existingGradeTypeIds: ReadonlyMap<string, string> = new Map(),
 ) {
   const flat = flattenSubjects(configuration.subjects);
   const subjectIds = new Map(
@@ -178,36 +192,67 @@ export function materializePresetConfiguration(
       })),
     );
 
-  return { subjectRows, averageRows, entryRows, subjectIds, averageIds };
+  const gradeTypeRows: Array<typeof gradeTypes.$inferInsert> =
+    configuration.gradeTypes.map((type, sortOrder) => ({
+      id: existingGradeTypeIds.get(type.key) ?? newId("gtype"),
+      name: type.name,
+      titlePrefix: type.titlePrefix,
+      coefficient: type.coefficient,
+      outOf: type.outOf,
+      accent: type.accent,
+      sortOrder,
+      presetNodeKey: type.key,
+      yearId,
+      userId,
+    }));
+  const gradeTypeIds = new Map(
+    gradeTypeRows.map((row) => [row.presetNodeKey as string, row.id as string]),
+  );
+
+  return {
+    subjectRows,
+    averageRows,
+    entryRows,
+    gradeTypeRows,
+    subjectIds,
+    averageIds,
+    gradeTypeIds,
+  };
 }
 
 async function loadYearConfiguration(yearId: string) {
-  const [subjectRows, averageRows, entryRows] = await Promise.all([
-    db
-      .select()
-      .from(subjects)
-      .where(eq(subjects.yearId, yearId))
-      .orderBy(asc(subjects.sortOrder)),
-    db
-      .select()
-      .from(customAverages)
-      .where(eq(customAverages.yearId, yearId))
-      .orderBy(asc(customAverages.sortOrder)),
-    db
-      .select({
-        averageId: customAverageEntries.averageId,
-        subjectId: customAverageEntries.subjectId,
-        coefficient: customAverageEntries.coefficient,
-        includeChildren: customAverageEntries.includeChildren,
-      })
-      .from(customAverageEntries)
-      .innerJoin(
-        customAverages,
-        eq(customAverageEntries.averageId, customAverages.id),
-      )
-      .where(eq(customAverages.yearId, yearId)),
-  ]);
-  return { subjectRows, averageRows, entryRows };
+  const [subjectRows, averageRows, entryRows, gradeTypeRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(subjects)
+        .where(eq(subjects.yearId, yearId))
+        .orderBy(asc(subjects.sortOrder)),
+      db
+        .select()
+        .from(customAverages)
+        .where(eq(customAverages.yearId, yearId))
+        .orderBy(asc(customAverages.sortOrder)),
+      db
+        .select({
+          averageId: customAverageEntries.averageId,
+          subjectId: customAverageEntries.subjectId,
+          coefficient: customAverageEntries.coefficient,
+          includeChildren: customAverageEntries.includeChildren,
+        })
+        .from(customAverageEntries)
+        .innerJoin(
+          customAverages,
+          eq(customAverageEntries.averageId, customAverages.id),
+        )
+        .where(eq(customAverages.yearId, yearId)),
+      db
+        .select()
+        .from(gradeTypes)
+        .where(eq(gradeTypes.yearId, yearId))
+        .orderBy(asc(gradeTypes.sortOrder)),
+    ]);
+  return { subjectRows, averageRows, entryRows, gradeTypeRows };
 }
 
 /** Exact comparison protects sync even if a future write path forgets to detach. */
@@ -247,6 +292,40 @@ export async function yearMatchesPresetConfiguration(
       (row.parentId
         ? (actualSubjectKeyById.get(row.parentId) ?? null)
         : null) !== expected.parentKey
+    ) {
+      return false;
+    }
+  }
+
+  /**
+   * Only the types the preset owns are the preset's business.
+   *
+   * A subject or a custom average is a term of the contract: adding one changes what the
+   * year computes, so any extra row means the year is no longer this preset. A type is
+   * stationery — it fills a title and a coefficient in as somebody writes a result down,
+   * and it moves no average. Severing the link for it would cost a reader the next
+   * corrected coefficient in exchange for nothing, so a type they added themselves is
+   * theirs, and only the rows carrying a preset key have to match.
+   */
+  const presetOwnedTypes = actual.gradeTypeRows.filter(
+    (row) => row.presetNodeKey,
+  );
+  if (presetOwnedTypes.length !== configuration.gradeTypes.length) return false;
+  const actualTypeByKey = new Map(
+    presetOwnedTypes.map((row) => [row.presetNodeKey as string, row]),
+  );
+  for (const expected of configuration.gradeTypes) {
+    // By key, and no position: this list is one the reader drags into the order they
+    // want, and the picker that offers it is the only thing the order feeds. A preset
+    // proposes which types exist and what each fills in — not where each one sits.
+    const row = actualTypeByKey.get(expected.key);
+    if (
+      !row ||
+      row.name !== expected.name ||
+      row.titlePrefix !== expected.titlePrefix ||
+      row.coefficient !== expected.coefficient ||
+      row.outOf !== expected.outOf ||
+      (row.accent ?? null) !== expected.accent
     ) {
       return false;
     }
@@ -459,19 +538,41 @@ export async function synchronizeYearPreset(userId: string, yearId: string) {
       .filter((row) => row.presetNodeKey)
       .map((row) => [row.presetNodeKey as string, row.id]),
   );
+  const gradeTypeIds = new Map(
+    current.gradeTypeRows
+      .filter((row) => row.presetNodeKey)
+      .map((row) => [row.presetNodeKey as string, row.id]),
+  );
   const materialized = materializePresetConfiguration(
     configuration,
     yearId,
     userId,
     subjectIds,
     averageIds,
+    gradeTypeIds,
   );
+  // A type arriving in a new version lands after everything the year already holds,
+  // including the reader's own types. Renumbering from zero would reshuffle a list
+  // somebody arranged, to say something the update never said.
+  const nextTypeSortOrder =
+    current.gradeTypeRows.reduce(
+      (highest, row) => Math.max(highest, row.sortOrder),
+      -1,
+    ) + 1;
   const targetSubjectKeys = materialized.subjectRows.map(
     (row) => row.presetNodeKey as string,
   );
   const targetAverageKeys = materialized.averageRows.map(
     (row) => row.presetNodeKey as string,
   );
+  const nextGradeTypeIds = new Set(
+    materialized.gradeTypeRows.map((row) => row.id as string),
+  );
+  // By id, for the reason the reapply path says at length: a row survives when it is
+  // carried forward, not when some incoming row happens to share its key.
+  const removedGradeTypeIds = current.gradeTypeRows
+    .filter((row) => row.presetNodeKey && !nextGradeTypeIds.has(row.id))
+    .map((row) => row.id);
   const removedAverageIds = current.averageRows
     .filter(
       (row) =>
@@ -486,6 +587,32 @@ export async function synchronizeYearPreset(userId: string, yearId: string) {
     .map((row) => row.id);
 
   const statements = [
+    // The results of a withdrawn kind keep their marks and lose their label: `set null`
+    // on the column does that, so a preset update never deletes a grade.
+    ...(removedGradeTypeIds.length > 0
+      ? [
+          db
+            .delete(gradeTypes)
+            .where(inArray(gradeTypes.id, removedGradeTypeIds)),
+        ]
+      : []),
+    ...materialized.gradeTypeRows.map((row, index) =>
+      gradeTypeIds.has(row.presetNodeKey as string)
+        ? db
+            .update(gradeTypes)
+            .set({
+              name: row.name,
+              titlePrefix: row.titlePrefix,
+              coefficient: row.coefficient,
+              outOf: row.outOf,
+              accent: row.accent,
+              updatedAt: new Date(),
+            })
+            .where(eq(gradeTypes.id, row.id as string))
+        : db
+            .insert(gradeTypes)
+            .values({ ...row, sortOrder: nextTypeSortOrder + index }),
+    ),
     ...(removedAverageIds.length > 0
       ? [
           db

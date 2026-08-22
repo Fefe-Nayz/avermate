@@ -1,0 +1,1 @@
+ALTER TABLE `social_groups` ADD `cohortEnabled` integer DEFAULT false NOT NULL;

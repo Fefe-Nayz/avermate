@@ -35,9 +35,15 @@ describe("widget encodings", () => {
 
   test("applies y and series descriptors without losing source values", () => {
     const visualization = createWidgetVisualization("line");
-    visualization.encoding.y = { field: "count", type: "quantitative" };
-    visualization.encoding.series = { field: "category", type: "nominal" };
-    const [encoded] = encodeWidgetSeries([row], visualization);
+    // The channels name ids in the document; what this encoder needs is the slot each
+    // one resolved to, which its caller works out from the analysis.
+    const [encoded] = encodeWidgetSeries([row], visualization, {
+      x: "date",
+      y: "count",
+      color: null,
+      series: "category",
+      facet: null,
+    });
 
     expect(encoded?.value).toBe(4);
     expect(encoded?.series).toBe("Mathematics");

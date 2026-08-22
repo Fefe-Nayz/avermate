@@ -182,10 +182,10 @@ export default function AccountSettingsPage() {
     }
   }
 
-  const unlinkProvider = async (providerId: string) => {
+  const unlinkProvider = async (accountId: string) => {
     if (!canUnlink) return
-    setAccountAction(`unlink:${providerId}`)
-    const { error } = await authClient.unlinkAccount({ providerId })
+    setAccountAction(`unlink:${accountId}`)
+    const { error } = await authClient.unlinkAccount({ accountId })
     setAccountAction(null)
     if (error) {
       haptic("error")
@@ -207,6 +207,7 @@ export default function AccountSettingsPage() {
         </h1>
 
         <SettingsSection
+          id="email"
           title={t("Email address")}
           description={t(
             "We confirm the new address before replacing the one on your account."
@@ -241,6 +242,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="password"
           title={hasPassword ? t("Password") : t("Add a password")}
           description={
             hasPassword
@@ -290,6 +292,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="sessions"
           title={t("Where you are signed in")}
           description={t("Sign out anywhere you do not recognise.")}
         >
@@ -371,6 +374,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="linked-sign-ins"
           title={t("Linked sign-ins")}
           description={t(
             "Keep at least one way to sign in. Linking never changes your grades or preferences."
@@ -409,7 +413,7 @@ export default function AccountSettingsPage() {
                   }
                   onClick={() =>
                     account
-                      ? unlinkProvider(account.providerId)
+                      ? unlinkProvider(account.id)
                       : linkProvider(provider)
                   }
                 >
@@ -428,6 +432,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="export"
           title={t("Your data")}
           description={t("Everything you have entered, as one JSON file.")}
         >
@@ -448,6 +453,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="start-over"
           title={t("Start over")}
           description={t(
             "Deletes every year, subject, grade and goal. Your account and preferences stay."
@@ -473,6 +479,7 @@ export default function AccountSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="delete"
           title={t("Delete this account")}
           description={t(
             "Permanent. We email you a link to confirm before anything is removed."

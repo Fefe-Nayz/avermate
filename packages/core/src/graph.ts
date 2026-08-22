@@ -21,10 +21,41 @@ export interface Scope {
 
 const EMPTY_SUBJECTS: readonly Subject[] = Object.freeze([]);
 
-export function gradeRatio(grade: Pick<Grade, "value" | "outOf">): number | null {
-  if (!Number.isFinite(grade.value) || !Number.isFinite(grade.outOf)) return null;
+/**
+ * A mark as a fraction of what it was out of, bonus included.
+ *
+ * The bonus is extra points on this mark's own scale — "+1 on that test" — because that
+ * is the unit the person writing it down is thinking in, and it needs no knowledge of
+ * the year to be meaningful.
+ *
+ * Clamped to 0..1 like every other ratio in the package. A 20/20 with a point of bonus
+ * is still full marks: every reading downstream — bands, distributions, projections, the
+ * scale of a chart — is built on that range, and letting one mark out at 1.05 would put
+ * a point outside its own axis.
+ */
+export function gradeRatio(
+  grade: Pick<Grade, "value" | "outOf"> & {
+    bonus?: number | null;
+    excludedFromAverage?: boolean;
+    syncExcludedFromAverage?: boolean;
+  },
+): number | null {
+  if (grade.excludedFromAverage || grade.syncExcludedFromAverage) return null;
+  if (!Number.isFinite(grade.value) || !Number.isFinite(grade.outOf))
+    return null;
   if (grade.outOf <= 0) return null;
-  return grade.value / grade.outOf;
+  const bonus = Number.isFinite(grade.bonus ?? 0) ? (grade.bonus ?? 0) : 0;
+  return clampRatio((grade.value + bonus) / grade.outOf);
+}
+
+/** The package's one clamp, kept local so `graph` does not import `format`. */
+function clampRatio(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+export function coefficientWeight(value: number | null | undefined): number {
+  return weight(value);
 }
 
 function weight(value: number | null | undefined): number {
@@ -40,8 +71,43 @@ function weight(value: number | null | undefined): number {
  * memoised per scope, so a dashboard asking for forty different numbers still
  * walks the tree once.
  */
+/**
+ * What the general average is made of, when it is not the whole year.
+ *
+ * A year can nominate one of its custom averages to *be* its general average — a prépa
+ * whose real headline is "moyenne des écrits", say. Expressed as the set of subjects that
+ * average covers plus its coefficient overrides, rather than as a value, so the
+ * substitution survives everything that derives a graph: a period filter, a simulation,
+ * a card's own scope.
+ *
+ * Here rather than at the thirty-odd places that ask for `ratio(null)`, because every one
+ * of them is asking the same question — what is this reader's average — and the answer
+ * should not depend on which of them is asking.
+ */
+export interface GeneralAverageSource {
+  /** Every subject the substituted average covers, descendants included. */
+  readonly subjects: ReadonlySet<string>;
+  readonly coefficients?: ReadonlyMap<string, number>;
+}
+
+export interface SubjectGraphOptions {
+  /**
+   * The year's scale, needed only for bonus points.
+   *
+   * A subject's bonus is in points — "+0.5" — and turning that into a ratio is the one
+   * thing the graph cannot work out for itself. Absent, a bonus is ignored rather than
+   * guessed at: a wrong scale would move an average silently, and no bonus at all is at
+   * least the number the marks say.
+   */
+  readonly scale?: number;
+  /** Extra points on whatever the general reading turns out to be. */
+  readonly generalBonus?: number | null;
+  readonly general?: GeneralAverageSource;
+}
+
 export class SubjectGraph {
   readonly subjects: readonly Subject[];
+  readonly options: SubjectGraphOptions;
 
   private readonly byIdMap = new Map<string, Subject>();
   private readonly childrenMap = new Map<string | null, Subject[]>();
@@ -50,8 +116,12 @@ export class SubjectGraph {
   private readonly ratioCaches = new Map<Scope | null, Map<string, Ratio>>();
   private rootContributorCache: readonly Subject[] | null = null;
 
-  constructor(subjects: readonly Subject[]) {
+  private generalGraph: SubjectGraph | null = null;
+  private readonly mergedScopes = new Map<Scope | null, Scope>();
+
+  constructor(subjects: readonly Subject[], options: SubjectGraphOptions = {}) {
     this.subjects = subjects;
+    this.options = options;
 
     for (const subject of subjects) {
       this.byIdMap.set(subject.id, subject);
@@ -212,7 +282,8 @@ export class SubjectGraph {
 
   // ----------------------------------------------------------------- averages
 
-  private coefficientOf(subject: Subject, scope: Scope | null): number {
+  /** The coefficient this subject weighs in with, after any scope override. */
+  coefficientOf(subject: Subject, scope: Scope | null): number {
     const override = scope?.coefficients?.get(subject.id);
     if (override !== undefined) return weight(override);
     return weight(subject.coefficient);
@@ -250,6 +321,26 @@ export class SubjectGraph {
       visiting.add(subjectId);
     }
 
+    /**
+     * The general reading, when the year nominated an average to stand in for it.
+     *
+     * Delegated to a subset graph rather than reimplemented: `resolveCustomAverage`
+     * already decides what "the subjects of this average" means — re-rooting a deep
+     * sub-subject, dissolving categories the average did not take — and two answers to
+     * that question would eventually disagree.
+     */
+    if (subjectId === null && this.options.general) {
+      const source = this.options.general;
+      this.generalGraph ??= new SubjectGraph(
+        this.subjects.filter((item) => source.subjects.has(item.id)),
+        // Not the general source itself, or it would substitute inside itself forever.
+        // The bonus does travel: it is a bonus on the reader's general average, whatever
+        // that average turns out to be made of.
+        { scale: this.options.scale, generalBonus: this.options.generalBonus },
+      );
+      return this.generalGraph.ratio(null, this.scopeWith(scope, source));
+    }
+
     let weighted = 0;
     let total = 0;
 
@@ -282,7 +373,44 @@ export class SubjectGraph {
     }
 
     if (subjectId !== null) visiting.delete(subjectId);
-    return total === 0 ? null : weighted / total;
+    if (total === 0) return null;
+    return this.withBonus(weighted / total, subject ?? null);
+  }
+
+  /**
+   * A ratio with its bonus points added.
+   *
+   * In points of the year's scale, because that is what somebody typing "+0.5" means —
+   * so without a scale there is nothing to convert and the marks stand alone, which is
+   * stated on `SubjectGraphOptions.scale`.
+   */
+  private withBonus(ratio: number, subject: Subject | null): number {
+    const scale = this.options.scale;
+    if (!scale || !Number.isFinite(scale) || scale <= 0) return ratio;
+    const points = subject
+      ? (subject.bonus ?? 0)
+      : (this.options.generalBonus ?? 0);
+    if (!Number.isFinite(points) || points === 0) return ratio;
+    return clampRatio(ratio + points / scale);
+  }
+
+  /**
+   * The caller's scope with the substituted average's coefficients laid over it.
+   *
+   * The average's own weights win: they are its definition, while a caller's scope is a
+   * question being asked *of* it. Cached per caller scope because the ratio cache is
+   * keyed by scope identity, and a fresh object each call would both miss the cache and
+   * grow it without bound.
+   */
+  private scopeWith(scope: Scope | null, source: GeneralAverageSource): Scope {
+    const cached = this.mergedScopes.get(scope);
+    if (cached) return cached;
+    const coefficients = new Map(scope?.coefficients ?? []);
+    for (const [id, value] of source.coefficients ?? [])
+      coefficients.set(id, value);
+    const merged: Scope = { coefficients, ratios: scope?.ratios };
+    this.mergedScopes.set(scope, merged);
+    return merged;
   }
 
   /**
@@ -291,14 +419,24 @@ export class SubjectGraph {
    * at top level. Grades come along untouched.
    */
   subset(ids: ReadonlySet<string>): SubjectGraph {
+    /**
+     * The scale travels; the substituted general average does not.
+     *
+     * A subset is a different universe — the subjects of one custom average, or the
+     * part of a year somebody shares — and its general reading is *its own*. Carrying
+     * the year's nomination in would have every subset answer with an average made of
+     * subjects it does not contain, which is null at best and somebody else's number at
+     * worst. The bonus points stay, because they belong to the subjects and the year.
+     */
     return new SubjectGraph(
       this.subjects.filter((subject) => ids.has(subject.id)),
+      { scale: this.options.scale },
     );
   }
 
   /** A graph with `mutate` applied to matching subjects — used by simulations. */
   withSubjects(map: (subject: Subject) => Subject): SubjectGraph {
-    return new SubjectGraph(this.subjects.map(map));
+    return new SubjectGraph(this.subjects.map(map), this.options);
   }
 }
 
@@ -333,7 +471,47 @@ export function resolveCustomAverage(
     }
   }
 
-  return { graph: graph.subset(include), scope: { coefficients } };
+  /**
+   * The average's own bonus rides on the subset's general reading, which is what this
+   * average *is*. `subset` carries the year's options forward, so the scale is already
+   * there; only the bonus is the average's own rather than the year's.
+   */
+  const subset = graph.subset(include);
+  return {
+    graph: custom.bonus
+      ? new SubjectGraph(subset.subjects, {
+          ...subset.options,
+          generalBonus: custom.bonus,
+        })
+      : subset,
+    scope: { coefficients },
+  };
+}
+
+/**
+ * The subjects a custom average covers, for a year that nominated one as its general
+ * average. The same walk `resolveCustomAverage` makes, without building a graph — the
+ * substitution is expressed as a set so it can be handed to the graph at construction.
+ */
+export function generalAverageSource(
+  graph: SubjectGraph,
+  custom: CustomAverage,
+): GeneralAverageSource {
+  const subjects = new Set<string>();
+  const coefficients = new Map<string, number>();
+  for (const entry of custom.entries) {
+    if (!graph.has(entry.subjectId)) continue;
+    subjects.add(entry.subjectId);
+    if (entry.coefficient !== null) {
+      coefficients.set(entry.subjectId, entry.coefficient);
+    }
+    if (entry.includeChildren) {
+      for (const descendant of graph.descendantsOf(entry.subjectId)) {
+        subjects.add(descendant.id);
+      }
+    }
+  }
+  return { subjects, coefficients };
 }
 
 /** Ratio → the year's display scale (0.875 → 17.5/20 or 87.5/100). */
@@ -387,7 +565,7 @@ export function restrictToPeriod(
 export const FULL_YEAR_PERIOD_ID = "__full_year__";
 
 export function fullYearPeriod(
-  year: Pick<Year, "startsAt" | "endsAt">,
+  year: Pick<Year, "startsAt" | "endsAt" | "generalBonus">,
   name: string,
 ): Period {
   return {
@@ -396,6 +574,7 @@ export function fullYearPeriod(
     startAt: year.startsAt,
     endAt: year.endsAt,
     isCumulative: true,
+    generalBonus: year.generalBonus ?? 0,
     sortOrder: Number.MAX_SAFE_INTEGER,
   };
 }

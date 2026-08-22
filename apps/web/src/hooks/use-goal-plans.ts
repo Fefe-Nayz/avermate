@@ -56,7 +56,8 @@ export function useGoalPlans() {
           resolved.graph.subjects,
           dayRange(window.from, until, Math.max(1, Math.ceil(span / 40))),
           resolved.subjectId,
-          resolved.scope
+          resolved.scope,
+          resolved.graph.options
         )
         projection = projectedRatio(series, 8)
       }

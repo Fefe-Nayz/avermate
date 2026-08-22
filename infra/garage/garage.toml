@@ -1,0 +1,21 @@
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+metadata_snapshots_dir = "/var/lib/garage/snapshots"
+metadata_auto_snapshot_interval = "6h"
+db_engine = "sqlite"
+
+# The bundled compose target is a single-node deployment. Use Garage's
+# multi-node guide and replication_factor = 3 for production-grade redundancy.
+replication_factor = 1
+compression_level = 1
+
+rpc_bind_addr = "[::]:3901"
+# Supplied through GARAGE_RPC_SECRET; never commit it here.
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+api_bind_addr = "[::]:3903"
+metrics_require_token = false

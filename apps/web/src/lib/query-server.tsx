@@ -16,7 +16,16 @@ export function createServerQueryClient(): QueryClient {
 /** Common layout cache, memoized only within the current React server request. */
 export const getServerQueryClient = cache(createServerQueryClient)
 
-/** Hydrate the queries prefetched through getServerQueryClient. */
+/**
+ * Hydrate the queries prefetched through getServerQueryClient.
+ *
+ * Everything that reads one of those queries must be a *descendant* of this.
+ * A reader rendered as an earlier sibling creates the query itself, before the
+ * boundary runs, and `HydrationBoundary` then treats the server's answer as an
+ * update to an existing query — which it applies in an effect, one commit
+ * later. The reader renders its default in the meantime, and the browser
+ * fetches what the server already sent.
+ */
 export function HydrateClient({
   children,
   queryClient = getServerQueryClient(),

@@ -6,15 +6,17 @@
  * single attribute swap restyles the whole app without re-rendering anything.
  */
 
-export const PALETTES = [
-  "default",
-  "ocean",
-  "forest",
-  "sunset",
-  "grape",
-  "rose",
-  "amber",
-] as const
+import {
+  THEME_FONT_CHOICES,
+  THEME_FONT_STACKS,
+  THEME_PALETTE_IDS,
+  THEME_SEASON_IDS,
+  THEME_TOKEN_NAMES,
+  UNLOCKABLE_THEME_PALETTE_IDS,
+  type ThemeFontId,
+} from "@avermate/core"
+
+export const PALETTES = THEME_PALETTE_IDS
 
 export type Palette = (typeof PALETTES)[number]
 
@@ -26,7 +28,7 @@ export function isPalette(value: unknown): value is Palette {
  * Themes that are not offered until they are earned. They live in the same
  * palette space as the rest, so an unlocked one behaves like any other choice.
  */
-export const UNLOCKABLE_PALETTES = ["mokattam"] as const
+export const UNLOCKABLE_PALETTES = UNLOCKABLE_THEME_PALETTE_IDS
 
 export type UnlockablePalette = (typeof UNLOCKABLE_PALETTES)[number]
 
@@ -40,53 +42,11 @@ export function isUnlockablePalette(
 }
 
 /** Tokens the custom-theme editor is allowed to override. */
-export const THEME_TOKENS = [
-  "background",
-  "foreground",
-  "card",
-  "card-foreground",
-  "popover",
-  "popover-foreground",
-  "primary",
-  "primary-foreground",
-  "secondary",
-  "secondary-foreground",
-  "muted",
-  "muted-foreground",
-  "accent",
-  "accent-foreground",
-  "destructive",
-  "border",
-  "input",
-  "ring",
-  "chart-1",
-  "chart-2",
-  "chart-3",
-  "chart-4",
-  "chart-5",
-  "sidebar",
-  "sidebar-foreground",
-  "sidebar-primary",
-  "sidebar-primary-foreground",
-  "sidebar-accent",
-  "sidebar-accent-foreground",
-  "sidebar-border",
-  "sidebar-ring",
-] as const
+export const THEME_TOKENS = THEME_TOKEN_NAMES
 
 export type ThemeToken = (typeof THEME_TOKENS)[number]
 
-export const SEASONS = [
-  "auto",
-  "none",
-  "newYear",
-  "spring",
-  "summer",
-  "autumn",
-  "halloween",
-  "winter",
-  "aprilFools",
-] as const
+export const SEASONS = THEME_SEASON_IDS
 
 export type Season = (typeof SEASONS)[number]
 
@@ -228,54 +188,11 @@ export function sanitizeCustomThemeCss(css: string): string {
   return inside ? "" : css
 }
 
-export const FONT_CHOICES = [
-  { id: "avermate", label: "Avermate" },
-  { id: "inter", label: "Inter" },
-  { id: "geist", label: "Geist" },
-  { id: "roboto", label: "Roboto" },
-  { id: "poppins", label: "Poppins" },
-  { id: "montserrat", label: "Montserrat" },
-  { id: "outfit", label: "Outfit" },
-  { id: "plusJakarta", label: "Plus Jakarta Sans" },
-  { id: "dmSans", label: "DM Sans" },
-  { id: "nunito", label: "Nunito" },
-  { id: "lora", label: "Lora" },
-  { id: "merriweather", label: "Merriweather" },
-  { id: "playfair", label: "Playfair Display" },
-  { id: "jetbrains", label: "JetBrains Mono" },
-  { id: "firaCode", label: "Fira Code" },
-  { id: "sourceCode", label: "Source Code Pro" },
-  { id: "system", label: "System" },
-  { id: "serif", label: "Serif" },
-  { id: "mono", label: "Mono" },
-] as const
+export const FONT_CHOICES = THEME_FONT_CHOICES
 
-export type FontChoice = (typeof FONT_CHOICES)[number]["id"]
+export type FontChoice = ThemeFontId
 
-export const FONT_STACKS: Record<FontChoice, string> = {
-  avermate:
-    "var(--font-gabarito), var(--font-inter), ui-sans-serif, system-ui, sans-serif",
-  inter: "var(--font-inter), ui-sans-serif, system-ui, sans-serif",
-  geist: "var(--font-geist), ui-sans-serif, system-ui, sans-serif",
-  roboto: "var(--font-roboto), ui-sans-serif, system-ui, sans-serif",
-  poppins: "var(--font-poppins), ui-sans-serif, system-ui, sans-serif",
-  montserrat: "var(--font-montserrat), ui-sans-serif, system-ui, sans-serif",
-  outfit: "var(--font-outfit), ui-sans-serif, system-ui, sans-serif",
-  plusJakarta: "var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif",
-  dmSans: "var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif",
-  nunito: "var(--font-nunito), ui-sans-serif, system-ui, sans-serif",
-  lora: "var(--font-lora), ui-serif, Georgia, serif",
-  merriweather: "var(--font-merriweather), ui-serif, Georgia, serif",
-  playfair: "var(--font-playfair), ui-serif, Georgia, serif",
-  jetbrains:
-    "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace",
-  firaCode: "var(--font-fira-code), ui-monospace, SFMono-Regular, monospace",
-  sourceCode:
-    "var(--font-source-code-pro), ui-monospace, SFMono-Regular, monospace",
-  system: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
-  serif: "var(--font-serif), ui-serif, Georgia, serif",
-  mono: "var(--font-mono), ui-monospace, SFMono-Regular, monospace",
-}
+export const FONT_STACKS: Record<FontChoice, string> = THEME_FONT_STACKS
 
 /** Resolve exact IDs and legacy v1 font stacks to one stable preference ID. */
 export function fontChoiceOf(

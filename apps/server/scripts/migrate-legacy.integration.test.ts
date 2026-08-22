@@ -138,7 +138,6 @@ async function runMigration(legacyUrl: string, targetUrl: string) {
         CLIENT_URL: "http://localhost:3000",
         NODE_ENV: "test",
         DISABLE_EMAIL: "true",
-        DISABLE_FEEDBACK: "true",
         DISABLE_UPLOADS: "true",
       },
       stdout: "pipe",
@@ -155,106 +154,104 @@ async function runMigration(legacyUrl: string, targetUrl: string) {
   expect(stdout).toContain("Migration complete.");
 }
 
-test(
-  "migrates a representative v1 database end to end and is idempotent",
-  async () => {
-    const harnessDirectory = process.env.AVERMATE_LEGACY_TEST_DIRECTORY;
-    if (!harnessDirectory) {
-      const directory = mkdtempSync(join(tmpdir(), "avermate-legacy-test-"));
-      try {
-        const child = Bun.spawn(
-          [
-            process.execPath,
-            "test",
-            import.meta.path,
-            "--timeout=30000",
-            "--max-concurrency=1",
-          ],
-          {
-            cwd: join(import.meta.dir, ".."),
-            env: {
-              ...process.env,
-              AVERMATE_LEGACY_TEST_DIRECTORY: directory,
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-          },
-        );
-        const [exitCode, stdout, stderr] = await Promise.all([
-          child.exited,
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-        ]);
-        expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-      } finally {
-        // The database work happens in the child process so all native SQLite
-        // handles are gone before the parent removes its exact temp directory.
-        rmSync(directory, {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-          retryDelay: 100,
-        });
-      }
-      return;
-    }
-
-    const directory = harnessDirectory;
-    const legacyUrl = databaseUrl(join(directory, "legacy.db"));
-    const targetUrl = databaseUrl(join(directory, "rewrite.db"));
-    const legacy = createClient({ url: legacyUrl });
-    const target = createClient({ url: targetUrl });
-
+test("migrates a representative v1 database end to end and is idempotent", async () => {
+  const harnessDirectory = process.env.AVERMATE_LEGACY_TEST_DIRECTORY;
+  if (!harnessDirectory) {
+    const directory = mkdtempSync(join(tmpdir(), "avermate-legacy-test-"));
     try {
-      await legacy.executeMultiple(legacyFixture);
-      const migrations = readdirSync(join(import.meta.dir, "../drizzle"))
-        .filter((file) => /^\d{4}_.+\.sql$/.test(file))
-        .sort()
-        .map((file) =>
-          readFileSync(join(import.meta.dir, "../drizzle", file), "utf8"),
-        )
-        .join("\n");
-      await target.executeMultiple(migrations);
-      legacy.close();
-      target.close();
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "test",
+          import.meta.path,
+          "--timeout=30000",
+          "--max-concurrency=1",
+        ],
+        {
+          cwd: join(import.meta.dir, ".."),
+          env: {
+            ...process.env,
+            AVERMATE_LEGACY_TEST_DIRECTORY: directory,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
+    } finally {
+      // The database work happens in the child process so all native SQLite
+      // handles are gone before the parent removes its exact temp directory.
+      rmSync(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    }
+    return;
+  }
 
-      await runMigration(legacyUrl, targetUrl);
-      await runMigration(legacyUrl, targetUrl);
+  const directory = harnessDirectory;
+  const legacyUrl = databaseUrl(join(directory, "legacy.db"));
+  const targetUrl = databaseUrl(join(directory, "rewrite.db"));
+  const legacy = createClient({ url: legacyUrl });
+  const target = createClient({ url: targetUrl });
 
-      const migrated = createClient({ url: targetUrl });
-      try {
-        const user = await migrated.execute(
-          "select email, emailVerified, role from users where id = 'legacy-user'",
-        );
-        expect(user.rows[0]).toMatchObject({
-          email: "legacy@example.com",
-          emailVerified: 1,
-          role: "admin",
-        });
+  try {
+    await legacy.executeMultiple(legacyFixture);
+    const migrations = readdirSync(join(import.meta.dir, "../drizzle"))
+      .filter((file) => /^\d{4}_.+\.sql$/.test(file))
+      .sort()
+      .map((file) =>
+        readFileSync(join(import.meta.dir, "../drizzle", file), "utf8"),
+      )
+      .join("\n");
+    await target.executeMultiple(migrations);
+    legacy.close();
+    target.close();
 
-        const year = await migrated.execute(
-          "select defaultOutOf from years where id = 'legacy-year'",
-        );
-        expect(Number(year.rows[0]?.defaultOutOf)).toBe(20);
-        const subject = await migrated.execute(
-          "select coefficient, kind, isMain from subjects where id = 'legacy-subject'",
-        );
-        expect(subject.rows[0]).toMatchObject({
-          coefficient: 2,
-          kind: "subject",
-          isMain: 1,
-        });
-        const grade = await migrated.execute(
-          "select value, outOf, coefficient, periodId from grades where id = 'legacy-grade'",
-        );
-        expect(grade.rows[0]).toMatchObject({
-          value: 15.5,
-          outOf: 20,
-          coefficient: 1.5,
-          periodId: "legacy-period",
-        });
+    await runMigration(legacyUrl, targetUrl);
+    await runMigration(legacyUrl, targetUrl);
 
-        const relations = await migrated.execute(`
+    const migrated = createClient({ url: targetUrl });
+    try {
+      const user = await migrated.execute(
+        "select email, emailVerified, role from users where id = 'legacy-user'",
+      );
+      expect(user.rows[0]).toMatchObject({
+        email: "legacy@example.com",
+        emailVerified: 1,
+        role: "admin",
+      });
+
+      const year = await migrated.execute(
+        "select defaultOutOf from years where id = 'legacy-year'",
+      );
+      expect(Number(year.rows[0]?.defaultOutOf)).toBe(20);
+      const subject = await migrated.execute(
+        "select coefficient, kind, isMain from subjects where id = 'legacy-subject'",
+      );
+      expect(subject.rows[0]).toMatchObject({
+        coefficient: 2,
+        kind: "subject",
+        isMain: 1,
+      });
+      const grade = await migrated.execute(
+        "select value, outOf, coefficient, periodId from grades where id = 'legacy-grade'",
+      );
+      expect(grade.rows[0]).toMatchObject({
+        value: 15.5,
+        outOf: 20,
+        coefficient: 1.5,
+        periodId: "legacy-period",
+      });
+
+      const relations = await migrated.execute(`
           select
             (select count(*) from grade_components) as components,
             (select count(*) from custom_average_entries) as averageEntries,
@@ -263,45 +260,43 @@ test(
             (select count(*) from announcement_views) as announcementViews,
             (select count(*) from dashboard_cards where yearId = 'legacy-year') as cards
         `);
-        expect(relations.rows[0]).toMatchObject({
-          components: 1,
-          averageEntries: 1,
-          reviews: 1,
-          announcements: 1,
-          announcementViews: 1,
-        });
-        expect(Number(relations.rows[0]?.cards)).toBeGreaterThan(0);
+      expect(relations.rows[0]).toMatchObject({
+        components: 1,
+        averageEntries: 1,
+        reviews: 1,
+        announcements: 1,
+        announcementViews: 1,
+      });
+      expect(Number(relations.rows[0]?.cards)).toBeGreaterThan(0);
 
-        const preferences = await migrated.execute(
-          "select language, chartSettings from preferences where userId = 'legacy-user'",
-        );
-        expect(preferences.rows[0]?.language).toBe("fr");
-        expect(String(preferences.rows[0]?.chartSettings)).toContain(
-          '"trendSubdivisions":4',
-        );
+      const preferences = await migrated.execute(
+        "select language, chartSettings from preferences where userId = 'legacy-user'",
+      );
+      expect(preferences.rows[0]?.language).toBe("fr");
+      expect(String(preferences.rows[0]?.chartSettings)).toContain(
+        '"trendSubdivisions":4',
+      );
 
-        const counts = await migrated.execute(`
+      const counts = await migrated.execute(`
           select
             (select count(*) from users where id = 'legacy-user') as users,
             (select count(*) from years where id = 'legacy-year') as years,
             (select count(*) from grades where id = 'legacy-grade') as grades
         `);
-        expect(counts.rows[0]).toMatchObject({ users: 1, years: 1, grades: 1 });
-      } finally {
-        migrated.close();
-      }
+      expect(counts.rows[0]).toMatchObject({ users: 1, years: 1, grades: 1 });
     } finally {
-      try {
-        legacy.close();
-      } catch {
-        // It was already closed before the child process opened the file.
-      }
-      try {
-        target.close();
-      } catch {
-        // It was already closed before the child process opened the file.
-      }
+      migrated.close();
     }
-  },
-  45_000,
-);
+  } finally {
+    try {
+      legacy.close();
+    } catch {
+      // It was already closed before the child process opened the file.
+    }
+    try {
+      target.close();
+    } catch {
+      // It was already closed before the child process opened the file.
+    }
+  }
+}, 45_000);

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
-import { goals } from "../db/schema";
+import { dashboardCardReferences, dashboardCards, goals } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import {
   assertSameYear,
@@ -16,19 +16,28 @@ import {
   requireYear,
 } from "../lib/ownership";
 
-const goalInput = z.object({
+const goalFields = {
   name: z.string().trim().min(1).max(96),
-  kind: z.enum(["general", "subject", "custom"]).default("general"),
-  referenceId: z.string().nullable().default(null),
+  kind: z.enum(["general", "subject", "custom"]),
+  referenceId: z.string().nullable(),
   /**
    * Stored as a ratio rather than a mark: a student who switches their year
    * from /20 to /100 keeps the goal they set, instead of aiming for 14%.
    */
   targetRatio: z.number().min(0).max(1),
-  periodId: z.string().nullable().default(null),
-  dueAt: z.coerce.date().nullable().default(null),
-  isPinned: z.boolean().default(false),
+  periodId: z.string().nullable(),
+  dueAt: z.coerce.date().nullable(),
+  isPinned: z.boolean(),
+};
+const goalInput = z.object({
+  ...goalFields,
+  kind: goalFields.kind.default("general"),
+  referenceId: goalFields.referenceId.default(null),
+  periodId: goalFields.periodId.default(null),
+  dueAt: goalFields.dueAt.default(null),
+  isPinned: goalFields.isPinned.default(false),
 });
+const goalPatchInput = z.object(goalFields).partial();
 
 async function validateGoalScope(
   userId: string,
@@ -103,7 +112,7 @@ export const goalsRouter = {
     }),
 
   update: protectedProcedure
-    .input(goalInput.partial().extend({ goalId: z.string() }))
+    .input(goalPatchInput.extend({ goalId: z.string() }))
     .handler(async ({ context, input }) => {
       const { goalId, ...patch } = input;
       const userId = context.session.user.id;
@@ -168,9 +177,7 @@ export const goalsRouter = {
       const selected = await db
         .select()
         .from(goals)
-        .where(
-          and(eq(goals.userId, userId), inArray(goals.id, input.goalIds)),
-        );
+        .where(and(eq(goals.userId, userId), inArray(goals.id, input.goalIds)));
       if (selected.length !== input.goalIds.length) {
         badRequest("Every reordered goal must belong to this account");
       }
@@ -190,10 +197,10 @@ export const goalsRouter = {
         ...current.map((goal) => goal.id).filter((id) => !requested.has(id)),
       ];
       const statements = orderedIds.map((id, index) =>
-          db
-            .update(goals)
-            .set({ sortOrder: index, updatedAt: new Date() })
-            .where(and(eq(goals.id, id), eq(goals.userId, userId))),
+        db
+          .update(goals)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(and(eq(goals.id, id), eq(goals.userId, userId))),
       );
       await db.batch(
         statements as [
@@ -208,7 +215,48 @@ export const goalsRouter = {
     .input(z.object({ goalId: z.string() }))
     .handler(async ({ context, input }) => {
       await requireGoal(context.session.user.id, input.goalId);
-      await db.delete(goals).where(eq(goals.id, input.goalId));
+      /**
+       * The cards that named this goal anywhere, not only the ones that named it first.
+       *
+       * `dashboard_cards.goalId` cascades, and it holds the goal of the *primary*
+       * measure — the one-reading projection. A card whose second series is a goal
+       * gauge has the goal in its definition and a null in that column, so the cascade
+       * walked straight past it and left a card pointing at a goal that no longer
+       * exists. The reference rows are the complete answer: `collectWidgetReferences`
+       * walks every measure precisely so an ownership check cannot be dodged, and the
+       * same completeness is what cleanup needs.
+       */
+      const referencing = await db
+        .select({ cardId: dashboardCardReferences.cardId })
+        .from(dashboardCardReferences)
+        .innerJoin(
+          dashboardCards,
+          eq(dashboardCards.id, dashboardCardReferences.cardId),
+        )
+        .where(
+          and(
+            eq(dashboardCardReferences.kind, "goal"),
+            eq(dashboardCardReferences.referenceId, input.goalId),
+            eq(dashboardCards.userId, context.session.user.id),
+          ),
+        );
+      const cardIds = [...new Set(referencing.map((row) => row.cardId))];
+      const statements = [
+        ...(cardIds.length > 0
+          ? [
+              db
+                .delete(dashboardCards)
+                .where(inArray(dashboardCards.id, cardIds)),
+            ]
+          : []),
+        db.delete(goals).where(eq(goals.id, input.goalId)),
+      ];
+      await db.batch(
+        statements as [
+          (typeof statements)[number],
+          ...(typeof statements)[number][],
+        ],
+      );
       return { ok: true };
     }),
 };

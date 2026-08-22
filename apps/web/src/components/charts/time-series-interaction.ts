@@ -53,7 +53,11 @@ export function panLinearDomainByPixels(
   deltaPixels: number,
   plotWidth: number
 ): NumericDomain {
-  if (!Number.isFinite(deltaPixels) || !Number.isFinite(plotWidth) || plotWidth <= 0) {
+  if (
+    !Number.isFinite(deltaPixels) ||
+    !Number.isFinite(plotWidth) ||
+    plotWidth <= 0
+  ) {
     return baseline
   }
   const span = baseline[1] - baseline[0]

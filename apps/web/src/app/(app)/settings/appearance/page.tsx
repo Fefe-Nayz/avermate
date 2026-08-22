@@ -114,7 +114,7 @@ export default function AppearanceSettingsPage() {
           {t("Appearance")}
         </h1>
 
-        <SettingsSection title={t("Theme")}>
+        <SettingsSection id="theme" title={t("Theme")}>
           <ChoiceField
             choices={[
               {
@@ -151,6 +151,7 @@ export default function AppearanceSettingsPage() {
          * the difference is said out loud rather than implied by placement.
          */}
         <SettingsSection
+          id="cards"
           title={t("Colour and theme")}
           description={t(
             "One choice. An accent recolours the app; a full design also changes its typography and shape."
@@ -412,6 +413,7 @@ export default function AppearanceSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="typography"
           title={t("Typography and shape")}
           description={t("Choose body and heading styles independently.")}
         >
@@ -485,6 +487,7 @@ export default function AppearanceSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="seasonal"
           title={t("Seasonal touches")}
           description={t(
             "A quiet accent around the holidays. Nothing that moves."
@@ -513,7 +516,7 @@ export default function AppearanceSettingsPage() {
           ) : null}
         </SettingsSection>
 
-        <SettingsSection title={t("Charts")}>
+        <SettingsSection id="charts" title={t("Charts")}>
           <SettingsRow
             label={t("Zoom to the data")}
             description={t(
@@ -652,7 +655,7 @@ export default function AppearanceSettingsPage() {
           />
         </SettingsSection>
 
-        <SettingsSection title={t("Feel")}>
+        <SettingsSection id="motion" title={t("Feel")}>
           <SettingsRow
             label={t("Haptic feedback")}
             description={t("Small taps on phones that support it.")}

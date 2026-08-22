@@ -7,6 +7,7 @@ import {
   customAverages,
   dashboardCardReferences,
   dashboardCards,
+  gradeTypes,
   grades,
   goals,
   periods,
@@ -23,7 +24,10 @@ import {
   parsePresetConfiguration,
   serializePresetConfiguration,
 } from "../data/managed-presets";
-import type { ManagedPresetConfiguration } from "../data/preset-types";
+import type {
+  ManagedPresetConfiguration,
+  ManagedPresetSubject,
+} from "../data/preset-types";
 import {
   academicCardRows,
   academicYearInput,
@@ -75,11 +79,9 @@ function parseTags(value: string): string[] {
 }
 
 function subjectCount(configuration: ManagedPresetConfiguration): number {
-  return configuration.subjects.reduce(
-    (count, subject) =>
-      count + 1 + subjectCount({ subjects: subject.children, averages: [] }),
-    0,
-  );
+  const count = (nodes: readonly ManagedPresetSubject[]): number =>
+    nodes.reduce((total, node) => total + 1 + count(node.children), 0);
+  return count(configuration.subjects);
 }
 
 async function currentPresetConfiguration(presetId: string) {
@@ -108,10 +110,19 @@ async function presetReplacementPlan(
   year: Awaited<ReturnType<typeof requireYear>>,
   preset: Awaited<ReturnType<typeof currentPresetConfiguration>>,
 ) {
-  const [existingSubjectRows, existingAverageRows] = await Promise.all([
-    db.select().from(subjects).where(eq(subjects.yearId, year.id)),
-    db.select().from(customAverages).where(eq(customAverages.yearId, year.id)),
-  ]);
+  const [existingSubjectRows, existingAverageRows, existingTypeRows] =
+    await Promise.all([
+      db.select().from(subjects).where(eq(subjects.yearId, year.id)),
+      db
+        .select()
+        .from(customAverages)
+        .where(eq(customAverages.yearId, year.id)),
+      db
+        .select()
+        .from(gradeTypes)
+        .where(eq(gradeTypes.yearId, year.id))
+        .orderBy(asc(gradeTypes.sortOrder)),
+    ]);
   const hasConfiguration =
     existingSubjectRows.length > 0 || existingAverageRows.length > 0;
 
@@ -132,12 +143,20 @@ async function presetReplacementPlan(
         ),
       )
     : new Map<string, string>();
+  const existingTypeIds = canPreservePresetIds
+    ? new Map(
+        existingTypeRows.flatMap((row) =>
+          row.presetNodeKey ? [[row.presetNodeKey, row.id] as const] : [],
+        ),
+      )
+    : new Map<string, string>();
   const materialized = materializePresetConfiguration(
     preset.configuration,
     year.id,
     userId,
     existingSubjectIds,
     existingAverageIds,
+    existingTypeIds,
   );
   const nextSubjectIds = new Set(
     materialized.subjectRows.map((row) => row.id as string),
@@ -225,6 +244,7 @@ async function presetReplacementPlan(
   return {
     existingSubjectRows,
     existingAverageRows,
+    existingTypeRows,
     hasConfiguration,
     materialized,
     referenceBlockers,
@@ -243,6 +263,7 @@ async function applyManagedPreset(
   const {
     existingSubjectRows,
     existingAverageRows,
+    existingTypeRows,
     hasConfiguration,
     materialized,
     referenceBlockers,
@@ -318,6 +339,60 @@ async function applyManagedPreset(
           .where(eq(customAverages.id, row.id as string))
       : db.insert(customAverages).values(row),
   );
+  /**
+   * The reader's own types survive a reapply.
+   *
+   * A preset states which kinds of assessment it proposes; it says nothing about the ones
+   * somebody added because their year has them. Those are deleted by no version of this,
+   * and they take the slots after the preset's own so the whole list stays a real order.
+   */
+  const nextTypeIds = new Set(
+    materialized.gradeTypeRows.map((row) => row.id as string),
+  );
+  /**
+   * By id, not by key — the difference is the whole of moving to *another* preset.
+   *
+   * Ids are only reused when the year keeps the preset it already had. Switching to a
+   * different one mints fresh ids for everything, so an old row whose key the new preset
+   * happens to reuse would survive a key test and then collide with the incoming row on
+   * `(yearId, presetNodeKey)`, failing the entire replacement. Asking whether the row
+   * itself is carried forward is the question the subjects have always asked.
+   */
+  const withdrawnTypeIds = existingTypeRows
+    .filter((row) => row.presetNodeKey && !nextTypeIds.has(row.id))
+    .map((row) => row.id);
+  const ownTypeRows = existingTypeRows.filter((row) => !row.presetNodeKey);
+  const writeGradeTypes = [
+    ...(withdrawnTypeIds.length > 0
+      ? [db.delete(gradeTypes).where(inArray(gradeTypes.id, withdrawnTypeIds))]
+      : []),
+    ...materialized.gradeTypeRows.map((row) =>
+      existingTypeRows.some((existing) => existing.id === row.id)
+        ? db
+            .update(gradeTypes)
+            .set({
+              name: row.name,
+              titlePrefix: row.titlePrefix,
+              coefficient: row.coefficient,
+              outOf: row.outOf,
+              accent: row.accent,
+              sortOrder: row.sortOrder,
+              presetNodeKey: row.presetNodeKey,
+              updatedAt: new Date(),
+            })
+            .where(eq(gradeTypes.id, row.id as string))
+        : db.insert(gradeTypes).values(row),
+    ),
+    ...ownTypeRows.map((row, index) =>
+      db
+        .update(gradeTypes)
+        .set({
+          sortOrder: materialized.gradeTypeRows.length + index,
+          updatedAt: new Date(),
+        })
+        .where(eq(gradeTypes.id, row.id)),
+    ),
+  ];
   const preservesStableIds =
     materialized.subjectRows.some((row) =>
       existingSubjectIds.has(row.id as string),
@@ -342,6 +417,7 @@ async function applyManagedPreset(
     ...(materialized.entryRows.length > 0
       ? [db.insert(customAverageEntries).values(materialized.entryRows)]
       : []),
+    ...writeGradeTypes,
     db
       .insert(yearPresetMemberships)
       .values({
@@ -377,6 +453,7 @@ async function applyManagedPreset(
   return {
     subjects: materialized.subjectRows.length,
     averages: materialized.averageRows.length,
+    gradeTypes: materialized.gradeTypeRows.length,
     version: preset.definition.currentVersion,
   };
 }
@@ -645,6 +722,9 @@ export const presetsRouter = {
           : []),
         ...(materialized?.entryRows.length
           ? [db.insert(customAverageEntries).values(materialized.entryRows)]
+          : []),
+        ...(materialized?.gradeTypeRows.length
+          ? [db.insert(gradeTypes).values(materialized.gradeTypeRows)]
           : []),
         ...(preset
           ? [

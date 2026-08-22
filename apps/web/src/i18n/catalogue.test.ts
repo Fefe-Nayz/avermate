@@ -12,9 +12,17 @@ import fr from "../../messages/fr.json"
 const source = en as Record<string, string>
 const target = fr as Record<string, string>
 
-/** Placeholders a message expects, e.g. {count} in "{count} results". */
+/**
+ * The arguments a message expects, e.g. `count` in "{count} results".
+ *
+ * An argument name is followed by `}` or `,` — the second being an ICU format such as
+ * `{count, plural, ...}`. The words *inside* a plural's branches are ordinary
+ * translatable text and are deliberately not arguments: matching every `{word` would
+ * read "{No items}" as a placeholder called `No`, and then demand that French spell it
+ * the same way.
+ */
 function placeholders(message: string): string[] {
-  return [...message.matchAll(/\{(\w+)/g)]
+  return [...message.matchAll(/\{\s*(\w+)\s*[},]/g)]
     .map((match) => match[1] as string)
     .sort()
 }

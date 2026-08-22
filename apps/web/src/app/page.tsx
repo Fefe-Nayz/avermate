@@ -113,7 +113,7 @@ export default function LandingPage() {
         <section className="relative isolate">
           <HeroBackdrop />
 
-          <div className="mx-auto flex max-w-6xl flex-col items-center pt-14 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] text-center sm:pt-20 sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
+          <div className="mx-auto flex max-w-6xl flex-col items-center clamp-[pt,14,20] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] text-center sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
             <Reveal>
               <span className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur">
                 <SparklesIcon className="size-3.5 text-primary" />
@@ -216,7 +216,7 @@ export default function LandingPage() {
 
         {/* ------------------------------------------------------- why */}
         <section id="why" className="scroll-mt-20">
-          <div className="mx-auto grid max-w-6xl gap-12 py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:py-28">
+          <div className="mx-auto grid max-w-6xl gap-12 clamp-[py,20,28] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
             <div>
               <SectionHeading
                 align="left"
@@ -279,7 +279,7 @@ export default function LandingPage() {
 
         {/* -------------------------------------------------- features */}
         <section id="features" className="scroll-mt-20 bg-muted/25">
-          <div className="mx-auto max-w-6xl py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
+          <div className="mx-auto max-w-6xl clamp-[py,20,28] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
             <SectionHeading
               id="features-title"
               eyebrow={t("Built around a whole school year")}
@@ -415,7 +415,7 @@ export default function LandingPage() {
 
         {/* -------------------------------------------------- how it works */}
         <section id="how" className="scroll-mt-20 border-y bg-card">
-          <div className="mx-auto max-w-6xl py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
+          <div className="mx-auto max-w-6xl clamp-[py,20,28] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
             <SectionHeading
               id="how-title"
               eyebrow={t("From blank page to useful answer")}
@@ -452,7 +452,7 @@ export default function LandingPage() {
         {/* --------------------------------------------------------- faq */}
         <section
           id="faq"
-          className="mx-auto max-w-4xl scroll-mt-20 py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28"
+          className="mx-auto max-w-4xl scroll-mt-20 clamp-[py,20,28] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]"
         >
           <SectionHeading
             id="faq-title"
@@ -479,9 +479,9 @@ export default function LandingPage() {
         <BeamDivider />
 
         {/* --------------------------------------------------- final cta */}
-        <section className="py-20 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:py-28">
+        <section className="clamp-[py,20,28] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))]">
           <Reveal>
-            <div className="relative mx-auto flex max-w-6xl flex-col items-center overflow-hidden rounded-3xl bg-primary px-6 py-16 text-center text-primary-foreground sm:px-12 sm:py-20">
+            <div className="relative mx-auto flex max-w-6xl flex-col items-center overflow-hidden rounded-3xl bg-primary px-6 clamp-[py,16,20] text-center text-primary-foreground sm:px-12">
               {/* Grain keeps a large flat fill from banding on wide gamuts. */}
               <NoiseTexture noiseOpacity={0.35} className="opacity-30" />
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(255,255,255,.18),transparent_32%),radial-gradient(circle_at_85%_85%,rgba(255,255,255,.12),transparent_34%)]" />

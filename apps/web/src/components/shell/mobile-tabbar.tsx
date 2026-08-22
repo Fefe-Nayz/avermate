@@ -38,7 +38,9 @@ export function MobileTabBar() {
     Dashboard: t("Home"),
     Subjects: t("Subjects"),
     Grades: t("Grades"),
+    Materials: t("Materials"),
     Goals: t("Goals"),
+    Planning: t("Planning"),
     Insights: t("Insights"),
     Social: t("Social"),
   }

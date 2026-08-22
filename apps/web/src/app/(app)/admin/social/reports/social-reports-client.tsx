@@ -10,10 +10,7 @@ import {
 } from "@/components/admin/social-moderation-ui"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { useSocialLabels } from "@/components/social/social-labels"
-import {
-  SocialEmpty,
-  SocialHeading,
-} from "@/components/social/social-ui"
+import { SocialEmpty, SocialHeading } from "@/components/social/social-ui"
 import { Button } from "@/components/ui/button"
 import { SelectControl } from "@/components/forms/controls"
 import { Spinner } from "@/components/ui/spinner"

@@ -6,6 +6,7 @@ import {
   customAverageEntries,
   customAverages,
   dashboardCards,
+  gradeTypes,
   groupComparisons,
   groupInvitations,
   groupMemberships,
@@ -56,7 +57,9 @@ import {
   issueOpaqueToken,
 } from "../../lib/social-policy";
 import {
+  assertActiveGroup,
   blocked,
+  groupAccess,
   groupFigures,
   identities,
   identity,
@@ -134,27 +137,6 @@ async function comparableSubjectNames(
 const nameSchema = z.string().trim().min(2).max(100);
 const descriptionSchema = z.string().trim().max(500);
 
-async function groupAccess(groupId: string, userId: string) {
-  const [row] = await db
-    .select({ group: socialGroups, membership: groupMemberships })
-    .from(socialGroups)
-    .innerJoin(groupMemberships, eq(groupMemberships.groupId, socialGroups.id))
-    .where(
-      and(eq(socialGroups.id, groupId), eq(groupMemberships.userId, userId)),
-    )
-    .limit(1);
-  if (!row) notFound("Group");
-  return row;
-}
-
-function assertActive(group: typeof socialGroups.$inferSelect) {
-  if (group.state !== "active") {
-    throw new ORPCError("FORBIDDEN", {
-      message: "This group is on an administrative hold",
-    });
-  }
-}
-
 function assertOwner(access: Awaited<ReturnType<typeof groupAccess>>) {
   if (access.membership.role !== "owner") {
     throw new ORPCError("FORBIDDEN", {
@@ -198,6 +180,7 @@ async function sharedSetupSummary(group: typeof socialGroups.$inferSelect) {
       scale: null,
       subjectCount: flattenedSubjectCount(config.subjects),
       averageCount: config.averages.length,
+      gradeTypeCount: config.gradeTypes.length,
       periodCount: 0,
     };
   }
@@ -355,6 +338,11 @@ export const socialGroupsRouter = {
           : []),
         ...(materialized.entryRows.length
           ? [db.insert(customAverageEntries).values(materialized.entryRows)]
+          : []),
+        // The owner's own year has to *be* the template, types included — otherwise the
+        // first status check reads their year as incompatible with the class they made.
+        ...(materialized.gradeTypeRows.length
+          ? [db.insert(gradeTypes).values(materialized.gradeTypeRows)]
           : []),
         ...(remainsPresetLinked && presetDefinition
           ? [
@@ -547,6 +535,9 @@ export const socialGroupsRouter = {
         kind: access.group.kind,
         showTrend: access.group.showTrend,
         showGradeCount: access.group.showGradeCount,
+        // Whether members may put this comparison on their own dashboards. Read here so
+        // the owner's screen can show the switch; changed through its own route.
+        cohortEnabled: access.group.cohortEnabled,
         sharedSetupYearId: access.group.sharedSetupYearId,
         sharedSetup,
         setupRequired: !classTemplate,
@@ -604,7 +595,7 @@ export const socialGroupsRouter = {
           input.groupId,
           context.session.user.id,
         );
-        assertActive(access.group);
+        assertActiveGroup(access.group);
         assertOwner(access);
         const template = parseClassTemplate(access.group.classTemplate);
         let subjectName = input.subjectName ?? null;
@@ -667,7 +658,7 @@ export const socialGroupsRouter = {
           input.groupId,
           context.session.user.id,
         );
-        assertActive(access.group);
+        assertActiveGroup(access.group);
         assertOwner(access);
         const [deleted] = await db
           .delete(groupComparisons)
@@ -694,7 +685,7 @@ export const socialGroupsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       assertOwner(access);
       if (parseClassTemplate(access.group.classTemplate)) {
         badRequest("This class already has an academic template");
@@ -742,7 +733,7 @@ export const socialGroupsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       const template = parseClassTemplate(access.group.classTemplate);
       if (!template) badRequest("This class still needs an academic template");
       if (
@@ -780,7 +771,7 @@ export const socialGroupsRouter = {
     )
     .handler(async ({ context, input }) => {
       const access = await groupAccess(input.groupId, context.session.user.id);
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       assertOwner(access);
       if (
         parseClassTemplate(access.group.classTemplate) &&
@@ -865,7 +856,7 @@ export const socialGroupsRouter = {
       assertOwner(access);
       // A frozen group is an administrative hold: the reported owner must
       // not be able to destroy the evidence while moderation looks at it.
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       await db.delete(socialGroups).where(eq(socialGroups.id, input.groupId));
       return { deleted: true };
     }),
@@ -880,7 +871,7 @@ export const socialGroupsRouter = {
         }
         // Owner-leave of an empty group deletes it, so the moderation hold
         // applies here exactly as it does to delete.
-        assertActive(access.group);
+        assertActiveGroup(access.group);
         await db.delete(socialGroups).where(eq(socialGroups.id, input.groupId));
         return { left: true };
       }
@@ -930,7 +921,7 @@ export const socialGroupsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       const classTemplate = parseClassTemplate(access.group.classTemplate);
       if (classTemplate) {
         const copy = classYearInsertStatements({
@@ -1004,6 +995,9 @@ export const socialGroupsRouter = {
           ...(materialized.entryRows.length > 0
             ? [db.insert(customAverageEntries).values(materialized.entryRows)]
             : []),
+          ...(materialized.gradeTypeRows.length > 0
+            ? [db.insert(gradeTypes).values(materialized.gradeTypeRows)]
+            : []),
           db
             .update(groupMemberships)
             .set({ yearId, shareAverage: false, updatedAt: new Date() })
@@ -1025,14 +1019,19 @@ export const socialGroupsRouter = {
         .limit(1);
       if (!reference) notFound("Year");
 
-      const [subjectRows, periodRows, averageRows] = await Promise.all([
-        db.select().from(subjects).where(eq(subjects.yearId, reference.id)),
-        db.select().from(periods).where(eq(periods.yearId, reference.id)),
-        db
-          .select()
-          .from(customAverages)
-          .where(eq(customAverages.yearId, reference.id)),
-      ]);
+      const [subjectRows, periodRows, averageRows, gradeTypeRows] =
+        await Promise.all([
+          db.select().from(subjects).where(eq(subjects.yearId, reference.id)),
+          db.select().from(periods).where(eq(periods.yearId, reference.id)),
+          db
+            .select()
+            .from(customAverages)
+            .where(eq(customAverages.yearId, reference.id)),
+          db
+            .select()
+            .from(gradeTypes)
+            .where(eq(gradeTypes.yearId, reference.id)),
+        ]);
       const entryRows =
         averageRows.length === 0
           ? []
@@ -1134,6 +1133,26 @@ export const socialGroupsRouter = {
         ...(copiedEntryRows.length > 0
           ? [db.insert(customAverageEntries).values(copiedEntryRows)]
           : []),
+        // The kinds of assessment travel with the shape of the year: the copy is what
+        // somebody writes their own results into, and a template that fills nothing in
+        // is half the year. The results themselves never travel, so nothing points at
+        // these yet.
+        ...(gradeTypeRows.length > 0
+          ? [
+              db.insert(gradeTypes).values(
+                gradeTypeRows.map((row) => ({
+                  name: row.name,
+                  titlePrefix: row.titlePrefix,
+                  coefficient: row.coefficient,
+                  outOf: row.outOf,
+                  accent: row.accent,
+                  sortOrder: row.sortOrder,
+                  yearId,
+                  userId,
+                })),
+              ),
+            ]
+          : []),
         db
           .update(groupMemberships)
           .set({ yearId, shareAverage: false, updatedAt: new Date() })
@@ -1157,7 +1176,7 @@ export const socialGroupsRouter = {
       assertOwner(access);
       // Members are part of what moderation is looking at; a frozen group
       // keeps them. Each member remains free to leave on their own.
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       if (input.membershipId === access.membership.id) {
         badRequest("Use leave or delete for your own membership");
       }
@@ -1189,7 +1208,7 @@ export const socialGroupInvitationsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const access = await groupAccess(input.groupId, userId);
-      assertActive(access.group);
+      assertActiveGroup(access.group);
       assertOwner(access);
       if (!parseClassTemplate(access.group.classTemplate)) {
         badRequest("Configure the class before inviting members");

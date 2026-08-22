@@ -25,6 +25,10 @@
  * planner can report, and cards covering every display.
  */
 import { eq, like } from "drizzle-orm";
+import {
+  createLocalAccountIssuer,
+  createOAuthAccountIssuer,
+} from "@better-auth/core/db";
 import { db } from "../src/db";
 import {
   accounts,
@@ -32,9 +36,17 @@ import {
   customAverages,
   dashboardCardReferences,
   dashboardCards,
+  academicAssignments,
+  calendarEvents,
   goals,
   gradeComponents,
+  gradeTypes,
   grades,
+  materialDocuments,
+  materialFolders,
+  planningTasks,
+  studyDocuments,
+  timetableSeries,
   periods,
   friendships,
   groupMemberships,
@@ -65,6 +77,14 @@ import {
 interface DemoCard {
   row: typeof dashboardCards.$inferInsert;
   references: Array<typeof dashboardCardReferences.$inferInsert>;
+}
+
+function demoAccountIssuer(provider: DemoProfile["provider"]): string {
+  if (provider === "credential") return createLocalAccountIssuer(provider);
+  if (provider === "google") return "https://accounts.google.com";
+  // Synthetic Microsoft accounts never authenticate against Entra. A real
+  // account must use the verified tenant issuer returned by Microsoft.
+  return createOAuthAccountIssuer(provider);
 }
 
 /**
@@ -1026,11 +1046,400 @@ async function seedFull(email: string, name: string) {
     await db.insert(dashboardCardReferences).values(cardReferences);
   }
 
+  await seedStudyLife({
+    userId: user.id,
+    yearId: year.id,
+    startsAt,
+    endsAt,
+    now,
+    subjects: { maths, physics, french, english },
+    averageId: written?.id ?? null,
+    gradeIds: gradeRows.map((row) => row.id),
+  });
+
   console.info(`Complete account: ${email} / ${PASSWORD}`);
   console.info(
     `  2 years · ${tree.length} subjects · ${gradeRows.length + composites.length} grades · ${goalRows.length} goals`,
   );
   return { user, year };
+}
+
+/**
+ * Everything the year holds besides its marks.
+ *
+ * The demo account existed to show averages, and every screen built since — the kinds of
+ * assessment, the bonus points, the timetable, the homework, the personal board, the
+ * materials — opened on an empty state. A product demonstrates badly from an empty
+ * state: the layouts that matter are the ones with something in them.
+ *
+ * Dates are relative to the year being seeded, so the timetable is always running and
+ * the homework is always due soon, whenever the script happens to be run.
+ */
+async function seedStudyLife(input: {
+  userId: string;
+  yearId: string;
+  startsAt: Date;
+  endsAt: Date;
+  now: Date;
+  subjects: { maths: string; physics: string; french: string; english: string };
+  averageId: string | null;
+  gradeIds: string[];
+}): Promise<void> {
+  const { userId, yearId, now, subjects: subject } = input;
+  const day = (offset: number, hour = 9) => {
+    const at = new Date(now);
+    at.setDate(at.getDate() + offset);
+    at.setHours(hour, 0, 0, 0);
+    return at;
+  };
+  const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+  // ------------------------------------------------------ kinds of assessment
+  const written = newId("gtype");
+  const oral = newId("gtype");
+  const practical = newId("gtype");
+  await db.insert(gradeTypes).values([
+    {
+      id: written,
+      name: "DS",
+      titlePrefix: "DS ",
+      coefficient: 2,
+      outOf: 20,
+      accent: "primary",
+      sortOrder: 0,
+      yearId,
+      userId,
+    },
+    {
+      id: oral,
+      name: "Colle",
+      titlePrefix: "Colle ",
+      coefficient: 1,
+      outOf: 20,
+      accent: "amber",
+      sortOrder: 1,
+      yearId,
+      userId,
+    },
+    {
+      id: practical,
+      name: "TP note",
+      titlePrefix: "TP ",
+      coefficient: 1,
+      outOf: 20,
+      accent: "teal",
+      sortOrder: 2,
+      yearId,
+      userId,
+    },
+  ]);
+
+  // Spread over the marks that already exist, so a card grouped by kind has three
+  // populated buckets and one of untyped results rather than a single bar.
+  const kinds = [written, oral, practical, null];
+  for (const [index, gradeId] of input.gradeIds.entries()) {
+    const typeId = kinds[index % kinds.length];
+    if (!typeId) continue;
+    await db.update(grades).set({ typeId }).where(eq(grades.id, gradeId));
+  }
+
+  // ---------------------------------------------------------------- bonus points
+  // A subject carrying an option's points, and a small bonus on the year itself:
+  // both readings the feature exists for, at a size that is visible without
+  // looking like a bug.
+  await db
+    .update(subjects)
+    .set({ bonus: 0.5 })
+    .where(eq(subjects.id, subject.english));
+  await db
+    .update(years)
+    .set({ generalBonus: 0.25, mainAverageId: input.averageId })
+    .where(eq(years.id, yearId));
+
+  // ------------------------------------------------------------------ timetable
+  const seriesWindow = {
+    startsOn: isoDay(input.startsAt),
+    endsOn: isoDay(input.endsAt),
+  };
+  await db.insert(timetableSeries).values([
+    {
+      title: "Mathematiques",
+      ...seriesWindow,
+      startMinutes: 8 * 60,
+      durationMinutes: 120,
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      recurrenceWeekdays: [1, 4],
+      location: "Salle B12",
+      subjectId: subject.maths,
+      yearId,
+      userId,
+    },
+    {
+      title: "Physique-Chimie - TP",
+      ...seriesWindow,
+      startMinutes: 14 * 60,
+      durationMinutes: 120,
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      recurrenceWeekdays: [2],
+      location: "Labo 3",
+      subjectId: subject.physics,
+      yearId,
+      userId,
+    },
+    {
+      title: "Anglais",
+      ...seriesWindow,
+      startMinutes: 10 * 60,
+      durationMinutes: 60,
+      recurrenceFrequency: "weekly",
+      recurrenceInterval: 1,
+      recurrenceWeekdays: [3, 5],
+      location: "Salle A04",
+      subjectId: subject.english,
+      yearId,
+      userId,
+    },
+  ]);
+
+  // ------------------------------------------------------------------- homework
+  await db.insert(academicAssignments).values([
+    {
+      title: "Exercices 4 a 8 - suites recurrentes",
+      instructions: "Rediger la recurrence en entier pour le 8.",
+      assignedAt: day(-2, 8),
+      dueAt: day(1, 8),
+      subjectId: subject.maths,
+      yearId,
+      userId,
+    },
+    {
+      title: "Compte rendu de TP - dosage",
+      instructions: "Incertitudes attendues, une page maximum.",
+      assignedAt: day(-5, 14),
+      dueAt: day(3, 14),
+      localNote: "Reprendre le tableau de la seance precedente.",
+      subjectId: subject.physics,
+      yearId,
+      userId,
+    },
+    {
+      title: "Lire le chapitre 6",
+      assignedAt: day(-1, 10),
+      dueAt: day(5, 10),
+      subjectId: subject.english,
+      yearId,
+      userId,
+    },
+    {
+      title: "Commentaire compose - introduction",
+      assignedAt: day(-9, 9),
+      dueAt: day(-2, 9),
+      completedAt: day(-3, 20),
+      subjectId: subject.french,
+      yearId,
+      userId,
+    },
+  ]);
+
+  // -------------------------------------------------------------- personal board
+  // Three columns' worth: a board is only a board when every column holds a card.
+  await db.insert(planningTasks).values([
+    {
+      title: "Refaire les annales de 2024",
+      status: "todo",
+      dueAt: day(6, 18),
+      subjectId: subject.maths,
+      sortOrder: 0,
+      yearId,
+      userId,
+    },
+    {
+      title: "Fiches de vocabulaire - unite 6",
+      status: "todo",
+      dueAt: day(4, 18),
+      subjectId: subject.english,
+      sortOrder: 1,
+      yearId,
+      userId,
+    },
+    {
+      title: "Relire le cours sur les dosages",
+      status: "doing",
+      scheduledAt: day(0, 17),
+      subjectId: subject.physics,
+      sortOrder: 2,
+      yearId,
+      userId,
+    },
+    {
+      title: "Preparer les questions pour la colle",
+      status: "doing",
+      dueAt: day(2, 8),
+      subjectId: subject.maths,
+      sortOrder: 3,
+      yearId,
+      userId,
+    },
+    {
+      title: "Rendre le devoir de francais",
+      status: "done",
+      completedAt: day(-3, 20),
+      subjectId: subject.french,
+      sortOrder: 4,
+      yearId,
+      userId,
+    },
+  ]);
+
+  // -------------------------------------------------------------------- calendar
+  await db.insert(calendarEvents).values([
+    {
+      eventKind: "event",
+      title: "Conseil de classe",
+      startsAt: day(4, 17),
+      endsAt: day(4, 19),
+      location: "Salle des professeurs",
+      yearId,
+      userId,
+    },
+    {
+      eventKind: "holiday",
+      title: "Vacances",
+      startsAt: day(12, 0),
+      endsAt: day(26, 23),
+      allDay: true,
+      yearId,
+      userId,
+    },
+    {
+      eventKind: "block",
+      title: "Revisions - plage bloquee",
+      startsAt: day(1, 18),
+      endsAt: day(1, 20),
+      yearId,
+      userId,
+    },
+  ]);
+
+  // ------------------------------------------------------------------- materials
+  const chapter = newId("mfold");
+  const labs = newId("mfold");
+  const corrections = newId("mfold");
+  await db.insert(materialFolders).values([
+    {
+      id: chapter,
+      name: "Chapitre 6 - Suites",
+      parentId: null,
+      subjectId: subject.maths,
+      sortOrder: 0,
+      yearId,
+      userId,
+    },
+    {
+      id: corrections,
+      name: "Corriges",
+      parentId: chapter,
+      subjectId: subject.maths,
+      sortOrder: 0,
+      yearId,
+      userId,
+    },
+    {
+      id: labs,
+      name: "Travaux pratiques",
+      parentId: null,
+      subjectId: subject.physics,
+      sortOrder: 1,
+      yearId,
+      userId,
+    },
+  ]);
+
+  await db.insert(materialDocuments).values([
+    {
+      title: "Cours filme - suites adjacentes",
+      folderId: chapter,
+      sourceType: "link",
+      sourceUrl: "https://www.youtube.com/watch?v=demo-suites",
+      yearId,
+      userId,
+    },
+    {
+      title: "Notes prises en TD",
+      folderId: chapter,
+      sourceType: "text",
+      textContent:
+        "Convergence : montrer que la suite est croissante et majoree.",
+      yearId,
+      userId,
+    },
+    {
+      title: "Corrige du DS 3",
+      folderId: corrections,
+      sourceType: "text",
+      textContent: "Question 2 : l inegalite se demontre par recurrence.",
+      yearId,
+      userId,
+    },
+    {
+      title: "Protocole de dosage",
+      folderId: labs,
+      sourceType: "text",
+      textContent: "Burette, becher, indicateur colore. Relever le volume.",
+      yearId,
+      userId,
+    },
+    {
+      title: "Article - la loi de Beer-Lambert",
+      folderId: labs,
+      sourceType: "link",
+      sourceUrl: "https://fr.wikipedia.org/wiki/Loi_de_Beer-Lambert",
+      yearId,
+      userId,
+    },
+    {
+      title: "Annales non classees",
+      folderId: null,
+      sourceType: "text",
+      textContent: "A ranger : sujets 2022 a 2024.",
+      yearId,
+      userId,
+    },
+  ]);
+
+  await db.insert(studyDocuments).values([
+    {
+      kind: "fiche",
+      title: "Fiche - raisonnement par recurrence",
+      bodyMarkdown:
+        "# Recurrence\n\n## Initialisation\nVerifier le premier rang.\n\n## Heredite\nSupposer vrai au rang n, montrer au rang n + 1.\n",
+      folderId: chapter,
+      subjectId: subject.maths,
+      yearId,
+      userId,
+    },
+    {
+      kind: "fiche",
+      title: "Fiche - dosages acido-basiques",
+      bodyMarkdown:
+        "# Dosages\n\nEquivalence : les reactifs sont dans les proportions stoechiometriques.\n",
+      folderId: labs,
+      subjectId: subject.physics,
+      yearId,
+      userId,
+    },
+    {
+      kind: "note",
+      title: "A revoir avant les vacances",
+      bodyMarkdown: "- Suites\n- Dosages\n- Vocabulaire unite 6\n",
+      folderId: null,
+      subjectId: null,
+      yearId,
+      userId,
+    },
+  ]);
 }
 
 async function seedSocialDemo(primary: Awaited<ReturnType<typeof seedFull>>) {
@@ -1282,6 +1691,7 @@ async function seedCohort(size: number, seed: number | undefined) {
           ? profile.id
           : `${providerId}:${profile.id}`,
       providerId,
+      issuer: demoAccountIssuer(providerId),
       userId: profile.id,
       password: providerId === "credential" ? credentialPassword : null,
       createdAt: profile.activity.createdAt,

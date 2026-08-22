@@ -97,9 +97,7 @@ export function GoalVisual() {
   return (
     <Frame className="flex flex-col justify-between gap-4">
       <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-muted-foreground">
-          {t("Target")}
-        </span>
+        <span className="text-[11px] text-muted-foreground">{t("Target")}</span>
         <span className="numeric text-sm font-semibold">14.00</span>
       </div>
 
@@ -150,7 +148,9 @@ export function ImpactVisual() {
               <motion.span
                 className={cn(
                   "absolute inset-y-0.5 rounded-sm",
-                  positive ? "left-1/2 bg-positive/70" : "right-1/2 bg-negative/70"
+                  positive
+                    ? "left-1/2 bg-positive/70"
+                    : "right-1/2 bg-negative/70"
                 )}
                 initial={{ width: 0 }}
                 whileInView={{ width }}
@@ -217,7 +217,11 @@ export function TimeTravelVisual() {
   return (
     <Frame className="flex flex-col justify-between gap-3">
       <div className="relative h-20">
-        <svg viewBox="0 0 200 70" className="size-full" preserveAspectRatio="none">
+        <svg
+          viewBox="0 0 200 70"
+          className="size-full"
+          preserveAspectRatio="none"
+        >
           <path
             d="M0 52 C 26 48, 42 58, 62 44 S 104 22, 128 30 S 168 16, 200 12"
             fill="none"
@@ -316,7 +320,11 @@ export function ProjectionVisual() {
           <span className="numeric">+0.38</span>
         </span>
       </div>
-      <svg viewBox="0 0 200 60" className="h-16 w-full" preserveAspectRatio="none">
+      <svg
+        viewBox="0 0 200 60"
+        className="h-16 w-full"
+        preserveAspectRatio="none"
+      >
         <defs>
           <linearGradient id="landing-projection" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.28" />

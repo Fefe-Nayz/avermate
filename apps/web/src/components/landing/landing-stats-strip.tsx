@@ -39,14 +39,14 @@ export function LandingStatsStrip({
       className="relative overflow-hidden border-y border-border/60 bg-muted/25"
     >
       <BackgroundDots />
-      <dl className="relative mx-auto grid max-w-6xl grid-cols-3 divide-border/60 py-8 pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:divide-x lg:py-10">
+      <dl className="relative mx-auto grid max-w-6xl grid-cols-3 divide-border/60 clamp-[py,8,10] pr-[max(1rem,var(--spacing-safe-right))] pl-[max(1rem,var(--spacing-safe-left))] sm:pr-[max(1.5rem,var(--spacing-safe-right))] sm:pl-[max(1.5rem,var(--spacing-safe-left))] lg:divide-x">
         {stats.map((stat, index) => (
           <div
             key={stat.label}
             className="flex flex-col items-center gap-1 text-center"
           >
             <dt className="sr-only">{stat.label}</dt>
-            <dd className="numeric font-mono text-2xl font-semibold tracking-tight sm:text-4xl">
+            <dd className="numeric font-mono clamp-[text,2xl,4xl] font-semibold tracking-tight">
               <NumberFlow
                 value={inView ? stat.value : 0}
                 format={{ notation: "compact", maximumFractionDigits: 1 }}

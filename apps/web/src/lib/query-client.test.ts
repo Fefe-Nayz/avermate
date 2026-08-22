@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { dehydrate, hydrate } from "@tanstack/react-query"
 import {
-  registerBrowserQueryClient,
+  getBrowserQueryCacheGeneration,
+  getBrowserQueryClient,
   resetBrowserQueryCache,
 } from "./browser-query-cache"
 import { createQueryClient, isUnauthorized } from "./query-client"
@@ -63,14 +64,49 @@ describe("query client", () => {
     expect(isUnauthorized(new Error("UNAUTHORIZED"))).toBe(false)
   })
 
-  test("destroys registered personalized data during an auth reset", () => {
-    const client = createQueryClient()
-    const unregister = registerBrowserQueryClient(client)
+  test("hands the same cache to every render of one document", () => {
+    // The point of the singleton: whatever rebuilds the provider tree — a
+    // suspended render, Strict Mode's second mount, a keyed remount — gets
+    // back the cache the server already filled, not an empty one.
+    const first = getBrowserQueryClient("user-a")
+    first.setQueryData(["preferences"], { theme: "hydrated" })
+
+    expect(getBrowserQueryClient("user-a")).toBe(first)
+    expect(
+      getBrowserQueryClient("user-a").getQueryData<{ theme: string }>([
+        "preferences",
+      ])
+    ).toEqual({ theme: "hydrated" })
+
+    resetBrowserQueryCache()
+  })
+
+  test("never lets one account read the cache of another", () => {
+    const mine = getBrowserQueryClient("user-a")
+    mine.setQueryData(["preferences"], { theme: "private-user-theme" })
+
+    const theirs = getBrowserQueryClient("user-b")
+
+    expect(theirs).not.toBe(mine)
+    expect(theirs.getQueryData(["preferences"])).toBeUndefined()
+    expect(mine.getQueryData(["preferences"])).toBeUndefined()
+
+    resetBrowserQueryCache()
+  })
+
+  test("destroys personalized data during an auth reset", () => {
+    const client = getBrowserQueryClient("user-a")
     client.setQueryData(["preferences"], { theme: "private-user-theme" })
+    const generation = getBrowserQueryCacheGeneration()
 
     resetBrowserQueryCache()
 
     expect(client.getQueryData(["preferences"])).toBeUndefined()
-    unregister()
+    // A fresh instance, so a provider that re-renders after the reset cannot
+    // keep writing into the cache the signed-out account was reading.
+    expect(getBrowserQueryClient("user-a")).not.toBe(client)
+    expect(getBrowserQueryCacheGeneration()).toBeGreaterThan(generation)
+
+    resetBrowserQueryCache()
   })
 })

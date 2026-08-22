@@ -10,7 +10,7 @@ import {
   substituteSlots,
   templateSlots,
   type TemplateSlotKind,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetEvaluationContext,
   type WidgetEvaluationResult,
   type WidgetSurface,
@@ -57,7 +57,7 @@ interface TemplateRow {
   category: string;
   status: "draft" | "published" | "archived";
   definitionVersion: number;
-  definitionJson: WidgetDefinitionV1;
+  definitionJson: WidgetDefinition;
 }
 
 type SlotOptions = Record<
@@ -77,7 +77,7 @@ const STATUS_LABELS: Record<TemplateRow["status"], () => string> = {
  * `useCards` builds it for stored cards.
  */
 function useTemplatePreview(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   surface: WidgetSurface,
 ): WidgetEvaluationResult | undefined {
   const yearState = useYear();
@@ -186,6 +186,11 @@ function AdminTemplateCard({
         value: period.id,
         label: period.name,
       })),
+      // Social references belong to the installing user, never to the admin who
+      // authored the template. Keep them unresolved in this private preview.
+      cohort: [],
+      "cohort-member": [],
+      friend: [],
     }),
     [customAverages, goals, graph, periods],
   );

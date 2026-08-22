@@ -12,6 +12,7 @@ import {
   feedback,
   gradeComponents,
   goals,
+  gradeTypes,
   grades,
   periods,
   preferences,
@@ -323,6 +324,7 @@ export const preferencesRouter = {
       periodRows,
       subjectRows,
       gradeRows,
+      gradeTypeRows,
       componentRows,
       averageRows,
       averageEntryRows,
@@ -357,6 +359,10 @@ export const preferencesRouter = {
       db.select().from(periods).where(eq(periods.userId, userId)),
       db.select().from(subjects).where(eq(subjects.userId, userId)),
       db.select().from(grades).where(eq(grades.userId, userId)),
+      // Every grade carries a `typeId`; without the types themselves the export names a
+      // row nothing in the file defines, and the account is no longer reconstructible
+      // from it — which is the whole promise of an export.
+      db.select().from(gradeTypes).where(eq(gradeTypes.userId, userId)),
       db
         .select()
         .from(gradeComponents)
@@ -398,7 +404,8 @@ export const preferencesRouter = {
 
     return {
       exportedAt: new Date().toISOString(),
-      version: 5,
+      // Bumped with the assessment types, which a reader of an older file will not find.
+      version: 6,
       account: account[0] ?? null,
       authentication: {
         providers: [...new Set(providerRows.map((row) => row.providerId))],
@@ -414,6 +421,7 @@ export const preferencesRouter = {
       periods: periodRows,
       subjects: subjectRows,
       grades: gradeRows,
+      gradeTypes: gradeTypeRows,
       gradeComponents: componentRows,
       customAverages: averageRows,
       customAverageEntries: averageEntryRows.map((row) => row.entry),

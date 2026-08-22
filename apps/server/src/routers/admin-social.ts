@@ -128,7 +128,9 @@ export const adminSocialRouter = {
     .input(
       z
         .object({
-          status: z.union([reportStatusSchema, z.literal("all")]).default("all"),
+          status: z
+            .union([reportStatusSchema, z.literal("all")])
+            .default("all"),
         })
         .default({ status: "all" }),
     )
@@ -208,9 +210,7 @@ export const adminSocialRouter = {
                     : null,
               }
             : {}),
-          ...(input.priority !== undefined
-            ? { priority: input.priority }
-            : {}),
+          ...(input.priority !== undefined ? { priority: input.priority } : {}),
           ...(input.assignToMe !== undefined
             ? {
                 assignedToUserId: input.assignToMe

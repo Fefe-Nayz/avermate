@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
-import { TextField } from "@/components/forms/controls"
+import { NumberField, TextField } from "@/components/forms/controls"
 import { AverageValue } from "@/components/data/value"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
@@ -29,6 +29,8 @@ interface Entry {
 export interface AverageFormValues {
   id?: string
   name: string
+  /** Extra points on the year's scale, added to this average. */
+  bonus: string
   entries: Entry[]
 }
 
@@ -54,6 +56,9 @@ export function AverageForm({
   const { graph, yearId } = useYear()
 
   const [name, setName] = useState(initial?.name ?? "")
+  const [bonus, setBonus] = useState(initial?.bonus ?? "")
+  const bonusPoints = Number.parseFloat(bonus.replace(",", ".")) || 0
+  const [showBonus, setShowBonus] = useState(Boolean(bonusPoints))
   const [addDashboardCard, setAddDashboardCard] = useState(false)
   const [entries, setEntries] = useState<Entry[]>(initial?.entries ?? [])
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -166,6 +171,7 @@ export function AverageForm({
 
     const payload = {
       name: name.trim(),
+      bonus: bonusPoints,
       entries: entries.map((entry) => ({
         subjectId: entry.subjectId,
         coefficient:
@@ -333,6 +339,30 @@ export function AverageForm({
             placeholder={t("Written exams, science block, mock results…")}
             error={errors.name}
           />
+
+          {showBonus ? (
+            <NumberField
+              label={t("Bonus points")}
+              description={t(
+                "Added to this average, in points of the year's scale."
+              )}
+              value={bonus}
+              onValueChange={setBonus}
+              step={0.5}
+              suffix={t("pts")}
+            />
+          ) : (
+            <button
+              type="button"
+              className="-mt-1 self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              onClick={() => {
+                haptic("selection")
+                setShowBonus(true)
+              }}
+            >
+              {t("Add bonus points")}
+            </button>
+          )}
 
           {mode === "create" ? (
             <Field orientation="horizontal">

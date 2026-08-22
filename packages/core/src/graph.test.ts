@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { SubjectGraph, resolveCustomAverage, toScale } from "./graph";
 import { gradeImpact, subjectImpact } from "./analytics";
-import { leverageOf, planGoal, requiredResult, requiredSubjectRatio } from "./goals";
+import {
+  leverageOf,
+  planGoal,
+  requiredResult,
+  requiredSubjectRatio,
+} from "./goals";
 import type { CustomAverage, Grade, Subject } from "./types";
 
 let counter = 0;
@@ -345,8 +350,18 @@ describe("goal planning", () => {
         ...sport,
         grades: [
           ...sport.grades,
-          grade("sport", (required as { requiredRatio: number }).requiredRatio * 20, 20, 2),
-          grade("sport", (required as { requiredRatio: number }).requiredRatio * 20, 20, 2),
+          grade(
+            "sport",
+            (required as { requiredRatio: number }).requiredRatio * 20,
+            20,
+            2,
+          ),
+          grade(
+            "sport",
+            (required as { requiredRatio: number }).requiredRatio * 20,
+            20,
+            2,
+          ),
         ],
       },
     ]);

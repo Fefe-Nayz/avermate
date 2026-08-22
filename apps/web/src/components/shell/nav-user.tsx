@@ -72,7 +72,7 @@ export function NavUser({
           // button is exactly the avatar — same size, same corner radius —
           // so the focus and open rings trace the picture, not a box
           // shifted around it.
-          "group size-8 shrink-0 justify-center rounded-lg p-0 outline-none transition-all",
+          "group size-8 shrink-0 justify-center rounded-lg p-0 transition-all outline-none",
           "hover:bg-muted hover:text-foreground",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
           "data-[popup-open]:bg-transparent data-[popup-open]:ring-[3px] data-[popup-open]:ring-ring/50",
@@ -111,7 +111,13 @@ export function NavUser({
   const content = (
     <DropdownMenuContent
       align="end"
-      side={iconOnly || isMobile ? "bottom" : state === "collapsed" ? "right" : "top"}
+      side={
+        iconOnly || isMobile
+          ? "bottom"
+          : state === "collapsed"
+            ? "right"
+            : "top"
+      }
       sideOffset={6}
       className="w-(--anchor-width) min-w-56"
     >

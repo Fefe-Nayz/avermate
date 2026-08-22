@@ -9,6 +9,7 @@ import { db } from "../db";
 import * as schema from "../db/schema";
 import { env, isProduction } from "./env";
 import { isAllowedOrigin } from "./origins";
+import { deleteAllUserFiles } from "./storage";
 import {
   sendAccountDeletionConfirmation,
   sendEmailChangeConfirmation,
@@ -29,6 +30,12 @@ export const MCP_SCOPES = [
   "avermate:social.read",
   "avermate:social.manage",
   "avermate:social.moderate",
+  "avermate:planner.read",
+  "avermate:planner.write",
+  "avermate:materials.read",
+  "avermate:materials.write",
+  "avermate:documents.read",
+  "avermate:documents.write",
 ] as const;
 
 export const mcpResourceUrl =
@@ -63,6 +70,57 @@ function localeOf(source: unknown): Locale {
   const header = headers?.get?.("accept-language") ?? "";
   return header.toLowerCase().startsWith("en") ? "en" : "fr";
 }
+
+const oauthProviderPlugin = oauthProvider({
+  loginPage: `${env.CLIENT_URL}/auth/sign-in`,
+  consentPage: `${env.CLIENT_URL}/auth/consent`,
+  allowPublicClientPrelogin: true,
+  scopes: ["openid", "profile", "email", "offline_access", ...MCP_SCOPES],
+  resources: [
+    {
+      identifier: mcpResourceUrl,
+      name: "Avermate MCP",
+      allowedScopes: [
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+        ...MCP_SCOPES,
+      ],
+    },
+  ],
+  // Avermate exposes one canonical protected resource. Every client
+  // registered by the UI is linked to it at creation, so 1.7 can enforce
+  // resource-bound tokens without broadening a client's audience later.
+  enforcePerClientResources: true,
+  clientRegistrationDefaultResources: [mcpResourceUrl],
+  clientRegistrationAllowedResources: [mcpResourceUrl],
+  grantTypes: ["authorization_code", "refresh_token"],
+  clientRegistrationDefaultScopes: [
+    "openid",
+    "profile",
+    "offline_access",
+    "avermate:read",
+  ],
+  clientRegistrationAllowedScopes: [
+    "openid",
+    "profile",
+    "email",
+    "offline_access",
+    ...MCP_SCOPES,
+  ],
+  // Dynamic registration stays an explicit opt-in. Better Auth 1.7 can add
+  // CIMD separately without opening the unauthenticated DCR endpoint.
+  allowDynamicClientRegistration: env.MCP_ENABLE_DCR,
+  allowUnauthenticatedClientRegistration: env.MCP_ENABLE_DCR,
+  scopeExpirations: {
+    "avermate:delete": "15 minutes",
+    "avermate:admin": "10 minutes",
+    "avermate:social.manage": "30 minutes",
+    "avermate:social.moderate": "10 minutes",
+    "avermate:materials.write": "30 minutes",
+  },
+});
 
 export const auth = betterAuth({
   appName: "Avermate",
@@ -107,6 +165,9 @@ export const auth = betterAuth({
   user: {
     deleteUser: {
       enabled: true,
+      beforeDelete: async (user) => {
+        await deleteAllUserFiles(user.id);
+      },
       sendDeleteAccountVerification: async ({ user, url }, request) => {
         await sendAccountDeletionConfirmation({
           to: user.email,
@@ -181,40 +242,7 @@ export const auth = betterAuth({
       jwt: { issuer: oauthIssuer, audience: mcpResourceUrl },
       jwks: { rotationInterval: 30 * 24 * 60 * 60 },
     }),
-    oauthProvider({
-      loginPage: `${env.CLIENT_URL}/auth/sign-in`,
-      consentPage: `${env.CLIENT_URL}/auth/consent`,
-      // Both discovery documents are mounted explicitly in src/index.ts.
-      silenceWarnings: { oauthAuthServerConfig: true, openidConfig: true },
-      allowPublicClientPrelogin: true,
-      scopes: ["openid", "profile", "email", "offline_access", ...MCP_SCOPES],
-      validAudiences: [mcpResourceUrl],
-      grantTypes: ["authorization_code", "refresh_token"],
-      clientRegistrationDefaultScopes: [
-        "openid",
-        "profile",
-        "offline_access",
-        "avermate:read",
-      ],
-      clientRegistrationAllowedScopes: [
-        "openid",
-        "profile",
-        "email",
-        "offline_access",
-        ...MCP_SCOPES,
-      ],
-      // DCR was deprecated by MCP 2026-07-28 in favour of Client ID
-      // Metadata Documents. Better Auth 1.6.26 has no stable CIMD endpoint,
-      // so the transition is explicit and closed by default.
-      allowDynamicClientRegistration: env.MCP_ENABLE_DCR,
-      allowUnauthenticatedClientRegistration: env.MCP_ENABLE_DCR,
-      scopeExpirations: {
-        "avermate:delete": "15 minutes",
-        "avermate:admin": "10 minutes",
-        "avermate:social.manage": "30 minutes",
-        "avermate:social.moderate": "10 minutes",
-      },
-    }),
+    oauthProviderPlugin,
   ],
 
   advanced: {

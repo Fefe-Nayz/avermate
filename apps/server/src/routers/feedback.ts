@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { UTApi } from "uploadthing/server";
 import { db } from "../db";
 import { feedback, feedbackComments } from "../db/schema";
-import { env } from "../lib/env";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { reserveRateLimit } from "../lib/rate-limit";
+import { deleteFile, resolveIncomingFile } from "../lib/storage";
 
 const CONTEXT_KEYS = new Set([
   "appVersion",
@@ -68,14 +67,19 @@ export function sanitizeFeedbackContext(input: Record<string, string>) {
   );
 }
 
-const feedbackInput = z.object({
-  kind: z.enum(["bug", "idea", "question", "other"]).default("other"),
-  subject: z.string().trim().min(3).max(120),
-  message: z.string().trim().min(10).max(4000),
-  /** Route, viewport and user agent — whatever makes a bug reproducible. */
-  context: contextSchema.default({}),
-  image: z.instanceof(File).optional(),
-});
+const feedbackInput = z
+  .object({
+    kind: z.enum(["bug", "idea", "question", "other"]).default("other"),
+    subject: z.string().trim().min(3).max(120),
+    message: z.string().trim().min(10).max(4000),
+    /** Route, viewport and user agent — whatever makes a bug reproducible. */
+    context: contextSchema.default({}),
+    image: z.instanceof(File).optional(),
+    attachmentFileId: z.string().min(1).optional(),
+  })
+  .refine((input) => !(input.image && input.attachmentFileId), {
+    message: "Provide only one feedback attachment",
+  });
 
 const automaticFeedbackInput = z.object({
   source: z.enum(["web", "mobile", "server"]),
@@ -110,12 +114,6 @@ function automaticFingerprint(
     .digest("hex");
 }
 
-const uploads = env.UPLOADTHING_TOKEN
-  ? new UTApi({ token: env.UPLOADTHING_TOKEN })
-  : null;
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
-
 export const feedbackRouter = {
   submit: protectedProcedure
     .input(feedbackInput)
@@ -127,34 +125,23 @@ export const feedbackRouter = {
         limit: 20,
         windowMs: 86_400_000,
       });
-      let attachmentUrl: string | null = null;
-      let attachmentKey: string | null = null;
+      let attachment: Awaited<ReturnType<typeof resolveIncomingFile>> | null =
+        null;
 
-      if (input.image) {
-        if (input.image.size > MAX_IMAGE_BYTES) {
-          badRequest("The feedback image must be 2 MiB or smaller");
-        }
-        if (!ALLOWED_IMAGE_TYPES.includes(input.image.type)) {
-          badRequest("Only PNG, JPEG and WebP feedback images are supported");
-        }
-        if (!uploads || env.DISABLE_UPLOADS) {
-          badRequest(
-            "Feedback image uploads are not configured on this server",
-          );
-        }
-
-        const upload = await uploads.uploadFiles(
-          new File(
-            [input.image],
-            `feedback-${user.id}-${Date.now()}.${input.image.type === "image/png" ? "png" : input.image.type === "image/webp" ? "webp" : "jpg"}`,
-            { type: input.image.type },
-          ),
-        );
-        if (upload.error || !upload.data) {
-          badRequest("The feedback image upload failed. Try again.");
-        }
-        attachmentUrl = upload.data.ufsUrl;
-        attachmentKey = upload.data.key;
+      if (input.image || input.attachmentFileId) {
+        const extension =
+          input.image?.type === "image/png"
+            ? "png"
+            : input.image?.type === "image/webp"
+              ? "webp"
+              : "jpg";
+        attachment = await resolveIncomingFile({
+          userId: user.id,
+          purpose: "feedback-attachment",
+          file: input.image,
+          fileId: input.attachmentFileId,
+          nameHint: `feedback-${user.id}-${Date.now()}.${extension}`,
+        });
       }
 
       let created: typeof feedback.$inferSelect | undefined;
@@ -165,22 +152,20 @@ export const feedbackRouter = {
             kind: input.kind,
             subject: input.subject,
             message: input.message,
-            attachmentUrl,
+            attachmentUrl: attachment?.url ?? null,
             context: JSON.stringify(sanitizeFeedbackContext(input.context)),
             source: "form",
             userId: user.id,
           })
           .returning();
       } catch (error) {
-        if (attachmentKey && uploads) {
-          await uploads.deleteFiles(attachmentKey).catch(() => undefined);
-        }
+        if (attachment)
+          await deleteFile(user.id, attachment.id).catch(() => undefined);
         throw error;
       }
       if (!created) {
-        if (attachmentKey && uploads) {
-          await uploads.deleteFiles(attachmentKey).catch(() => undefined);
-        }
+        if (attachment)
+          await deleteFile(user.id, attachment.id).catch(() => undefined);
         badRequest("The feedback could not be saved");
       }
 

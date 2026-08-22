@@ -14,6 +14,7 @@ import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { suggestSchoolYear } from "@avermate/core"
 import {
+  presetConfigurationIsValid,
   PresetVisualEditor,
   type PresetEditorConfiguration,
   type PresetEditorSubject,
@@ -66,28 +67,8 @@ function emptyConfiguration(subjectName: string): PresetEditorConfiguration {
       },
     ],
     averages: [],
+    gradeTypes: [],
   }
-}
-
-function everySubject(
-  subjects: readonly PresetEditorSubject[],
-  predicate: (subject: PresetEditorSubject) => boolean
-): boolean {
-  return subjects.every(
-    (subject) => predicate(subject) && everySubject(subject.children, predicate)
-  )
-}
-
-function modelIsValid(configuration: PresetEditorConfiguration): boolean {
-  return (
-    configuration.subjects.length > 0 &&
-    everySubject(configuration.subjects, (subject) =>
-      Boolean(subject.name.trim())
-    ) &&
-    configuration.averages.every(
-      (average) => Boolean(average.name.trim()) && average.entries.length > 0
-    )
-  )
 }
 
 function subjectCount(subjects: readonly PresetEditorSubject[]): number {
@@ -241,14 +222,16 @@ export function ClassCreationForm() {
 
   const submit = () => {
     const next: Record<string, string> = {}
-    if (name.trim().length < 2) {
+    if (name.trim().length < 2 || name.trim().length > 100) {
       next.name = t("Give the class a name with at least two characters.")
     }
     if (source === "year" && !selectedYearId) {
       next.year = t("Choose one of your years.")
     }
     if (source === "builder") {
-      if (!yearName.trim()) next.yearName = t("Give the class year a name.")
+      if (!yearName.trim() || yearName.trim().length > 64) {
+        next.yearName = t("Give the class year a name.")
+      }
       if (!datesValid)
         next.dates = t("The end date must be after the start date.")
       if (!scaleValid) next.scale = t("Enter a valid grading scale.")
@@ -258,9 +241,9 @@ export function ClassCreationForm() {
       if (periodMode === "custom" && !periodsValid) {
         next.periods = t("Fix the period names and dates before continuing.")
       }
-      if (!modelIsValid(configuration)) {
+      if (!presetConfigurationIsValid(configuration)) {
         next.model = t(
-          "Add at least one named subject, and complete every custom average."
+          "Fix the subjects, averages and assessment types before continuing."
         )
       }
     }
@@ -310,7 +293,7 @@ export function ClassCreationForm() {
   }
 
   const identityValid = () => {
-    const valid = name.trim().length >= 2
+    const valid = name.trim().length >= 2 && name.trim().length <= 100
     setErrors((current) => ({
       ...current,
       name: valid
@@ -321,7 +304,10 @@ export function ClassCreationForm() {
   }
   const yearSettingsValid = () => {
     const next = {
-      yearName: yearName.trim() ? "" : t("Give the class year a name."),
+      yearName:
+        yearName.trim() && yearName.trim().length <= 64
+          ? ""
+          : t("Give the class year a name."),
       dates: datesValid ? "" : t("The end date must be after the start date."),
       scale: scaleValid ? "" : t("Enter a valid grading scale."),
       passingGrade: passingGradeValid
@@ -332,13 +318,13 @@ export function ClassCreationForm() {
     return !next.yearName && !next.dates && !next.scale && !next.passingGrade
   }
   const modelValid = () => {
-    const valid = modelIsValid(configuration)
+    const valid = presetConfigurationIsValid(configuration)
     setErrors((current) => ({
       ...current,
       model: valid
         ? ""
         : t(
-            "Add at least one named subject, and complete every custom average."
+            "Fix the subjects, averages and assessment types before continuing."
           ),
     }))
     return valid
@@ -629,11 +615,12 @@ export function ClassCreationForm() {
       id: "model",
       title: t("Adapt the class model"),
       description: t(
-        "Review every subject, coefficient and custom average before creating the class."
+        "Review every subject, coefficient, custom average and assessment type before creating the class."
       ),
-      summary: t("{subjects} subjects · {averages} averages", {
+      summary: t("{subjects} subjects · {averages} averages · {types} types", {
         subjects: String(subjectCount(configuration.subjects)),
         averages: String(configuration.averages.length),
+        types: String((configuration.gradeTypes ?? []).length),
       }),
       when: source === "builder",
       validate: modelValid,
@@ -669,7 +656,8 @@ export function ClassCreationForm() {
       disabled={
         source === "year"
           ? !selectedYearId
-          : loadingPresetId !== null || !modelIsValid(configuration)
+          : loadingPresetId !== null ||
+            !presetConfigurationIsValid(configuration)
       }
       footerNote={t(
         "Creating a class never shares grades. Class comparisons remain opt-in for every member."

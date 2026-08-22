@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
+import { writeStickyValue } from "@/hooks/use-sticky-state"
 import {
   ACTIVE_YEAR_STORAGE_KEY,
   writeActiveYearCookie,
@@ -198,7 +199,7 @@ function YearSetupForm({
     ])
     clearYearSetupDraft(sessionStorage, mode)
     writeActiveYearCookie(recovered.id)
-    localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(recovered.id))
+    writeStickyValue(ACTIVE_YEAR_STORAGE_KEY, recovered.id)
     router.replace(
       recovered.presetId
         ? "/dashboard"
@@ -246,7 +247,7 @@ function YearSetupForm({
       })
 
       writeActiveYearCookie(created.id)
-      localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(created.id))
+      writeStickyValue(ACTIVE_YEAR_STORAGE_KEY, created.id)
       queryClient.setQueryData(yearsOptions.queryKey, [
         created,
         ...(existing.data ?? []).filter((year) => year.id !== created.id),

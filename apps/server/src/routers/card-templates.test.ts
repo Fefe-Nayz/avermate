@@ -15,7 +15,6 @@ process.env.BETTER_AUTH_SECRET = "test-secret-that-is-at-least-32-chars";
 process.env.CLIENT_URL = "http://localhost:3001";
 process.env.NODE_ENV = "test";
 process.env.DISABLE_EMAIL = "true";
-process.env.DISABLE_FEEDBACK = "true";
 process.env.DISABLE_UPLOADS = "true";
 
 const migrationDirectory = join(import.meta.dir, "../../drizzle");

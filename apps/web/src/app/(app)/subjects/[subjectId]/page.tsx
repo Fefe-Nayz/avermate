@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
+  FULL_YEAR_PERIOD_ID,
   averageEventDates,
   averageOverTime,
   consistency,
@@ -119,7 +120,9 @@ export default function SubjectPage({
       averageOverTime(
         graph.subjects,
         averageEventDates(graph.subjects, range.from, range.to, target),
-        target
+        target,
+        null,
+        graph.options
       )
     return [
       ...children.map((child, index) => ({
@@ -323,6 +326,29 @@ export default function SubjectPage({
                 <DeltaValue delta={ratio - general} className="text-sm" />
               ) : null}
             </CardContent>
+            {/* Where the figure above is not only the marks. Beneath rather than beside
+                the number, so the average stays the thing being read and the bonus is
+                the footnote it is. */}
+            {subject.bonus ? (
+              <CardContent className="px-4 pt-0">
+                <p className="text-xs text-muted-foreground">
+                  {period.id === FULL_YEAR_PERIOD_ID
+                    ? t("Includes {points} legacy year-wide adjustment", {
+                        points: format.number(subject.bonus, {
+                          signDisplay: "always",
+                          maximumFractionDigits: 2,
+                        }),
+                      })
+                    : t("Includes {points} adjustment for {period}", {
+                        points: format.number(subject.bonus, {
+                          signDisplay: "always",
+                          maximumFractionDigits: 2,
+                        }),
+                        period: period.name,
+                      })}
+                </p>
+              </CardContent>
+            ) : null}
           </Card>
 
           {/* Categories get these too. They were gated out, but every figure

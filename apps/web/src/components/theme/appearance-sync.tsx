@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
 import { THEME_HOTKEY_EVENT } from "@/components/theme-provider"
 import {
@@ -18,8 +19,9 @@ import { LOCALE_COOKIE, isAppLocale } from "@/i18n/config"
  * something actually differs so a normal navigation costs nothing.
  */
 export function AppearanceSync() {
-  const { preferences, isLoading, update } = usePreferences()
+  const { preferences, isLoading, isSaving, update } = usePreferences()
   const { setTheme } = useTheme()
+  const router = useRouter()
 
   useEffect(() => {
     if (isLoading) return
@@ -52,7 +54,13 @@ export function AppearanceSync() {
   }, [update])
 
   useEffect(() => {
-    if (isLoading) return
+    // Waiting for the write to settle, not for the optimistic value: the
+    // refresh below re-runs the layout's own read of the account, and starting
+    // it while the change is still in flight raced it — the server answered
+    // with the language from before the click and streamed it back over the
+    // optimistic one, so the setting visibly reverted to "Match my device"
+    // before landing. Settled first, then refresh, and both agree.
+    if (isLoading || isSaving) return
     if (preferences.language === "system") return
     if (!isAppLocale(preferences.language)) return
 
@@ -64,9 +72,16 @@ export function AppearanceSync() {
     if (current === preferences.language) return
     document.cookie = `${LOCALE_COOKIE}=${preferences.language}; path=/; max-age=31536000; samesite=lax`
     // The message catalogue is chosen on the server, so the new language only
-    // takes effect on the next render pass from it.
-    window.location.reload()
-  }, [isLoading, preferences.language])
+    // takes effect on the next render pass from it — and a *server* render is
+    // all that is needed. `location.reload()` also asked for a new document,
+    // which threw away the query cache, every piece of component state, the
+    // scroll position and the loaded images, so changing one word in Settings
+    // made the whole app flicker back through its empty states. A refresh
+    // re-renders the server tree in place: the cookie above picks the
+    // catalogue, `NextIntlClientProvider` receives it, and everything the
+    // browser had built stays where it was.
+    router.refresh()
+  }, [isLoading, isSaving, preferences.language, router])
 
   return null
 }

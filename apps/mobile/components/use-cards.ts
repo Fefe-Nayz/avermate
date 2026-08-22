@@ -4,7 +4,7 @@ import {
   estimateRemaining,
   evaluateWidgetDefinition,
   type CardMetric,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetEvaluationContext,
   type WidgetEvaluationResult,
   type WidgetSurface,
@@ -23,7 +23,7 @@ export interface WidgetCardModel {
   id: string;
   surface: WidgetSurface;
   /** `null` for a row this build cannot read — see `resolveWidgetRow`. */
-  definition: WidgetDefinitionV1 | null;
+  definition: WidgetDefinition | null;
   issues: WidgetValidationIssue[];
   span: 1 | 2 | 3 | 4;
   title: string | null;
@@ -128,6 +128,20 @@ export function metricLabel(metric: CardMetric): string {
   switch (metric) {
     case "average":
       return t("Average");
+    case "leverage":
+      return t("Weight in your average");
+    case "requiredResult":
+      return t("What you need next");
+    case "coverage":
+      return t("Assessment coverage");
+    case "safetyMargin":
+      return t("Room left on a goal");
+    case "weightBreakdown":
+      return t("Where your average comes from");
+    case "contributions":
+      return t("Why your average moved");
+    case "projectionBand":
+      return t("Where your average could end up");
     case "averageTrend":
       return t("Trend");
     case "projection":
@@ -168,6 +182,32 @@ export function metricLabel(metric: CardMetric): string {
       return t("Spread of results");
     case "goalProgress":
       return t("Goal progress");
+    case "markImpact":
+      return t("Grade impact");
+    case "nextBestAction":
+      return t("Best next action");
+    case "cohortRank":
+      return t("Class rank");
+    case "cohortAverage":
+      return t("Class average");
+    case "cohortGap":
+      return t("Gap to class average");
+    case "memberAverage":
+      return t("Classmate average");
+    case "friendAverage":
+      return t("Friend average");
+    case "friendCurves":
+      return t("Average with a friend");
+    case "friendSubjects":
+      return t("Subjects with a friend");
+    case "controlBand":
+      return t("Result control band");
+    case "anomaly":
+      return t("Unusual result");
+    case "concentration":
+      return t("Average concentration");
+    case "nextLeverage":
+      return t("Next grade leverage");
   }
 }
 

@@ -1,7 +1,12 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { widgetLiveStreak, type WidgetEvaluationResult } from "@avermate/core"
+import {
+  widgetLiveStreak,
+  WIDGET_HEIGHT_TIER_PIXELS,
+  type WidgetEvaluationResult,
+  type WidgetHeightTier,
+} from "@avermate/core"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useScrollPane } from "@/components/shell/scroll-pane"
 import { cn } from "@/lib/utils"
@@ -41,6 +46,7 @@ export function CardShell({
   action,
   className,
   children,
+  heightTier,
   ...rest
 }: {
   title: ReactNode
@@ -49,6 +55,18 @@ export function CardShell({
   /** State styling from `cardSurface`, or `undefined` for none. */
   surface?: string
   spanClasses?: string
+  /**
+   * How much height the body needs before it says anything, as a class of height
+   * rather than a number — see `WIDGET_HEIGHT_TIER_PIXELS`.
+   *
+   * The row is as tall as the tallest card in it, and until a card said what it
+   * needed the row had no way to know. `CardContent` is `min-h-0 flex-1`, which
+   * exists so a chart can shrink and deliberately allows the body to go *below*
+   * its content: a 130px sparkline inside a 120px body overflowed by ten pixels
+   * and the card clipped it. Asked for here, on the card, the grid row grows and
+   * every card in it gets the benefit.
+   */
+  heightTier?: WidgetHeightTier
   /** The header's second column: controls, on the surfaces that have them. */
   action?: ReactNode
   className?: string
@@ -66,6 +84,16 @@ export function CardShell({
         spanClasses,
         className
       )}
+      style={
+        heightTier
+          ? {
+              // The header, the padding and the gap sit above the body, so the
+              // card asks for the tier plus its own chrome.
+              minHeight: WIDGET_HEIGHT_TIER_PIXELS[heightTier] + CARD_CHROME,
+              ...rest.style,
+            }
+          : rest.style
+      }
       {...rest}
     >
       {bar ? (
@@ -124,6 +152,13 @@ export function cardSurface(
     ? "bg-linear-to-tr from-band-weak/15 via-card to-band-fair/10 ring-band-weak/25"
     : undefined
 }
+
+/**
+ * The card's own furniture above its body: `py-4` twice, the `gap-2`, and one
+ * line of uppercase title. Measured rather than guessed, so a tier means the
+ * height the *body* gets rather than the height of the card.
+ */
+const CARD_CHROME = 16 + 16 + 8 + 16
 
 /** `gap-3`, as a number, because the track arithmetic below needs it. */
 const GRID_GAP = 12

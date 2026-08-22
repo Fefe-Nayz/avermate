@@ -53,7 +53,8 @@ export default function DashboardPage() {
       graph.subjects,
       averageEventDates(graph.subjects, from, to),
       null,
-      null
+      null,
+      graph.options
     )
   }, [graph, period, timelineDate, year, now])
 

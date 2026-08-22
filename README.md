@@ -26,10 +26,10 @@ typed oRPC API with a protected MCP server, and one shared calculation engine.
   adopt reviewed updates, while the first student customization visibly and
   safely moves that year out of automatic updates until a preset is explicitly
   reapplied.
-- Offers an optional private social space for friends, circles, and invite-only
-  study groups or classes. Profile fields and derived comparison metrics are
-  shared only after explicit consent; there is no Internet-public grade
-  profile.
+- Offers an optional private social space for friends and invite-only study
+  groups or classes. Sharing is off by default: each student chooses whether
+  to expose their general average, history, or selected subject averages, and
+  there is no Internet-public grade profile.
 - Runs as a responsive Next.js web app and a dedicated Expo iOS/Android app.
 - Includes email/OAuth authentication, data export, global or preset-targeted
   announcements, centralized bug/feature-request triage, social moderation,
@@ -38,11 +38,11 @@ typed oRPC API with a protected MCP server, and one shared calculation engine.
 - Exposes scoped academic and social operations to compatible AI assistants
   through an OAuth-protected MCP 2026-07-28 endpoint.
 
-Interactive analytics use TanStack Charts on the web and inside an Expo DOM
-surface on native. Time-series views support localized tooltips, independently
-resolved active points, mouse/trackpad/touch zoom and pan, keyboard controls,
-responsive layouts, reduced motion, and light/dark themes. Small decorative
-charts intentionally omit interaction.
+Interactive analytics use TanStack Charts on the web and a native
+`react-native-svg` renderer with gesture handling in the Expo application.
+Time-series views support localized tooltips, independently resolved active
+points, platform-appropriate zoom and pan, responsive layouts, reduced motion,
+and light/dark themes. Small decorative charts intentionally omit interaction.
 
 ## Architecture
 
@@ -55,6 +55,8 @@ flowchart LR
   mobile["Expo app"] --> api
   assistant["MCP client"] -->|"OAuth 2.1 + scoped MCP"| api
   api --> db["libSQL / Turso"]
+  browser -->|"signed PUT in production"| garage["Self-hosted Garage / S3"]
+  api --> garage
   core["@avermate/core"] --> web
   core --> api
   core --> mobile
@@ -98,7 +100,7 @@ For implementation details and measured request reductions, see
 | Authentication | Better Auth with Drizzle, email OTP, OAuth and Expo support     |
 | Database       | Drizzle ORM over libSQL/Turso or a local SQLite-compatible file |
 | Mobile         | Expo SDK 57, Expo Router, React Native 0.86, Expo Widgets       |
-| Workspace      | Bun 1.3.14 workspaces and Turborepo                             |
+| Workspace      | Bun 1.4.0 workspaces and Turborepo                              |
 
 ## Repository layout
 
@@ -124,7 +126,7 @@ responses, interactive simulations, native screens, and unit tests.
 
 ## Requirements
 
-- [Bun 1.3.14](https://bun.sh/) — the version pinned by `packageManager` and CI.
+- [Bun 1.4.0](https://bun.sh/) — the version pinned by `packageManager` and CI.
 - A libSQL database. `file:./dev.db` is enough locally; Turso or another durable
   libSQL endpoint is recommended for deployment.
 - For native development, the platform requirements for Expo, Xcode and/or
@@ -182,7 +184,8 @@ Required web values:
 
 Optional server integrations include `DATABASE_AUTH_TOKEN`, Google and
 Microsoft OAuth credentials, `RESEND_API_KEY`, `EMAIL_FROM`,
-`UPLOADTHING_TOKEN`, and `ADMIN_USER_IDS`. The `DISABLE_EMAIL` and
+`ADMIN_USER_IDS`, and the production Garage `S3_*` values. Development uses
+local file storage automatically and does not require Garage. The `DISABLE_EMAIL` and
 `DISABLE_UPLOADS` flags are local-development escape hatches. Bug reports and
 feature requests are stored in Avermate and triaged from the protected admin
 panel; they are not relayed to Discord.
@@ -192,8 +195,8 @@ Production deployments should set an independent `MCP_REQUEST_STATE_SECRET`;
 `MCP_RESOURCE_URL`, proxy allow-lists, and the disabled-by-default transitional
 DCR switch are documented in `apps/server/.env.example` and
 [docs/mcp.md](docs/mcp.md). Private social features fail closed and remain
-globally disabled until an administrator enables them; every participant still
-has to complete the applicable consent flow.
+globally disabled until an administrator enables them; each participant still
+chooses the averages, history and subjects they share.
 
 When production web and API hosts are trusted sibling subdomains, set
 `AUTH_COOKIE_DOMAIN` to the narrowest parent they share. Leave it unset for
@@ -287,16 +290,22 @@ Before using it:
 1. Fill every required API/web environment value and use a strong auth secret.
 2. Set `API_INTERNAL_URL` to the API service address and, for sibling hosts,
    configure the narrow shared `AUTH_COOKIE_DOMAIN`.
-3. Use a durable remote libSQL database or add an explicit persistent volume
+3. Generate `GARAGE_RPC_SECRET`, `GARAGE_ACCESS_KEY_ID` and
+   `GARAGE_SECRET_ACCESS_KEY`, and point the public `S3_ENDPOINT`/Traefik host at
+   the Garage S3 API. The access key ID must start with `GK`.
+4. Use a durable remote libSQL database or add an explicit persistent volume
    for a file database; the reference Compose file does not provide one.
-4. Create or rename the external Traefik network expected as `webgateway`.
-5. For other public domains, change the web Dockerfile's build-time
+5. Create or rename the external Traefik network expected as `webgateway`.
+6. For other public domains, change the web Dockerfile's build-time
    `NEXT_PUBLIC_*` values before building. Next inlines public variables into
    the client bundle; runtime Compose values cannot replace them afterward.
 
 The API container applies reviewed migrations on startup and fails closed if a
 migration cannot complete. It never falls back to a forced schema push. Review
 backups and migration output before a production upgrade.
+
+For a complete environment checklist, upgrade procedure and backup guidance,
+see [the self-hosting guide](docs/self-hosting.md).
 
 ## Migrating an Avermate v1 database
 
@@ -339,3 +348,10 @@ privacy review.
 
 No project license is currently declared in this repository. Do not assume
 permission to redistribute the code until the maintainers add one.
+The server currently pins `pawnote@1.6.2` and `scolengo-api@3.0.5`, both declared
+`GPL-3.0-or-later`, as development-only dependencies. The hot local server and
+tests lazy-load their PRONOTE/Skolengo adapters and expose the connection flows;
+the production catalogue keeps both providers locked, and the production Docker
+install and executable registry exclude them. Do not move them into the release
+graph without an explicit compatible project-license decision and the required
+source/notices compliance review.

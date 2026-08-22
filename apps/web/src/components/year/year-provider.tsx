@@ -13,11 +13,14 @@ import { useQuery } from "@tanstack/react-query"
 import { useExtracted } from "next-intl"
 import {
   FULL_YEAR_PERIOD_ID,
+  generalAverageSource,
   SubjectGraph,
+  type SubjectGraphOptions,
   fullYearPeriod,
   resolveCustomAverage,
   restrictToPeriod,
   type CustomAverage,
+  type GradeType,
   type Goal,
   type Period,
   type Scope,
@@ -106,6 +109,14 @@ export interface YearContextValue {
   setTimelineDate: (date: string | null) => void
 
   customAverages: CustomAverage[]
+  /**
+   * The kinds of assessment this year defines.
+   *
+   * On the year rather than fetched where it is used: the grade form fills itself from
+   * one, a card groups by one, and both need the same list — a second source would be a
+   * second answer to "what kinds does this year have".
+   */
+  gradeTypes: GradeType[]
   goals: Goal[]
   cards: DashboardCardRow[]
 
@@ -198,6 +209,7 @@ export function YearProvider({
         subjects: Subject[]
         periods: Period[]
         customAverages: CustomAverage[]
+        gradeTypes: GradeType[]
         goals: Goal[]
         cards: DashboardCardRow[]
       }
@@ -245,18 +257,88 @@ export function YearProvider({
     }))
   }, [subjects, timelineDate])
 
+  const customAverages = useMemo(
+    () => snapshot?.customAverages ?? [],
+    [snapshot]
+  )
+
+  /**
+   * The year's own arrangement of its averages, handed to every graph built here.
+   *
+   * Bonus points need the scale to become a ratio, and a nominated average needs the set
+   * of subjects it covers. Both are properties of the year, so they are attached once and
+   * travel with every graph derived from these — a period view, a simulation, a card's
+   * own scope — rather than being remembered at each of the thirty-odd places that ask
+   * what the reader's average is.
+   *
+   * A nomination naming an average that is no longer there resolves to nothing, and the
+   * general average is the whole year again. That is the honest fallback, and it is why
+   * the column needs no foreign key.
+   */
+  const yearGraphOptions = useMemo<SubjectGraphOptions>(() => {
+    if (!year) return {}
+    const nominated = year.mainAverageId
+      ? customAverages.find((average) => average.id === year.mainAverageId)
+      : undefined
+    return {
+      scale: year.scale,
+      generalBonus: year.generalBonus,
+      ...(nominated
+        ? {
+            general: generalAverageSource(
+              new SubjectGraph(visibleSubjects),
+              nominated
+            ),
+          }
+        : {}),
+    }
+  }, [customAverages, visibleSubjects, year])
+
+  const periodSubjects = useMemo(() => {
+    if (period.id === FULL_YEAR_PERIOD_ID) return visibleSubjects
+    return visibleSubjects.map((subject) => ({
+      ...subject,
+      bonus: subject.periodBonuses?.[period.id] ?? 0,
+    }))
+  }, [period.id, visibleSubjects])
+
+  const graphOptions = useMemo<SubjectGraphOptions>(() => {
+    if (!year) return {}
+    const nominated = year.mainAverageId
+      ? customAverages.find((average) => average.id === year.mainAverageId)
+      : undefined
+    return {
+      scale: year.scale,
+      generalBonus:
+        period.id === FULL_YEAR_PERIOD_ID
+          ? (year.generalBonus ?? 0)
+          : (period.generalBonus ?? 0),
+      ...(nominated
+        ? {
+            general: generalAverageSource(
+              new SubjectGraph(periodSubjects),
+              nominated
+            ),
+          }
+        : {}),
+    }
+  }, [customAverages, period, periodSubjects, year])
+
   const yearGraph = useMemo(
-    () => new SubjectGraph(visibleSubjects),
-    [visibleSubjects]
+    () => new SubjectGraph(visibleSubjects, yearGraphOptions),
+    [visibleSubjects, yearGraphOptions]
   )
 
   const graph = useMemo(
-    () => new SubjectGraph(restrictToPeriod(visibleSubjects, period, year)),
-    [visibleSubjects, period, year]
+    () =>
+      new SubjectGraph(
+        restrictToPeriod(periodSubjects, period, year),
+        graphOptions
+      ),
+    [graphOptions, periodSubjects, period, year]
   )
-
-  const customAverages = useMemo(
-    () => snapshot?.customAverages ?? [],
+  const gradeTypes = useMemo<GradeType[]>(
+    () => snapshot?.gradeTypes ?? [],
     [snapshot]
   )
 
@@ -296,6 +378,7 @@ export function YearProvider({
       timelineDate,
       setTimelineDate,
       customAverages,
+      gradeTypes,
       goals: snapshot?.goals ?? [],
       cards: snapshot?.cards ?? [],
       resolve,
@@ -323,6 +406,7 @@ export function YearProvider({
       setTimelineDate,
       setStoredPeriodId,
       customAverages,
+      gradeTypes,
       snapshot,
       resolve,
       now,

@@ -36,6 +36,9 @@ export const socialSharingRouter = {
     return {
       handle: profile.handle,
       shareGeneralAverage: profile.shareGeneralAverage,
+      // Its own lock: a current average says where you are, its history says when you had
+      // a bad fortnight. Off until somebody says otherwise.
+      shareHistory: profile.shareHistory,
       shareSubjectsMode: profile.shareSubjectsMode,
       /** The stored choice; null means "follow my current year". */
       sharedYearId: profile.sharedYearId,
@@ -52,6 +55,7 @@ export const socialSharingRouter = {
         handle: handleSchema.nullable().optional(),
         sharedYearId: z.string().min(1).nullable().optional(),
         shareGeneralAverage: z.boolean().optional(),
+        shareHistory: z.boolean().optional(),
         shareSubjectsMode: z.enum(["all", "selected", "none"]).optional(),
         sharedSubjectIds: z.array(z.string().min(1)).max(500).optional(),
       }),
@@ -119,6 +123,9 @@ export const socialSharingRouter = {
           ...(input.handle !== undefined ? { handle: input.handle } : {}),
           ...(input.sharedYearId !== undefined
             ? { sharedYearId: input.sharedYearId }
+            : {}),
+          ...(input.shareHistory !== undefined
+            ? { shareHistory: input.shareHistory }
             : {}),
           ...(input.shareGeneralAverage !== undefined
             ? { shareGeneralAverage: input.shareGeneralAverage }

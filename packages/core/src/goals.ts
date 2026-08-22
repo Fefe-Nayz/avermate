@@ -88,7 +88,9 @@ export interface GoalPlan {
   /** Where the current trend lands, when there is enough history to fit one. */
   projection: number | null;
   /** What the next assessment in each candidate subject would have to be. */
-  nextResults: Array<{ subject: Subject; coefficient: number } & RequiredResult>;
+  nextResults: Array<
+    { subject: Subject; coefficient: number } & RequiredResult
+  >;
   /** "N more results at X" — the same answer read at several horizons. */
   horizons: Array<{ count: number } & RequiredResult>;
   /** Subjects ranked by how much a point there is worth at the top. */
@@ -103,7 +105,12 @@ export type GoalAdvice =
   | { kind: "unreachable"; ceiling: number }
   | { kind: "no-data" }
   | { kind: "close"; gap: number }
-  | { kind: "focus"; subjectId: string; leverage: number; requiredRatio: number }
+  | {
+      kind: "focus";
+      subjectId: string;
+      leverage: number;
+      requiredRatio: number;
+    }
   | { kind: "steady"; requiredRatio: number; count: number }
   | { kind: "protect"; subjectId: string; leverage: number }
   | { kind: "declining"; subjectId: string; delta: number };
@@ -159,6 +166,49 @@ export function leverageOf(
   const ends = endpoints(graph, target, subjectId, scope);
   return ends ? ends.high - ends.low : 0;
 }
+
+/**
+ * How much the *next* assessment in a subject can move the average.
+ *
+ * The other leverage, and the one `leverageOf` is careful to say it is not. That one asks
+ * what happens if a subject's whole average moves from nothing to everything — a
+ * structural share, `Wᵢ/ΣW`. This asks what a single further result can do, which is that
+ * share diluted by everything the subject has already been graded on:
+ *
+ *     leverage(next) = (Wᵢ / ΣW) × (c / (Cᵢ + c))
+ *
+ * A subject with one mark and a subject with twelve carry the same weight in the year and
+ * are not the same opportunity: the thirteenth mark moves the average a twelfth as far as
+ * the second one would.
+ *
+ * Measured rather than derived from that formula. Planting one hypothetical assessment at
+ * zero, then at full marks, and taking the difference goes through the same weighting the
+ * average itself uses — nesting, categories, a subject that carries marks beside
+ * sub-subjects — so it cannot disagree with the number on screen. The formula above is
+ * what it *works out to*, not how it is computed.
+ */
+export function nextAssessmentLeverage(
+  graph: SubjectGraph,
+  target: string | null,
+  subjectId: string,
+  coefficient = 1,
+  scope: Scope | null = null,
+): number {
+  const planned: PlannedAssessment[] = [{ subjectId, coefficient, count: 1 }];
+  const low = withPlanned(graph, planned, 0).ratio(target, scope);
+  const high = withPlanned(graph, planned, 1).ratio(target, scope);
+  if (low === null || high === null) return 0;
+  return Math.max(0, high - low);
+}
+
+/**
+ * The level a subject can realistically be pushed to.
+ *
+ * The planner's own figure, exported rather than repeated: two features that both say
+ * "realistically" must mean the same thing by it, or a card and the goal screen disagree
+ * about what is worth doing.
+ */
+export const REALISTIC_CEILING = 0.85;
 
 const PLANNED_PREFIX = "__planned__";
 
@@ -258,10 +308,7 @@ export function estimateRemaining(
   now: Date = new Date(),
 ): (subjectId: string) => number {
   const span = to.getTime() - from.getTime();
-  const elapsed = Math.min(
-    Math.max(now.getTime() - from.getTime(), 0),
-    span,
-  );
+  const elapsed = Math.min(Math.max(now.getTime() - from.getTime(), 0), span);
   // Guard both ends: a period that has not started yet, and one already over.
   const progress = span <= 0 ? 1 : elapsed / span;
   const left = Math.max(0, 1 - progress);
@@ -304,7 +351,7 @@ export function planGoal(
     assumedCoefficient = 1,
     horizons = [1, 2, 3, 5, 8],
     projection = null,
-    realisticCeiling = 0.85,
+    realisticCeiling = REALISTIC_CEILING,
   } = options;
 
   const current = graph.ratio(target, scope);
@@ -398,9 +445,17 @@ export function planGoal(
         realisticGain,
       };
     })
-    .sort((a, b) => b.realisticGain - a.realisticGain || b.leverage - a.leverage);
+    .sort(
+      (a, b) => b.realisticGain - a.realisticGain || b.leverage - a.leverage,
+    );
 
-  const status = statusOf(current, goal.targetRatio, ceiling, floor, projection);
+  const status = statusOf(
+    current,
+    goal.targetRatio,
+    ceiling,
+    floor,
+    projection,
+  );
   const gap = current === null ? null : goal.targetRatio - current;
 
   return {
@@ -415,7 +470,13 @@ export function planGoal(
     nextResults,
     horizons: horizonResults,
     levers,
-    advice: adviseOn({ status, gap, ceiling, levers, horizons: horizonResults }),
+    advice: adviseOn({
+      status,
+      gap,
+      ceiling,
+      levers,
+      horizons: horizonResults,
+    }),
   };
 }
 
@@ -433,7 +494,9 @@ function adviseOn(input: {
   if (input.status === "achieved") {
     advice.push({ kind: "achieved" });
     // Holding a result is its own task: name what would cost the most.
-    const fragile = [...input.levers].sort((a, b) => b.leverage - a.leverage)[0];
+    const fragile = [...input.levers].sort(
+      (a, b) => b.leverage - a.leverage,
+    )[0];
     if (fragile) {
       advice.push({
         kind: "protect",

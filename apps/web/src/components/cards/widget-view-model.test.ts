@@ -2,10 +2,13 @@ import { describe, expect, test } from "bun:test"
 import {
   createWidgetDefinition,
   createWidgetVisualization,
+  widgetDatumSlots,
 } from "@avermate/core"
 import {
+  widgetChannelValueIsDelta,
   widgetDefinitionValueType,
   widgetDefinitionShowsDelta,
+  widgetDefinitionValueIsDelta,
   widgetDisplayValue,
   widgetEncodedScaleValue,
   widgetEncodedSeriesDatum,
@@ -13,6 +16,7 @@ import {
   widgetEncodingValueType,
   widgetGaugeFillRatio,
   widgetGoalPresentation,
+  widgetMeasureValueIsDelta,
   widgetNumericDomain,
   widgetResolvedUnit,
   widgetSeriesDomainValues,
@@ -63,45 +67,194 @@ describe("widget presentation model", () => {
 
   test("uses each streak capability's unit", () => {
     const definition = createWidgetDefinition("overview")
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "activityStreak",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "activityStreak", goalId: null },
+      },
+    ]
     expect(widgetDefinitionValueType(definition)).toBe("days")
 
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "passStreak",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "passStreak", goalId: null },
+      },
+    ]
     expect(widgetDefinitionValueType(definition)).toBe("count")
   })
 
   test("shows intrinsic subject deltas without a comparison", () => {
     const definition = createWidgetDefinition("overview")
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "subjectRanking",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "subjectRanking", goalId: null },
+      },
+    ]
     expect(widgetDefinitionShowsDelta(definition)).toBe(true)
 
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "mostImproved",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "mostImproved", goalId: null },
+      },
+    ]
     expect(widgetDefinitionShowsDelta(definition)).toBe(true)
 
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "average",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "average", goalId: null },
+      },
+    ]
     expect(widgetDefinitionShowsDelta(definition)).toBe(false)
     definition.analysis.comparison = { kind: "baseline", value: 0.5 }
     expect(widgetDefinitionShowsDelta(definition)).toBe(true)
+  })
+
+  test("distinguishes a delta headline from a level with a comparison", () => {
+    const definition = createWidgetDefinition("overview")
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "averageTrend", goalId: null },
+      },
+    ]
+    expect(widgetDefinitionValueIsDelta(definition)).toBe(true)
+
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "cohortGap", goalId: null },
+      },
+    ]
+    expect(widgetDefinitionValueIsDelta(definition)).toBe(true)
+
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "mostImproved", goalId: null },
+      },
+    ]
+    expect(widgetDefinitionValueIsDelta(definition)).toBe(true)
+
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "average", goalId: null },
+      },
+    ]
+    definition.analysis.comparison = { kind: "baseline", value: 0.5 }
+    expect(widgetDefinitionShowsDelta(definition)).toBe(true)
+    expect(widgetDefinitionValueIsDelta(definition)).toBe(false)
+  })
+
+  test("classifies average comparison channels by their delta slot", () => {
+    const definition = createWidgetDefinition("insights")
+    definition.analysis.comparison = { kind: "previous-window" }
+    definition.visualization.encoding.y = {
+      field: "measure.delta",
+      type: "quantitative",
+    }
+    definition.visualization.encoding.color = {
+      field: "measure.delta",
+      type: "quantitative",
+    }
+    definition.visualization.format = {
+      decimals: 1,
+      unit: "percent",
+      compact: false,
+    }
+    const slots = widgetDatumSlots(
+      definition.analysis,
+      definition.visualization.encoding
+    )
+    const measureValueIsDelta = widgetDefinitionValueIsDelta(definition)
+
+    expect(measureValueIsDelta).toBe(false)
+    expect(slots.y).toBe("delta")
+    expect(slots.color).toBe("delta")
+    expect(widgetChannelValueIsDelta(slots.y, measureValueIsDelta)).toBe(true)
+    expect(widgetChannelValueIsDelta(slots.color, measureValueIsDelta)).toBe(
+      true
+    )
+    expect(
+      widgetValuePresentation(
+        0.1,
+        widgetEncodingValueType(slots.y!, "ratio"),
+        definition.visualization.format,
+        20,
+        2
+      )
+    ).toEqual({
+      displayed: 10,
+      decimals: 1,
+      compact: false,
+      unit: "percent",
+    })
+  })
+
+  test("classifies a level slot from an intrinsic delta measure", () => {
+    const definition = createWidgetDefinition("insights")
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "metric",
+          metric: "improvement",
+          goalId: null,
+        },
+      },
+    ]
+    const slots = widgetDatumSlots(
+      definition.analysis,
+      definition.visualization.encoding
+    )
+
+    expect(slots.y).toBe("value")
+    expect(
+      widgetChannelValueIsDelta(
+        slots.y,
+        widgetDefinitionValueIsDelta(definition)
+      )
+    ).toBe(true)
+    expect(widgetChannelValueIsDelta("count", true)).toBe(false)
+  })
+
+  test("classifies each scatter axis independently", () => {
+    const definition = createWidgetDefinition("overview")
+    const consistency = {
+      id: "consistency",
+      label: "Consistency",
+      expression: {
+        kind: "metric" as const,
+        metric: "consistency" as const,
+        goalId: null,
+      },
+    }
+    const improvement = {
+      id: "improvement",
+      label: "Improvement",
+      expression: {
+        kind: "metric" as const,
+        metric: "improvement" as const,
+        goalId: null,
+      },
+    }
+    definition.analysis.measures = [consistency, improvement]
+    expect(widgetMeasureValueIsDelta(consistency.expression)).toBe(false)
+    expect(widgetMeasureValueIsDelta(improvement.expression)).toBe(true)
   })
 
   test("keeps an empty goal current value distinct from zero", () => {

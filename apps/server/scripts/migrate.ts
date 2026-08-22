@@ -148,6 +148,55 @@ export async function migrateClient(
   return baseline;
 }
 
+/**
+ * Better Auth 1.7 stores protected resources separately and, when per-client
+ * resources are enforced, pre-1.7 clients need an explicit link. Keep this
+ * bootstrap beside the schema migration so the first OAuth request never has
+ * to repair deployment state. Existing resource policy edits are preserved.
+ */
+export async function bootstrapOAuthResource(
+  client: Client,
+  resourceUrl: string,
+) {
+  const identifier = new URL(resourceUrl).href;
+  const now = Math.floor(Date.now() / 1_000);
+  await client.batch(
+    [
+      {
+        sql: `
+          INSERT INTO oauth_resources (
+            id, identifier, name, dpopBoundAccessTokensRequired, disabled,
+            createdAt, updatedAt, policyVersion
+          ) VALUES (
+            'ors_' || lower(hex(randomblob(8))), ?, 'Avermate MCP',
+            0, 0, ?, ?, 1
+          )
+          ON CONFLICT(identifier) DO NOTHING
+        `,
+        args: [identifier, now, now],
+      },
+      {
+        sql: `
+          INSERT INTO oauth_client_resources (
+            id, clientId, resourceId, createdAt
+          )
+          SELECT
+            'ocr_' || lower(hex(randomblob(8))), clientId, ?, ?
+          FROM oauth_clients AS clients
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM oauth_client_resources AS links
+            WHERE links.clientId = clients.clientId
+              AND links.resourceId = ?
+          )
+        `,
+        args: [identifier, now, identifier],
+      },
+    ],
+    "write",
+  );
+}
+
 export async function migrateConfiguredDatabase() {
   const client = createClient({
     url: process.env.DATABASE_URL ?? "file:./dev.db",
@@ -156,6 +205,14 @@ export async function migrateConfiguredDatabase() {
 
   try {
     const baseline = await migrateClient(client);
+    const resourceUrl =
+      process.env.MCP_RESOURCE_URL ??
+      (process.env.BETTER_AUTH_URL
+        ? `${process.env.BETTER_AUTH_URL.replace(/\/$/, "")}/mcp`
+        : undefined);
+    if (resourceUrl) {
+      await bootstrapOAuthResource(client, resourceUrl);
+    }
     if (baseline === "adopted") {
       console.info(
         "Adopted the exact 0000_init schema as the migration baseline.",

@@ -20,6 +20,7 @@ import {
   SocialRow,
   SocialSection,
 } from "@/components/social/social-ui"
+import { sharingHistoryState } from "@/components/social/sharing-preview"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -95,7 +96,7 @@ export function SharingClient() {
         icon={ShieldCheckIcon}
         title={t("Sharing")}
         description={t(
-          "Two locks decide what every friend sees: your general average, and your subjects. Each class has its own separate switch."
+          "Three locks decide what every friend sees: your general average, its history, and your subjects. Each class has its own separate switch."
         )}
       />
 
@@ -151,6 +152,28 @@ export function SharingClient() {
               update.mutate({ shareGeneralAverage: checked })
             }
             aria-label={t("Share my general average")}
+          />
+        </div>
+
+        {/* A third lock, under the first because it is a *widening* of it rather than a
+            separate thing to share — and disabled when the first is shut, since a history
+            of an average nobody sees is a history of nothing. */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{t("How it changed")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Lets friends draw your average across the year beside their own. It shows when your year dipped, not only where it stands."
+              )}
+            </p>
+          </div>
+          <Switch
+            checked={settings.shareHistory}
+            disabled={update.isPending || !settings.shareGeneralAverage}
+            onCheckedChange={(checked) =>
+              update.mutate({ shareHistory: checked })
+            }
+            aria-label={t("Share how my average changed")}
           />
         </div>
 
@@ -286,11 +309,30 @@ export function SharingClient() {
                 {t("No subject averages are shared.")}
               </p>
             )}
+            {/* The third lock, which the preview claimed to show everything about and
+                then left out entirely: the server already sends the curve, so a reader
+                turning history on saw the switch move and this panel say nothing. */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm">{t("Average over time")}</span>
+              {sharingHistoryState(settings.preview.history) === "shared" ? (
+                <span className="text-sm text-muted-foreground">
+                  {t("{count} points", {
+                    count: String(settings.preview.history?.length ?? 0),
+                  })}
+                </span>
+              ) : sharingHistoryState(settings.preview.history) === "empty" ? (
+                <span className="text-sm text-muted-foreground">
+                  {t("No data yet")}
+                </span>
+              ) : (
+                <SharingState granted={false} label={t("Locked")} />
+              )}
+            </div>
           </div>
         ) : (
           <SocialCallout title={t("Friends currently see nothing")}>
             {t(
-              "Both locks are closed, or there is no academic year to share yet."
+              "All sharing locks are closed, or there is no academic year to share yet."
             )}
           </SocialCallout>
         )}

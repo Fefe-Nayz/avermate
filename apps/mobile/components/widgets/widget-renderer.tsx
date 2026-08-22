@@ -1,12 +1,16 @@
 import { Text, View } from "react-native";
 import {
   widgetCapability,
+  widgetDatumSlots,
+  widgetFrameSeries,
   widgetMeasureId,
   type CardResult,
-  type WidgetDefinitionV1,
+  type WidgetDatumSlots,
+  type WidgetDefinition,
   type WidgetEvaluationResult,
   type WidgetSeriesDatum,
   type WidgetValueType,
+  widgetPrimaryMeasure,
 } from "@avermate/core";
 import { Icon } from "@/components/icon";
 import { StatusPill } from "@/components/goal-status";
@@ -66,7 +70,7 @@ const HEATMAP_DIVERGING_COLORS = [
 function valueLabel(
   value: number,
   valueType: WidgetValueType,
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   scale: number,
   defaultDecimals: number,
 ): string {
@@ -99,7 +103,7 @@ function SeriesRows({
   showValues?: boolean;
   showCount?: boolean;
   table?: boolean;
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
 }) {
   const palette = usePalette();
   const columns = widgetSeriesColumnVisibility(definition, values, {
@@ -280,7 +284,7 @@ function safeColor(value: string | null | undefined): string | null {
   return value && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
 }
 
-function thresholdFor(value: number, definition: WidgetDefinitionV1) {
+function thresholdFor(value: number, definition: WidgetDefinition) {
   const threshold = widgetThreshold(value, definition);
   return threshold ? { ...threshold, color: safeColor(threshold.color) } : null;
 }
@@ -288,7 +292,7 @@ function thresholdFor(value: number, definition: WidgetDefinitionV1) {
 function ThresholdLabels({
   visualization,
 }: {
-  visualization: WidgetDefinitionV1["visualization"];
+  visualization: WidgetDefinition["visualization"];
 }) {
   const palette = usePalette();
   const labelled = visualization.thresholds.filter(
@@ -317,18 +321,24 @@ function BoxPlot({
   formatValue,
   showOutliers,
   definition,
+  domain,
 }: {
   result: Extract<WidgetEvaluationResult, { kind: "distribution" }>;
   formatValue: (value: number) => string;
   showOutliers: boolean;
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
+  domain?: { min: number; max: number };
 }) {
   const palette = usePalette();
   const summary = widgetDistributionPresentation(result).summary;
   const { min: rawMin, q1, median, q3, max: rawMax } = summary;
   const scale = definition.visualization.scale.y;
-  const min = scale.min ?? (scale.zero ? Math.min(0, rawMin) : rawMin);
-  const max = scale.max ?? (scale.zero ? Math.max(0, rawMax) : rawMax);
+  const min =
+    scale.min ??
+    (scale.zero ? Math.min(0, domain?.min ?? rawMin) : (domain?.min ?? rawMin));
+  const max =
+    scale.max ??
+    (scale.zero ? Math.max(0, domain?.max ?? rawMax) : (domain?.max ?? rawMax));
   const span = max - min || 1;
   const positionNumber = (value: number) => {
     const normalized = Math.max(0, Math.min(1, (value - min) / span));
@@ -431,6 +441,69 @@ function BoxPlot({
   );
 }
 
+function DistributionSet({
+  result,
+  definition,
+  formatValue,
+}: {
+  result: Extract<WidgetEvaluationResult, { kind: "distribution-set" }>;
+  definition: WidgetDefinition;
+  formatValue: (value: number) => string;
+}) {
+  const palette = usePalette();
+  const domain = {
+    min: Math.min(...result.groups.map((group) => group.summary.min)),
+    max: Math.max(...result.groups.map((group) => group.summary.max)),
+  };
+  const showOutliers =
+    definition.visualization.options.kind === "boxplot" &&
+    definition.visualization.options.showOutliers;
+
+  return (
+    <View style={{ gap: space.lg }}>
+      {result.groups.map((group) => {
+        const distribution: Extract<
+          WidgetEvaluationResult,
+          { kind: "distribution" }
+        > = {
+          kind: "distribution",
+          shape: "distribution",
+          buckets: group.buckets,
+          total: group.total,
+          values: group.values,
+          summary: group.summary,
+        };
+        return (
+          <View key={group.key} style={{ gap: space.sm }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: space.sm,
+              }}
+            >
+              <Text style={[type.body, { flex: 1, color: palette.text }]}>
+                {group.label}
+              </Text>
+              <Text style={[type.label, numeric, { color: palette.textMuted }]}>
+                {t("{count} grades", { count: group.total })}
+              </Text>
+            </View>
+            <BoxPlot
+              result={distribution}
+              definition={definition}
+              domain={domain}
+              showOutliers={showOutliers}
+              formatValue={formatValue}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function Histogram({
   result,
   definition,
@@ -438,7 +511,7 @@ function Histogram({
   formatBucket,
 }: {
   result: Extract<WidgetEvaluationResult, { kind: "distribution" }>;
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   formatValue: (value: number) => string;
   formatBucket: (value: number) => string;
 }) {
@@ -577,22 +650,29 @@ function Histogram({
   );
 }
 
+/** A definition's own value type: the formula's, or the metric's capability. */
+function measureValueType(definition: WidgetDefinition): WidgetValueType {
+  const measure = widgetPrimaryMeasure(definition.analysis);
+  return measure.kind === "formula"
+    ? measure.valueType
+    : widgetCapability(measure.metric).valueType;
+}
+
 function Heatmap({
   values,
   visualization,
+  slots,
   formatValue,
   formatColor,
 }: {
   values: EncodedWidgetDatum[];
-  visualization: WidgetDefinitionV1["visualization"];
+  visualization: WidgetDefinition["visualization"];
+  slots: WidgetDatumSlots;
   formatValue: (value: number) => string;
   formatColor: (value: number) => string;
 }) {
   const palette = usePalette();
-  const colorField =
-    visualization.encoding.color?.field ??
-    visualization.encoding.y?.field ??
-    "value";
+  const colorField = slots.color ?? slots.y ?? "value";
   const rows = values.filter(
     (entry): entry is EncodedWidgetDatum & { value: number } =>
       entry.value !== null,
@@ -845,17 +925,14 @@ function Heatmap({
           >
             <Text style={[type.label, { color: palette.textFaint }]}>
               {orderedRows[0]
-                ? widgetDatumLabel(
-                    orderedRows[0].source,
-                    visualization.encoding.x?.field,
-                  )
+                ? widgetDatumLabel(orderedRows[0].source, slots.x ?? undefined)
                 : ""}
             </Text>
             <Text style={[type.label, { color: palette.textFaint }]}>
               {orderedRows.at(-1)
                 ? widgetDatumLabel(
                     orderedRows.at(-1)!.source,
-                    visualization.encoding.x?.field,
+                    slots.x ?? undefined,
                   )
                 : ""}
             </Text>
@@ -886,13 +963,13 @@ function ScalarChart({
   result,
   formatValue,
 }: {
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   result: Extract<WidgetEvaluationResult, { kind: "scalar" }>;
   formatValue: (value: number) => string;
 }) {
   const repeated =
-    definition.visualization.mark === "line" ||
-    definition.visualization.mark === "area";
+    definition.visualization.recipe === "line" ||
+    definition.visualization.recipe === "area";
   const now = new Date();
   const values: WidgetSeriesDatum[] = (repeated ? [0, 1] : [0]).map(
     (offset) => ({
@@ -907,8 +984,19 @@ function ScalarChart({
   );
   return (
     <WidgetSeriesChart
-      values={encodeWidgetSeries(values, definition.visualization)}
+      values={encodeWidgetSeries(
+        values,
+        definition.visualization,
+        widgetDatumSlots(
+          definition.analysis,
+          definition.visualization.encoding,
+        ),
+      )}
       visualization={definition.visualization}
+      slots={widgetDatumSlots(
+        definition.analysis,
+        definition.visualization.encoding,
+      )}
       formatValue={formatValue}
     />
   );
@@ -924,7 +1012,7 @@ function StructuredResult({
   value,
   formatValue,
 }: {
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   value: CardResult;
   formatValue: (value: number, valueType?: WidgetValueType) => string;
 }) {
@@ -934,8 +1022,8 @@ function StructuredResult({
     const name = value.name;
     const subtitle = value.kind === "grade" ? value.subjectName : undefined;
     if (
-      definition.visualization.mark === "table" ||
-      definition.visualization.mark === "list"
+      definition.visualization.recipe === "table" ||
+      definition.visualization.recipe === "list"
     ) {
       const row: WidgetSeriesDatum = {
         key: value.kind === "grade" ? value.gradeId : value.subjectId,
@@ -950,7 +1038,7 @@ function StructuredResult({
         <SeriesRows
           values={[row]}
           definition={definition}
-          table={definition.visualization.mark === "table"}
+          table={definition.visualization.recipe === "table"}
           showValues={
             definition.visualization.options.kind !== "list" ||
             definition.visualization.options.showValues
@@ -998,7 +1086,7 @@ function StructuredResult({
       <SeriesRows
         values={rows.slice(0, limit)}
         definition={definition}
-        table={definition.visualization.mark === "table"}
+        table={definition.visualization.recipe === "table"}
         showValues={
           definition.visualization.options.kind !== "list" ||
           definition.visualization.options.showValues
@@ -1024,7 +1112,7 @@ function StructuredResult({
   if (value.kind === "goal") {
     const plan = value.plan;
     const goal = widgetGoalPresentation(value);
-    if (definition.visualization.mark === "line") {
+    if (definition.visualization.recipe === "line") {
       const now = new Date();
       const rows: WidgetSeriesDatum[] = [
         ["current", t("Current"), plan.current, 0],
@@ -1047,8 +1135,19 @@ function StructuredResult({
       );
       return (
         <WidgetSeriesChart
-          values={encodeWidgetSeries(rows, definition.visualization)}
+          values={encodeWidgetSeries(
+            rows,
+            definition.visualization,
+            widgetDatumSlots(
+              definition.analysis,
+              definition.visualization.encoding,
+            ),
+          )}
           visualization={definition.visualization}
+          slots={widgetDatumSlots(
+            definition.analysis,
+            definition.visualization.encoding,
+          )}
           formatValue={(entry) => formatValue(entry, "ratio")}
         />
       );
@@ -1074,8 +1173,8 @@ function StructuredResult({
         </View>
       );
     }
-    const goalDefinition: WidgetDefinitionV1 =
-      definition.visualization.mark === "gauge"
+    const goalDefinition: WidgetDefinition =
+      definition.visualization.recipe === "gauge"
         ? {
             ...definition,
             visualization: {
@@ -1106,7 +1205,7 @@ export function WidgetResultRenderer({
   definition,
   result,
 }: {
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   result: WidgetEvaluationResult | undefined;
 }) {
   const palette = usePalette();
@@ -1114,10 +1213,7 @@ export function WidgetResultRenderer({
   const formatValue = (value: number, valueType?: WidgetValueType) =>
     valueLabel(
       value,
-      valueType ??
-        (definition.analysis.measure.kind === "formula"
-          ? definition.analysis.measure.valueType
-          : widgetCapability(definition.analysis.measure.metric).valueType),
+      valueType ?? measureValueType(definition),
       definition,
       scale,
       decimals,
@@ -1133,7 +1229,7 @@ export function WidgetResultRenderer({
   if (result.kind === "scalar") {
     const presentation = widgetScalarPresentation(definition, result);
     if (
-      ["line", "area", "bar", "dot"].includes(definition.visualization.mark)
+      ["line", "area", "bar", "dot"].includes(definition.visualization.recipe)
     ) {
       return (
         <ScalarChart
@@ -1214,7 +1310,7 @@ export function WidgetResultRenderer({
             ) : null}
           </View>
         ) : null}
-        {definition.visualization.mark === "gauge" ? (
+        {definition.visualization.recipe === "gauge" ? (
           <View
             style={{
               height: presentation.gaugeThickness,
@@ -1246,24 +1342,30 @@ export function WidgetResultRenderer({
       </View>
     );
   }
-  if (result.kind === "series") {
+  if (result.kind === "data-frame") {
     const limit =
       definition.visualization.options.kind === "table" ||
       definition.visualization.options.kind === "list"
         ? definition.visualization.options.rows
-        : result.values.length;
-    const values = encodeWidgetSeries(
-      result.values.slice(0, limit),
-      definition.visualization,
+        : result.frame.rows.length;
+    const slots = widgetDatumSlots(
+      definition.analysis,
+      definition.visualization.encoding,
     );
-    const yField = definition.visualization.encoding.y?.field ?? "value";
+    const values = encodeWidgetSeries(
+      // The frame, as the rows this renderer draws — the same projection the web uses.
+      widgetFrameSeries(result.frame, slots).slice(0, limit),
+      definition.visualization,
+      slots,
+    );
+    const yField = slots.y ?? "value";
     const seriesValue = (value: number) =>
       yField === "date"
         ? new Date(value).toLocaleDateString(
             locale() === "fr" ? "fr-FR" : "en-GB",
           )
         : formatValue(value, yField === "count" ? "count" : result.valueType);
-    const colorField = definition.visualization.encoding.color?.field;
+    const colorField = slots.color ?? undefined;
     const seriesColorValue = (value: number) =>
       colorField === "date"
         ? new Date(value).toLocaleDateString(
@@ -1274,14 +1376,14 @@ export function WidgetResultRenderer({
             colorField === "count" ? "count" : result.valueType,
           );
     if (
-      definition.visualization.mark === "table" ||
-      definition.visualization.mark === "list"
+      definition.visualization.recipe === "table" ||
+      definition.visualization.recipe === "list"
     ) {
       return (
         <SeriesRows
           values={values}
           definition={definition}
-          table={definition.visualization.mark === "table"}
+          table={definition.visualization.recipe === "table"}
           showValues={
             definition.visualization.options.kind !== "list" ||
             definition.visualization.options.showValues
@@ -1290,15 +1392,13 @@ export function WidgetResultRenderer({
         />
       );
     }
-    if (definition.visualization.mark === "heatmap") {
-      const heatmapColorField =
-        definition.visualization.encoding.color?.field ??
-        definition.visualization.encoding.y?.field ??
-        "value";
+    if (definition.visualization.recipe === "heatmap") {
+      const heatmapColorField = slots.color ?? slots.y ?? "value";
       return (
         <Heatmap
           values={values}
           visualization={definition.visualization}
+          slots={slots}
           formatValue={seriesValue}
           formatColor={(value) =>
             formatValue(
@@ -1313,8 +1413,18 @@ export function WidgetResultRenderer({
       <WidgetSeriesChart
         values={values}
         visualization={definition.visualization}
+        slots={slots}
         formatValue={seriesValue}
         formatColorValue={seriesColorValue}
+      />
+    );
+  }
+  if (result.kind === "distribution-set") {
+    return (
+      <DistributionSet
+        result={result}
+        definition={definition}
+        formatValue={(value) => formatValue(value, "ratio")}
       />
     );
   }
@@ -1322,10 +1432,20 @@ export function WidgetResultRenderer({
     const distribution = widgetDistributionPresentation(result);
     const distributionCount = (value: number) => formatValue(value, "count");
     const distributionRatio = (value: number) => formatValue(value, "ratio");
-    if (definition.visualization.mark === "bar") {
+    if (definition.visualization.recipe === "bar") {
       const visualization = widgetDistributionBarVisualization(
         definition.visualization,
       );
+      // A distribution's bars are its buckets: the category on x, the count on y. The
+      // synthetic visualization above has no channels of its own, so the slots are
+      // stated rather than resolved from an analysis that never declared them.
+      const distributionSlots: WidgetDatumSlots = {
+        x: "category",
+        y: "value",
+        color: null,
+        series: null,
+        facet: null,
+      };
       const rows: WidgetSeriesDatum[] = distribution.buckets.map((bucket) => ({
         key: `${bucket.from}:${bucket.to}`,
         label: `${formatValue(bucket.from, "ratio")} - ${formatValue(bucket.to, "ratio")}`,
@@ -1337,13 +1457,14 @@ export function WidgetResultRenderer({
       }));
       return (
         <WidgetSeriesChart
-          values={encodeWidgetSeries(rows, visualization)}
+          values={encodeWidgetSeries(rows, visualization, distributionSlots)}
           visualization={visualization}
+          slots={distributionSlots}
           formatValue={distributionCount}
         />
       );
     }
-    return definition.visualization.mark === "boxplot" ? (
+    return definition.visualization.recipe === "boxplot" ? (
       <BoxPlot
         result={result}
         definition={definition}
@@ -1378,7 +1499,7 @@ export function widgetCardTitle(
   if (card.title) return card.title;
   if (!card.definition) return t("Unavailable card");
   const capability = widgetCapability(
-    widgetMeasureId(card.definition.analysis.measure),
+    widgetMeasureId(widgetPrimaryMeasure(card.definition.analysis)),
   );
   return widgetMessage(capability.messageKey);
 }
@@ -1392,13 +1513,13 @@ export function WidgetCardView({
   result,
 }: {
   card: WidgetCardModel;
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   result: WidgetEvaluationResult | undefined;
 }) {
   const palette = usePalette();
   const listy =
-    result?.kind === "series" &&
-    ["list", "table"].includes(definition.visualization.mark);
+    result?.kind === "data-frame" &&
+    ["list", "table"].includes(definition.visualization.recipe);
   const accent =
     card.accent && /^#[0-9a-f]{6}$/i.test(card.accent) ? card.accent : null;
   return (

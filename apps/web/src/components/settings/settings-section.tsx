@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
  * echo the shape the navigation rail uses for the same thing.
  */
 export function SettingsSection({
+  id,
   title,
   description,
   icon: Icon,
@@ -18,6 +19,7 @@ export function SettingsSection({
   className,
   footer,
 }: {
+  id?: string
   title: string
   description?: string
   icon?: ComponentType<{ className?: string }>
@@ -26,7 +28,15 @@ export function SettingsSection({
   footer?: ReactNode
 }) {
   return (
-    <section className={cn("rounded-xl border bg-card", className)}>
+    <section
+      id={id}
+      // `settings-section` is what the `:target` ring in app.css hooks onto, so a
+      // settings-search result lands on a section that says "this one".
+      className={cn(
+        "settings-section scroll-mt-4 rounded-xl border bg-card",
+        className
+      )}
+    >
       <header className="px-4 pt-4">
         <h2 className="flex items-center gap-2 text-sm font-medium">
           {Icon ? (

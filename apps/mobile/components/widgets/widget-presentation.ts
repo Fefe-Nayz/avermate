@@ -1,12 +1,13 @@
 import {
+  widgetPrimaryMeasure,
   widgetCapability,
   widgetMeasureHasIntrinsicDelta,
   widgetMeasureId,
   type CardResult,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetEvaluationResult,
   type WidgetSeriesDatum,
-  type WidgetVisualizationV1,
+  type WidgetVisualization,
 } from "@avermate/core";
 
 type ScalarResult = Extract<WidgetEvaluationResult, { kind: "scalar" }>;
@@ -18,7 +19,7 @@ type DistributionResult = Extract<
   { kind: "distribution" }
 >;
 
-export function widgetThreshold(value: number, definition: WidgetDefinitionV1) {
+export function widgetThreshold(value: number, definition: WidgetDefinition) {
   return (
     [...definition.visualization.thresholds]
       .sort((left, right) => left.value - right.value)
@@ -39,30 +40,30 @@ export function widgetRecordScalar(value: RecordResult): ScalarResult | null {
 }
 
 export function widgetStreakScalar(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   value: StreakResult,
 ): ScalarResult {
   return {
     kind: "scalar",
     shape: "scalar",
     value: value.current,
-    valueType: widgetCapability(widgetMeasureId(definition.analysis.measure))
+    valueType: widgetCapability(widgetMeasureId(widgetPrimaryMeasure(definition.analysis)))
       .valueType,
     delta: null,
   };
 }
 
 export function widgetDefinitionShowsDelta(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
 ): boolean {
   return (
     definition.analysis.comparison.kind !== "none" ||
-    widgetMeasureHasIntrinsicDelta(definition.analysis.measure)
+    widgetMeasureHasIntrinsicDelta(widgetPrimaryMeasure(definition.analysis))
   );
 }
 
 export function widgetSeriesColumnVisibility(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   values: readonly WidgetSeriesDatum[],
   options: {
     table: boolean;
@@ -85,8 +86,8 @@ export function widgetSeriesColumnVisibility(
 }
 
 export function widgetDistributionBarVisualization(
-  visualization: WidgetVisualizationV1,
-): WidgetVisualizationV1 {
+  visualization: WidgetVisualization,
+): WidgetVisualization {
   return {
     ...visualization,
     encoding: {
@@ -125,7 +126,7 @@ export function widgetDistributionPresentation(value: DistributionResult) {
 }
 
 export function widgetScalarPresentation(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   result: ScalarResult,
 ) {
   const options = definition.visualization.options;

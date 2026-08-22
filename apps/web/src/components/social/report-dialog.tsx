@@ -24,11 +24,7 @@ import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
 
 type ReportCategory =
-  | "harassment"
-  | "privacy"
-  | "impersonation"
-  | "unsafe_content"
-  | "other"
+  "harassment" | "privacy" | "impersonation" | "unsafe_content" | "other"
 
 /**
  * Reporting a person or a group.

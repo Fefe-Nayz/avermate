@@ -81,6 +81,19 @@ describe("the card shell", () => {
     }
   })
 
+  test("previews the recipe's real height tier", () => {
+    const preview = surfaces["the widget editor"]
+    const dashboard = surfaces["the dashboard grid"]
+
+    // Both shells read the same core policy. A radar (analytical) used to be
+    // previewed in the short default shell and then grow only after saving.
+    expect(preview).toContain("widgetRecipeLayout(")
+    expect(preview).toContain(".minHeightTier")
+    expect(preview).toContain("heightTier={")
+    expect(dashboard).toContain("widgetRecipeLayout(")
+    expect(dashboard).toContain(".minHeightTier")
+  })
+
   test("runs one renderer, so the two surfaces cannot draw different cards", () => {
     // The complaint this closes: the preview's contents had nothing to do with
     // the card's. Two renderers existed — `WidgetBody` for a definition and

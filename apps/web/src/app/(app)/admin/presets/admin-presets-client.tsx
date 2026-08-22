@@ -55,6 +55,7 @@ const EMPTY_CONFIGURATION: PresetEditorConfiguration = {
     },
   ],
   averages: [],
+  gradeTypes: [],
 }
 
 /**
@@ -118,6 +119,12 @@ function configurationDiff(
   const toAverages = new Map(
     next.averages.map((average) => [average.key, average])
   )
+  const fromTypes = new Map(
+    (previous.gradeTypes ?? []).map((type) => [type.key, type])
+  )
+  const toTypes = new Map(
+    (next.gradeTypes ?? []).map((type) => [type.key, type])
+  )
   return {
     added: [...toSubjects.keys()].filter((key) => !fromSubjects.has(key))
       .length,
@@ -134,6 +141,12 @@ function configurationDiff(
       (key) =>
         JSON.stringify(fromAverages.get(key)) !==
         JSON.stringify(toAverages.get(key))
+    ).length,
+    gradeTypesChanged: [
+      ...new Set([...fromTypes.keys(), ...toTypes.keys()]),
+    ].filter(
+      (key) =>
+        JSON.stringify(fromTypes.get(key)) !== JSON.stringify(toTypes.get(key))
     ).length,
   }
 }
@@ -186,8 +199,7 @@ export function AdminPresetsClient({
       description: current.description,
       tags: current.tags.join(", "),
       featured: current.featured,
-      configuration:
-        currentVersion.configuration as PresetEditorConfiguration,
+      configuration: currentVersion.configuration as PresetEditorConfiguration,
       changeNote: "",
     })
     setSourceVersion(currentVersion.version)
@@ -281,7 +293,8 @@ export function AdminPresetsClient({
     ? diff.added === 0 &&
       diff.changed === 0 &&
       diff.removed === 0 &&
-      diff.averagesChanged === 0
+      diff.averagesChanged === 0 &&
+      diff.gradeTypesChanged === 0
     : true
 
   return (
@@ -437,6 +450,11 @@ export function AdminPresetsClient({
                     {
                       label: t("averages changed"),
                       value: diff.averagesChanged,
+                      kind: "edit",
+                    },
+                    {
+                      label: t("assessment types changed"),
+                      value: diff.gradeTypesChanged,
                       kind: "edit",
                     },
                   ]}

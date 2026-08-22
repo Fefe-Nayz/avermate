@@ -4,9 +4,10 @@ import {
   resolveWidgetFlow,
   widgetCapability,
   widgetMeasureId,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetFlowEditor as WidgetEditorKind,
   type WidgetSurface,
+  widgetPrimaryMeasure,
 } from "@avermate/core";
 import { FieldGroup } from "@/components/field";
 import { Section } from "@/components/ui";
@@ -92,11 +93,11 @@ export function WidgetFlowEditor({
   onEditorChange,
   onChange,
 }: {
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   surface: WidgetSurface;
   editor?: WidgetEditorKind;
   onEditorChange?: (editor: WidgetEditorKind) => void;
-  onChange: (definition: WidgetDefinitionV1) => void;
+  onChange: (definition: WidgetDefinition) => void;
 }) {
   const [localEditor, setLocalEditor] =
     useState<WidgetEditorKind>("definition");
@@ -113,14 +114,14 @@ export function WidgetFlowEditor({
     [definition, surface],
   );
   const capability = widgetCapability(
-    widgetMeasureId(canonicalDefinition.analysis.measure),
+    widgetMeasureId(widgetPrimaryMeasure(canonicalDefinition.analysis)),
   );
   const selectEditor = (next: WidgetEditorKind) => {
     if (onEditorChange) onEditorChange(next);
     else setLocalEditor(next);
   };
   const commit = (draft: WidgetDraftValue) => {
-    const raw = draft as unknown as WidgetDefinitionV1;
+    const raw = draft as unknown as WidgetDefinition;
     onChange(resolveWidgetEditorChange(raw, context));
   };
 

@@ -28,7 +28,11 @@ describe("subjects and averages parity", () => {
     expect(detail).toContain("preferences.chartSettings.showSubSubjects")
     expect(detail).toContain("<ImpactGrid")
     expect(detail).toContain("resolved.graph.allGrades()")
-    expect(detail).toContain("custom.entries.flatMap")
+    // The composition is built from the average's own entries — `shown`, which is the
+    // custom average being read, or the one a year nominated as its general average.
+    // That page used to resolve `/averages/general` to the whole year regardless, so a
+    // substituted headline sat above a breakdown of a different set of subjects.
+    expect(detail).toContain("shown.entries.flatMap")
     expect(detail).toContain("href={`/subjects/${subject.id}`}")
     expect(detail).toContain('backHref="/subjects"')
   })

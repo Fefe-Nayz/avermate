@@ -5,6 +5,7 @@
 export {
   resolveSlotMapping,
   substituteSlots,
+  templateSlotKey,
   templateSlots,
   type TemplateSlot,
   type TemplateSlotKind,

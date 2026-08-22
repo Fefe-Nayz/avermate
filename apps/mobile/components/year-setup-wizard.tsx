@@ -474,7 +474,21 @@ export function YearSetupWizard({ yearId }: { yearId?: string }) {
       const periods = await savePeriods.mutateAsync(draft.periods);
       queryClient.setQueryData(
         orpc.snapshot.get.queryKey({ input: { yearId } }),
-        (current) => (current ? { ...current, periods } : current),
+        (current) =>
+          current
+            ? {
+                ...current,
+                periods: periods.map((period) => ({
+                  ...period,
+                  // The period route owns calendar rows; period-scoped average
+                  // adjustments are projected by the snapshot route. Preserve an
+                  // existing projection and initialize newly-created rows to zero.
+                  generalBonus:
+                    current.periods.find((entry) => entry.id === period.id)
+                      ?.generalBonus ?? 0,
+                })),
+              }
+            : current,
       );
       await queryClient.invalidateQueries({
         queryKey: orpc.presets.status.queryKey({ input: { yearId } }),

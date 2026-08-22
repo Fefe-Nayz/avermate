@@ -280,6 +280,21 @@ export function PresetMembershipClient() {
                     value: data.changes.averagesRemoved,
                     kind: "remove",
                   },
+                  {
+                    label: t("assessment types"),
+                    value: data.changes.gradeTypesAdded,
+                    kind: "add",
+                  },
+                  {
+                    label: t("assessment types changed"),
+                    value: data.changes.gradeTypesChanged,
+                    kind: "edit",
+                  },
+                  {
+                    label: t("assessment types"),
+                    value: data.changes.gradeTypesRemoved,
+                    kind: "remove",
+                  },
                 ]}
               />
             ) : null}
@@ -300,6 +315,7 @@ export function PresetMembershipClient() {
         ) : null}
 
         <SettingsSection
+          id="year-template"
           icon={SparklesIcon}
           title={linked ? t("Switch to another preset") : t("Choose a preset")}
           description={t(

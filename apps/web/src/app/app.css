@@ -6,6 +6,53 @@
  * handling that Tailwind has no opinion about.
  */
 
+/*
+ * Controls default to touch-safe dimensions. Density follows the actual
+ * input device, never viewport width: a wide tablet remains comfortable,
+ * while a desktop window can use the compact values without screen edits.
+ */
+:root {
+  --control-h: 2.5rem;
+  --control-h-xs: 1.75rem;
+  --control-h-sm: 2.25rem;
+  --control-h-lg: 3rem;
+  --control-icon-h-lg: 2.75rem;
+  /* Shared form wrappers keep their existing, intentionally larger targets. */
+  --control-h-form: 2.75rem;
+  --control-h-comfortable: 3rem;
+  --control-h-search: 2.75rem;
+  --control-px: 0.75rem;
+  --control-px-xs: 0.5rem;
+  --control-px-sm: 0.75rem;
+  --control-px-lg: 1rem;
+  --control-text: 1rem;
+  --control-text-xs: 0.75rem;
+  --control-text-sm: 0.8rem;
+  --control-text-lg: 0.95rem;
+  --control-textarea-min-h: 4rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root {
+    --control-h: 2rem;
+    --control-h-xs: 1.5rem;
+    --control-h-sm: 1.75rem;
+    --control-h-lg: 2.25rem;
+    --control-icon-h-lg: 2.25rem;
+    --control-h-form: 2.25rem;
+    --control-h-comfortable: 2.25rem;
+    --control-h-search: 2.5rem;
+    --control-px: 0.625rem;
+    --control-px-xs: 0.5rem;
+    --control-px-sm: 0.625rem;
+    --control-px-lg: 0.625rem;
+    --control-text: 0.875rem;
+    --control-text-xs: 0.75rem;
+    --control-text-sm: 0.8rem;
+    --control-text-lg: 0.875rem;
+  }
+}
+
 @theme inline {
   --spacing-safe-top: env(safe-area-inset-top, 0px);
   --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -425,6 +472,35 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* The settings section a search result just pointed at.
+   The search can send a reader to `/settings/appearance#charts`, a page of five
+   near-identical cards — and the browser scrolled them to it without saying which
+   one it meant. `:target` needs no state and no effect: it is true exactly while
+   the URL names this section, so the ring appears on arrival and again if the
+   reader picks the same result twice from somewhere else. Both reduced-motion
+   switches below cut the animation to nothing, leaving the border, which is the
+   part that carries the meaning. */
+@keyframes settings-target-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--ring) 45%, transparent);
+  }
+  12% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 45%, transparent);
+  }
+  72% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--ring) 0%, transparent);
+  }
+}
+
+.settings-section:target,
+.settings-section[data-settings-highlight] {
+  border-color: var(--ring);
+  animation: settings-target-ring 2.4s ease-out 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

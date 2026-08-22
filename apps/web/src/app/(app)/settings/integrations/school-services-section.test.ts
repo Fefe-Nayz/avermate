@@ -1,0 +1,77 @@
+import { describe, expect, test } from "bun:test"
+
+async function source(name: string) {
+  return Bun.file(new URL(name, import.meta.url)).text()
+}
+
+describe("school services settings", () => {
+  test("keeps each provider in its own UI and prefetches the provider catalog", async () => {
+    const [page, client, moodle, school] = await Promise.all([
+      source("./page.tsx"),
+      source("./integrations-client.tsx"),
+      source("./moodle-sync-section.tsx"),
+      source("./school-services-section.tsx"),
+    ])
+    expect(page).toContain("orpc.sync.providers.queryOptions()")
+    expect(client).toContain("<MoodleSyncSection />")
+    expect(client).toContain("<SchoolServicesSection />")
+    expect(moodle).toContain('connection.provider === "moodle"')
+    expect(school).toContain('connection.provider === "ecoledirecte"')
+    expect(school).toContain('t("Development only")')
+    expect(school).toContain("<PronoteDialog")
+    expect(school).toContain("<SkolengoDialog")
+  })
+
+  test("sends credentials only to the sealing mutation and never reads stored secrets", async () => {
+    const school = await source("./school-services-section.tsx")
+    expect(school).toContain('type="password"')
+    expect(school).toContain('autoComplete="current-password"')
+    expect(school).toContain("credentialInput: JSON.stringify")
+    expect(school).not.toContain("sealedCredentials")
+    expect(school).toContain("orpc.sync.ecoledirecte.begin")
+    expect(school).toContain("orpc.sync.ecoledirecte.confirm")
+    expect(school).toContain("challengeId")
+    expect(school).toContain("orpc.jobs.get")
+    expect(school).toContain("isTerminalSyncJob")
+    expect(school).toContain("orpc.sync.subjectMappings.list")
+    expect(school).toContain("orpc.sync.subjectMappings.resolve")
+    expect(school).toContain("providerSubjectExternalId")
+    expect(school).toContain("orpc.sync.subjectMappings.list.key()")
+    expect(school).toContain("SubjectMappingReview")
+    expect(school).toContain("linkedSubjectMappings")
+    expect(school).toContain("localSubjectSelectOptions")
+    expect(school).toContain('t("Update link")')
+    expect(school).toContain("mapping.subjectId ??")
+    expect(school).toContain("AcademicBindingDialog")
+    expect(school).toContain('t("Connections waiting for an academic year")')
+    expect(school).toContain('t("Review import")')
+    expect(school).toContain("orpc.sync.academic.preview")
+    expect(school).toContain("orpc.sync.academic.bind")
+    expect(school).toContain('mode: "create"')
+    expect(school).toContain('mode: "existing"')
+    expect(school).toContain("orpc.sync.periodMappings.list")
+    expect(school).toContain("orpc.sync.periodMappings.resolve")
+    expect(school).toContain("orpc.sync.gradeRecords.list")
+    expect(school).toContain("orpc.sync.connections.setGradesAuthority")
+    expect(school).toContain("orpc.sync.connections.purge")
+    expect(school).toContain("reconnectConnectionId")
+    expect(school).toContain("yearId: null as string | null")
+    expect(school).toContain('t("Disconnect and keep data")')
+    expect(school).toContain('t("Delete permanently")')
+    expect(school).toContain("Imported data was kept")
+    expect(school).toContain('provider: "pronote"')
+    expect(school).toContain('provider: "skolengo"')
+    expect(school).toContain("scolengo-token JSON bundle")
+    expect(school).toContain("resetCredentialMutations")
+    expect(school).toContain("begin.reset()")
+    expect(school).toContain("confirm.reset()")
+    expect(school).toContain("create.reset()")
+    expect(school).toContain("providerAvailable")
+    expect(school).toContain("Boolean(syncingId || jobId || run.isPending)")
+    expect(school).toContain("synchronizationBusy ||")
+    expect(school).toContain("gradeRecordCounts")
+    expect(school).toContain("schoolConnectionState")
+    expect(school).toContain("periodMappingsNeedingReview")
+    expect(school).not.toContain("console.log")
+  })
+})

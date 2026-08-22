@@ -17,6 +17,7 @@ import {
   users,
   years,
 } from "../db/schema";
+import { deleteAllUserFiles } from "../lib/storage";
 import { isAdmin } from "../lib/admin";
 import { isSuspensionActive } from "../lib/access-policy";
 import { auth } from "../lib/auth";
@@ -358,6 +359,8 @@ export const adminRouter = {
             value: grades.value,
             outOf: grades.outOf,
             coefficient: grades.coefficient,
+            excludedFromAverage: grades.excludedFromAverage,
+            syncExcludedFromAverage: grades.syncExcludedFromAverage,
             passedAt: grades.passedAt,
             createdAt: grades.createdAt,
             periodId: grades.periodId,
@@ -704,6 +707,8 @@ export const adminRouter = {
             value: grades.value,
             outOf: grades.outOf,
             coefficient: grades.coefficient,
+            excludedFromAverage: grades.excludedFromAverage,
+            syncExcludedFromAverage: grades.syncExcludedFromAverage,
             passedAt: grades.passedAt,
             createdAt: grades.createdAt,
             periodId: grades.periodId,
@@ -880,6 +885,7 @@ export const adminRouter = {
       if (input.confirmation !== input.userId) {
         badRequest("The confirmation does not match the account id");
       }
+      await deleteAllUserFiles(input.userId);
       const [deleted] = await db
         .delete(users)
         .where(eq(users.id, input.userId))

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildClassTemplate,
   classTemplateSummary,
   parseClassTemplate,
   sameAcademicDay,
@@ -31,6 +32,7 @@ const template: ClassTemplate = {
       },
     ],
     averages: [],
+    gradeTypes: [],
   },
   source: { kind: "preset", presetId: "fr-terminal", presetVersion: 3 },
 };
@@ -44,6 +46,49 @@ describe("class templates", () => {
       source: "preset",
       subjectCount: 1,
     });
+  });
+
+  test("canonicalizes grade type keys independently of builder order", () => {
+    const built = buildClassTemplate({
+      year: {
+        ...template.year,
+        startsAt: new Date(template.year.startsAt),
+        endsAt: new Date(template.year.endsAt),
+      },
+      periods: [],
+      configuration: {
+        ...template.configuration,
+        gradeTypes: [
+          {
+            key: "z-written",
+            name: "Written",
+            titlePrefix: "",
+            coefficient: 1,
+            outOf: 20,
+            accent: null,
+          },
+          {
+            key: "a-oral",
+            name: "Oral",
+            titlePrefix: "",
+            coefficient: 1,
+            outOf: 20,
+            accent: null,
+          },
+        ],
+      },
+      source: template.source,
+    });
+
+    expect(built.configuration.gradeTypes.map((type) => type.key)).toEqual([
+      "a-oral",
+      "z-written",
+    ]);
+    expect(
+      parseClassTemplate(serializeClassTemplate(built))?.configuration.gradeTypes.map(
+        (type) => type.key,
+      ),
+    ).toEqual(["a-oral", "z-written"]);
   });
 
   test("treats malformed legacy storage as an unconfigured class", () => {

@@ -1,0 +1,1 @@
+ALTER TABLE `material_tag_links` ADD `origin` text DEFAULT 'manual' NOT NULL;

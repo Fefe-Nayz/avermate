@@ -3,6 +3,7 @@ import { z } from "zod";
 import type {
   ManagedPresetAverage,
   ManagedPresetConfiguration,
+  ManagedPresetGradeType,
   ManagedPresetSubject,
   Preset,
   PresetSubject,
@@ -47,10 +48,24 @@ const managedAverageSchema: z.ZodType<ManagedPresetAverage> = z.object({
     .max(200),
 });
 
+const managedGradeTypeSchema: z.ZodType<ManagedPresetGradeType> = z.object({
+  key: nodeKey,
+  name: z.string().trim().min(1).max(48),
+  // Not trimmed: the trailing space is the point. "DS " is what turns into "DS 3" in
+  // the name box, and "DS" would leave somebody deleting the join every time.
+  titlePrefix: z.string().max(48).default(""),
+  coefficient: z.number().min(0).max(1000).default(1),
+  outOf: z.number().positive().max(100_000).default(20),
+  accent: z.string().trim().max(32).nullable().default(null),
+});
+
 export const managedPresetConfigurationSchema = z
   .object({
     subjects: z.array(managedSubjectSchema).min(1).max(300),
     averages: z.array(managedAverageSchema).max(100),
+    // Absent in every payload published before assessment types existed, and a preset is
+    // immutable once published — so the field defaults rather than being backfilled.
+    gradeTypes: z.array(managedGradeTypeSchema).max(24).default([]),
   })
   .superRefine((configuration, context) => {
     const subjectKeys = new Set<string>();
@@ -73,6 +88,17 @@ export const managedPresetConfigurationSchema = z
       }
     };
     visit(configuration.subjects);
+
+    const typeKeys = new Set<string>();
+    for (const type of configuration.gradeTypes) {
+      if (typeKeys.has(type.key)) {
+        context.addIssue({
+          code: "custom",
+          message: `Duplicate grade type key: ${type.key}`,
+        });
+      }
+      typeKeys.add(type.key);
+    }
 
     const averageKeys = new Set<string>();
     for (const average of configuration.averages) {
@@ -141,6 +167,14 @@ export function normalizeLegacyPreset(
 
   const configuration: ManagedPresetConfiguration = {
     subjects: subjects(preset.subjects, []),
+    gradeTypes: (preset.gradeTypes ?? []).map((type, index) => ({
+      key: type.key ?? `legacy-type:${index}:${slug(type.name)}`,
+      name: type.name,
+      titlePrefix: type.titlePrefix ?? "",
+      coefficient: type.coefficient ?? 1,
+      outOf: type.outOf ?? 20,
+      accent: type.accent ?? null,
+    })),
     averages: preset.averages.map((average, index) => ({
       key: average.key ?? `legacy-average:${index}:${slug(average.name)}`,
       name: average.name,

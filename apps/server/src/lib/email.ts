@@ -75,10 +75,7 @@ function layout(options: {
 }
 
 export type OtpKind =
-  | "email-verification"
-  | "sign-in"
-  | "forget-password"
-  | "change-email";
+  "email-verification" | "sign-in" | "forget-password" | "change-email";
 
 const OTP_COPY: Record<Locale, Record<OtpKind, Copy>> = {
   en: {
@@ -211,7 +208,9 @@ export async function sendAccountDeletionConfirmation(input: {
   const french = (input.locale ?? "fr") === "fr";
   await send(
     input.to,
-    french ? "Confirmez la suppression de votre compte" : "Confirm account deletion",
+    french
+      ? "Confirmez la suppression de votre compte"
+      : "Confirm account deletion",
     layout({
       heading: french ? "Supprimer votre compte" : "Delete your account",
       body: french

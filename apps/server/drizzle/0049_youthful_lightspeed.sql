@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `sync_connections_remote_scope_unique` ON `sync_connections` (`userId`,`provider`,`remoteStudentId`,`remoteAcademicYearId`) WHERE "sync_connections"."remoteStudentId" is not null and "sync_connections"."remoteAcademicYearId" is not null;

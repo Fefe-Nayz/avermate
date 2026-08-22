@@ -2475,7 +2475,7 @@ function AwardRevealSlide({ stats }: SlideProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
-            className="text-md leading-tight font-bold text-white sm:text-xl"
+            className="clamp-[text,base,xl] leading-tight font-bold text-white"
           >
             {award.condition}
           </motion.div>

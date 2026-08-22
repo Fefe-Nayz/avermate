@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { ChevronRightIcon } from "lucide-react"
-import { useFormatter } from "next-intl"
+import { useExtracted, useFormatter } from "next-intl"
 import { gradeRatio, type Grade } from "@avermate/core"
 import { CoefficientBadge, ResultBadge } from "@/components/data/value"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,6 +27,7 @@ export const gradeListItemClassName = `${listRowClassName} transition-colors hov
  * drifting apart again.
  */
 export function GradeList({ grades }: { grades: readonly Grade[] }) {
+  const t = useExtracted()
   const format = useFormatter()
   const { graph } = useYear()
 
@@ -65,6 +66,21 @@ export function GradeList({ grades }: { grades: readonly Grade[] }) {
                     </div>
                   </div>
                   <CoefficientBadge coefficient={grade.coefficient} />
+                  {/* The badge beside this reads the mark with its bonus in it, so a
+                      paper worth 14 shows 15 and the row would otherwise disagree with
+                      itself. Small and quiet: it is an annotation on the figure, not a
+                      second figure. */}
+                  {grade.bonus ? (
+                    <span
+                      className="numeric shrink-0 text-xs text-muted-foreground"
+                      title={t("Bonus points")}
+                    >
+                      {format.number(grade.bonus, {
+                        signDisplay: "always",
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  ) : null}
                   <ResultBadge ratio={gradeRatio(grade)} />
                   <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/60" />
                 </Link>

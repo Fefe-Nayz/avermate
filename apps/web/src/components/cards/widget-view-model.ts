@@ -1,13 +1,14 @@
 import {
   widgetCapability,
   widgetMeasureHasIntrinsicDelta,
+  widgetPrimaryMeasure,
   widgetMeasureId,
   type GoalPlan,
-  type WidgetDefinitionV1,
-  type WidgetEncodingField,
+  type WidgetDefinition,
+  type WidgetDatumSlotName,
   type WidgetSeriesDatum,
   type WidgetValueType,
-  type WidgetVisualizationV1,
+  type WidgetVisualization,
 } from "@avermate/core"
 
 export function widgetGoalPresentation(
@@ -30,26 +31,54 @@ export function widgetGoalPresentation(
 }
 
 export function widgetDefinitionValueType(
-  definition: WidgetDefinitionV1
+  definition: WidgetDefinition
 ): WidgetValueType {
-  return definition.analysis.measure.kind === "formula"
-    ? definition.analysis.measure.valueType
-    : widgetCapability(widgetMeasureId(definition.analysis.measure)).valueType
+  const measure = widgetPrimaryMeasure(definition.analysis)
+  return measure.kind === "formula"
+    ? measure.valueType
+    : widgetCapability(widgetMeasureId(measure)).valueType
 }
 
 export function widgetDefinitionShowsDelta(
-  definition: WidgetDefinitionV1
+  definition: WidgetDefinition
 ): boolean {
   return (
     definition.analysis.comparison.kind !== "none" ||
-    widgetMeasureHasIntrinsicDelta(definition.analysis.measure)
+    widgetMeasureHasIntrinsicDelta(widgetPrimaryMeasure(definition.analysis))
   )
+}
+
+/** Whether the headline is itself a signed movement rather than a level. */
+export function widgetMeasureValueIsDelta(
+  measure: WidgetDefinition["analysis"]["measures"][number]["expression"]
+): boolean {
+  return (
+    measure.kind === "metric" &&
+    (measure.metric === "averageTrend" ||
+      measure.metric === "improvement" ||
+      measure.metric === "mostImproved" ||
+      measure.metric === "cohortGap")
+  )
+}
+
+export function widgetDefinitionValueIsDelta(
+  definition: WidgetDefinition
+): boolean {
+  return widgetMeasureValueIsDelta(widgetPrimaryMeasure(definition.analysis))
+}
+
+/** Whether one rendered channel carries a signed movement rather than a level. */
+export function widgetChannelValueIsDelta(
+  slot: WidgetDatumSlotName | null,
+  measureValueIsDelta: boolean
+): boolean {
+  return slot === "delta" || (slot === "value" && measureValueIsDelta)
 }
 
 export function widgetDisplayValue(
   value: number,
   valueType: WidgetValueType,
-  unit: WidgetVisualizationV1["format"]["unit"],
+  unit: WidgetVisualization["format"]["unit"],
   scale: number
 ): number {
   const resolved = unit === "auto" ? valueType : unit
@@ -59,7 +88,7 @@ export function widgetDisplayValue(
 }
 
 export function widgetEncodingValueType(
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   resultValueType: WidgetValueType
 ): WidgetValueType {
   if (field === "count") return "count"
@@ -69,9 +98,9 @@ export function widgetEncodingValueType(
 
 export function widgetEncodedScaleValue(
   value: number,
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   resultValueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): number {
   return widgetDisplayValue(
@@ -84,8 +113,8 @@ export function widgetEncodedScaleValue(
 
 export function widgetResolvedUnit(
   valueType: WidgetValueType,
-  unit: WidgetVisualizationV1["format"]["unit"]
-): WidgetValueType | Exclude<WidgetVisualizationV1["format"]["unit"], "auto"> {
+  unit: WidgetVisualization["format"]["unit"]
+): WidgetValueType | Exclude<WidgetVisualization["format"]["unit"], "auto"> {
   return unit === "auto" ? valueType : unit
 }
 
@@ -99,7 +128,7 @@ export interface WidgetValuePresentation {
 export function widgetValuePresentation(
   value: number,
   valueType: WidgetValueType,
-  format: WidgetVisualizationV1["format"],
+  format: WidgetVisualization["format"],
   scale: number,
   defaultDecimals: number
 ): WidgetValuePresentation {
@@ -168,9 +197,9 @@ export function widgetGaugeFillRatio(
 
 export function widgetNumericEncodedValue(
   item: WidgetSeriesDatum,
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   valueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): number | null {
   if (field === "count") return item.count
@@ -197,9 +226,9 @@ export function widgetNumericEncodedValue(
 
 export function widgetEncodedValue(
   item: WidgetSeriesDatum,
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   valueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): string | number | null {
   if (field === "date") return item.date?.getTime() ?? null
@@ -209,7 +238,7 @@ export function widgetEncodedValue(
 
 export function widgetThresholdColor(
   value: number,
-  thresholds: WidgetVisualizationV1["thresholds"]
+  thresholds: WidgetVisualization["thresholds"]
 ): string | null {
   return (
     [...thresholds]
@@ -220,9 +249,9 @@ export function widgetThresholdColor(
 
 export function widgetEncodedThresholdColor(
   shownValue: number,
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   resultValueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): string | null {
   return (
@@ -244,9 +273,9 @@ export function widgetEncodedThresholdColor(
 
 export function widgetColorValue(
   item: WidgetSeriesDatum,
-  field: WidgetEncodingField,
+  field: WidgetDatumSlotName,
   valueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): string | number | null {
   if (field === "category") return item.series ?? item.label
@@ -255,11 +284,11 @@ export function widgetColorValue(
 
 export function widgetEncodedSeriesDatum(
   item: WidgetSeriesDatum,
-  xField: WidgetEncodingField,
-  yField: WidgetEncodingField,
-  colorField: WidgetEncodingField | null,
+  xField: WidgetDatumSlotName,
+  yField: WidgetDatumSlotName,
+  colorField: WidgetDatumSlotName | null,
   valueType: WidgetValueType,
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
   scale: number
 ): {
   x: string | number

@@ -8,7 +8,10 @@ import {
   goals,
   gradeComponents,
   grades,
+  gradeTypes,
+  periodGeneralAdjustments,
   periods,
+  subjectPeriodAdjustments,
   subjects,
 } from "../db/schema";
 import { protectedProcedure } from "../lib/orpc";
@@ -34,10 +37,13 @@ export const snapshotRouter = {
         gradeRows,
         componentRows,
         periodRows,
+        generalAdjustmentRows,
+        subjectAdjustmentRows,
         averageRows,
         entryRows,
         goalRows,
         cardRows,
+        typeRows,
       ] = await Promise.all([
         db
           .select()
@@ -76,6 +82,31 @@ export const snapshotRouter = {
           .where(eq(periods.yearId, year.id))
           .orderBy(asc(periods.sortOrder), asc(periods.startAt)),
         db
+          .select({
+            periodId: periodGeneralAdjustments.periodId,
+            points: periodGeneralAdjustments.points,
+          })
+          .from(periodGeneralAdjustments)
+          .where(
+            and(
+              eq(periodGeneralAdjustments.userId, userId),
+              eq(periodGeneralAdjustments.yearId, year.id),
+            ),
+          ),
+        db
+          .select({
+            periodId: subjectPeriodAdjustments.periodId,
+            subjectId: subjectPeriodAdjustments.subjectId,
+            points: subjectPeriodAdjustments.points,
+          })
+          .from(subjectPeriodAdjustments)
+          .where(
+            and(
+              eq(subjectPeriodAdjustments.userId, userId),
+              eq(subjectPeriodAdjustments.yearId, year.id),
+            ),
+          ),
+        db
           .select()
           .from(customAverages)
           .where(eq(customAverages.yearId, year.id))
@@ -112,6 +143,19 @@ export const snapshotRouter = {
           .from(dashboardCards)
           .where(eq(dashboardCards.yearId, year.id))
           .orderBy(asc(dashboardCards.sortOrder)),
+        db
+          .select({
+            id: gradeTypes.id,
+            name: gradeTypes.name,
+            titlePrefix: gradeTypes.titlePrefix,
+            coefficient: gradeTypes.coefficient,
+            outOf: gradeTypes.outOf,
+            accent: gradeTypes.accent,
+            sortOrder: gradeTypes.sortOrder,
+          })
+          .from(gradeTypes)
+          .where(eq(gradeTypes.yearId, year.id))
+          .orderBy(asc(gradeTypes.sortOrder), asc(gradeTypes.name)),
       ]);
 
       const componentsByGrade = new Map<string, typeof componentRows>();
@@ -126,6 +170,16 @@ export const snapshotRouter = {
         const list = gradesBySubject.get(grade.subjectId);
         if (list) list.push(grade);
         else gradesBySubject.set(grade.subjectId, [grade]);
+      }
+
+      const generalAdjustmentByPeriod = new Map(
+        generalAdjustmentRows.map((row) => [row.periodId, row.points]),
+      );
+      const subjectAdjustments = new Map<string, Record<string, number>>();
+      for (const row of subjectAdjustmentRows) {
+        const current = subjectAdjustments.get(row.subjectId) ?? {};
+        current[row.periodId] = row.points;
+        subjectAdjustments.set(row.subjectId, current);
       }
 
       const entriesByAverage = new Map<
@@ -158,6 +212,16 @@ export const snapshotRouter = {
           defaultOutOf: year.defaultOutOf,
           passingRatio: year.passingRatio,
           decimals: year.decimals,
+          /**
+           * The average this year reads as its general one, and the points added to it.
+           *
+           * Both belong to the year rather than to the reading, because the client
+           * builds one graph for the whole year and hands it the arrangement once — see
+           * `SubjectGraphOptions`. A nomination naming an average that no longer exists
+           * is simply not found there, and the general average is the whole year again.
+           */
+          mainAverageId: year.mainAverageId,
+          generalBonus: year.generalBonus,
           sortOrder: year.sortOrder,
           archivedAt: year.archivedAt,
         },
@@ -169,6 +233,8 @@ export const snapshotRouter = {
           coefficient: subject.coefficient,
           kind: subject.kind as "subject" | "category",
           isMain: subject.isMain,
+          bonus: subject.bonus,
+          periodBonuses: subjectAdjustments.get(subject.id) ?? {},
           sortOrder: subject.sortOrder,
           grades: (gradesBySubject.get(subject.id) ?? []).map((grade) => ({
             id: grade.id,
@@ -176,12 +242,20 @@ export const snapshotRouter = {
             value: grade.value,
             outOf: grade.outOf,
             coefficient: grade.coefficient,
+            excludedFromAverage: grade.excludedFromAverage,
+            syncExcludedFromAverage: grade.syncExcludedFromAverage,
+            // Extra points on this result's own scale, kept apart from the mark itself.
+            bonus: grade.bonus,
             isComposite: grade.isComposite,
             note: grade.note,
             passedAt: grade.passedAt,
             createdAt: grade.createdAt,
             subjectId: grade.subjectId,
             periodId: grade.periodId,
+            // The kind of assessment, where the year defines any. `null` on every result
+            // written before types existed, and on any whose type was deleted — a result
+            // outlives its template.
+            typeId: grade.typeId,
             components: (componentsByGrade.get(grade.id) ?? []).map(
               (component) => ({
                 id: component.id,
@@ -194,13 +268,18 @@ export const snapshotRouter = {
             ),
           })),
         })),
-        periods: periodRows,
+        periods: periodRows.map((period) => ({
+          ...period,
+          generalBonus: generalAdjustmentByPeriod.get(period.id) ?? 0,
+        })),
+        gradeTypes: typeRows,
         customAverages: averageRows.map((average) => ({
           id: average.id,
           name: average.name,
           // Historical rows can still carry this bit; it has no product
           // meaning now and must never alter the general average.
           isMain: false,
+          bonus: average.bonus,
           sortOrder: average.sortOrder,
           entries: entriesByAverage.get(average.id) ?? [],
         })),

@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { newId } from "../../lib/id";
 import { users } from "./auth";
-import type { WidgetDefinitionV1 } from "@avermate/core/widget-types";
+import type { WidgetDefinition } from "@avermate/core/widget-types";
 
 /**
  * Application schema.
@@ -153,6 +153,25 @@ export const years = sqliteTable(
     /** Decimal places used when displaying averages. */
     decimals: integer().notNull().default(2),
 
+    /**
+     * A custom average nominated to *be* this year's general average.
+     *
+     * `null` — the ordinary case — means the general average is the whole year. Set, it
+     * is the average named here, everywhere the general average is read. Deliberately a
+     * property of the year rather than a flag on the average: there is exactly one
+     * headline, and a column that can hold one value is what says so.
+     *
+     * Not a foreign key. A circular reference between two tables that already cascade
+     * one way would mean rebuilding `years` for a guarantee the readers do not need:
+     * the nomination is resolved by looking the id up among the year's averages, so one
+     * that no longer exists is simply not found and the general average is the whole
+     * year again. Deleting an average clears it anyway, which is the path a person takes
+     * on purpose.
+     */
+    mainAverageId: text(),
+    /** Extra points on the year's scale, added to the general average. */
+    generalBonus: real().notNull().default(0),
+
     /** Preset this year was created from, kept for later updates. */
     presetId: text(),
     sortOrder: integer().notNull().default(0),
@@ -281,6 +300,8 @@ export const subjects = sqliteTable(
     /** "subject" counts once; "category" lets its children weigh in above it. */
     kind: text().notNull().default("subject"),
     isMain: integer({ mode: "boolean" }).notNull().default(false),
+    /** Extra points on the year's scale, added to this subject's average. */
+    bonus: real().notNull().default(0),
     sortOrder: integer().notNull().default(0),
     /** Stable preset node identity; names and positions may change by version. */
     presetNodeKey: text(),
@@ -304,6 +325,61 @@ export const subjects = sqliteTable(
 
 // ---------------------------------------------------------------------- grades
 
+/**
+ * A kind of assessment, defined by the person who is being assessed.
+ *
+ * Not an enumeration of "written / oral / practical". A year's kinds of assessment are
+ * whatever that year actually holds — "DS", "Interrogation", "Colle", "TP noté", "Grand
+ * oral" — and no fixed list survives contact with two school systems. So a type is a
+ * *template*: a name, and the parts of a result it can fill in ahead of time.
+ *
+ * What it fills in stays editable. A type that forced its coefficient would be a type
+ * nobody could use for the one test that counted double, and the point of a template is
+ * to save typing rather than to constrain.
+ *
+ * Per year, like subjects and custom averages, and materialised from a preset the same
+ * way: a year is a contract, and last year's kinds of assessment are not automatically
+ * this year's.
+ */
+export const gradeTypes = sqliteTable(
+  "grade_types",
+  {
+    id: text()
+      .notNull()
+      .primaryKey()
+      .$defaultFn(() => newId("gtype")),
+    name: text().notNull(),
+    /**
+     * What a result of this kind is usually called, offered as the start of the title.
+     *
+     * "DS" turns into "DS " in the name box, ready for "DS 3". Empty means the type names
+     * nothing and only carries its numbers.
+     */
+    titlePrefix: text().notNull().default(""),
+    /** Suggested coefficient and denominator; both stay editable on the result itself. */
+    coefficient: real().notNull().default(1),
+    outOf: real().notNull().default(20),
+    /** Named accent from the theme, so a type can be recognised at a glance. */
+    accent: text(),
+    sortOrder: integer().notNull().default(0),
+    /** Stable preset identity across published versions, as subjects have. */
+    presetNodeKey: text(),
+
+    yearId: text()
+      .notNull()
+      .references(() => years.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    userId: owner(),
+    ...timestamps,
+  },
+  (t) => [
+    index("grade_types_year_id_idx").on(t.yearId),
+    uniqueIndex("grade_types_year_preset_node_unique").on(
+      t.yearId,
+      t.presetNodeKey,
+    ),
+  ],
+);
+
 export const grades = sqliteTable(
   "grades",
   {
@@ -316,9 +392,27 @@ export const grades = sqliteTable(
     value: real().notNull(),
     outOf: real().notNull(),
     coefficient: real().notNull().default(1),
+    /**
+     * Extra points on this result's own scale — 14/20 with a bonus of 1 reads as 15/20.
+     *
+     * Its own column rather than folded into `value`, because what the paper said and
+     * what was added afterwards are two different facts, and only the first is the mark.
+     */
+    bonus: real().notNull().default(0),
 
     /** Set when the headline number is derived from `gradeComponents`. */
     isComposite: integer({ mode: "boolean" }).notNull().default(false),
+    /** Local calculation overlay; the stored result remains visible but has no weight. */
+    excludedFromAverage: integer({ mode: "boolean" }).notNull().default(false),
+    /**
+     * Synchronization state gate. This is deliberately separate from the
+     * user's `excludedFromAverage` overlay so changing provider authority,
+     * losing a remote result, or remapping a period never erases a personal
+     * inclusion/exclusion choice.
+     */
+    syncExcludedFromAverage: integer({ mode: "boolean" })
+      .notNull()
+      .default(false),
     /** Free-form note the user attached to the result. */
     note: text(),
 
@@ -334,6 +428,16 @@ export const grades = sqliteTable(
       onDelete: "set null",
       onUpdate: "cascade",
     }),
+    /**
+     * The kind of assessment this was, where the year defines any.
+     *
+     * `set null` rather than cascade: deleting a type must not delete results, and a
+     * result whose type is gone is still a result — it simply stops being grouped by one.
+     */
+    typeId: text().references(() => gradeTypes.id, {
+      onDelete: "set null",
+      onUpdate: "cascade",
+    }),
     yearId: text()
       .notNull()
       .references(() => years.id, { onDelete: "cascade", onUpdate: "cascade" }),
@@ -342,6 +446,7 @@ export const grades = sqliteTable(
   },
   (t) => [
     index("grades_subject_id_idx").on(t.subjectId),
+    index("grades_type_id_idx").on(t.typeId),
     index("grades_year_id_idx").on(t.yearId),
     index("grades_user_id_idx").on(t.userId),
     index("grades_passed_at_idx").on(t.passedAt),
@@ -384,6 +489,8 @@ export const customAverages = sqliteTable(
     name: text().notNull(),
     /** @deprecated Kept only for backwards-compatible stored snapshots. */
     isMain: integer({ mode: "boolean" }).notNull().default(false),
+    /** Extra points on the year's scale, added to this average. */
+    bonus: real().notNull().default(0),
     sortOrder: integer().notNull().default(0),
     /** Stable preset average identity across published versions. */
     presetNodeKey: text(),
@@ -521,9 +628,7 @@ export const dashboardCards = sqliteTable(
      * null, so a row that cannot be read no longer exists.
      */
     definitionVersion: integer().notNull(),
-    definitionJson: text({ mode: "json" })
-      .$type<WidgetDefinitionV1>()
-      .notNull(),
+    definitionJson: text({ mode: "json" }).$type<WidgetDefinition>().notNull(),
 
     yearId: text()
       .notNull()

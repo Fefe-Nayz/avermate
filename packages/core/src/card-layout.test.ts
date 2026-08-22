@@ -9,18 +9,34 @@ import {
   type CardSpec,
 } from "./cards";
 import { layoutCardGrid } from "./card-grid";
+import {
+  WIDGET_RECIPES,
+  widgetRecipeLayout,
+  type WidgetChartRecipe,
+} from "./widget-recipes";
+
+/** What the web derives from a definition, in the shape these fixtures speak. */
+function recipeForDisplay(display: CardDisplay): WidgetChartRecipe {
+  if (display === "value") return "value";
+  if (display === "gauge") return "gauge";
+  if (display === "sparkline") return "sparkline";
+  if (display === "list") return "ranking";
+  return "bar";
+}
 
 function card(
   id: string,
   span: CardSpec["span"],
   display: CardDisplay = "value",
   metric: CardMetric = "average",
+  recipe: WidgetChartRecipe = recipeForDisplay(display),
 ): CardSpec {
   return {
     id,
     metric,
     target: { kind: "general", referenceId: null },
     display,
+    recipe,
     span,
     title: null,
     accent: null,
@@ -30,8 +46,10 @@ function card(
   };
 }
 
-const number = { display: "value" as const, metric: "average" as const };
-const named = { display: "value" as const, metric: "bestSubject" as const };
+const number = { recipe: "value" as const };
+const named = { recipe: "value" as const };
+/** A body that cannot be read in a sliver, whatever its metric is. */
+const wide = { recipe: "histogram" as const };
 
 const widths = (specs: CardSpec[], columns: number) =>
   layoutCards(specs, columns).map((item) => item.columns);
@@ -203,9 +221,7 @@ describe("card layout", () => {
     ]);
     // And a chart on a phone has one: it cannot be drawn at half a row.
     expect(
-      availableSpans({ display: "chart", metric: "distribution" }, 2).map(
-        (item) => item.columns,
-      ),
+      availableSpans({ recipe: "bar" }, 2).map((item) => item.columns),
     ).toEqual([2]);
     // A card that reports a name is offered every width, same as any other.
     expect(availableSpans(named, 4).map((item) => item.columns)).toEqual([
@@ -228,9 +244,7 @@ describe("card layout", () => {
   });
 
   test("a width the surface cannot draw leaves the stored span alone", () => {
-    expect(
-      spanForColumns(2, 1, { display: "chart", metric: "average" }, 2),
-    ).toBe(2);
+    expect(spanForColumns(2, 1, { recipe: "bar" }, 2)).toBe(2);
   });
 
   test("a round trip through a phone edit is stable", () => {

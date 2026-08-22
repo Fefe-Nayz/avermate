@@ -1,8 +1,28 @@
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
-import { SETTINGS_SECTIONS, isActiveSettingsSection } from "./nav"
+import {
+  CUSTOMIZABLE_NAV_HREFS,
+  DEFAULT_SIDEBAR_HREFS,
+  NAV_ENTRIES,
+  SETTINGS_SECTIONS,
+  isActiveSettingsSection,
+  sanitizeNavSelection,
+} from "./nav"
 
 const settingsDir = new URL("../app/(app)/settings/", import.meta.url)
+
+function settingsSource(directory: URL): string {
+  return readdirSync(directory, { withFileTypes: true })
+    .map((entry) => {
+      const path = new URL(
+        entry.name + (entry.isDirectory() ? "/" : ""),
+        directory
+      )
+      if (entry.isDirectory()) return settingsSource(path)
+      return entry.name.endsWith(".tsx") ? readFileSync(path, "utf8") : ""
+    })
+    .join("\n")
+}
 
 /** Every settings screen on disk, as the route that reaches it. */
 const routes = readdirSync(settingsDir, { withFileTypes: true })
@@ -56,5 +76,46 @@ describe("settings sections", () => {
     expect(isActiveSettingsSection("/settings/appearance", appearance)).toBe(
       true
     )
+  })
+
+  test("every indexed in-page setting links to a real anchor", () => {
+    const source = settingsSource(settingsDir)
+    const fragments = SETTINGS_SECTIONS.flatMap((section) =>
+      (section.items ?? []).flatMap((item) => {
+        const hash = item.href.indexOf("#")
+        return hash === -1 ? [] : [item.href.slice(hash + 1)]
+      })
+    )
+
+    for (const fragment of new Set(fragments)) {
+      expect(source).toContain(`id="${fragment}"`)
+    }
+  })
+})
+
+describe("planning navigation", () => {
+  test("places Planning directly after goals and keeps it customizable", () => {
+    const hrefs = NAV_ENTRIES.map((entry) => entry.href)
+    expect(hrefs.indexOf("/planning")).toBe(hrefs.indexOf("/goals") + 1)
+    expect(CUSTOMIZABLE_NAV_HREFS).toContain("/planning")
+  })
+
+  test("migrates a previously pinned Agenda destination to Planning", () => {
+    expect(sanitizeNavSelection(["/agenda"], DEFAULT_SIDEBAR_HREFS)).toContain(
+      "/planning"
+    )
+  })
+
+  test("stays named on every customizable navigation surface", () => {
+    for (const file of [
+      "../components/shell/app-sidebar.tsx",
+      "../components/shell/mobile-tabbar.tsx",
+      "../components/command/command-palette.tsx",
+      "../app/(app)/settings/navigation/page.tsx",
+      "../app/(app)/more/page.tsx",
+    ]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8")
+      expect(source).toContain('t("Planning")')
+    }
   })
 })

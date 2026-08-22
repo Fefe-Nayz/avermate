@@ -26,8 +26,6 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@avermate/core"],
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "*.ufs.sh" },
-      { protocol: "https", hostname: "utfs.io" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
       { protocol: "https", hostname: "graph.microsoft.com" },
     ],
@@ -114,6 +112,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/vendor/pyodide/:asset*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -121,7 +129,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(), microphone=(self), geolocation=()",
           },
         ],
       },

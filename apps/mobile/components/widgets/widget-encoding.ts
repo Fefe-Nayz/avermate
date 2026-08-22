@@ -1,8 +1,9 @@
 import type {
-  WidgetEncodingField,
+  WidgetDatumSlotName,
+  WidgetDatumSlots,
   WidgetScaleSpec,
   WidgetSeriesDatum,
-  WidgetVisualizationV1,
+  WidgetVisualization,
 } from "@avermate/core";
 
 export interface WidgetNumericDomain {
@@ -40,7 +41,7 @@ export function widgetColorIndex(
 
 export function widgetDatumNumber(
   datum: WidgetSeriesDatum,
-  field: WidgetEncodingField | undefined,
+  field: WidgetDatumSlotName | undefined,
 ): number | null {
   switch (field ?? "value") {
     case "value":
@@ -58,7 +59,7 @@ export function widgetDatumNumber(
 
 export function widgetDatumLabel(
   datum: WidgetSeriesDatum,
-  field: WidgetEncodingField | undefined,
+  field: WidgetDatumSlotName | undefined,
 ): string {
   switch (field ?? "category") {
     case "date":
@@ -82,10 +83,12 @@ export interface EncodedWidgetDatum extends WidgetSeriesDatum {
 /** Applies the y and series channels while preserving the evaluator row. */
 export function encodeWidgetSeries(
   values: WidgetSeriesDatum[],
-  visualization: WidgetVisualizationV1,
+  visualization: WidgetVisualization,
+  /** Which datum slot each channel meant — resolved by the caller from the analysis. */
+  slots: WidgetDatumSlots,
 ): EncodedWidgetDatum[] {
-  const yField = visualization.encoding.y?.field ?? "value";
-  const seriesField = visualization.encoding.series?.field;
+  const yField = slots.y ?? "value";
+  const seriesField = slots.series ?? undefined;
   const categories = new Map<string, number>();
   if (yField === "category") {
     for (const value of values) {

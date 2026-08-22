@@ -46,6 +46,7 @@ import {
   periodDraftsFromRows,
   type PeriodDraft,
 } from "@/lib/period-drafts"
+import { writeStickyValue } from "@/hooks/use-sticky-state"
 import {
   ACTIVE_YEAR_STORAGE_KEY,
   writeActiveYearCookie,
@@ -88,7 +89,7 @@ export function YearConfigurationWizard({
 
   useEffect(() => {
     writeActiveYearCookie(yearId)
-    localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(yearId))
+    writeStickyValue(ACTIVE_YEAR_STORAGE_KEY, yearId)
   }, [yearId])
 
   const goTo = (next: ConfigurationStep) => {
@@ -116,7 +117,7 @@ export function YearConfigurationWizard({
 
   const finish = () => {
     writeActiveYearCookie(yearId)
-    localStorage.setItem(ACTIVE_YEAR_STORAGE_KEY, JSON.stringify(yearId))
+    writeStickyValue(ACTIVE_YEAR_STORAGE_KEY, yearId)
     haptic("success")
     toast.success(t("Year ready."))
     router.replace("/dashboard")

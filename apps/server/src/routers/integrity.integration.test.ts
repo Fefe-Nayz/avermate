@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
 import { createRouterClient } from "@orpc/server";
 import {
@@ -49,7 +49,6 @@ process.env.BETTER_AUTH_SECRET = "test-secret-that-is-at-least-32-chars";
 process.env.CLIENT_URL = "http://localhost:3001";
 process.env.NODE_ENV = "test";
 process.env.DISABLE_EMAIL = "true";
-process.env.DISABLE_FEEDBACK = "true";
 process.env.DISABLE_UPLOADS = "true";
 
 const migrationDirectory = join(import.meta.dir, "../../drizzle");
@@ -289,22 +288,118 @@ beforeAll(async () => {
   });
 });
 
-afterAll(async () => {
-  database.$client.close();
-});
-
 describe("router year invariants", () => {
+  test("partial academic updates preserve omitted defaults", async () => {
+    const year = await api.years.create({
+      name: "Patch preservation year",
+      startsAt: new Date("2041-09-01T00:00:00.000Z"),
+      endsAt: new Date("2042-07-01T00:00:00.000Z"),
+      scale: 100,
+      defaultOutOf: 40,
+      passingRatio: 0.6,
+      decimals: 3,
+      generalBonus: 4,
+    });
+    const period = await api.periods.create({
+      yearId: year.id,
+      name: "Cumulative term",
+      startAt: new Date("2041-09-01T00:00:00.000Z"),
+      endAt: new Date("2042-01-31T23:59:59.000Z"),
+      isCumulative: true,
+    });
+    const subject = await api.subjects.create({
+      yearId: year.id,
+      name: "Weighted subject",
+      shortName: "Weighted",
+      coefficient: 7,
+      kind: "subject",
+      isMain: true,
+      bonus: 3,
+    });
+    const average = await api.averages.create({
+      yearId: year.id,
+      name: "Adjusted average",
+      bonus: 2,
+      entries: [
+        { subjectId: subject.id, coefficient: 5, includeChildren: true },
+      ],
+    });
+    const goal = await api.goals.create({
+      yearId: year.id,
+      name: "Pinned target",
+      kind: "subject",
+      referenceId: subject.id,
+      targetRatio: 0.75,
+      periodId: period.id,
+      dueAt: new Date("2042-01-15T00:00:00.000Z"),
+      isPinned: true,
+    });
+
+    const renamedYear = await api.years.update({
+      yearId: year.id,
+      name: "Renamed year",
+    });
+    const renamedPeriod = await api.periods.update({
+      periodId: period.id,
+      name: "Renamed term",
+    });
+    const renamedSubject = await api.subjects.update({
+      subjectId: subject.id,
+      name: "Renamed subject",
+    });
+    const renamedAverage = await api.averages.update({
+      averageId: average.id,
+      name: "Renamed average",
+    });
+    const renamedGoal = await api.goals.update({
+      goalId: goal.id,
+      name: "Renamed target",
+    });
+
+    expect(renamedYear).toMatchObject({
+      scale: 100,
+      defaultOutOf: 40,
+      passingRatio: 0.6,
+      decimals: 3,
+      generalBonus: 4,
+    });
+    expect(renamedPeriod?.isCumulative).toBe(true);
+    expect(renamedSubject).toMatchObject({
+      shortName: "Weighted",
+      coefficient: 7,
+      kind: "subject",
+      isMain: true,
+      bonus: 3,
+    });
+    expect(renamedAverage).toMatchObject({ bonus: 2 });
+    expect(renamedAverage?.entries).toHaveLength(1);
+    expect(renamedGoal).toMatchObject({
+      kind: "subject",
+      referenceId: subject.id,
+      periodId: period.id,
+      isPinned: true,
+    });
+    expect(renamedGoal?.dueAt).toEqual(new Date("2042-01-15T00:00:00.000Z"));
+
+    // This case creates a complete extra active year. Remove it so the next
+    // invariant really exercises the two canonical fixtures from beforeAll.
+    await api.years.delete({ yearId: year.id });
+  });
   test("always keeps an active year while archived years remain", async () => {
     await api.years.archive({ yearId: "year-a", archived: true });
 
-    await expect(
-      api.years.archive({ yearId: "year-b", archived: true }),
-    ).rejects.toThrow("The last active year cannot be archived");
-    await expect(api.years.delete({ yearId: "year-b" })).rejects.toThrow(
-      "The last active year cannot be deleted while archived years remain",
-    );
+    try {
+      await expect(
+        api.years.archive({ yearId: "year-b", archived: true }),
+      ).rejects.toThrow("The last active year cannot be archived");
+      await expect(api.years.delete({ yearId: "year-b" })).rejects.toThrow(
+        "The last active year cannot be deleted while archived years remain",
+      );
+    } finally {
+      // Keep later scenarios independent even when an assertion above fails.
+      await api.years.archive({ yearId: "year-a", archived: false });
+    }
 
-    await api.years.archive({ yearId: "year-a", archived: false });
     const listed = await api.years.list();
     expect(listed.filter((year) => !year.archivedAt)).toHaveLength(2);
   });
@@ -438,6 +533,114 @@ describe("router year invariants", () => {
       // every reference a card can hold rather than one for the three the old
       // columns could name.
     ).rejects.toThrow("Invalid widget definition");
+  });
+
+  test("preserves omitted fields in grade and grade-type patches", async () => {
+    const type = await api.gradeTypes.create({
+      yearId: "year-a",
+      name: "Written exam",
+      titlePrefix: "DS ",
+      coefficient: 3,
+      outOf: 40,
+      accent: "primary",
+    });
+    const grade = await api.grades.create({
+      name: "Algebra parts",
+      value: 0,
+      outOf: 20,
+      coefficient: 2.5,
+      note: "Keep this note",
+      passedAt: new Date("2026-03-01T12:00:00.000Z"),
+      subjectId: "subject-a",
+      periodId: "period-a",
+      typeId: type.id,
+      components: [{ name: "Proof", value: 9, outOf: 10, coefficient: 2 }],
+    });
+    if (!grade) throw new Error("The typed grade was not created");
+
+    await api.grades.update({
+      gradeId: grade.id,
+      name: "Algebra parts renamed",
+    });
+    await api.gradeTypes.update({
+      typeId: type.id,
+      name: "Written paper",
+    });
+
+    const [[storedGrade], storedComponents, [storedType]] = await Promise.all([
+      database
+        .select()
+        .from(schema.grades)
+        .where(eq(schema.grades.id, grade.id)),
+      database
+        .select()
+        .from(schema.gradeComponents)
+        .where(eq(schema.gradeComponents.gradeId, grade.id)),
+      database
+        .select()
+        .from(schema.gradeTypes)
+        .where(eq(schema.gradeTypes.id, type.id)),
+    ]);
+    expect(storedGrade).toMatchObject({
+      name: "Algebra parts renamed",
+      coefficient: 2.5,
+      note: "Keep this note",
+      periodId: "period-a",
+      typeId: type.id,
+      isComposite: true,
+    });
+    expect(storedComponents).toHaveLength(1);
+    expect(storedType).toMatchObject({
+      name: "Written paper",
+      titlePrefix: "DS ",
+      coefficient: 3,
+      outOf: 40,
+      accent: "primary",
+    });
+
+    await api.grades.update({ gradeId: grade.id, typeId: null });
+    const [withoutType] = await database
+      .select({ typeId: schema.grades.typeId })
+      .from(schema.grades)
+      .where(eq(schema.grades.id, grade.id));
+    expect(withoutType?.typeId).toBeNull();
+
+    await api.grades.update({ gradeId: grade.id, typeId: type.id });
+    const destinationType = await api.gradeTypes.create({
+      yearId: "year-b",
+      name: "Written paper",
+      titlePrefix: "Exam ",
+      coefficient: 4,
+      outOf: 50,
+      accent: "secondary",
+    });
+    await api.grades.update({
+      gradeId: grade.id,
+      subjectId: "subject-b",
+      typeId: destinationType.id,
+    });
+    const [remappedType] = await database
+      .select({ typeId: schema.grades.typeId, yearId: schema.grades.yearId })
+      .from(schema.grades)
+      .where(eq(schema.grades.id, grade.id));
+    expect(remappedType).toEqual({
+      typeId: destinationType.id,
+      yearId: "year-b",
+    });
+
+    await api.grades.update({
+      gradeId: grade.id,
+      subjectId: "subject-a",
+    });
+    const [clearedAcrossYears] = await database
+      .select({ typeId: schema.grades.typeId, yearId: schema.grades.yearId })
+      .from(schema.grades)
+      .where(eq(schema.grades.id, grade.id));
+    expect(clearedAcrossYears).toEqual({ typeId: null, yearId: "year-a" });
+
+    await api.grades.delete({ gradeId: grade.id });
+    await api.gradeTypes.delete({ typeId: type.id });
+    await api.gradeTypes.delete({ typeId: destinationType.id });
   });
 
   test("requires an exact destination sibling order while preserving re-parenting", async () => {
@@ -695,9 +898,11 @@ describe("router year invariants", () => {
         (card) => cardSemanticsFromDefinition(card.definitionJson).metric,
       ),
     ).toEqual(["average", "distribution", "mostImproved", "consistency"]);
-    expect(recommended.every((card) => card.definitionVersion === 1)).toBe(
-      true,
-    );
+    expect(
+      recommended.every(
+        (card) => card.definitionVersion === WIDGET_DEFINITION_VERSION,
+      ),
+    ).toBe(true);
 
     for (const card of recommended) {
       await api.cards.delete({ cardId: card.id });
@@ -715,7 +920,7 @@ describe("router year invariants", () => {
       includeDescendants: true,
     };
     definition.query.window = { kind: "period", periodId: "period-a" };
-    definition.visualization.mark = "bar";
+    definition.visualization.recipe = "bar";
     definition.visualization.options = {
       kind: "bar",
       orientation: "horizontal",
@@ -726,7 +931,7 @@ describe("router year invariants", () => {
     const created = await api.cards.create({
       yearId: "year-a",
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: definition,
       span: 3,
       title: "Owned widget",
@@ -743,9 +948,9 @@ describe("router year invariants", () => {
       surface: "insights",
       span: 3,
       title: "Owned widget",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: {
-        apiVersion: 1,
+        apiVersion: WIDGET_DEFINITION_VERSION,
         query: {
           scope: { kind: "subjects", subjectIds: ["subject-a"] },
           window: { kind: "period", periodId: "period-a" },
@@ -755,8 +960,10 @@ describe("router year invariants", () => {
     expect((await api.snapshot.get({ yearId: "year-a" })).cards).toContainEqual(
       expect.objectContaining({
         id: created?.id,
-        definitionVersion: 1,
-        definitionJson: expect.objectContaining({ apiVersion: 1 }),
+        definitionVersion: WIDGET_DEFINITION_VERSION,
+        definitionJson: expect.objectContaining({
+          apiVersion: WIDGET_DEFINITION_VERSION,
+        }),
       }),
     );
 
@@ -771,7 +978,7 @@ describe("router year invariants", () => {
       api.cards.create({
         yearId: "year-a",
         surface: "insights",
-        definitionVersion: 1,
+        definitionVersion: WIDGET_DEFINITION_VERSION,
         definitionJson: foreign,
       }),
     ).rejects.toThrow("Invalid widget definition");
@@ -780,7 +987,7 @@ describe("router year invariants", () => {
       api.cards.create({
         yearId: "year-a",
         surface: "insights",
-        definitionVersion: 1,
+        definitionVersion: WIDGET_DEFINITION_VERSION,
         definitionJson: definition,
         metric: "average",
       } as never),
@@ -812,11 +1019,12 @@ describe("router year invariants", () => {
         display: "sparkline",
       }),
     });
-    // A sparkline is a filled line with its apparatus stripped, which is what the
-    // card renderer reads to draw a reading over scenery rather than a chart.
+    // A sparkline is its own recipe now — a reading over scenery — rather than an area
+    // chart everyone has to remember was stripped of its axes. The axes still come off,
+    // because that is what the recipe *means*, and the renderer reads the recipe.
     expect(sparkline?.definitionJson).toMatchObject({
       visualization: {
-        mark: "area",
+        recipe: "sparkline",
         axes: {
           x: { visible: false, grid: false },
           y: { visible: false, grid: false },
@@ -831,16 +1039,19 @@ describe("router year invariants", () => {
     for (const key of ["metric", "targetKind", "targetId", "display"]) {
       expect(sparkline, key).not.toHaveProperty(key);
     }
-    expect(sparkline).toMatchObject({ definitionVersion: 1 });
-    // Derived on demand it is still lossy in exactly the same way, which is why
-    // nothing stores it: the projection is a convenience, never an authority.
+    expect(sparkline).toMatchObject({
+      definitionVersion: WIDGET_DEFINITION_VERSION,
+    });
+    // Derived on demand, and no longer lossy about *this*: a sparkline used to project
+    // back as "chart", because the document said `area` and the axes were a detail
+    // elsewhere. The recipe carries the distinction, so the projection keeps it.
     expect(
       cardSemanticsFromDefinition(sparkline!.definitionJson),
     ).toMatchObject({
       metric: "average",
       targetKind: "subject",
       targetId: "subject-a",
-      display: "chart",
+      display: "sparkline",
     });
 
     const renamed = await api.cards.update({
@@ -849,7 +1060,7 @@ describe("router year invariants", () => {
     });
     expect(renamed).toMatchObject({
       title: "Renamed without rewriting semantics",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
     });
     expect(renamed?.definitionJson).toEqual(sparkline?.definitionJson);
 
@@ -863,27 +1074,35 @@ describe("router year invariants", () => {
     ).rejects.toThrow();
 
     const formula = createWidgetDefinition("insights");
-    formula.analysis.measure = {
-      kind: "formula",
-      formula: {
-        kind: "binary",
-        operation: "multiply",
-        left: { kind: "aggregate", operation: "mean", field: "ratio" },
-        right: { kind: "literal", value: 100 },
+    formula.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
+          formula: {
+            kind: "binary",
+            operation: "multiply",
+            left: { kind: "aggregate", operation: "mean", field: "ratio" },
+            right: { kind: "literal", value: 100 },
+          },
+          valueType: "percent",
+        },
       },
-      valueType: "percent",
-    };
+    ];
     const formulaCard = await api.cards.create({
       yearId: "year-a",
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: formula,
     });
     expect(formulaCard).toMatchObject({
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: {
-        analysis: { measure: { kind: "formula", valueType: "percent" } },
+        analysis: {
+          measures: [{ expression: { kind: "formula", valueType: "percent" } }],
+        },
       },
     });
 
@@ -898,10 +1117,14 @@ describe("router year invariants", () => {
     ).toContainEqual(
       expect.objectContaining({
         id: formulaCard?.id,
-        definitionVersion: 1,
+        definitionVersion: WIDGET_DEFINITION_VERSION,
         definitionJson: expect.objectContaining({
           analysis: expect.objectContaining({
-            measure: expect.objectContaining({ kind: "formula" }),
+            measures: [
+              expect.objectContaining({
+                expression: expect.objectContaining({ kind: "formula" }),
+              }),
+            ],
           }),
         }),
       }),
@@ -993,7 +1216,7 @@ describe("router year invariants", () => {
     const multiCard = await api.cards.create({
       yearId,
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: multiSubject,
     });
     expect(
@@ -1029,7 +1252,7 @@ describe("router year invariants", () => {
       await expect(
         api.cards.update({
           cardId: multiCard?.id ?? "",
-          definitionVersion: 1,
+          definitionVersion: WIDGET_DEFINITION_VERSION,
           definitionJson: multiSubject,
         }),
       ).rejects.toThrow("forced widget reference failure");
@@ -1055,7 +1278,7 @@ describe("router year invariants", () => {
     ).toEqual({ kind: "period", periodId: "period-ref-one" });
     await api.cards.update({
       cardId: multiCard?.id ?? "",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: multiSubject,
     });
     expect(
@@ -1093,7 +1316,7 @@ describe("router year invariants", () => {
     const periodCard = await api.cards.create({
       yearId,
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: periodDefinition,
     });
     await database
@@ -1110,7 +1333,7 @@ describe("router year invariants", () => {
     };
     const averageCard = await api.cards.create({
       yearId,
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: averageDefinition,
     });
     await database
@@ -1121,12 +1344,18 @@ describe("router year invariants", () => {
     );
 
     const goalDefinition = createWidgetDefinition("overview");
-    goalDefinition.analysis.measure = {
-      kind: "metric",
-      metric: "goalProgress",
-      goalId: "goal-ref-one",
-    };
-    goalDefinition.visualization.mark = "gauge";
+    goalDefinition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "metric",
+          metric: "goalProgress",
+          goalId: "goal-ref-one",
+        },
+      },
+    ];
+    goalDefinition.visualization.recipe = "gauge";
     goalDefinition.visualization.options = {
       kind: "gauge",
       showValue: true,
@@ -1134,7 +1363,7 @@ describe("router year invariants", () => {
     };
     const goalCard = await api.cards.create({
       yearId,
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: goalDefinition,
     });
     expect(
@@ -1196,7 +1425,7 @@ describe("router year invariants", () => {
     const multiCard = await api.cards.create({
       yearId,
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: multiDefinition,
     });
 
@@ -1208,7 +1437,7 @@ describe("router year invariants", () => {
     };
     const singleCard = await api.cards.create({
       yearId,
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: singleDefinition,
     });
     const subjectCard = await api.cards.create({
@@ -1241,7 +1470,7 @@ describe("router year invariants", () => {
     );
     expect(retained).toMatchObject({
       id: multiCard?.id,
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: {
         query: {
           scope: {
@@ -1641,7 +1870,8 @@ describe("router year invariants", () => {
         metric: "average",
         targetKind: "custom",
         targetId: created?.id,
-        display: "chart",
+        // A sparkline, and the projection says so now that the recipe carries it.
+        display: "sparkline",
       },
     ]);
     expect(
@@ -2194,6 +2424,23 @@ describe("the simplified social model", () => {
       (await api.social.groups.get({ groupId: "legacy-class" })).setupRequired,
     ).toBe(true);
     await expect(
+      api.social.cohorts.setEnabled({
+        groupId: "legacy-class",
+        enabled: true,
+      }),
+    ).rejects.toThrow("Only a class");
+    // Retyping a preserved row does not manufacture the immutable academic contract.
+    await api.social.groups.update({
+      groupId: "legacy-class",
+      kind: "class",
+    });
+    await expect(
+      api.social.cohorts.setEnabled({
+        groupId: "legacy-class",
+        enabled: true,
+      }),
+    ).rejects.toThrow("Configure the class");
+    await expect(
       api.social.groups.invitations.create({ groupId: "legacy-class" }),
     ).rejects.toThrow("Configure the class");
     await api.social.groups.configureClass({
@@ -2205,6 +2452,12 @@ describe("the simplified social model", () => {
     });
     expect(configuredLegacy.setupRequired).toBe(false);
     expect(configuredLegacy.viewer.shareAverage).toBe(false);
+    expect(
+      await api.social.cohorts.setEnabled({
+        groupId: "legacy-class",
+        enabled: true,
+      }),
+    ).toEqual({ enabled: true });
     await expect(
       api.social.groups.configureClass({
         groupId: "legacy-class",
@@ -2258,6 +2511,26 @@ describe("the simplified social model", () => {
             },
           ],
           averages: [],
+          // The class says which kinds of assessment it runs, the way it says which
+          // subjects it has.
+          gradeTypes: [
+            {
+              key: "z-builder-type",
+              name: "DS",
+              titlePrefix: "DS ",
+              coefficient: 2,
+              outOf: 20,
+              accent: null,
+            },
+            {
+              key: "a-builder-type",
+              name: "Oral",
+              titlePrefix: "Oral ",
+              coefficient: 1,
+              outOf: 20,
+              accent: "secondary",
+            },
+          ],
         },
         periods: {
           mode: "custom",
@@ -2287,6 +2560,36 @@ describe("the simplified social model", () => {
       shareAverage: false,
     });
     expect(customBuilderDetail.classTemplate?.source).toBe("custom");
+    /**
+     * The owner's own year has to *be* the template.
+     *
+     * It materialised the types and then never inserted them, so the year the owner was
+     * handed lacked what the class declares — and `yearStatus` above, which compares the
+     * two, read the owner as incompatible with the class they had just made.
+     */
+    expect(
+      (await api.gradeTypes.list({ yearId: customBuilder.yearId })).map(
+        (type) => ({
+          name: type.name,
+          titlePrefix: type.titlePrefix,
+          coefficient: type.coefficient,
+          presetNodeKey: type.presetNodeKey,
+        }),
+      ),
+    ).toEqual([
+      {
+        name: "DS",
+        titlePrefix: "DS ",
+        coefficient: 2,
+        presetNodeKey: "z-builder-type",
+      },
+      {
+        name: "Oral",
+        titlePrefix: "Oral ",
+        coefficient: 1,
+        presetNodeKey: "a-builder-type",
+      },
+    ]);
     expect(customBuilderDetail.availableSubjectOptions).toContainEqual({
       key: "builder-subject",
       name: "Builder subject",
@@ -3107,7 +3410,7 @@ describe("managed preset lifecycle", () => {
     };
     const multiSubjectCard = await api.cards.create({
       yearId: year.id,
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
       definitionJson: multiSubjectDefinition,
     });
 
@@ -3522,6 +3825,245 @@ describe("managed preset lifecycle", () => {
     const status = await api.presets.status({ yearId: "legacy-preset-year" });
     expect(status.state).toBe("customized");
     expect(status.membership?.detachedReason).toBe("legacy_configuration");
+  });
+
+  test("proposes assessment types, and leaves the ones a reader adds alone", async () => {
+    /**
+     * A preset says which kinds of assessment a year has, the way it says which
+     * subjects it has — but only about its own.
+     *
+     * A type is stationery: it fills a title, a coefficient and a denominator in as
+     * somebody writes a result down, and it moves no average. So a type the reader
+     * invented is theirs, and inventing one must not sever the link that carries the
+     * next corrected coefficient to them. That asymmetry against subjects is the whole
+     * point of this test.
+     */
+    const presetId = "INTEGRATION_TYPES_PRESET";
+    const written = {
+      key: "type-written",
+      name: "DS",
+      titlePrefix: "DS ",
+      coefficient: 2,
+      outOf: 20,
+      accent: null,
+    };
+    const oral = {
+      key: "type-oral",
+      name: "Colle",
+      titlePrefix: "Colle ",
+      coefficient: 1,
+      outOf: 20,
+      accent: "primary",
+    };
+    await adminApi.presets.admin.create({
+      id: presetId,
+      name: "Typed curriculum",
+      description: "Proposes assessment types",
+      tags: ["test"],
+      featured: false,
+      configuration: { ...baseConfiguration, gradeTypes: [written, oral] },
+    });
+    const year = await api.presets.setupYear({
+      idempotencyKey: "typed-preset-setup",
+      year: {
+        name: "Typed year",
+        startsAt: new Date("2031-09-01T00:00:00.000Z"),
+        endsAt: new Date("2032-07-01T00:00:00.000Z"),
+      },
+      presetId,
+      periodTemplateId: "none",
+      periodNames: [],
+    });
+
+    const adopted = await api.gradeTypes.list({ yearId: year.id });
+    expect(adopted.map((type) => type.name)).toEqual(["DS", "Colle"]);
+    expect(adopted[0]).toMatchObject({
+      presetNodeKey: "type-written",
+      titlePrefix: "DS ",
+      coefficient: 2,
+    });
+    expect(adopted[1]?.accent).toBe("primary");
+
+    // A kind their own year has and the preset never mentioned.
+    const own = await api.gradeTypes.create({
+      yearId: year.id,
+      name: "TP noté",
+      titlePrefix: "TP ",
+      coefficient: 1,
+      outOf: 10,
+      accent: null,
+    });
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "current",
+    );
+    // And so is the order they drag it into.
+    await api.gradeTypes.reorder({
+      yearId: year.id,
+      typeIds: [own.id, adopted[1]?.id ?? "", adopted[0]?.id ?? ""],
+    });
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "current",
+    );
+
+    await adminApi.presets.admin.publish({
+      presetId,
+      name: "Typed curriculum",
+      description: "Proposes assessment types",
+      tags: ["test"],
+      featured: false,
+      changeNote: "Weight the written papers, add the practicals",
+      configuration: {
+        ...baseConfiguration,
+        gradeTypes: [
+          { ...written, coefficient: 3 },
+          oral,
+          {
+            key: "type-practical",
+            name: "TP",
+            titlePrefix: "TP ",
+            coefficient: 1,
+            outOf: 20,
+            accent: null,
+          },
+        ],
+      },
+    });
+
+    const available = await api.presets.status({ yearId: year.id });
+    expect(available.state).toBe("update_available");
+    expect(available.changes).toMatchObject({
+      gradeTypesAdded: 1,
+      gradeTypesChanged: 1,
+      gradeTypesRemoved: 0,
+    });
+
+    await api.presets.synchronize({ yearId: year.id });
+    const synchronized = await api.gradeTypes.list({ yearId: year.id });
+    const byKey = new Map(
+      synchronized.map((type) => [type.presetNodeKey ?? type.id, type]),
+    );
+    expect(byKey.get("type-written")).toMatchObject({
+      id: adopted[0]?.id,
+      coefficient: 3,
+    });
+    expect(byKey.get("type-practical")).toBeDefined();
+    // Untouched: same row, same name, still where they put it.
+    expect(byKey.get(own.id)).toMatchObject({
+      name: "TP noté",
+      outOf: 10,
+      presetNodeKey: null,
+    });
+    expect(synchronized[0]?.id).toBe(own.id);
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "current",
+    );
+
+    const [mathematics] = await database
+      .select()
+      .from(schema.subjects)
+      .where(
+        and(
+          eq(schema.subjects.yearId, year.id),
+          eq(schema.subjects.presetNodeKey, "mathematics"),
+        ),
+      );
+    const grade = await api.grades.create({
+      name: "Colle 1",
+      value: 14,
+      outOf: 20,
+      passedAt: new Date("2031-10-01T00:00:00.000Z"),
+      subjectId: mathematics?.id ?? "",
+      typeId: byKey.get("type-oral")?.id,
+    });
+
+    await adminApi.presets.admin.publish({
+      presetId,
+      name: "Typed curriculum",
+      description: "Proposes assessment types",
+      tags: ["test"],
+      featured: false,
+      changeNote: "Drop the orals",
+      configuration: {
+        ...baseConfiguration,
+        gradeTypes: [{ ...written, coefficient: 3 }],
+      },
+    });
+    // Withdrawing a kind is not withdrawing the marks: a subject that carries grades
+    // blocks the update, but a type that labelled them only loses the label.
+    expect(
+      (await api.presets.status({ yearId: year.id })).changes,
+    ).toMatchObject({ gradeTypesRemoved: 2 });
+    await api.presets.synchronize({ yearId: year.id });
+
+    const [survivor] = await database
+      .select()
+      .from(schema.grades)
+      .where(eq(schema.grades.id, grade?.id ?? ""));
+    expect(survivor).toMatchObject({ value: 14, typeId: null });
+    expect(
+      (await api.gradeTypes.list({ yearId: year.id })).map((type) => type.name),
+    ).toEqual(["TP noté", "DS"]);
+  });
+
+  test("moves between two presets that name a type the same way", async () => {
+    /**
+     * Two curricula both call their written papers `type-written`, because a stable key
+     * is stable inside *a* preset and nothing coordinates them across the catalogue.
+     *
+     * Switching presets mints fresh ids for everything, so the row from the old preset
+     * is not carried forward — but it was only withdrawn when its *key* disappeared, and
+     * this key does not. The old row stayed, the new row arrived, and
+     * `(yearId, presetNodeKey)` is unique: the entire replacement failed, subjects
+     * included, on a collision between two presets that had never met.
+     */
+    const shared = {
+      key: "type-written",
+      name: "DS",
+      titlePrefix: "DS ",
+      coefficient: 2,
+      outOf: 20,
+      accent: null,
+    };
+    for (const [id, name] of [
+      ["INTEGRATION_TYPE_COLLISION_A", "Collision A"],
+      ["INTEGRATION_TYPE_COLLISION_B", "Collision B"],
+    ]) {
+      await adminApi.presets.admin.create({
+        id: id as string,
+        name: name as string,
+        description: "Shares a type key",
+        tags: ["test"],
+        featured: false,
+        configuration: {
+          ...baseConfiguration,
+          gradeTypes: [{ ...shared, name: `${name as string} paper` }],
+        },
+      });
+    }
+
+    const year = await api.presets.setupYear({
+      idempotencyKey: "type-collision-setup",
+      year: {
+        name: "Collision year",
+        startsAt: new Date("2033-09-01T00:00:00.000Z"),
+        endsAt: new Date("2034-07-01T00:00:00.000Z"),
+      },
+      presetId: "INTEGRATION_TYPE_COLLISION_A",
+      periodTemplateId: "none",
+      periodNames: [],
+    });
+
+    await api.presets.reapply({
+      yearId: year.id,
+      presetId: "INTEGRATION_TYPE_COLLISION_B",
+      acknowledgeReplacement: true,
+    });
+
+    const types = await api.gradeTypes.list({ yearId: year.id });
+    expect(types.map((type) => type.name)).toEqual(["Collision B paper"]);
+    expect((await api.presets.status({ yearId: year.id })).state).toBe(
+      "current",
+    );
   });
 
   test("keeps preset administration authoritative", async () => {

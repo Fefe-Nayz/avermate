@@ -65,7 +65,10 @@ export function ModeToggle({ className }: { className?: string }) {
               <option.icon className="size-4" />
               <span className="flex-1">{option.label}</span>
               {theme === option.value ? (
-                <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-primary"
+                />
               ) : null}
             </DropdownMenuItem>
           ))}

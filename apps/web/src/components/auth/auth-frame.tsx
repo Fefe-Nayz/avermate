@@ -19,12 +19,15 @@ export function AuthBackdrop() {
   const primary = useTokenHex("--primary")
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+    >
       <DotPattern
         width={30}
         height={30}
         cr={0.7}
-        className="text-foreground/[0.06] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,black,transparent_75%)]"
+        className="[mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,black,transparent_75%)] text-foreground/[0.06]"
       />
       <div className="absolute top-[-24rem] left-1/2 size-[46rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
       <div className="absolute right-[-8rem] bottom-[-12rem] size-[32rem] rounded-full bg-chart-2/8 blur-3xl" />

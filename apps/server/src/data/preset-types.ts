@@ -35,6 +35,17 @@ export interface PresetPeriod {
   isCumulative?: boolean;
 }
 
+/** A kind of assessment a preset proposes, in the shape a year stores it. */
+export interface PresetGradeType {
+  /** Stable across versions. Omitted only by the legacy bootstrap dataset. */
+  key?: string;
+  name: string;
+  titlePrefix?: string;
+  coefficient?: number;
+  outOf?: number;
+  accent?: string | null;
+}
+
 export interface Preset {
   id: string;
   name: string;
@@ -44,6 +55,7 @@ export interface Preset {
   archived: boolean;
   subjects: PresetSubject[];
   averages: PresetAverage[];
+  gradeTypes?: PresetGradeType[];
   periods?: PresetPeriod[];
 }
 
@@ -70,8 +82,22 @@ export interface ManagedPresetAverage {
   entries: ManagedPresetAverageEntry[];
 }
 
+export interface ManagedPresetGradeType {
+  key: string;
+  name: string;
+  titlePrefix: string;
+  coefficient: number;
+  outOf: number;
+  accent: string | null;
+}
+
 /** The immutable payload stored for every published preset version. */
 export interface ManagedPresetConfiguration {
   subjects: ManagedPresetSubject[];
   averages: ManagedPresetAverage[];
+  /**
+   * Every payload written before assessment types existed parses as an empty list, so
+   * nothing stored has to be rewritten for this field to arrive.
+   */
+  gradeTypes: ManagedPresetGradeType[];
 }

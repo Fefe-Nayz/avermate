@@ -79,6 +79,15 @@ describe("classes social flow", () => {
     expect(screen).not.toContain("PresetVisualEditor")
     expect(screen).not.toContain("sharedSetupConfig")
     expect(screen).not.toContain('label: t("Goals achieved")')
+    expect(screen).toContain("disabled={!template || setCohorts.isPending}")
+    expect(screen).toContain(
+      "Connect a class model before enabling comparisons in cards."
+    )
+    expect(screen).toContain("onSuccess: refreshCohortSurfaces")
+    expect(screen).toContain(
+      "invalidateCohortQueriesForGroup(queryClient, groupId)"
+    )
+    expect(screen).toContain('t("The change could not be saved.")')
   })
 
   test("only owners can create class invitation links", async () => {

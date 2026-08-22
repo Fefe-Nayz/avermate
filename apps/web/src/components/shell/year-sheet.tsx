@@ -62,80 +62,80 @@ export function YearSheetProvider({ children }: { children: ReactNode }) {
         description={t("Everything you see follows the year you pick.")}
       >
         <div className="grid gap-1">
-            {activeYears.map((item) => {
-              const active = item.id === year?.id
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    haptic("selection")
-                    selectYear(item.id)
-                    setOpen(false)
-                  }}
+          {activeYears.map((item) => {
+            const active = item.id === year?.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  haptic("selection")
+                  selectYear(item.id)
+                  setOpen(false)
+                }}
+                className={cn(
+                  "flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent",
+                  active && "bg-primary/8"
+                )}
+              >
+                <span
                   className={cn(
-                    "flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent",
-                    active && "bg-primary/8"
+                    "flex size-10 shrink-0 items-center justify-center rounded-xl",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-10 shrink-0 items-center justify-center rounded-xl",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    <GraduationCapIcon className="size-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {item.name}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {format.dateTime(new Date(item.startsAt), {
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      {" → "}
-                      {format.dateTime(new Date(item.endsAt), {
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </span>
-                  {active ? (
-                    <CheckIcon className="size-5 shrink-0 text-primary" />
-                  ) : null}
-                </button>
-              )
-            })}
-
-            {hasArchivedYears ? (
-              <Link
-                href="/settings/year"
-                onClick={() => setOpen(false)}
-                className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
-              >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                  <ArchiveRestoreIcon className="size-5" />
+                  <GraduationCapIcon className="size-5" />
                 </span>
-                <span className="text-sm font-medium">
-                  {t("Manage archived years")}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">
+                    {item.name}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {format.dateTime(new Date(item.startsAt), {
+                      month: "short",
+                      year: "numeric",
+                    })}
+                    {" → "}
+                    {format.dateTime(new Date(item.endsAt), {
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
                 </span>
-              </Link>
-            ) : null}
+                {active ? (
+                  <CheckIcon className="size-5 shrink-0 text-primary" />
+                ) : null}
+              </button>
+            )
+          })}
 
+          {hasArchivedYears ? (
             <Link
-              href="/onboarding/year/new"
+              href="/settings/year"
               onClick={() => setOpen(false)}
               className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
-                <PlusIcon className="size-5" />
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <ArchiveRestoreIcon className="size-5" />
               </span>
-              <span className="text-sm font-medium">{t("Add a year")}</span>
+              <span className="text-sm font-medium">
+                {t("Manage archived years")}
+              </span>
             </Link>
+          ) : null}
+
+          <Link
+            href="/onboarding/year/new"
+            onClick={() => setOpen(false)}
+            className="flex min-h-13 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-accent/60 active:bg-accent"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed text-muted-foreground">
+              <PlusIcon className="size-5" />
+            </span>
+            <span className="text-sm font-medium">{t("Add a year")}</span>
+          </Link>
         </div>
       </ResponsiveSheet>
     </YearSheetContext.Provider>

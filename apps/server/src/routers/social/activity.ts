@@ -1,7 +1,11 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { socialGroups, socialNotifications, socialReports } from "../../db/schema";
+import {
+  socialGroups,
+  socialNotifications,
+  socialReports,
+} from "../../db/schema";
 import { badRequest, notFound, protectedProcedure } from "../../lib/orpc";
 import { identities } from "./shared";
 
@@ -35,9 +39,7 @@ export const socialNotificationsRouter = {
           kind: row.kind,
           entityType: row.entityType,
           entityId: row.entityId,
-          actor: actor
-            ? { name: actor.name, avatar: actor.avatar }
-            : null,
+          actor: actor ? { name: actor.name, avatar: actor.avatar } : null,
           safeParams: JSON.parse(row.safeParams) as Record<string, string>,
           readAt: row.readAt,
           createdAt: row.createdAt,

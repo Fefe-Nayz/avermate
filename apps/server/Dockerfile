@@ -1,19 +1,40 @@
 # The whole workspace is installed rather than just the app: the server
 # consumes @avermate/core as TypeScript source, so it has to be present.
-FROM oven/bun:1.3.14-alpine AS deps
+FROM oven/bun:1.4.0-alpine AS deps
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY patches patches
 COPY apps/server/package.json apps/server/package.json
 COPY packages/core/package.json packages/core/package.json
-RUN bun install --frozen-lockfile
+# GPL-backed provider adapters are review/test-only until the project license is
+# resolved. A production-only workspace install is therefore a release boundary,
+# not just an image-size optimization.
+RUN bun install --frozen-lockfile --production
 
-FROM oven/bun:1.3.14-alpine AS release
+FROM oven/bun:1.4.0-alpine AS release
 WORKDIR /app
 
-ENV NODE_ENV=production
+# Preview and LaTeX workers use bounded child processes. Keeping the binaries
+# in the runtime image makes production deterministic while local development
+# remains zero-config (unsupported/failed is reported when a binary is absent).
+RUN apk add --no-cache \
+  ffmpeg \
+  imagemagick \
+  imagemagick-jpeg \
+  imagemagick-webp \
+  poppler-utils \
+  tectonic
+
+RUN mkdir -p /var/cache/avermate/tectonic \
+  && chown -R bun:bun /var/cache/avermate/tectonic
+
+ENV NODE_ENV=production \
+  TECTONIC_CACHE_DIR=/var/cache/avermate/tectonic \
+  TECTONIC_UNTRUSTED_MODE=1
 
 COPY --from=deps /app/node_modules node_modules
+COPY --from=deps /app/apps/server/node_modules apps/server/node_modules
 COPY packages/core packages/core
 COPY apps/server apps/server
 

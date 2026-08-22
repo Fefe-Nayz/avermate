@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import type { WidgetDefinitionV1 } from "@avermate/core/widget-types";
+import type { WidgetDefinition } from "@avermate/core/widget-types";
 import { newId } from "../../lib/id";
 import { users } from "./auth";
 
@@ -20,9 +20,10 @@ const timestamps = {
  * is the existing `cards.create` with the template's definition — the store
  * never grows a second write path for cards. A published template is
  * immutable, mirroring `presetVersions`: to change one, archive it and
- * publish a successor. Publish-time validation guarantees the definition
- * carries no user-specific references (subjects, custom averages, goals,
- * periods), so there is no shadow-reference table to maintain.
+ * publish a successor. Publish-time validation turns every user-specific
+ * reference into a typed installation slot. The gallery resolves those slots
+ * against entities owned by the installing user before calling `cards.create`,
+ * so the catalog still needs no shadow-reference table.
  */
 export const cardTemplates = sqliteTable("card_templates", {
   id: text()
@@ -36,7 +37,7 @@ export const cardTemplates = sqliteTable("card_templates", {
   /** Grouping key in the gallery. */
   category: text().notNull().default("general"),
   definitionVersion: integer().notNull(),
-  definitionJson: text({ mode: "json" }).$type<WidgetDefinitionV1>().notNull(),
+  definitionJson: text({ mode: "json" }).$type<WidgetDefinition>().notNull(),
   status: text()
     .$type<"draft" | "published" | "archived">()
     .notNull()

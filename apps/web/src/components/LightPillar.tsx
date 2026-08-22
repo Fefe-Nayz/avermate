@@ -105,8 +105,7 @@ const LightPillar: React.FC<LightPillarProps> = ({
     // Phones go further: at DPR 0.75 with a 48-step march the same pillar
     // costs roughly a quarter of the desktop budget, and a soft glow
     // upscaled by the compositor is indistinguishable on a small screen.
-    const lowPower =
-      window.matchMedia?.("(pointer: coarse)").matches ?? false
+    const lowPower = window.matchMedia?.("(pointer: coarse)").matches ?? false
     renderer.setPixelRatio(lowPower ? 0.75 : 1)
     const marchSteps = lowPower ? 48 : 80
     renderer.domElement.style.willChange = "transform"

@@ -17,6 +17,7 @@ import {
 } from "@/components/authenticated-user"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
+import { uploadBrowserFile } from "@/lib/file-upload"
 
 /**
  * Choosing an avatar.
@@ -73,6 +74,7 @@ export function AvatarEditor() {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [area, setArea] = useState<Area | null>(null)
+  const [directUploadPending, setDirectUploadPending] = useState(false)
 
   const availability = useQuery(orpc.profile.uploadsEnabled.queryOptions())
   const enabled = availability.data?.enabled ?? false
@@ -84,10 +86,6 @@ export function AvatarEditor() {
       toast.success(t("Avatar updated."))
       setSource(null)
       updateUser({ image: result.url })
-    },
-    onError: (error: Error) => {
-      haptic("error")
-      toast.error(error.message || t("The upload failed. Try again."))
     },
   })
 
@@ -109,11 +107,19 @@ export function AvatarEditor() {
   const save = async () => {
     if (!source || !area) return
     try {
+      setDirectUploadPending(true)
       const file = await cropToFile(source, area)
-      upload.mutate({ image: file })
-    } catch {
+      const uploaded = await uploadBrowserFile("avatar", file)
+      await upload.mutateAsync({ fileId: uploaded.fileId })
+    } catch (error) {
       haptic("error")
-      toast.error(t("That image could not be processed."))
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("That image could not be processed.")
+      )
+    } finally {
+      setDirectUploadPending(false)
     }
   }
 
@@ -203,10 +209,12 @@ export function AvatarEditor() {
             </Button>
             <Button
               className="flex-1"
-              disabled={upload.isPending || !area}
+              disabled={directUploadPending || upload.isPending || !area}
               onClick={save}
             >
-              {upload.isPending ? <Spinner className="size-4" /> : null}
+              {directUploadPending || upload.isPending ? (
+                <Spinner className="size-4" />
+              ) : null}
               {t("Save photo")}
             </Button>
           </div>

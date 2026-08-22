@@ -1,6 +1,11 @@
 "use client"
 
-import { useId, useState, type ReactNode } from "react"
+import {
+  useId,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react"
 import {
   CalendarIcon,
   CheckIcon,
@@ -8,6 +13,7 @@ import {
   MinusIcon,
   PlusIcon,
 } from "lucide-react"
+import { CARD_ACCENTS } from "@/components/cards/card-accent"
 import { useExtracted, useLocale } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -47,10 +53,11 @@ import { MonthPagerCalendar } from "./month-pager-calendar"
 /**
  * Form controls tuned for a thumb.
  *
- * Every target is at least 44px tall, numeric inputs open the numeric keypad,
- * and choices that would be a `<select>` on desktop are laid out as tappable
- * cards instead — a native select on a phone is a modal you cannot style and
- * cannot preview.
+ * Controls inherit pointer-aware density from the shared primitives; custom
+ * touch targets remain at least 44px tall. Numeric inputs open the numeric
+ * keypad, and choices that would be a `<select>` on desktop are laid out as
+ * tappable cards instead — a native select on a phone is a modal you cannot
+ * style and cannot preview.
  */
 
 export function TextField({
@@ -77,7 +84,7 @@ export function TextField({
         id={id}
         enterKeyHint="next"
         aria-invalid={error ? true : undefined}
-        className="h-12 md:h-9"
+        className="h-(--control-h-comfortable)"
         {...props}
       />
       {description && !error ? (
@@ -98,9 +105,8 @@ function decimalPlaces(value: number): number {
  * This is openbacktest's `NumberStepperField`: the input flexes and the unit
  * never does, the `−`/`+` hold their size, and the whole control keeps a floor
  * so a narrow column shrinks the input rather than collapsing it to nothing.
- * The one thing retuned here is the height — 48px on a phone, 36px from `md`
- * up — because that is this app's control height, and a row mixing a date
- * picker with a stepper has to come out level.
+ * Every part inherits the same pointer-aware control height, keeping the row
+ * level without guessing input modality from viewport width.
  */
 export function NumberField({
   label,
@@ -186,7 +192,7 @@ export function NumberField({
 
       <ButtonGroup className="w-full">
         {prefix || suffix ? (
-          <InputGroup className="h-12 min-w-24 flex-1 md:h-9">
+          <InputGroup className="h-(--control-h-comfortable) min-w-24 flex-1">
             {prefix ? (
               <InputGroupAddon className="shrink-0">
                 <InputGroupText>{prefix}</InputGroupText>
@@ -205,7 +211,7 @@ export function NumberField({
         ) : (
           <Input
             {...inputProps}
-            className="numeric h-12 min-w-16 grow basis-16 md:h-9"
+            className="numeric h-(--control-h-comfortable) min-w-16 grow basis-16"
           />
         )}
         {stepper ? (
@@ -214,7 +220,7 @@ export function NumberField({
               variant="outline"
               size="icon"
               type="button"
-              className="size-12 shrink-0 md:size-9"
+              className="size-(--control-h-comfortable) shrink-0"
               aria-label={t("Decrease {label}", { label })}
               onClick={() => adjust(-1)}
               disabled={disabled || (isNumeric && numericValue <= floor)}
@@ -225,7 +231,7 @@ export function NumberField({
               variant="outline"
               size="icon"
               type="button"
-              className="size-12 shrink-0 md:size-9"
+              className="size-(--control-h-comfortable) shrink-0"
               aria-label={t("Increase {label}", { label })}
               onClick={() => adjust(1)}
               disabled={disabled || (isNumeric && numericValue >= ceiling)}
@@ -368,6 +374,7 @@ export function SelectControl({
   className,
   contentClassName,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: string
   onValueChange: (value: string) => void
@@ -379,6 +386,7 @@ export function SelectControl({
   className?: string
   contentClassName?: string
   "aria-label"?: string
+  "aria-describedby"?: string
 }) {
   return (
     <Select
@@ -392,8 +400,9 @@ export function SelectControl({
       <SelectTrigger
         id={id}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         aria-invalid={invalid ? true : undefined}
-        className={cn("h-11 w-full md:h-9", className)}
+        className={cn("h-(--control-h-form) w-full", className)}
       >
         <SelectValue placeholder={placeholder}>
           {(current) =>
@@ -690,7 +699,7 @@ export function DateField({
       <DatePicker
         id={id}
         invalid={Boolean(error)}
-        className="h-11 w-full md:h-9"
+        className="h-(--control-h-form) w-full"
         {...picker}
       />
 
@@ -761,7 +770,7 @@ export function DateTimePicker({
         invalid={invalid}
         placeholder={placeholder}
         format="short"
-        className="h-11 min-w-0 flex-1 md:h-9"
+        className="h-(--control-h-form) min-w-0 flex-1"
       />
       <Input
         type="time"
@@ -769,7 +778,7 @@ export function DateTimePicker({
         value={timePart}
         disabled={disabled || !datePart}
         onChange={(event) => commit(datePart, event.target.value)}
-        className="h-11 w-28 shrink-0 md:h-9"
+        className="h-(--control-h-form) w-28 shrink-0"
       />
     </div>
   )
@@ -904,5 +913,120 @@ export function FormSection({
         <div className="flex flex-col gap-4 pt-3">{children}</div>
       ) : null}
     </section>
+  )
+}
+
+/**
+ * A colour from the theme's own set, or none.
+ *
+ * Swatches rather than a list of names: the choice *is* the colour, and a reader picking
+ * "chart-3" from a dropdown has to imagine what that looks like. Radio semantics so a
+ * keyboard walks the row and a screen reader announces which is chosen — the accent is
+ * decoration on screen and a real setting underneath.
+ *
+ * Shared rather than private to the card editor: a dashboard card and a kind of
+ * assessment both carry an accent, and two palettes that drifted apart would let a card
+ * and its type be different shades of the same idea.
+ */
+export function AccentField({
+  value,
+  onValueChange,
+  label,
+}: {
+  value: string | null
+  onValueChange: (value: string | null) => void
+  /** Defaults to "Colour"; a caller with two of these needs to say which. */
+  label?: string
+}) {
+  const t = useExtracted()
+  const heading = label ?? t("Colour")
+  const accentLabels: Record<string, string> = {
+    primary: t("Accent"),
+    positive: t("Green"),
+    "chart-2": t("Teal"),
+    "chart-3": t("Blue"),
+    "chart-4": t("Purple"),
+    "chart-5": t("Amber"),
+  }
+  /**
+   * The choices in order, so the arrow keys can walk them.
+   *
+   * A `radiogroup` promises a particular set of keys: one tab stop for the group, arrows
+   * to move within it, and the move selects. Declaring the role without any of that told
+   * assistive technology it was a radio group and then behaved like a row of buttons —
+   * eight tab stops and no arrow keys, which is worse than no role at all.
+   */
+  const choices: Array<{ value: string | null; label: string }> = [
+    { value: null, label: t("No colour") },
+    ...CARD_ACCENTS.map((accent) => ({
+      value: accent.value,
+      label: accentLabels[accent.value] ?? accent.label,
+    })),
+  ]
+  const current = Math.max(
+    0,
+    choices.findIndex((choice) => choice.value === value)
+  )
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : event.key === "Home"
+            ? -current
+            : event.key === "End"
+              ? choices.length - 1 - current
+              : 0
+    if (step === 0 && event.key !== "Home" && event.key !== "End") return
+    event.preventDefault()
+    // Wrapping, as a radio group does: past the last colour is the first one.
+    const next = (current + step + choices.length * 2) % choices.length
+    onValueChange(choices[next]?.value ?? null)
+    const group = event.currentTarget
+    const buttons = group.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+    buttons[next]?.focus()
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-sm font-medium">{heading}</span>
+      <div
+        role="radiogroup"
+        aria-label={heading}
+        className="flex flex-wrap gap-2"
+        onKeyDown={onKeyDown}
+      >
+        {choices.map((choice, index) => {
+          const accent = CARD_ACCENTS.find(
+            (item) => item.value === choice.value
+          )
+          const checked = value === choice.value
+          return (
+            <button
+              key={choice.value ?? "none"}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              aria-label={choice.label}
+              // One tab stop for the whole group, landing on the current choice.
+              tabIndex={index === current ? 0 : -1}
+              onClick={() => onValueChange(choice.value)}
+              className={cn(
+                "flex size-9 items-center justify-center rounded-full border-2",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                checked ? "border-foreground" : "border-transparent"
+              )}
+            >
+              <span
+                className={cn(
+                  "size-6 rounded-full",
+                  accent ? accent.swatch : "border border-dashed"
+                )}
+              />
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

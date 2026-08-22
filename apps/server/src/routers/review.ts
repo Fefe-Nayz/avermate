@@ -25,7 +25,9 @@ export const reviewRouter = {
    * leaderboard. Only the anonymous rank leaves this handler.
    */
   status: protectedProcedure
-    .input(z.object({ yearId: z.string(), reviewKey: z.string().default("annual") }))
+    .input(
+      z.object({ yearId: z.string(), reviewKey: z.string().default("annual") }),
+    )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);
@@ -36,7 +38,12 @@ export const reviewRouter = {
         .where(eq(grades.yearId, input.yearId));
 
       if (count < MINIMUM_GRADES) {
-        return { available: false, topPercentile: 0, seen: false, gradeCount: count };
+        return {
+          available: false,
+          topPercentile: 0,
+          seen: false,
+          gradeCount: count,
+        };
       }
 
       const [seenRow] = await db
@@ -89,7 +96,9 @@ export const reviewRouter = {
     }),
 
   markSeen: protectedProcedure
-    .input(z.object({ yearId: z.string(), reviewKey: z.string().default("annual") }))
+    .input(
+      z.object({ yearId: z.string(), reviewKey: z.string().default("annual") }),
+    )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       await requireYear(userId, input.yearId);

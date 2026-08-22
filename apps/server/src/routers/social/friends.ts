@@ -78,9 +78,7 @@ export const socialFriendsRouter = {
               shareSubjectsMode: socialProfiles.shareSubjectsMode,
             })
             .from(socialProfiles)
-            .where(
-              or(...friendIds.map((id) => eq(socialProfiles.userId, id))),
-            ),
+            .where(or(...friendIds.map((id) => eq(socialProfiles.userId, id)))),
     ]);
     const sharing = new Map(profiles.map((row) => [row.userId, row]));
     return {
@@ -169,9 +167,7 @@ export const socialFriendsRouter = {
       };
     };
     return {
-      incoming: rows
-        .filter((row) => row.recipientUserId === userId)
-        .map(dto),
+      incoming: rows.filter((row) => row.recipientUserId === userId).map(dto),
       outgoing: rows.filter((row) => row.senderUserId === userId).map(dto),
     };
   }),
@@ -536,10 +532,7 @@ export const socialBlocksRouter = {
       await db
         .delete(friendships)
         .where(
-          and(
-            eq(friendships.userLowId, low),
-            eq(friendships.userHighId, high),
-          ),
+          and(eq(friendships.userLowId, low), eq(friendships.userHighId, high)),
         );
       await db
         .delete(friendRequests)

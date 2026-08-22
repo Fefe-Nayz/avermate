@@ -2,11 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import {
-  FlagIcon,
-  LayoutDashboardIcon,
-  UsersRoundIcon,
-} from "lucide-react"
+import { FlagIcon, LayoutDashboardIcon, UsersRoundIcon } from "lucide-react"
 import { useExtracted } from "next-intl"
 import { cn } from "@/lib/utils"
 

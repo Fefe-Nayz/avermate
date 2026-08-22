@@ -39,22 +39,25 @@ import type {
   OAuthClientSummary,
   OAuthConsentSummary,
 } from "@/lib/oauth-integrations"
+import { useMcpScopeCopy } from "./mcp-scope-copy"
+import { MCP_SCOPE_GROUPS, type McpScopeGroup } from "./mcp-scope-model"
+import { MoodleSyncSection } from "./moodle-sync-section"
+import { DriveSyncSection, type DriveProvider } from "./drive-sync-section"
+import { SchoolServicesSection } from "./school-services-section"
+import { ServiceKeysSection } from "./service-keys-section"
 
-const SCOPE_OPTIONS = [
-  {
-    scope: "avermate:read",
-    required: true,
-  },
-  {
-    scope: "avermate:write",
-  },
-  {
-    scope: "avermate:delete",
-  },
-  {
-    scope: "avermate:admin",
-  },
-] as const
+/**
+ * The personal drives this build knows about.
+ *
+ * Google Drive joins the day the server widens `content_connections.provider`
+ * and implements the provider — the interface is already the same, because the
+ * two really are the same shape: OAuth, folders you point at, a delta cursor
+ * and a webhook.
+ */
+const DRIVE_PROVIDERS: DriveProvider[] = [
+  { id: "onedrive", name: "OneDrive", rootLabel: "OneDrive" },
+  { id: "googledrive", name: "Google Drive", rootLabel: "My Drive" },
+]
 
 function displayDate(value: string | number | undefined): string | null {
   if (value === undefined) return null
@@ -153,29 +156,15 @@ export function IntegrationsClient({
   const [clientToRevoke, setClientToRevoke] = useState<string | null>(null)
   const [registerOpen, setRegisterOpen] = useState(initial.clients.length === 0)
 
-  const scopeCopy = {
-    "avermate:read": {
-      label: t("Read"),
-      description: t("Years, subjects, grades, averages, goals and analytics."),
-    },
-    "avermate:write": {
-      label: t("Write"),
-      description: t("Create and update academic data and preferences."),
-    },
-    "avermate:delete": {
-      label: t("Delete"),
-      description: t("Expose confirmed destructive tools."),
-    },
-    "avermate:admin": {
-      label: t("Admin"),
-      description: t(
-        "Expose administration tools when this account is an admin."
-      ),
-    },
-  } satisfies Record<
-    (typeof SCOPE_OPTIONS)[number]["scope"],
-    { label: string; description: string }
-  >
+  const scopeCopy = useMcpScopeCopy()
+
+  const scopeGroupCopy = {
+    academic: t("Account and academics"),
+    social: t("Social"),
+    planner: t("Planning"),
+    materials: t("Course materials"),
+    documents: t("Study documents"),
+  } satisfies Record<McpScopeGroup, string>
 
   /** `avermate:write` means nothing to a reader; "Write" does. */
   function scopeLabel(scope: string) {
@@ -213,7 +202,7 @@ export function IntegrationsClient({
         token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
-        type: "user-agent-based",
+        application_type: "native",
         scope: ["openid", "profile", "offline_access", ...scopes].join(" "),
       })
       if (error) throw new Error(error.message)
@@ -310,6 +299,7 @@ export function IntegrationsClient({
       </div>
 
       <SettingsSection
+        id="mcp"
         icon={BotIcon}
         title={t("Connect an assistant")}
         description={t(
@@ -332,7 +322,18 @@ export function IntegrationsClient({
         </details>
       </SettingsSection>
 
+      <MoodleSyncSection />
+
+      {DRIVE_PROVIDERS.map((provider) => (
+        <DriveSyncSection key={provider.id} provider={provider} />
+      ))}
+
+      <SchoolServicesSection />
+
+      <ServiceKeysSection />
+
       <SettingsSection
+        id="oauth-clients"
         icon={ShieldCheckIcon}
         title={t("What has access")}
         description={t(
@@ -384,6 +385,7 @@ export function IntegrationsClient({
       </SettingsSection>
 
       <SettingsSection
+        id="registered-clients"
         icon={KeyRoundIcon}
         title={t("Registered clients")}
         description={t(
@@ -490,46 +492,61 @@ export function IntegrationsClient({
 
             <div className="grid gap-2">
               <Label>{t("The most this client may ever ask for")}</Label>
-              <div className="divide-y overflow-hidden rounded-lg border">
-                {SCOPE_OPTIONS.map((option) => {
-                  const info = scopeCopy[option.scope]
-                  const locked = "required" in option && option.required
-                  return (
-                    <label
-                      key={option.scope}
-                      className={cn(
-                        "flex items-start gap-3 p-3 transition-colors",
-                        locked
-                          ? "cursor-default"
-                          : "cursor-pointer hover:bg-accent/40"
-                      )}
+              <div className="grid gap-3 @2xl/main:grid-cols-2">
+                {MCP_SCOPE_GROUPS.map((group) => (
+                  <section
+                    key={group.id}
+                    aria-labelledby={`oauth-scope-group-${group.id}`}
+                    className="overflow-hidden rounded-lg border"
+                  >
+                    <h3
+                      id={`oauth-scope-group-${group.id}`}
+                      className="bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground"
                     >
-                      <Checkbox
-                        checked={scopes.has(option.scope)}
-                        disabled={locked}
-                        onCheckedChange={(checked) => {
-                          setScopes((current) => {
-                            const next = new Set(current)
-                            if (checked) next.add(option.scope)
-                            else next.delete(option.scope)
-                            return next
-                          })
-                        }}
-                      />
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-2 text-sm font-medium">
-                          {info.label}
-                          {locked ? (
-                            <Badge variant="outline">{t("Always")}</Badge>
-                          ) : null}
-                        </span>
-                        <span className="block text-xs leading-relaxed text-muted-foreground">
-                          {info.description}
-                        </span>
-                      </span>
-                    </label>
-                  )
-                })}
+                      {scopeGroupCopy[group.id]}
+                    </h3>
+                    <div className="divide-y">
+                      {group.scopes.map((option) => {
+                        const info = scopeCopy[option.scope]
+                        return (
+                          <label
+                            key={option.scope}
+                            className={cn(
+                              "flex items-start gap-3 p-3 transition-colors",
+                              option.required
+                                ? "cursor-default"
+                                : "cursor-pointer hover:bg-accent/40"
+                            )}
+                          >
+                            <Checkbox
+                              checked={scopes.has(option.scope)}
+                              disabled={option.required}
+                              onCheckedChange={(checked) => {
+                                setScopes((current) => {
+                                  const next = new Set(current)
+                                  if (checked) next.add(option.scope)
+                                  else next.delete(option.scope)
+                                  return next
+                                })
+                              }}
+                            />
+                            <span className="min-w-0">
+                              <span className="flex items-center gap-2 text-sm font-medium">
+                                {info.label}
+                                {option.required ? (
+                                  <Badge variant="outline">{t("Always")}</Badge>
+                                ) : null}
+                              </span>
+                              <span className="block text-xs leading-relaxed text-muted-foreground">
+                                {info.description}
+                              </span>
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {t(

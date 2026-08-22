@@ -23,6 +23,8 @@ import { NextIntlClientProvider } from "next-intl"
 import { getLocale } from "next-intl/server"
 import { Providers } from "@/components/providers"
 import { APPEARANCE_COOKIE, parseAppearance } from "@/lib/appearance"
+import { STICKY_COOKIE_PREFIX } from "@/lib/sticky-state"
+import { StickyStateProvider } from "@/components/sticky-state-provider"
 import { cn } from "@/lib/utils"
 import { fontStack } from "@/lib/theme"
 import "./globals.css"
@@ -140,6 +142,15 @@ export default async function RootLayout({
   const [locale, store] = await Promise.all([getLocale(), cookies()])
   const appearance = parseAppearance(store.get(APPEARANCE_COOKIE)?.value)
 
+  // Remembered layout choices, so a screen renders on the server the way the
+  // reader left it. See `lib/sticky-state`.
+  const sticky: Record<string, string> = {}
+  for (const cookie of store.getAll()) {
+    if (cookie.name.startsWith(STICKY_COOKIE_PREFIX)) {
+      sticky[cookie.name] = cookie.value
+    }
+  }
+
   return (
     <html
       lang={locale}
@@ -188,7 +199,9 @@ export default async function RootLayout({
       </head>
       <body>
         <NextIntlClientProvider>
-          <Providers>{children}</Providers>
+          <StickyStateProvider value={sticky}>
+            <Providers>{children}</Providers>
+          </StickyStateProvider>
         </NextIntlClientProvider>
       </body>
     </html>

@@ -13,26 +13,28 @@ import {
   resolveWidgetFlow,
   spanForColumns,
   widgetCapability,
-  cardSemanticsFromDefinition,
   widgetMeasureId,
+  widgetPrimaryMeasure,
+  widgetRecipeLayout,
+  widgetSocialNeeds,
   WIDGET_DEFINITION_VERSION,
   type CardSpec,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetFlowSection,
   type WidgetOptionProvider,
   type WidgetSurface,
 } from "@avermate/core"
 import {
+  AccentField,
   ChoiceField,
   FormSection,
   TextField,
 } from "@/components/forms/controls"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
+import { useCohorts, useFriends } from "@/hooks/use-cohorts"
 import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
 import { haptic } from "@/lib/haptics"
 import { orpc } from "@/lib/orpc"
-import { cn } from "@/lib/utils"
-import { CARD_ACCENTS } from "./card-accent"
 import {
   CardShell,
   CardShellGrid,
@@ -47,6 +49,7 @@ import { resolveWidgetRow } from "./widget-row"
 import { useWidgetMessages } from "./use-widget-messages"
 import { useWidgetResult } from "./use-widget-result"
 import { WidgetBody } from "./widget-view"
+import { widgetRecipeForLayout } from "./widget-responsive"
 import type { WidgetDraftValue } from "./widget-draft"
 import {
   resolveWidgetEditorChange,
@@ -89,7 +92,7 @@ export interface WidgetFormSubmission {
   submitLabel: string
   pending: boolean
   /** Receives the compiled definition and a non-empty title. */
-  submit: (definition: WidgetDefinitionV1, title: string) => void
+  submit: (definition: WidgetDefinition, title: string) => void
   /** An extra opening step, e.g. the template's surface choice. */
   leadStep?: FlowStep
 }
@@ -126,6 +129,23 @@ export function WidgetForm({
   const [accent, setAccent] = useState(initial?.accent ?? null)
   const [hidden] = useState(initial?.hidden ?? false)
 
+  const socialNeeds = useMemo(() => widgetSocialNeeds(definition), [definition])
+  const primaryMeasure = widgetPrimaryMeasure(definition.analysis)
+  // The comparison the card currently names, which decides both the sole expensive group
+  // response to fetch and the people the dependent member picker may offer.
+  const selectedGroupId =
+    primaryMeasure?.kind === "metric" ? (primaryMeasure.groupId ?? null) : null
+  const selectedComparisonIds = useMemo(
+    () => (selectedGroupId ? [selectedGroupId] : []),
+    [selectedGroupId]
+  )
+  // A normal card editor now asks for no social data. Choosing a social metric first
+  // loads its cheap picker; choosing a cohort comparison then loads that group alone.
+  const { cohorts, choices: cohortChoices } = useCohorts({
+    enabled: socialNeeds.cohorts,
+    comparisonIds: selectedComparisonIds,
+  })
+  const { people } = useFriends({ enabled: socialNeeds.friends })
   const optionSets = useMemo<WidgetOptionSets>(
     () => ({
       subjects: graph.flatten().map((subject) => ({
@@ -144,8 +164,39 @@ export function WidgetForm({
         value: period.id,
         messageKey: period.name,
       })),
+      /**
+       * One entry per *comparison*, not per group.
+       *
+       * `useCohorts` keys its map by the comparison's id — "Terminale 2" and "Maths in
+       * Terminale 2" are two readings of one group — and the evaluator looks the card's
+       * `groupId` up in that map. Offering the group's own id would store a reference
+       * nothing can resolve.
+       */
+      cohorts: cohortChoices.map((cohort) => ({
+        value: cohort.comparisonId,
+        messageKey: cohort.name,
+      })),
+      // Those readable inside the chosen comparison. Before one is chosen there is
+      // nobody to offer, which is the honest answer rather than everyone.
+      "cohort-members": (selectedGroupId
+        ? (cohorts.get(selectedGroupId)?.members ?? [])
+        : []
+      ).map((member) => ({ value: member.userId, messageKey: member.name })),
+      friends: people.map((friend) => ({
+        value: friend.userId,
+        messageKey: friend.name,
+      })),
     }),
-    [customAverages, goals, graph, periods]
+    [
+      cohortChoices,
+      cohorts,
+      customAverages,
+      goals,
+      graph,
+      people,
+      periods,
+      selectedGroupId,
+    ]
   )
   const flow = useMemo(
     () =>
@@ -163,21 +214,32 @@ export function WidgetForm({
   )
   const result = useWidgetResult(flow.prunedDefinition, surface)
   const capability = widgetCapability(
-    widgetMeasureId(flow.prunedDefinition.analysis.measure)
+    widgetMeasureId(widgetPrimaryMeasure(flow.prunedDefinition.analysis))
   )
   const defaultTitle = message(capability.messageKey)
 
   // The pane the dashboard is drawn in decides, exactly as its container
   // queries do — not this window. See `useDashboardGrid`.
   const { columns } = useDashboardGrid()
-  const projection = cardSemanticsFromDefinition(flow.prunedDefinition)
-  const shape = { metric: projection.metric, display: projection.display }
+  // The dashboard lets an adaptive recipe occupy the compact fallback's width,
+  // while a preserving definition keeps the requested recipe's floor. The editor
+  // must ask the same question or it previews an adaptive one-column card but never
+  // lets the reader choose that width.
+  const requestedRecipe = flow.prunedDefinition.visualization.recipe
+  const layoutRecipe = draftCompilation.plan
+    ? widgetRecipeForLayout(
+        requestedRecipe,
+        flow.prunedDefinition.presentation.responsiveBehavior,
+        draftCompilation.plan.resultShape
+      )
+    : requestedRecipe
+  const shape = { recipe: layoutRecipe }
   const widths = availableSpans(shape, columns)
   const drawn = cardColumns({ ...shape, span }, columns)
 
   const updateDraft = (draft: WidgetDraftValue) => {
     setDefinition(
-      resolveWidgetEditorChange(draft as unknown as WidgetDefinitionV1, {
+      resolveWidgetEditorChange(draft as unknown as WidgetDefinition, {
         surface,
         options: optionSets,
       })
@@ -256,6 +318,10 @@ export function WidgetForm({
       <CardShell
         accent={accent}
         surface={cardSurface(result)}
+        heightTier={
+          widgetRecipeLayout(flow.prunedDefinition.visualization.recipe)
+            .minHeightTier
+        }
         spanClasses={PREVIEW_SPAN[drawn]}
         title={title.trim() || defaultTitle}
       >
@@ -267,6 +333,8 @@ export function WidgetForm({
           definition={flow.prunedDefinition}
           result={result}
           expanded={surface === "insights"}
+          columns={drawn as 1 | 2 | 3 | 4}
+          gridColumns={columns as 1 | 2 | 3 | 4}
         />
       </CardShell>
     </CardShellGrid>
@@ -396,7 +464,7 @@ export function WidgetForm({
                 }
                 columns={widths.length > 2 ? 4 : 2}
               />
-              <WidgetAccentField value={accent} onValueChange={setAccent} />
+              <AccentField value={accent} onValueChange={setAccent} />
             </>
           )}
           <TextField
@@ -440,7 +508,7 @@ function clampSpan(span: number): CardSpec["span"] {
 
 function summarize(
   sections: WidgetFlowSection[],
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   message: (key: string) => string
 ): string {
   const summaries = sections.flatMap((section) =>
@@ -460,56 +528,4 @@ function summarize(
     })
   )
   return [...new Set(summaries)].slice(0, 3).join(" · ")
-}
-
-function WidgetAccentField({
-  value,
-  onValueChange,
-}: {
-  value: string | null
-  onValueChange: (value: string | null) => void
-}) {
-  const t = useExtracted()
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium">{t("Colour")}</span>
-      <div
-        role="radiogroup"
-        aria-label={t("Colour")}
-        className="flex flex-wrap gap-2"
-      >
-        <button
-          type="button"
-          role="radio"
-          aria-checked={value === null}
-          aria-label={t("No colour")}
-          onClick={() => onValueChange(null)}
-          className={cn(
-            "flex size-9 items-center justify-center rounded-full border-2",
-            value === null ? "border-foreground" : "border-transparent"
-          )}
-        >
-          <span className="size-6 rounded-full border border-dashed" />
-        </button>
-        {CARD_ACCENTS.map((accent) => (
-          <button
-            key={accent.value}
-            type="button"
-            role="radio"
-            aria-checked={value === accent.value}
-            aria-label={accent.label}
-            onClick={() => onValueChange(accent.value)}
-            className={cn(
-              "flex size-9 items-center justify-center rounded-full border-2",
-              value === accent.value
-                ? "border-foreground"
-                : "border-transparent"
-            )}
-          >
-            <span className={cn("size-6 rounded-full", accent.swatch)} />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
 }

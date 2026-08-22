@@ -1,10 +1,38 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { SubjectGraph } from "./graph";
+import { widgetFrameSeries } from "./widget-frame";
 import { evaluateWidgetDefinition } from "./widget-evaluator";
 import { widgetDefinitionFromCard } from "./widget-defaults";
 import { WIDGET_LIMITS } from "./widget-types";
-import type { Grade, Subject, WidgetTransform } from "./index";
+import type {
+  Grade,
+  Subject,
+  WidgetEvaluationResult,
+  WidgetSeriesDatum,
+  WidgetTransform,
+} from "./index";
+
+/**
+ * The plotted rows of a grouped result, as a renderer reads them.
+ *
+ * A grouped reading is a data frame now; every chart in the app goes through this same
+ * projection, so the assertions below test  what a renderer would actually draw rather than an
+ * intermediate the frame replaced.
+ */
+const PLOT_SLOTS = {
+  x: null,
+  y: "value",
+  color: null,
+  series: null,
+  facet: null,
+} as const;
+
+function plotted(result: WidgetEvaluationResult): WidgetSeriesDatum[] {
+  return result.kind === "data-frame"
+    ? widgetFrameSeries(result.frame, PLOT_SLOTS)
+    : [];
+}
 
 /**
  * A transform must never see a shortened series.
@@ -60,14 +88,18 @@ function dailySeries(days: number, transforms: WidgetTransform[]) {
     goalId: null,
     display: "chart",
   });
-  definition.analysis.groupBy = {
-    kind: "time",
-    interval: "day",
-    // Running, so bucket k reports every result to date — a sequence whose sums
-    // and means have closed forms, which is what makes the assertions below
-    // exact rather than golden.
-    accumulation: "running",
-  };
+  definition.analysis.dimensions = [
+    {
+      id: "group",
+      kind: "time",
+      grain: "day",
+      // Running, so bucket k reports every result to date — a sequence whose sums
+      // and means have closed forms, which is what makes the assertions below
+      // exact rather than golden.
+      accumulation: "running",
+      fill: "observed",
+    },
+  ];
   definition.analysis.transforms = transforms;
 
   const from = new Date(2025, 0, 1);
@@ -93,9 +125,9 @@ function dailySeries(days: number, transforms: WidgetTransform[]) {
     now: to,
     surface: "insights",
   });
-  if (result.kind !== "series")
+  if (result.kind !== "data-frame")
     throw new Error(`expected a series, got ${result.kind}`);
-  return result.values;
+  return plotted(result);
 }
 
 /** One grade a day and a running count, so bucket k reports k results to date. */

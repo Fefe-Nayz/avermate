@@ -1,0 +1,1 @@
+ALTER TABLE `content_oauth_states` ADD `sealedVerifier` text;

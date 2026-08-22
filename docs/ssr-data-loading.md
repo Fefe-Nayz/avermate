@@ -20,6 +20,12 @@ project README.
    invalidation is reserved for operations that genuinely replace the whole
    local model, such as first-time setup, creating the active year, or erasing
    all account data.
+6. Feature-scoped read models stay outside the year snapshot. A new entity
+   family gets its own oRPC namespace, a shared input factory in
+   `route-query-inputs.ts`, and page-level server prefetch using that exact
+   query key. Its mutations invalidate only that namespace. The planner's
+   unified agenda is the reference implementation: it projects related dated
+   sources on demand without enlarging or invalidating `snapshot.get`.
 
 These choices follow the current TanStack Query guidance for Server Components,
 prefetching, request-scoped clients, dehydration and `HydrationBoundary`, and

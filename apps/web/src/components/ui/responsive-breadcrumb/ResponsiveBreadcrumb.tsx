@@ -1,16 +1,16 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { useExtracted } from "next-intl";
-import { useMediaQuery } from "@/hooks/use-media-query";
-import { cn } from "@/lib/utils";
-import { BreadcrumbRenderer } from "./BreadcrumbRenderer";
+import * as React from "react"
+import { useExtracted } from "next-intl"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { cn } from "@/lib/utils"
+import { BreadcrumbRenderer } from "./BreadcrumbRenderer"
 import {
   getLayoutRange,
   getLayoutRanges,
   getLayoutWidth,
   solveBreadcrumbLayout,
-} from "./solveBreadcrumbLayout";
+} from "./solveBreadcrumbLayout"
 import type {
   BreadcrumbData,
   BreadcrumbDebugState,
@@ -19,8 +19,30 @@ import type {
   ResponsiveBreadcrumbProps,
   ResponsiveBreadcrumbStrings,
   SeparatorNavItem,
-} from "./types";
-import { useBreadcrumbMeasurements } from "./useBreadcrumbMeasurements";
+} from "./types"
+import { useBreadcrumbMeasurements } from "./useBreadcrumbMeasurements"
+
+type DocumentDirection = "ltr" | "rtl"
+
+function getDocumentDirection(): DocumentDirection {
+  if (typeof document === "undefined") return "ltr"
+
+  return window.getComputedStyle(document.documentElement).direction === "rtl"
+    ? "rtl"
+    : "ltr"
+}
+
+function subscribeToDocumentDirection(onStoreChange: () => void) {
+  if (typeof MutationObserver === "undefined") return () => undefined
+
+  const observer = new MutationObserver(onStoreChange)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class", "dir", "style"],
+  })
+
+  return () => observer.disconnect()
+}
 
 export function ResponsiveBreadcrumb({
   items,
@@ -72,24 +94,25 @@ export function ResponsiveBreadcrumb({
   direction = "auto",
   alwaysShow,
 }: ResponsiveBreadcrumbProps) {
-  const t = useExtracted();
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const measureRef = React.useRef<HTMLDivElement | null>(null);
-  const isMobile = useMediaQuery("(max-width: 768px)");
-  const [openOverlay, setOpenOverlay] = React.useState<string | null>(null);
-  const [detectedDirection, setDetectedDirection] = React.useState<
-    "ltr" | "rtl"
-  >("ltr");
+  const t = useExtracted()
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const measureRef = React.useRef<HTMLDivElement | null>(null)
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [openOverlay, setOpenOverlay] = React.useState<string | null>(null)
+  const detectedDirection = React.useSyncExternalStore(
+    subscribeToDocumentDirection,
+    getDocumentDirection,
+    () => "ltr"
+  )
 
-  const measurementLocked = lockOnOverlayOpen && openOverlay !== null;
+  const measurementLocked = lockOnOverlayOpen && openOverlay !== null
   const isRtl =
-    direction === "rtl" ||
-    (direction === "auto" && detectedDirection === "rtl");
-  const headCount = alwaysShow?.head ?? 1;
-  const tailCount = alwaysShow?.tail ?? 1;
-  const includeNextArrow = showNextArrow && nextItems.length > 0;
+    direction === "rtl" || (direction === "auto" && detectedDirection === "rtl")
+  const headCount = alwaysShow?.head ?? 1
+  const tailCount = alwaysShow?.tail ?? 1
+  const includeNextArrow = showNextArrow && nextItems.length > 0
   const resolvedFocusRing =
-    focusRing ?? (overflowBehavior === "collapse" ? "inset" : "outer");
+    focusRing ?? (overflowBehavior === "collapse" ? "inset" : "outer")
   const defaultStrings = React.useMemo<ResponsiveBreadcrumbStrings>(
     () => ({
       navigateTo: (label) => t("Navigate to {label}", { label }),
@@ -109,60 +132,50 @@ export function ResponsiveBreadcrumb({
       measureEllipsis: t("Measure collapsed items"),
       measureNextItems: t("Measure next items"),
     }),
-    [t],
-  );
+    [t]
+  )
   const resolvedStrings = React.useMemo(
     () => ({ ...defaultStrings, ...strings }),
-    [defaultStrings, strings],
-  );
+    [defaultStrings, strings]
+  )
   const resolvedTitleOnlyFallback = React.useMemo(() => {
     if (isLoading && loadingFallback === "custom" && customLoadingFallback) {
-      return customLoadingFallback;
+      return customLoadingFallback
     }
 
     if (isLoading && loadingFallback === "title") {
-      return titleOnlyFallback ?? items.at(-1)?.label ?? "";
+      return titleOnlyFallback ?? items.at(-1)?.label ?? ""
     }
 
-    return titleOnlyFallback ?? items.at(-1)?.label ?? "";
+    return titleOnlyFallback ?? items.at(-1)?.label ?? ""
   }, [
     customLoadingFallback,
     isLoading,
     items,
     loadingFallback,
     titleOnlyFallback,
-  ]);
+  ])
   const measurements = useBreadcrumbMeasurements({
     containerRef,
     measureRef,
     locked: measurementLocked,
-  });
+  })
   const itemWidths = React.useMemo(
     () => normalizeMeasuredWidths(measurements.itemWidths, items.length),
-    [items.length, measurements.itemWidths],
-  );
+    [items.length, measurements.itemWidths]
+  )
   const separatorWidths = React.useMemo(
     () =>
       normalizeMeasuredWidths(
         measurements.separatorWidths,
-        Math.max(0, items.length - 1),
+        Math.max(0, items.length - 1)
       ),
-    [items.length, measurements.separatorWidths],
-  );
+    [items.length, measurements.separatorWidths]
+  )
   const hasCurrentMeasurements =
     measurements.ready &&
     measurements.itemWidths.length === items.length &&
-    measurements.separatorWidths.length === Math.max(0, items.length - 1);
-
-  React.useEffect(() => {
-    if (direction !== "auto") {
-      return;
-    }
-
-    const root = document.documentElement;
-    const computedDirection = window.getComputedStyle(root).direction;
-    setDetectedDirection(computedDirection === "rtl" ? "rtl" : "ltr");
-  }, [direction]);
+    measurements.separatorWidths.length === Math.max(0, items.length - 1)
 
   const untruncatedFullLayout = React.useMemo(
     () =>
@@ -179,36 +192,36 @@ export function ResponsiveBreadcrumb({
       itemWidths,
       measurements.nextArrowWidth,
       separatorWidths,
-    ],
-  );
+    ]
+  )
 
   const buildLayoutForWidths = React.useCallback(
     (itemWidths: number[], fullLayoutForWidths: LayoutNode[]) => {
       if (items.length === 0) {
-        return [];
+        return []
       }
 
       if (isLoading && loadingFallback === "custom" && customLoadingFallback) {
-        return titleOnlyLayout(measurements.titleOnlyWidth);
+        return titleOnlyLayout(measurements.titleOnlyWidth)
       }
 
       if (isLoading && loadingFallback === "title") {
-        return titleOnlyLayout(measurements.titleOnlyWidth);
+        return titleOnlyLayout(measurements.titleOnlyWidth)
       }
 
       if (overflowBehavior !== "collapse") {
-        return fullLayoutForWidths;
+        return fullLayoutForWidths
       }
 
       if (!hasCurrentMeasurements) {
-        return titleOnlyLayout(measurements.titleOnlyWidth);
+        return titleOnlyLayout(measurements.titleOnlyWidth)
       }
 
       if (
         typeof fallbackAtWidth === "number" &&
         measurements.containerWidth <= fallbackAtWidth
       ) {
-        return titleOnlyLayout(measurements.titleOnlyWidth);
+        return titleOnlyLayout(measurements.titleOnlyWidth)
       }
 
       return solveBreadcrumbLayout({
@@ -224,10 +237,10 @@ export function ResponsiveBreadcrumb({
           strategy,
           preference,
           canCollapse: items.map((item, index) =>
-            getCanCollapse(item, index, items.length),
+            getCanCollapse(item, index, items.length)
           ),
           forcedCollapsed: items.map(
-            (item, index) => forceCollapse?.(item, index) ?? false,
+            (item, index) => forceCollapse?.(item, index) ?? false
           ),
           itemPriority: itemPriority
             ? items.map((item, index) => itemPriority(item, index))
@@ -238,7 +251,7 @@ export function ResponsiveBreadcrumb({
           allowMultipleEllipses,
           grouping,
         },
-      });
+      })
     },
     [
       allowMultipleEllipses,
@@ -263,16 +276,16 @@ export function ResponsiveBreadcrumb({
       separatorWidths,
       strategy,
       tailCount,
-    ],
-  );
+    ]
+  )
 
   const titleOnlyForcedByLoading =
     isLoading &&
     (loadingFallback === "title" ||
-      (loadingFallback === "custom" && Boolean(customLoadingFallback)));
+      (loadingFallback === "custom" && Boolean(customLoadingFallback)))
   const titleOnlyForcedByWidth =
     typeof fallbackAtWidth === "number" &&
-    measurements.containerWidth <= fallbackAtWidth;
+    measurements.containerWidth <= fallbackAtWidth
   const shouldTryTruncation =
     enableTruncation &&
     overflowBehavior === "collapse" &&
@@ -280,7 +293,7 @@ export function ResponsiveBreadcrumb({
     !titleOnlyForcedByLoading &&
     !titleOnlyForcedByWidth &&
     getLayoutWidth(untruncatedFullLayout, measurements.gap) >
-      measurements.containerWidth;
+      measurements.containerWidth
 
   const truncation = React.useMemo(
     () =>
@@ -311,8 +324,8 @@ export function ResponsiveBreadcrumb({
       truncateMinWidth,
       truncateOrder,
       truncateThreshold,
-    ],
-  );
+    ]
+  )
 
   const fullLayout = React.useMemo(
     () =>
@@ -329,26 +342,26 @@ export function ResponsiveBreadcrumb({
       measurements.nextArrowWidth,
       separatorWidths,
       truncation.itemWidths,
-    ],
-  );
+    ]
+  )
 
   const layout = React.useMemo(
     () => buildLayoutForWidths(truncation.itemWidths, fullLayout),
-    [buildLayoutForWidths, fullLayout, truncation.itemWidths],
-  );
+    [buildLayoutForWidths, fullLayout, truncation.itemWidths]
+  )
 
   const validOverlayIds = React.useMemo(() => {
-    const ids = new Set<string>();
+    const ids = new Set<string>()
 
     layout.forEach((node, nodeIndex) => {
       if (node.type === "ellipsis") {
-        ids.add(`ellipsis-${node.from}-${node.to}`);
-        return;
+        ids.add(`ellipsis-${node.from}-${node.to}`)
+        return
       }
 
       if (node.type === "next" && nextItems.length > 0) {
-        ids.add("next");
-        return;
+        ids.add("next")
+        return
       }
 
       if (node.type === "separator") {
@@ -361,15 +374,15 @@ export function ResponsiveBreadcrumb({
           clickableLeftOfEllipsis,
           separatorNavSide,
           showCurrentInNav,
-        });
+        })
 
         if (overlayId) {
-          ids.add(overlayId);
+          ids.add(overlayId)
         }
       }
-    });
+    })
 
-    return ids;
+    return ids
   }, [
     clickableLeftOfEllipsis,
     items,
@@ -378,17 +391,25 @@ export function ResponsiveBreadcrumb({
     separatorNavItems,
     separatorNavSide,
     showCurrentInNav,
-  ]);
+  ])
 
   React.useEffect(() => {
-    if (openOverlay && !validOverlayIds.has(openOverlay)) {
-      setOpenOverlay(null);
+    if (!openOverlay || validOverlayIds.has(openOverlay)) return
+
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      setOpenOverlay((current) => (current === openOverlay ? null : current))
+    })
+
+    return () => {
+      cancelled = true
     }
-  }, [openOverlay, validOverlayIds]);
+  }, [openOverlay, validOverlayIds])
 
   const schemaJson = React.useMemo(() => {
     if (schema !== "json-ld") {
-      return null;
+      return null
     }
 
     const schemaData = {
@@ -400,26 +421,26 @@ export function ResponsiveBreadcrumb({
         name: primitiveLabel(item.label) || item.key,
         item: item.href,
       })),
-    };
+    }
 
-    return JSON.stringify(schemaData).replace(/</g, "\\u003c");
-  }, [items, schema]);
+    return JSON.stringify(schemaData).replace(/</g, "\\u003c")
+  }, [items, schema])
 
   React.useEffect(() => {
     if (!debug || !onDebugStateChange) {
-      return;
+      return
     }
 
-    const collapsedRange = getLayoutRange(layout);
-    const collapsedGroups = getLayoutRanges(layout);
-    const usedWidth = getLayoutWidth(layout, measurements.gap);
+    const collapsedRange = getLayoutRange(layout)
+    const collapsedGroups = getLayoutRanges(layout)
+    const usedWidth = getLayoutWidth(layout, measurements.gap)
     const visibleItemsCount = layout.filter(
-      (node) => node.type === "item",
-    ).length;
+      (node) => node.type === "item"
+    ).length
     const collapsedItemsCount = collapsedGroups.reduce(
       (sum, range) => sum + range.b - range.a + 1,
-      0,
-    );
+      0
+    )
     const debugState: BreadcrumbDebugState = {
       containerWidth: measurements.containerWidth,
       availableWidth: measurements.containerWidth,
@@ -442,9 +463,9 @@ export function ResponsiveBreadcrumb({
       measurementLocked,
       truncatedItems: truncation.truncatedWidths,
       truncationEnabled: enableTruncation,
-    };
+    }
 
-    onDebugStateChange(debugState);
+    onDebugStateChange(debugState)
   }, [
     debug,
     enableTruncation,
@@ -462,7 +483,7 @@ export function ResponsiveBreadcrumb({
     separatorWidths,
     strategy,
     truncation.truncatedWidths,
-  ]);
+  ])
 
   const breadcrumb = (
     <BreadcrumbRenderer
@@ -502,12 +523,12 @@ export function ResponsiveBreadcrumb({
       debug={debug}
       isRtl={isRtl}
     />
-  );
+  )
 
   return (
     <div
       ref={containerRef}
-      className={cn("relative min-w-0 max-w-full", className)}
+      className={cn("relative max-w-full min-w-0", className)}
       data-responsive-breadcrumb=""
       data-focus-ring={resolvedFocusRing}
     >
@@ -554,11 +575,11 @@ export function ResponsiveBreadcrumb({
         isRtl={isRtl}
       />
     </div>
-  );
+  )
 }
 
-export const FinalResponsiveBreadcrumb = ResponsiveBreadcrumb;
-export default ResponsiveBreadcrumb;
+export const FinalResponsiveBreadcrumb = ResponsiveBreadcrumb
+export default ResponsiveBreadcrumb
 export type {
   BreadcrumbData,
   BreadcrumbDebugState,
@@ -568,44 +589,40 @@ export type {
   LayoutNode,
   ResponsiveBreadcrumbProps,
   SeparatorNavItem,
-} from "./types";
+} from "./types"
 
-const noopOpenOverlayChange = () => undefined;
+const noopOpenOverlayChange = () => undefined
 
 const MeasurementTree = React.forwardRef<
   HTMLDivElement,
   {
-    items: BreadcrumbData[];
-    renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"];
-    renderItem?: ResponsiveBreadcrumbProps["renderItem"];
-    renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"];
-    renderTitleOnly?: ResponsiveBreadcrumbProps["renderTitleOnly"];
-    renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"];
-    renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"];
-    renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"];
-    isMobile: boolean;
-    showHomeIcon: boolean;
-    showNextArrow: boolean;
-    nextItems: SeparatorNavItem[];
+    items: BreadcrumbData[]
+    renderSeparator?: ResponsiveBreadcrumbProps["renderSeparator"]
+    renderItem?: ResponsiveBreadcrumbProps["renderItem"]
+    renderEllipsis?: ResponsiveBreadcrumbProps["renderEllipsis"]
+    renderTitleOnly?: ResponsiveBreadcrumbProps["renderTitleOnly"]
+    renderMenuItem?: ResponsiveBreadcrumbProps["renderMenuItem"]
+    renderItemLink?: ResponsiveBreadcrumbProps["renderItemLink"]
+    renderMenuLink?: ResponsiveBreadcrumbProps["renderMenuLink"]
+    isMobile: boolean
+    showHomeIcon: boolean
+    showNextArrow: boolean
+    nextItems: SeparatorNavItem[]
     separatorNavItems: NonNullable<
       ResponsiveBreadcrumbProps["separatorNavItems"]
-    >;
-    separatorNavSide: NonNullable<
-      ResponsiveBreadcrumbProps["separatorNavSide"]
-    >;
-    showCurrentInNav: NonNullable<
-      ResponsiveBreadcrumbProps["showCurrentInNav"]
-    >;
-    titleOnlyFallback: React.ReactNode;
-    titleOnlyIcon?: React.ReactNode;
-    titleOnlyCustomElement?: React.ReactNode;
-    customEllipsisElement?: React.ReactNode;
-    lastItemClickable: boolean;
-    showCollapsedCount: boolean;
-    clickableLeftOfEllipsis: boolean;
-    strings: ResponsiveBreadcrumbStrings;
-    focusRing: BreadcrumbFocusRing;
-    isRtl: boolean;
+    >
+    separatorNavSide: NonNullable<ResponsiveBreadcrumbProps["separatorNavSide"]>
+    showCurrentInNav: NonNullable<ResponsiveBreadcrumbProps["showCurrentInNav"]>
+    titleOnlyFallback: React.ReactNode
+    titleOnlyIcon?: React.ReactNode
+    titleOnlyCustomElement?: React.ReactNode
+    customEllipsisElement?: React.ReactNode
+    lastItemClickable: boolean
+    showCollapsedCount: boolean
+    clickableLeftOfEllipsis: boolean
+    strings: ResponsiveBreadcrumbStrings
+    focusRing: BreadcrumbFocusRing
+    isRtl: boolean
   }
 >(function MeasurementTree(
   {
@@ -635,21 +652,21 @@ const MeasurementTree = React.forwardRef<
     focusRing,
     isRtl,
   },
-  ref,
+  ref
 ) {
-  const includeNextArrow = showNextArrow && nextItems.length > 0;
+  const includeNextArrow = showNextArrow && nextItems.length > 0
   const fullMeasurementLayout = buildFullLayout({
     items,
     itemWidths: Array.from({ length: items.length }, () => 0),
     separatorWidths: Array.from(
       { length: Math.max(0, items.length - 1) },
-      () => 0,
+      () => 0
     ),
     includeNextArrow,
     nextArrowWidth: 0,
-  });
-  const ellipsisMeasurementLayout = [getEllipsisMeasurementNode(items.length)];
-  const titleOnlyMeasurementLayout = titleOnlyLayout(0);
+  })
+  const ellipsisMeasurementLayout = [getEllipsisMeasurementNode(items.length)]
+  const titleOnlyMeasurementLayout = titleOnlyLayout(0)
   const sharedRendererProps = {
     items,
     isMobile,
@@ -687,13 +704,13 @@ const MeasurementTree = React.forwardRef<
   } satisfies Omit<
     React.ComponentProps<typeof BreadcrumbRenderer>,
     "layout" | "mode" | "measurementScope"
-  >;
+  >
 
   return (
     <div
       ref={ref}
       aria-hidden="true"
-      className="pointer-events-none absolute left-0 top-0 -z-10 h-0 max-w-none overflow-hidden opacity-0"
+      className="pointer-events-none absolute top-0 left-0 -z-10 h-0 max-w-none overflow-hidden opacity-0"
       style={{ contain: "layout style", visibility: "hidden" }}
     >
       <BreadcrumbRenderer
@@ -715,8 +732,8 @@ const MeasurementTree = React.forwardRef<
         measurementScope="title-only"
       />
     </div>
-  );
-});
+  )
+})
 
 function buildFullLayout({
   items,
@@ -725,31 +742,31 @@ function buildFullLayout({
   includeNextArrow,
   nextArrowWidth,
 }: {
-  items: BreadcrumbData[];
-  itemWidths: number[];
-  separatorWidths: number[];
-  includeNextArrow: boolean;
-  nextArrowWidth: number;
+  items: BreadcrumbData[]
+  itemWidths: number[]
+  separatorWidths: number[]
+  includeNextArrow: boolean
+  nextArrowWidth: number
 }): LayoutNode[] {
-  const nodes: LayoutNode[] = [];
+  const nodes: LayoutNode[] = []
 
   items.forEach((_, index) => {
-    nodes.push({ type: "item", index, width: itemWidths[index] ?? 0 });
+    nodes.push({ type: "item", index, width: itemWidths[index] ?? 0 })
 
     if (index < items.length - 1) {
       nodes.push({
         type: "separator",
         after: index,
         width: separatorWidths[index] ?? 0,
-      });
+      })
     }
-  });
+  })
 
   if (includeNextArrow) {
-    nodes.push({ type: "next", width: nextArrowWidth });
+    nodes.push({ type: "next", width: nextArrowWidth })
   }
 
-  return nodes;
+  return nodes
 }
 
 function computeTruncation({
@@ -766,24 +783,24 @@ function computeTruncation({
   truncateThreshold,
   truncateOrder,
 }: {
-  items: BreadcrumbData[];
-  itemWidths: number[];
-  separatorWidths: number[];
-  availableWidth: number;
-  gapWidth: number;
-  includeNextArrow: boolean;
-  nextArrowWidth: number;
-  enabled: boolean;
-  truncateMinWidth: number;
-  truncateMaxWidth: number;
-  truncateThreshold: number;
-  truncateOrder: "biggest-first" | "smallest-first";
+  items: BreadcrumbData[]
+  itemWidths: number[]
+  separatorWidths: number[]
+  availableWidth: number
+  gapWidth: number
+  includeNextArrow: boolean
+  nextArrowWidth: number
+  enabled: boolean
+  truncateMinWidth: number
+  truncateMaxWidth: number
+  truncateThreshold: number
+  truncateOrder: "biggest-first" | "smallest-first"
 }) {
-  const effectiveItemWidths = itemWidths.map((width) => width ?? 0);
-  const truncatedWidths: Record<number, number> = {};
+  const effectiveItemWidths = itemWidths.map((width) => width ?? 0)
+  const truncatedWidths: Record<number, number> = {}
 
   if (!enabled || items.length === 0) {
-    return { itemWidths: effectiveItemWidths, truncatedWidths };
+    return { itemWidths: effectiveItemWidths, truncatedWidths }
   }
 
   let overflow =
@@ -795,15 +812,15 @@ function computeTruncation({
         includeNextArrow,
         nextArrowWidth,
       }),
-      gapWidth,
-    ) - availableWidth;
+      gapWidth
+    ) - availableWidth
 
   if (overflow <= 0) {
-    return { itemWidths: effectiveItemWidths, truncatedWidths };
+    return { itemWidths: effectiveItemWidths, truncatedWidths }
   }
 
-  const minWidth = Math.max(1, truncateMinWidth);
-  const maxWidth = Math.max(minWidth, truncateMaxWidth);
+  const minWidth = Math.max(1, truncateMinWidth)
+  const maxWidth = Math.max(minWidth, truncateMaxWidth)
   const candidates = items
     .map((item, index) => ({
       item,
@@ -812,63 +829,63 @@ function computeTruncation({
       canTruncate: getCanTruncate(item, index, items.length),
     }))
     .filter(
-      ({ width, canTruncate }) => canTruncate && width > truncateThreshold,
+      ({ width, canTruncate }) => canTruncate && width > truncateThreshold
     )
     .sort((left, right) =>
       truncateOrder === "biggest-first"
         ? right.width - left.width
-        : left.width - right.width,
-    );
+        : left.width - right.width
+    )
 
   for (const candidate of candidates) {
     if (overflow <= 0) {
-      break;
+      break
     }
 
     const targetWidth = Math.max(
       minWidth,
-      Math.min(maxWidth, candidate.width - overflow),
-    );
-    const nextWidth = Math.min(candidate.width, targetWidth);
+      Math.min(maxWidth, candidate.width - overflow)
+    )
+    const nextWidth = Math.min(candidate.width, targetWidth)
 
     if (nextWidth >= candidate.width) {
-      continue;
+      continue
     }
 
-    effectiveItemWidths[candidate.index] = nextWidth;
-    truncatedWidths[candidate.index] = nextWidth;
-    overflow -= candidate.width - nextWidth;
+    effectiveItemWidths[candidate.index] = nextWidth
+    truncatedWidths[candidate.index] = nextWidth
+    overflow -= candidate.width - nextWidth
   }
 
-  return { itemWidths: effectiveItemWidths, truncatedWidths };
+  return { itemWidths: effectiveItemWidths, truncatedWidths }
 }
 
 function titleOnlyLayout(width: number): LayoutNode[] {
-  return [{ type: "title-only", width }];
+  return [{ type: "title-only", width }]
 }
 
 function getEllipsisMeasurementNode(count: number): LayoutNode {
   if (count > 2) {
-    return { type: "ellipsis", from: 1, to: count - 2, width: 0 };
+    return { type: "ellipsis", from: 1, to: count - 2, width: 0 }
   }
 
-  return { type: "ellipsis", from: 0, to: Math.max(0, count - 1), width: 0 };
+  return { type: "ellipsis", from: 0, to: Math.max(0, count - 1), width: 0 }
 }
 
 function getCanCollapse(item: BreadcrumbData, index: number, count: number) {
   if (item.canCollapse !== undefined) {
-    return item.canCollapse;
+    return item.canCollapse
   }
 
-  return index !== 0 && index !== count - 1;
+  return index !== 0 && index !== count - 1
 }
 
 function getCanTruncate(item: BreadcrumbData, index: number, count: number) {
   if (item.canTruncate !== undefined) {
-    return item.canTruncate;
+    return item.canTruncate
   }
 
-  return index !== count - 1;
+  return index !== count - 1
 }
 
 function getSeparatorOverlayId({
@@ -881,47 +898,45 @@ function getSeparatorOverlayId({
   separatorNavSide,
   showCurrentInNav,
 }: {
-  node: Extract<LayoutNode, { type: "separator" }>;
-  layout: LayoutNode[];
-  nodeIndex: number;
-  items: BreadcrumbData[];
-  separatorNavItems: NonNullable<
-    ResponsiveBreadcrumbProps["separatorNavItems"]
-  >;
-  clickableLeftOfEllipsis: boolean;
-  separatorNavSide: NonNullable<ResponsiveBreadcrumbProps["separatorNavSide"]>;
-  showCurrentInNav: NonNullable<ResponsiveBreadcrumbProps["showCurrentInNav"]>;
+  node: Extract<LayoutNode, { type: "separator" }>
+  layout: LayoutNode[]
+  nodeIndex: number
+  items: BreadcrumbData[]
+  separatorNavItems: NonNullable<ResponsiveBreadcrumbProps["separatorNavItems"]>
+  clickableLeftOfEllipsis: boolean
+  separatorNavSide: NonNullable<ResponsiveBreadcrumbProps["separatorNavSide"]>
+  showCurrentInNav: NonNullable<ResponsiveBreadcrumbProps["showCurrentInNav"]>
 }) {
-  const previousItem = items[node.after];
-  const nextNode = layout[nodeIndex + 1];
+  const previousItem = items[node.after]
+  const nextNode = layout[nodeIndex + 1]
   const nextIndex =
     nextNode?.type === "item"
       ? nextNode.index
       : nextNode?.type === "ellipsis"
         ? nextNode.from
-        : node.after + 1;
-  const nextItem = items[nextIndex];
-  const anchorItem = separatorNavSide === "left" ? previousItem : nextItem;
-  const leftOfEllipsis = nextNode?.type === "ellipsis";
+        : node.after + 1
+  const nextItem = items[nextIndex]
+  const anchorItem = separatorNavSide === "left" ? previousItem : nextItem
+  const leftOfEllipsis = nextNode?.type === "ellipsis"
   const baseNavItems = getSeparatorNavItems(
     separatorNavItems,
     previousItem,
     nextItem,
-    separatorNavSide,
-  );
+    separatorNavSide
+  )
   const navItems = withCurrentItem({
     navItems: baseNavItems,
     nextItem: anchorItem,
     showCurrentInNav,
-  });
+  })
   const interactive =
-    navItems.length > 0 && (!leftOfEllipsis || clickableLeftOfEllipsis);
+    navItems.length > 0 && (!leftOfEllipsis || clickableLeftOfEllipsis)
 
   if (!interactive) {
-    return null;
+    return null
   }
 
-  return `separator-${anchorItem?.key ?? node.after}`;
+  return `separator-${anchorItem?.key ?? node.after}`
 }
 
 function getSeparatorNavItems(
@@ -930,12 +945,12 @@ function getSeparatorNavItems(
   >,
   previousItem: BreadcrumbData | undefined,
   nextItem: BreadcrumbData | undefined,
-  side: NonNullable<ResponsiveBreadcrumbProps["separatorNavSide"]>,
+  side: NonNullable<ResponsiveBreadcrumbProps["separatorNavSide"]>
 ) {
-  const anchorItem = side === "left" ? previousItem : nextItem;
+  const anchorItem = side === "left" ? previousItem : nextItem
 
   if (!anchorItem) {
-    return [];
+    return []
   }
 
   return (
@@ -944,7 +959,7 @@ function getSeparatorNavItems(
       ? separatorNavItems[`${previousItem.key}:${nextItem.key}`]
       : undefined) ??
     []
-  );
+  )
 }
 
 function withCurrentItem({
@@ -952,21 +967,21 @@ function withCurrentItem({
   nextItem,
   showCurrentInNav,
 }: {
-  navItems: SeparatorNavItem[];
-  nextItem: BreadcrumbData | undefined;
-  showCurrentInNav: NonNullable<ResponsiveBreadcrumbProps["showCurrentInNav"]>;
+  navItems: SeparatorNavItem[]
+  nextItem: BreadcrumbData | undefined
+  showCurrentInNav: NonNullable<ResponsiveBreadcrumbProps["showCurrentInNav"]>
 }) {
   const shouldInclude =
     nextItem &&
     (showCurrentInNav === "always" ||
-      (showCurrentInNav === "with-others" && navItems.length > 0));
+      (showCurrentInNav === "with-others" && navItems.length > 0))
 
   if (!shouldInclude) {
-    return navItems;
+    return navItems
   }
 
   if (navItems.some((item) => item.key === nextItem.key)) {
-    return navItems;
+    return navItems
   }
 
   return [
@@ -979,17 +994,17 @@ function withCurrentItem({
       disabled: nextItem.disabled,
     },
     ...navItems,
-  ];
+  ]
 }
 
 function normalizeMeasuredWidths(widths: number[], length: number) {
-  return Array.from({ length }, (_, index) => widths[index] ?? 0);
+  return Array.from({ length }, (_, index) => widths[index] ?? 0)
 }
 
 function primitiveLabel(label: React.ReactNode) {
   if (typeof label === "string" || typeof label === "number") {
-    return String(label);
+    return String(label)
   }
 
-  return "";
+  return ""
 }

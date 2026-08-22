@@ -20,10 +20,7 @@ export interface PeriodTemplateDefinition {
 }
 
 export type PeriodDraftProblem =
-  | "empty-name"
-  | "invalid-range"
-  | "outside-year"
-  | "overlap"
+  "empty-name" | "invalid-range" | "outside-year" | "overlap"
 
 function utcDay(day: string): number {
   return new Date(`${day}T00:00:00.000Z`).getTime()

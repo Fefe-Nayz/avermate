@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { managedPresetConfigurationSchema } from "../data/managed-presets";
-import type { ManagedPresetSubject } from "../data/preset-types";
+import type {
+  ManagedPresetConfiguration,
+  ManagedPresetSubject,
+} from "../data/preset-types";
 
 const templatePeriodSchema = z.object({
   name: z.string(),
@@ -36,6 +39,29 @@ export const classTemplateSchema = z.object({
 export type ClassTemplate = z.infer<typeof classTemplateSchema>;
 export type ClassYearStatus = "connected" | "not_connected" | "incompatible";
 
+/** Stable, locale-independent ordering for configuration keys stored in a class snapshot. */
+export function compareClassTemplateKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function canonicalConfiguration(
+  configuration: ManagedPresetConfiguration,
+): ManagedPresetConfiguration {
+  return {
+    ...configuration,
+    gradeTypes: [...configuration.gradeTypes].sort((left, right) =>
+      compareClassTemplateKeys(left.key, right.key),
+    ),
+  };
+}
+
+function canonicalTemplate(template: ClassTemplate): ClassTemplate {
+  return {
+    ...template,
+    configuration: canonicalConfiguration(template.configuration),
+  };
+}
+
 export function buildClassTemplate(input: {
   year: {
     name: string;
@@ -56,21 +82,23 @@ export function buildClassTemplate(input: {
   configuration: z.infer<typeof managedPresetConfigurationSchema>;
   source: ClassTemplate["source"];
 }): ClassTemplate {
-  return classTemplateSchema.parse({
-    version: 1,
-    year: {
-      ...input.year,
-      startsAt: input.year.startsAt.getTime(),
-      endsAt: input.year.endsAt.getTime(),
-    },
-    periods: input.periods.map((period) => ({
-      ...period,
-      startAt: period.startAt.getTime(),
-      endAt: period.endAt.getTime(),
-    })),
-    configuration: input.configuration,
-    source: input.source,
-  });
+  return canonicalTemplate(
+    classTemplateSchema.parse({
+      version: 1,
+      year: {
+        ...input.year,
+        startsAt: input.year.startsAt.getTime(),
+        endsAt: input.year.endsAt.getTime(),
+      },
+      periods: input.periods.map((period) => ({
+        ...period,
+        startAt: period.startAt.getTime(),
+        endAt: period.endAt.getTime(),
+      })),
+      configuration: input.configuration,
+      source: input.source,
+    }),
+  );
 }
 
 /** Accept timestamp encoding drift, but reject a full-day offset. */
@@ -82,14 +110,16 @@ export function parseClassTemplate(value: string | null): ClassTemplate | null {
   if (!value) return null;
   try {
     const parsed = classTemplateSchema.safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : null;
+    return parsed.success ? canonicalTemplate(parsed.data) : null;
   } catch {
     return null;
   }
 }
 
 export function serializeClassTemplate(template: ClassTemplate): string {
-  return JSON.stringify(classTemplateSchema.parse(template));
+  return JSON.stringify(
+    canonicalTemplate(classTemplateSchema.parse(template)),
+  );
 }
 
 export function classTemplateSummary(template: ClassTemplate) {
@@ -102,6 +132,7 @@ export function classTemplateSummary(template: ClassTemplate) {
     scale: template.year.scale,
     subjectCount: countSubjects(template.configuration.subjects),
     averageCount: template.configuration.averages.length,
+    gradeTypeCount: template.configuration.gradeTypes.length,
     periodCount: template.periods.length,
     source: template.source.kind,
   };

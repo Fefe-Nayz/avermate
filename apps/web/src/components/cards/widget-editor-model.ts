@@ -1,7 +1,7 @@
 import {
   compileWidgetDefinition,
   resolveWidgetFlow,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetFlowContext,
   type WidgetValidationIssue,
 } from "@avermate/core"
@@ -25,9 +25,9 @@ export function widgetIssueForPath(
 
 /** Canonicalize structural transitions while retaining invalid active inputs. */
 export function resolveWidgetEditorChange(
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
   context: WidgetFlowContext
-): WidgetDefinitionV1 {
+): WidgetDefinition {
   const issues = compileWidgetDefinition(definition, {
     surface: context.surface,
   }).issues
@@ -35,11 +35,21 @@ export function resolveWidgetEditorChange(
   let next = flow.prunedDefinition as unknown as WidgetDraftValue
 
   for (const path of flow.activePaths) {
-    if (!widgetIssueForPath(issues, path)) continue
+    const issue = widgetIssueForPath(issues, path)
+    // Only what the reader is *typing* is kept: a half-written number, a cleared
+    // field. An `unsupported` issue is a combination the model refuses, and the
+    // compiler has already replaced it with one that works — writing the refused
+    // value back over that correction leaves the card permanently invalid.
+    //
+    // This used to be unreachable for the choice fields, because a field with a
+    // single option was inactive and never restored. Offering a real second recipe —
+    // a goal as a gauge *or* a bullet — made it reachable, and it restored the
+    // incompatible one.
+    if (!issue || issue.code === "unsupported") continue
     const raw = widgetDraftValue(definition, path)
     if (raw === undefined) continue
     next = setWidgetDraftValue(next, path, raw)
   }
 
-  return next as unknown as WidgetDefinitionV1
+  return next as unknown as WidgetDefinition
 }

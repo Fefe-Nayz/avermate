@@ -1,6 +1,13 @@
-import { SubjectGraph, type Subject } from "@avermate/core";
+import {
+  averageOverTime,
+  dayRange,
+  gradeRatio,
+  SubjectGraph,
+  type Subject,
+} from "@avermate/core";
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
+import { ORPCError } from "@orpc/server";
 import { db } from "../../db";
 import {
   friendships,
@@ -17,6 +24,7 @@ import {
   users,
   years,
 } from "../../db/schema";
+import { notFound } from "../../lib/orpc";
 import { normalizeHandle } from "../../lib/social-policy";
 
 export const handleSchema = z
@@ -47,11 +55,52 @@ export async function identity(userId: string) {
   return row ?? null;
 }
 
+/**
+ * The caller's own view of a group, or nothing.
+ *
+ * The gate every group route passes through: one query that says both "does this group
+ * exist" and "is this person in it", so no handler can answer half of that. Shared rather
+ * than private to the group routes because the cohort surface needs exactly the same
+ * answer — and two implementations of "can they see it" is one too many.
+ */
+/**
+ * A group under an administrative hold answers reads and refuses writes.
+ *
+ * Here rather than in `groups.ts`, where it began: a hold is a property of the group,
+ * not of one router, and the switch that turns a board into a cohort was reachable from
+ * the other file without ever asking. Every write against a group belongs behind this.
+ */
+export function assertActiveGroup(group: typeof socialGroups.$inferSelect) {
+  if (group.state !== "active") {
+    throw new ORPCError("FORBIDDEN", {
+      message: "This group is on an administrative hold",
+    });
+  }
+}
+
+export async function groupAccess(groupId: string, userId: string) {
+  const [row] = await db
+    .select({ group: socialGroups, membership: groupMemberships })
+    .from(socialGroups)
+    .innerJoin(groupMemberships, eq(groupMemberships.groupId, socialGroups.id))
+    .where(
+      and(eq(socialGroups.id, groupId), eq(groupMemberships.userId, userId)),
+    )
+    .limit(1);
+  if (!row) notFound("Group");
+  return row;
+}
+
 export async function identities(userIds: readonly string[]) {
   const unique = [...new Set(userIds)];
   const out = new Map<
     string,
-    { userId: string; name: string; avatar: string | null; handle: string | null }
+    {
+      userId: string;
+      name: string;
+      avatar: string | null;
+      handle: string | null;
+    }
   >();
   if (unique.length === 0) return out;
   const rows = await db
@@ -198,6 +247,44 @@ export interface SharedAcademics {
   gradeCount: number;
   shareGeneralAverage: boolean;
   subjects: SharedSubjectView[];
+  /**
+   * The general average as it stood through the year, behind its own lock.
+   *
+   * `null` when the owner has not opened it, which is the default even for accounts that
+   * share everything else — see `shareHistory`. Weekly rather than per mark: a point per
+   * result would draw a line whose steps are the days somebody was assessed, which is a
+   * calendar of their year rather than a shape.
+   */
+  history: Array<{ at: Date; ratio: number }> | null;
+}
+
+/** How many points a shared curve carries. A school year in weeks, near enough. */
+const SHARED_HISTORY_POINTS = 40;
+
+/**
+ * When to sample a shared curve.
+ *
+ * Two things were wrong with a plain weekly range trimmed to the first forty points.
+ *
+ * It ran to the *end of the year*, so every week between today and July carried the
+ * average as it stands — a flat line into the future, drawn as if it had happened. A
+ * shared curve is a record, and it stops where the record does.
+ *
+ * And the trim kept the first forty, which for a school year of about forty-four weeks
+ * quietly cut the last month off — the part a reader is most likely looking for. Over the
+ * cap the points are now spread across the whole range instead, so a longer year is drawn
+ * coarser rather than truncated, and the last point is always the latest one.
+ */
+function sharedHistoryDates(startsAt: Date, endsAt: Date, now = new Date()) {
+  const until = new Date(Math.min(endsAt.getTime(), now.getTime()));
+  if (until.getTime() < startsAt.getTime()) return [];
+  const weekly = dayRange(startsAt, until, 7);
+  if (weekly.length <= SHARED_HISTORY_POINTS) return weekly;
+  const last = weekly.length - 1;
+  return Array.from({ length: SHARED_HISTORY_POINTS }, (_, index) => {
+    const at = weekly[Math.round((index * last) / (SHARED_HISTORY_POINTS - 1))];
+    return at as Date;
+  });
 }
 
 /**
@@ -209,10 +296,7 @@ export async function sharedAcademics(
   ownerUserId: string,
 ): Promise<SharedAcademics | null> {
   const profile = await ensureProfile(ownerUserId);
-  if (
-    !profile.shareGeneralAverage &&
-    profile.shareSubjectsMode === "none"
-  ) {
+  if (!profile.shareGeneralAverage && profile.shareSubjectsMode === "none") {
     return null;
   }
   const year = await resolveSharedYear(ownerUserId, profile.sharedYearId);
@@ -241,6 +325,8 @@ export async function sharedAcademics(
         value: grades.value,
         outOf: grades.outOf,
         coefficient: grades.coefficient,
+        excludedFromAverage: grades.excludedFromAverage,
+        syncExcludedFromAverage: grades.syncExcludedFromAverage,
         passedAt: grades.passedAt,
         createdAt: grades.createdAt,
         subjectId: grades.subjectId,
@@ -292,59 +378,85 @@ export async function sharedAcademics(
     shared.sort((left, right) => left.name.localeCompare(right.name));
   }
 
+  /**
+   * The curve, if it was opened.
+   *
+   * Behind both locks: a history of an average nobody shares is a history of nothing, so
+   * `shareHistory` alone is not enough. Evenly spaced over the year rather than one point
+   * per mark, for the reason on the field.
+   */
+  const history =
+    profile.shareHistory && profile.shareGeneralAverage
+      ? averageOverTime(
+          graphSubjects,
+          // A week apart, which over a school year is about forty points — and, more to
+          // the point, a shape rather than a diary of when somebody was assessed.
+          sharedHistoryDates(year.startsAt, year.endsAt),
+        ).flatMap((point) =>
+          point.ratio === null ? [] : [{ at: point.date, ratio: point.ratio }],
+        )
+      : null;
+
   return {
     year: { name: year.name, scale: year.scale, decimals: year.decimals },
     generalAverage: profile.shareGeneralAverage ? graph.ratio(null) : null,
     gradeCount: gradeRows.length,
     shareGeneralAverage: profile.shareGeneralAverage,
     subjects: shared,
+    history,
   };
 }
 
 /** The user's social relations, for the account export. */
 export async function exportSocialData(userId: string) {
-  const [profile, sharedRows, friendRows, membershipRows, blockRows, reportRows] =
-    await Promise.all([
-      ensureProfile(userId),
-      db
-        .select({ subjectId: socialSharedSubjects.subjectId })
-        .from(socialSharedSubjects)
-        .where(eq(socialSharedSubjects.userId, userId)),
-      db
-        .select()
-        .from(friendships)
-        .where(
-          or(
-            eq(friendships.userLowId, userId),
-            eq(friendships.userHighId, userId),
-          ),
+  const [
+    profile,
+    sharedRows,
+    friendRows,
+    membershipRows,
+    blockRows,
+    reportRows,
+  ] = await Promise.all([
+    ensureProfile(userId),
+    db
+      .select({ subjectId: socialSharedSubjects.subjectId })
+      .from(socialSharedSubjects)
+      .where(eq(socialSharedSubjects.userId, userId)),
+    db
+      .select()
+      .from(friendships)
+      .where(
+        or(
+          eq(friendships.userLowId, userId),
+          eq(friendships.userHighId, userId),
         ),
-      db
-        .select({
-          groupName: socialGroups.name,
-          role: groupMemberships.role,
-          shareAverage: groupMemberships.shareAverage,
-          joinedAt: groupMemberships.createdAt,
-        })
-        .from(groupMemberships)
-        .innerJoin(socialGroups, eq(socialGroups.id, groupMemberships.groupId))
-        .where(eq(groupMemberships.userId, userId)),
-      db
-        .select({
-          blockedUserId: userBlocks.blockedUserId,
-          createdAt: userBlocks.createdAt,
-        })
-        .from(userBlocks)
-        .where(eq(userBlocks.blockerUserId, userId)),
-      db
-        .select({
-          category: socialReports.category,
-          status: socialReports.status,
-          createdAt: socialReports.createdAt,
-        })
-        .from(socialReports)
-        .where(eq(socialReports.reporterUserId, userId)),
-    ]);
+      ),
+    db
+      .select({
+        groupName: socialGroups.name,
+        role: groupMemberships.role,
+        shareAverage: groupMemberships.shareAverage,
+        joinedAt: groupMemberships.createdAt,
+      })
+      .from(groupMemberships)
+      .innerJoin(socialGroups, eq(socialGroups.id, groupMemberships.groupId))
+      .where(eq(groupMemberships.userId, userId)),
+    db
+      .select({
+        blockedUserId: userBlocks.blockedUserId,
+        createdAt: userBlocks.createdAt,
+      })
+      .from(userBlocks)
+      .where(eq(userBlocks.blockerUserId, userId)),
+    db
+      .select({
+        category: socialReports.category,
+        status: socialReports.status,
+        createdAt: socialReports.createdAt,
+      })
+      .from(socialReports)
+      .where(eq(socialReports.reporterUserId, userId)),
+  ]);
   const named = await identities(
     friendRows.map((row) => friendOf(row, userId)),
   );
@@ -353,6 +465,9 @@ export async function exportSocialData(userId: string) {
       handle: profile.handle,
       shareGeneralAverage: profile.shareGeneralAverage,
       shareSubjectsMode: profile.shareSubjectsMode,
+      // The third lock, and it belongs in the export beside the other two: a file that
+      // omits it cannot say whether the curve was shared.
+      shareHistory: profile.shareHistory,
       sharedYearId: profile.sharedYearId,
       sharedSubjectIds: sharedRows.map((row) => row.subjectId),
     },
@@ -439,6 +554,8 @@ export async function groupFigures(
         value: grades.value,
         outOf: grades.outOf,
         coefficient: grades.coefficient,
+        excludedFromAverage: grades.excludedFromAverage,
+        syncExcludedFromAverage: grades.syncExcludedFromAverage,
         passedAt: grades.passedAt,
         createdAt: grades.createdAt,
         subjectId: grades.subjectId,
@@ -462,16 +579,14 @@ export async function groupFigures(
       bySubject.set(grade.subjectId, list);
     }
     return new SubjectGraph(
-      subjectRows.map(
-        (subject): Subject => ({
-          ...subject,
-          kind: subject.kind === "category" ? "category" : "subject",
-          grades: (bySubject.get(subject.id) ?? []).map((grade) => ({
-            ...grade,
-            components: [],
-          })),
-        }),
-      ),
+      subjectRows.map((subject): Subject => ({
+        ...subject,
+        kind: subject.kind === "category" ? "category" : "subject",
+        grades: (bySubject.get(subject.id) ?? []).map((grade) => ({
+          ...grade,
+          components: [],
+        })),
+      })),
     );
   };
 
@@ -516,11 +631,10 @@ export async function groupFigures(
   const earlier = options.includeTrend ? toGraph(earlierRows) : null;
 
   const validRatios = (rows: typeof gradeRows) =>
-    rows.flatMap((grade) =>
-      grade.outOf > 0 && Number.isFinite(grade.value)
-        ? [Math.max(0, Math.min(1, grade.value / grade.outOf))]
-        : [],
-    );
+    rows.flatMap((grade) => {
+      const ratio = gradeRatio(grade);
+      return ratio === null ? [] : [ratio];
+    });
   const median = (values: number[]) => {
     if (values.length === 0) return null;
     const ordered = [...values].sort((a, b) => a - b);
@@ -535,15 +649,12 @@ export async function groupFigures(
       : values.filter((ratio) => ratio >= year.passingRatio).length /
         values.length;
 
-  const goalRows =
-    options.scopes.some((entry) => entry.kind === "goalProgress")
-      ? await db
-          .select({ achievedAt: goals.achievedAt })
-          .from(goals)
-          .where(
-            and(eq(goals.userId, ownerUserId), eq(goals.yearId, year.id)),
-          )
-      : [];
+  const goalRows = options.scopes.some((entry) => entry.kind === "goalProgress")
+    ? await db
+        .select({ achievedAt: goals.achievedAt })
+        .from(goals)
+        .where(and(eq(goals.userId, ownerUserId), eq(goals.yearId, year.id)))
+    : [];
 
   const valueOf = (
     entry: GroupFigureScope,

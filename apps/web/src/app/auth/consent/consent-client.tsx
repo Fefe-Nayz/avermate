@@ -9,21 +9,20 @@ import {
   ShieldCheckIcon,
 } from "lucide-react"
 import { useExtracted } from "next-intl"
+import { useMcpScopeCopy } from "@/app/(app)/settings/integrations/mcp-scope-copy"
+import { MCP_SCOPE_OPTIONS } from "@/app/(app)/settings/integrations/mcp-scope-model"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { authClient } from "@/lib/auth-client"
 import type { OAuthPublicClient } from "@/lib/oauth-integrations"
 
-const KNOWN_SCOPES = [
+const KNOWN_SCOPES: readonly string[] = [
   "openid",
   "profile",
   "email",
   "offline_access",
-  "avermate:read",
-  "avermate:write",
-  "avermate:delete",
-  "avermate:admin",
-] as const
+  ...MCP_SCOPE_OPTIONS.map((option) => option.scope),
+]
 
 function clientWebsite(client: OAuthPublicClient): string | null {
   if (!client.client_uri) return null
@@ -45,6 +44,7 @@ export function ConsentClient({
   requestedScopes: string[]
 }) {
   const t = useExtracted()
+  const mcpScopeCopy = useMcpScopeCopy()
   const [busy, setBusy] = useState<"accept" | "deny" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const scopeCopy: Record<string, { label: string; description: string }> = {
@@ -64,30 +64,7 @@ export function ConsentClient({
       label: t("Stay connected"),
       description: t("Refresh access without asking you to sign in each time."),
     },
-    "avermate:read": {
-      label: t("Read your academic data"),
-      description: t(
-        "Read years, periods, subjects, grades, averages, goals, preferences and analytics."
-      ),
-    },
-    "avermate:write": {
-      label: t("Create and update data"),
-      description: t(
-        "Add or change academic data, goals, cards and preferences when you ask."
-      ),
-    },
-    "avermate:delete": {
-      label: t("Request destructive actions"),
-      description: t(
-        "Offer deletion tools. Every destructive action still requires a separate confirmation."
-      ),
-    },
-    "avermate:admin": {
-      label: t("Use administration tools"),
-      description: t(
-        "Access administration operations only if this account is already an administrator."
-      ),
-    },
+    ...mcpScopeCopy,
   }
   const unknownScopeDescription = t(
     "An additional permission requested by this client."
@@ -120,12 +97,8 @@ export function ConsentClient({
   const scopes = requestedScopes
     .filter((scope, index, values) => values.indexOf(scope) === index)
     .sort((left, right) => {
-      const leftIndex = KNOWN_SCOPES.indexOf(
-        left as (typeof KNOWN_SCOPES)[number]
-      )
-      const rightIndex = KNOWN_SCOPES.indexOf(
-        right as (typeof KNOWN_SCOPES)[number]
-      )
+      const leftIndex = KNOWN_SCOPES.indexOf(left)
+      const rightIndex = KNOWN_SCOPES.indexOf(right)
       return (
         (leftIndex < 0 ? 99 : leftIndex) - (rightIndex < 0 ? 99 : rightIndex)
       )
@@ -186,7 +159,11 @@ export function ConsentClient({
         ) : null}
       </div>
 
-      <div className="grid gap-2" aria-label={t("Requested permissions")}>
+      <div
+        role="list"
+        className="grid gap-2"
+        aria-label={t("Requested permissions")}
+      >
         {scopes.map((scope) => {
           const copy = scopeCopy[scope] ?? {
             label: scope,
@@ -195,10 +172,11 @@ export function ConsentClient({
           return (
             <div
               key={scope}
+              role="listitem"
               className="flex items-start gap-3 rounded-xl border p-3"
             >
               <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <CheckIcon className="size-3.5" />
+                <CheckIcon className="size-3.5" aria-hidden />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{copy.label}</span>

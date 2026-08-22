@@ -4,7 +4,7 @@ import {
   compileWidgetDefinition,
   WIDGET_DEFINITION_VERSION,
   WIDGET_SURFACES,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
 } from "@avermate/core";
 import { db } from "../db";
@@ -36,19 +36,28 @@ const surfacesInput = z
   .min(1)
   .max(WIDGET_SURFACES.length);
 
-const templateCreateInput = z.object({
+const templateFields = {
   title: z.string().trim().min(1).max(80),
-  description: z.string().trim().max(280).default(""),
+  description: z.string().trim().max(280),
   surfaces: surfacesInput,
-  category: z.string().trim().min(1).max(48).default("general"),
+  category: z.string().trim().min(1).max(48),
   definitionVersion: z.number().int().positive(),
   definitionJson: z.record(z.string(), z.unknown()),
-  sortOrder: z.number().int().min(0).max(10_000).default(0),
+  sortOrder: z.number().int().min(0).max(10_000),
+};
+const templateCreateInput = z.object({
+  ...templateFields,
+  description: templateFields.description.default(""),
+  category: templateFields.category.default("general"),
+  sortOrder: templateFields.sortOrder.default(0),
 });
 
-const templateUpdateInput = templateCreateInput.partial().extend({
-  templateId: z.string().min(1),
-});
+const templateUpdateInput = z
+  .object(templateFields)
+  .partial()
+  .extend({
+    templateId: z.string().min(1),
+  });
 
 async function requireTemplate(templateId: string) {
   const [row] = await db
@@ -65,13 +74,13 @@ function validatePublishable(
   definitionJson: unknown,
   definitionVersion: number,
   surfaces: readonly string[],
-): WidgetDefinitionV1 {
+): WidgetDefinition {
   if (definitionVersion !== WIDGET_DEFINITION_VERSION) {
     badRequest(
       `Card templates must target definition version ${WIDGET_DEFINITION_VERSION}.`,
     );
   }
-  let definition: WidgetDefinitionV1 | null = null;
+  let definition: WidgetDefinition | null = null;
   for (const surface of surfaces) {
     const compiled = compileWidgetDefinition(definitionJson, {
       surface: surface as WidgetSurface,
@@ -127,7 +136,7 @@ export const cardTemplatesRouter = {
           surfaces: [...input.surfaces],
           category: input.category,
           definitionVersion: input.definitionVersion,
-          definitionJson: input.definitionJson as unknown as WidgetDefinitionV1,
+          definitionJson: input.definitionJson as unknown as WidgetDefinition,
           sortOrder: input.sortOrder,
           status: "draft",
           createdByUserId: context.session.user.id,
@@ -153,7 +162,7 @@ export const cardTemplatesRouter = {
           ...(surfaces !== undefined ? { surfaces: [...surfaces] } : {}),
           ...(definitionJson !== undefined
             ? {
-                definitionJson: definitionJson as unknown as WidgetDefinitionV1,
+                definitionJson: definitionJson as unknown as WidgetDefinition,
               }
             : {}),
           updatedAt: new Date(),

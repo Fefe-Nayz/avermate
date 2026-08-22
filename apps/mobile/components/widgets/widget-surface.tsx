@@ -34,6 +34,10 @@ function layoutSpec(card: WidgetCardModel): CardSpec {
       referenceId: projection?.targetId ?? null,
     },
     display: projection?.display ?? "value",
+    // What the layout actually reads, off the definition rather than off the
+    // four-way `display` projection — so mobile packs its rows against the same
+    // policy the web does. See `widget-recipes`.
+    recipe: card.definition?.visualization.recipe ?? "value",
     span: card.span,
     title: card.title,
     accent: card.accent,

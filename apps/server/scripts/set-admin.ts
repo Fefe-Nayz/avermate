@@ -18,7 +18,9 @@ const identifier = process.argv[2];
 const revoke = process.argv.includes("--revoke");
 
 if (!identifier) {
-  console.error("Usage: bun scripts/set-admin.ts <email or user id> [--revoke]");
+  console.error(
+    "Usage: bun scripts/set-admin.ts <email or user id> [--revoke]",
+  );
   process.exit(1);
 }
 

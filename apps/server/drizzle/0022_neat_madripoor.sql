@@ -1,0 +1,1 @@
+ALTER TABLE `social_profiles` ADD `shareHistory` integer DEFAULT false NOT NULL;

@@ -1,6 +1,6 @@
 # syntax=docker.io/docker/dockerfile:1
 
-FROM oven/bun:1.3.14-alpine AS base
+FROM oven/bun:1.4.0-alpine AS base
 WORKDIR /app
 
 FROM base AS deps
@@ -20,8 +20,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=https://api.avermate.nayz.fr
 ENV NEXT_PUBLIC_APP_URL=https://avermate.nayz.fr
 
-# Next's standalone output needs a real node binary at build time.
-RUN apk add --no-cache nodejs && node ./node_modules/next/dist/bin/next build
+# Next's standalone output needs a real node binary at build time. The
+# hash-pinned Pyodide subset is generated into public/ first, because invoking
+# Next directly does not run package-manager prebuild hooks.
+RUN apk add --no-cache nodejs && \
+    bun scripts/sync-pyodide-assets.ts && \
+    node ./node_modules/next/dist/bin/next build
 
 FROM base AS runner
 WORKDIR /app

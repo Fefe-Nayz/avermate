@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import {
   cardSemanticsFromDefinition,
   createWidgetDefinition,
+  WIDGET_DEFINITION_VERSION,
 } from "@avermate/core";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +18,6 @@ process.env.MCP_REQUEST_STATE_SECRET =
 process.env.MCP_ENABLE_DCR = "false";
 process.env.NODE_ENV = "test";
 process.env.DISABLE_EMAIL = "true";
-process.env.DISABLE_FEEDBACK = "true";
 process.env.DISABLE_UPLOADS = "true";
 
 const PROTOCOL_VERSION = "2026-07-28";
@@ -262,6 +262,7 @@ beforeAll(async () => {
     id: "account-mcp-user",
     accountId: "mcp-user",
     providerId: "credential",
+    issuer: "local:credential",
     userId: "mcp-user",
     password,
     createdAt: now,
@@ -384,6 +385,8 @@ describe("MCP 2026-07-28 transport and discovery", () => {
       cacheScope: "private",
     });
     expect(toolNames(toolsOne.json.result)).toContain("analytics.snapshot");
+    expect(toolNames(toolsOne.json.result)).toContain("grades.attachments");
+    expect(toolNames(toolsOne.json.result)).toContain("jobs.get");
 
     const resources = await callMcp(handler, "resources/list");
     expect(resources.json.result?.resources).toBeArrayOfSize(5);
@@ -405,6 +408,121 @@ describe("MCP 2026-07-28 transport and discovery", () => {
     expect(JSON.stringify(prompts.json.result?.prompts)).toContain(
       "year-recap",
     );
+    expect(JSON.stringify(prompts.json.result?.prompts)).toContain(
+      "fiche-methodology",
+    );
+    expect(JSON.stringify(prompts.json.result?.prompts)).toContain(
+      "fiche-from-chapter",
+    );
+    expect(JSON.stringify(prompts.json.result?.prompts)).toContain(
+      "mindmap-from-chapter",
+    );
+    for (const name of ["fiche-from-chapter", "mindmap-from-chapter"]) {
+      const generated = await callMcp(handler, "prompts/get", {
+        name,
+        arguments: { folderId: "folder-owned" },
+      });
+      const instructions = JSON.stringify(generated.json.result);
+      expect(instructions).toContain("documents.create");
+      expect(instructions).toContain("documents.update");
+      expect(instructions).toContain("revision returned by create");
+    }
+
+    const plannerHandler = createAvermateMcpHandler(
+      principal("mcp-user", [
+        "avermate:read",
+        "avermate:planner.read",
+        "avermate:planner.write",
+      ]),
+    );
+    const plannerOne = await callMcp(plannerHandler, "tools/list");
+    const plannerTwo = await callMcp(
+      plannerHandler,
+      "tools/list",
+      {},
+      { id: 3 },
+    );
+    expect(plannerOne.json.result).toEqual(plannerTwo.json.result);
+    expect(
+      toolNames(plannerOne.json.result).filter((name) =>
+        name.startsWith("planner."),
+      ),
+    ).toEqual([
+      "planner.agenda",
+      "planner.list",
+      "planner.create",
+      "planner.update",
+      "planner.setStatus",
+      "planner.delete",
+    ]);
+
+    const materialsHandler = createAvermateMcpHandler(
+      principal("mcp-user", [
+        "avermate:read",
+        "avermate:materials.read",
+        "avermate:materials.write",
+      ]),
+    );
+    const materialsOne = await callMcp(materialsHandler, "tools/list");
+    const materialsTwo = await callMcp(
+      materialsHandler,
+      "tools/list",
+      {},
+      { id: 4 },
+    );
+    expect(materialsOne.json.result).toEqual(materialsTwo.json.result);
+    expect(
+      toolNames(materialsOne.json.result).filter((name) =>
+        name.startsWith("materials."),
+      ),
+    ).toEqual([
+      "materials.folders.list",
+      "materials.documents.list",
+      "materials.documents.get",
+      "materials.documents.transcript",
+      "materials.folders.create",
+      "materials.documents.transcribe",
+      "materials.documents.rename",
+      "materials.documents.move",
+      "materials.documents.delete",
+      "materials.folders.delete",
+    ]);
+    expect(
+      toolNames(materialsOne.json.result).filter((name) =>
+        name.startsWith("recordings."),
+      ),
+    ).toEqual(["recordings.list", "recordings.transcript"]);
+    expect(toolNames(materialsOne.json.result)).toContain("sync.status");
+    expect(toolNames(materialsOne.json.result)).toContain("sync.trigger");
+
+    const documentsHandler = createAvermateMcpHandler(
+      principal("mcp-user", [
+        "avermate:read",
+        "avermate:documents.read",
+        "avermate:documents.write",
+      ]),
+    );
+    const documentsOne = await callMcp(documentsHandler, "tools/list");
+    const documentsTwo = await callMcp(
+      documentsHandler,
+      "tools/list",
+      {},
+      { id: 5 },
+    );
+    expect(documentsOne.json.result).toEqual(documentsTwo.json.result);
+    expect(
+      toolNames(documentsOne.json.result).filter((name) =>
+        name.startsWith("documents."),
+      ),
+    ).toEqual([
+      "documents.list",
+      "documents.get",
+      "documents.downloadPptx",
+      "documents.create",
+      "documents.update",
+      "documents.exportPptx",
+      "documents.delete",
+    ]);
   });
 });
 
@@ -483,6 +601,365 @@ describe("MCP authorization, scopes and ownership", () => {
     expect(cardsReset).toContain("insights");
   });
 
+  test("keeps grade-copy reads scoped and hides provider credentials", async () => {
+    await database.insert(schema.files).values({
+      id: "mcp-grade-copy-file",
+      provider: "private-provider",
+      storageKey: "mcp-provider-secret-grade-copy",
+      url: "https://cdn.example.test/grade-copy.pdf",
+      mimeType: "application/pdf",
+      byteSize: 2_048,
+      purpose: "grade-copy",
+      userId: "mcp-user",
+    });
+    await database.insert(schema.gradeAttachments).values({
+      id: "mcp-grade-copy-attachment",
+      gradeId: "grade-to-delete",
+      fileId: "mcp-grade-copy-file",
+      label: "Scanned algebra copy",
+      sortOrder: 0,
+      userId: "mcp-user",
+    });
+
+    const readHandler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read"]),
+    );
+    const readCatalog = await callMcp(readHandler, "tools/list");
+    const writeOnlyCatalog = await callMcp(
+      createAvermateMcpHandler(principal("mcp-user", ["avermate:write"])),
+      "tools/list",
+    );
+    expect(toolNames(readCatalog.json.result)).toContain("grades.attachments");
+    expect(toolNames(writeOnlyCatalog.json.result)).not.toContain(
+      "grades.attachments",
+    );
+
+    const response = await callMcp(readHandler, "tools/call", {
+      name: "grades.attachments",
+      arguments: { gradeId: "grade-to-delete" },
+    });
+    expect(response.json.result?.isError).not.toBe(true);
+    expect(response.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: {
+        value: [
+          {
+            id: "mcp-grade-copy-attachment",
+            label: "Scanned algebra copy",
+            sortOrder: 0,
+            file: {
+              id: "mcp-grade-copy-file",
+              url: "https://cdn.example.test/grade-copy.pdf",
+              mimeType: "application/pdf",
+              byteSize: 2_048,
+            },
+          },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(response.json.result?.structuredContent);
+    expect(serialized).not.toContain("mcp-provider-secret-grade-copy");
+    expect(serialized).not.toContain('"storageKey"');
+    expect(serialized).not.toContain('"provider"');
+  });
+
+  test("keeps planner read and write scopes isolated", async () => {
+    const legacy = await callMcp(
+      createAvermateMcpHandler(principal("mcp-user", ["avermate:read"])),
+      "tools/list",
+    );
+    const plannerRead = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:planner.read"]),
+      ),
+      "tools/list",
+    );
+    const plannerWrite = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:planner.write"]),
+      ),
+      "tools/list",
+    );
+
+    const plannerNames = (result: JsonObject | undefined) =>
+      toolNames(result).filter((name) => name.startsWith("planner."));
+    expect(plannerNames(legacy.json.result)).toEqual([]);
+    expect(plannerNames(plannerRead.json.result)).toEqual([
+      "planner.agenda",
+      "planner.list",
+    ]);
+    expect(plannerNames(plannerWrite.json.result)).toEqual([
+      "planner.create",
+      "planner.update",
+      "planner.setStatus",
+      "planner.delete",
+    ]);
+    expect(
+      JSON.stringify(
+        toolDefinition(plannerWrite.json.result, "planner.delete")?.inputSchema,
+      ),
+    ).toContain("idempotencyKey");
+  });
+
+  test("keeps materials read and write scopes isolated", async () => {
+    const legacy = await callMcp(
+      createAvermateMcpHandler(principal("mcp-user", ["avermate:read"])),
+      "tools/list",
+    );
+    const materialsRead = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:materials.read"]),
+      ),
+      "tools/list",
+    );
+    const materialsWrite = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:materials.write"]),
+      ),
+      "tools/list",
+    );
+
+    const materialNames = (result: JsonObject | undefined) =>
+      toolNames(result).filter((name) => name.startsWith("materials."));
+    const recordingNames = (result: JsonObject | undefined) =>
+      toolNames(result).filter((name) => name.startsWith("recordings."));
+    expect(materialNames(legacy.json.result)).toEqual([]);
+    expect(materialNames(materialsRead.json.result)).toEqual([
+      "materials.folders.list",
+      "materials.documents.list",
+      "materials.documents.get",
+      "materials.documents.transcript",
+    ]);
+    expect(materialNames(materialsWrite.json.result)).toEqual([
+      "materials.folders.create",
+      "materials.documents.transcribe",
+      "materials.documents.rename",
+      "materials.documents.move",
+      "materials.documents.delete",
+      "materials.folders.delete",
+    ]);
+    expect(recordingNames(legacy.json.result)).toEqual([]);
+    expect(recordingNames(materialsRead.json.result)).toEqual([
+      "recordings.list",
+      "recordings.transcript",
+    ]);
+    expect(recordingNames(materialsWrite.json.result)).toEqual([]);
+    expect(materialNames(materialsWrite.json.result)).not.toContain(
+      "materials.documents.upload",
+    );
+    expect(toolNames(legacy.json.result)).not.toContain("sync.status");
+    expect(toolNames(legacy.json.result)).not.toContain("sync.trigger");
+    expect(toolNames(materialsRead.json.result)).toContain("sync.status");
+    expect(toolNames(materialsRead.json.result)).not.toContain("sync.trigger");
+    expect(toolNames(materialsWrite.json.result)).not.toContain("sync.status");
+    expect(toolNames(materialsWrite.json.result)).toContain("sync.trigger");
+    expect(
+      JSON.stringify(
+        toolDefinition(materialsWrite.json.result, "materials.documents.delete")
+          ?.inputSchema,
+      ),
+    ).toContain("idempotencyKey");
+    expect(
+      JSON.stringify(
+        toolDefinition(materialsWrite.json.result, "materials.folders.delete")
+          ?.inputSchema,
+      ),
+    ).toContain("idempotencyKey");
+  });
+
+  test("projects only an owned lecture transcript through materials read", async () => {
+    const now = new Date("2026-08-20T14:00:00.000Z");
+    await database.insert(schema.lectureRecordings).values([
+      {
+        id: "recording-mcp-owned",
+        title: "Owned lecture",
+        status: "ready",
+        recordedAt: now,
+        durationMs: 90_000,
+        yearId: "year-owned",
+        userId: "mcp-user",
+      },
+      {
+        id: "recording-mcp-foreign",
+        title: "Foreign lecture",
+        status: "ready",
+        recordedAt: now,
+        durationMs: 45_000,
+        yearId: "year-foreign",
+        userId: "other-user",
+      },
+    ]);
+    await database.insert(schema.recordingTranscripts).values([
+      {
+        recordingId: "recording-mcp-owned",
+        text: "Owned transcript content",
+        segmentsVersion: 1,
+        segmentsJson: [{ startMs: 0, endMs: 12_000, text: "Owned window" }],
+        language: "fr",
+        provider: "mistral",
+        userId: "mcp-user",
+      },
+      {
+        recordingId: "recording-mcp-foreign",
+        text: "FOREIGN_PRIVATE_TRANSCRIPT",
+        segmentsVersion: 1,
+        segmentsJson: [
+          { startMs: 0, endMs: 8_000, text: "FOREIGN_PRIVATE_WINDOW" },
+        ],
+        language: "en",
+        provider: "mistral",
+        userId: "other-user",
+      },
+    ]);
+
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read", "avermate:materials.read"]),
+    );
+    const owned = await callMcp(handler, "tools/call", {
+      name: "recordings.transcript",
+      arguments: { recordingId: "recording-mcp-owned" },
+    });
+    expect(owned.json.result?.isError).not.toBe(true);
+    expect(owned.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: {
+        recording: {
+          id: "recording-mcp-owned",
+          title: "Owned lecture",
+          status: "ready",
+        },
+        transcript: {
+          text: "Owned transcript content",
+          segmentsVersion: 1,
+          segments: [{ startMs: 0, endMs: 12_000, text: "Owned window" }],
+          language: "fr",
+          provider: "mistral",
+        },
+      },
+    });
+    const serializedOwned = JSON.stringify(
+      owned.json.result?.structuredContent,
+    );
+    expect(serializedOwned).not.toContain("userId");
+    expect(serializedOwned).not.toContain("fileId");
+    expect(serializedOwned).not.toContain("storageKey");
+
+    const foreign = await callMcp(handler, "tools/call", {
+      name: "recordings.transcript",
+      arguments: { recordingId: "recording-mcp-foreign" },
+    });
+    expect(foreign.json.result?.isError).toBe(true);
+    expect(JSON.stringify(foreign.json.result)).not.toContain(
+      "FOREIGN_PRIVATE_TRANSCRIPT",
+    );
+    expect(JSON.stringify(foreign.json.result)).not.toContain(
+      "FOREIGN_PRIVATE_WINDOW",
+    );
+  });
+
+  test("keeps document read and write scopes isolated", async () => {
+    const legacy = await callMcp(
+      createAvermateMcpHandler(principal("mcp-user", ["avermate:read"])),
+      "tools/list",
+    );
+    const documentsRead = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:documents.read"]),
+      ),
+      "tools/list",
+    );
+    const documentsWrite = await callMcp(
+      createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:documents.write"]),
+      ),
+      "tools/list",
+    );
+
+    const documentNames = (result: JsonObject | undefined) =>
+      toolNames(result).filter((name) => name.startsWith("documents."));
+    expect(documentNames(legacy.json.result)).toEqual([]);
+    expect(documentNames(documentsRead.json.result)).toEqual([
+      "documents.list",
+      "documents.get",
+      "documents.downloadPptx",
+    ]);
+    expect(documentNames(documentsWrite.json.result)).toEqual([
+      "documents.create",
+      "documents.update",
+      "documents.exportPptx",
+      "documents.delete",
+    ]);
+    expect(
+      JSON.stringify(
+        toolDefinition(documentsWrite.json.result, "documents.delete")
+          ?.inputSchema,
+      ),
+    ).toContain("idempotencyKey");
+  });
+
+  test("keeps provider credentials and custom CA material out of sync status", async () => {
+    await database.insert(schema.syncConnections).values([
+      {
+        id: "sync-owned",
+        provider: "moodle",
+        label: "Owned Moodle",
+        baseUrl: "https://moodle.example.test",
+        sealedCredentials: "mcp-sealed-provider-secret",
+        caCertPem: "mcp-private-ca-secret",
+        capabilities: ["files"],
+        yearId: "year-owned",
+        userId: "mcp-user",
+      },
+      {
+        id: "sync-foreign",
+        provider: "moodle",
+        label: "Foreign Moodle",
+        baseUrl: "https://foreign.example.test",
+        sealedCredentials: "mcp-foreign-provider-secret",
+        caCertPem: "mcp-foreign-ca-secret",
+        capabilities: ["files"],
+        yearId: "year-foreign",
+        userId: "other-user",
+      },
+    ]);
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read", "avermate:materials.read"]),
+    );
+    const owned = await callMcp(handler, "tools/call", {
+      name: "sync.status",
+      arguments: { connectionId: "sync-owned" },
+    });
+    expect(owned.json.result?.isError).not.toBe(true);
+    expect(owned.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: {
+        connection: {
+          id: "sync-owned",
+          label: "Owned Moodle",
+          hasCustomCa: true,
+        },
+        lastJob: null,
+      },
+    });
+    const serialized = JSON.stringify(owned.json.result?.structuredContent);
+    expect(serialized).not.toContain("mcp-sealed-provider-secret");
+    expect(serialized).not.toContain("mcp-private-ca-secret");
+    expect(serialized).not.toContain("sealedCredentials");
+    expect(serialized).not.toContain("caCertPem");
+
+    const foreign = await callMcp(handler, "tools/call", {
+      name: "sync.status",
+      arguments: { connectionId: "sync-foreign" },
+    });
+    expect(foreign.json.result?.isError).toBe(true);
+    expect(JSON.stringify(foreign.json.result)).not.toContain(
+      "mcp-foreign-provider-secret",
+    );
+    expect(JSON.stringify(foreign.json.result)).not.toContain(
+      "mcp-foreign-ca-secret",
+    );
+  });
+
   test("cannot invoke an unregistered mutation through a read-only handler", async () => {
     const before = await database.select().from(schema.years);
     const response = await callMcp(
@@ -503,6 +980,267 @@ describe("MCP authorization, scopes and ownership", () => {
     );
   });
 
+  test("surfaces the document revision fence through the MCP tool", async () => {
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", [
+        "avermate:read",
+        "avermate:documents.read",
+        "avermate:documents.write",
+      ]),
+    );
+    const createdResponse = await callMcp(handler, "tools/call", {
+      name: "documents.create",
+      arguments: {
+        yearId: "year-owned",
+        title: "MCP revision fiche",
+        bodyMarkdown: "Initial source-grounded body",
+        subjectId: "subject-owned",
+      },
+    });
+    expect(createdResponse.json.result?.isError).not.toBe(true);
+    const [created] = await database
+      .select()
+      .from(schema.studyDocuments)
+      .where(eq(schema.studyDocuments.title, "MCP revision fiche"));
+    expect(created).toMatchObject({
+      bodyMarkdown: "Initial source-grounded body",
+      revision: 1,
+      userId: "mcp-user",
+    });
+
+    const readResponse = await callMcp(handler, "tools/call", {
+      name: "documents.get",
+      arguments: { documentId: created!.id },
+    });
+    expect(readResponse.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: { document: { id: created!.id, revision: 1 } },
+    });
+
+    const updatedResponse = await callMcp(handler, "tools/call", {
+      name: "documents.update",
+      arguments: {
+        documentId: created!.id,
+        revision: 1,
+        bodyMarkdown: "Accepted MCP body",
+      },
+    });
+    expect(updatedResponse.json.result?.isError).not.toBe(true);
+
+    const staleResponse = await callMcp(handler, "tools/call", {
+      name: "documents.update",
+      arguments: {
+        documentId: created!.id,
+        revision: 1,
+        bodyMarkdown: "Stale MCP body",
+      },
+    });
+    expect(staleResponse.json.result?.isError).toBe(true);
+    expect(JSON.stringify(staleResponse.json.result)).toContain(
+      "This fiche changed elsewhere — reload",
+    );
+    const [preserved] = await database
+      .select()
+      .from(schema.studyDocuments)
+      .where(eq(schema.studyDocuments.id, created!.id));
+    expect(preserved).toMatchObject({
+      bodyMarkdown: "Accepted MCP body",
+      revision: 2,
+    });
+    await database
+      .delete(schema.studyDocuments)
+      .where(eq(schema.studyDocuments.id, created!.id));
+  });
+
+  test("polls only owned jobs without exposing queue internals", async () => {
+    await database.insert(schema.jobs).values([
+      {
+        id: "job-mcp-owned",
+        kind: "export.documentPptx",
+        payload: { documentId: "private-document-input" },
+        status: "succeeded",
+        idempotencyKey: "private-idempotency-key",
+        result: {
+          fileId: "file-mcp-owned",
+          byteSize: 42,
+          revision: 1,
+          url: "https://example.invalid/export.pptx",
+        },
+        userId: "mcp-user",
+      },
+      {
+        id: "job-mcp-foreign",
+        kind: "export.documentPptx",
+        result: {
+          fileId: "file-mcp-foreign",
+          url: "https://example.invalid/foreign.pptx",
+        },
+        userId: "other-user",
+      },
+    ]);
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read"]),
+    );
+    const owned = await callMcp(handler, "tools/call", {
+      name: "jobs.get",
+      arguments: { jobId: "job-mcp-owned" },
+    });
+    expect(owned.json.result?.structuredContent).toMatchObject({
+      ok: true,
+      data: {
+        id: "job-mcp-owned",
+        kind: "export.documentPptx",
+        status: "succeeded",
+        result: {
+          fileId: "file-mcp-owned",
+          byteSize: 42,
+          revision: 1,
+        },
+      },
+    });
+    const serialized = JSON.stringify(owned.json.result?.structuredContent);
+    expect(serialized).not.toContain("private-document-input");
+    expect(serialized).not.toContain("private-idempotency-key");
+    expect(serialized).not.toContain("lockedBy");
+    expect(serialized).not.toContain("lockedUntil");
+    expect(serialized).not.toContain("example.invalid");
+    expect(serialized).not.toContain("mcp-user");
+
+    const foreign = await callMcp(handler, "tools/call", {
+      name: "jobs.get",
+      arguments: { jobId: "job-mcp-foreign" },
+    });
+    expect(foreign.json.result?.isError).toBe(true);
+
+    await database
+      .delete(schema.jobs)
+      .where(eq(schema.jobs.id, "job-mcp-owned"));
+    await database
+      .delete(schema.jobs)
+      .where(eq(schema.jobs.id, "job-mcp-foreign"));
+  });
+
+  test("mints PPTX download URLs only on demand for owned exports", async () => {
+    const mimeType =
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    await database.insert(schema.studyDocuments).values([
+      {
+        id: "slides-mcp-owned",
+        kind: "slides",
+        title: "Owned MCP slides",
+        bodyMarkdown: "# Owned",
+        revision: 1,
+        metaJson: { version: 1 },
+        yearId: "year-owned",
+        userId: "mcp-user",
+      },
+      {
+        id: "slides-mcp-foreign",
+        kind: "slides",
+        title: "Foreign MCP slides",
+        bodyMarkdown: "# Foreign",
+        revision: 1,
+        metaJson: { version: 1 },
+        yearId: "year-foreign",
+        userId: "other-user",
+      },
+    ]);
+    await database.insert(schema.files).values([
+      {
+        id: "pptx-mcp-owned",
+        provider: "protocol-test",
+        storageKey: "private-owned-pptx-key",
+        url: "https://downloads.example.test/owned.pptx?signature=short-lived",
+        mimeType,
+        byteSize: 4_096,
+        purpose: "document-export",
+        userId: "mcp-user",
+      },
+      {
+        id: "pptx-mcp-foreign",
+        provider: "protocol-test",
+        storageKey: "private-foreign-pptx-key",
+        url: "https://downloads.example.test/foreign.pptx?signature=private",
+        mimeType,
+        byteSize: 8_192,
+        purpose: "document-export",
+        userId: "other-user",
+      },
+    ]);
+    await database.insert(schema.studyDocumentExports).values([
+      {
+        documentId: "slides-mcp-owned",
+        revision: 1,
+        fileId: "pptx-mcp-owned",
+        userId: "mcp-user",
+      },
+      {
+        documentId: "slides-mcp-foreign",
+        revision: 1,
+        fileId: "pptx-mcp-foreign",
+        userId: "other-user",
+      },
+    ]);
+
+    try {
+      const handler = createAvermateMcpHandler(
+        principal("mcp-user", ["avermate:read", "avermate:documents.read"]),
+      );
+      const owned = await callMcp(handler, "tools/call", {
+        name: "documents.downloadPptx",
+        arguments: { documentId: "slides-mcp-owned", revision: 1 },
+      });
+      expect(owned.json.result?.structuredContent).toEqual({
+        ok: true,
+        data: {
+          url: "https://downloads.example.test/owned.pptx?signature=short-lived",
+          mimeType,
+          byteSize: 4_096,
+        },
+      });
+      const serialized = JSON.stringify(owned.json.result?.structuredContent);
+      expect(serialized).not.toContain("pptx-mcp-owned");
+      expect(serialized).not.toContain("private-owned-pptx-key");
+      expect(serialized).not.toContain("mcp-user");
+
+      const foreign = await callMcp(handler, "tools/call", {
+        name: "documents.downloadPptx",
+        arguments: { documentId: "slides-mcp-foreign", revision: 1 },
+      });
+      expect(foreign.json.result?.isError).toBe(true);
+      const serializedForeign = JSON.stringify(foreign.json.result);
+      expect(serializedForeign).not.toContain("foreign.pptx");
+      expect(serializedForeign).not.toContain("private-foreign-pptx-key");
+
+      const unavailableRevision = await callMcp(handler, "tools/call", {
+        name: "documents.downloadPptx",
+        arguments: { documentId: "slides-mcp-owned", revision: 2 },
+      });
+      expect(unavailableRevision.json.result?.isError).toBe(true);
+    } finally {
+      await database
+        .delete(schema.studyDocumentExports)
+        .where(eq(schema.studyDocumentExports.documentId, "slides-mcp-owned"));
+      await database
+        .delete(schema.studyDocumentExports)
+        .where(
+          eq(schema.studyDocumentExports.documentId, "slides-mcp-foreign"),
+        );
+      await database
+        .delete(schema.studyDocuments)
+        .where(eq(schema.studyDocuments.id, "slides-mcp-owned"));
+      await database
+        .delete(schema.studyDocuments)
+        .where(eq(schema.studyDocuments.id, "slides-mcp-foreign"));
+      await database
+        .delete(schema.files)
+        .where(eq(schema.files.id, "pptx-mcp-owned"));
+      await database
+        .delete(schema.files)
+        .where(eq(schema.files.id, "pptx-mcp-foreign"));
+    }
+  });
+
   test("round-trips canonical analytical widgets through MCP", async () => {
     const handler = createAvermateMcpHandler(
       principal("mcp-user", ["avermate:read", "avermate:write"]),
@@ -518,7 +1256,7 @@ describe("MCP authorization, scopes and ownership", () => {
       arguments: {
         yearId: "year-owned",
         surface: "insights",
-        definitionVersion: 1,
+        definitionVersion: WIDGET_DEFINITION_VERSION,
         definitionJson: definition,
         title: "MCP analytical widget",
       },
@@ -531,7 +1269,7 @@ describe("MCP authorization, scopes and ownership", () => {
       .where(eq(schema.dashboardCards.title, "MCP analytical widget"));
     expect(created).toMatchObject({
       surface: "insights",
-      definitionVersion: 1,
+      definitionVersion: WIDGET_DEFINITION_VERSION,
     });
     // The target is read off the definition; the row keeps no copy of it.
     expect(cardSemanticsFromDefinition(created!.definitionJson)).toMatchObject({
@@ -563,7 +1301,7 @@ describe("MCP authorization, scopes and ownership", () => {
       arguments: { yearId: "year-owned", surface: "insights" },
     });
     expect(JSON.stringify(listedResponse.json.result)).toContain(
-      '"definitionVersion":1',
+      `"definitionVersion":${WIDGET_DEFINITION_VERSION}`,
     );
     expect(JSON.stringify(listedResponse.json.result)).toContain(
       "MCP analytical widget renamed",
@@ -572,6 +1310,61 @@ describe("MCP authorization, scopes and ownership", () => {
     await database
       .delete(schema.dashboardCards)
       .where(eq(schema.dashboardCards.id, created?.id ?? ""));
+  });
+
+  test("keeps an omitted assessment type on partial MCP grade updates", async () => {
+    await database.insert(schema.gradeTypes).values({
+      id: "mcp-update-type",
+      name: "Written exam",
+      titlePrefix: "DS ",
+      coefficient: 3,
+      outOf: 40,
+      accent: "primary",
+      yearId: "year-owned",
+      userId: "mcp-user",
+    });
+    await database.insert(schema.grades).values({
+      id: "mcp-grade-update",
+      name: "Original typed grade",
+      value: 16,
+      outOf: 20,
+      coefficient: 2,
+      note: "Preserve through MCP",
+      passedAt: new Date("2026-03-10T12:00:00.000Z"),
+      subjectId: "subject-owned",
+      typeId: "mcp-update-type",
+      yearId: "year-owned",
+      userId: "mcp-user",
+    });
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:read", "avermate:write"]),
+    );
+
+    const response = await callMcp(handler, "tools/call", {
+      name: "grades.update",
+      arguments: {
+        gradeId: "mcp-grade-update",
+        name: "Renamed typed grade",
+      },
+    });
+    expect(response.json.result?.isError).not.toBe(true);
+    const [stored] = await database
+      .select()
+      .from(schema.grades)
+      .where(eq(schema.grades.id, "mcp-grade-update"));
+    expect(stored).toMatchObject({
+      name: "Renamed typed grade",
+      coefficient: 2,
+      note: "Preserve through MCP",
+      typeId: "mcp-update-type",
+    });
+
+    await database
+      .delete(schema.grades)
+      .where(eq(schema.grades.id, "mcp-grade-update"));
+    await database
+      .delete(schema.gradeTypes)
+      .where(eq(schema.gradeTypes.id, "mcp-update-type"));
   });
 
   test("keeps preset targeting when MCP applies an unrelated partial patch", async () => {
@@ -688,6 +1481,36 @@ describe("MCP authorization, scopes and ownership", () => {
     expect(toolNames(adminModerate.json.result)).not.toContain(
       "social.sharing.update",
     );
+  });
+
+  test("publishes and persists the history-sharing lock", async () => {
+    const handler = createAvermateMcpHandler(
+      principal("mcp-user", ["avermate:social.manage"]),
+    );
+    const listed = await callMcp(handler, "tools/list");
+    expect(
+      JSON.stringify(
+        toolDefinition(listed.json.result, "social.sharing.update")
+          ?.inputSchema,
+      ),
+    ).toContain("shareHistory");
+
+    const enabled = await callMcp(handler, "tools/call", {
+      name: "social.sharing.update",
+      arguments: { shareHistory: true },
+    });
+    expect(enabled.json.result?.isError).not.toBe(true);
+    const [profile] = await database
+      .select({ shareHistory: schema.socialProfiles.shareHistory })
+      .from(schema.socialProfiles)
+      .where(eq(schema.socialProfiles.userId, "mcp-user"));
+    expect(profile?.shareHistory).toBe(true);
+
+    const disabled = await callMcp(handler, "tools/call", {
+      name: "social.sharing.update",
+      arguments: { shareHistory: false },
+    });
+    expect(disabled.json.result?.isError).not.toBe(true);
   });
 
   test("oRPC remains authoritative for user ownership", async () => {
@@ -846,13 +1669,14 @@ describe("OAuth 2.1 authorization-code + PKCE", () => {
         token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
-        type: "native",
+        application_type: "native",
+        resources: ["http://localhost:3000/mcp"],
         scope:
           "openid profile offline_access avermate:read avermate:write avermate:delete",
       }),
     });
     jar.absorb(createClient);
-    expect(createClient.status).toBe(200);
+    expect(createClient.status).toBe(201);
     const client = (await createClient.json()) as { client_id: string };
     expect(client.client_id).toBeString();
 

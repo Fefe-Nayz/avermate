@@ -1,0 +1,1 @@
+ALTER TABLE `grades` ADD `syncExcludedFromAverage` integer DEFAULT false NOT NULL;

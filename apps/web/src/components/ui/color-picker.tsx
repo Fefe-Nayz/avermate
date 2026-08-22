@@ -48,7 +48,6 @@ function hsvToHex({ h, s, v }: Hsv): string {
   return `#${f(5)}${f(3)}${f(1)}`
 }
 
-
 /**
  * Any CSS colour, as the three channels the square needs.
  *
@@ -100,6 +99,35 @@ function rgbToHsv([r, g, b]: [number, number, number]): Hsv {
   return { h, s: max === 0 ? 0 : delta / max, v: max }
 }
 
+function ColorValueInput({
+  value,
+  onValueChange,
+  label,
+}: {
+  value: string
+  onValueChange: (value: string) => void
+  label?: string
+}) {
+  const [draft, setDraft] = React.useState(value)
+
+  return (
+    <Input
+      value={draft}
+      aria-label={label ? `${label} — value` : "Colour value"}
+      placeholder="#rrggbb, oklch(…)"
+      className="h-7 font-mono text-[11px]"
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        const next = draft.trim()
+        if (next !== value) onValueChange(next)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur()
+      }}
+    />
+  )
+}
+
 export function ColorPicker({
   value,
   onValueChange,
@@ -115,11 +143,8 @@ export function ColorPicker({
   disabled?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
-  const [draft, setDraft] = React.useState(value)
   const areaRef = React.useRef<HTMLDivElement>(null)
   const dragging = React.useRef(false)
-
-  React.useEffect(() => setDraft(value), [value])
 
   const rgb = React.useMemo(() => toRgb(value), [value])
 
@@ -200,7 +225,7 @@ export function ColorPicker({
           onPointerCancel={() => {
             dragging.current = false
           }}
-          className="relative h-32 w-full cursor-crosshair rounded-lg border touch-none"
+          className="relative h-32 w-full cursor-crosshair touch-none rounded-lg border"
           style={{
             backgroundColor: `hsl(${hsv.h} 100% 50%)`,
             backgroundImage:
@@ -236,19 +261,11 @@ export function ColorPicker({
 
         <div className="flex items-center gap-2">
           <PipetteIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <Input
-            value={draft}
-            aria-label={label ? `${label} — value` : "Colour value"}
-            placeholder="#rrggbb, oklch(…)"
-            className="h-7 font-mono text-[11px]"
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => {
-              const next = draft.trim()
-              if (next !== value) onValueChange(next)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur()
-            }}
+          <ColorValueInput
+            key={value}
+            value={value}
+            onValueChange={onValueChange}
+            label={label}
           />
         </div>
       </PopoverContent>

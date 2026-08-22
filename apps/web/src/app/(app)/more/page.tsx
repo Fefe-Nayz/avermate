@@ -1,19 +1,24 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { useThemeControl } from "@/hooks/use-preferences"
 import { useRouter } from "next/navigation"
 import {
   ChartNoAxesCombinedIcon,
   BellIcon,
+  CalendarRangeIcon,
   ChevronRightIcon,
   GraduationCapIcon,
+  FolderOpenIcon,
   LogOutIcon,
   MessageSquarePlusIcon,
   MoonIcon,
   ShieldIcon,
   SparklesIcon,
+  SearchIcon,
   SunIcon,
+  XIcon,
   TargetIcon,
   UsersRoundIcon,
   type LucideIcon,
@@ -31,6 +36,16 @@ import { useIsAdmin } from "@/hooks/use-admin"
 import { useYear } from "@/components/year/year-provider"
 import { useYearSheet } from "@/components/shell/year-sheet"
 import { useSettingsSections } from "@/lib/nav-labels"
+import {
+  normalizeSettingsSearch,
+  settingsResultsForSection,
+} from "../settings/settings-search"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 
 /**
  * The account hub.
@@ -52,12 +67,15 @@ export default function MorePage() {
   const { year, years } = useYear()
   const yearSheet = useYearSheet()
   const settings = useSettingsSections()
+  const [query, setQuery] = useState("")
 
   const groups: Array<{
     label?: string
     items: Array<{
       icon: LucideIcon
       label: string
+      /** The section a search hit came from, so a row says where it lives. */
+      caption?: string
       href?: string
       onClick?: () => void
       destructive?: boolean
@@ -75,6 +93,16 @@ export default function MorePage() {
             ]
           : []),
         { icon: TargetIcon, label: t("Goals"), href: "/goals" },
+        {
+          icon: CalendarRangeIcon,
+          label: t("Planning"),
+          href: "/planning",
+        },
+        {
+          icon: FolderOpenIcon,
+          label: t("Materials"),
+          href: "/materials",
+        },
         { icon: UsersRoundIcon, label: t("Social"), href: "/social" },
         {
           icon: ChartNoAxesCombinedIcon,
@@ -125,6 +153,56 @@ export default function MorePage() {
     },
   ]
 
+  /**
+   * Searching from here rather than from inside the settings pages.
+   *
+   * The rail's search sat above every one of the eleven settings screens on a
+   * phone, which is a field repeated on each of the pages it can send you to.
+   * A phone reaches all of them from this list, so this is the one place the
+   * search is worth having — and it searches everything on the page, not only
+   * the settings half of it.
+   */
+  const needle = normalizeSettingsSearch(query)
+
+  /**
+   * Searching reaches inside the settings, not only their titles.
+   *
+   * The rail on a wide screen answers "dark mode" with the row that carries it,
+   * two levels down inside Appearance. A phone asking the same question of the
+   * same list has to get the same answer, so the settings group is rebuilt from
+   * the item-level matches while a query is set — the same model the rail uses,
+   * so the two cannot answer differently.
+   */
+  const settingsHits = needle
+    ? settings.flatMap((section) =>
+        settingsResultsForSection(section, query).map(({ kind, item }) => ({
+          icon: section.icon,
+          label: item?.label ?? section.label,
+          caption: kind === "section" ? undefined : section.label,
+          href: item?.href ?? section.href,
+          onClick: undefined,
+          destructive: false,
+        }))
+      )
+    : []
+
+  const visibleGroups = needle
+    ? groups
+        .map((group) =>
+          group.label === t("Settings")
+            ? { ...group, items: settingsHits }
+            : {
+                ...group,
+                items: group.items.filter((item) =>
+                  normalizeSettingsSearch(
+                    `${item.label} ${item.href ?? ""}`
+                  ).includes(needle)
+                ),
+              }
+        )
+        .filter((group) => group.items.length > 0)
+    : groups
+
   return (
     <>
       <PageMeta title={t("More")} />
@@ -174,8 +252,40 @@ export default function MorePage() {
           </div>
         </div>
 
+        <InputGroup className="h-(--control-h-search)">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("Search settings and screens…")}
+            aria-label={t("Search settings and screens…")}
+            // WebKit draws its own cancel button inside a search field, beside
+            // ours — one clear button too many.
+            className="[&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {query ? (
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                aria-label={t("Clear the search")}
+                onClick={() => setQuery("")}
+              >
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          ) : null}
+        </InputGroup>
+
+        {visibleGroups.length === 0 ? (
+          <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+            {t("Nothing matches that.")}
+          </p>
+        ) : null}
+
         <div className="grid gap-5 md:grid-cols-2 md:items-start">
-          {groups.map((group, groupIndex) => (
+          {visibleGroups.map((group, groupIndex) => (
             <section key={groupIndex} className="flex flex-col gap-1.5">
               {group.label ? (
                 <h2 className="px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -196,11 +306,19 @@ export default function MorePage() {
                       <span
                         className={
                           item.destructive
-                            ? "flex-1 text-sm text-destructive"
-                            : "flex-1 text-sm"
+                            ? "min-w-0 flex-1 text-sm text-destructive"
+                            : "min-w-0 flex-1 text-sm"
                         }
                       >
-                        {item.label}
+                        <span className="block truncate">{item.label}</span>
+                        {/* A search hit two levels down says which section it
+                            lives in; without it "Dark mode" and "Theme" are
+                            two rows with no home. */}
+                        {item.caption ? (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {item.caption}
+                          </span>
+                        ) : null}
                       </span>
                       {item.href ? (
                         <ChevronRightIcon className="size-4 text-muted-foreground/60" />

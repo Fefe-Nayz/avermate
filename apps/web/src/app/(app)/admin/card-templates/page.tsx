@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import {
   WIDGET_DEFINITION_VERSION,
   cardSemanticsFromDefinition,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
 } from "@avermate/core"
 import {
@@ -39,7 +39,7 @@ interface TemplateRow {
   category: string
   status: "draft" | "published" | "archived"
   definitionVersion: number
-  definitionJson: WidgetDefinitionV1
+  definitionJson: WidgetDefinition
 }
 
 /**
@@ -242,6 +242,12 @@ function AdminTemplateCard({
       })),
       goal: goals.map((goal) => ({ value: goal.id })),
       period: periods.map((period) => ({ value: period.id })),
+      // An administrator previewing a template has no standing in anybody's class, so
+      // these are empty here and the preview says the slot cannot be filled — which is
+      // the truth rather than a silently unresolved id.
+      cohort: [],
+      "cohort-member": [],
+      friend: [],
     }),
     [customAverages, goals, graph, periods]
   )

@@ -20,6 +20,8 @@
       }
     ],
     "paths": {
+      "@better-auth/core": ["../../node_modules/@better-auth/core"],
+      "@better-auth/core/*": ["../../node_modules/@better-auth/core/*"],
       "@/*": ["./src/*"]
     }
   },

@@ -3,9 +3,10 @@ import {
   WIDGET_LIMITS,
   compileWidgetDefinition,
   createWidgetDefinition,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetFilter,
   type WidgetFormula,
+  widgetPrimaryMeasure,
 } from "@avermate/core";
 import {
   preservesRawWidgetDraft,
@@ -19,28 +20,40 @@ describe("widget editor model", () => {
       formula = { kind: "unary", operation: "absolute", operand: formula };
     }
     const definition = createWidgetDefinition("overview");
-    definition.analysis.measure = {
-      kind: "formula",
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
       formula,
       valueType: "number",
-    };
+        },
+      },
+    ];
 
     expect(preservesRawWidgetDraft(definition, "overview")).toBe(true);
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     });
     expect(
-      (resolved.analysis.measure as { formula: WidgetFormula }).formula,
+      (widgetPrimaryMeasure(resolved.analysis) as { formula: WidgetFormula }).formula,
     ).toEqual(formula);
   });
 
   test("keeps a temporarily cleared literal value visible and blocks saving", () => {
     const definition = createWidgetDefinition("overview");
-    definition.analysis.measure = {
-      kind: "formula",
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
       formula: { kind: "literal", value: null } as unknown as WidgetFormula,
       valueType: "number",
-    };
+        },
+      },
+    ];
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
@@ -49,14 +62,14 @@ describe("widget editor model", () => {
 
     expect(preservesRawWidgetDraft(definition, "overview")).toBe(true);
     expect(
-      (resolved.analysis.measure as { formula: { value: unknown } }).formula
+      (widgetPrimaryMeasure(resolved.analysis) as { formula: { value: unknown } }).formula
         .value,
     ).toBeNull();
     expect(compiled.valid).toBe(false);
     expect(compiled.plan).toBeNull();
     expect(
       compiled.issues.some(
-        (issue) => issue.path === "analysis.measure.formula.value",
+        (issue) => issue.path === "analysis.measures.0.expression.formula.value",
       ),
     ).toBe(true);
   });
@@ -69,18 +82,24 @@ describe("widget editor model", () => {
       left: { kind: "literal", value: null },
       right: { kind: "literal", value: 7 },
     } as unknown as WidgetFormula;
-    definition.analysis.measure = {
-      kind: "formula",
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
       formula,
       valueType: "number",
-    };
+        },
+      },
+    ];
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     });
 
     expect(
-      (resolved.analysis.measure as { formula: WidgetFormula }).formula,
+      (widgetPrimaryMeasure(resolved.analysis) as { formula: WidgetFormula }).formula,
     ).toBe(formula);
     expect(
       compileWidgetDefinition(resolved, { surface: "overview" }).valid,
@@ -117,7 +136,7 @@ describe("widget editor model", () => {
         value: null,
         color: "#2563EB",
         label: "Target",
-      } as unknown as WidgetDefinitionV1["visualization"]["thresholds"][number],
+      } as unknown as WidgetDefinition["visualization"]["thresholds"][number],
     ];
 
     const cleared = resolveWidgetEditorChange(definition, {
@@ -128,7 +147,7 @@ describe("widget editor model", () => {
       compileWidgetDefinition(cleared, { surface: "overview" }).valid,
     ).toBe(false);
 
-    const retyped: WidgetDefinitionV1 = {
+    const retyped: WidgetDefinition = {
       ...cleared,
       visualization: {
         ...cleared.visualization,
@@ -164,17 +183,19 @@ describe("widget editor model", () => {
 
   test("canonicalizes incompatible fields after a metric transition", () => {
     const definition = createWidgetDefinition("insights");
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "lastGrade",
-      goalId: null,
-    };
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "lastGrade", goalId: null },
+      },
+    ];
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "insights",
     });
-    expect(resolved.analysis.groupBy).toEqual({ kind: "none" });
-    expect(resolved.visualization.mark).toBe("value");
+    expect(resolved.analysis.dimensions).toEqual([]);
+    expect(resolved.visualization.recipe).toBe("value");
     expect(
       compileWidgetDefinition(resolved, { surface: "insights" }).valid,
     ).toBe(true);
@@ -182,18 +203,20 @@ describe("widget editor model", () => {
 
   test("canonicalizes goal progress to its owned query and gauge", () => {
     const definition = createWidgetDefinition("overview");
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "goalProgress",
-      goalId: "goal-1",
-    };
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "goalProgress", goalId: "goal-1" },
+      },
+    ];
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     });
     expect(resolved.query.scope).toEqual({ kind: "general" });
-    expect(resolved.analysis.groupBy).toEqual({ kind: "none" });
-    expect(resolved.visualization.mark).toBe("gauge");
+    expect(resolved.analysis.dimensions).toEqual([]);
+    expect(resolved.visualization.recipe).toBe("gauge");
     expect(
       compileWidgetDefinition(resolved, { surface: "overview" }).valid,
     ).toBe(true);

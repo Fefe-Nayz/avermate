@@ -90,7 +90,9 @@ export function SocialSection({
 }
 
 export function SocialList({ children }: { children: ReactNode }) {
-  return <ul className="flex flex-col divide-y rounded-lg border">{children}</ul>
+  return (
+    <ul className="flex flex-col divide-y rounded-lg border">{children}</ul>
+  )
 }
 
 export function SocialRow({
@@ -144,7 +146,9 @@ export function SocialIdentity({
     <div className="flex min-w-0 items-center gap-3">
       <Avatar className="size-9 shrink-0">
         {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-        <AvatarFallback>{(name || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+        <AvatarFallback>
+          {(name || "?").slice(0, 1).toUpperCase()}
+        </AvatarFallback>
       </Avatar>
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{name}</p>

@@ -209,8 +209,9 @@ describe("form flows", () => {
 
     // `rollUp` returns null when every part is blank, and the payload's
     // `?? 0` would have saved a mark of zero nobody typed.
+    expect(form).toContain('validates("components") &&')
     expect(form).toContain(
-      "composite && components.length > 0 && effectiveValue === null"
+      "components.length > 0 &&\n      effectiveValue === null"
     )
   })
 

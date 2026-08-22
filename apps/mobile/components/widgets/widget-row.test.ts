@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   compileWidgetDefinition,
   createWidgetDefinition,
+  WIDGET_DEFINITION_VERSION,
 } from "@avermate/core";
 import { resolveWidgetRow, type StoredWidgetRow } from "./widget-row";
 
@@ -21,7 +22,7 @@ describe("resolveWidgetRow", () => {
   test("uses the stored definition", () => {
     const definition = createWidgetDefinition("overview");
     const resolved = resolveWidgetRow(
-      { ...row, definitionVersion: 1, definitionJson: definition },
+      { ...row, definitionVersion: WIDGET_DEFINITION_VERSION, definitionJson: definition },
       "overview",
     );
     const compiled = compileWidgetDefinition(definition, {
@@ -38,7 +39,7 @@ describe("resolveWidgetRow", () => {
     // *different renderer*, so an unreadable row silently became a working card
     // that looked nothing like the one the editor showed for it.
     const resolved = resolveWidgetRow(
-      { ...row, definitionVersion: 1, definitionJson: { apiVersion: 999 } },
+      { ...row, definitionVersion: WIDGET_DEFINITION_VERSION, definitionJson: { apiVersion: 999 } },
       "overview",
     );
 
@@ -54,7 +55,8 @@ describe("resolveWidgetRow", () => {
     const resolved = resolveWidgetRow(
       {
         ...row,
-        definitionVersion: 2,
+        // One past the version this build knows.
+        definitionVersion: WIDGET_DEFINITION_VERSION + 1,
         definitionJson: createWidgetDefinition("overview"),
       },
       "overview",

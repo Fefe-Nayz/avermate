@@ -174,6 +174,8 @@ export function radarSpec({
   height,
   formatValue,
   focusedSubject = null,
+  fill = true,
+  showPoints = false,
 }: {
   points: readonly RadarPoint[]
   /** The year's own top mark; a year here is not always out of twenty. */
@@ -188,6 +190,15 @@ export function radarSpec({
    * renderer. See the active point below.
    */
   focusedSubject?: string | null
+  /**
+   * Fill the polygon, or draw its outline alone.
+   *
+   * Both defaults are the dashboard's, so the chart it was written for is
+   * unchanged; a card that turns either one off says so in its own document.
+   */
+  fill?: boolean
+  /** A dot at every spoke, rather than only under the pointer. */
+  showPoints?: boolean
 }) {
   const domain = points.map((point) => point.subject)
   const fontSize = labelFontSizeFor(width)
@@ -264,7 +275,7 @@ export function radarSpec({
             key: "subject",
             curve: curveLinearClosed,
             fill: "var(--chart-1)",
-            fillOpacity: 0.1,
+            fillOpacity: fill ? 0.1 : 0,
             stroke: "var(--chart-1)",
             strokeWidth: 2,
           }),
@@ -297,7 +308,11 @@ export function radarSpec({
             // Zero, not absent: the dot keeps its identity across focus changes,
             // so the renderer resizes one circle instead of adding and removing
             // one — the same shape the cartesian charts' `states` produce.
-            r: (datum) => (datum.subject === focusedSubject ? 5 : 0),
+            // Zero is "not drawn": a radar whose points are always visible shows
+            // where the readings actually are, and one that hides them reads as a
+            // shape. The focused point is larger either way.
+            r: (datum) =>
+              datum.subject === focusedSubject ? 5 : showPoints ? 2.5 : 0,
             fill: "var(--chart-1)",
             // Lifts it off the area's own fill and stroke.
             stroke: "var(--background)",

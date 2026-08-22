@@ -50,7 +50,9 @@ export default function NavigationSettingsPage() {
     "/dashboard": t("Dashboard"),
     "/subjects": t("Subjects"),
     "/grades": t("Grades"),
+    "/materials": t("Materials"),
     "/goals": t("Goals"),
+    "/planning": t("Planning"),
     "/insights": t("Insights"),
     "/social": t("Social"),
   }
@@ -102,6 +104,7 @@ export default function NavigationSettingsPage() {
         </h1>
 
         <SettingsSection
+          id="mobile-navigation"
           title={t("Phone tab bar")}
           description={t(
             "Drag a screen into a seat. Three are yours; the add button and More keep theirs, so every screen stays reachable."
@@ -116,6 +119,7 @@ export default function NavigationSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="sidebar"
           title={t("Sidebar")}
           description={t(
             "Drag to order the screens you live in. Hidden ones stay reachable from More and the search."

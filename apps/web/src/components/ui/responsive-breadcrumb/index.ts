@@ -2,7 +2,7 @@ export {
   default,
   FinalResponsiveBreadcrumb,
   ResponsiveBreadcrumb,
-} from "./ResponsiveBreadcrumb";
+} from "./ResponsiveBreadcrumb"
 export type {
   BreadcrumbData,
   BreadcrumbDebugState,
@@ -12,4 +12,4 @@ export type {
   LayoutNode,
   ResponsiveBreadcrumbProps,
   SeparatorNavItem,
-} from "./ResponsiveBreadcrumb";
+} from "./ResponsiveBreadcrumb"

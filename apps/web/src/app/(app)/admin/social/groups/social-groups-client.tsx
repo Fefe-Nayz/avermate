@@ -2,7 +2,12 @@
 
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { SearchIcon, SnowflakeIcon, Trash2Icon, UsersRoundIcon } from "lucide-react"
+import {
+  SearchIcon,
+  SnowflakeIcon,
+  Trash2Icon,
+  UsersRoundIcon,
+} from "lucide-react"
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import { GroupStateMark } from "@/components/admin/social-moderation-ui"
@@ -182,7 +187,9 @@ export function AdminSocialGroupsClient() {
                   {" · "}
                   {group.memberCount === 1
                     ? t("1 member")
-                    : t("{count} members", { count: String(group.memberCount) })}
+                    : t("{count} members", {
+                        count: String(group.memberCount),
+                      })}
                 </p>
               </SocialRow>
             ))}

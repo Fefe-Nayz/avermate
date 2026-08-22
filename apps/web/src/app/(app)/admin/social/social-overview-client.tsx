@@ -75,10 +75,16 @@ export function AdminSocialOverviewClient() {
         </div>
         <SocialSection title={t("Queues")}>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" render={<Link href="/admin/social/reports" />}>
+            <Button
+              variant="outline"
+              render={<Link href="/admin/social/reports" />}
+            >
               <FlagIcon /> {t("Review reports")}
             </Button>
-            <Button variant="outline" render={<Link href="/admin/social/groups" />}>
+            <Button
+              variant="outline"
+              render={<Link href="/admin/social/groups" />}
+            >
               <UsersRoundIcon /> {t("Browse classes")}
             </Button>
           </div>

@@ -55,6 +55,7 @@ export function ProfileSettingsClient() {
         </h1>
 
         <SettingsSection
+          id="profile-identity"
           title={t("Who you are")}
           description={t("Shown only to you.")}
         >
@@ -85,6 +86,7 @@ export function ProfileSettingsClient() {
         </SettingsSection>
 
         <SettingsSection
+          id="profile-language"
           title={t("Language")}
           description={t("Applies everywhere, on every device you sign in on.")}
         >

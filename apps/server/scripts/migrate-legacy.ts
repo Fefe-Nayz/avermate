@@ -17,6 +17,10 @@
  * after the migration, and re-running the script is idempotent.
  */
 import { createClient } from "@libsql/client";
+import {
+  createLocalAccountIssuer,
+  createOAuthAccountIssuer,
+} from "@better-auth/core/db";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../src/db";
 import {
@@ -79,6 +83,21 @@ async function read(table: string): Promise<Row[]> {
 
 const asString = (value: unknown): string | null =>
   value === null || value === undefined ? null : String(value);
+
+function legacyAccountIssuer(row: Row): string {
+  const existing = asString(row.issuer);
+  if (existing) return existing;
+
+  const providerId = String(row.providerId);
+  if (providerId === "credential") return createLocalAccountIssuer(providerId);
+  if (providerId === "google") return "https://accounts.google.com";
+  if (providerId === "microsoft") {
+    throw new Error(
+      "Microsoft accounts require their verified tenant issuer and oid before Better Auth 1.7; migrate them from trusted provider data first.",
+    );
+  }
+  return createOAuthAccountIssuer(providerId);
+}
 
 const asNumber = (value: unknown, fallback = 0): number => {
   const parsed = Number(value);
@@ -206,6 +225,7 @@ async function main() {
         id: String(row.id),
         accountId: String(row.accountId),
         providerId: String(row.providerId),
+        issuer: legacyAccountIssuer(row),
         userId: String(row.userId),
         accessToken: asString(row.accessToken),
         accessTokenExpiresAt: row.accessTokenExpiresAt

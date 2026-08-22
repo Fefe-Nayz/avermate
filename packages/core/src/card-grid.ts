@@ -241,6 +241,85 @@ export interface GridReorderPlan {
 }
 
 /** The plan a drop would carry out, and how it should be shown while dragging. */
+/** A keyboard step, in the directions a grid actually has. */
+export type GridMoveDirection = "left" | "right" | "up" | "down";
+
+/**
+ * One keyboard step, as the card the step lands on.
+ *
+ * The audit asks for the pointer and the keyboard to produce the same intention, and this
+ * is that intention in the vocabulary the grid already speaks: a *target card*, which
+ * `planGridReorder` then reads as an insertion or an exchange. The two inputs differ in
+ * how they choose the target and agree on everything after it — so a keyboard step through
+ * a row of mixed widths lands exactly where the same drop would.
+ *
+ * `left` and `right` walk the canonical order, which is what a reader stepping through a
+ * list expects and what the row wraps around. `up` and `down` are geometric: the card in
+ * the row above or below that *covers the same column*, because a row of one card and a
+ * row of three have no common index — stepping by position would move a card two places
+ * sideways for every place it moved up.
+ *
+ * `null` when there is nowhere to go: no card of that id, or an edge.
+ */
+export function gridKeyboardTarget(
+  specs: readonly CardSpec[],
+  columns: number,
+  activeId: string,
+  direction: GridMoveDirection,
+): string | null {
+  const layout = layoutCardGrid(specs, columns);
+  const active = layout.byId.get(activeId);
+  if (!active) return null;
+
+  if (direction === "left" || direction === "right") {
+    const order = specs.map((spec) => spec.id);
+    const index = order.indexOf(activeId);
+    const next = direction === "left" ? index - 1 : index + 1;
+    return order[next] ?? null;
+  }
+
+  const row = layout.rows[active.rowIndex];
+  const neighbour =
+    layout.rows[active.rowIndex + (direction === "up" ? -1 : 1)];
+  if (!row || !neighbour) return null;
+
+  // Where the card starts, in columns, counting along its own row.
+  let start = 0;
+  for (const item of row.items) {
+    if (item.spec.id === activeId) break;
+    start += item.columns;
+  }
+
+  // The card of the neighbouring row that covers that column. A wide card covers several,
+  // and a row that ends early — the packer leaves a hole rather than stretching a card
+  // past its policy — hands the step to its last card.
+  let cursor = 0;
+  for (const item of neighbour.items) {
+    cursor += item.columns;
+    if (start < cursor) return item.spec.id;
+  }
+  return neighbour.items.at(-1)?.spec.id ?? null;
+}
+
+/**
+ * The order one keyboard step produces.
+ *
+ * The same planner the pointer's drop runs, so a step cannot reach an arrangement a drag
+ * could not — including the row-atomic exchange, which is the case a flat sortable's own
+ * keyboard handling gets wrong.
+ */
+export function planGridKeyboardMove(
+  specs: readonly CardSpec[],
+  columns: number,
+  activeId: string,
+  direction: GridMoveDirection,
+): GridReorderPlan {
+  const target = gridKeyboardTarget(specs, columns, activeId, direction);
+  return target === null
+    ? { order: specs.map((spec) => spec.id), insertion: null, exchanged: null }
+    : planGridReorder(specs, columns, activeId, target);
+}
+
 export function planGridReorder(
   specs: readonly CardSpec[],
   columns: number,

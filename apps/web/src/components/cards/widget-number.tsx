@@ -1,7 +1,7 @@
 "use client"
 
 import { useFormatter } from "next-intl"
-import type { WidgetValueType, WidgetVisualizationV1 } from "@avermate/core"
+import type { WidgetValueType, WidgetVisualization } from "@avermate/core"
 import { cn } from "@/lib/utils"
 import { widgetValuePresentation } from "./widget-view-model"
 
@@ -18,7 +18,7 @@ export function WidgetNumberText({
 }: {
   value: number
   valueType: WidgetValueType
-  format: WidgetVisualizationV1["format"]
+  format: WidgetVisualization["format"]
   scale: number
   defaultDecimals: number
   daysLabel: string

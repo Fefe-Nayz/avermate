@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  periodDraftProblems,
-  periodDraftsFromTemplate,
-} from "./period-drafts"
+import { periodDraftProblems, periodDraftsFromTemplate } from "./period-drafts"
 
 const trimesters = {
   id: "trimesters",
@@ -24,10 +21,12 @@ describe("period drafts", () => {
 
     expect(drafts[0]?.startAt).toBe("2026-09-01")
     expect(drafts.at(-1)?.endAt).toBe("2027-07-15")
-    expect(periodDraftProblems(drafts, {
-      startsAt: "2026-09-01",
-      endsAt: "2027-07-15",
-    })).toEqual([])
+    expect(
+      periodDraftProblems(drafts, {
+        startsAt: "2026-09-01",
+        endsAt: "2027-07-15",
+      })
+    ).toEqual([])
     expect(new Date(drafts[1]!.startAt).getTime()).toBe(
       new Date(drafts[0]!.endAt).getTime() + 86_400_000
     )

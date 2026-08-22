@@ -11,6 +11,7 @@ import {
   customAverages,
   dashboardCardReferences,
   dashboardCards,
+  years,
 } from "../db/schema";
 import { badRequest, protectedProcedure } from "../lib/orpc";
 import { assertSameYear } from "../lib/domain-integrity";
@@ -28,10 +29,17 @@ const entryInput = z.object({
   includeChildren: z.boolean().default(false),
 });
 
-const averageInput = z.object({
+const averageFields = {
   name: z.string().trim().min(1).max(64),
+  /** Extra points on the year's scale, added to this average. */
+  bonus: z.number().min(-1000).max(1000),
   entries: z.array(entryInput).min(1).max(200),
+};
+const averageInput = z.object({
+  ...averageFields,
+  bonus: averageFields.bonus.default(0),
 });
+const averagePatchInput = z.object(averageFields).partial();
 
 const CARD_TITLE_MAX_LENGTH = 48;
 
@@ -149,6 +157,7 @@ export const averagesRouter = {
         id: averageId,
         name: input.name,
         isMain: false,
+        bonus: input.bonus,
         sortOrder: existing.reduce(
           (max, row) => Math.max(max, row.sortOrder + 1),
           0,
@@ -213,7 +222,7 @@ export const averagesRouter = {
     }),
 
   update: protectedProcedure
-    .input(averageInput.partial().extend({ averageId: z.string() }))
+    .input(averagePatchInput.extend({ averageId: z.string() }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const { averageId, entries, ...patch } = input;
@@ -327,6 +336,18 @@ export const averagesRouter = {
           ),
         ),
         db.delete(customAverages).where(eq(customAverages.id, input.averageId)),
+        // A year whose headline *was* this average goes back to reading the whole year.
+        // Same batch as the deletion, so there is no moment where the year points at an
+        // average that is gone.
+        db
+          .update(years)
+          .set({ mainAverageId: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(years.id, existing.yearId),
+              eq(years.mainAverageId, input.averageId),
+            ),
+          ),
         detachYearPresetStatement(userId, existing.yearId, "average_deleted"),
       ]);
       return { ok: true };

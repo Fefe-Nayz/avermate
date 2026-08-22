@@ -7,7 +7,11 @@ import Svg, {
   Rect,
   Text as SvgText,
 } from "react-native-svg";
-import type { WidgetVisualizationV1 } from "@avermate/core";
+import {
+  widgetMarkForRecipe,
+  type WidgetDatumSlots,
+  type WidgetVisualization,
+} from "@avermate/core";
 import { space, type, usePalette } from "@/lib/theme";
 import {
   widgetColorIndex,
@@ -54,10 +58,9 @@ function pathFor(
 
 function bucketValue(
   entry: EncodedWidgetDatum,
-  visualization: WidgetVisualizationV1,
+  slots: WidgetDatumSlots,
 ): string | number {
-  const field =
-    visualization.encoding.x?.field ?? (entry.date ? "date" : "category");
+  const field = slots.x ?? (entry.date ? "date" : "category");
   if (field === "category") return entry.source.label;
   return (
     widgetDatumNumber(entry.source, field) ??
@@ -67,18 +70,17 @@ function bucketValue(
 
 function bucketKey(
   entry: EncodedWidgetDatum,
-  visualization: WidgetVisualizationV1,
+  slots: WidgetDatumSlots,
 ): string {
-  const value = bucketValue(entry, visualization);
+  const value = bucketValue(entry, slots);
   return typeof value === "number" ? `n:${value}` : `s:${value}`;
 }
 
 function bucketLabel(
   entry: EncodedWidgetDatum,
-  visualization: WidgetVisualizationV1,
+  slots: WidgetDatumSlots,
 ): string {
-  const field =
-    visualization.encoding.x?.field ?? (entry.date ? "date" : "category");
+  const field = slots.x ?? (entry.date ? "date" : "category");
   return widgetDatumLabel(entry.source, field);
 }
 
@@ -87,7 +89,7 @@ function Legend({
   position,
 }: {
   series: Array<{ label: string; color: string }>;
-  position: WidgetVisualizationV1["legend"]["position"];
+  position: WidgetVisualization["legend"]["position"];
 }) {
   const palette = usePalette();
   return (
@@ -128,16 +130,21 @@ function Legend({
 export function WidgetSeriesChart({
   values,
   visualization,
+  slots,
   formatValue,
   formatColorValue = formatValue,
 }: {
   values: EncodedWidgetDatum[];
-  visualization: WidgetVisualizationV1;
+  visualization: WidgetVisualization;
+  /** Which datum slot each channel meant — see `widgetDatumSlots`. */
+  slots: WidgetDatumSlots;
   formatValue: (value: number) => string;
   formatColorValue?: (value: number) => string;
 }) {
   const palette = usePalette();
   const [width, setWidth] = useState(0);
+  // The shape to draw, from the recipe the document stores.
+  const mark = widgetMarkForRecipe(visualization.recipe) ?? "value";
   const rows = useMemo(
     () =>
       values.filter(
@@ -146,7 +153,7 @@ export function WidgetSeriesChart({
       ),
     [values],
   );
-  const colorField = visualization.encoding.color?.field;
+  const colorField = slots.color ?? undefined;
   const colorValues = rows.flatMap((entry) => {
     const value = colorField
       ? widgetDatumNumber(entry.source, colorField)
@@ -204,9 +211,9 @@ export function WidgetSeriesChart({
   }, [colorField, palette.accent, rows]);
   const buckets = useMemo(() => {
     const map = new Map<string, EncodedWidgetDatum>();
-    for (const row of rows) map.set(bucketKey(row, visualization), row);
+    for (const row of rows) map.set(bucketKey(row, slots), row);
     return [...map.entries()];
-  }, [rows, visualization]);
+  }, [rows, slots]);
   if (rows.length === 0) return <View style={{ height: HEIGHT }} />;
 
   const barOptions =
@@ -214,7 +221,7 @@ export function WidgetSeriesChart({
   const horizontalBars = barOptions?.orientation === "horizontal";
   const stackedExtents = buckets.map(([key]) => {
     const bucketRows = rows.filter(
-      (entry) => bucketKey(entry, visualization) === key,
+      (entry) => bucketKey(entry, slots) === key,
     );
     return {
       positive: bucketRows.reduce(
@@ -240,18 +247,18 @@ export function WidgetSeriesChart({
   const plotHeight = HEIGHT - PAD.top - PAD.bottom;
   const bucketIndex = new Map(buckets.map(([key], index) => [key, index]));
   const numericX =
-    ["line", "area"].includes(visualization.mark) &&
+    ["line", "area"].includes(mark) &&
     buckets.every(
-      ([, entry]) => typeof bucketValue(entry, visualization) === "number",
+      ([, entry]) => typeof bucketValue(entry, slots) === "number",
     );
   const xNumbers = buckets.map(([, entry]) =>
-    Number(bucketValue(entry, visualization)),
+    Number(bucketValue(entry, slots)),
   );
   const xMinimum = Math.min(...xNumbers);
   const xMaximum = Math.max(...xNumbers);
   const normalizedBucket = (entry: EncodedWidgetDatum) => {
-    const index = bucketIndex.get(bucketKey(entry, visualization)) ?? 0;
-    const numeric = Number(bucketValue(entry, visualization));
+    const index = bucketIndex.get(bucketKey(entry, slots)) ?? 0;
+    const numeric = Number(bucketValue(entry, slots));
     const normalized = numericX
       ? xMaximum === xMinimum
         ? 0.5
@@ -274,14 +281,13 @@ export function WidgetSeriesChart({
     return PAD.left + positioned * plotWidth;
   };
   const categoryY = (entry: EncodedWidgetDatum) => {
-    const index = bucketIndex.get(bucketKey(entry, visualization)) ?? 0;
+    const index = bucketIndex.get(bucketKey(entry, slots)) ?? 0;
     const normalized = buckets.length <= 1 ? 0.5 : index / (buckets.length - 1);
     const positioned = visualization.scale.x.reverse
       ? 1 - normalized
       : normalized;
     return PAD.top + positioned * plotHeight;
   };
-  const mark = visualization.mark;
   const curve =
     visualization.options.kind === "line" ||
     visualization.options.kind === "area"
@@ -435,7 +441,7 @@ export function WidgetSeriesChart({
                   const bucketRows = groups.flatMap((group, groupIndex) =>
                     group.entries
                       .filter(
-                        (entry) => bucketKey(entry, visualization) === key,
+                        (entry) => bucketKey(entry, slots) === key,
                       )
                       .map((entry) => ({ entry, group, groupIndex })),
                   );
@@ -566,7 +572,7 @@ export function WidgetSeriesChart({
                         ? buckets.at(-1)
                         : buckets[0]
                     )?.[1];
-                    return entry ? bucketLabel(entry, visualization) : "";
+                    return entry ? bucketLabel(entry, slots) : "";
                   })()}
                 </SvgText>
                 <SvgText
@@ -582,7 +588,7 @@ export function WidgetSeriesChart({
                         ? buckets[0]
                         : buckets.at(-1)
                     )?.[1];
-                    return entry ? bucketLabel(entry, visualization) : "";
+                    return entry ? bucketLabel(entry, slots) : "";
                   })()}
                 </SvgText>
               </>

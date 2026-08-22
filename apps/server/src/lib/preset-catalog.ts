@@ -1,7 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { presetDefinitions, presetVersions } from "../db/schema";
-import { normalizeLegacyPreset, serializePresetConfiguration } from "../data/managed-presets";
+import {
+  normalizeLegacyPreset,
+  serializePresetConfiguration,
+} from "../data/managed-presets";
 import { PRESETS } from "../data/presets";
 
 /**
@@ -28,7 +31,9 @@ export async function ensurePresetCatalog(): Promise<void> {
       .values({
         presetId: preset.id,
         version: 1,
-        configuration: serializePresetConfiguration(normalizeLegacyPreset(preset)),
+        configuration: serializePresetConfiguration(
+          normalizeLegacyPreset(preset),
+        ),
         changeNote: "Imported from the original Avermate preset catalogue",
       })
       .onConflictDoNothing({

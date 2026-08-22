@@ -83,7 +83,7 @@ export default function PrivacyPage() {
       <h2>{t("Where it lives")}</h2>
       <p>
         {t(
-          "Data is stored on servers in the European Union. Emails are sent through Resend, and uploaded avatars are hosted by UploadThing."
+          "Data and uploaded files are stored on infrastructure operated for Avermate. Emails are sent through Resend when that integration is enabled."
         )}
       </p>
 

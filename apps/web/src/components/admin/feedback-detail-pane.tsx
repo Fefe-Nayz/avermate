@@ -195,7 +195,9 @@ export function FeedbackDetailPane({ feedbackId }: { feedbackId: string }) {
               id="feedback-assignee"
               value={item.assignedToUserId ?? ""}
               disabled={busy}
-              onValueChange={(value) => patch({ assignedToUserId: value || null })}
+              onValueChange={(value) =>
+                patch({ assignedToUserId: value || null })
+              }
               placeholder={t("Unassigned")}
               options={(assignees.data ?? []).map((assignee) => ({
                 value: assignee.id,

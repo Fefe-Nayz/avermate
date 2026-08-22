@@ -372,6 +372,11 @@ const WIDGET_SELF_SCHEMA = new WeakMap<
   WidgetCollectionSchema
 >()
 
+/** Variants permitted for a new item; existing items still use the full schema. */
+export function collectionAddVariants(schema: WidgetCollectionSchema) {
+  return schema.addVariants ?? schema.variants
+}
+
 function defaultItem(
   schema: WidgetCollectionSchema,
   variant = schema.variants[0]
@@ -405,8 +410,14 @@ function CollectionEditor({
     : Array.isArray(raw)
       ? raw
       : []
-  const [variant, setVariant] = useState(schema.variants[0]?.value ?? "")
-  const variants = schema.variants.map((entry) => ({
+  // Existing items must keep the complete schema so their current kind remains
+  // editable. The add row can be narrower: the flow removes variants that would be
+  // invalid as another axis without making an already-stored outer axis disappear.
+  const addVariants = collectionAddVariants(schema)
+  const [variant, setVariant] = useState(addVariants[0]?.value ?? "")
+  const selectedAddVariant =
+    addVariants.find((entry) => entry.value === variant) ?? addVariants[0]
+  const variants = addVariants.map((entry) => ({
     value: entry.value,
     label: message(entry.messageKey),
   }))
@@ -417,11 +428,8 @@ function CollectionEditor({
     )
   }
   const add = () => {
-    const selected =
-      schema.variants.find((entry) => entry.value === variant) ??
-      schema.variants[0]
-    if (!selected || items.length >= schema.maxItems) return
-    commit([...items, defaultItem(schema, selected)])
+    if (!selectedAddVariant || items.length >= schema.maxItems) return
+    commit([...items, defaultItem(schema, selectedAddVariant)])
   }
 
   return (
@@ -449,12 +457,12 @@ function CollectionEditor({
           />
         ))}
 
-        {items.length < schema.maxItems ? (
+        {items.length < schema.maxItems && addVariants.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
             {variants.length > 1 ? (
               <SelectField
                 label={message(schema.addMessageKey)}
-                value={variant}
+                value={selectedAddVariant?.value ?? ""}
                 options={variants}
                 onValueChange={setVariant}
                 className="flex-1"

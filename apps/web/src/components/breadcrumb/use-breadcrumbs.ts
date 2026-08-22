@@ -1,9 +1,30 @@
 "use client"
 
 import { useMemo, type ReactNode } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useExtracted } from "next-intl"
+import { useQuery } from "@tanstack/react-query"
 import { useMaybeYear } from "@/components/year/year-provider"
+import {
+  materialFolderTrail,
+  type MaterialFolderLike,
+} from "@/components/materials/materials-model"
+import {
+  MATERIALS_FOLDER_PARAM,
+  MATERIALS_OPEN_PARAM,
+  MATERIALS_TAG_PARAM,
+  materialsLocationHref,
+  parseMaterialsLocation,
+} from "@/components/materials/materials-location"
+import { orpc } from "@/lib/orpc"
+import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
+import {
+  lectureRecordingsInput,
+  materialTagsInput,
+  materialsDocumentsInput,
+  materialsFoldersInput,
+  studyDocumentsInput,
+} from "@/lib/route-query-inputs"
 
 /**
  * One step of the trail. `siblings` is what makes the separator before a
@@ -27,8 +48,88 @@ export interface Crumb {
  */
 export function useBreadcrumbs(): Crumb[] {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const t = useExtracted()
   const year = useMaybeYear()
+  const yearId = year?.yearId ?? ""
+
+  // The materials browser puts the folder you are in in the address, so the
+  // trail can say where that is. Only that screen pays for the read, and it has
+  // already prefetched the same query, so this resolves from the cache.
+  const inMaterials = pathname === "/materials"
+  const folderParam = searchParams.get(MATERIALS_FOLDER_PARAM)
+  const tagParam = searchParams.get(MATERIALS_TAG_PARAM)
+  const openParam = searchParams.get(MATERIALS_OPEN_PARAM)
+  const materialFolders = useQuery({
+    ...orpc.materials.folders.list.queryOptions({
+      input: materialsFoldersInput(yearId),
+    }),
+    enabled: inMaterials && Boolean(yearId),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const folders = useMemo(
+    () => (materialFolders.data ?? []) as readonly MaterialFolderLike[],
+    [materialFolders.data]
+  )
+  // A tag is a location too, and its crumb has to say the tag's name rather
+  // than its id. Same cache the browser fills, so this costs nothing there.
+  const materialTags = useQuery({
+    ...orpc.materials.tags.list.queryOptions({
+      input: materialTagsInput(yearId),
+    }),
+    enabled: inMaterials && Boolean(tagParam) && Boolean(yearId),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const tagName = useMemo(() => {
+    const names = new Map(
+      (materialTags.data ?? []).map((tag) => [tag.id, tag.name])
+    )
+    return (tagId: string) => names.get(tagId) ?? null
+  }, [materialTags.data])
+
+  /**
+   * The name of the document being read.
+   *
+   * A trail that ends at the folder while the pane shows a document is a trail
+   * that stops one step short of where you are. The three lists are the same
+   * ones the browser has already fetched, so on that screen this is a cache
+   * read; anywhere else it never runs.
+   */
+  const readingSomething = inMaterials && Boolean(openParam) && Boolean(yearId)
+  const openDocuments = useQuery({
+    ...orpc.materials.documents.list.queryOptions({
+      input: materialsDocumentsInput(yearId),
+    }),
+    enabled: readingSomething,
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const openStudy = useQuery({
+    ...orpc.documents.list.queryOptions({
+      input: studyDocumentsInput(yearId),
+    }),
+    enabled: readingSomething,
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const openRecordings = useQuery({
+    ...orpc.recordings.list.queryOptions({
+      input: lectureRecordingsInput(yearId),
+    }),
+    enabled: readingSomething,
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const openTitle = useMemo(() => {
+    if (!openParam) return null
+    const document = (openDocuments.data ?? []).find(
+      (row) => row.document.id === openParam
+    )
+    if (document) return document.document.title
+    const study = (openStudy.data ?? []).find((row) => row.id === openParam)
+    if (study) return study.title
+    const recording = (openRecordings.data ?? []).find(
+      (row) => row.id === openParam
+    )
+    return recording?.title ?? null
+  }, [openParam, openDocuments.data, openStudy.data, openRecordings.data])
 
   return useMemo(() => {
     const segments = pathname.split("/").filter(Boolean)
@@ -188,6 +289,151 @@ export function useBreadcrumbs(): Crumb[] {
         return [{ key: "insights", label: t("Insights") }]
       }
 
+      case "materials": {
+        const crumbs: Crumb[] = [
+          { key: "materials", label: t("Materials"), href: "/materials" },
+        ]
+        const section = segments[1]
+
+        // A sheet or a recording is a document you opened, not a place in the
+        // folder tree, so its trail stops at the browser it came from.
+        if (section === "fiches" || section === "recordings") {
+          const isNew = segments[2] === "new"
+          crumbs.push({
+            key: section,
+            label:
+              section === "fiches"
+                ? isNew
+                  ? t("New study document")
+                  : t("Study document")
+                : isNew
+                  ? t("New recording")
+                  : t("Recording"),
+          })
+          return crumbs
+        }
+        // Tags are managed on their own screens, and they hang off Supports
+        // rather than off a folder — a tag is not in the tree.
+        if (section === "tags") {
+          crumbs.push({
+            key: "tags",
+            label: t("Tags"),
+            href: segments[2] ? "/materials/tags" : undefined,
+          })
+          if (segments[2] === "new") {
+            crumbs.push({ key: "new", label: t("New tag") })
+          } else if (segments[2]) {
+            crumbs.push({ key: segments[2], label: t("Edit tag") })
+          }
+          return crumbs
+        }
+        if (section) return crumbs
+
+        const location = parseMaterialsLocation(folderParam, tagParam)
+        if (location.kind === "root") return crumbs
+        // The row-shaped places are one step, not a trail: none of them sits
+        // inside a folder, so there is nothing above them to walk back to.
+        if (location.kind !== "folder") {
+          crumbs.push({
+            key: location.kind,
+            label:
+              location.kind === "all"
+                ? t("Everything")
+                : location.kind === "starred"
+                  ? t("Favourites")
+                  : location.kind === "trash"
+                    ? t("Bin")
+                    : (tagName(location.tagId) ?? t("Tag")),
+            href: openParam ? materialsLocationHref(location) : undefined,
+          })
+          if (openParam) {
+            crumbs.push({ key: openParam, label: openTitle ?? t("Document") })
+          }
+          return crumbs
+        }
+
+        // Every folder above the one you are in is a step you can take back to,
+        // which is the whole reason the trail is worth having.
+        const trail = materialFolderTrail(folders, location.folderId)
+        for (const [index, folder] of trail.entries()) {
+          // The folder you are in is the end of the trail only when nothing is
+          // open in it: a document adds one more step, and then the folder
+          // becomes a link back rather than the last word.
+          const last = index === trail.length - 1 && !openParam
+          crumbs.push({
+            key: folder.id,
+            label: folder.name,
+            href: last
+              ? undefined
+              : materialsLocationHref({ kind: "folder", folderId: folder.id }),
+            siblings: folders
+              .filter((sibling) => sibling.parentId === folder.parentId)
+              .map((sibling) => ({
+                key: sibling.id,
+                label: sibling.name,
+                href: materialsLocationHref({
+                  kind: "folder",
+                  folderId: sibling.id,
+                }),
+              })),
+          })
+        }
+        if (openParam) {
+          crumbs.push({ key: openParam, label: openTitle ?? t("Document") })
+        }
+        return crumbs
+      }
+
+      case "planning": {
+        // It had no case at all, so the trail read a literal "planning" — the
+        // one area of the app whose breadcrumb named a URL segment rather than
+        // a screen.
+        const crumbs: Crumb[] = [
+          { key: "planning", label: t("Planning"), href: "/planning" },
+        ]
+        const section = segments[1]
+        const labels: Record<string, string> = {
+          agenda: t("Class agenda"),
+          tasks: t("Tasks"),
+          calendar: t("Calendar"),
+        }
+        if (section && labels[section]) {
+          crumbs.push({
+            key: section,
+            label: labels[section] as string,
+            // The section stops being the last crumb once you are inside a
+            // form, so it becomes a way back rather than a dead end.
+            href: segments[2] ? `/planning/${section}` : undefined,
+            siblings: Object.entries(labels).map(([key, label]) => ({
+              key,
+              label,
+              href: `/planning/${key}`,
+            })),
+          })
+        }
+
+        // The creation and edit screens, which are pages now rather than
+        // panels that unfolded inside the list.
+        const leaf = segments[2]
+        if (leaf === "new") {
+          crumbs.push({
+            key: "new",
+            label:
+              section === "tasks"
+                ? t("New task")
+                : section === "agenda"
+                  ? t("New homework")
+                  : t("New calendar item"),
+          })
+        } else if (leaf && segments[3] === "edit") {
+          crumbs.push({
+            key: "edit",
+            label: section === "tasks" ? t("Edit task") : t("Edit homework"),
+          })
+        }
+        return crumbs
+      }
+
       case "review":
         return [{ key: "review", label: t("Year in review") }]
 
@@ -288,5 +534,15 @@ export function useBreadcrumbs(): Crumb[] {
       default:
         return [{ key: root, label: root }]
     }
-  }, [pathname, t, year])
+  }, [
+    folderParam,
+    folders,
+    openParam,
+    openTitle,
+    pathname,
+    t,
+    tagName,
+    tagParam,
+    year,
+  ])
 }

@@ -11,7 +11,7 @@ import { YearGate } from "@/components/year/year-gate"
 import { YearProvider } from "@/components/year/year-provider"
 import { prepareAuthenticatedShell } from "@/lib/authenticated-data"
 import { getServerOrpc } from "@/lib/orpc/server"
-import { HydrateClient } from "@/lib/query-server"
+import { dehydrate } from "@tanstack/react-query"
 import { yearReviewWindowKey } from "@/lib/year-review-window"
 
 /**
@@ -45,25 +45,26 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthenticatedProviders user={user}>
-      <HydrateClient queryClient={queryClient}>
-        <YearProvider initialNow={renderedAt} initialYearId={activeYearId}>
-          <PageChromeProvider>
-            <CommandPaletteProvider>
-              <FeedbackProvider>
-                <QuickAddProvider>
-                  <YearSheetProvider>
-                    <AppShell>
-                      <YearGate>{children}</YearGate>
-                    </AppShell>
-                    <YearReviewTrigger />
-                  </YearSheetProvider>
-                </QuickAddProvider>
-              </FeedbackProvider>
-            </CommandPaletteProvider>
-          </PageChromeProvider>
-        </YearProvider>
-      </HydrateClient>
+    <AuthenticatedProviders
+      dehydratedState={dehydrate(queryClient)}
+      user={user}
+    >
+      <YearProvider initialNow={renderedAt} initialYearId={activeYearId}>
+        <PageChromeProvider>
+          <CommandPaletteProvider>
+            <FeedbackProvider>
+              <QuickAddProvider>
+                <YearSheetProvider>
+                  <AppShell>
+                    <YearGate>{children}</YearGate>
+                  </AppShell>
+                  <YearReviewTrigger />
+                </YearSheetProvider>
+              </QuickAddProvider>
+            </FeedbackProvider>
+          </CommandPaletteProvider>
+        </PageChromeProvider>
+      </YearProvider>
     </AuthenticatedProviders>
   )
 }

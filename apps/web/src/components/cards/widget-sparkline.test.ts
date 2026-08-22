@@ -26,6 +26,11 @@ describe("the trend card", () => {
     // card-presentation.test.tsx for what that hand is.
     expect(view).toContain("<CardFigure")
     expect(view).toContain("<CardDelta")
+    // A trend metric is already a movement. Its headline must be signed and must
+    // not be rendered as a level such as “0.1 / 20”.
+    expect(view).toContain("difference={headlineIsDifference}")
+    expect(view).toContain("difference={difference}")
+    expect(view).toContain("!difference && delta !== null")
   })
 
   test("reads the change across the window, not against last week", () => {
@@ -44,7 +49,7 @@ describe("the trend card", () => {
   test("shows the reading whichever curve the definition asked for", () => {
     // A line that kept its axes is still a card, and a card answers first. Only
     // the insights surface skips the reading, where the chart is the subject.
-    expect(view).toContain("!expanded && result.values.some")
+    expect(view).toContain("!expanded && rows.some")
     expect(view).toContain("<WidgetSeriesChart")
   })
 

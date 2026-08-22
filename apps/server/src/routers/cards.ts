@@ -8,7 +8,7 @@ import {
   WIDGET_DEFINITION_VERSION,
   type CardDisplay,
   type CardMetric,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type CardSemantics,
   type WidgetSurface,
 } from "@avermate/core";
@@ -42,7 +42,7 @@ import {
 } from "../lib/ownership";
 
 interface PreparedSemantics {
-  definition: WidgetDefinitionV1;
+  definition: WidgetDefinition;
   columns: ReturnType<typeof widgetSemanticColumns>;
 }
 

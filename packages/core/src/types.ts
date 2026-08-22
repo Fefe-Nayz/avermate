@@ -20,6 +20,24 @@ export interface GradeComponent {
   sortOrder: number;
 }
 
+/**
+ * A kind of assessment, as the year defines it.
+ *
+ * The template a result was written from — its name, and the parts of a result it fills in
+ * ahead of time. Carried into the core because a card can group by it: "how do I do on
+ * orals against written papers" is a question about the *type*, and the evaluator needs
+ * the name to label a bucket with.
+ */
+export interface GradeType {
+  id: string;
+  name: string;
+  titlePrefix: string;
+  coefficient: number;
+  outOf: number;
+  accent: string | null;
+  sortOrder: number;
+}
+
 export interface Grade {
   id: string;
   name: string;
@@ -29,10 +47,30 @@ export interface Grade {
   outOf: number;
   /** Relative weight inside its subject. */
   coefficient: number;
+  /** Local overlay: keep the result visible without including it in averages. */
+  excludedFromAverage?: boolean;
+  /** Provider gate: ignored while its synchronized source is inactive or stale. */
+  syncExcludedFromAverage?: boolean;
   passedAt: Date;
   createdAt: Date;
   subjectId: string;
   periodId: string | null;
+  /**
+   * The kind of assessment this was, where the year defines any.
+   *
+   * `null` on every result written before a year had types, and on any whose type was
+   * deleted — a result outlives its template. Optional on the type so that a caller
+   * building a grade by hand, and every fixture in this package, need not think about it.
+   */
+  typeId?: string | null;
+  /**
+   * Extra points on this result's own scale.
+   *
+   * A mark of 14/20 with a bonus of 1 reads as 15/20. Kept apart from `value` rather than
+   * folded into it because the two are different facts — what was scored, and what was
+   * added — and only the first is what the paper said.
+   */
+  bonus?: number | null;
   /** Free-form remark the user attached to the result. */
   note?: string | null;
   /**
@@ -64,6 +102,16 @@ export interface Subject {
   /** Surfaced on the dashboard as a headline subject. */
   isMain: boolean;
   sortOrder: number;
+  /**
+   * Extra points on the year's scale, added to this subject's average.
+   *
+   * The scale is the year's, so the graph needs to be told it — see
+   * `SubjectGraphOptions.scale`. Points rather than a ratio because that is the unit the
+   * reader is given them in.
+   */
+  bonus?: number | null;
+  /** Period-specific bonus points, keyed by period id. */
+  periodBonuses?: Readonly<Record<string, number>>;
   grades: Grade[];
 }
 
@@ -77,6 +125,8 @@ export interface Period {
    * start of the year up to its own end (a "semester 2 including semester 1").
    */
   isCumulative: boolean;
+  /** Extra points on the general average for this period only. */
+  generalBonus?: number | null;
   sortOrder: number;
 }
 
@@ -93,6 +143,17 @@ export interface Year {
   passingRatio: number;
   /** Decimal places used when displaying averages. */
   decimals: number;
+  /**
+   * A custom average nominated to be this year's general average, if any.
+   *
+   * The reading itself is arranged on the graph — see `SubjectGraphOptions.general` —
+   * so this is the year's *statement of intent*, and the host resolves it. An id naming
+   * an average that no longer exists resolves to nothing, and the general average is the
+   * whole year again.
+   */
+  mainAverageId?: string | null;
+  /** Extra points on this year's scale, added to the general average. */
+  generalBonus?: number | null;
   /** Explicit user order. Optional for imported/plain calculation fixtures. */
   sortOrder?: number;
   /** Archived years stay recoverable but leave the everyday year picker. */
@@ -111,6 +172,8 @@ export interface CustomAverage {
   id: string;
   name: string;
   entries: CustomAverageEntry[];
+  /** Extra points on the year's scale, added to this average. */
+  bonus?: number | null;
   /** @deprecated Custom averages never replace the general average. */
   isMain: boolean;
   sortOrder: number;

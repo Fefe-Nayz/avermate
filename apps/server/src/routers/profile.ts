@@ -1,12 +1,17 @@
 import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { UTApi } from "uploadthing/server";
 import { db } from "../db";
-import { accounts, users } from "../db/schema";
+import { accounts, files, users } from "../db/schema";
 import { auth } from "../lib/auth";
-import { env } from "../lib/env";
 import { badRequest, protectedProcedure } from "../lib/orpc";
+import {
+  deleteFile,
+  deleteLegacyStorageKey,
+  legacyKeyOf,
+  resolveIncomingFile,
+  storageEnabled,
+} from "../lib/storage";
 
 /**
  * Avatars.
@@ -17,18 +22,25 @@ import { badRequest, protectedProcedure } from "../lib/orpc";
  * instead of being orphaned.
  */
 
-const uploads = env.UPLOADTHING_TOKEN
-  ? new UTApi({ token: env.UPLOADTHING_TOKEN })
-  : null;
-
-const MAX_BYTES = 2 * 1024 * 1024;
-const ALLOWED = ["image/png", "image/jpeg", "image/webp"];
-
-/** The file key inside an UploadThing URL, for deleting the old one. */
-function keyOf(url: string | null): string | null {
-  if (!url) return null;
-  const match = url.match(/\/f\/([^/?#]+)/);
-  return match?.[1] ?? null;
+async function deleteAvatarObject(userId: string, url: string | null) {
+  if (!url) return;
+  const [stored] = await db
+    .select({ id: files.id })
+    .from(files)
+    .where(
+      and(
+        eq(files.userId, userId),
+        eq(files.url, url),
+        eq(files.status, "stored"),
+      ),
+    )
+    .limit(1);
+  if (stored) {
+    await deleteFile(userId, stored.id);
+    return;
+  }
+  const key = legacyKeyOf(url);
+  if (key) await deleteLegacyStorageKey(key);
 }
 
 export const profileRouter = {
@@ -56,43 +68,44 @@ export const profileRouter = {
   }),
 
   uploadAvatar: protectedProcedure
-    .input(z.object({ image: z.instanceof(File) }))
+    .input(
+      z
+        .object({
+          image: z.instanceof(File).optional(),
+          fileId: z.string().min(1).optional(),
+        })
+        .refine((input) => Boolean(input.image) !== Boolean(input.fileId), {
+          message: "Provide exactly one uploaded avatar",
+        }),
+    )
     .handler(async ({ context, input }) => {
       const user = context.session.user;
-
-      if (input.image.size > MAX_BYTES) {
-        badRequest("That image is too large — crop it or pick a smaller one");
-      }
-      if (!ALLOWED.includes(input.image.type)) {
-        badRequest("Only PNG, JPEG and WebP images are supported");
-      }
-      if (!uploads || env.DISABLE_UPLOADS) {
-        badRequest("Avatar uploads are not configured on this server");
-      }
-
       const [current] = await db
         .select({ avatarUrl: users.avatarUrl })
         .from(users)
         .where(eq(users.id, user.id))
         .limit(1);
-      const previous = keyOf(current?.avatarUrl ?? null);
-      const result = await uploads.uploadFiles(
-        new File([input.image], `${user.id}.png`, { type: input.image.type }),
-      );
-
-      if (result.error || !result.data) {
-        badRequest("The upload failed. Try again.");
+      const stored = await resolveIncomingFile({
+        userId: user.id,
+        purpose: "avatar",
+        file: input.image,
+        fileId: input.fileId,
+        nameHint: `${user.id}.png`,
+      });
+      try {
+        await db
+          .update(users)
+          .set({ avatarUrl: stored.url, updatedAt: new Date() })
+          .where(eq(users.id, user.id));
+      } catch (error) {
+        await deleteFile(user.id, stored.id).catch(() => undefined);
+        throw error;
       }
 
-      await db
-        .update(users)
-        .set({ avatarUrl: result.data.ufsUrl, updatedAt: new Date() })
-        .where(eq(users.id, user.id));
-
       // Only after the new one is safely stored.
-      if (previous) await uploads.deleteFiles(previous).catch(() => undefined);
+      await deleteAvatarObject(user.id, current?.avatarUrl ?? null);
 
-      return { url: result.data.ufsUrl };
+      return { url: stored.url };
     }),
 
   removeAvatar: protectedProcedure.handler(async ({ context }) => {
@@ -102,20 +115,19 @@ export const profileRouter = {
       .from(users)
       .where(eq(users.id, user.id))
       .limit(1);
-    const key = keyOf(current?.avatarUrl ?? null);
 
     await db
       .update(users)
       .set({ avatarUrl: null, updatedAt: new Date() })
       .where(eq(users.id, user.id));
 
-    if (key && uploads) await uploads.deleteFiles(key).catch(() => undefined);
+    await deleteAvatarObject(user.id, current?.avatarUrl ?? null);
     return { ok: true };
   }),
 
   /** Whether the upload path is available, so the UI can hide what is off. */
   uploadsEnabled: protectedProcedure.handler(() => ({
-    enabled: Boolean(uploads) && !env.DISABLE_UPLOADS,
+    enabled: storageEnabled(),
   })),
 
   /**

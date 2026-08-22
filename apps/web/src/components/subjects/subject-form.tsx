@@ -300,6 +300,12 @@ export function SubjectForm({
             </FieldDescription>
           )}
 
+          <FieldDescription>
+            {t(
+              "Subject bonus points are configured per term or semester in Average adjustments."
+            )}
+          </FieldDescription>
+
           <Field orientation="horizontal">
             <FieldLabel htmlFor="is-main" className="flex-1">
               <span className="flex items-center gap-1.5">

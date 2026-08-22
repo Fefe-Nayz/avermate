@@ -81,10 +81,29 @@ export default function AverageAnalyticsPage({
   const custom = customAverages.find((average) => average.id === averageId)
   const isGeneral = averageId === "general"
 
+  /**
+   * The average this year nominated to be its general one, if any.
+   *
+   * The headline number was already right — the graph carries the substitution, so
+   * `ratio(null)` answers with it wherever it is asked. Everything *underneath* was not:
+   * the composition, the contributor chart and the list of results all walked the whole
+   * year, so this page showed a substituted figure explained by a breakdown that does
+   * not add up to it. Resolving the page through the nominated average makes one reading
+   * of the whole screen.
+   */
+  const nominated = year?.mainAverageId
+    ? customAverages.find((average) => average.id === year.mainAverageId)
+    : undefined
+  const shown = isGeneral ? nominated : custom
+
   const resolved = useMemo<ResolvedCustomAverage | null>(() => {
-    if (isGeneral) return { graph, scope: {} }
+    if (isGeneral) {
+      return nominated
+        ? resolveCustomAverage(graph, nominated)
+        : { graph, scope: {} }
+    }
     return custom ? resolveCustomAverage(graph, custom) : null
-  }, [custom, graph, isGeneral])
+  }, [custom, graph, isGeneral, nominated])
   const title = isGeneral ? t("General average") : (custom?.name ?? "")
 
   const range = useMemo(() => {
@@ -117,7 +136,8 @@ export default function AverageAnalyticsPage({
           target
         ),
         target,
-        resolved.scope
+        resolved.scope,
+        resolved.graph.options
       )
 
     return [
@@ -164,8 +184,8 @@ export default function AverageAnalyticsPage({
     gradeSort
   )
   const contributors = resolved.graph.contributorsOf(null)
-  const composition = custom
-    ? custom.entries.flatMap((entry) => {
+  const composition = shown
+    ? shown.entries.flatMap((entry) => {
         const subject = graph.byId(entry.subjectId)
         if (!subject || !resolved.graph.has(subject.id)) return []
         return [
@@ -234,12 +254,12 @@ export default function AverageAnalyticsPage({
       <PageMeta title={title} backHref="/subjects" />
       <PageActions>
         <TimelineTrigger />
-        {custom ? (
+        {shown ? (
           <Button
             variant="ghost"
             size="icon"
             aria-label={t("Edit")}
-            render={<Link href={`/settings/averages/${custom.id}`} />}
+            render={<Link href={`/settings/averages/${shown.id}`} />}
           >
             <PencilIcon className="size-4" />
           </Button>
@@ -253,16 +273,23 @@ export default function AverageAnalyticsPage({
               {title}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {t("A complete view of this average")}
+              {/* Named, because the number on this page is not the one the year's
+                  subjects add up to, and a reader is owed the reason without having
+                  to find it in the settings. */}
+              {isGeneral && nominated
+                ? t("Read as “{name}”, which this year counts instead.", {
+                    name: nominated.name,
+                  })
+                : t("A complete view of this average")}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <PeriodSwitcher />
-            {custom ? (
+            {shown ? (
               <Button
                 variant="outline"
                 size="sm"
-                render={<Link href={`/settings/averages/${custom.id}`} />}
+                render={<Link href={`/settings/averages/${shown.id}`} />}
               >
                 <PencilIcon className="size-4" />
                 {t("Edit")}
@@ -295,6 +322,22 @@ export default function AverageAnalyticsPage({
                 animateFromZero
               />
             </CardContent>
+            {/* Both bonuses that can reach this figure, named separately: one belongs to
+                the average, the other to the year's general reading, and a reader
+                looking for the missing half-point needs to know which. */}
+            {shown?.bonus || (isGeneral && period.generalBonus) ? (
+              <CardContent className="px-4 pt-0">
+                <p className="text-xs text-muted-foreground">
+                  {t("Includes {points} bonus points", {
+                    points: format.number(
+                      (shown?.bonus ?? 0) +
+                        (isGeneral ? (period.generalBonus ?? 0) : 0),
+                      { signDisplay: "always", maximumFractionDigits: 2 }
+                    ),
+                  })}
+                </p>
+              </CardContent>
+            ) : null}
           </Card>
 
           {stats.map((stat) => (

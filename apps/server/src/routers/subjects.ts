@@ -21,14 +21,26 @@ import { badRequest, protectedProcedure } from "../lib/orpc";
 import { requireSubject, requireYear } from "../lib/ownership";
 import { detachYearPresetStatement } from "../lib/preset-membership";
 
-const subjectInput = z.object({
+const subjectFields = {
   name: z.string().trim().min(1).max(96),
-  shortName: z.string().trim().max(24).nullable().default(null),
-  parentId: z.string().nullable().default(null),
-  coefficient: z.number().min(0).max(1000).default(1),
-  kind: z.enum(["subject", "category"]).default("subject"),
-  isMain: z.boolean().default(false),
+  shortName: z.string().trim().max(24).nullable(),
+  parentId: z.string().nullable(),
+  coefficient: z.number().min(0).max(1000),
+  kind: z.enum(["subject", "category"]),
+  isMain: z.boolean(),
+  /** Extra points on the year's scale, added to this subject's average. */
+  bonus: z.number().min(-1000).max(1000),
+};
+const subjectInput = z.object({
+  ...subjectFields,
+  shortName: subjectFields.shortName.default(null),
+  parentId: subjectFields.parentId.default(null),
+  coefficient: subjectFields.coefficient.default(1),
+  kind: subjectFields.kind.default("subject"),
+  isMain: subjectFields.isMain.default(false),
+  bonus: subjectFields.bonus.default(0),
 });
+const subjectPatchInput = z.object(subjectFields).partial();
 
 /**
  * Refuse a parent change that would put a subject inside its own sub-tree.
@@ -226,7 +238,7 @@ export const subjectsRouter = {
     }),
 
   update: protectedProcedure
-    .input(subjectInput.partial().extend({ subjectId: z.string() }))
+    .input(subjectPatchInput.extend({ subjectId: z.string() }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const { subjectId, ...patch } = input;

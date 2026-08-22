@@ -1,3 +1,4 @@
+import { WIDGET_LIMITS } from "./widget-types";
 import type {
   WidgetCollectionField,
   WidgetCollectionSchema,
@@ -19,14 +20,71 @@ const exists = (path: string): WidgetFlowCondition => ({
   kind: "exists",
   path,
 });
+const not = (condition: WidgetFlowCondition): WidgetFlowCondition => ({
+  kind: "not",
+  condition,
+});
+/** The metrics whose reading is *of* a goal, and which therefore ask for one. */
+/** The metrics read against a group, which therefore ask which one. */
+const cohortMetrics = oneOf("analysis.measures.0.expression.metric", [
+  "cohortRank",
+  "cohortAverage",
+  "cohortGap",
+  "memberAverage",
+]);
+const goalMetrics = oneOf("analysis.measures.0.expression.metric", [
+  "goalProgress",
+  "requiredResult",
+  // Mirrors `GOAL_METRICS` in the compiler, which has always required a goal here. The
+  // list drifted, so the editor never offered the picker and the card could not be saved.
+  "safetyMargin",
+]);
+/**
+ * The recipes whose drawing *is* a pair, and which the compiler therefore refuses with
+ * one measure. Both were offered by the editor with no way to add the second — chosen,
+ * refused, and nothing on screen explaining what was missing.
+ */
+const pairedRecipes = oneOf("visualization.recipe", [
+  "scatter",
+  "difference-area",
+]);
+const secondMetricMeasure: WidgetFlowCondition = {
+  kind: "and",
+  conditions: [
+    pairedRecipes,
+    equals("analysis.measures.1.expression.kind", "metric"),
+  ],
+};
+const secondFormulaMeasure: WidgetFlowCondition = {
+  kind: "and",
+  conditions: [
+    pairedRecipes,
+    equals("analysis.measures.1.expression.kind", "formula"),
+  ],
+};
+/** The readings about a friend, which name the person through the friendship itself. */
+const friendMetrics = oneOf("analysis.measures.0.expression.metric", [
+  "friendAverage",
+  "friendCurves",
+  "friendSubjects",
+]);
+/**
+ * The metrics whose value *is* a spread, and which therefore ask how to measure
+ * one. Mirrors `WIDGET_DISPERSION_METRICS` — the parser drops the field on any
+ * other metric, so a control offered anywhere else would be a control whose
+ * answer is thrown away.
+ */
+const dispersionMetrics = oneOf("analysis.measures.0.expression.metric", [
+  "spread",
+]);
 const notGoalProgress: WidgetFlowCondition = {
   kind: "not",
-  condition: equals("analysis.measure.metric", "goalProgress"),
+  condition: goalMetrics,
 };
 const valueAdornmentMetric: WidgetFlowCondition = {
   kind: "and",
   conditions: [
-    equals("visualization.mark", "value"),
+    equals("visualization.recipe", "value"),
     {
       kind: "not",
       condition: equals("analysis.comparison.kind", "none"),
@@ -34,8 +92,8 @@ const valueAdornmentMetric: WidgetFlowCondition = {
     {
       kind: "or",
       conditions: [
-        equals("analysis.measure.kind", "formula"),
-        oneOf("analysis.measure.metric", [
+        equals("analysis.measures.0.expression.kind", "formula"),
+        oneOf("analysis.measures.0.expression.metric", [
           "average",
           "averageTrend",
           "projection",
@@ -55,6 +113,22 @@ function options(...values: string[]): WidgetFlowOption[] {
   return values.map((value) => ({
     value,
     messageKey: `widget.option.${value}`,
+  }));
+}
+
+/**
+ * Options named under a prefix of their own.
+ *
+ * `widget.option.<value>` is shared by every field that offers the same value, which is
+ * usually what you want — "week" is "week" everywhere — and occasionally a collision:
+ * a window pair aligns by `calendar` or by `period`, and both of those already name a
+ * window's fill and a window's kind. One key, two sentences, and whichever was written
+ * second would be wrong somewhere.
+ */
+function namedOptions(prefix: string, ...values: string[]): WidgetFlowOption[] {
+  return values.map((value) => ({
+    value,
+    messageKey: `${prefix}.${value}`,
   }));
 }
 
@@ -135,6 +209,98 @@ export const WIDGET_FILTER_SCHEMA: WidgetCollectionSchema = {
   ],
 };
 
+/**
+ * The groupings a card is split by, as a list.
+ *
+ * This replaces six flat fields that all addressed `analysis.dimensions.0` — a single
+ * choice plus its options — and the replacement is the whole point: the model has carried
+ * a *list* of dimensions since the second version, the evaluator walks two of them and the
+ * renderers draw the result (a series per subject, stacked bars, a facet grid), but no
+ * screen could ask for the second one. The card had to be written by hand or generated.
+ *
+ * "No grouping" is an empty list rather than a `none` kind. The old control had to spell
+ * that as a value because it was one choice over one path; a list says it by being empty,
+ * which is what the model meant all along. `parseDimension` still reads `none` silently,
+ * for documents written by the old control.
+ *
+ * Two is the ceiling — `WIDGET_LIMITS.dimensions` — because three is a cube and a cube has
+ * no honest flat drawing.
+ */
+export const WIDGET_DIMENSION_SCHEMA: WidgetCollectionSchema = {
+  discriminator: "kind",
+  minItems: 0,
+  maxItems: WIDGET_LIMITS.dimensions,
+  addMessageKey: "widget.action.add-dimension",
+  variants: [
+    {
+      value: "time",
+      messageKey: "widget.dimension.time",
+      fields: [
+        collectionField("time-interval", "grain", "choice", {
+          // `event` — one point per result — and `period` were evaluable and drawable all
+          // along; the flat control offered neither, so no card could ask for them.
+          options: options("event", "day", "week", "month", "period"),
+        }),
+        collectionField("time-accumulation", "accumulation", "choice", {
+          options: options("bucket", "running"),
+          visibleWhen: not(equals("grain", "event")),
+        }),
+        collectionField("time-fill", "fill", "choice", {
+          options: options("observed", "calendar"),
+          visibleWhen: not(equals("grain", "event")),
+        }),
+      ],
+    },
+    {
+      value: "subject",
+      messageKey: "widget.dimension.subject",
+      fields: [
+        collectionField("subject-level", "level", "choice", {
+          options: options("leaf", "root", "all"),
+        }),
+        collectionField("subject-limit", "limit", "number", {
+          min: 1,
+          max: 100,
+          step: 1,
+        }),
+        collectionField("include-categories", "includeCategories", "toggle", {
+          visibleWhen: not(equals("level", "leaf")),
+        }),
+      ],
+    },
+    {
+      value: "period",
+      messageKey: "widget.dimension.period",
+      fields: [],
+    },
+    {
+      value: "assessment-type",
+      messageKey: "widget.dimension.assessment-type",
+      fields: [
+        collectionField("include-untyped", "includeUntyped", "toggle", {}),
+      ],
+    },
+    {
+      // The bands are the compiler's defaults — quarters of the scale — and now really
+      // are: this comment described an arrangement that did not exist, and a grade-band
+      // card was refused for want of thresholds no control here could supply. A list of
+      // numbers still needs a control of its own before the cuts can be moved.
+      value: "grade-band",
+      messageKey: "widget.dimension.grade-band",
+      fields: [],
+    },
+    {
+      value: "status",
+      messageKey: "widget.dimension.status",
+      fields: [
+        collectionField("status-values", "values", "multi-choice", {
+          options: options("passed", "failed", "missing"),
+        }),
+      ],
+    },
+  ],
+};
+
 export const WIDGET_TRANSFORM_SCHEMA: WidgetCollectionSchema = {
   discriminator: "kind",
   minItems: 0,
@@ -164,7 +330,7 @@ export const WIDGET_TRANSFORM_SCHEMA: WidgetCollectionSchema = {
     {
       value: "moving-average",
       messageKey: "widget.transform.moving-average",
-      visibleWhen: equals("analysis.groupBy.kind", "time"),
+      visibleWhen: equals("analysis.dimensions.0.kind", "time"),
       fields: [
         collectionField("transform-points", "points", "number", {
           min: 2,
@@ -176,7 +342,7 @@ export const WIDGET_TRANSFORM_SCHEMA: WidgetCollectionSchema = {
     {
       value: "cumulative",
       messageKey: "widget.transform.cumulative",
-      visibleWhen: equals("analysis.groupBy.kind", "time"),
+      visibleWhen: equals("analysis.dimensions.0.kind", "time"),
       fields: [],
     },
   ],
@@ -385,6 +551,91 @@ function field(
 }
 
 /** Declarative editor graph. Clients only understand controls and paths. */
+/**
+ * The six fields that describe one window.
+ *
+ * Written once and used three times: the card's own window and the two sides of a window
+ * pair. A pair of arbitrary windows is what the model has allowed since the second version
+ * and what nothing could compose — "the first term against the third" had to be written by
+ * hand — and the reason was that a window is six controls, not one.
+ *
+ * `visibleWhen` is the caller's own guard, `and`-ed with each field's own condition: a
+ * pair's fields appear only when the comparison is a pair, and each side's options only
+ * for the kind that side is.
+ */
+function windowFields(
+  prefix: string,
+  path: string,
+  section: string,
+  order: number,
+  visibleWhen: WidgetFlowCondition = always,
+): WidgetFlowFieldSchema[] {
+  const when = (condition: WidgetFlowCondition): WidgetFlowCondition =>
+    visibleWhen.kind === "always"
+      ? condition
+      : { kind: "and", conditions: [visibleWhen, condition] };
+  const id = (suffix: string) => (prefix ? `${prefix}-${suffix}` : suffix);
+  return [
+    field(id("window"), "definition", section, order, `${path}.kind`, "choice", {
+      options: options(
+        "active-period",
+        "whole-year",
+        "period",
+        "rolling-days",
+        "last-grades",
+        "date-range",
+      ),
+      visibleWhen: prefix ? visibleWhen : when(notGoalProgress),
+    }),
+    field(
+      id("period"),
+      "definition",
+      section,
+      order + 1,
+      `${path}.periodId`,
+      "reference",
+      {
+        optionProvider: "periods",
+        visibleWhen: when(equals(`${path}.kind`, "period")),
+      },
+    ),
+    field(
+      id("rolling-days"),
+      "definition",
+      section,
+      order + 2,
+      `${path}.days`,
+      "number",
+      {
+        min: 1,
+        max: 3_650,
+        step: 1,
+        visibleWhen: when(equals(`${path}.kind`, "rolling-days")),
+      },
+    ),
+    field(
+      id("last-grades"),
+      "definition",
+      section,
+      order + 3,
+      `${path}.count`,
+      "number",
+      {
+        min: 1,
+        max: 500,
+        step: 1,
+        visibleWhen: when(equals(`${path}.kind`, "last-grades")),
+      },
+    ),
+    field(id("from"), "definition", section, order + 4, `${path}.from`, "date", {
+      visibleWhen: when(equals(`${path}.kind`, "date-range")),
+    }),
+    field(id("to"), "definition", section, order + 5, `${path}.to`, "date", {
+      visibleWhen: when(equals(`${path}.kind`, "date-range")),
+    }),
+  ];
+}
+
 export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
   field("scope", "definition", "data", 10, "query.scope.kind", "choice", {
     options: options("general", "subjects", "custom-average"),
@@ -424,63 +675,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       visibleWhen: equals("query.scope.kind", "custom-average"),
     },
   ),
-  field("window", "definition", "window", 10, "query.window.kind", "choice", {
-    options: options(
-      "active-period",
-      "whole-year",
-      "period",
-      "rolling-days",
-      "last-grades",
-      "date-range",
-    ),
-    visibleWhen: notGoalProgress,
-  }),
-  field(
-    "period",
-    "definition",
-    "window",
-    20,
-    "query.window.periodId",
-    "reference",
-    {
-      optionProvider: "periods",
-      visibleWhen: equals("query.window.kind", "period"),
-    },
-  ),
-  field(
-    "rolling-days",
-    "definition",
-    "window",
-    30,
-    "query.window.days",
-    "number",
-    {
-      min: 1,
-      max: 3_650,
-      step: 1,
-      visibleWhen: equals("query.window.kind", "rolling-days"),
-    },
-  ),
-  field(
-    "last-grades",
-    "definition",
-    "window",
-    40,
-    "query.window.count",
-    "number",
-    {
-      min: 1,
-      max: 500,
-      step: 1,
-      visibleWhen: equals("query.window.kind", "last-grades"),
-    },
-  ),
-  field("from", "definition", "window", 50, "query.window.from", "date", {
-    visibleWhen: equals("query.window.kind", "date-range"),
-  }),
-  field("to", "definition", "window", 60, "query.window.to", "date", {
-    visibleWhen: equals("query.window.kind", "date-range"),
-  }),
+  ...windowFields("", "query.window", "window", 10),
   field("filters", "definition", "filters", 10, "query.filters", "filters", {
     required: false,
     clearWhenHidden: false,
@@ -492,22 +687,100 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "definition",
     "measure",
     10,
-    "analysis.measure.kind",
+    "analysis.measures.0.expression.kind",
     "choice",
     {
       options: options("metric", "formula"),
     },
+  ),
+  /**
+   * The second reading, for the two recipes that are a pair.
+   *
+   * Kept to the shape the first one has — a kind, a metric, a name — and offered only
+   * where a pair is what is being drawn, so an ordinary card is still one measure with
+   * one control. The labels are required by the compiler as soon as there are two, which
+   * is why both appear here rather than only the second.
+   */
+  field(
+    "measure-label",
+    "definition",
+    "measure",
+    11,
+    "analysis.measures.0.label",
+    "text",
+    { visibleWhen: pairedRecipes, clearWhenHidden: false },
+  ),
+  field(
+    "second-measure-kind",
+    "definition",
+    "measure",
+    12,
+    "analysis.measures.1.expression.kind",
+    "choice",
+    {
+      options: options("metric", "formula"),
+      visibleWhen: pairedRecipes,
+      clearWhenHidden: false,
+    },
+  ),
+  field(
+    "second-metric",
+    "definition",
+    "measure",
+    13,
+    "analysis.measures.1.expression.metric",
+    "choice",
+    {
+      optionProvider: "metrics",
+      visibleWhen: secondMetricMeasure,
+      clearWhenHidden: false,
+    },
+  ),
+  field(
+    "second-formula-output",
+    "definition",
+    "measure",
+    14,
+    "analysis.measures.1.expression.valueType",
+    "choice",
+    {
+      options: options("ratio", "number", "count", "percent"),
+      visibleWhen: secondFormulaMeasure,
+      clearWhenHidden: false,
+    },
+  ),
+  field(
+    "second-formula",
+    "definition",
+    "measure",
+    15,
+    "analysis.measures.1.expression.formula",
+    "formula",
+    {
+      visibleWhen: secondFormulaMeasure,
+      collection: WIDGET_FORMULA_SCHEMA,
+      clearWhenHidden: false,
+    },
+  ),
+  field(
+    "second-measure-label",
+    "definition",
+    "measure",
+    16,
+    "analysis.measures.1.label",
+    "text",
+    { visibleWhen: pairedRecipes, clearWhenHidden: false },
   ),
   field(
     "metric",
     "definition",
     "measure",
     20,
-    "analysis.measure.metric",
+    "analysis.measures.0.expression.metric",
     "choice",
     {
       optionProvider: "metrics",
-      visibleWhen: equals("analysis.measure.kind", "metric"),
+      visibleWhen: equals("analysis.measures.0.expression.kind", "metric"),
     },
   ),
   field(
@@ -515,11 +788,28 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "definition",
     "measure",
     30,
-    "analysis.measure.goalId",
+    "analysis.measures.0.expression.goalId",
     "reference",
     {
       optionProvider: "goals",
-      visibleWhen: equals("analysis.measure.metric", "goalProgress"),
+      visibleWhen: goalMetrics,
+    },
+  ),
+  field(
+    "dispersion",
+    "definition",
+    "measure",
+    35,
+    "analysis.measures.0.expression.dispersion",
+    "choice",
+    {
+      options: options(
+        "standard-deviation",
+        "range",
+        "interquartile-range",
+        "median-absolute-deviation",
+      ),
+      visibleWhen: dispersionMetrics,
     },
   ),
   field(
@@ -527,11 +817,11 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "definition",
     "measure",
     40,
-    "analysis.measure.valueType",
+    "analysis.measures.0.expression.valueType",
     "choice",
     {
       options: options("ratio", "number", "count", "percent"),
-      visibleWhen: equals("analysis.measure.kind", "formula"),
+      visibleWhen: equals("analysis.measures.0.expression.kind", "formula"),
     },
   ),
   field(
@@ -539,71 +829,68 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "definition",
     "measure",
     50,
-    "analysis.measure.formula",
+    "analysis.measures.0.expression.formula",
     "formula",
     {
-      visibleWhen: equals("analysis.measure.kind", "formula"),
+      visibleWhen: equals("analysis.measures.0.expression.kind", "formula"),
       collection: WIDGET_FORMULA_SCHEMA,
     },
   ),
   field(
-    "group-by",
+    "cohort-group",
+    "definition",
+    "measure",
+    26,
+    "analysis.measures.0.expression.groupId",
+    "reference",
+    {
+      optionProvider: "cohorts",
+      visibleWhen: cohortMetrics,
+    },
+  ),
+  field(
+    "cohort-member",
+    "definition",
+    "measure",
+    27,
+    "analysis.measures.0.expression.memberId",
+    "reference",
+    {
+      optionProvider: "cohort-members",
+      visibleWhen: equals(
+        "analysis.measures.0.expression.metric",
+        "memberAverage",
+      ),
+    },
+  ),
+  /**
+   * The same field of the definition, asked as a different question.
+   *
+   * `memberId` is "who is this reading about", and the answer comes from a group for a
+   * classmate and from the friendships for a friend — two lists, two consents. One
+   * control each, so neither offers people the other's rule never opened.
+   */
+  field(
+    "friend",
+    "definition",
+    "measure",
+    28,
+    "analysis.measures.0.expression.memberId",
+    "reference",
+    { optionProvider: "friends", visibleWhen: friendMetrics },
+  ),
+  field(
+    "dimensions",
     "definition",
     "grouping",
     10,
-    "analysis.groupBy.kind",
-    "choice",
+    "analysis.dimensions",
+    "dimensions",
     {
-      options: options("none", "time", "subject"),
-    },
-  ),
-  field(
-    "time-interval",
-    "definition",
-    "grouping",
-    20,
-    "analysis.groupBy.interval",
-    "choice",
-    {
-      options: options("day", "week", "month"),
-      visibleWhen: equals("analysis.groupBy.kind", "time"),
-    },
-  ),
-  field(
-    "time-accumulation",
-    "definition",
-    "grouping",
-    25,
-    "analysis.groupBy.accumulation",
-    "choice",
-    {
-      options: options("bucket", "running"),
-      visibleWhen: equals("analysis.groupBy.kind", "time"),
-    },
-  ),
-  field(
-    "subject-limit",
-    "definition",
-    "grouping",
-    30,
-    "analysis.groupBy.limit",
-    "number",
-    {
-      min: 1,
-      max: 100,
-      step: 1,
-      visibleWhen: equals("analysis.groupBy.kind", "subject"),
-    },
-  ),
-  field(
-    "include-categories",
-    "definition",
-    "grouping",
-    40,
-    "analysis.groupBy.includeCategories",
-    "toggle",
-    {
-      visibleWhen: equals("analysis.groupBy.kind", "subject"),
+      required: false,
+      clearWhenHidden: false,
+      collection: WIDGET_DIMENSION_SCHEMA,
+      descriptionKey: "widget.field.dimensions.description",
     },
   ),
   field(
@@ -614,7 +901,46 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "analysis.comparison.kind",
     "choice",
     {
-      options: options("none", "previous-window", "baseline"),
+      options: options("none", "previous-window", "baseline", "window-pair"),
+    },
+  ),
+  /**
+   * The two windows of a pair, and how their buckets meet.
+   *
+   * The comparison the model has carried and nothing could compose. Both sides are full
+   * windows — the same six controls as the card's own — so "the first term against the
+   * third", "the last ten results against the ten before them" and "September against
+   * September" are all sayable, and the right-hand side is the reading.
+   */
+  ...windowFields(
+    "pair-left",
+    "analysis.comparison.left",
+    "comparison",
+    30,
+    equals("analysis.comparison.kind", "window-pair"),
+  ),
+  ...windowFields(
+    "pair-right",
+    "analysis.comparison.right",
+    "comparison",
+    40,
+    equals("analysis.comparison.kind", "window-pair"),
+  ),
+  field(
+    "pair-alignment",
+    "definition",
+    "comparison",
+    50,
+    "analysis.comparison.alignment",
+    "choice",
+    {
+      options: namedOptions(
+        "widget.alignment",
+        "relative",
+        "calendar",
+        "period",
+      ),
+      visibleWhen: equals("analysis.comparison.kind", "window-pair"),
     },
   ),
   field(
@@ -639,12 +965,20 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       required: false,
       clearWhenHidden: false,
       collection: WIDGET_TRANSFORM_SCHEMA,
-      visibleWhen: oneOf("analysis.groupBy.kind", ["time", "subject"]),
+      visibleWhen: oneOf("analysis.dimensions.0.kind", ["time", "subject"]),
     },
   ),
-  field("mark", "visualization", "chart", 10, "visualization.mark", "choice", {
-    optionProvider: "marks",
-  }),
+  field(
+    "mark",
+    "visualization",
+    "chart",
+    10,
+    "visualization.recipe",
+    "choice",
+    {
+      optionProvider: "marks",
+    },
+  ),
   field(
     "encoding-x",
     "visualization",
@@ -654,12 +988,14 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "encoding",
     {
       optionProvider: "encoding-fields",
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
         "dot",
         "heatmap",
+        "lollipop",
+        "slope-arrow",
       ]),
       required: false,
     },
@@ -676,7 +1012,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       visibleWhen: {
         kind: "and",
         conditions: [
-          oneOf("visualization.mark", [
+          oneOf("visualization.recipe", [
             "line",
             "area",
             "bar",
@@ -684,14 +1020,16 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
             "histogram",
             "heatmap",
             "boxplot",
+            "lollipop",
+            "slope-arrow",
           ]),
           {
             kind: "not",
             condition: {
               kind: "and",
               conditions: [
-                equals("analysis.measure.metric", "distribution"),
-                oneOf("visualization.mark", ["histogram", "boxplot"]),
+                equals("analysis.measures.0.expression.metric", "distribution"),
+                oneOf("visualization.recipe", ["histogram", "boxplot"]),
               ],
             },
           },
@@ -709,12 +1047,14 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "encoding",
     {
       optionProvider: "encoding-fields",
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
         "dot",
         "heatmap",
+        "lollipop",
+        "slope-arrow",
       ]),
       required: false,
     },
@@ -728,7 +1068,12 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "encoding",
     {
       optionProvider: "encoding-fields",
-      visibleWhen: oneOf("visualization.mark", ["line", "area", "bar", "dot"]),
+      visibleWhen: oneOf("visualization.recipe", [
+        "line",
+        "area",
+        "bar",
+        "dot",
+      ]),
       required: false,
     },
   ),
@@ -741,7 +1086,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "choice",
     {
       options: options("linear", "monotone", "step"),
-      visibleWhen: oneOf("visualization.mark", ["line", "area"]),
+      visibleWhen: oneOf("visualization.recipe", ["line", "area"]),
     },
   ),
   field(
@@ -774,7 +1119,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.options.points",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", ["line", "area"]),
+      visibleWhen: oneOf("visualization.recipe", ["line", "area"]),
     },
   ),
   field(
@@ -788,7 +1133,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 1,
       max: 8,
       step: 0.5,
-      visibleWhen: equals("visualization.mark", "line"),
+      visibleWhen: equals("visualization.recipe", "line"),
     },
   ),
   field(
@@ -802,7 +1147,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 0,
       max: 1,
       step: 0.05,
-      visibleWhen: equals("visualization.mark", "area"),
+      visibleWhen: equals("visualization.recipe", "area"),
     },
   ),
   field(
@@ -814,7 +1159,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "choice",
     {
       options: options("vertical", "horizontal"),
-      visibleWhen: equals("visualization.mark", "bar"),
+      visibleWhen: oneOf("visualization.recipe", ["bar", "lollipop"]),
     },
   ),
   field(
@@ -825,16 +1170,21 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.options.stacked",
     "toggle",
     {
+      // Stacking needs bars over time *and* something to stack them by: a second
+      // dimension, shown on the colour or the series channel. The condition used to
+      // test a channel against the literal `category`, which was the only way the old
+      // model could say "split by subject" — the analysis says it now.
       visibleWhen: {
         kind: "and",
         conditions: [
-          equals("visualization.mark", "bar"),
-          equals("analysis.groupBy.kind", "time"),
+          equals("visualization.recipe", "bar"),
+          equals("analysis.dimensions.0.kind", "time"),
+          exists("analysis.dimensions.1.kind"),
           {
             kind: "or",
             conditions: [
-              equals("visualization.encoding.color.field", "category"),
-              equals("visualization.encoding.series.field", "category"),
+              exists("visualization.encoding.color.field"),
+              exists("visualization.encoding.series.field"),
             ],
           },
         ],
@@ -852,7 +1202,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 0,
       max: 20,
       step: 1,
-      visibleWhen: equals("visualization.mark", "bar"),
+      visibleWhen: equals("visualization.recipe", "bar"),
     },
   ),
   field(
@@ -871,7 +1221,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       // would have left a card unable to give the choice back once it had named a
       // thickness, since no number means "let the renderer decide".
       required: false,
-      visibleWhen: equals("visualization.mark", "gauge"),
+      visibleWhen: equals("visualization.recipe", "gauge"),
     },
   ),
   field(
@@ -882,7 +1232,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.options.showValue",
     "toggle",
     {
-      visibleWhen: equals("visualization.mark", "gauge"),
+      visibleWhen: equals("visualization.recipe", "gauge"),
     },
   ),
   field(
@@ -896,8 +1246,96 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 1,
       max: 24,
       step: 1,
-      visibleWhen: equals("visualization.mark", "dot"),
+      visibleWhen: equals("visualization.recipe", "dot"),
     },
+  ),
+  field(
+    "lollipop-size",
+    "visualization",
+    "appearance",
+    83,
+    "visualization.options.size",
+    "number",
+    {
+      min: 2,
+      max: 24,
+      step: 1,
+      visibleWhen: equals("visualization.recipe", "lollipop"),
+    },
+  ),
+  // A share, not a count of observations: twenty cells suit a mark out of
+  // twenty, and a hundred needs a wide card to stay square.
+  field(
+    "waffle-cells",
+    "visualization",
+    "appearance",
+    84,
+    "visualization.options.cells",
+    "number",
+    {
+      min: 10,
+      max: 100,
+      step: 5,
+      visibleWhen: equals("visualization.recipe", "waffle"),
+    },
+  ),
+  field(
+    "slope-labels",
+    "visualization",
+    "appearance",
+    85,
+    "visualization.options.showLabels",
+    "toggle",
+    { visibleWhen: equals("visualization.recipe", "slope-arrow") },
+  ),
+  // Two ends per row: their size, and whether each carries its own number.
+  field(
+    "dumbbell-size",
+    "visualization",
+    "appearance",
+    88,
+    "visualization.options.size",
+    "number",
+    {
+      min: 4,
+      max: 24,
+      step: 1,
+      visibleWhen: equals("visualization.recipe", "dumbbell"),
+    },
+  ),
+  field(
+    "dumbbell-labels",
+    "visualization",
+    "appearance",
+    89,
+    "visualization.options.showLabels",
+    "toggle",
+    { visibleWhen: equals("visualization.recipe", "dumbbell") },
+  ),
+  // A strip is the marks themselves, so its only sizes are the tick and whether
+  // the median is drawn through them.
+  field(
+    "strip-tick",
+    "visualization",
+    "appearance",
+    86,
+    "visualization.options.tick",
+    "number",
+    {
+      min: 4,
+      max: 24,
+      step: 1,
+      visibleWhen: equals("visualization.recipe", "strip"),
+    },
+  ),
+  field(
+    "strip-median",
+    "visualization",
+    "appearance",
+    87,
+    "visualization.options.showMedian",
+    "toggle",
+    { visibleWhen: equals("visualization.recipe", "strip") },
   ),
   field(
     "histogram-bins",
@@ -910,7 +1348,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 3,
       max: 40,
       step: 1,
-      visibleWhen: equals("visualization.mark", "histogram"),
+      visibleWhen: equals("visualization.recipe", "histogram"),
     },
   ),
   field(
@@ -922,7 +1360,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "choice",
     {
       options: options("semantic", "sequential", "diverging"),
-      visibleWhen: equals("visualization.mark", "heatmap"),
+      visibleWhen: equals("visualization.recipe", "heatmap"),
     },
   ),
   field(
@@ -933,7 +1371,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.options.showOutliers",
     "toggle",
     {
-      visibleWhen: equals("visualization.mark", "boxplot"),
+      visibleWhen: equals("visualization.recipe", "boxplot"),
     },
   ),
   field(
@@ -947,7 +1385,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       min: 1,
       max: 100,
       step: 1,
-      visibleWhen: oneOf("visualization.mark", ["table", "list"]),
+      visibleWhen: oneOf("visualization.recipe", ["table", "list"]),
     },
   ),
   field(
@@ -958,7 +1396,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.options.showValues",
     "toggle",
     {
-      visibleWhen: equals("visualization.mark", "list"),
+      visibleWhen: equals("visualization.recipe", "list"),
     },
   ),
   field(
@@ -969,7 +1407,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.scale.y.zero",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -988,7 +1426,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "number",
     {
       required: false,
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1008,7 +1446,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "number",
     {
       required: false,
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1027,7 +1465,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.scale.y.reverse",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1047,7 +1485,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.scale.x.reverse",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1064,7 +1502,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.axes.x.visible",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1081,7 +1519,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.axes.y.visible",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1100,7 +1538,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.axes.y.grid",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1119,7 +1557,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "visualization.axes.x.grid",
     "toggle",
     {
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1137,7 +1575,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "text",
     {
       required: false,
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1155,7 +1593,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
     "text",
     {
       required: false,
-      visibleWhen: oneOf("visualization.mark", [
+      visibleWhen: oneOf("visualization.recipe", [
         "line",
         "area",
         "bar",
@@ -1177,7 +1615,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       visibleWhen: {
         kind: "and",
         conditions: [
-          oneOf("visualization.mark", [
+          oneOf("visualization.recipe", [
             "line",
             "area",
             "bar",
@@ -1207,7 +1645,7 @@ export const WIDGET_FLOW_SCHEMA: readonly WidgetFlowFieldSchema[] = [
       visibleWhen: {
         kind: "and",
         conditions: [
-          oneOf("visualization.mark", [
+          oneOf("visualization.recipe", [
             "line",
             "area",
             "bar",

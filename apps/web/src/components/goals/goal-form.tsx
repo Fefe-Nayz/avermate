@@ -11,11 +11,7 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { FormFlow, type FlowStep } from "@/components/forms/form-flow"
-import {
-  ChoiceField,
-  DateField,
-  TextField,
-} from "@/components/forms/controls"
+import { ChoiceField, DateField, TextField } from "@/components/forms/controls"
 import { PickerField, type PickerOption } from "@/components/forms/picker"
 import { AverageValue } from "@/components/data/value"
 import { GoalPlanView } from "./goal-plan-view"

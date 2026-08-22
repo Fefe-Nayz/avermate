@@ -7,7 +7,7 @@ import {
   WIDGET_SURFACES,
   cardSemanticsFromDefinition,
   type WidgetCompileOptions,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
 } from "@avermate/core";
 import { and, eq } from "drizzle-orm";
@@ -36,7 +36,7 @@ const envelope = {
 
 const definition = {
   definitionVersion: z.literal(WIDGET_DEFINITION_VERSION),
-  definitionJson: z.custom<WidgetDefinitionV1>(
+  definitionJson: z.custom<WidgetDefinition>(
     (value) =>
       value !== null && typeof value === "object" && !Array.isArray(value),
     "Widget definition must be an object",
@@ -88,7 +88,10 @@ export type CardUpdateInput = z.infer<typeof cardUpdateInputSchema>;
 
 export function hasWidgetDefinition(
   input: CardCreateInput | CardUpdateInput,
-): input is Extract<typeof input, { definitionVersion: 1 }> {
+): input is Extract<
+  typeof input,
+  { definitionVersion: typeof WIDGET_DEFINITION_VERSION }
+> {
   return (
     "definitionVersion" in input &&
     input.definitionVersion === WIDGET_DEFINITION_VERSION
@@ -159,7 +162,7 @@ export async function compileOwnedWidgetDefinition(
   surface: WidgetSurface,
   input: unknown,
   exclusions: WidgetReferenceExclusions = {},
-): Promise<WidgetDefinitionV1> {
+): Promise<WidgetDefinition> {
   return compileStoredWidgetDefinition(
     surface,
     input,
@@ -171,7 +174,7 @@ export function compileStoredWidgetDefinition(
   surface: WidgetSurface,
   input: unknown,
   references: NonNullable<WidgetCompileOptions["references"]>,
-): WidgetDefinitionV1 {
+): WidgetDefinition {
   const compiled = compileWidgetDefinition(input, {
     surface,
     references,
@@ -201,7 +204,7 @@ export function compileStoredWidgetDefinition(
  * `ON DELETE CASCADE`, so it is behaviour rather than a copy — delete a goal and
  * its cards go with it, which no JSON blob can arrange.
  */
-export function widgetSemanticColumns(definition: WidgetDefinitionV1) {
+export function widgetSemanticColumns(definition: WidgetDefinition) {
   return {
     goalId: cardSemanticsFromDefinition(definition).goalId,
     definitionVersion: WIDGET_DEFINITION_VERSION,
@@ -211,7 +214,7 @@ export function widgetSemanticColumns(definition: WidgetDefinitionV1) {
 
 export function widgetReferenceRows(
   cardId: string,
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
 ) {
   const references = collectWidgetReferences(definition);
   return [
@@ -241,7 +244,7 @@ export function widgetReferenceRows(
 /** Derived rows always replace the previous set in the same write batch. */
 export function widgetReferenceReplacementStatements(
   cardId: string,
-  definition: WidgetDefinitionV1,
+  definition: WidgetDefinition,
 ) {
   const references = widgetReferenceRows(cardId, definition);
   return [

@@ -27,7 +27,7 @@ export default function AboutPage() {
           {t("About")}
         </h1>
 
-        <SettingsSection title={t("Avermate")}>
+        <SettingsSection id="version" title={t("Avermate")}>
           <p className="text-sm leading-relaxed text-muted-foreground">
             {t(
               "Avermate works out your averages the way your school does, explains what moves them, and tells you what it would take to hit the result you are after."
@@ -45,6 +45,7 @@ export default function AboutPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="support"
           title={t("Support")}
           description={t("Quote this id if you ever write in about a problem.")}
         >
@@ -64,6 +65,7 @@ export default function AboutPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="install"
           title={t("Install Avermate")}
           description={t(
             "The web app can live on your home screen alongside the native app."
@@ -72,7 +74,7 @@ export default function AboutPage() {
           <InstallCard />
         </SettingsSection>
 
-        <SettingsSection title={t("Legal")}>
+        <SettingsSection id="legal" title={t("Legal")}>
           <div className="flex flex-col gap-2">
             <Link
               href="/legal/privacy"

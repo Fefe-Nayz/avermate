@@ -1,4 +1,10 @@
-import { SubjectGraph, type Scope, gradeRatio } from "./graph";
+import { linearFit } from "./regression";
+import {
+  SubjectGraph,
+  type Scope,
+  type SubjectGraphOptions,
+  gradeRatio,
+} from "./graph";
 import type { Grade, Ratio, Subject } from "./types";
 
 // ------------------------------------------------------------------- helpers
@@ -256,6 +262,7 @@ export function averageOverTime(
   dates: readonly Date[],
   target: string | null = null,
   scope: Scope | null = null,
+  graphOptions: SubjectGraphOptions = {},
 ): SeriesPoint[] {
   return dates.map((date) => {
     const cutoff = date.getTime();
@@ -265,33 +272,31 @@ export function averageOverTime(
         (grade) => grade.passedAt.getTime() <= cutoff,
       ),
     }));
-    return { date, ratio: new SubjectGraph(snapshot).ratio(target, scope) };
+    return {
+      date,
+      ratio: new SubjectGraph(snapshot, graphOptions).ratio(target, scope),
+    };
   });
 }
 
-/** Least-squares slope of a series, per point. `null` when under-determined. */
+/**
+ * Least-squares slope of a series, per point. `null` when under-determined.
+ *
+ * One line of arithmetic, in `linearFit`, which also carries the two things this signature
+ * cannot return: how much of the variation the line explains, and how uncertain it is. A
+ * caller who needs those asks for the fit; a caller who needs "up or down, how fast" —
+ * every trend arrow in the app — asks here.
+ */
 export function trend(points: readonly SeriesPoint[]): number | null {
   const defined = points.filter(
     (point): point is { date: Date; ratio: number } => point.ratio !== null,
   );
-  if (defined.length < 2) return null;
-
-  const n = defined.length;
-  let sumX = 0;
-  let sumY = 0;
-  let sumXY = 0;
-  let sumXX = 0;
-
-  defined.forEach((point, index) => {
-    sumX += index;
-    sumY += point.ratio;
-    sumXY += index * point.ratio;
-    sumXX += index * index;
-  });
-
-  const denominator = n * sumXX - sumX * sumX;
-  if (denominator === 0) return null;
-  return (n * sumXY - sumX * sumY) / denominator;
+  // The x axis is the *position* in the series, not the date: consecutive readings, evenly
+  // spaced. That is what the callers of this have always meant by "per point".
+  return (
+    linearFit(defined.map((point, index) => ({ x: index, y: point.ratio })))
+      ?.slope ?? null
+  );
 }
 
 /** Fitted line over a series, useful as a chart overlay. */
@@ -464,6 +469,194 @@ export function standardDeviation(values: readonly number[]): number | null {
     values.reduce((sum, value) => sum + (value - average) ** 2, 0) /
     values.length;
   return Math.sqrt(variance);
+}
+
+/**
+ * A quantile by linear interpolation between the two nearest ranks.
+ *
+ * One definition, used by every dispersion estimator below, because the quartiles
+ * of a short list differ by several tenths between the common conventions and a
+ * card that reported a different spread from the box plot beside it would be
+ * reporting a choice of formula as a fact about the marks.
+ */
+export function quantile(
+  values: readonly number[],
+  fraction: number,
+): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 1) return sorted[0] as number;
+  const position = (sorted.length - 1) * Math.min(1, Math.max(0, fraction));
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const weight = position - lower;
+  return (
+    (sorted[lower] as number) * (1 - weight) +
+    (sorted[upper] as number) * weight
+  );
+}
+
+/** Highest minus lowest: the whole span, and the estimator an outlier owns. */
+export function range(values: readonly number[]): number | null {
+  if (values.length < 2) return null;
+  return Math.max(...values) - Math.min(...values);
+}
+
+/**
+ * The width of the middle half.
+ *
+ * Ignores the tails by construction, which is what makes it the honest answer for
+ * "how much do my marks usually move" — one catastrophic paper doubles a standard
+ * deviation and leaves this untouched.
+ */
+export function interquartileRange(values: readonly number[]): number | null {
+  if (values.length < 4) return null;
+  const low = quantile(values, 0.25);
+  const high = quantile(values, 0.75);
+  return low === null || high === null ? null : high - low;
+}
+
+/**
+ * Median absolute deviation, scaled to be comparable with a standard deviation.
+ *
+ * The 1.4826 factor makes it the same number as the standard deviation when the
+ * marks are normally distributed, so the two estimators can be offered as
+ * alternatives in one card without the reading jumping when the choice changes.
+ */
+export function medianAbsoluteDeviation(
+  values: readonly number[],
+): number | null {
+  if (values.length < 3) return null;
+  const centre = median(values);
+  if (centre === null) return null;
+  const deviations = values.map((value) => Math.abs(value - centre));
+  const spread = median(deviations);
+  return spread === null ? null : spread * 1.4826;
+}
+
+/**
+ * How a spread is measured.
+ *
+ * A standard deviation is the one everybody knows and the one a single bad paper
+ * owns: one 2/20 in a term of fourteens doubles it, and the card then reports a
+ * catastrophe as a habit. The other three answer the question actually being
+ * asked — *how much do my marks usually move* — so the estimator is the card's
+ * choice rather than this file's, and the card says which one it used.
+ */
+export type WidgetDispersion =
+  | "standard-deviation"
+  | "range"
+  | "interquartile-range"
+  | "median-absolute-deviation";
+
+export const WIDGET_DISPERSIONS: readonly WidgetDispersion[] = [
+  "standard-deviation",
+  "range",
+  "interquartile-range",
+  "median-absolute-deviation",
+];
+
+/**
+ * A dispersion by the named estimator, or `null` below its own minimum sample.
+ *
+ * The minimum is the estimator's, not a policy: two marks for a deviation or a
+ * range, three for a median absolute deviation, four for a middle half. Below it
+ * the number exists arithmetically and means nothing, so it is not returned.
+ */
+export function dispersionOf(
+  values: readonly number[],
+  estimator: WidgetDispersion,
+): number | null {
+  switch (estimator) {
+    case "range":
+      return range(values);
+    case "interquartile-range":
+      return interquartileRange(values);
+    case "median-absolute-deviation":
+      return medianAbsoluteDeviation(values);
+    default:
+      return standardDeviation(values);
+  }
+}
+
+/**
+ * The smallest sample the named estimator means anything on.
+ *
+ * Read from the estimators themselves — each returns `null` below its own
+ * minimum — so a card that reports "4 marks needed" cannot disagree with the
+ * function that refused to answer.
+ */
+export function dispersionMinimum(estimator: WidgetDispersion): number {
+  switch (estimator) {
+    case "interquartile-range":
+      return 4;
+    case "median-absolute-deviation":
+      return 3;
+    default:
+      return 2;
+  }
+}
+
+/**
+ * A smooth shape over a set of marks, sampled on a grid.
+ *
+ * The primitive behind a violin and a ridgeline, and — as the audit says — *not* a chart of
+ * its own: nobody asks to see a kernel density estimate of their marks. What they ask is
+ * "where do my results cluster", and a violin answers it by giving that shape a width.
+ *
+ * Gaussian kernel, Silverman's rule for the bandwidth, and a floor on it so a set of nearly
+ * identical marks gets a narrow shape rather than a spike of infinite height. The estimate
+ * is *bounded to the scale*: a density that leaks past full marks would draw a subject
+ * scoring above twenty out of twenty.
+ *
+ * `null` below `DENSITY_MINIMUM_SAMPLE`, and that refusal is the honest half of the feature.
+ * A smooth curve over three marks looks like knowledge and is an interpolation; the audit is
+ * explicit that a violin must not be drawn there, and this is where that is enforced rather
+ * than left to a renderer to remember.
+ */
+export const DENSITY_MINIMUM_SAMPLE = 6;
+
+export interface DensityPoint {
+  /** A ratio in 0..1. */
+  at: number;
+  /** Relative height. Comparable within one estimate, not across two. */
+  density: number;
+}
+
+export function kernelDensity(
+  values: readonly number[],
+  samples = 24,
+): DensityPoint[] | null {
+  if (values.length < DENSITY_MINIMUM_SAMPLE) return null;
+  const deviation = standardDeviation(values);
+  const spread = interquartileRange(values);
+  if (deviation === null) return null;
+
+  // Silverman: 0.9 · min(σ, IQR/1.34) · n^(-1/5). The IQR term is what stops one
+  // catastrophic paper widening the whole shape.
+  const robust =
+    spread === null ? deviation : Math.min(deviation, spread / 1.34);
+  const bandwidth = Math.max(
+    // A floor of half a point on a scale of twenty: below that the curve is a spike, and a
+    // spike says "certainty" about a set of marks that are merely close together.
+    0.025,
+    0.9 * robust * Math.pow(values.length, -1 / 5),
+  );
+
+  const points: DensityPoint[] = [];
+  for (let index = 0; index < samples; index += 1) {
+    const at = index / (samples - 1);
+    let sum = 0;
+    for (const value of values) {
+      const z = (at - value) / bandwidth;
+      sum += Math.exp(-0.5 * z * z);
+    }
+    points.push({
+      at,
+      density: sum / (values.length * bandwidth * Math.sqrt(2 * Math.PI)),
+    });
+  }
+  return points;
 }
 
 /** Ratios of every grade under a subject, in chronological order. */

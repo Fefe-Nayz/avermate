@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { createWidgetDefinition } from "@avermate/core"
+import {
+  createWidgetDefinition,
+  WIDGET_DEFINITION_VERSION,
+} from "@avermate/core"
 import type { DashboardCardRow } from "@/components/year/year-provider"
 import { resolveWidgetRow } from "./widget-row"
 
@@ -18,7 +21,11 @@ const row: DashboardCardRow = {
 
 const withDefinition = (
   definitionJson: DashboardCardRow["definitionJson"]
-): DashboardCardRow => ({ ...row, definitionVersion: 1, definitionJson })
+): DashboardCardRow => ({
+  ...row,
+  definitionVersion: WIDGET_DEFINITION_VERSION,
+  definitionJson,
+})
 
 describe("reading one persisted card", () => {
   test("reads the stored definition", () => {
@@ -52,7 +59,8 @@ describe("reading one persisted card", () => {
   test("refuses a definition version this build does not know", () => {
     const resolved = resolveWidgetRow({
       ...row,
-      definitionVersion: 2,
+      // One past the version this build knows.
+      definitionVersion: WIDGET_DEFINITION_VERSION + 1,
       definitionJson: createWidgetDefinition("overview"),
     })
 

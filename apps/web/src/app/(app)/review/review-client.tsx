@@ -130,7 +130,7 @@ export function ReviewClient({
             />
 
             <div className="relative flex flex-1 flex-col items-center justify-center py-8">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider text-white/80 uppercase ring-1 ring-white/15 backdrop-blur-sm">
                 <SparklesIcon className="size-3.5" />
                 {t("Year in review")}
               </span>

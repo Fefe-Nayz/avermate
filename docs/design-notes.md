@@ -18,5 +18,8 @@ max) so nothing changes at the extremes. An explicit `leading-*` /
 `tracking-*` utility beside the clamp keeps winning; only add one when the
 ladder had one.
 
+Auth/onboarding titles without a breakpoint ladder stay fixed: do not invent
+new endpoints, and do not use an equal-value pair (the plugin rejects it).
+
 Watch item: `@jalendport/tailwindcss-fluid` is the spiritual successor —
 reconsider if it ships on npm.

@@ -16,7 +16,7 @@ import { bandOf, gradeRatio, type Grade, type ResultBand } from "@avermate/core"
 import { GradeList } from "@/components/grades/grade-list"
 import { Button } from "@/components/ui/button"
 import { useYear } from "@/components/year/year-provider"
-import { dayKey, monthGrid } from "@/lib/calendar"
+import { dayKey, monthGrid } from "@/components/calendar/month-grid"
 import { cn } from "@/lib/utils"
 
 export { dayKey, monthGrid }

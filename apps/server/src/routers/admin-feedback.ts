@@ -109,6 +109,19 @@ function resolvedAtFor(status: z.infer<typeof feedbackStatusSchema>) {
     : null;
 }
 
+/** Shared by the admin action and the daily maintenance job. */
+export async function purgeExpiredAutomaticFeedbackRows(
+  olderThanDays: number,
+  now = new Date(),
+) {
+  const cutoff = new Date(now.getTime() - olderThanDays * 86_400_000);
+  const deleted = await db
+    .delete(feedback)
+    .where(and(like(feedback.source, "auto:%"), lt(feedback.lastSeenAt, cutoff)))
+    .returning({ id: feedback.id });
+  return { deletedCount: deleted.length, cutoff };
+}
+
 export const adminFeedbackRouter = {
   feedbackQueue: adminProcedure
     .input(
@@ -587,13 +600,9 @@ export const adminFeedbackRouter = {
       }),
     )
     .handler(async ({ input }) => {
-      const cutoff = new Date(Date.now() - input.olderThanDays * 86_400_000);
-      const deleted = await db
-        .delete(feedback)
-        .where(
-          and(like(feedback.source, "auto:%"), lt(feedback.lastSeenAt, cutoff)),
-        )
-        .returning({ id: feedback.id });
-      return { ok: true, deletedCount: deleted.length, cutoff };
+      const result = await purgeExpiredAutomaticFeedbackRows(
+        input.olderThanDays,
+      );
+      return { ok: true, ...result };
     }),
 };

@@ -52,9 +52,17 @@ export function createQueryClient(): QueryClient {
       dehydrate: {
         // Including pending queries lets a Server Component start work without
         // blocking its whole route; React can stream the eventual result.
+        //
+        // Except one: a query is also "pending" while it retries a failure, and
+        // that one carries the first attempt's `Error` in `fetchFailureReason`.
+        // `serializeData` only ever sees `state.data`, so the raw Error would
+        // cross the RSC boundary — and React refuses anything but plain objects
+        // there, which turns one failing prefetch into a page that does not
+        // render at all. Leaving it out costs nothing: the browser starts the
+        // query itself and shows whatever the failure actually was.
         shouldDehydrateQuery: (query) =>
           defaultShouldDehydrateQuery(query) ||
-          query.state.status === "pending",
+          (query.state.status === "pending" && !query.state.fetchFailureReason),
         serializeData,
         // Next.js uses thrown errors to determine dynamic rendering. Redacting
         // them here would hide that signal during the server render.

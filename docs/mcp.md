@@ -105,6 +105,23 @@ private social data adds one or more of `avermate:social.read`,
 Request only the surfaces the assistant actually needs; the three social scopes
 are independent and do not imply one another.
 
+A client that works with the agenda adds `avermate:planner.read`,
+`avermate:planner.write`, or both. Planner reads and writes are independent;
+deletion uses the write scope and still requires a separate MCP confirmation.
+
+A client that works with course materials adds `avermate:materials.read`,
+`avermate:materials.write`, or both. Materials reads and writes are independent;
+uploads remain exclusive to the authenticated application, and folder or document
+deletion still requires a separate MCP confirmation. Provider synchronization
+uses the same scopes: read can inspect connection/job status and write can enqueue
+a sync, while connection setup and credential entry remain application-only.
+
+A client that authors revision fiches adds `avermate:documents.read`,
+`avermate:documents.write`, or both. Reading and writing are independent;
+updates always echo the revision returned by `documents.get`, and deletion
+still requires a separate MCP confirmation. PPTX download URLs require the
+read scope and are minted only when `documents.downloadPptx` is called.
+
 Loopback redirects are appropriate for installed clients. Browser clients
 should register an HTTPS callback. Redirect URIs must be exact; public clients
 must not persist or display a client secret.
@@ -124,23 +141,29 @@ it becomes available.
 
 ## Scopes
 
-| Scope                      | Capability                                                                                                                                                                                         |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `avermate:read`            | Read account, academic structures, grades, averages, goals, preferences, announcements, analytics, feedback, and recaps. Required for MCP access.                                                  |
-| `avermate:write`           | Create and update academic data, goals, dashboard cards, preferences, feedback, and read-state.                                                                                                    |
-| `avermate:delete`          | Make destructive tools discoverable. Each call still requires a separate multi-round confirmation.                                                                                                 |
-| `avermate:admin`           | Discover the administrator surface with `avermate:read` only when the account also has the backend `admin` role. Admin writes/deletes additionally require their ordinary write/delete scope.      |
-| `avermate:social.read`     | Read the connected user's eligibility, private profile/grants, capability-safe relationships, groups and policies, threshold-protected comparisons, notifications, own reports, and social export. |
-| `avermate:social.manage`   | Update the connected user's profile/grants/ranking choices and perform confirmed eligibility, friendship, block, group, policy, report, and social-reset workflows.                                |
-| `avermate:social.moderate` | Read social moderation counts/reports/audit and perform confirmed profile/group freezes, only when the account also has the backend `admin` role.                                                  |
+| Scope                      | Capability                                                                                                                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `avermate:read`            | Read account, academic structures, grades, averages, goals, preferences, announcements, analytics, feedback, recaps, and the safe status/result of owned asynchronous jobs. Required for MCP access. |
+| `avermate:write`           | Create and update academic data, goals, dashboard cards, preferences, feedback, and read-state.                                                                                                      |
+| `avermate:delete`          | Make destructive tools discoverable. Each call still requires a separate multi-round confirmation.                                                                                                   |
+| `avermate:admin`           | Discover the administrator surface with `avermate:read` only when the account also has the backend `admin` role. Admin writes/deletes additionally require their ordinary write/delete scope.        |
+| `avermate:social.read`     | Read the connected user's eligibility, private profile/grants, capability-safe relationships, groups and policies, threshold-protected comparisons, notifications, own reports, and social export.   |
+| `avermate:social.manage`   | Update the connected user's profile/grants/ranking choices and perform confirmed eligibility, friendship, block, group, policy, report, and social-reset workflows.                                  |
+| `avermate:social.moderate` | Read social moderation counts/reports/audit and perform confirmed profile/group freezes, only when the account also has the backend `admin` role.                                                    |
+| `avermate:planner.read`    | Read planner tasks and events plus the bounded agenda that combines them with dated goals, grades, and periods.                                                                                      |
+| `avermate:planner.write`   | Create and update planner tasks/events, change task status, and discover confirmed planner deletion.                                                                                                 |
+| `avermate:materials.read`  | Read owned course-material folders, document sources, OCR text, lecture recordings and timestamped transcripts, plus safe provider synchronization status.                                           |
+| `avermate:materials.write` | Create folders, rename or move documents, enqueue OCR/provider synchronization, and discover confirmed folder/document deletion. File upload and provider connection setup are unavailable over MCP. |
+| `avermate:documents.read`  | List and read owned revision-fenced fiches, notes, mind maps and slide decks with relational academic sources, and mint short-lived URLs for owned completed PPTX exports.                           |
+| `avermate:documents.write` | Create/update those document kinds, enqueue idempotent PPTX export for slide decks, and discover confirmed document deletion.                                                                        |
 
 OIDC scopes (`openid`, `profile`, `email`, `offline_access`) have their usual
 authorization-server meaning. A scope never bypasses an oRPC ownership or role
-check. `avermate:delete` expires after 15 minutes,
-`avermate:social.manage` after 30 minutes, and both `avermate:admin` and
-`avermate:social.moderate` after 10 minutes. The protected-resource metadata
-advertises all seven Avermate scopes from the live authorization-server
-configuration.
+check. `avermate:delete` expires after 15 minutes, both
+`avermate:social.manage` and `avermate:materials.write` after 30 minutes, and
+both `avermate:admin` and `avermate:social.moderate` after 10 minutes. The
+protected-resource metadata advertises all thirteen Avermate scopes from the live
+authorization-server configuration.
 
 ## Server surface
 
@@ -149,18 +172,28 @@ The catalog covers:
 - account profile and complete safe data export;
 - academic years, periods, and ordering;
 - subject/category hierarchies and deletion impact;
-- grades, composite components, recent results, and reassignment;
+- grades, composite components, recent results, reassignment, and attached-copy
+  URLs;
 - custom averages;
 - goals and achieved state;
+- planner tasks/events and the unified bounded agenda;
+- course-material folders and text, link, or stored-file document sources,
+  their machine-readable OCR transcripts, and Moodle file synchronization
+  status and triggering;
+- lecture-recording status and final timestamped transcripts (audio file
+  internals and provider credentials stay outside MCP);
+- revision-fenced fiches, notes, structured mind maps and slide decks, their
+  academic source references, PPTX export jobs, and on-demand private download
+  URLs for completed exports;
 - dashboard cards and layouts;
 - preferences, chart settings, and celebrations;
 - announcements and dismissal history;
 - analytics snapshots and annual recap eligibility/status;
 - feedback submission and history;
-- opt-in social eligibility and profile grants;
-- capability-safe friends, requests, circles and blocks;
-- private groups/classes, immutable sharing policies, re-consent,
-  threshold-protected aggregate statistics and opt-in rankings;
+- opt-in social sharing for general averages, history and selected subjects;
+- capability-safe friends, requests and blocks;
+- private groups/classes, fixed academic class templates, live cohort
+  comparisons and opt-in rankings;
 - privacy-safe social notifications, reports and account export/reset;
 - administrator overview, users, managed preset identities, announcements,
   feedback, roles, and
@@ -173,10 +206,69 @@ The social read, manage, and moderation catalogues are deliberately isolated.
 An academic `avermate:read` token does not discover social tools; a social-read
 token does not discover mutations; and a non-admin token with
 `avermate:social.moderate` does not discover moderation tools. Social operations
-still pass through the same feature flag, eligibility/guardian consent,
-field-grant, group-policy, cohort-threshold, ownership, and moderation checks as
-the web and Expo applications. MCP never exposes raw grades, notes, subject
-names, email addresses, or internal account identifiers through social DTOs.
+still pass through the same global feature flag, ownership, per-field sharing
+configuration, group membership, freezes, blocks and moderation checks as the
+web and Expo applications. MCP never exposes raw grades, notes, email addresses,
+or internal account identifiers through social DTOs; subject comparisons use
+the explicitly shared, class-template identities.
+
+The planner read and write catalogues are isolated as well. A base academic
+read token discovers neither; `avermate:planner.read` exposes only agenda/list
+tools, while `avermate:planner.write` exposes create/update/status and the
+confirmed delete tool. The oRPC planner router remains authoritative for item
+ownership, year/subject consistency, event dates, and the 62-day agenda cap.
+
+The materials read and write catalogues are isolated in the same way. A base
+academic read token discovers neither; `avermate:materials.read` exposes only
+folder/document list, document read/OCR, and owned lecture list/transcript
+tools, while
+`avermate:materials.write` exposes folder creation, document rename/move, OCR,
+synchronization triggering, and confirmed deletion. It never exposes upload or
+provider connection setup. OCR returns a durable job identifier; transcript
+reads expose only resulting text, timestamp windows and safe status metadata,
+never audio storage internals or provider credentials.
+`sync.status` returns only safe connection metadata and the public latest-job
+view; sealed credentials and custom CA PEM never cross the MCP boundary. The
+oRPC materials and sync routers remain authoritative for ownership,
+year/folder/subject consistency, folder-cycle prevention, and source invariants.
+
+The documents catalog is isolated independently. `avermate:documents.read`
+exposes list/get plus owner-checked `documents.downloadPptx`, while
+`avermate:documents.write` exposes create/update, revision-idempotent
+`documents.exportPptx`, and confirmed delete.
+The base read tool `jobs.get` polls the returned job identifier and exposes
+only safe public status/result fields: queue payloads, idempotency keys and
+worker locks are omitted. Ownership is checked before any status is returned.
+On success, pass the original document identifier and the result revision to
+`documents.downloadPptx`; this second owner-checked call mints a short-lived URL
+without persisting it in the job or an MCP catalog.
+`documents.get` returns the current revision; every
+update must echo it. A stale write is rejected without replacing the saved
+body or its source references, so an agent must re-read and deliberately
+reapply its edit. The oRPC documents router remains authoritative for
+ownership, year consistency, the 512 KiB body cap, and reference validation.
+Fiches/notes store Markdown. Slides accept at most 512 KiB and 100 source
+slides, use `metaJson: {"version":1}`, and split only on a `---` thematic-break
+line outside CommonMark fenced code (including fences nested in list items).
+Mind maps store an empty Markdown body and a versioned
+`{root:{id,label,note?,children?}}` tree capped at 8 levels, 500 uniquely
+identified nodes and 512 KiB of metadata. `documents.create` does not accept
+sources: create the document first, then call `documents.update` with the
+returned revision and the complete source list.
+
+PPTX v1 exports XML-safe text, bullets and fenced code. Dense source slides
+become numbered continuation slides instead of losing overflowing content, and
+one stored `.pptx` result is adopted idempotently per document revision. An
+export is rejected without truncation if continuation would exceed 250
+generated slides; split an exceptionally dense deck into smaller documents.
+Math remains source text; linked image binaries and custom themes are
+intentionally not embedded in this version.
+
+`grades.attachments` is an academic read tool under `avermate:read`. It returns
+the attachment label, order and timestamp plus the stored file's identifier,
+public URL, MIME type and byte size. Storage-provider identities and provider
+keys are never serialized. The oRPC grade router remains authoritative for
+grade ownership and filters out files that are no longer stored.
 
 Announcement reads accept an optional `yearId`. When present, preset-targeted
 messages are authorized against that owned year's current linked membership;
@@ -195,9 +287,13 @@ recaps. Resource templates provide:
 - `avermate://subjects/{subjectId}`;
 - `avermate://grades/{gradeId}`.
 
-Prompts include `academic-check-in`, `grade-impact-analysis`, `goal-plan`, and
-`year-recap`. They direct the assistant to read real Avermate data first and
-never invent identifiers or silently modify data.
+Prompts include `academic-check-in`, `grade-impact-analysis`, `goal-plan`,
+`year-recap`, `fiche-methodology`, `fiche-from-chapter`, and
+`mindmap-from-chapter`. The fiche prompts
+teach the five `[!DEF]`, `[!THM]`, `[!METH]`, `[!PIEGE]`, and `[!CHECK]`
+callouts, source-first chapter reading, math syntax, and explicit unread-source
+reporting. All prompts direct the assistant to read real Avermate data first
+and never invent identifiers or silently modify data.
 
 ## Destructive operations and MRTR
 
@@ -304,9 +400,13 @@ It executes the handler through `handler.fetch` in an isolated process and
 covers modern envelopes, version/header rejection, deterministic catalogs and
 cache hints, resource templates/prompts, scopes and role gates, ownership,
 read-only mutation denial, isolated social read/manage/moderation catalogues,
-signed MRTR confirmation, idempotent replay, protected-resource discovery,
-DCR-off behavior, unauthenticated challenges, and a real authorization-code +
-PKCE exchange whose JWT calls `/mcp`.
+isolated planner and materials read/write catalogues (including OCR, owned
+lecture transcripts and provider-sync separation), isolated document
+read/write catalogues and a
+revision-fence round trip, signed MRTR confirmation, safe grade-copy
+metadata projection, idempotent replay, protected-resource discovery, DCR-off
+behavior, unauthenticated challenges, and a real authorization-code + PKCE
+exchange whose JWT calls `/mcp`.
 
 The implementation is based on:
 

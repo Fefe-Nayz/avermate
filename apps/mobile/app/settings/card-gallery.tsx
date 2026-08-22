@@ -8,7 +8,7 @@ import {
   templateSlots,
   WIDGET_DEFINITION_VERSION,
   type TemplateSlotKind,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
 } from "@avermate/core";
 import { Button, Card, Empty, Loading, Screen, Section } from "@/components/ui";
@@ -32,7 +32,7 @@ interface TemplateRow {
   title: string;
   description: string;
   surfaces: string[];
-  definitionJson: WidgetDefinitionV1;
+  definitionJson: WidgetDefinition;
 }
 
 type SlotOptions = Record<
@@ -49,6 +49,9 @@ const SLOT_LABELS: Record<TemplateSlotKind, () => string> = {
   "custom-average": () => t("Custom average"),
   goal: () => t("Goal"),
   period: () => t("Period"),
+  cohort: () => t("Class"),
+  "cohort-member": () => t("Classmate"),
+  friend: () => t("Friend"),
 };
 
 function GalleryItem({
@@ -62,7 +65,7 @@ function GalleryItem({
   options: SlotOptions;
   installing: boolean;
   disabled: boolean;
-  onInstall: (definition: WidgetDefinitionV1) => void;
+  onInstall: (definition: WidgetDefinition) => void;
 }) {
   const palette = usePalette();
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -75,6 +78,9 @@ function GalleryItem({
     slots,
     options,
     new Map(Object.entries(picks)),
+  );
+  const hasUnfillableSlot = slots.some(
+    (slot) => options[slot.kind].length === 0,
   );
 
   return (
@@ -109,7 +115,7 @@ function GalleryItem({
         label={t("Install")}
         icon="add-circle"
         loading={installing}
-        disabled={disabled}
+        disabled={disabled || hasUnfillableSlot}
         onPress={() =>
           onInstall(substituteSlots(template.definitionJson, mapping))
         }
@@ -127,7 +133,7 @@ export default function CardGallery() {
   const [installingId, setInstallingId] = useState<string | null>(null);
 
   const install = useMutation({
-    mutationFn: (definition: WidgetDefinitionV1) => {
+    mutationFn: (definition: WidgetDefinition) => {
       if (!yearId) throw new Error("No year selected");
       return client.cards.create({
         yearId,
@@ -169,6 +175,12 @@ export default function CardGallery() {
         value: period.id,
         label: period.name,
       })),
+      // Social template slots require consent-aware, dependent pickers. Until
+      // those are loaded on native, leave the template visibly unfillable
+      // instead of persisting the author's unrelated ids.
+      cohort: [],
+      "cohort-member": [],
+      friend: [],
     }),
     [customAverages, goals, graph, periods],
   );

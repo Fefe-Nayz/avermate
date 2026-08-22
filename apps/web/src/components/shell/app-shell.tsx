@@ -13,6 +13,8 @@ import { TimelineBanner } from "./timeline-banner"
 import { PullToRefresh } from "./pull-to-refresh"
 import { ScrollPaneProvider } from "./scroll-pane"
 import { usePaneScrollRestoration } from "@/hooks/use-pane-scroll-restoration"
+import { isFullBleedRoute } from "./page-layout"
+import { cn } from "@/lib/utils"
 
 /**
  * One tree, two layouts.
@@ -35,6 +37,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     pathname,
   }))
   const condensed = scrollState.pathname === pathname && scrollState.condensed
+  // A browser-style screen takes the pane instead of sitting in the centred
+  // column every reading screen uses. Read from the path, so the first paint is
+  // already the right shape.
+  const fullBleed = isFullBleedRoute(pathname)
 
   // A new screen starts at the top; a screen you came *back* to starts where
   // you left it. See the hook for why those are opposite requirements and how
@@ -101,12 +107,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PullToRefresh paneRef={scrollRef} />
             <div
               ref={scrollRef}
-              className="scroll-pane pane-inset @container/main min-w-0 flex-1 md:pb-[max(1.5rem,var(--spacing-safe-bottom))]"
+              className={cn(
+                "scroll-pane pane-inset @container/main min-w-0 flex-1",
+                fullBleed
+                  ? // Two panes that scroll independently cannot live inside a
+                    // pane that scrolls too. On a phone there is only ever one
+                    // of them on screen, so the page keeps scrolling normally.
+                    "md:overflow-hidden md:pb-0"
+                  : "md:pb-[max(1.5rem,var(--spacing-safe-bottom))]"
+              )}
             >
-              <div className="mx-auto w-full max-w-6xl pt-1 pr-[max(1rem,var(--spacing-safe-right))] pb-6 pl-[max(1rem,var(--spacing-safe-left))] md:pt-4 md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
-                <MobilePageTitle />
-                {children}
-              </div>
+              {fullBleed ? (
+                <div className="flex w-full flex-col md:h-full md:min-h-0">
+                  <MobilePageTitle />
+                  {children}
+                </div>
+              ) : (
+                <div className="mx-auto w-full max-w-6xl pt-1 pr-[max(1rem,var(--spacing-safe-right))] pb-6 pl-[max(1rem,var(--spacing-safe-left))] md:pt-4 md:pr-[max(1.5rem,var(--spacing-safe-right))] md:pl-[max(1.5rem,var(--spacing-safe-left))]">
+                  <MobilePageTitle />
+                  {children}
+                </div>
+              )}
             </div>
           </div>
 

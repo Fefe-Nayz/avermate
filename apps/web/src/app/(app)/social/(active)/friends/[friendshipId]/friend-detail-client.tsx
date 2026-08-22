@@ -168,7 +168,9 @@ export function FriendDetailClient({ friendshipId }: { friendshipId: string }) {
                     <p className="text-xs text-muted-foreground">
                       {subject.gradeCount === 1
                         ? t("1 grade")
-                        : t("{count} grades", { count: String(subject.gradeCount) })}
+                        : t("{count} grades", {
+                            count: String(subject.gradeCount),
+                          })}
                     </p>
                   </SocialRow>
                 ))}

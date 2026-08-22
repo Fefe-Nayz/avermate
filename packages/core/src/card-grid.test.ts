@@ -10,12 +10,16 @@ function card(
   id: string,
   span: CardSpec["span"],
   display: CardSpec["display"],
+  recipe: CardSpec["recipe"] = display === "value" || display === "gauge"
+    ? "value"
+    : "bar",
 ): CardSpec {
   return {
     id,
     metric: "average",
     target: { kind: "general", referenceId: null },
     display,
+    recipe,
     span,
     title: id,
     accent: null,

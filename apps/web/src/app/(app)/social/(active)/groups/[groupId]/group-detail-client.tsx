@@ -63,6 +63,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { useYear } from "@/components/year/year-provider"
+import { invalidateCohortQueriesForGroup } from "@/hooks/use-cohorts"
 import { haptic } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import { orpc } from "@/lib/orpc"
@@ -111,10 +112,31 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
       }),
     ])
   }
+  const refreshCohortSurfaces = async () => {
+    await Promise.all([
+      refresh(),
+      invalidateCohortQueriesForGroup(queryClient, groupId),
+    ])
+  }
 
   const update = useMutation({
     ...orpc.social.groups.update.mutationOptions(),
     onSuccess: refresh,
+  })
+  /**
+   * The switch that lets members put this comparison on their own dashboards.
+   *
+   * Its own mutation rather than a field of `update`, matching the route: a board is
+   * something you look at together in this screen, and a cohort is a number that follows
+   * members around their own. The owner should have to decide that on purpose.
+   */
+  const setCohorts = useMutation({
+    ...orpc.social.cohorts.setEnabled.mutationOptions(),
+    onSuccess: refreshCohortSurfaces,
+    onError: (error) => {
+      haptic("error")
+      toast.error(error.message || t("The change could not be saved."))
+    },
   })
   const configureClass = useMutation({
     ...orpc.social.groups.configureClass.mutationOptions(),
@@ -200,9 +222,7 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
       router.push("/social/groups")
     },
     onError: () =>
-      toast.error(
-        t("Remove the other members first, or delete the class.")
-      ),
+      toast.error(t("Remove the other members first, or delete the class.")),
   })
   const destroy = useMutation({
     ...orpc.social.groups.delete.mutationOptions(),
@@ -352,6 +372,32 @@ export function GroupDetailClient({ groupId }: { groupId: string }) {
                         update.mutate({ groupId, showGradeCount })
                       }
                     />
+                  </div>
+                  {/* What this one opens is a different surface, so it says so rather
+                      than sitting silently beside the board's own two switches. */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="edit-class-cohort">
+                        {t("Let members use this class in their own cards")}
+                      </Label>
+                      <Switch
+                        id="edit-class-cohort"
+                        checked={Boolean(template) && group.cohortEnabled}
+                        disabled={!template || setCohorts.isPending}
+                        onCheckedChange={(enabled) =>
+                          setCohorts.mutate({ groupId, enabled })
+                        }
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {template
+                        ? t(
+                            "Members can then add a rank or a class average to their dashboard. Only those who already share their average appear, and turning sharing off removes them again."
+                          )
+                        : t(
+                            "Connect a class model before enabling comparisons in cards."
+                          )}
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>

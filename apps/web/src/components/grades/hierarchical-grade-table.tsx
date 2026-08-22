@@ -48,7 +48,7 @@ export function HierarchicalGradeTable({
   order: GradeOrder
 }) {
   const t = useExtracted()
-  const { customAverages, graph } = useYear()
+  const { customAverages, graph, year } = useYear()
 
   // Resolved once for both arrangements, so neither can drift from the other.
   // Which grades a query is asking about, and in what order, is decided in
@@ -62,22 +62,40 @@ export function HierarchicalGradeTable({
     { query, order }
   ).map((row) => ({ ...row, ratio: graph.ratio(row.subject.id) }))
 
+  /**
+   * The nominated average is not listed twice.
+   *
+   * When a year reads its general average as one of its custom ones, both rows carry the
+   * same figure under two names — and clicking either now opens the same page, since
+   * `/averages/general` resolves through the nomination. So the general row takes the
+   * name it is actually reading, and the custom row it duplicates drops out. The average
+   * itself is untouched: it is still managed from the settings, and still has a page.
+   */
+  const nominatedId = year?.mainAverageId ?? null
+  const nominated = nominatedId
+    ? customAverages.find((average) => average.id === nominatedId)
+    : undefined
+
   const averages = [
     {
       id: "general",
       href: "/averages/general",
-      name: t("General average"),
+      name: nominated
+        ? t("General average · {name}", { name: nominated.name })
+        : t("General average"),
       ratio: graph.ratio(null),
     },
-    ...customAverages.map((average) => {
-      const resolved = resolveCustomAverage(graph, average)
-      return {
-        id: average.id,
-        href: `/averages/${average.id}`,
-        name: average.name,
-        ratio: resolved.graph.ratio(null, resolved.scope),
-      }
-    }),
+    ...customAverages
+      .filter((average) => average.id !== nominatedId)
+      .map((average) => {
+        const resolved = resolveCustomAverage(graph, average)
+        return {
+          id: average.id,
+          href: `/averages/${average.id}`,
+          name: average.name,
+          ratio: resolved.graph.ratio(null, resolved.scope),
+        }
+      }),
   ]
 
   if (lines.length === 0) {

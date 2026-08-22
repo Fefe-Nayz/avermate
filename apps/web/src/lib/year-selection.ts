@@ -22,15 +22,17 @@ export function resolveActiveYearId(
 ): string | null {
   if (years.length === 0) return null
 
-  const activeYears = years.filter((year) => !year.archivedAt)
-  const candidates = activeYears.length > 0 ? activeYears : years
-
-  if (
-    preferredYearId &&
-    candidates.some((year) => year.id === preferredYearId)
-  ) {
+  // An archived year is not offered by the ordinary switcher, but it remains
+  // a valid explicit destination (for example from a recording linked to an
+  // older lesson). Archiving the currently selected year already writes a
+  // live fallback, so honoring a still-valid explicit id does not strand the
+  // normal archive flow.
+  if (preferredYearId && years.some((year) => year.id === preferredYearId)) {
     return preferredYearId
   }
+
+  const activeYears = years.filter((year) => !year.archivedAt)
+  const candidates = activeYears.length > 0 ? activeYears : years
 
   const current = candidates.find(
     (year) =>

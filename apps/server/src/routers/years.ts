@@ -29,15 +29,31 @@ import { assertPeriodRangesWithinYear } from "../lib/academic-periods";
 import { academicCardRows } from "../lib/academic-setup";
 import { getYearPresetStatus } from "../lib/preset-membership";
 
-const yearInput = z.object({
+const yearFields = {
   name: z.string().trim().min(1).max(64),
   startsAt: z.coerce.date(),
   endsAt: z.coerce.date(),
-  scale: z.number().positive().max(1000).default(20),
-  defaultOutOf: z.number().positive().max(1000).default(20),
-  passingRatio: z.number().min(0).max(1).default(0.5),
-  decimals: z.number().int().min(0).max(4).default(2),
+  scale: z.number().positive().max(1000),
+  defaultOutOf: z.number().positive().max(1000),
+  passingRatio: z.number().min(0).max(1),
+  decimals: z.number().int().min(0).max(4),
+  /** One of this year's custom averages, to stand in as the general average. */
+  mainAverageId: z.string().nullable(),
+  /** Extra points on the year's scale, added to the general average. */
+  generalBonus: z.number().min(-1000).max(1000),
+};
+
+const yearInput = z.object({
+  ...yearFields,
+  scale: yearFields.scale.default(20),
+  defaultOutOf: yearFields.defaultOutOf.default(20),
+  passingRatio: yearFields.passingRatio.default(0.5),
+  decimals: yearFields.decimals.default(2),
+  mainAverageId: yearFields.mainAverageId.default(null),
+  generalBonus: yearFields.generalBonus.default(0),
 });
+
+const yearPatchInput = z.object(yearFields).partial();
 
 function assertRange(startsAt: Date, endsAt: Date) {
   if (endsAt.getTime() <= startsAt.getTime()) {
@@ -152,7 +168,7 @@ export const yearsRouter = {
     }),
 
   update: protectedProcedure
-    .input(yearInput.partial().extend({ yearId: z.string() }))
+    .input(yearPatchInput.extend({ yearId: z.string() }))
     .handler(async ({ context, input }) => {
       const { yearId, ...patch } = input;
       const existing = await requireYear(context.session.user.id, yearId);
@@ -171,6 +187,28 @@ export const yearsRouter = {
           .from(periods)
           .where(eq(periods.yearId, yearId));
         assertPeriodRangesWithinYear({ startsAt, endsAt }, periodRows);
+      }
+
+      /**
+       * A year can only nominate one of its *own* averages.
+       *
+       * The column carries no foreign key — see the schema, which says why — so this is
+       * where the year boundary is kept. Without it a reader could point their headline
+       * at an average belonging to another of their years, and read a number computed
+       * from subjects this year does not have.
+       */
+      if (patch.mainAverageId) {
+        const [owned] = await db
+          .select({ id: customAverages.id })
+          .from(customAverages)
+          .where(
+            and(
+              eq(customAverages.id, patch.mainAverageId),
+              eq(customAverages.yearId, yearId),
+            ),
+          )
+          .limit(1);
+        if (!owned) badRequest("That average is not part of this year");
       }
 
       const [updated] = await db

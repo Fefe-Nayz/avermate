@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { AuthenticatedProviders } from "@/components/authenticated-providers"
 import { prepareOnboarding } from "@/lib/authenticated-data"
-import { HydrateClient } from "@/lib/query-server"
+import { dehydrate } from "@tanstack/react-query"
 
 export default async function OnboardingLayout({
   children,
@@ -11,8 +11,11 @@ export default async function OnboardingLayout({
   const { queryClient, user } = await prepareOnboarding()
 
   return (
-    <AuthenticatedProviders user={user}>
-      <HydrateClient queryClient={queryClient}>{children}</HydrateClient>
+    <AuthenticatedProviders
+      dehydratedState={dehydrate(queryClient)}
+      user={user}
+    >
+      {children}
     </AuthenticatedProviders>
   )
 }

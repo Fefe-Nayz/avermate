@@ -3,5 +3,6 @@ node_modules/
 .next/
 .turbo/
 coverage/
+public/vendor/pyodide/
 pnpm-lock.yaml
 .pnpm-store/

@@ -37,6 +37,27 @@ const CATEGORY_BY_METRIC: Record<CardMetric, WidgetCategory> = {
   passStreak: "consistency",
   distribution: "consistency",
   goalProgress: "goals",
+  // What a goal still needs is a goal reading; where effort pays is a result.
+  requiredResult: "goals",
+  leverage: "results",
+  coverage: "essentials",
+  safetyMargin: "goals",
+  weightBreakdown: "essentials",
+  contributions: "momentum",
+  projectionBand: "goals",
+  markImpact: "results",
+  nextBestAction: "results",
+  cohortRank: "results",
+  cohortAverage: "essentials",
+  cohortGap: "results",
+  memberAverage: "results",
+  friendAverage: "essentials",
+  friendCurves: "momentum",
+  friendSubjects: "results",
+  controlBand: "consistency",
+  anomaly: "consistency",
+  concentration: "consistency",
+  nextLeverage: "results",
 };
 
 function recommendedDisplay(metric: CardMetric): CardDisplay {

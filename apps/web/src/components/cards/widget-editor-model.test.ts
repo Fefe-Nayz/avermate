@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  widgetPrimaryMeasure,
   WIDGET_LIMITS,
   compileWidgetDefinition,
   createWidgetDefinition,
@@ -15,18 +16,27 @@ describe("widget editor model", () => {
       formula = { kind: "unary", operation: "absolute", operand: formula }
     }
     const definition = createWidgetDefinition("overview")
-    definition.analysis.measure = {
-      kind: "formula",
-      formula,
-      valueType: "number",
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
+          formula,
+          valueType: "number",
+        },
+      },
+    ]
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     })
-    expect(resolved.analysis.measure).toMatchObject({ kind: "formula" })
+    expect(widgetPrimaryMeasure(resolved.analysis)).toMatchObject({
+      kind: "formula",
+    })
     expect(
-      (resolved.analysis.measure as { formula: WidgetFormula }).formula
+      (widgetPrimaryMeasure(resolved.analysis) as { formula: WidgetFormula })
+        .formula
     ).toEqual(formula)
     expect(
       compileWidgetDefinition(resolved, { surface: "overview" }).valid
@@ -35,11 +45,17 @@ describe("widget editor model", () => {
 
   test("keeps a temporarily empty number leaf and blocks compilation", () => {
     const definition = createWidgetDefinition("overview")
-    definition.analysis.measure = {
-      kind: "formula",
-      formula: { kind: "literal", value: null } as unknown as WidgetFormula,
-      valueType: "number",
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: {
+          kind: "formula",
+          formula: { kind: "literal", value: null } as unknown as WidgetFormula,
+          valueType: "number",
+        },
+      },
+    ]
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
@@ -47,14 +63,17 @@ describe("widget editor model", () => {
     const compiled = compileWidgetDefinition(resolved, { surface: "overview" })
 
     expect(
-      (resolved.analysis.measure as { formula: { value: unknown } }).formula
-        .value
+      (
+        widgetPrimaryMeasure(resolved.analysis) as {
+          formula: { value: unknown }
+        }
+      ).formula.value
     ).toBeNull()
     expect(compiled.valid).toBe(false)
     expect(compiled.plan).toBeNull()
     expect(
       compiled.issues.some(
-        (issue) => issue.path === "analysis.measure.formula.value"
+        (issue) => issue.path === "analysis.measures.0.expression.formula.value"
       )
     ).toBe(true)
   })
@@ -121,24 +140,32 @@ describe("widget editor model", () => {
 
   test("canonicalizes time and line when switching to latest grade", () => {
     const definition = createWidgetDefinition("overview")
-    definition.analysis.groupBy = {
-      kind: "time",
-      interval: "week",
-      accumulation: "running",
-    }
+    definition.analysis.dimensions = [
+      {
+        id: "group",
+        kind: "time",
+        grain: "week",
+        accumulation: "running",
+        fill: "observed",
+      },
+    ]
     definition.visualization = createWidgetVisualization("line")
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "lastGrade",
-      goalId: null,
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "lastGrade", goalId: null },
+      },
+    ]
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     })
 
-    expect(resolved.analysis.groupBy).toEqual({ kind: "none" })
-    expect(resolved.visualization.mark).toBe("value")
+    // A measure that cannot be grouped keeps no dimension at all, rather than a
+    // dimension of nothing: an ungrouped analysis is an empty list.
+    expect(resolved.analysis.dimensions).toEqual([])
+    expect(resolved.visualization.recipe).toBe("value")
     expect(
       compileWidgetDefinition(resolved, { surface: "overview" }).valid
     ).toBe(true)
@@ -149,25 +176,31 @@ describe("widget editor model", () => {
     definition.query.filters = [
       { kind: "grade-ratio", operator: "gte", value: 0.5 },
     ]
-    definition.analysis.groupBy = {
-      kind: "time",
-      interval: "week",
-      accumulation: "running",
-    }
+    definition.analysis.dimensions = [
+      {
+        id: "group",
+        kind: "time",
+        grain: "week",
+        accumulation: "running",
+        fill: "observed",
+      },
+    ]
     definition.visualization = createWidgetVisualization("line")
-    definition.analysis.measure = {
-      kind: "metric",
-      metric: "goalProgress",
-      goalId: "goal",
-    }
+    definition.analysis.measures = [
+      {
+        id: "measure",
+        label: null,
+        expression: { kind: "metric", metric: "goalProgress", goalId: "goal" },
+      },
+    ]
 
     const resolved = resolveWidgetEditorChange(definition, {
       surface: "overview",
     })
 
     expect(resolved.query.filters).toEqual([])
-    expect(resolved.analysis.groupBy).toEqual({ kind: "none" })
-    expect(resolved.visualization.mark).toBe("gauge")
+    expect(resolved.analysis.dimensions).toEqual([])
+    expect(resolved.visualization.recipe).toBe("gauge")
     expect(
       compileWidgetDefinition(resolved, { surface: "overview" }).valid
     ).toBe(true)

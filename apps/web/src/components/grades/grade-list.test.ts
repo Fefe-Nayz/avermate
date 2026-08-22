@@ -32,7 +32,7 @@ describe("shared grade list", () => {
     expect(subjectPage).toContain("<GradeList grades={grades} />")
     expect(averagePage).toContain("<GradeList grades={grades} />")
     expect(component).toContain('<ul className="divide-y">')
-    expect(component).toContain('className={gradeListItemClassName}')
+    expect(component).toContain("className={gradeListItemClassName}")
     expect(component).toContain("<ChevronRightIcon")
   })
 

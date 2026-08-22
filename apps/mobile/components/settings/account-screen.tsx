@@ -236,10 +236,10 @@ export function AccountScreen() {
     say(t("Sign-in linked."));
   };
 
-  const unlink = async (providerId: string) => {
+  const unlink = async (accountId: string, providerId: string) => {
     if (!canUnlink) return;
     setAction(`unlink:${providerId}`);
-    const result = await authClient.unlinkAccount({ providerId });
+    const result = await authClient.unlinkAccount({ accountId });
     setAction(null);
     if (result.error) return complain(t("That sign-in could not be removed."));
     await accounts.refetch();
@@ -546,7 +546,7 @@ export function AccountScreen() {
                   }
                   onPress={() =>
                     linked
-                      ? void unlink(linked.providerId)
+                      ? void unlink(linked.id, linked.providerId)
                       : void link(provider)
                   }
                 />

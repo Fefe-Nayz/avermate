@@ -15,6 +15,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  type KeyboardCoordinateGetter,
   MouseSensor,
   TouchSensor,
   closestCenter,
@@ -41,13 +42,18 @@ import {
 import { useExtracted } from "next-intl"
 import { toast } from "sonner"
 import {
+  gridKeyboardTarget,
   layoutCardGrid,
   layoutCards,
   planGridReorder,
   widgetCapability,
   cardSemanticsFromDefinition,
+  widgetPrimaryMeasure,
+  widgetRecipeLayout,
+  widgetResultShapeForRecipe,
   widgetMeasureId,
   type CardSpec,
+  type GridMoveDirection,
   type WidgetSurface,
 } from "@avermate/core"
 import { Button } from "@/components/ui/button"
@@ -56,7 +62,7 @@ import { useYear, type DashboardCardRow } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { cn } from "@/lib/utils"
 import { haptic } from "@/lib/haptics"
-import { CardShell, cardSurface } from "./card-shell"
+import { CardShell, cardSurface, useDashboardGrid } from "./card-shell"
 import {
   aimGridSlot,
   captureGridSlots,
@@ -69,6 +75,10 @@ import { resolveWidgetRow } from "./widget-row"
 import { useWidgetMessages } from "./use-widget-messages"
 import { useWidgetResult } from "./use-widget-result"
 import { WidgetBody } from "./widget-view"
+import {
+  widgetRecipeForLayout,
+  type WidgetGridColumns,
+} from "./widget-responsive"
 
 /**
  * The dashboard grid.
@@ -91,6 +101,14 @@ import { WidgetBody } from "./widget-view"
 export function toSpec(row: DashboardCardRow): CardSpec {
   const { definition } = resolveWidgetRow(row)
   const projection = definition ? cardSemanticsFromDefinition(definition) : null
+  const requestedRecipe = definition?.visualization.recipe ?? "value"
+  const resultShape = definition
+    ? widgetResultShapeForRecipe(
+        widgetPrimaryMeasure(definition.analysis),
+        definition.analysis.dimensions,
+        requestedRecipe
+      )
+    : "scalar"
   return {
     id: row.id,
     metric: projection?.metric ?? "average",
@@ -99,6 +117,18 @@ export function toSpec(row: DashboardCardRow): CardSpec {
       referenceId: projection?.targetId ?? null,
     },
     display: projection?.display ?? "value",
+    // The layout reads this, and it is read off the definition rather than off
+    // `display`: a sparkline, a ranking and an eight-series study are three
+    // widths, and the four-way display projection could only name one of them.
+    // A row this build cannot read lays out as a plain value card, which is the
+    // least it could be.
+    recipe: definition
+      ? widgetRecipeForLayout(
+          requestedRecipe,
+          definition.presentation.responsiveBehavior,
+          resultShape
+        )
+      : requestedRecipe,
     span: Math.min(4, Math.max(1, row.span)) as CardSpec["span"],
     title: row.title,
     accent: row.accent,
@@ -168,6 +198,19 @@ const REORDER_TRANSITION = {
  * the same position always yields the same preview however many times it is
  * asked.
  */
+/**
+ * Which way each arrow means, in the grid's own vocabulary.
+ *
+ * `event.code` rather than `event.key`, so the answer does not change with the keyboard
+ * layout: the arrow keys carry the same codes everywhere.
+ */
+const ARROW_DIRECTIONS: Record<string, GridMoveDirection | undefined> = {
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  ArrowUp: "up",
+  ArrowDown: "down",
+}
+
 interface DragSession {
   activeId: string
   ids: string[]
@@ -187,6 +230,17 @@ interface DragSession {
   targetId: string | null
   /** Where inside the card the pointer took hold; `null` for a keyboard drag. */
   grab: { x: number; y: number } | null
+  /**
+   * Where the last arrow key aimed, for a drag with no pointer.
+   *
+   * A keyboard drag used to be handed to `closestCenter` over the rects measured at drag
+   * start: dnd-kit's own answer, and a reasonable one for a list, but it compares the
+   * *centre* of the dragged card — so a wide card stepping down landed on whichever half
+   * of the row below its middle happened to touch. The step is chosen in core now, by
+   * column, and remembered here so the aim below can use the answer rather than
+   * re-deriving one from geometry.
+   */
+  keyboardTargetId: string | null
   source: { width: number; height: number } | null
 }
 
@@ -243,6 +297,8 @@ function DashboardCardView({
   spec,
   editing,
   surface,
+  columns,
+  gridColumns,
   className,
   handle,
 }: {
@@ -250,6 +306,9 @@ function DashboardCardView({
   spec: CardSpec
   editing: boolean
   surface: WidgetSurface
+  /** Columns the packer actually drew after closing this row. */
+  columns: WidgetGridColumns
+  gridColumns: WidgetGridColumns
   className?: string
   /** The reorder grip, with its listeners in the grid and without in the overlay. */
   handle?: ReactNode
@@ -261,8 +320,9 @@ function DashboardCardView({
   const result = useWidgetResult(definition, surface)
   const defaultTitle = definition
     ? message(
-        widgetCapability(widgetMeasureId(definition.analysis.measure))
-          .messageKey
+        widgetCapability(
+          widgetMeasureId(widgetPrimaryMeasure(definition.analysis))
+        ).messageKey
       )
     : t("Unavailable card")
   const route = surface === "insights" ? "/insights/cards" : "/dashboard/cards"
@@ -278,12 +338,19 @@ function DashboardCardView({
       })
     },
   })
-
   return (
     <CardShell
       accent={spec.accent}
       surface={cardSurface(result)}
       className={cn(row.hidden && "opacity-55", className)}
+      // What this body needs before it says anything, so the row grows to hold
+      // it rather than clipping it. Derived from the definition, never from the
+      // data, so a new grade cannot change a row's height.
+      heightTier={
+        definition
+          ? widgetRecipeLayout(definition.visualization.recipe).minHeightTier
+          : "short"
+      }
       title={spec.title ?? defaultTitle}
       action={
         editing ? (
@@ -321,6 +388,8 @@ function DashboardCardView({
           definition={definition}
           result={result}
           expanded={surface === "insights"}
+          columns={columns}
+          gridColumns={gridColumns}
         />
       ) : (
         <p className="py-6 text-center text-sm text-muted-foreground">
@@ -351,6 +420,8 @@ function SortableDashboardCard({
   editing,
   spanClasses,
   surface,
+  columns,
+  gridColumns,
   dragging,
   animateLayout,
 }: {
@@ -359,6 +430,8 @@ function SortableDashboardCard({
   editing: boolean
   spanClasses: string
   surface: WidgetSurface
+  columns: WidgetGridColumns
+  gridColumns: WidgetGridColumns
   dragging: boolean
   animateLayout: boolean
 }) {
@@ -386,6 +459,8 @@ function SortableDashboardCard({
         spec={spec}
         editing={editing}
         surface={surface}
+        columns={columns}
+        gridColumns={gridColumns}
         className={cn("h-full", dragging && "invisible")}
         handle={
           <Button
@@ -423,6 +498,8 @@ export function CardGrid({
   const t = useExtracted()
   const queryClient = useQueryClient()
   const { cards, yearId } = useYear()
+  const { columns: dashboardColumns } = useDashboardGrid()
+  const activeGridColumns = dashboardColumns as WidgetGridColumns
 
   const surfaceCards = useMemo(
     () =>
@@ -537,6 +614,7 @@ export function CardGrid({
   const placement = useMemo(() => {
     const specs = orderedSpecs(visible)
     const perCard = new Map<string, string[]>()
+    const activeColumns = new Map<string, WidgetGridColumns>()
     const gaps: string[] = []
 
     for (const step of GRID_STEPS) {
@@ -545,6 +623,9 @@ export function CardGrid({
         const classes = perCard.get(item.spec.id) ?? []
         classes.push(SPAN_CLASS[`${step.container}${item.columns}`] ?? "")
         perCard.set(item.spec.id, classes)
+        if (step.columns === activeGridColumns) {
+          activeColumns.set(item.spec.id, item.columns as WidgetGridColumns)
+        }
       }
       // Straight from the engine: a second implementation of the packing rules
       // here is a second thing to keep in step with it.
@@ -561,9 +642,10 @@ export function CardGrid({
       spans: new Map(
         [...perCard].map(([id, classes]) => [id, classes.join(" ")])
       ),
+      columns: activeColumns,
       gap: gaps.join(" "),
     }
-  }, [orderedSpecs, visible])
+  }, [activeGridColumns, orderedSpecs, visible])
 
   const reorder = useMutation({
     ...orpc.cards.reorder.mutationOptions(),
@@ -614,14 +696,58 @@ export function CardGrid({
   // will not do for a finger — it starts scrolling and cancels the pointer, so
   // the card never picks up. Touch gets a deliberate hold instead, mouse keeps
   // the small distance so a tap on a card link stays a tap.
+  /**
+   * One arrow key, as a move to the card the step lands on.
+   *
+   * dnd-kit drives a keyboard drag by *coordinates*, so the step is expressed as "put the
+   * dragged card over that one" — but which card is decided in core, by
+   * `gridKeyboardTarget`, from the same layout the packer drew. The default getter walks
+   * the sortable's flat order instead, which in a grid of mixed widths means a card can
+   * step "down" into the row it is already in.
+   *
+   * The slots are the frozen ones, so this is a pure function of the arrangement the drag
+   * began in — the same guarantee the pointer's aim has.
+   */
+  const keyboardCoordinates = useCallback<KeyboardCoordinateGetter>(
+    (event, args) => {
+      const active = sessionRef.current
+      const grid = gridRef.current
+      const direction = ARROW_DIRECTIONS[event.code]
+      if (!active || !grid || !direction) {
+        return sortableKeyboardCoordinates(event, args)
+      }
+      const target = gridKeyboardTarget(
+        active.specs,
+        active.columns,
+        // Where the card is *now*, not where the drag began.
+        //
+        // Every step recomputed the neighbour of the origin, so the second arrow press
+        // returned the same slot as the first and the card could never travel more than
+        // one cell in a keyboard drag. The layout stays frozen, so walking from the last
+        // target reads the same arrangement — one step further along it.
+        active.keyboardTargetId ?? active.activeId,
+        direction
+      )
+      const slot = active.slots.find((item) => item.id === target)
+      // Nowhere to go — the edge of the grid — so the card stays where it is rather than
+      // wrapping to the far end, which is a reorder nobody asked for.
+      if (!target || !slot) return undefined
+      active.keyboardTargetId = target
+      const box = grid.getBoundingClientRect()
+      return {
+        x: box.left + slot.left + slot.width / 2,
+        y: box.top + slot.top + slot.height / 2,
+      }
+    },
+    []
+  )
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, {
       activationConstraint: { delay: 180, tolerance: 8 },
     }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates })
   )
 
   const itemIds = useMemo(() => visible.map((card) => card.id), [visible])
@@ -661,7 +787,11 @@ export function CardGrid({
           bounds: box,
           previousId: active.targetId,
         })
-      : (closestCenter(args)[0]?.id ?? null)
+      : // A keyboard drag: the step already decided which card it lands on, and that
+        // answer is used rather than measured back out of the coordinates it produced.
+        // Measuring it back is how a wide card stepping down ended up on whichever half
+        // of the row below its centre touched.
+        (active.keyboardTargetId ?? closestCenter(args)[0]?.id ?? null)
 
     // Remembered so the next answer can prefer to stay put, and so a pointer
     // that has left the grid can be told apart from one that has not moved.
@@ -774,6 +904,7 @@ export function CardGrid({
       source: rect ? { width: rect.width, height: rect.height } : null,
       cardsKey,
       targetId: null,
+      keyboardTargetId: null,
     }
     sessionRef.current = next
     previewRef.current = ids
@@ -960,6 +1091,8 @@ export function CardGrid({
                 editing={editing}
                 spanClasses={placement.spans.get(row.id) ?? ""}
                 surface={surface}
+                columns={placement.columns.get(row.id) ?? 1}
+                gridColumns={activeGridColumns}
                 dragging={activeId === row.id}
                 // Measured only while a drag is under way. Left on, Motion would
                 // measure every card on every unrelated render — and the grid
@@ -1005,6 +1138,8 @@ export function CardGrid({
               spec={specsById.get(activeRow.id) ?? toSpec(activeRow)}
               editing={editing}
               surface={surface}
+              columns={placement.columns.get(activeRow.id) ?? 1}
+              gridColumns={activeGridColumns}
               className="h-full shadow-lg"
               handle={
                 <span className="inline-flex size-7 items-center justify-center text-muted-foreground">

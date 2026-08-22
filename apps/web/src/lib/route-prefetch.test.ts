@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   ADMIN_OVERVIEW_INPUT,
+  agendaMonthInput,
   adminUsersInput,
+  gradeAttachmentsInput,
   reviewStatusInput,
 } from "./route-query-inputs"
 import {
@@ -54,6 +56,16 @@ const routes = [
     client: "../components/settings/avatar-editor.tsx",
     query: "profile.uploadsEnabled.queryOptions",
   },
+  {
+    page: "../app/(app)/grades/[gradeId]/layout.tsx",
+    client: "../components/grades/grade-copies.tsx",
+    query: "grades.attachments.queryOptions",
+  },
+  {
+    page: "../app/(app)/settings/integrations/page.tsx",
+    client: "../app/(app)/settings/integrations/service-keys-section.tsx",
+    query: "serviceKeys.list.queryOptions",
+  },
 ] as const
 
 describe("route-specific SSR prefetch", () => {
@@ -67,7 +79,10 @@ describe("route-specific SSR prefetch", () => {
 
         expect(page).not.toContain('"use client"')
         expect(page).not.toContain("useQuery")
-        expect(page).toContain("createServerQueryClient")
+        expect(
+          page.includes("createServerQueryClient") ||
+            page.includes("prepareAuthenticatedShell")
+        ).toBe(true)
         expect(page).toContain("HydrateClient")
         expect(page).toContain(route.query)
 
@@ -79,10 +94,16 @@ describe("route-specific SSR prefetch", () => {
   })
 
   test("server and client share deterministic first-render inputs", () => {
+    const month = new Date(2026, 7, 20, 12)
+    const agenda = agendaMonthInput("year-1", month)
+    expect(agenda.yearId).toBe("year-1")
+    expect(agenda.from).toEqual(new Date(2026, 7, 1))
+    expect(agenda.to).toEqual(new Date(2026, 7, 31, 23, 59, 59, 999))
     expect(reviewStatusInput("year-1")).toEqual({
       yearId: "year-1",
       reviewKey: "annual",
     })
+    expect(gradeAttachmentsInput("grade-1")).toEqual({ gradeId: "grade-1" })
     expect(ADMIN_OVERVIEW_INPUT).toEqual({ days: 30 })
     expect(adminUsersInput("")).toEqual({ query: "", limit: 20, offset: 0 })
     expect(adminFeedbackQueueInput(INITIAL_ADMIN_FEEDBACK_FILTERS)).toEqual({
@@ -148,6 +169,21 @@ describe("route-specific SSR prefetch", () => {
     expect(account).toContain("authClient.listSessions")
     expect(account).toContain("authClient.listAccounts")
     expect(account).not.toContain("getServerOrpc")
+  })
+
+  test("grade-copy mutations refresh only the attachment read model", async () => {
+    const copies = await source("../components/grades/grade-copies.tsx")
+    expect(copies).toContain("grades.attachments.queryKey")
+    expect(copies).not.toContain("snapshot")
+  })
+
+  test("service keys remain write-only browser inputs", async () => {
+    const keys = await source(
+      "../app/(app)/settings/integrations/service-keys-section.tsx"
+    )
+    expect(keys).toContain('type="password"')
+    expect(keys).toContain("serviceKeys.list.queryKey")
+    expect(keys).not.toContain("sealedKey")
   })
 
   test("settings keeps only its active-navigation island client-owned", async () => {

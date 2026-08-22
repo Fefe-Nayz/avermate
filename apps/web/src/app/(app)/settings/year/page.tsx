@@ -37,7 +37,13 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { PageMeta } from "@/components/shell/page-chrome"
 import { SettingsSection } from "@/components/settings/settings-section"
-import { DateField, NumberField, TextField } from "@/components/forms/controls"
+import {
+  DateField,
+  NumberField,
+  SelectControl,
+  TextField,
+} from "@/components/forms/controls"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { useYear } from "@/components/year/year-provider"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
@@ -54,7 +60,7 @@ export default function YearSettingsPage() {
   const t = useExtracted()
   const format = useFormatter()
   const queryClient = useQueryClient()
-  const { year, yearId, years, periods, selectYear } = useYear()
+  const { year, yearId, years, periods, customAverages, selectYear } = useYear()
   const [deletingYearId, setDeletingYearId] = useState<string | null>(null)
 
   const [sourceYear, setSourceYear] = useState(year)
@@ -73,6 +79,16 @@ export default function YearSettingsPage() {
     String(year ? year.passingRatio * year.scale : 10)
   )
   const [decimals, setDecimals] = useState(() => String(year?.decimals ?? 2))
+  /**
+   * What this year's headline number is, and what is added to it.
+   *
+   * `""` means the whole year, which is what a year reads as unless somebody says
+   * otherwise — a `<select>` cannot hold `null`, and the empty option is the same
+   * statement said in the language of a form.
+   */
+  const [mainAverageId, setMainAverageId] = useState(
+    () => year?.mainAverageId ?? ""
+  )
 
   // A refreshed snapshot replaces the editing baseline. Adjusting guarded
   // render state avoids an extra effect render while keeping unsaved edits
@@ -87,6 +103,7 @@ export default function YearSettingsPage() {
       setDefaultOutOf(String(year.defaultOutOf))
       setPassing(String(year.passingRatio * year.scale))
       setDecimals(String(year.decimals))
+      setMainAverageId(year.mainAverageId ?? "")
     }
   }
 
@@ -222,6 +239,7 @@ export default function YearSettingsPage() {
         </h1>
 
         <SettingsSection
+          id="academic-year"
           title={t("This year")}
           footer={
             <Button
@@ -301,6 +319,69 @@ export default function YearSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="general-average"
+          title={t("The general average")}
+          description={t(
+            "What the app means when it says “your average”, everywhere it says it."
+          )}
+          footer={
+            <Button
+              size="sm"
+              disabled={saveYear.isPending}
+              onClick={() =>
+                saveYear.mutate({
+                  yearId: yearId as string,
+                  mainAverageId: mainAverageId || null,
+                })
+              }
+            >
+              {saveYear.isPending ? (
+                <Spinner className="size-4" />
+              ) : (
+                <SaveIcon className="size-4" />
+              )}
+              {t("Save")}
+            </Button>
+          }
+        >
+          <Field>
+            <FieldLabel htmlFor="main-average">
+              {t("Read the general average as")}
+            </FieldLabel>
+            <SelectControl
+              id="main-average"
+              value={mainAverageId}
+              onValueChange={setMainAverageId}
+              options={[
+                { value: "", label: t("Every subject in the year") },
+                ...customAverages.map((average) => ({
+                  value: average.id,
+                  label: average.name,
+                })),
+              ]}
+            />
+            <FieldDescription>
+              {/* Substituting the headline is not hiding the year: every subject keeps
+                  its own average, and the custom average keeps its own page. */}
+              {mainAverageId
+                ? t(
+                    "Every subject keeps its own average — only the headline changes."
+                  )
+                : t(
+                    "Pick one of your custom averages to stand in for it, if your school counts a different one."
+                  )}
+            </FieldDescription>
+          </Field>
+
+          <FieldDescription>
+            {t(
+              "Bonus points are configured per term or semester in Average adjustments."
+            )}
+          </FieldDescription>
+        </SettingsSection>
+
+        <SettingsSection
+          id="periods"
           title={t("Periods")}
           description={t(
             "A grade with no period of its own is filed by its date. Deleting a period never deletes grades."
@@ -384,6 +465,7 @@ export default function YearSettingsPage() {
         </SettingsSection>
 
         <SettingsSection
+          id="school-years"
           title={t("School years")}
           description={t(
             "Reorder the picker, archive years you no longer use, or permanently remove one after checking its contents."

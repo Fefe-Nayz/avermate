@@ -1,7 +1,7 @@
 import {
   WIDGET_DEFINITION_VERSION,
   compileWidgetDefinition,
-  type WidgetDefinitionV1,
+  type WidgetDefinition,
   type WidgetSurface,
   type WidgetValidationIssue,
 } from "@avermate/core"
@@ -18,7 +18,7 @@ export interface ResolvedWidgetRow {
    * `null` when the row carries nothing this build can read — no definition, a
    * version from the future, or JSON that fails to compile.
    */
-  definition: WidgetDefinitionV1 | null
+  definition: WidgetDefinition | null
   issues: WidgetValidationIssue[]
 }
 

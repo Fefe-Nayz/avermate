@@ -1,7 +1,7 @@
 {
   "name": "avermate",
   "private": true,
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -29,14 +29,24 @@
     "packages/*"
   ],
   "devDependencies": {
-    "@oxlint/plugins": "^1.78.0",
-    "oxlint": "^1.78.0",
+    "@better-auth/core": "1.7.1",
+    "@better-auth/expo": "1.7.1",
+    "@better-auth/oauth-provider": "1.7.1",
+    "@oxlint/plugins": "^1.79.0",
+    "better-auth": "1.7.1",
+    "nanostores": "^1.5.2",
+    "oxlint": "^1.79.0",
     "oxlint-plugin-react-doctor": "^0.9.12",
+    "react": "19.2.8",
     "react-doctor": "^0.9.12",
-    "turbo": "2.10.10"
+    "react-dom": "19.2.8",
+    "turbo": "2.10.11"
   },
   "overrides": {
     "@better-fetch/fetch": "1.3.1",
-    "expo-constants": "57.0.10"
+    "expo-constants": "57.0.13"
+  },
+  "patchedDependencies": {
+    "@blockshub/blocksdirecte@0.0.8-alpha": "patches/@blockshub%2Fblocksdirecte@0.0.8-alpha.patch"
   }
 }

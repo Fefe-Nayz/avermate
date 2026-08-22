@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import { use, useMemo, type ReactNode } from "react"
-import { ChevronLeftIcon, ChevronRightIcon, PencilIcon } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloudIcon,
+  LockKeyholeIcon,
+  PencilIcon,
+} from "lucide-react"
 import { useFormatter, useExtracted } from "next-intl"
 import {
   averageEventDates,
@@ -16,6 +23,7 @@ import {
   type Grade,
 } from "@avermate/core"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Empty,
@@ -40,6 +48,8 @@ import {
 import { GradeResultsChart } from "@/components/charts/grade-results-chart"
 import { GradeScale } from "@/components/grades/grade-scale"
 import { listRowClassName } from "@/components/grades/grade-list"
+import { GradeCopies } from "@/components/grades/grade-copies"
+import { orpc } from "@/lib/orpc"
 
 /**
  * One result, and what it did.
@@ -67,6 +77,7 @@ export default function GradePage({
   const format = useFormatter()
   const { customAverages, graph, year, period, now, timelineDate, scale } =
     useYear()
+  const detail = useQuery(orpc.grades.get.queryOptions({ input: { gradeId } }))
 
   const grade = graph.allGrades().find((item) => item.id === gradeId)
   const subjectId = grade?.subjectId ?? null
@@ -104,7 +115,9 @@ export default function GradePage({
         points: averageOverTime(
           graph.subjects,
           averageEventDates(graph.subjects, from, to, target.id),
-          target.id
+          target.id,
+          null,
+          graph.options
         ),
         primary: true,
       },
@@ -138,6 +151,14 @@ export default function GradePage({
   // other results" means.
   const subjectGrades = subject ? graph.allGrades(subject.id) : []
   const neighbours = gradeNeighbours(graph, gradeId)
+  const management = detail.data?.management
+  const providerName =
+    management?.providerLabel?.trim() ||
+    management?.provider?.trim() ||
+    t("School service")
+  const sourceDisconnected =
+    management?.connectionStatus === "disconnected" ||
+    management?.connectionStatus === "revoked"
 
   const impacts = [
     {
@@ -292,6 +313,42 @@ export default function GradePage({
           </Button>
         </div>
 
+        {management?.mode === "provider" ? (
+          <section
+            className="rounded-xl border bg-card p-4"
+            aria-label={t("Source")}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">
+                <CloudIcon /> {providerName}
+              </Badge>
+              <Badge variant="outline">
+                <LockKeyholeIcon /> {t("Read-only source fields")}
+              </Badge>
+              <Badge variant="outline">
+                {sourceDisconnected
+                  ? t("Disconnected")
+                  : management.gradesAuthority
+                    ? t("Primary grade source")
+                    : t("Secondary source")}
+              </Badge>
+              {management.syncState === "dismissed" ? (
+                <Badge variant="destructive">{t("Ignored")}</Badge>
+              ) : management.syncState === "missing" ? (
+                <Badge variant="destructive">{t("Missing from source")}</Badge>
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {sourceDisconnected
+                ? t("School service disconnected. Imported data was kept.")
+                : t(
+                    "The result, scale, subject, weight and date are synchronized from {provider}. Open Edit to manage your local note, bonus, type and average inclusion.",
+                    { provider: providerName }
+                  )}
+            </p>
+          </section>
+        ) : null}
+
         {/* The mark, then immediately what it is worth against — one card, because
             a result and its position are one thought. */}
         <Card className="gap-4 py-6">
@@ -313,9 +370,26 @@ export default function GradePage({
                   The weight took the opposite treatment: it was hidden at ×1,
                   which is exactly when a reader wonders whether it is missing. */}
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                {grade.outOf !== scale ? (
+                {/* The mark as written, whenever the badge above is not it.
+                    A bonus makes that true at any scale: the badge reads 15/20 and the
+                    paper said 14, so the two facts are shown side by side rather than
+                    leaving the reader to wonder which one is the mark. */}
+                {grade.outOf !== scale || grade.bonus ? (
                   <>
                     <PointsValue value={grade.value} outOf={grade.outOf} />
+                    <span aria-hidden>·</span>
+                  </>
+                ) : null}
+                {grade.bonus ? (
+                  <>
+                    <span className="numeric">
+                      {t("{points} bonus", {
+                        points: format.number(grade.bonus, {
+                          signDisplay: "always",
+                          maximumFractionDigits: 2,
+                        }),
+                      })}
+                    </span>
                     <span aria-hidden>·</span>
                   </>
                 ) : null}
@@ -397,6 +471,8 @@ export default function GradePage({
             </Card>
           </section>
         ) : null}
+
+        <GradeCopies gradeId={gradeId} />
 
         {standing.length > 0 ? (
           <section className="flex flex-col gap-2">

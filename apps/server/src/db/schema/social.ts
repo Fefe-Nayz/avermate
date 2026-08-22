@@ -49,6 +49,15 @@ export const socialProfiles = sqliteTable(
     userId: userRef().primaryKey(),
     handle: text(),
     shareGeneralAverage: integer({ mode: "boolean" }).notNull().default(true),
+    /**
+     * Whether friends may see that average *over time*, not only as it stands.
+     *
+     * A third lock rather than part of the first, and off by default, because it is a
+     * wider thing to agree to: a current average says where you are, and its history says
+     * when you had a bad fortnight. Somebody who ticked "share my average" years ago did
+     * not agree to that, so it starts closed even for accounts that share everything else.
+     */
+    shareHistory: integer({ mode: "boolean" }).notNull().default(false),
     shareSubjectsMode: text()
       .$type<SocialShareSubjectsMode>()
       .notNull()
@@ -210,6 +219,20 @@ export const socialGroups = sqliteTable(
     showTrend: integer({ mode: "boolean" }).notNull().default(true),
     showGradeCount: integer({ mode: "boolean" }).notNull().default(true),
     /**
+     * Whether the group may be read as a *cohort* — a comparison a member can put on
+     * their own dashboard.
+     *
+     * Off by default, and deliberately a second switch rather than a consequence of the
+     * board existing. A board is something you look at together; a cohort is a number
+     * that follows a member around their own dashboard, and the owner of a class should
+     * have to decide that on purpose.
+     *
+     * It does not override anybody's consent: a member still appears only if their own
+     * `shareAverage` is on, and a member who shares nothing gets no ranking either — see
+     * the reciprocity rule in the cohort route.
+     */
+    cohortEnabled: integer({ mode: "boolean" }).notNull().default(false),
+    /**
      * Optional common configuration, from one of two exclusive sources: one
      * of the owner's years offered as a template, or a configuration built
      * by hand in the preset editor (stored as JSON in the managed-preset
@@ -236,11 +259,7 @@ export const socialGroups = sqliteTable(
 );
 
 export type GroupComparisonKind =
-  | "general"
-  | "subject"
-  | "median"
-  | "passRate"
-  | "goalProgress";
+  "general" | "subject" | "median" | "passRate" | "goalProgress";
 
 /**
  * What a group's board compares — several figures side by side, not one.

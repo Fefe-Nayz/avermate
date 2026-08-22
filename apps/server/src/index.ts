@@ -13,6 +13,15 @@ import { env, isProduction } from "./lib/env";
 import { resolveOrigin } from "./lib/origins";
 import { appRouter } from "./routers";
 import { handleMcp, protectedResourceMetadataResponse } from "./mcp/http";
+import {
+  registerAllJobHandlers,
+  scheduleDailyMaintenanceJobs,
+} from "./jobs/handlers";
+import { startJobRunner } from "./lib/jobs";
+import { uploadRoutes } from "./routes/uploads";
+import { transcriptionEventRoutes } from "./routes/transcription-events";
+import { graphWebhookRoutes } from "./routes/graph-webhooks";
+import { googleDriveWebhookRoutes } from "./routes/google-drive-webhooks";
 
 const app = new Hono();
 
@@ -29,12 +38,13 @@ app.use(
     allowHeaders: [
       "Content-Type",
       "Authorization",
+      "Last-Event-ID",
       "x-orpc-batch",
       "MCP-Protocol-Version",
       "Mcp-Method",
       "Mcp-Name",
     ],
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "HEAD", "POST", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -89,6 +99,11 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   return response;
 });
 
+app.route("/api", uploadRoutes);
+app.route("/api", transcriptionEventRoutes);
+app.route("/api", graphWebhookRoutes);
+app.route("/api", googleDriveWebhookRoutes);
+
 const handler = new RPCHandler(appRouter);
 
 app.use("/rpc/*", compressRpcJson());
@@ -103,6 +118,14 @@ app.use("/rpc/*", async (c, next) => {
 });
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
+
+registerAllJobHandlers();
+if (!env.DISABLE_JOBS) {
+  void scheduleDailyMaintenanceJobs().catch((error) =>
+    console.error("[jobs] maintenance scheduling failed", error),
+  );
+  startJobRunner({ instanceId: crypto.randomUUID() });
+}
 
 export default {
   port: env.PORT,

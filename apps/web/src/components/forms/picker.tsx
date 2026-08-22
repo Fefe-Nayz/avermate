@@ -126,7 +126,7 @@ export function PickerField({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={t("Search…")}
-        className="h-11 pl-9 md:h-10"
+        className="h-(--control-h-search) pl-9"
         autoFocus={focus}
       />
     </div>
@@ -277,7 +277,7 @@ function List({
             <p
               key={option.value}
               style={{ paddingInlineStart: indent }}
-              className="pt-4 pb-1 pe-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase first:pt-1"
+              className="pe-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase first:pt-1"
             >
               {option.label}
             </p>

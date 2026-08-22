@@ -73,7 +73,9 @@ export const CARD_ACCENTS: readonly CardAccent[] = [
 const BY_VALUE = new Map(CARD_ACCENTS.map((accent) => [accent.value, accent]))
 
 /** The accent for a stored value, or `null` for default and for anything unknown. */
-export function cardAccent(value: string | null | undefined): CardAccent | null {
+export function cardAccent(
+  value: string | null | undefined
+): CardAccent | null {
   if (!value) return null
   return BY_VALUE.get(value) ?? null
 }

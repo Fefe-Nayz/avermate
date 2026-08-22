@@ -4,14 +4,11 @@
     "strict": true,
     "types": ["bun", "node"],
     "paths": {
+      "@better-auth/core": ["../../node_modules/@better-auth/core"],
+      "@better-auth/core/*": ["../../node_modules/@better-auth/core/*"],
       "@/*": ["./*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
-  ],
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   "exclude": ["node_modules"]
 }

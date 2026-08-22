@@ -59,7 +59,9 @@ export function FriendsClient() {
       queryClient.invalidateQueries({
         queryKey: orpc.social.friends.invitations.list.key(),
       }),
-      queryClient.invalidateQueries({ queryKey: orpc.social.blocks.list.key() }),
+      queryClient.invalidateQueries({
+        queryKey: orpc.social.blocks.list.key(),
+      }),
     ])
   }
 
@@ -75,15 +77,16 @@ export function FriendsClient() {
       )
       await refresh()
     },
-    onError: () =>
-      toast.error(t("Nobody with that handle could be reached.")),
+    onError: () => toast.error(t("Nobody with that handle could be reached.")),
   })
   const respond = useMutation({
     ...orpc.social.friends.respond.mutationOptions(),
     onSuccess: async (result) => {
       haptic("success")
       toast.success(
-        result.status === "accepted" ? t("Friend added.") : t("Request declined.")
+        result.status === "accepted"
+          ? t("Friend added.")
+          : t("Request declined.")
       )
       await refresh()
     },
@@ -226,10 +229,7 @@ export function FriendsClient() {
       ) : null}
 
       {requests.data?.outgoing.length ? (
-        <SocialSection
-          icon={ClockIcon}
-          title={t("Waiting for an answer")}
-        >
+        <SocialSection icon={ClockIcon} title={t("Waiting for an answer")}>
           <SocialList>
             {requests.data.outgoing.map((request) => (
               <SocialRow

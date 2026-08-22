@@ -86,7 +86,13 @@ export function Reveal({
   className?: string
 }) {
   return (
-    <BlurFade inView delay={delay} duration={0.5} offset={14} className={className}>
+    <BlurFade
+      inView
+      delay={delay}
+      duration={0.5}
+      offset={14}
+      className={className}
+    >
       {children}
     </BlurFade>
   )
@@ -124,7 +130,7 @@ export function SectionHeading({
       <Eyebrow>{eyebrow}</Eyebrow>
       <h2
         id={id}
-        className="mt-4 text-3xl font-semibold tracking-tight text-balance sm:text-4xl"
+        className="mt-4 clamp-[text,3xl,4xl] font-semibold tracking-tight text-balance"
       >
         {title}
       </h2>
@@ -206,7 +212,7 @@ export function BackgroundDots({ className }: { className?: string }) {
       height={28}
       cr={0.7}
       className={cn(
-        "text-foreground/[0.09] [mask-image:radial-gradient(ellipse_60%_120%_at_center,black,transparent_75%)]",
+        "[mask-image:radial-gradient(ellipse_60%_120%_at_center,black,transparent_75%)] text-foreground/[0.09]",
         className
       )}
     />
@@ -311,11 +317,7 @@ export function PrincipleCard({
         <ShineBorder
           borderWidth={1}
           duration={18 + index * 2}
-          shineColor={[
-            "var(--primary)",
-            "var(--chart-2)",
-            "var(--positive)",
-          ]}
+          shineColor={["var(--primary)", "var(--chart-2)", "var(--positive)"]}
           className="opacity-40 dark:opacity-55"
         />
         {children}

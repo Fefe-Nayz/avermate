@@ -246,11 +246,7 @@ export function resolveNearestProjectedSeriesPoints<
 }
 
 export type ChartKeyboardCommand =
-  | "pan-left"
-  | "pan-right"
-  | "reset"
-  | "zoom-in"
-  | "zoom-out";
+  "pan-left" | "pan-right" | "reset" | "zoom-in" | "zoom-out";
 
 /** Plain arrows and Home/End stay available for renderer datum navigation. */
 export function resolveChartKeyboardCommand(input: {

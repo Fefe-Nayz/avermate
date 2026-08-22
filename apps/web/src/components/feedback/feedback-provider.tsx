@@ -39,6 +39,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { orpc } from "@/lib/orpc"
 import { haptic } from "@/lib/haptics"
+import { uploadBrowserFile } from "@/lib/file-upload"
 
 /**
  * Feedback, reachable from anywhere.
@@ -65,6 +66,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(
     () => () => {
@@ -83,10 +85,6 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
       setMessage("")
       setImage(null)
       setImagePreview(null)
-    },
-    onError: () => {
-      haptic("error")
-      toast.error(t("The message could not be sent."))
     },
   })
 
@@ -121,23 +119,42 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
           <form
             className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault()
-              submit.mutate({
-                kind,
-                subject,
-                message,
-                ...(image ? { image } : {}),
-                context: {
-                  page: pathname,
-                  viewport:
-                    typeof window === "undefined"
-                      ? ""
-                      : `${window.innerWidth}×${window.innerHeight}`,
-                  userAgent:
-                    typeof navigator === "undefined" ? "" : navigator.userAgent,
-                },
-              })
+              try {
+                setUploading(true)
+                const attachment = image
+                  ? await uploadBrowserFile("feedbackAttachment", image)
+                  : null
+                await submit.mutateAsync({
+                  kind,
+                  subject,
+                  message,
+                  ...(attachment
+                    ? { attachmentFileId: attachment.fileId }
+                    : {}),
+                  context: {
+                    route: pathname,
+                    viewport:
+                      typeof window === "undefined"
+                        ? ""
+                        : `${window.innerWidth}×${window.innerHeight}`,
+                    userAgent:
+                      typeof navigator === "undefined"
+                        ? ""
+                        : navigator.userAgent,
+                  },
+                })
+              } catch (error) {
+                haptic("error")
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : t("The message could not be sent.")
+                )
+              } finally {
+                setUploading(false)
+              }
             }}
           >
             <FieldGroup>
@@ -254,7 +271,9 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
             <Button
               type="submit"
               className="mt-auto"
-              disabled={submit.isPending || message.trim().length < 10}
+              disabled={
+                uploading || submit.isPending || message.trim().length < 10
+              }
             >
               <SendIcon className="size-4" />
               {t("Send")}

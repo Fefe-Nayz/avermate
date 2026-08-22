@@ -73,7 +73,9 @@ export function FriendInvitationClient({ token }: { token: string }) {
       <SocialSection
         icon={UserRoundPlusIcon}
         title={t("Friend invitation")}
-        description={t("Becoming friends shares only what each of you unlocked.")}
+        description={t(
+          "Becoming friends shares only what each of you unlocked."
+        )}
       >
         <SocialIdentity
           name={data.inviter.name}

@@ -9,6 +9,7 @@ import {
   customAverageEntries,
   customAverages,
   dashboardCards,
+  gradeTypes,
   periods,
   subjects,
   yearPresetMemberships,
@@ -28,6 +29,7 @@ export {
 import {
   buildClassTemplate,
   classTemplateSchema,
+  compareClassTemplateKeys,
   sameAcademicDay,
   type ClassTemplate,
   type ClassYearStatus,
@@ -43,6 +45,10 @@ function customAverageKey(id: string) {
   return `class-average:${id}`;
 }
 
+function customGradeTypeKey(id: string) {
+  return `class-type:${id}`;
+}
+
 async function loadAcademicRows(userId: string, yearId: string) {
   const [year] = await db
     .select()
@@ -51,52 +57,62 @@ async function loadAcademicRows(userId: string, yearId: string) {
     .limit(1);
   if (!year) return null;
 
-  const [subjectRows, periodRows, averageRows, presetMembership] =
-    await Promise.all([
-      db
-        .select()
-        .from(subjects)
-        .where(and(eq(subjects.yearId, yearId), eq(subjects.userId, userId)))
-        .orderBy(
-          asc(subjects.sortOrder),
-          asc(subjects.createdAt),
-          asc(subjects.id),
+  const [
+    subjectRows,
+    periodRows,
+    averageRows,
+    gradeTypeRows,
+    presetMembership,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(subjects)
+      .where(and(eq(subjects.yearId, yearId), eq(subjects.userId, userId)))
+      .orderBy(
+        asc(subjects.sortOrder),
+        asc(subjects.createdAt),
+        asc(subjects.id),
+      ),
+    db
+      .select()
+      .from(periods)
+      .where(and(eq(periods.yearId, yearId), eq(periods.userId, userId)))
+      .orderBy(asc(periods.sortOrder), asc(periods.createdAt), asc(periods.id)),
+    db
+      .select()
+      .from(customAverages)
+      .where(
+        and(
+          eq(customAverages.yearId, yearId),
+          eq(customAverages.userId, userId),
         ),
-      db
-        .select()
-        .from(periods)
-        .where(and(eq(periods.yearId, yearId), eq(periods.userId, userId)))
-        .orderBy(
-          asc(periods.sortOrder),
-          asc(periods.createdAt),
-          asc(periods.id),
+      )
+      .orderBy(
+        asc(customAverages.sortOrder),
+        asc(customAverages.createdAt),
+        asc(customAverages.id),
+      ),
+    db
+      .select()
+      .from(gradeTypes)
+      .where(and(eq(gradeTypes.yearId, yearId), eq(gradeTypes.userId, userId)))
+      .orderBy(
+        asc(gradeTypes.sortOrder),
+        asc(gradeTypes.createdAt),
+        asc(gradeTypes.id),
+      ),
+    db
+      .select()
+      .from(yearPresetMemberships)
+      .where(
+        and(
+          eq(yearPresetMemberships.yearId, yearId),
+          eq(yearPresetMemberships.userId, userId),
         ),
-      db
-        .select()
-        .from(customAverages)
-        .where(
-          and(
-            eq(customAverages.yearId, yearId),
-            eq(customAverages.userId, userId),
-          ),
-        )
-        .orderBy(
-          asc(customAverages.sortOrder),
-          asc(customAverages.createdAt),
-          asc(customAverages.id),
-        ),
-      db
-        .select()
-        .from(yearPresetMemberships)
-        .where(
-          and(
-            eq(yearPresetMemberships.yearId, yearId),
-            eq(yearPresetMemberships.userId, userId),
-          ),
-        )
-        .limit(1)
-        .then((rows) => rows[0] ?? null),
-    ]);
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+  ]);
   const entryRows =
     averageRows.length === 0
       ? []
@@ -118,6 +134,7 @@ async function loadAcademicRows(userId: string, yearId: string) {
     subjectRows,
     periodRows,
     averageRows,
+    gradeTypeRows,
     entryRows,
     presetMembership,
   };
@@ -126,6 +143,14 @@ async function loadAcademicRows(userId: string, yearId: string) {
 function configurationFromRows(
   rows: NonNullable<AcademicRows>,
   keyMode: "persisted" | "source-custom",
+  /**
+   * The type keys the class actually declares, when there is a class to compare with.
+   *
+   * Omitted while a template is being *taken*, where every type the year holds is part
+   * of the snapshot. Supplied while one is being *checked*, so a type added afterwards
+   * is left out of the comparison rather than counted as divergence.
+   */
+  expectedTypeKeys?: ReadonlySet<string>,
 ): ManagedPresetConfiguration | null {
   const subjectKey = new Map<string, string>();
   for (const row of rows.subjectRows) {
@@ -178,8 +203,37 @@ function configurationFromRows(
     list.push(entry);
     entriesByAverage.set(entry.averageId, list);
   }
+  /**
+   * A type the member added for themselves is not a term of the class.
+   *
+   * Persisted mode reads the keys the class handed out, so a type of their own — which
+   * has none — is simply not part of this comparison, and adding one cannot disconnect
+   * their year. Sorted by key rather than by their arrangement, for the same reason the
+   * average entries are: the order of the picker is theirs.
+   */
+  const typeRows = (
+    keyMode === "source-custom"
+      ? rows.gradeTypeRows.map((row) => ({
+          row,
+          key: customGradeTypeKey(row.id),
+        }))
+      : rows.gradeTypeRows.flatMap((row) =>
+          row.presetNodeKey ? [{ row, key: row.presetNodeKey }] : [],
+        )
+  ).filter(({ key }) => !expectedTypeKeys || expectedTypeKeys.has(key));
+
   const configuration = {
     subjects: buildSubjects(null),
+    gradeTypes: typeRows
+      .map(({ row, key }) => ({
+        key,
+        name: row.name,
+        titlePrefix: row.titlePrefix,
+        coefficient: row.coefficient,
+        outOf: row.outOf,
+        accent: row.accent,
+      }))
+      .sort((left, right) => compareClassTemplateKeys(left.key, right.key)),
     averages: rows.averageRows.map((average) => ({
       key: averageKey.get(average.id) as string,
       name: average.name,
@@ -309,13 +363,27 @@ function evaluateClassYearStatus(
   const matchesTemplate = (configuration: ManagedPresetConfiguration | null) =>
     configuration !== null &&
     JSON.stringify(configuration) === JSON.stringify(template.configuration);
-  if (matchesTemplate(configurationFromRows(rows, "persisted"))) {
+  /**
+   * The types the class declares, and only those.
+   *
+   * A member — the owner included — writes their own year, and one kind of assessment
+   * their year happens to have is not a term of the class: it moves no average and the
+   * class never mentioned it. Counting it as divergence disconnected people from a class
+   * for defining "TP noté" on their own side, which is exactly the same call the preset
+   * link makes, made in the one place the class checks.
+   */
+  const declaredTypeKeys = new Set(
+    template.configuration.gradeTypes.map((type) => type.key),
+  );
+  if (matchesTemplate(configurationFromRows(rows, "persisted", declaredTypeKeys))) {
     return "connected";
   }
   if (
     template.source.kind === "custom" &&
     yearId === template.source.yearId &&
-    matchesTemplate(configurationFromRows(rows, "source-custom"))
+    matchesTemplate(
+      configurationFromRows(rows, "source-custom", declaredTypeKeys),
+    )
   ) {
     return "connected";
   }
@@ -363,20 +431,27 @@ export async function classYearStatuses(
   const loaded = new Map<string, NonNullable<AcademicRows>>();
   if (pairs.size > 0) {
     const yearIds = [...new Set([...pairs.values()].map((p) => p.yearId))];
-    const [yearRows, subjectRowsAll, periodRowsAll, averageRowsAll, presetAll] =
-      await Promise.all([
-        db.select().from(years).where(inArray(years.id, yearIds)),
-        db.select().from(subjects).where(inArray(subjects.yearId, yearIds)),
-        db.select().from(periods).where(inArray(periods.yearId, yearIds)),
-        db
-          .select()
-          .from(customAverages)
-          .where(inArray(customAverages.yearId, yearIds)),
-        db
-          .select()
-          .from(yearPresetMemberships)
-          .where(inArray(yearPresetMemberships.yearId, yearIds)),
-      ]);
+    const [
+      yearRows,
+      subjectRowsAll,
+      periodRowsAll,
+      averageRowsAll,
+      gradeTypeRowsAll,
+      presetAll,
+    ] = await Promise.all([
+      db.select().from(years).where(inArray(years.id, yearIds)),
+      db.select().from(subjects).where(inArray(subjects.yearId, yearIds)),
+      db.select().from(periods).where(inArray(periods.yearId, yearIds)),
+      db
+        .select()
+        .from(customAverages)
+        .where(inArray(customAverages.yearId, yearIds)),
+      db.select().from(gradeTypes).where(inArray(gradeTypes.yearId, yearIds)),
+      db
+        .select()
+        .from(yearPresetMemberships)
+        .where(inArray(yearPresetMemberships.yearId, yearIds)),
+    ]);
     const averageIds = averageRowsAll.map((row) => row.id);
     const entryRowsAll =
       averageIds.length === 0
@@ -404,6 +479,9 @@ export async function classYearStatuses(
           .filter((row) => row.yearId === yearId && row.userId === userId)
           .sort(byAcademicOrder),
         averageRows,
+        gradeTypeRows: gradeTypeRowsAll
+          .filter((row) => row.yearId === yearId && row.userId === userId)
+          .sort(byAcademicOrder),
         entryRows: entryRowsAll
           .filter((row) => ownedAverages.has(row.averageId))
           .sort(
@@ -519,6 +597,9 @@ export function classYearInsertStatements(input: {
       : []),
     ...(materialized.entryRows.length
       ? [db.insert(customAverageEntries).values(materialized.entryRows)]
+      : []),
+    ...(materialized.gradeTypeRows.length
+      ? [db.insert(gradeTypes).values(materialized.gradeTypeRows)]
       : []),
     ...(input.template.source.kind === "preset"
       ? [

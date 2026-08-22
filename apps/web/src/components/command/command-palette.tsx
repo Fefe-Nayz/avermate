@@ -18,6 +18,7 @@ import {
   PlusIcon,
   SunIcon,
   SigmaIcon,
+  Settings2Icon,
   TargetIcon,
 } from "lucide-react"
 import {
@@ -31,9 +32,11 @@ import {
   CommandSeparator,
 } from "@/components/ui/command"
 import { NAV_ENTRIES } from "@/lib/nav"
+import { useSettingsSections } from "@/lib/nav-labels"
 import { useMaybeYear } from "@/components/year/year-provider"
 import { AverageValue } from "@/components/data/value"
 import { useIsAdmin } from "@/hooks/use-admin"
+import { useMaterialsSearchEntries } from "@/components/materials/materials-search-entries"
 import { cn } from "@/lib/utils"
 
 /**
@@ -119,7 +122,9 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
     Dashboard: t("Dashboard"),
     Subjects: t("Subjects"),
     Grades: t("Grades"),
+    Materials: t("Materials"),
     Goals: t("Goals"),
+    Planning: t("Planning"),
     Insights: t("Insights"),
     Social: t("Social"),
     "Year in review": t("Year in review"),
@@ -127,9 +132,14 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
     Admin: t("Admin"),
   }
 
+  // Materials are the one place in the app holding hundreds of named things,
+  // and they were the one place this could not find anything in. Nothing is
+  // fetched until the palette is opened.
+  const materials = useMaterialsSearchEntries(year?.yearId ?? undefined, open)
   const subjects = year?.subjects ?? []
   const averages = year?.customAverages ?? []
   const grades = year?.graph.allGrades().slice(-60).reverse() ?? []
+  const settingsSections = useSettingsSections()
 
   return (
     <PaletteContext.Provider value={store}>
@@ -172,17 +182,33 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
             <CommandSeparator />
 
             <CommandGroup heading={t("Go to")}>
-              {NAV_ENTRIES.filter(
-                (entry) =>
-                  !entry.adminOnly || isAdmin
-              ).map((entry) => (
+              {NAV_ENTRIES.filter((entry) => !entry.adminOnly || isAdmin).map(
+                (entry) => (
+                  <CommandItem
+                    key={entry.href}
+                    value={`${labels[entry.label] ?? entry.label} ${
+                      entry.href === "/planning"
+                        ? `${t("Agenda")} ${t("Calendar")} ${t("Tasks")} ${t("Kanban")} ${t("Timetable")}`
+                        : ""
+                    }`}
+                    onSelect={() => run(() => router.push(entry.href))}
+                  >
+                    <entry.icon />
+                    {labels[entry.label] ?? entry.label}
+                  </CommandItem>
+                )
+              )}
+            </CommandGroup>
+
+            <CommandGroup heading={t("Settings")}>
+              {settingsSections.map((section) => (
                 <CommandItem
-                  key={entry.href}
-                  value={labels[entry.label] ?? entry.label}
-                  onSelect={() => run(() => router.push(entry.href))}
+                  key={section.href}
+                  value={`${section.label} ${section.href}`}
+                  onSelect={() => run(() => router.push(section.href))}
                 >
-                  <entry.icon />
-                  {labels[entry.label] ?? entry.label}
+                  <Settings2Icon />
+                  {section.label}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -241,6 +267,29 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
               </CommandGroup>
             ) : null}
 
+            {materials.length > 0 ? (
+              <CommandGroup heading={t("Materials")}>
+                {materials.map((entry) => (
+                  <CommandItem
+                    key={entry.id}
+                    value={`${entry.title} ${entry.kind}`}
+                    className="[&>svg:last-child]:hidden"
+                    onSelect={() => run(() => router.push(entry.href))}
+                  >
+                    <CommandResultColumns
+                      primary={entry.title}
+                      secondaryKind="label"
+                      secondary={
+                        <span className="text-xs text-muted-foreground">
+                          {entry.kind}
+                        </span>
+                      }
+                    />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+
             {grades.length > 0 ? (
               <CommandGroup heading={t("Recent grades")}>
                 {grades.map((grade) => (
@@ -271,11 +320,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
             <CommandGroup heading={t("Commands")}>
               <CommandItem
                 value={t("Toggle theme")}
-                onSelect={() =>
-                  run(() =>
-                    toggleTheme()
-                  )
-                }
+                onSelect={() => run(() => toggleTheme())}
               >
                 {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
                 {t("Toggle theme")}
