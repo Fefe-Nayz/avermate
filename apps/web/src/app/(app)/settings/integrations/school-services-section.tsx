@@ -730,7 +730,7 @@ function SubjectMappingReview({
                 : t("Unmatched")}
           </Badge>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <SelectControl
             value={selected}
             options={subjectOptions}
@@ -933,7 +933,7 @@ function PeriodMappingReview({
                 : t("Unmatched")}
           </Badge>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <SelectControl
             value={selected}
             options={options}
@@ -1861,7 +1861,7 @@ export function SchoolServicesSection() {
           "Synchronize subjects, periods, grades, homework and timetable data. Provider-owned facts stay locked while personal notes and grades remain yours."
         )}
       >
-        <div className="grid gap-3 @lg/main:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-3">
           {descriptors.map((provider) => (
             <article key={provider.id} className="rounded-xl border p-3">
               <div className="flex items-center justify-between gap-2">
@@ -1976,7 +1976,7 @@ export function SchoolServicesSection() {
         ) : null}
 
         {schoolConnections.length > 0 ? (
-          <div className="grid gap-3 @lg/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-2">
             {schoolConnections.map((connection) => {
               const active = syncingId === connection.id
               const providerAvailable = descriptors.some(

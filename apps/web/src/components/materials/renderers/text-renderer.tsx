@@ -101,7 +101,8 @@ function InlineNoteReader({ row }: MaterialRenderProps) {
   if (detail.isError) {
     return (
       <RendererError
-        message={detail.error.message || t("This note could not be loaded.")}
+        message={t("This note could not be loaded.")}
+        detail={detail.error.message}
         onRetry={() => void detail.refetch()}
       />
     )

@@ -203,7 +203,7 @@ export function CreateArtifactDialog({
             </FieldDescription>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel>{t("Template")}</FieldLabel>
               <Select
@@ -256,7 +256,7 @@ export function CreateArtifactDialog({
               </Select>
               <FieldDescription>
                 {t(
-                  "This is a preference, not an authorization override. Server policy chooses the conforming placement."
+                  "This is a preference. Avermate still decides what is allowed."
                 )}
               </FieldDescription>
             </Field>

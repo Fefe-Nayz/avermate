@@ -204,7 +204,7 @@ export function ActionCard({
             </CollapsibleTrigger>
             <CollapsibleContent className="flex flex-col gap-3 pt-3">
               <Separator />
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 <JsonBlock
                   label={t("Redacted input")}
                   value={action.redactedInput}

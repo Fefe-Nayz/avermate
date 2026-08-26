@@ -234,14 +234,14 @@ export function AvermateNodeSettingsClient() {
     onSuccess: async (result) => {
       toast.success(
         result.migrationState === "planned"
-          ? t("Placement recorded; migration verification is still required.")
+          ? t("Choice saved. The move still has to be verified.")
           : t("Placement updated.")
       )
       await refresh()
     },
     onError: (error) =>
       toast.error(
-        errorMessage(error, t("The placement could not be updated."))
+        errorMessage(error, t("Where your data lives could not be changed."))
       ),
   })
   const migrationMutationOptions = {
@@ -249,9 +249,7 @@ export function AvermateNodeSettingsClient() {
       await refresh()
     },
     onError: (error: unknown) =>
-      toast.error(
-        errorMessage(error, t("The placement migration could not continue."))
-      ),
+      toast.error(errorMessage(error, t("The move could not continue."))),
   }
   const startMigration = useMutation({
     ...orpc.node.startMigration.mutationOptions(),
@@ -304,9 +302,7 @@ export function AvermateNodeSettingsClient() {
     <>
       <PageMeta
         title={t("Avermate Node")}
-        subtitle={t(
-          "Pair a user-owned data plane and choose where each capability runs."
-        )}
+        subtitle={t("Pair a server you own, and choose what runs where.")}
       />
 
       <div className="flex flex-col gap-4">
@@ -316,7 +312,7 @@ export function AvermateNodeSettingsClient() {
             <AlertTitle>{t("Node readiness is unavailable.")}</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
               {t(
-                "No placement change is assumed while the control plane cannot be inspected."
+                "While the Node cannot be reached, nothing is assumed to have moved."
               )}
               <Button
                 size="sm"
@@ -365,11 +361,11 @@ export function AvermateNodeSettingsClient() {
           icon={ServerIcon}
           title={t("Paired Nodes")}
           description={t(
-            "Only verified manifests and live relay health are shown. Browser code never receives Node credentials."
+            "Only checked reports and live status are shown here. Your Node's credentials never reach the browser."
           )}
         >
           {!data ? (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               <Skeleton className="h-64" />
               <Skeleton className="h-64" />
             </div>
@@ -388,7 +384,7 @@ export function AvermateNodeSettingsClient() {
               </EmptyHeader>
             </Empty>
           ) : (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {data.nodes.map((node) => (
                 <NodeCard
                   key={node.nodeId}
@@ -412,36 +408,44 @@ export function AvermateNodeSettingsClient() {
           )}
         >
           {data ? (
-            <div className="grid gap-3 xl:grid-cols-2">
-              {NODE_CAPABILITIES.map((capability) => (
-                <PlacementCard
-                  key={`${capability}:${
-                    data.placements.find(
-                      (placement) => placement.capability === capability
-                    )?.revision ?? 0
-                  }:${data.nodes.map((node) => node.nodeId).join(",")}`}
-                  capability={capability}
-                  current={data.placements.find(
-                    (placement) => placement.capability === capability
-                  )}
-                  nodes={data.nodes}
-                  expectedProtocolMajor={data.expectedProtocolMajor}
-                  label={capabilityLabels[capability]}
-                  pending={setPlacement.isPending}
-                  onApply={(placement, nodeId) =>
-                    setPlacement.mutate({
-                      capability,
-                      placement,
-                      ...(placement === "node" && nodeId ? { nodeId } : {}),
-                      providerId: nodePlacementProviderId(placement, nodeId),
-                      idempotencyKey: crypto.randomUUID(),
-                    })
-                  }
-                />
-              ))}
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {NODE_CAPABILITIES.map((capability) => {
+                const current = data.placements.find(
+                  (placement) => placement.capability === capability
+                )
+                /**
+                 * The revision belongs in the key on purpose: the card seeds
+                 * its draft from `current` with `useState`, which only reads
+                 * on mount, so a saved change has to remount it to show. The
+                 * same row was being searched for twice — once to build this
+                 * key and once to pass down.
+                 */
+                return (
+                  <PlacementCard
+                    key={`${capability}:${current?.revision ?? 0}:${data.nodes
+                      .map((node) => node.nodeId)
+                      .join(",")}`}
+                    capability={capability}
+                    current={current}
+                    nodes={data.nodes}
+                    expectedProtocolMajor={data.expectedProtocolMajor}
+                    label={capabilityLabels[capability]}
+                    pending={setPlacement.isPending}
+                    onApply={(placement, nodeId) =>
+                      setPlacement.mutate({
+                        capability,
+                        placement,
+                        ...(placement === "node" && nodeId ? { nodeId } : {}),
+                        providerId: nodePlacementProviderId(placement, nodeId),
+                        idempotencyKey: crypto.randomUUID(),
+                      })
+                    }
+                  />
+                )
+              })}
             </div>
           ) : (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
               {NODE_CAPABILITIES.slice(0, 4).map((capability) => (
                 <Skeleton key={capability} className="h-48" />
               ))}
@@ -546,7 +550,7 @@ function useCapabilityLabels(): Record<NodeCapabilityId, string> {
 
 function ReadinessSkeleton() {
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       <Skeleton className="h-52" />
       <Skeleton className="h-52" />
     </div>
@@ -580,7 +584,7 @@ function ReadinessSection({
       icon={ServerCogIcon}
       title={t("Deployment readiness")}
       description={t(
-        "The same control plane reports hosted-Core and complete self-host deployments."
+        "The same screen covers a hosted setup and a fully self-hosted one."
       )}
     >
       <div className="flex flex-wrap items-center gap-2" aria-live="polite">
@@ -604,7 +608,7 @@ function ReadinessSection({
           <CardTitle>{t("Full-self-host capability gate")}</CardTitle>
           <CardDescription>
             {t(
-              "A container being present is not enough: placement, migration proof, relay health and the signed capability must all agree."
+              "A running container is not enough. Avermate also checks where your data lives, that the move finished, that the relay answers, and that the Node's signature matches."
             )}
           </CardDescription>
           <CardAction>
@@ -620,7 +624,7 @@ function ReadinessSection({
           <Progress value={progress.percent}>
             <ProgressLabel>{t("Verified capability lanes")}</ProgressLabel>
           </Progress>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {data.diagnostics.map((diagnostic) => (
               <ReadinessDiagnostic
                 key={diagnostic.capability}
@@ -637,7 +641,7 @@ function ReadinessSection({
           <CardTitle>{t("Full-self-host onboarding")}</CardTitle>
           <CardDescription>
             {t(
-              "These gates use the live Core APIs and do not assume a hosted avermate.fr control plane."
+              "These checks run against the live APIs, whether or not you use avermate.fr."
             )}
           </CardDescription>
         </CardHeader>
@@ -653,9 +657,9 @@ function ReadinessSection({
             />
             <OnboardingStep
               number="2"
-              title={t("Connect a compatible live manifest")}
+              title={t("Connect a Node running a compatible version")}
               description={t(
-                "The protocol, connection epoch and current configuration revision must be accepted."
+                "The Node has to agree on the protocol version and be running the current configuration."
               )}
               complete={connected}
             />
@@ -663,7 +667,7 @@ function ReadinessSection({
               number="3"
               title={t("Place and verify every required capability")}
               description={t(
-                "Durable lanes require a verified migration; execution lanes require live advertised providers."
+                "Storing data needs a verified move. Running models needs the Node online."
               )}
               complete={readinessComplete}
             />
@@ -681,7 +685,7 @@ function ReadinessSection({
           </AlertTitle>
           <AlertDescription>
             {t(
-              "Required Node-placed flows fail closed until every durable migration is verified and every execution capability is live."
+              "Anything you required to run on your Node stays blocked until the move is verified and the Node answers."
             )}
           </AlertDescription>
         </Alert>
@@ -739,7 +743,7 @@ function ReadinessDiagnostic({
   const reason = diagnostic.ready
     ? t("Verified")
     : diagnostic.reasonCode === "node-placement-required"
-      ? t("Node placement required")
+      ? t("Must run on your Node")
       : diagnostic.reasonCode === "migration-not-verified"
         ? t("Migration proof required")
         : diagnostic.reasonCode === "node-offline"
@@ -863,7 +867,7 @@ function PairingSection({
             </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <dl className="grid gap-3 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Metadata label={t("Node ID")} value={preview.nodeId} mono />
               <Metadata
                 label={t("Protocol")}
@@ -1028,14 +1032,14 @@ function NodeCard({
         ) : !node.manifestFresh ? (
           <Alert>
             <Clock3Icon />
-            <AlertTitle>{t("Waiting for a fresh manifest")}</AlertTitle>
+            <AlertTitle>{t("Waiting for the Node to report in")}</AlertTitle>
             <AlertDescription>
               {t("Dispatch remains fenced until the relay revalidates it.")}
             </AlertDescription>
           </Alert>
         ) : null}
 
-        <dl className="grid gap-3 sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Metadata label={t("Fingerprint")} value={node.fingerprint} mono />
           <Metadata
             label={t("Protocol")}
@@ -1092,9 +1096,7 @@ function NodeCard({
 
         {featureLines.length > 0 ? (
           <div>
-            <p className="text-sm font-medium">
-              {t("Signed manifest details")}
-            </p>
+            <p className="text-sm font-medium">{t("What the Node reports")}</p>
             <ul className="mt-2 flex list-disc flex-col gap-1 ps-5 text-sm text-muted-foreground">
               {featureLines.map((line) => (
                 <li key={line}>{line}</li>
@@ -1450,7 +1452,7 @@ function PlacementCard({
                       ? t(
                           "The Node is offline; Node-owned requests will remain unavailable."
                         )
-                      : t("The signed manifest advertises this capability.")}
+                      : t("The Node reports that it can do this.")}
               </FieldDescription>
             </Field>
           ) : null}
@@ -1682,7 +1684,7 @@ function MigrationSection({
           </AlertDescription>
         </Alert>
       ) : isPending ? (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <Skeleton className="h-56" />
           <Skeleton className="h-56" />
         </div>
@@ -1695,13 +1697,13 @@ function MigrationSection({
             <EmptyTitle>{t("No placement migration")}</EmptyTitle>
             <EmptyDescription>
               {t(
-                "Changing a durable capability placement creates a reviewed migration here."
+                "Changing where stored data lives starts a move you review here."
               )}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           {active.map((migration) => {
             const progress = migrationProgress(migration)
             const source = migration.sourcePlacement.kind
@@ -1887,7 +1889,7 @@ function RemoteDeletionSection({
       )}
     >
       {isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2" role="status">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="status">
           <Skeleton className="h-36" />
           <Skeleton className="h-36" />
         </div>
@@ -1918,7 +1920,7 @@ function RemoteDeletionSection({
             </EmptyMedia>
             <EmptyTitle>{t("No remote deletion is pending")}</EmptyTitle>
             <EmptyDescription>
-              {t("There are no Node deletion manifests for this account.")}
+              {t("No Node deletions have been recorded for this account.")}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -1942,7 +1944,7 @@ function RemoteDeletionSection({
               </AlertDescription>
             </Alert>
           ) : null}
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {records.map((record) => {
               const verified = record.state === "verified_deleted"
               const retrying = retryingDigest === record.manifestDigest
@@ -2176,7 +2178,7 @@ function LifecycleSection({
                   </CardHeader>
                   {metadata.length > 0 ? (
                     <CardContent>
-                      <dl className="grid gap-2 sm:grid-cols-2">
+                      <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {metadata.map(([key, value]) => (
                           <Metadata key={key} label={key} value={value} mono />
                         ))}
@@ -2272,7 +2274,7 @@ function RevokeNodeDialog({
           <AlertDialogTitle>{t("Revoke this Node?")}</AlertDialogTitle>
           <AlertDialogDescription>
             {t(
-              "Active relay epochs are fenced immediately. Node-owned data stays where it is and may become unreachable until you follow a recovery or migration procedure."
+              "Live connections are cut at once. Data on the Node stays on the Node, and may be out of reach until you recover it or move it."
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>

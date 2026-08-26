@@ -148,7 +148,7 @@ export function MaterialsGrid({
               )}
 
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className="font-mono text-[0.6rem]">
+                <Badge variant="outline" className="font-mono text-xs">
                   {row.badge}
                 </Badge>
                 {measure ? (

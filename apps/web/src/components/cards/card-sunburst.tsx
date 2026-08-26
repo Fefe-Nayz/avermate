@@ -11,7 +11,11 @@ import {
   INSTANT_CHART_UPDATES,
   ResponsiveChart,
 } from "@/components/charts/responsive-chart"
-import { treemapTiles, TREEMAP_ROOT, type TreemapTile } from "./card-treemap"
+import {
+  labelledTreemapTiles,
+  TREEMAP_ROOT,
+  type TreemapTile,
+} from "./card-treemap"
 
 /**
  * Where the average comes from, as concentric rings.
@@ -49,14 +53,7 @@ export function CardSunburst({
   const format = useFormatter()
 
   const tiles = useMemo(
-    () =>
-      treemapTiles(nodes, depth).map((tile) => ({
-        ...tile,
-        label:
-          nodes.find((node) => node.id === tile.id)?.kind === "own-marks"
-            ? ownMarksLabel(tile.label)
-            : tile.label,
-      })),
+    () => labelledTreemapTiles(nodes, depth, ownMarksLabel),
     [depth, nodes, ownMarksLabel]
   )
 

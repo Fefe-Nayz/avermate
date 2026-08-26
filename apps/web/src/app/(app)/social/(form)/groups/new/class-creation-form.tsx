@@ -566,7 +566,7 @@ export function ClassCreationForm() {
         t("Custom model"),
       when: source === "builder",
       content: (
-        <div className="grid gap-2 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
           <button
             type="button"
             aria-pressed={presetId === null}

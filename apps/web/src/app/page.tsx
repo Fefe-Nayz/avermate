@@ -254,7 +254,10 @@ export default function LandingPage() {
               </Reveal>
             </div>
 
-            <Reveal delay={0.14} className="grid gap-4 sm:grid-cols-2">
+            <Reveal
+              delay={0.14}
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            >
               <div className="rounded-2xl border bg-card p-4">
                 <p className="mb-3 font-mono text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
                   {t("Projection")}

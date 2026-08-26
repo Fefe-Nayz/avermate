@@ -33,6 +33,7 @@ import { guardMicrosoftIdentityWrite } from "./lib/microsoft-identity-guard";
 import {
   actionLedgerService,
   startActionApprovalSweeper,
+  sweepExpiredActionApprovals,
 } from "./actions/services";
 import { recoverInterruptedActions } from "./actions/action-recovery";
 import { assistantRunService } from "./assistant/services";
@@ -203,90 +204,113 @@ app.use("/rpc/*", async (c, next) => {
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
 registerAllJobHandlers();
+if (!env.DISABLE_JOBS) {
+  try {
+    await scheduleDailyMaintenanceJobs();
+  } catch (error) {
+    console.error("[jobs] maintenance scheduling failed", error);
+  }
+}
 // Direct protocol harnesses disable jobs to prove request behavior without
-// fire-and-forget startup writers racing their private SQLite fixture. Normal
-// development/production servers still reconcile even when queue workers are
-// intentionally hosted in another process.
-if (env.NODE_ENV !== "test" || !env.DISABLE_JOBS) {
-  startActionApprovalSweeper();
-  void routedCorpusStore
-    .reconcileNodeEnvelopes(1_000)
-    .then((outcomes) => {
-      if (outcomes.length > 0) {
-        console.info("[corpus] Node recovery envelopes reconciled", outcomes);
-      }
-    })
-    .catch((error) =>
-      console.error("[corpus] Node envelope reconciliation failed", error),
+// background writers racing their private SQLite fixture. Boot reconciliation
+// is deliberately sequenced before the queue runner: libSQL's local driver can
+// otherwise busy-wait on a second connection and prevent the transaction owner
+// on this event loop from reaching COMMIT.
+const shouldReconcileAtStartup = env.NODE_ENV !== "test" || !env.DISABLE_JOBS;
+
+async function reconcileStartupState() {
+  const approvalWorkerId = `actions:${crypto.randomUUID()}`;
+  try {
+    await sweepExpiredActionApprovals(approvalWorkerId);
+  } catch (error) {
+    console.error("[actions] initial approval expiry sweep failed", error);
+  }
+
+  try {
+    const outcomes = await routedCorpusStore.reconcileNodeEnvelopes(1_000);
+    if (outcomes.length > 0) {
+      console.info("[corpus] Node recovery envelopes reconciled", outcomes);
+    }
+  } catch (error) {
+    console.error("[corpus] Node envelope reconciliation failed", error);
+  }
+
+  try {
+    const result = await recoverInterruptedActions({
+      ledger: actionLedgerService(),
+      continuations: managedToolActionContinuationStore,
+      brokerForOwner: async (ownerId) =>
+        createFirstPartyToolBroker(
+          await createOwnerRecoveryApi(ownerId, "action"),
+          {
+            fileHandles: fileHandleService,
+            ownerId,
+            includeMutations: true,
+            continuations: managedToolActionContinuationStore,
+          },
+        ),
+    });
+    const count =
+      result.resumed.length +
+      result.inspectRequired.length +
+      result.failed.length +
+      result.deferred.length;
+    if (count > 0) {
+      console.info("[actions] interrupted executions reconciled", result);
+    }
+  } catch (error) {
+    console.error(
+      "[actions] interrupted execution reconciliation failed",
+      error,
     );
-  void recoverInterruptedActions({
-    ledger: actionLedgerService(),
-    continuations: managedToolActionContinuationStore,
-    brokerForOwner: async (ownerId) =>
-      createFirstPartyToolBroker(
-        await createOwnerRecoveryApi(ownerId, "action"),
-        {
+  }
+
+  try {
+    const result = await assistantRunService.recoverInterrupted(
+      async (ownerId) => {
+        const api = await createOwnerRecoveryApi(ownerId, "assistant");
+        const broker = createFirstPartyToolBroker(api, {
           fileHandles: fileHandleService,
           ownerId,
           includeMutations: true,
           continuations: managedToolActionContinuationStore,
-        },
-      ),
-  })
-    .then((result) => {
-      const count =
-        result.resumed.length +
-        result.inspectRequired.length +
-        result.failed.length +
-        result.deferred.length;
-      if (count > 0) {
-        console.info("[actions] interrupted executions reconciled", result);
-      }
-    })
-    .catch((error) =>
-      console.error(
-        "[actions] interrupted execution reconciliation failed",
-        error,
-      ),
-    );
-  void assistantRunService
-    .recoverInterrupted(async (ownerId) => {
-      const api = await createOwnerRecoveryApi(ownerId, "assistant");
-      const broker = createFirstPartyToolBroker(api, {
-        fileHandles: fileHandleService,
-        ownerId,
-        includeMutations: true,
-        continuations: managedToolActionContinuationStore,
-      });
-      for (const descriptor of await createCustomMcpDescriptors(ownerId)) {
-        if (descriptor.effect !== "read") continue;
-        broker.registry.register(descriptor);
-      }
-      return broker;
-    })
-    .then((result) => {
-      const count =
-        result.resumed.length +
-        result.finalizedFromCheckpoint.length +
-        result.failedClosed.length;
-      if (count > 0) {
-        console.info("[assistant] interrupted runs reconciled", {
-          resumed: result.resumed.length,
-          finalizedFromCheckpoint: result.finalizedFromCheckpoint.length,
-          failedClosed: result.failedClosed.length,
         });
-      }
-    })
-    .catch((error) =>
-      console.error("[assistant] interrupted run reconciliation failed", error),
+        for (const descriptor of await createCustomMcpDescriptors(ownerId)) {
+          if (descriptor.effect !== "read") continue;
+          broker.registry.register(descriptor);
+        }
+        return broker;
+      },
     );
+    const count =
+      result.resumed.length +
+      result.finalizedFromCheckpoint.length +
+      result.failedClosed.length;
+    if (count > 0) {
+      console.info("[assistant] interrupted runs reconciled", {
+        resumed: result.resumed.length,
+        finalizedFromCheckpoint: result.finalizedFromCheckpoint.length,
+        failedClosed: result.failedClosed.length,
+      });
+    }
+  } catch (error) {
+    console.error("[assistant] interrupted run reconciliation failed", error);
+  }
+
+  startActionApprovalSweeper({
+    workerId: approvalWorkerId,
+    runImmediately: false,
+  });
 }
-if (!env.DISABLE_JOBS) {
-  void scheduleDailyMaintenanceJobs().catch((error) =>
-    console.error("[jobs] maintenance scheduling failed", error),
-  );
-  startJobRunner({ instanceId: crypto.randomUUID() });
-}
+
+void (async () => {
+  if (shouldReconcileAtStartup) await reconcileStartupState();
+  if (!env.DISABLE_JOBS) {
+    startJobRunner({ instanceId: crypto.randomUUID() });
+  }
+})().catch((error) =>
+  console.error("[startup] background services failed to start", error),
+);
 
 export default {
   port: env.PORT,

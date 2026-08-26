@@ -379,7 +379,7 @@ function SubjectsConfigurationStep({
               wizard gave two ~250px columns — narrow enough that names broke mid-word
               and every card grew to three lines of title. A container query asks the
               column that actually holds them. */}
-          <div className="grid gap-3 @2xl/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 @2xl/main:grid-cols-2">
             {visiblePresets.map((preset) => (
               <PresetCard
                 key={preset.id}
@@ -473,8 +473,14 @@ function SubjectsConfigurationStep({
                     <BookMarkedIcon className="size-4 shrink-0 text-muted-foreground" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-                      {subject.name}
+                    {/*
+                     * The name carries its own truncation. `truncate` on the
+                     * flex row set overflow and nowrap but not the ellipsis —
+                     * `text-overflow` needs a block container — so a long
+                     * subject name was cut off mid-word with no sign of it.
+                     */}
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      <span className="min-w-0 truncate">{subject.name}</span>
                       {subject.isMain ? (
                         <StarIcon className="size-3.5 shrink-0 text-primary" />
                       ) : null}

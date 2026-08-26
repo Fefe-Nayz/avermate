@@ -2113,7 +2113,7 @@ export function MaterialsClient() {
             <span
               key={tag.id}
               className={cn(
-                "shrink-0 rounded-full px-1.5 py-0.5 text-[0.65rem] leading-none font-medium",
+                "shrink-0 rounded-full px-1.5 py-0.5 text-xs leading-none font-medium",
                 materialTagChipClass(tag.color)
               )}
             >
@@ -2122,7 +2122,7 @@ export function MaterialsClient() {
           ))}
           {hidden > 0 ? (
             <span
-              className="shrink-0 text-[0.65rem] text-muted-foreground"
+              className="shrink-0 text-xs text-muted-foreground"
               title={own.map((tag) => tag.name).join(", ")}
             >
               +{hidden}
@@ -2144,7 +2144,7 @@ export function MaterialsClient() {
   const originBadge = useCallback(
     (row: MaterialRow) =>
       row.origin === "manual" ? null : (
-        <Badge variant="secondary" className="shrink-0 text-[0.6rem]">
+        <Badge variant="secondary" className="shrink-0 text-xs">
           {row.origin === "onedrive"
             ? t("OneDrive")
             : row.origin === "googledrive"

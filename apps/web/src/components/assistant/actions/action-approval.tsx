@@ -34,14 +34,12 @@ function approvalReason(
     )
   }
   if (action.risk === "high") {
-    return t("This is a high-risk change and requires an explicit decision.")
+    return t("This one is risky, so it needs a clear yes from you.")
   }
   if (action.compensatorId) {
-    return t(
-      "This write is recoverable while its affected resources remain unchanged."
-    )
+    return t("You can undo this, as long as nothing else changes it first.")
   }
-  return t("This write requires your confirmation before execution.")
+  return t("This change needs your approval before it happens.")
 }
 
 function useApprovalExpiry(expiresAt: string) {
@@ -110,24 +108,25 @@ function LiveActionApprovalPanel({
           seconds: seconds.toString().padStart(2, "0"),
         })
       : t("Expires in {seconds}s", { seconds: String(seconds) })
-  const effectLabel =
-    action.effect === "external"
-      ? t("External effect")
-      : action.effect === "delete"
-        ? t("Delete effect")
-        : action.effect === "create"
-          ? t("Create effect")
-          : action.effect === "update"
-            ? t("Update effect")
-            : t("Read effect")
-  const riskLabel =
-    action.risk === "irreversible"
-      ? t("Irreversible risk")
-      : action.risk === "high"
-        ? t("High risk")
-        : action.risk === "medium"
-          ? t("Medium risk")
-          : t("Low risk")
+  /**
+   * Nine branches of ternary before, naming the taxonomy rather than the
+   * consequence: "Delete effect", "Irreversible risk". Somebody deciding
+   * whether to approve wants to read what will happen to their data, so that
+   * is what these say now, from a table rather than a staircase.
+   */
+  const effectLabels: Record<string, string> = {
+    external: t("Sends data outside Avermate"),
+    delete: t("Deletes data"),
+    create: t("Creates data"),
+    update: t("Changes existing data"),
+  }
+  const effectLabel = effectLabels[action.effect] ?? t("Reads only")
+  const riskLabels: Record<string, string> = {
+    irreversible: t("Cannot be undone"),
+    high: t("High risk"),
+    medium: t("Medium risk"),
+  }
+  const riskLabel = riskLabels[action.risk] ?? t("Low risk")
 
   useEffect(() => {
     if (!expiry.expired) approveButtonRef.current?.focus()

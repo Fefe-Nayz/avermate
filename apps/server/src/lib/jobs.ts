@@ -1,7 +1,9 @@
 import { and, asc, eq, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "../db";
+import { isLocalSqliteUrl } from "../db/client-config";
 import { jobRuntimeMetadata, jobs } from "../db/schema";
 import { env } from "./env";
+import { isSqliteBusyError } from "./sqlite-busy";
 
 /**
  * The in-process durable queue.
@@ -13,9 +15,16 @@ import { env } from "./env";
 
 export const JOB_LEASE_MS = 60_000;
 export const DEFAULT_JOB_RUNNER_CONCURRENCY = 4;
+export const LOCAL_SQLITE_JOB_RUNNER_CONCURRENCY = 1;
 const MAX_BACKOFF_MS = 5 * 60_000;
 const BASE_BACKOFF_MS = 2_000;
 const CANCELLATION_POLL_MS = 250;
+
+export function jobRunnerConcurrencyForDatabaseUrl(url: string) {
+  return isLocalSqliteUrl(url)
+    ? LOCAL_SQLITE_JOB_RUNNER_CONCURRENCY
+    : DEFAULT_JOB_RUNNER_CONCURRENCY;
+}
 
 export interface JobExecutionIdentity {
   /** Stable queue row identity. */
@@ -454,7 +463,7 @@ export async function runNextJob(instanceId: string, now = new Date()) {
 export function startJobRunner({
   instanceId,
   intervalMs = 2_000,
-  concurrency = DEFAULT_JOB_RUNNER_CONCURRENCY,
+  concurrency = jobRunnerConcurrencyForDatabaseUrl(env.DATABASE_URL),
 }: {
   instanceId: string;
   intervalMs?: number;
@@ -473,7 +482,12 @@ export function startJobRunner({
     try {
       await runNextJob(`${instanceId}:${lane}`);
     } catch (error) {
-      console.error(`[jobs] runner lane ${lane} failed`, error);
+      // A busy error here may occur after a row was leased, so it must remain
+      // observable instead of being mistaken for a harmless claim race.
+      const message = isSqliteBusyError(error)
+        ? `[jobs] runner lane ${lane} timed out waiting for SQLite`
+        : `[jobs] runner lane ${lane} failed`;
+      console.error(message, error);
     } finally {
       lanes[lane] = false;
     }

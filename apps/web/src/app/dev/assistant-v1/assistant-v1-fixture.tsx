@@ -202,7 +202,7 @@ export function AssistantV1Fixture() {
           dataChanges: {
             available: false,
             reason: "no-domain-cursor",
-            message: "No durable data cursor exists in this fixture.",
+            message: "This fixture records no saved-data position.",
           },
         }),
       cancel: async () => undefined,

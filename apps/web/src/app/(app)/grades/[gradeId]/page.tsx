@@ -578,7 +578,7 @@ export default function GradePage({
           // A result is one of a sequence, and the sequence is the story. Ending
           // the page on a dead end made every reading above it feel like a
           // one-off.
-          <nav className="grid gap-3 @xl/main:grid-cols-2">
+          <nav className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2">
             <NeighbourLink
               grade={neighbours.previous}
               direction="previous"

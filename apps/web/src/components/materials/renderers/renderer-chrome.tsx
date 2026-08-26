@@ -26,11 +26,22 @@ export function RendererLoading() {
   )
 }
 
+/**
+ * The sentence first, the server's words second.
+ *
+ * Every caller wrote `error.message || t("…")`, so an English transport error
+ * — "Authentication required" — won over the translated sentence and the
+ * fallback only ever showed when the server said nothing at all. A reader in
+ * French got an English string about a layer they cannot see. The technical
+ * text is not thrown away; it just stops being the headline.
+ */
 export function RendererError({
   message,
+  detail,
   onRetry,
 }: {
   message: string
+  detail?: string
   onRetry?: () => void
 }) {
   const t = useExtracted()
@@ -40,6 +51,9 @@ export function RendererError({
         <p role="alert" className="text-sm text-destructive">
           {message}
         </p>
+        {detail && detail !== message ? (
+          <p className="text-xs break-words text-muted-foreground">{detail}</p>
+        ) : null}
         {onRetry ? (
           <Button size="sm" onClick={onRetry}>
             <RefreshCwIcon /> {t("Retry")}

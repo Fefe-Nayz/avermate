@@ -237,7 +237,7 @@ export function AssistantSpikeClient() {
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-h-48 min-w-0">
           <ExternalStoreProjection
             projection={projection}

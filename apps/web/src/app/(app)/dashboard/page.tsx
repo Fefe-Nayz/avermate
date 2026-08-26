@@ -146,9 +146,19 @@ export default function DashboardPage() {
          * for a curve left the radar in the first column and half the row
          * empty — a gap that reads as something failing to load.
          */}
+        {/*
+          `grid-cols-1`, not a bare `grid`.
+          
+          A grid with no template gives its implicit column `auto` width, so
+          the column grows to whatever the widest child asks for — and a chart
+          asks for the width it was last drawn at. Below `@3xl/main` that is
+          this row's only column, so the whole dashboard scrolled sideways on a
+          phone. `grid-cols-1` is `repeat(1, minmax(0, 1fr))`: capped at the
+          container, exactly like the two-column band above it.
+        */}
         <div
           className={cn(
-            "grid gap-3",
+            "grid grid-cols-1 gap-3",
             hasCurve && "@3xl/main:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
           )}
         >

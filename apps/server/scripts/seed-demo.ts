@@ -24,7 +24,7 @@
  * composite grades, notes, custom averages, a goal in each of the states the
  * planner can report, and cards covering every display.
  */
-import { eq, like } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import {
   createLocalAccountIssuer,
   createOAuthAccountIssuer,
@@ -46,6 +46,19 @@ import {
   materialFolders,
   planningTasks,
   studyDocuments,
+  agentActionSequences,
+  agentActions,
+  assistantBranches,
+  assistantMessages,
+  assistantThreads,
+  contentSources,
+  learningConceptSets,
+  learningConcepts,
+  learningMasteryCurrent,
+  learningMasteryProjections,
+  learningObjectives,
+  studyProjectItems,
+  studyProjects,
   timetableSeries,
   periods,
   friendships,
@@ -231,7 +244,60 @@ async function account(email: string, name: string) {
     .where(eq(users.email, email))
     .limit(1);
 
-  if (existing) await db.delete(users).where(eq(users.id, existing.id));
+  if (existing) {
+    /*
+     * Take the RESTRICT edges down by hand, in order, before the cascade.
+     *
+     * `material_documents.fileId -> files.id` is ON DELETE RESTRICT, and so
+     * are the assistant's message/branch/run self-references. Deleting the
+     * user cascades into both sides of each pair, and SQLite reaches the
+     * parent while a child still points at it: "FOREIGN KEY constraint
+     * failed", which is why re-seeding stopped working once conversations and
+     * synced material landed. The restriction itself is right — a document
+     * must not outlive its file — so the fix belongs here, not in the schema.
+     */
+    const threads = sql`select id from assistant_threads where "userId" = ${existing.id}`;
+    /*
+     * Leaves first, because the rows may not be edited.
+     *
+     * A message points at its parent with ON DELETE RESTRICT, so the set
+     * cannot be deleted in one statement, and `assistant_messages are
+     * immutable` forbids untying the link with an UPDATE first. Deleting the
+     * rows nothing points at, repeatedly, walks the tree from its tips.
+     */
+    await db.run(
+      sql`delete from assistant_runs where "threadId" in (${threads})`,
+    );
+    for (let pass = 0; pass < 64; pass += 1) {
+      const removed = await db.run(
+        sql`delete from assistant_conversation_checkpoints
+            where "threadId" in (${threads})
+              and id not in (
+                select "parentCheckpointId" from assistant_conversation_checkpoints
+                where "parentCheckpointId" is not null
+              )`,
+      );
+      if (removed.rowsAffected === 0) break;
+    }
+    await db.run(
+      sql`delete from assistant_branches where "threadId" in (${threads})`,
+    );
+    for (let pass = 0; pass < 256; pass += 1) {
+      const removed = await db.run(
+        sql`delete from assistant_messages
+            where "threadId" in (${threads})
+              and id not in (
+                select "parentMessageId" from assistant_messages
+                where "parentMessageId" is not null
+              )`,
+      );
+      if (removed.rowsAffected === 0) break;
+    }
+    await db
+      .delete(materialDocuments)
+      .where(eq(materialDocuments.userId, existing.id));
+    await db.delete(users).where(eq(users.id, existing.id));
+  }
 
   await auth.api.signUpEmail({ body: { name, email, password: PASSWORD } });
 
@@ -1357,8 +1423,10 @@ async function seedStudyLife(input: {
     },
   ]);
 
+  const filmedCourse = newId("mdoc");
   await db.insert(materialDocuments).values([
     {
+      id: filmedCourse,
       title: "Cours filme - suites adjacentes",
       folderId: chapter,
       sourceType: "link",
@@ -1409,8 +1477,10 @@ async function seedStudyLife(input: {
     },
   ]);
 
+  const recurrenceSheet = newId("sdoc");
   await db.insert(studyDocuments).values([
     {
+      id: recurrenceSheet,
       kind: "fiche",
       title: "Fiche - raisonnement par recurrence",
       bodyMarkdown:
@@ -1438,6 +1508,306 @@ async function seedStudyLife(input: {
       subjectId: null,
       yearId,
       userId,
+    },
+  ]);
+
+  // ------------------------------------------------------- study projects
+  // Plan 028's corpus: a bounded set of sources the assistant answers from.
+  // Without one, /projects opens on an empty state and nothing downstream —
+  // retrieval, citations, the assistant's context — can be tried at all.
+  const suitesProject = newId("proj");
+  await db.insert(studyProjects).values({
+    id: suitesProject,
+    title: "Suites et recurrence",
+    description:
+      "Tout ce qui sert pour le controle de mardi : le cours filme, la fiche et les corriges.",
+    yearId,
+    subjectId: subject.maths,
+    userId,
+  });
+  // A project may only point at something the corpus registry knows: a
+  // trigger enforces it ("project item source is not owned or
+  // year-compatible"), which is plan 028's rule that an answer must be able to
+  // cite an owned, indexed source rather than a bare row id.
+  await db.insert(contentSources).values([
+    {
+      userId,
+      yearId,
+      subjectId: subject.maths,
+      originKind: "material",
+      originId: filmedCourse,
+      status: "ready",
+      coverage: "metadata-and-locators-only",
+    },
+    {
+      userId,
+      yearId,
+      subjectId: subject.maths,
+      originKind: "study-document",
+      originId: recurrenceSheet,
+      status: "ready",
+      coverage: "searchable-native-text",
+    },
+  ]);
+  await db.insert(studyProjectItems).values([
+    {
+      projectId: suitesProject,
+      kind: "material",
+      referenceId: filmedCourse,
+      position: 0,
+      label: "Cours filme - suites adjacentes",
+    },
+    {
+      projectId: suitesProject,
+      kind: "study-document",
+      referenceId: recurrenceSheet,
+      position: 1,
+      label: "Fiche - raisonnement par recurrence",
+    },
+  ]);
+
+  // ---------------------------------------------------- assistant thread
+  // One finished exchange, attached to the project above, so /assistant opens
+  // on a conversation instead of an empty state and the rail, the branch
+  // model and the message rendering all have something real to draw.
+  const thread = newId("thr");
+  const branch = newId("br");
+  const askId = newId("msg");
+  const answerId = newId("msg");
+  // The thread names its branch and the branch names its thread, and a
+  // trigger checks both ways ("assistant active branch must belong to
+  // thread"), so neither can be written already pointing at the other.
+  await db.insert(assistantThreads).values({
+    id: thread,
+    userId,
+    title: "Reviser les suites avant mardi",
+    projectId: suitesProject,
+  });
+  await db.insert(assistantBranches).values({
+    id: branch,
+    threadId: thread,
+    name: "principale",
+  });
+  await db.insert(assistantMessages).values([
+    {
+      id: askId,
+      threadId: thread,
+      parentMessageId: null,
+      role: "user",
+      authorship: "user",
+      status: "complete",
+      partsJson: [
+        {
+          type: "text",
+          id: newId("part"),
+          markdown:
+            "Je bloque sur la recurrence. Tu peux me remettre les etapes a partir de ma fiche ?",
+        },
+      ],
+      createdAt: day(-2, 18),
+    },
+    {
+      id: answerId,
+      threadId: thread,
+      parentMessageId: askId,
+      role: "assistant",
+      authorship: "model",
+      status: "complete",
+      partsJson: [
+        {
+          type: "text",
+          id: newId("part"),
+          markdown:
+            "Ta fiche donne deux etapes. 1) Initialisation : verifier la propriete au premier rang. 2) Heredite : la supposer vraie au rang n, la montrer au rang n + 1. Ce qui manque souvent, c'est de dire ou l'hypothese sert dans le calcul du rang suivant.",
+        },
+      ],
+      createdAt: day(-2, 19),
+    },
+  ]);
+  await db
+    .update(assistantBranches)
+    .set({ headMessageId: answerId })
+    .where(eq(assistantBranches.id, branch));
+  await db
+    .update(assistantThreads)
+    .set({ activeBranchId: branch })
+    .where(eq(assistantThreads.id, thread));
+
+  // -------------------------------------------------------- learning loop
+  // Plan 037's evidence model, small but complete: concepts, the objectives
+  // under them, and one mastery projection with the interval it is honest
+  // about. Without it /learning opens on an empty state and the part the plan
+  // calls Avermate's differentiation cannot be looked at at all.
+  const conceptSet = newId("lcset");
+  const recurrenceConcept = newId("lconc");
+  const limitsConcept = newId("lconc");
+  const initialisation = newId("lobj");
+  const heredity = newId("lobj");
+  const comparison = newId("lobj");
+  await db.insert(learningConceptSets).values({
+    id: conceptSet,
+    title: "Analyse - premiere partie",
+    namespace: "local",
+    yearId,
+    subjectId: subject.maths,
+    userId,
+  });
+  await db.insert(learningConcepts).values([
+    {
+      id: recurrenceConcept,
+      setId: conceptSet,
+      stableKey: "recurrence",
+      canonicalLabel: "Raisonnement par recurrence",
+      description: "Montrer une propriete pour tout entier a partir d'un rang.",
+      sortOrder: 0,
+      yearId,
+      subjectId: subject.maths,
+      userId,
+    },
+    {
+      id: limitsConcept,
+      setId: conceptSet,
+      stableKey: "limites-suites",
+      canonicalLabel: "Limites de suites",
+      description: "Comportement d'une suite quand n devient grand.",
+      sortOrder: 1,
+      yearId,
+      subjectId: subject.maths,
+      userId,
+    },
+  ]);
+  await db.insert(learningObjectives).values([
+    {
+      id: initialisation,
+      conceptId: recurrenceConcept,
+      statement: "Verifier l'initialisation au bon rang.",
+      expectedLevel: 3,
+      yearId,
+      subjectId: subject.maths,
+      userId,
+    },
+    {
+      id: heredity,
+      conceptId: recurrenceConcept,
+      statement: "Utiliser l'hypothese de recurrence dans le passage au rang suivant.",
+      expectedLevel: 4,
+      yearId,
+      subjectId: subject.maths,
+      userId,
+    },
+    {
+      id: comparison,
+      conceptId: limitsConcept,
+      statement: "Appliquer un theoreme de comparaison pour conclure.",
+      expectedLevel: 3,
+      yearId,
+      subjectId: subject.maths,
+      userId,
+    },
+  ]);
+
+  // One objective solid, one still uncertain: the interval is the point, so a
+  // demo that only ever showed a confident estimate would misrepresent it.
+  const projections = [
+    { objectiveId: initialisation, estimate: 0.82, low: 0.71, high: 0.9, alpha: 9, beta: 2, count: 11 },
+    { objectiveId: heredity, estimate: 0.46, low: 0.24, high: 0.69, alpha: 3, beta: 4, count: 4 },
+  ];
+  for (const [index, projection] of projections.entries()) {
+    const projectionId = newId("lproj");
+    await db.insert(learningMasteryProjections).values({
+      id: projectionId,
+      objectiveId: projection.objectiveId,
+      generation: 1,
+      algorithmRevision: "beta-binomial-v1",
+      evidenceCursor: `seed-${index}`,
+      asOf: day(-1, 20),
+      estimate: projection.estimate,
+      low: projection.low,
+      high: projection.high,
+      alpha: projection.alpha,
+      beta: projection.beta,
+      evidenceCount: projection.count,
+      freshnessDays: 1,
+      // The schema will not store a projection without one: plan 037 is an
+      // evidence model, so an estimate that cannot say what it rests on is
+      // not a thing this table is willing to hold.
+      explanationJson: {
+        version: 1,
+        prior: { alpha: 1, beta: 1 },
+        asOf: day(-1, 20).toISOString(),
+        contributions: [
+          {
+            evidenceId: `seed-evidence-${index}`,
+            included: true,
+            normalizedOutcome: projection.estimate,
+            reliability: 0.8,
+            recencyWeight: 1,
+            difficulty: null,
+            alphaContribution: projection.alpha - 1,
+            betaContribution: projection.beta - 1,
+          },
+        ],
+      },
+      digest: `seed-digest-${index}`,
+      userId,
+    });
+    await db.insert(learningMasteryCurrent).values({
+      objectiveId: projection.objectiveId,
+      projectionId,
+      generation: 1,
+      evidenceCursor: `seed-${index}`,
+      userId,
+    });
+  }
+
+  // -------------------------------------------------------- action ledger
+  // Plan 030: what the assistant changed, and what can still be undone. One
+  // finished write and one still waiting on the reader, so /assistant/actions
+  // shows both the record and the approval it is there to ask for.
+  // The ledger numbers from 1 — `agent_actions_sequence_check` is `> 0`.
+  await db.insert(agentActionSequences).values({ userId, nextSequence: 3 });
+  await db.insert(agentActions).values([
+    {
+      userId,
+      actorKind: "embedded-agent",
+      threadId: thread,
+      branchId: branch,
+      toolId: "planning.tasks.create",
+      toolVersion: 1,
+      effect: "create",
+      risk: "low",
+      argumentsHash: "seed-hash-task",
+      idempotencyKey: "seed-action-task",
+      actionSequence: 1,
+      redactedInputJson: {
+        title: "Refaire les exercices 12 a 18",
+        dueAt: isoDay(day(1)),
+      },
+      previewJson: { creates: 1, updates: 0, deletes: 0 },
+      previewHash: "seed-preview-task",
+      status: "completed",
+      resultSummaryJson: { created: "Refaire les exercices 12 a 18" },
+      startedAt: day(-2, 19),
+      completedAt: day(-2, 19),
+    },
+    {
+      userId,
+      actorKind: "embedded-agent",
+      threadId: thread,
+      branchId: branch,
+      toolId: "grades.update",
+      toolVersion: 1,
+      effect: "update",
+      // Higher risk on purpose: this is the case the approval flow exists for,
+      // and a demo where everything is low risk never shows it.
+      risk: "high",
+      argumentsHash: "seed-hash-grade",
+      idempotencyKey: "seed-action-grade",
+      actionSequence: 2,
+      redactedInputJson: { subject: "Mathematiques", note: "corriger 12 -> 12.5" },
+      previewJson: { creates: 0, updates: 1, deletes: 0 },
+      previewHash: "seed-preview-grade",
+      status: "awaiting-approval",
     },
   ]);
 }

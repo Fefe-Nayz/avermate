@@ -153,12 +153,12 @@ export function LearningPlanView({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Card size="sm">
-        <CardContent className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
           <div>
             <p className="font-medium">{t("Build a time-bounded plan")}</p>
             <p className="text-sm text-muted-foreground">
               {t(
-                "The deterministic policy ranks reviewed gaps, prerequisites, due work and evidence freshness."
+                "Ordered by what you got wrong, what it builds on, what is due, and how recent the evidence is."
               )}
             </p>
           </div>
@@ -214,7 +214,7 @@ export function LearningPlanView({
           <AlertTitle>{t("Plan data may be stale")}</AlertTitle>
           <AlertDescription>
             {t(
-              "Refresh before applying a suggestion if its evidence or planning task changed elsewhere. Revision checks still fail closed."
+              "Refresh before applying a suggestion if its evidence or task changed elsewhere. If the check cannot be made, the suggestion is not applied."
             )}
           </AlertDescription>
         </Alert>
@@ -229,7 +229,7 @@ export function LearningPlanView({
             <EmptyTitle>{t("No suggested actions")}</EmptyTitle>
             <EmptyDescription>
               {t(
-                "The plan uses weak or uncertain objectives; it does not invent a separate task list."
+                "The plan works from the objectives you are weakest on. It does not invent extra tasks."
               )}
             </EmptyDescription>
           </EmptyHeader>
@@ -286,6 +286,23 @@ export function LearningPlanView({
   )
 }
 
+/**
+ * Where a planned task has got to. Five ternary branches inside the render
+ * before; a table here, read once per row.
+ */
+function planStatusLabel(
+  status: string,
+  t: (message: string) => string
+): string {
+  const labels: Record<string, string> = {
+    proposed: t("Suggested"),
+    accepted: t("Accepted"),
+    "in-progress": t("In progress"),
+    completed: t("Completed"),
+  }
+  return labels[status] ?? t("Dismissed")
+}
+
 function PlanGroup({
   group,
   rows,
@@ -317,12 +334,10 @@ function PlanGroup({
         : t("By objective")
   const description =
     group === "today"
-      ? t(
-          "Tasks whose authoritative scheduled or due date is today or overdue."
-        )
+      ? t("Due today, or already late.")
       : group === "upcoming"
-        ? t("Tasks scheduled after today in the authoritative planning domain.")
-        : t("Unscheduled suggestions remain grouped by learning objective.")
+        ? t("Scheduled for later.")
+        : t("Not scheduled yet, grouped by what they work on.")
   return (
     <section aria-labelledby={`learning-plan-${group}`} className="grid gap-3">
       <div>
@@ -334,7 +349,7 @@ function PlanGroup({
         </h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {rows.map((row) => (
           <PlanCard
             key={row.item.id}
@@ -392,17 +407,7 @@ function PlanCard({
             {objective.statement}
           </CardTitle>
         </div>
-        <Badge variant="outline">
-          {item.status === "proposed"
-            ? t("Suggested")
-            : item.status === "accepted"
-              ? t("Accepted")
-              : item.status === "in-progress"
-                ? t("In progress")
-                : item.status === "completed"
-                  ? t("Completed")
-                  : t("Dismissed")}
-        </Badge>
+        <Badge variant="outline">{planStatusLabel(item.status, t)}</Badge>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">
         <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
@@ -468,7 +473,7 @@ function PlanCard({
                 value={
                   rationale.interval
                     ? `${Math.round(rationale.interval[0] * 100)}–${Math.round(rationale.interval[1] * 100)} %`
-                    : t("No normalized evidence")
+                    : t("No evidence")
                 }
               />
             </dl>

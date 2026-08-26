@@ -111,6 +111,26 @@ export function treemapTiles(
   ]
 }
 
+/**
+ * The same tiles, with own-marks branches renamed.
+ *
+ * Both drawings needed this and both wrote it the same way: a `nodes.find` per
+ * tile, which re-reads the whole hierarchy once for every rectangle drawn. The
+ * kinds are a lookup, so they are read once, here.
+ */
+export function labelledTreemapTiles(
+  nodes: readonly HierarchyNode[],
+  depth: number,
+  ownMarksLabel: (subject: string) => string
+): TreemapTile[] {
+  const kindById = new Map(nodes.map((node) => [node.id, node.kind]))
+  return treemapTiles(nodes, depth).map((tile) =>
+    kindById.get(tile.id) === "own-marks"
+      ? { ...tile, label: ownMarksLabel(tile.label) }
+      : tile
+  )
+}
+
 /** Id of the synthetic root every top-level subject hangs from. */
 export const TREEMAP_ROOT = "__year__"
 
@@ -132,14 +152,7 @@ export function CardTreemap({
   const format = useFormatter()
 
   const tiles = useMemo(
-    () =>
-      treemapTiles(nodes, depth).map((tile) => ({
-        ...tile,
-        label:
-          nodes.find((node) => node.id === tile.id)?.kind === "own-marks"
-            ? ownMarksLabel(tile.label)
-            : tile.label,
-      })),
+    () => labelledTreemapTiles(nodes, depth, ownMarksLabel),
     [depth, nodes, ownMarksLabel]
   )
 

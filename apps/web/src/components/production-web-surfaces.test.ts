@@ -6,28 +6,68 @@ async function source(relativePath: string) {
 
 describe("production Web surfaces", () => {
   test("keeps the assistant unavailable states safe and accessible", async () => {
-    const [workspace, composer, approval, history, interactions, panel] =
-      await Promise.all([
-        source("./assistant/assistant-workspace.tsx"),
-        source("./assistant/assistant-composer.tsx"),
-        source("./assistant/actions/action-approval.tsx"),
-        source("./assistant/historical-branch-dialog.tsx"),
-        source("./assistant/actions/action-interactions.tsx"),
-        source("./assistant/assistant-panel.tsx"),
-      ])
+    const [
+      workspace,
+      pane,
+      header,
+      composer,
+      approval,
+      history,
+      interactions,
+      panel,
+    ] = await Promise.all([
+      source("./assistant/assistant-workspace.tsx"),
+      source("./assistant/assistant-conversation-pane.tsx"),
+      source("./assistant/assistant-conversation-header.tsx"),
+      source("./assistant/assistant-composer.tsx"),
+      source("./assistant/actions/action-approval.tsx"),
+      source("./assistant/historical-branch-dialog.tsx"),
+      source("./assistant/actions/action-interactions.tsx"),
+      source("./assistant/assistant-panel.tsx"),
+    ])
 
-    expect(workspace).toContain("useOnlineStatus")
-    expect(workspace).toContain('useMediaQuery("(min-width: 768px)")')
+    // The shell keeps only the shell: which of the three right-hand states to
+    // show, and whether the rail is open.
+    // The rail reads this element's width, not the window's. The assistant
+    // also runs as a ~500px side panel, where every viewport test answered
+    // "desktop": the rail planted itself at a static 288px and left the
+    // conversation 212px, one word per line. Same 768px threshold, container
+    // side — measured 500px container, viewport untouched at 1100.
+    expect(workspace).toContain("useContainerWidth(rootRef)")
+    expect(workspace).toContain("containerWidth >= 768")
+    expect(workspace).toContain("@3xl:static")
+    expect(workspace).not.toContain("md:static")
     expect(workspace).toContain("railPreference ?? wideRailDefault")
-    expect(workspace).toContain("state.models.length > 0")
-    expect(workspace).toContain("isOnline")
-    expect(workspace).toContain('t("You are offline")')
-    expect(workspace).toContain("motion-reduce:scroll-auto")
-    expect(workspace).toContain('aria-live="polite"')
-    expect(composer).toContain("<SelectGroup>")
-    expect(composer).toContain('t("Confirm changes")')
+
+    // Everything about one conversation moved to the pane. Online state, the
+    // three blocking conditions and the reduced-motion scroll came with it.
+    expect(pane).toContain("useOnlineStatus")
+    expect(pane).toContain("paneStatus({")
+    expect(pane).toContain("modelCount: state.models.length")
+    expect(pane).toContain("motion-reduce:scroll-auto")
+
+    // The pane used to stack an error strip, an offline alert and a
+    // no-model alert; `paneStatus` now picks exactly one and is tested on its
+    // own. What matters here is that the pane renders that one and no more.
+    expect(pane).toContain("status.notice ? (")
+    expect(pane.match(/<ConversationNotice/g)).toHaveLength(1)
+
+    // And the composer is mounted unconditionally. It used to disappear when
+    // the reader went offline, taking the draft with it; it is disabled with a
+    // reason instead, which is what `blockedReason` carries.
+    expect(pane).toContain("blockedReason={blockedReason}")
+    expect(composer).toContain("blockedReason")
+    expect(header).toContain('aria-live="polite"')
+    // The model choice stayed in the composer but stopped being a bare
+    // <Select>; the approval mode left it entirely for the conversation
+    // header, where a disclosure about what the assistant may do belongs.
+    expect(composer).toContain("<ModelPicker")
+    expect(header).toContain("<SafetyDisclosure")
+    expect(header).toContain('t("Ask before changing")')
     expect(approval).toContain("approveButtonRef.current?.focus()")
-    expect(workspace).toContain("modelReadinessAction")
+    // Routing a reader whose models are all unavailable moved out of the
+    // pane and is now ranked and unit-tested in `assistant-pane-status`.
+    expect(pane).toContain("readinessDestination(notice.reasons)")
     expect(history).toContain("rpc.assistant.messages.dataChangesReview")
     expect(history).toContain("rpc.actions.undo.execute")
     expect(history).toContain('t("Study-data review")')
@@ -81,17 +121,19 @@ describe("production Web surfaces", () => {
   })
 
   test("keeps Media Studio localized, recoverable and offline-safe", async () => {
-    const [studio, create, output, copy] = await Promise.all([
+    const [studio, create, output, copy, detail, activity] = await Promise.all([
       source("./media-studio/media-studio-client.tsx"),
       source("./media-studio/create-artifact-dialog.tsx"),
       source("./media-studio/artifact-output-dialog.tsx"),
       source("./media-studio/media-studio-copy.ts"),
+      source("./media-studio/artifact-detail-panel.tsx"),
+      source("./media-studio/workflow-activity-panel.tsx"),
     ])
 
     expect(studio).toContain("useOnlineStatus")
     expect(studio).toContain('t("You are offline")')
     expect(studio).toContain("disabled={!isOnline")
-    expect(studio).toContain('aria-live="polite"')
+    expect(activity).toContain('aria-live="polite"')
     expect(create).toContain("useExtracted")
     expect(create).toContain('t("New learning artifact")')
     expect(studio).toContain('key={selectedRevision?.id ?? "no-revision"}')
@@ -103,8 +145,10 @@ describe("production Web surfaces", () => {
     expect(studio).toContain("revokeVideoExtractionNotice")
     expect(studio).toContain("videoExtractionConsent.queryOptions")
     expect(studio).toContain('id="video-audio-fallback"')
-    expect(studio).toContain('t("Revision comparison")')
-    expect(studio).toContain('t("Revise")')
+    // The artifact pane moved out of the studio screen into its own file; it
+    // was three hundred and fifty lines twenty-five levels deep in there.
+    expect(detail).toContain('t("Comparing two versions")')
+    expect(detail).toContain('t("Revise")')
     expect(create).toContain("parentArtifactRevisionIds")
     expect(create).toContain("templateId")
     expect(create).toContain("placementPreference")
@@ -112,16 +156,32 @@ describe("production Web surfaces", () => {
   })
 
   test("keeps floating and tabular actions reachable on narrow screens", async () => {
-    const [panel, materials] = await Promise.all([
+    const [panel, materials, header] = await Promise.all([
       source("./assistant/assistant-panel.tsx"),
       source("./materials/materials-table.tsx"),
+      source("./shell/site-header.tsx"),
     ])
 
-    expect(panel).toContain("var(--spacing-tabbar)")
-    expect(panel).not.toContain("var(--height-tabbar)")
+    // The tab-bar offset used to keep a floating pill clear of the mobile tab
+    // bar. There is no floating pill: the trigger is a header button at every
+    // width, which is both what was asked for and why nothing needs to dodge
+    // the tab bar any more. What must hold is that the trigger is not inside
+    // the cluster that folds away below 1001px, or a phone cannot open the
+    // assistant at all.
+    expect(panel).toContain("export function AssistantPanelTrigger")
+    expect(panel).not.toContain("var(--spacing-tabbar)")
+    // Rendered before the cluster opens, so it survives the fold.
+    const trigger = header.indexOf("<AssistantPanelTrigger />")
+    const foldingCluster = header.indexOf('className="hidden items-center')
+    expect(trigger).toBeGreaterThan(-1)
+    expect(trigger).toBeLessThan(foldingCluster)
     expect(materials).toContain("size: medium ? 420 : 240")
+    // `flex-wrap` is the load-bearing word here. Without it the file name was
+    // the only shrinkable item on the row, so a long status badge squeezed it
+    // to zero width — measured at 390px — and the row showed a badge and no
+    // file name.
     expect(materials).toContain(
-      'className="flex min-w-0 items-center gap-1.5 overflow-hidden"'
+      'className="flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden"'
     )
   })
 })

@@ -675,7 +675,7 @@ export function MoodleSyncSection() {
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="grid gap-3 @lg/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-2">
             {rows.map((connection) => (
               <MoodleConnectionCard
                 key={connection.id}

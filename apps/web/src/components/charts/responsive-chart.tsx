@@ -235,11 +235,28 @@ export function ResponsiveChart<
             : current
       )
     }
+    // The first measurement is immediate — the chart cannot draw without it.
     measure()
     if (typeof ResizeObserver === "undefined") return
-    const observer = new ResizeObserver(measure)
+    /*
+     * Later ones wait for the drag to settle.
+     *
+     * The renderer only reads its size when it mounts, so a width change has
+     * to remount it. Feeding that straight from the observer would remount a
+     * canvas chart on every frame of a window drag, which is worse than the
+     * stale layout it fixes. A short settle turns a drag into one remount at
+     * the end.
+     */
+    let settle: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver(() => {
+      if (settle) clearTimeout(settle)
+      settle = setTimeout(measure, 120)
+    })
     observer.observe(node)
-    return () => observer.disconnect()
+    return () => {
+      if (settle) clearTimeout(settle)
+      observer.disconnect()
+    }
   }, [])
 
   const handleRender = useCallback(
@@ -452,7 +469,20 @@ export function ResponsiveChart<
         data-chart-surface
       >
         {isClient && box ? (
+          /*
+           * Keyed on the width, because the renderer only sizes its host once.
+           *
+           * It writes `width: 678px` onto `.ts-chart-host` at mount and never
+           * rewrites it: the measurement here does update — observed 678 then
+           * 340 — and the new width is handed over, but the scene stays laid
+           * out for the old one. Arriving at a narrow window is fine, since
+           * the first measurement is already narrow; dragging across a
+           * breakpoint left a chart drawn for a width that no longer existed,
+           * which is why capping it with `max-width` only squashed it. A new
+           * key remounts the renderer so it measures again.
+           */
           <RendererChart
+            key={box.width}
             {...props}
             renderer={renderer}
             width={box.width}

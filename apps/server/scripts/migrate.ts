@@ -5,6 +5,8 @@ import { createClient, type Client } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 
+import { databaseClientConfig } from "../src/db/client-config";
+
 type BaselineStatus = "adopted" | "fresh" | "journaled";
 
 type MigrationJournal = {
@@ -198,10 +200,12 @@ export async function bootstrapOAuthResource(
 }
 
 export async function migrateConfiguredDatabase() {
-  const client = createClient({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  });
+  const client = createClient(
+    databaseClientConfig({
+      url: process.env.DATABASE_URL ?? "file:./dev.db",
+      authToken: process.env.DATABASE_AUTH_TOKEN,
+    }),
+  );
 
   try {
     const baseline = await migrateClient(client);

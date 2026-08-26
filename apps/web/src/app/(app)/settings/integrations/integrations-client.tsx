@@ -490,7 +490,7 @@ export function IntegrationsClient({
             className="flex flex-col gap-4 rounded-xl border p-4"
             onSubmit={createClient}
           >
-            <div className="grid gap-4 @lg/main:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @lg/main:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="oauth-client-name">{t("Client name")}</Label>
                 <Input
@@ -517,7 +517,7 @@ export function IntegrationsClient({
 
             <div className="grid gap-2">
               <Label>{t("The most this client may ever ask for")}</Label>
-              <div className="grid gap-3 @2xl/main:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 @2xl/main:grid-cols-2">
                 {MCP_SCOPE_GROUPS.map((group) => (
                   <section
                     key={group.id}

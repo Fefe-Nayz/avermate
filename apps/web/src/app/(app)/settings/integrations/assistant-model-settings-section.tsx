@@ -130,7 +130,7 @@ function PreferenceEditor({
         <CardTitle>{t("Model policy")}</CardTitle>
         <CardDescription>
           {t(
-            "Placement, fallbacks and limits are persisted and frozen in each run. No provider becomes a fallback without this explicit policy."
+            "Every run remembers where it ran, what it fell back to and its limits. Nothing becomes a fallback unless you choose it here."
           )}
         </CardDescription>
       </CardHeader>
@@ -158,7 +158,7 @@ function PreferenceEditor({
             </Select>
           </Field>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field>
               <FieldLabel>{t("Preferred placement")}</FieldLabel>
               <Select
@@ -203,7 +203,7 @@ function PreferenceEditor({
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field>
               <FieldLabel htmlFor="assistant-max-input">
                 {t("Input tokens")}
@@ -262,7 +262,7 @@ function PreferenceEditor({
           </div>
           <FieldDescription>
             {t(
-              "An empty limit adds no user ceiling; placement quotas still apply."
+              "Leave it empty for no limit of your own. The service's own quotas still apply."
             )}
           </FieldDescription>
 
@@ -351,7 +351,7 @@ export function AssistantModelSettingsSection() {
       icon={BotIcon}
       title={t("Assistant models and routing")}
       description={t(
-        "Inspect each exact model placement, select explicit fallbacks and set token or spend ceilings for new assistant runs."
+        "See where each model runs, choose what it falls back to, and cap tokens or spending for new conversations."
       )}
     >
       {catalogue.error || preference.error ? (
@@ -366,7 +366,7 @@ export function AssistantModelSettingsSection() {
 
       {catalogue.isPending ? (
         <div
-          className="grid gap-3 md:grid-cols-2"
+          className="grid grid-cols-1 gap-3 md:grid-cols-2"
           role="status"
           aria-label={t("Loading model catalogue")}
         >
@@ -374,7 +374,7 @@ export function AssistantModelSettingsSection() {
           <Skeleton className="h-52" />
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {catalogue.data?.items.map((entry) => (
             <Card key={entry.routeKey} size="sm">
               <CardHeader>
@@ -422,8 +422,8 @@ export function AssistantModelSettingsSection() {
                     <ItemContent>
                       <ItemTitle>
                         {entry.capability.contentLeavesPlacement
-                          ? t("Selected context leaves this placement")
-                          : t("Context stays within this placement")}
+                          ? t("The context you attach is sent out")
+                          : t("Your context stays here")}
                       </ItemTitle>
                       <ItemDescription>
                         {entry.available
@@ -476,7 +476,7 @@ export function AssistantModelSettingsSection() {
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <CheckCircle2Icon className="size-3.5" />
         {t(
-          "Each run preserves the model, provider, policy, tool catalogue and context manifest revisions."
+          "Every run records the model, the provider, the rules, the tools and the context it was given."
         )}
       </p>
     </SettingsSection>

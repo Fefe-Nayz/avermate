@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react"
 import { toast } from "sonner"
 import { useMaybeYear } from "@/components/year/year-provider"
@@ -21,6 +22,7 @@ import {
 import { uploadBrowserFile } from "@/lib/file-upload"
 import { env } from "@/lib/env"
 import { orpc, rpc } from "@/lib/orpc"
+import { activeRun } from "./assistant-thread-model"
 import { AssistantWorkspace } from "./assistant-workspace"
 import {
   findBranchContainingMessage,
@@ -44,21 +46,6 @@ function randomRequestId(prefix: string): string {
 
 function messageFromError(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback
-}
-
-function activeRun(detail: AssistantThreadDetail | null) {
-  if (!detail) return null
-  return [...detail.runs]
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .find((run) =>
-      [
-        "reserved",
-        "running",
-        "waiting-for-user",
-        "waiting-approval",
-        "cancelling",
-      ].includes(run.status)
-    )
 }
 
 function reference(
@@ -91,10 +78,18 @@ function citationHref(
 
 export function AssistantWorkspaceClient({
   onClose,
+  expandHref,
+  pane,
+  paneTitle,
+  paneCloseHref,
   className,
   compactRail = false,
 }: {
   onClose?: () => void
+  expandHref?: string
+  pane?: ReactNode
+  paneTitle?: string
+  paneCloseHref?: string
   className?: string
   compactRail?: boolean
 }) {
@@ -687,6 +682,10 @@ export function AssistantWorkspaceClient({
       state={state}
       actions={actions}
       onClose={onClose}
+      expandHref={expandHref}
+      pane={pane}
+      paneTitle={paneTitle}
+      paneCloseHref={paneCloseHref}
       className={className}
       compactRail={compactRail}
     />

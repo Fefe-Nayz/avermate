@@ -1,17 +1,19 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { BotIcon, LoaderCircleIcon, XIcon } from "lucide-react"
+import { BotIcon, LoaderCircleIcon } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useExtracted } from "next-intl"
 import {
+  createContext,
+  useContext,
   useEffect,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react"
 import { Button } from "@/components/ui/button"
 import { orpc } from "@/lib/orpc"
-import { cn } from "@/lib/utils"
 import { AssistantWorkspaceClient } from "./assistant-client"
 
 const DEFAULT_WIDTH = 500
@@ -26,8 +28,32 @@ function clampWidth(width: number): number {
   )
 }
 
-export function AssistantPanel({ userId }: { userId: string }) {
-  const t = useExtracted()
+type AssistantPanelValue = {
+  open: boolean
+  setOpen: (open: boolean) => void
+  width: number
+  setWidth: (update: (current: number) => number) => void
+  running: boolean
+  unread: boolean
+  available: boolean
+}
+
+const AssistantPanelContext = createContext<AssistantPanelValue | null>(null)
+
+/**
+ * The panel's state lives above both the panel and the header.
+ *
+ * It used to be private to the panel, which is why the only way in was a
+ * floating pill parked over the page. Lifting it means the header can own the
+ * trigger like every other utility, and the pill can go.
+ */
+export function AssistantPanelProvider({
+  userId,
+  children,
+}: {
+  userId: string
+  children: ReactNode
+}) {
   const pathname = usePathname()
   const storagePrefix = `avermate:assistant-panel:${userId}`
   const [hydrated, setHydrated] = useState(false)
@@ -55,6 +81,9 @@ export function AssistantPanel({ userId }: { userId: string }) {
     ) ?? [])
   )
   const unread = hydrated && !open && latestActivityAt > lastSeenAt
+  const available = !(
+    pathname === "/assistant" || pathname.startsWith("/assistant/")
+  )
 
   useEffect(() => {
     try {
@@ -102,11 +131,80 @@ export function AssistantPanel({ userId }: { userId: string }) {
     setLastSeenAt(latestActivityAt)
   }
 
+  return (
+    <AssistantPanelContext.Provider
+      value={{
+        open,
+        setOpen: setPanelOpen,
+        width,
+        setWidth: (update) =>
+          setWidth((current) => clampWidth(update(current))),
+        running,
+        unread,
+        available,
+      }}
+    >
+      {children}
+    </AssistantPanelContext.Provider>
+  )
+}
+
+function useAssistantPanel() {
+  return useContext(AssistantPanelContext)
+}
+
+/** The way into the assistant, sitting with the other header utilities. */
+export function AssistantPanelTrigger() {
+  const t = useExtracted()
+  const panel = useAssistantPanel()
+  if (!panel?.available) return null
+
+  return (
+    <Button
+      type="button"
+      variant={panel.open ? "secondary" : "ghost"}
+      size="icon-sm"
+      className="relative"
+      aria-pressed={panel.open}
+      aria-label={
+        panel.open
+          ? t("Close assistant")
+          : panel.running
+            ? t("Open assistant, response running")
+            : panel.unread
+              ? t("Open assistant, unread response")
+              : t("Open assistant")
+      }
+      onClick={() => panel.setOpen(!panel.open)}
+    >
+      {panel.running ? (
+        <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" />
+      ) : (
+        <BotIcon className="size-4" />
+      )}
+      {panel.unread ? (
+        <span
+          className="absolute top-0.5 right-0.5 size-2 rounded-full border-2 border-background bg-destructive"
+          aria-hidden="true"
+          data-testid="assistant-unread-indicator"
+        />
+      ) : null}
+    </Button>
+  )
+}
+
+export function AssistantPanel() {
+  const t = useExtracted()
+  const panel = useAssistantPanel()
+  if (!panel?.available || !panel.open) return null
+
+  const { width, setWidth, setOpen } = panel
+
   const beginResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
     event.preventDefault()
     const move = (pointer: PointerEvent) =>
-      setWidth(clampWidth(window.innerWidth - pointer.clientX))
+      setWidth(() => window.innerWidth - pointer.clientX)
     const stop = () => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", stop)
@@ -119,85 +217,50 @@ export function AssistantPanel({ userId }: { userId: string }) {
     window.addEventListener("pointerup", stop, { once: true })
   }
 
-  if (pathname === "/assistant" || pathname.startsWith("/assistant/")) {
-    return null
-  }
-
   return (
-    <>
-      {open ? (
-        <aside
-          aria-label={t("Avermate assistant")}
-          className="fixed inset-0 z-50 flex min-h-0 bg-background md:static md:inset-auto md:z-auto md:h-full md:shrink-0 md:border-l"
-          style={{ width: `min(100vw, ${width}px)` }}
-        >
-          <button
-            type="button"
-            aria-label={t("Resize assistant panel")}
-            className="absolute inset-y-0 left-0 z-20 hidden w-2 -translate-x-1/2 cursor-col-resize touch-none md:block"
-            onPointerDown={beginResize}
-            onKeyDown={(event) => {
-              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
-                return
-              event.preventDefault()
-              setWidth((current) =>
-                clampWidth(current + (event.key === "ArrowLeft" ? 20 : -20))
-              )
-            }}
-          >
-            <span className="mx-auto block h-full w-px bg-border transition-colors hover:bg-primary" />
-          </button>
-          <AssistantWorkspaceClient
-            className="h-full min-h-0 w-full"
-            compactRail
-            onClose={() => setPanelOpen(false)}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="absolute top-2 right-2 z-30 md:hidden"
-            onClick={() => setPanelOpen(false)}
-          >
-            <XIcon />
-            <span className="sr-only">{t("Close assistant")}</span>
-          </Button>
-        </aside>
-      ) : (
-        <Button
-          type="button"
-          size="lg"
-          className={cn(
-            "fixed right-[max(1rem,var(--spacing-safe-right))] bottom-[calc(var(--spacing-tabbar)+var(--spacing-safe-bottom)+1rem)] z-40 rounded-full shadow-xl md:bottom-6",
-            running && "ring-2 ring-primary/30"
-          )}
-          aria-label={
-            running
-              ? t("Open assistant, response running")
-              : unread
-                ? t("Open assistant, unread response")
-                : t("Open assistant")
-          }
-          onClick={() => setPanelOpen(true)}
-        >
-          {running ? (
-            <LoaderCircleIcon
-              className="animate-spin motion-reduce:animate-none"
-              data-icon="inline-start"
-            />
-          ) : (
-            <BotIcon data-icon="inline-start" />
-          )}
-          {t("Assistant")}
-          {unread ? (
-            <span
-              className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-destructive"
-              aria-hidden="true"
-              data-testid="assistant-unread-indicator"
-            />
-          ) : null}
-        </Button>
-      )}
-    </>
+    <aside
+      aria-label={t("Avermate assistant")}
+      /*
+       * `relative`, not `static`: the resize handle is absolutely positioned
+       * against this element, and `md:static` took away the positioning
+       * context, so the handle resolved against some ancestor and never
+       * landed on the panel edge at all.
+       *
+       * The inset treatment rides the same `peer-data-[variant=inset]` the
+       * main pane uses — the panel is a sibling of the sidebar too — so it
+       * reads as a second docked card rather than a slab bolted to the edge,
+       * and it follows automatically if the sidebar variant ever changes.
+       */
+      className="fixed inset-0 z-50 flex min-h-0 overflow-hidden bg-background md:relative md:inset-auto md:z-auto md:h-full md:shrink-0 md:border-l md:peer-data-[variant=inset]:my-2 md:peer-data-[variant=inset]:mr-2 md:peer-data-[variant=inset]:h-auto md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:shadow-sm"
+      style={{ width: `min(100vw, ${width}px)` }}
+    >
+      <button
+        type="button"
+        aria-label={t("Resize assistant panel")}
+        /* Eight pixels was a hairline to aim at. Sixteen, centred on the
+             edge, is a target a hand can actually find. */
+        className="absolute inset-y-0 left-0 z-20 hidden w-4 -translate-x-1/2 cursor-col-resize touch-none md:block"
+        onPointerDown={beginResize}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+          event.preventDefault()
+          setWidth(
+            (current) => current + (event.key === "ArrowLeft" ? 20 : -20)
+          )
+        }}
+      >
+        <span className="mx-auto block h-full w-px bg-border transition-colors hover:bg-primary" />
+      </button>
+      {/*
+        The conversation header owns Close and Full screen. A cluster pinned
+        here sat on top of that header and duplicated its X.
+      */}
+      <AssistantWorkspaceClient
+        className="h-full min-h-0 w-full"
+        compactRail
+        onClose={() => setOpen(false)}
+        expandHref="/assistant"
+      />
+    </aside>
   )
 }

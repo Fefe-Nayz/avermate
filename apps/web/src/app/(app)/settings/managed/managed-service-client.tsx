@@ -224,7 +224,7 @@ export function ManagedServiceClient() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
-              "Optional Avermate-hosted convenience. Grades, export, BYOK, Node and self-hosting never require it."
+              "Optional, and hosted by Avermate. Grades, exports, your own API keys, your Node and self-hosting never need it."
             )}
           </p>
         </div>
@@ -331,7 +331,7 @@ export function ManagedServiceClient() {
                       <SettingsRow
                         label={t("Allow managed execution")}
                         description={t(
-                          "BYOK and your Avermate Node are unaffected."
+                          "Your own API keys and your Node are unaffected."
                         )}
                       >
                         <Switch
@@ -410,7 +410,7 @@ function ManagedSkeleton() {
   const t = useExtracted()
   return (
     <div
-      className="grid gap-3 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
       role="status"
       aria-label={t("Loading managed service status")}
       aria-busy="true"
@@ -427,7 +427,7 @@ function ModeSummary({ data }: { data: ManagedData }) {
   const active =
     data.account?.state === "active" && data.account.managedDataConsent
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <Card size="sm">
         <CardHeader>
           <CardTitle>{t("Current mode")}</CardTitle>
@@ -509,7 +509,7 @@ function EnrollmentPanel({
 }) {
   const t = useExtracted()
   return (
-    <div className="grid gap-4 @3xl/main:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 @3xl/main:grid-cols-2">
       <SettingsSection
         icon={KeyRoundIcon}
         title={t("Activate an invitation")}
@@ -681,10 +681,10 @@ function UsageGrid({ usage }: { usage: ManagedData["usage"] }) {
       icon={BoxesIcon}
       title={t("Authoritative usage")}
       description={t(
-        "Settled and reserved quantities come from Avermate's immutable ledger, not browser counters."
+        "These figures come from Avermate's own ledger, not from a counter in your browser."
       )}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {usage.map(({ capability, totals, entitlement }) => {
           const used = finiteNumber(totals.netConsumed) ?? 0
           const reserved = finiteNumber(totals.reserved) ?? 0
@@ -762,7 +762,7 @@ function UsageGrid({ usage }: { usage: ManagedData["usage"] }) {
               <AlertTriangleIcon />
               <AlertTitle>{t("Reservation history is unavailable")}</AlertTitle>
               <AlertDescription>
-                {t("Summary totals above remain authoritative.")}
+                {t("The totals above are the ones that count.")}
               </AlertDescription>
             </Alert>
           ) : visibleReservations.length === 0 ? (
@@ -936,7 +936,7 @@ function ProviderDisclosure({ data }: { data: ManagedData }) {
             <EmptyTitle>{t("No managed provider is advertised")}</EmptyTitle>
             <EmptyDescription>
               {t(
-                "Managed operations stay unavailable; Core, BYOK and Node remain usable."
+                "Managed features stay unavailable. Everything else keeps working."
               )}
             </EmptyDescription>
           </EmptyHeader>
@@ -1105,7 +1105,7 @@ function PrivacyPanel({
         icon={HardDriveIcon}
         title={t("Lifecycle receipts")}
         description={t(
-          "Pending remote deletion is never described as deleted until a placement receipt is verified."
+          "Nothing is called deleted until the service confirms it."
         )}
       >
         {operations.length === 0 ? (
@@ -1236,7 +1236,7 @@ function PlanPanel({ data }: { data: ManagedData }) {
       title={t("Free academic Core, optional convenience")}
       description={t("Checkout remains disabled during this invite beta.")}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Card size="sm">
           <CardHeader>
             <CardTitle>{t("Always available")}</CardTitle>
@@ -1248,7 +1248,9 @@ function PlanPanel({ data }: { data: ManagedData }) {
             <ul className="list-disc ps-5 text-sm text-muted-foreground">
               <li>{t("Grades, years, subjects, averages and planning")}</li>
               <li>{t("Export and account deletion")}</li>
-              <li>{t("BYOK, Avermate Node, MCP and full self-host")}</li>
+              <li>
+                {t("Your own API keys, your Node, MCP and full self-hosting")}
+              </li>
             </ul>
           </CardContent>
         </Card>
@@ -1263,7 +1265,11 @@ function PlanPanel({ data }: { data: ManagedData }) {
             <ul className="list-disc ps-5 text-sm text-muted-foreground">
               <li>{t("Storage, OCR, transcription and embeddings")}</li>
               <li>{t("Model, reranking, speech and sandbox compute")}</li>
-              <li>{t("Usage is settled by immutable normalized units")}</li>
+              <li>
+                {t(
+                  "Usage is counted in fixed units that cannot be changed afterwards"
+                )}
+              </li>
             </ul>
           </CardContent>
         </Card>

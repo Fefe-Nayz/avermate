@@ -4,22 +4,13 @@ import Link from "next/link"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  ArchiveIcon,
   BanIcon,
   CheckCircle2Icon,
-  ChevronDownIcon,
   CircleAlertIcon,
-  Clock3Icon,
-  EyeIcon,
   FileOutputIcon,
-  FilmIcon,
-  HistoryIcon,
   PlusIcon,
-  RefreshCwIcon,
-  RotateCcwIcon,
   Settings2Icon,
   SparklesIcon,
-  Trash2Icon,
 } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
 import { toast } from "sonner"
@@ -30,40 +21,19 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import {
   Empty,
-  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item"
-import {
-  Progress,
-  ProgressLabel,
-  ProgressValue,
-} from "@/components/ui/progress"
+import { ItemGroup } from "@/components/ui/item"
 import {
   Select,
   SelectContent,
@@ -78,19 +48,15 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { orpc } from "@/lib/orpc"
 import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
+import { ArtifactDetailPanel } from "./artifact-detail-panel"
+import { WorkflowActivityPanel } from "./workflow-activity-panel"
 import { ArtifactOutputDialog } from "./artifact-output-dialog"
 import {
   CreateArtifactDialog,
   type ArtifactPlanSeed,
   type ArtifactPlanValue,
 } from "./create-artifact-dialog"
-import {
-  TERMINAL_WORKFLOW_STATUSES,
-  stageCanApprove,
-  stageCanRetry,
-  stageProgress,
-  workflowStatusVariant,
-} from "./media-studio-model"
+import { TERMINAL_WORKFLOW_STATUSES } from "./media-studio-model"
 import { useMediaStudioCopy } from "./media-studio-copy"
 
 function formatDate(
@@ -108,12 +74,7 @@ export function MediaStudioClient() {
   const t = useExtracted()
   const format = useFormatter()
   const isOnline = useOnlineStatus()
-  const {
-    artifactKindLabel,
-    capabilityReason,
-    stageLabel,
-    workflowStatusLabel,
-  } = useMediaStudioCopy()
+  const { artifactKindLabel, capabilityReason } = useMediaStudioCopy()
   const queryClient = useQueryClient()
   const [projectId, setProjectId] = useState<string | null>(null)
   const [tab, setTab] = useState("workflows")
@@ -337,7 +298,9 @@ export function MediaStudioClient() {
     {
       key: "platformCaptions" as const,
       label: t("Platform captions"),
-      description: t("Deterministic import of authorized tracks."),
+      description: t(
+        "Imports the subtitle tracks you allowed, exactly as they are."
+      ),
     },
     {
       key: "videoAudioExtraction" as const,
@@ -352,18 +315,9 @@ export function MediaStudioClient() {
     {
       key: "manimRendering" as const,
       label: t("Manim animations"),
-      description: t("Reviewed DSL translated inside a conforming sandbox."),
+      description: t("Runs the reviewed script in a sandbox."),
     },
   ]
-  const workflowProgress = workflow?.stages.length
-    ? Math.round(
-        workflow.stages.reduce(
-          (sum, stage) => sum + stageProgress(stage.processed, stage.total),
-          0
-        ) / workflow.stages.length
-      )
-    : 0
-
   function submitPlan(value: ArtifactPlanValue) {
     plan.mutate({
       ...value,
@@ -410,7 +364,7 @@ export function MediaStudioClient() {
             <AlertTitle>{t("You are offline")}</AlertTitle>
             <AlertDescription>
               {t(
-                "Published artifacts remain inspectable when cached. New workflows, approvals, retries and downloads resume after reconnection."
+                "What is already downloaded stays readable. Anything new waits until you are back online."
               )}
             </AlertDescription>
           </Alert>
@@ -422,12 +376,10 @@ export function MediaStudioClient() {
                 id="studio-capabilities-title"
                 className="font-heading text-lg font-medium"
               >
-                {t("Execution capabilities")}
+                {t("What the studio can make")}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {t(
-                  "The interface never claims that a remote or local engine is ready before verification."
-                )}
+                {t("Each one is checked before it is offered.")}
               </p>
             </div>
             <Select
@@ -466,94 +418,106 @@ export function MediaStudioClient() {
               </AlertDescription>
             </Alert>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            /* One bordered list, not a card per capability. Each of these is a
+               label, a sentence and a status word; six frames around that is
+               six frames too many, and the grid made a short list look like a
+               dashboard. */
+            <ul className="divide-y rounded-xl border">
               {capabilities.map((item) => {
                 const capability = capabilitiesQuery.data?.[item.key]
                 return (
-                  <Card key={item.key} size="sm">
-                    <CardHeader>
-                      <CardTitle>{item.label}</CardTitle>
-                      <CardDescription>{item.description}</CardDescription>
-                      <CardAction>
-                        {capabilitiesQuery.isPending ? (
-                          <Skeleton className="h-5 w-20" />
-                        ) : (
-                          <Badge
-                            variant={
-                              capability?.available ? "default" : "outline"
-                            }
-                          >
-                            {capability?.available
-                              ? t("Available")
-                              : t("Unavailable")}
-                          </Badge>
-                        )}
-                      </CardAction>
-                    </CardHeader>
-                    <CardContent className="text-xs text-muted-foreground">
-                      {capability
-                        ? capabilityReason(capability)
-                        : t("Checking…")}
-                    </CardContent>
-                  </Card>
+                  <li
+                    key={item.key}
+                    className="flex flex-wrap items-start gap-x-4 gap-y-1 p-3"
+                  >
+                    <div className="min-w-48 flex-1">
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <p className="text-xs text-pretty text-muted-foreground">
+                        {item.description}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {capability
+                          ? capabilityReason(capability)
+                          : t("Checking…")}
+                      </span>
+                      {capabilitiesQuery.isPending ? (
+                        <Skeleton className="h-5 w-20" />
+                      ) : (
+                        <Badge
+                          variant={
+                            capability?.available ? "default" : "outline"
+                          }
+                        >
+                          {capability?.available
+                            ? t("Available")
+                            : t("Unavailable")}
+                        </Badge>
+                      )}
+                    </div>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           )}
-          <Card
+
+          {/* This one stays its own panel: it is a permission you grant, not a
+              status you read, and it is the only thing on the screen that can
+              reach outside Avermate. */}
+          <div
             id="video-audio-fallback"
-            className="mt-3 scroll-mt-24"
-            size="sm"
+            className="mt-3 scroll-mt-24 rounded-xl border p-4"
           >
-            <CardHeader>
-              <CardTitle>{t("Video audio fallback")}</CardTitle>
-              <CardDescription>
-                {t(
-                  "If a platform has no usable captions, extracting its audio requires a separate explicit authorization. This choice does not start a download by itself."
-                )}
-              </CardDescription>
-              <CardAction>
-                {videoConsentQuery.isPending ? (
-                  <Skeleton className="h-5 w-24" />
-                ) : (
-                  <Badge
-                    variant={
-                      videoConsentQuery.isError
-                        ? "destructive"
-                        : videoConsentQuery.data?.active
-                          ? "secondary"
-                          : "outline"
-                    }
-                  >
-                    {videoConsentQuery.isError
-                      ? t("Status unavailable")
-                      : videoConsentQuery.data?.active
-                        ? t("Authorized")
-                        : t("Not authorized")}
-                  </Badge>
-                )}
-              </CardAction>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                {videoConsentQuery.data?.notice ??
-                  t(
-                    "Only the authorized source is processed, inside the configured bounded worker. Platform rules and source policy still apply."
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-medium">
+                  {t("Taking the sound from a video")}
+                </h3>
+                <p className="mt-1 max-w-prose text-sm text-pretty text-muted-foreground">
+                  {t(
+                    "When a video has no subtitles we can read, we can transcribe its sound instead — but only if you allow it here. Allowing it downloads nothing by itself."
                   )}
-              </p>
-              {videoConsentQuery.data?.active &&
-              videoConsentQuery.data.acceptedAt ? (
-                <p className="text-xs">
-                  {t("Authorized on {date}", {
-                    date: format.dateTime(
-                      new Date(videoConsentQuery.data.acceptedAt),
-                      { dateStyle: "medium", timeStyle: "short" }
-                    ),
-                  })}
                 </p>
-              ) : null}
-            </CardContent>
-            <CardFooter className="justify-end gap-2">
+              </div>
+              {videoConsentQuery.isPending ? (
+                <Skeleton className="h-5 w-24" />
+              ) : (
+                <Badge
+                  variant={
+                    videoConsentQuery.isError
+                      ? "destructive"
+                      : videoConsentQuery.data?.active
+                        ? "secondary"
+                        : "outline"
+                  }
+                >
+                  {videoConsentQuery.isError
+                    ? t("Status unavailable")
+                    : videoConsentQuery.data?.active
+                      ? t("Allowed")
+                      : t("Not allowed")}
+                </Badge>
+              )}
+            </div>
+            <p className="mt-2 max-w-prose text-sm text-pretty text-muted-foreground">
+              {videoConsentQuery.data?.notice ??
+                t(
+                  "Only the video you ask for is processed, and the platform's own rules still apply."
+                )}
+            </p>
+            {videoConsentQuery.data?.active &&
+            videoConsentQuery.data.acceptedAt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("Allowed on {date}", {
+                  date: format.dateTime(
+                    new Date(videoConsentQuery.data.acceptedAt),
+                    { dateStyle: "medium", timeStyle: "short" }
+                  ),
+                })}
+              </p>
+            ) : null}
+            <div className="mt-3 flex justify-end gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -568,7 +532,7 @@ export function MediaStudioClient() {
                 onClick={() => revokeVideoExtraction.mutate(undefined)}
               >
                 <BanIcon data-icon="inline-start" />
-                {t("Revoke")}
+                {t("Withdraw")}
               </Button>
               <Button
                 type="button"
@@ -587,10 +551,10 @@ export function MediaStudioClient() {
                 ) : (
                   <CheckCircle2Icon data-icon="inline-start" />
                 )}
-                {t("Authorize fallback")}
+                {t("Allow it")}
               </Button>
-            </CardFooter>
-          </Card>
+            </div>
+          </div>
         </section>
 
         <Separator />
@@ -611,254 +575,19 @@ export function MediaStudioClient() {
           </TabsList>
 
           <TabsContent value="workflows" className="pt-3">
-            {workflowsQuery.error ? (
-              <Alert variant="destructive">
-                <CircleAlertIcon />
-                <AlertTitle>{t("Workflows unavailable")}</AlertTitle>
-                <AlertDescription>
-                  {workflowsQuery.error.message}
-                </AlertDescription>
-              </Alert>
-            ) : workflowsQuery.isPending ? (
-              <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.5fr)]">
-                <Skeleton className="h-96" />
-                <Skeleton className="h-96" />
-              </div>
-            ) : !workflowsQuery.data?.length ? (
-              <Empty className="min-h-80 border">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <FilmIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("No workflows")}</EmptyTitle>
-                  <EmptyDescription>
-                    {t(
-                      "Create a study sheet, quiz, podcast, presentation or video from a project's sources."
-                    )}
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button
-                    onClick={() => setCreateOpen(true)}
-                    disabled={!isOnline}
-                  >
-                    <PlusIcon data-icon="inline-start" />
-                    {t("Plan an artifact")}
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            ) : (
-              <div className="grid min-h-[34rem] gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.5fr)]">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{t("Activity")}</CardTitle>
-                    <CardDescription>
-                      {t(
-                        "{count, plural, one {# workflow} other {# workflows}}",
-                        { count: workflowsQuery.data.length }
-                      )}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-2">
-                    <ItemGroup className="gap-1">
-                      {workflowsQuery.data.map((run) => (
-                        <Button
-                          key={run.id}
-                          variant={
-                            selectedWorkflow?.id === run.id
-                              ? "secondary"
-                              : "ghost"
-                          }
-                          className="h-auto w-full justify-start px-2 py-2 text-left"
-                          onClick={() => setSelectedRunId(run.id)}
-                          aria-pressed={selectedWorkflow?.id === run.id}
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium">
-                              {artifactKindLabel(run.kind)}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {formatDate(format, run.updatedAt)}
-                            </span>
-                          </span>
-                          <Badge variant={workflowStatusVariant(run.status)}>
-                            {workflowStatusLabel(run.status)}
-                          </Badge>
-                        </Button>
-                      ))}
-                    </ItemGroup>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  {workflow ? (
-                    <>
-                      <CardHeader>
-                        <CardTitle>
-                          {artifactKindLabel(workflow.kind)}
-                        </CardTitle>
-                        <CardDescription>
-                          {workflow.workflowId} · {t("version")}{" "}
-                          {workflow.workflowVersion}
-                        </CardDescription>
-                        <CardAction>
-                          <Badge
-                            variant={workflowStatusVariant(workflow.status)}
-                          >
-                            {workflowStatusLabel(workflow.status)}
-                          </Badge>
-                        </CardAction>
-                      </CardHeader>
-                      <CardContent
-                        className="flex flex-col gap-5"
-                        aria-live="polite"
-                        aria-busy={
-                          !TERMINAL_WORKFLOW_STATUSES.has(workflow.status)
-                        }
-                      >
-                        <Progress value={workflowProgress}>
-                          <ProgressLabel>{t("Overall progress")}</ProgressLabel>
-                          <ProgressValue>
-                            {() => `${workflowProgress} %`}
-                          </ProgressValue>
-                        </Progress>
-
-                        {workflow.reasonCode || workflow.safeError ? (
-                          <Alert variant="destructive">
-                            <CircleAlertIcon />
-                            <AlertTitle>
-                              {workflow.reasonCode || t("Workflow failed")}
-                            </AlertTitle>
-                            <AlertDescription>
-                              {workflow.safeError ||
-                                t(
-                                  "The workflow cannot advance from its current state."
-                                )}
-                            </AlertDescription>
-                          </Alert>
-                        ) : null}
-
-                        <ItemGroup>
-                          {workflow.stages.map((stage) => {
-                            const progress = stageProgress(
-                              stage.processed,
-                              stage.total
-                            )
-                            return (
-                              <Item key={stage.id} variant="outline">
-                                <ItemMedia variant="icon">
-                                  {stage.status === "completed" ? (
-                                    <CheckCircle2Icon className="text-primary" />
-                                  ) : stage.status === "failed" ? (
-                                    <CircleAlertIcon className="text-destructive" />
-                                  ) : (
-                                    <Clock3Icon />
-                                  )}
-                                </ItemMedia>
-                                <ItemContent>
-                                  <ItemTitle>
-                                    {stage.position + 1}.{" "}
-                                    {stageLabel(stage.key)}
-                                    <Badge
-                                      variant={workflowStatusVariant(
-                                        stage.status
-                                      )}
-                                    >
-                                      {workflowStatusLabel(stage.status)}
-                                    </Badge>
-                                  </ItemTitle>
-                                  <ItemDescription>
-                                    {stage.message ||
-                                      (stage.placement === "unavailable"
-                                        ? t(
-                                            "No conforming placement is available."
-                                          )
-                                        : t("Placement: {placement}", {
-                                            placement: stage.placement,
-                                          }))}
-                                  </ItemDescription>
-                                  <Progress value={progress} className="mt-1">
-                                    <ProgressValue>
-                                      {() =>
-                                        stage.total > 0
-                                          ? `${stage.processed}/${stage.total} ${stage.unit}`
-                                          : t("Waiting")
-                                      }
-                                    </ProgressValue>
-                                  </Progress>
-                                  {stage.safeError ? (
-                                    <p className="text-xs text-destructive">
-                                      {stage.safeError}
-                                    </p>
-                                  ) : null}
-                                </ItemContent>
-                                {stageCanApprove(stage.status) ||
-                                stageCanRetry(stage.status) ? (
-                                  <ItemActions>
-                                    {stageCanApprove(stage.status) ? (
-                                      <Button
-                                        size="sm"
-                                        onClick={() =>
-                                          approve.mutate({
-                                            runId: workflow.id,
-                                            stageId: stage.id,
-                                          })
-                                        }
-                                        disabled={
-                                          !isOnline || approve.isPending
-                                        }
-                                      >
-                                        {t("Approve")}
-                                      </Button>
-                                    ) : null}
-                                    {stageCanRetry(stage.status) ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          retry.mutate({
-                                            runId: workflow.id,
-                                            stageId: stage.id,
-                                          })
-                                        }
-                                        disabled={!isOnline || retry.isPending}
-                                      >
-                                        <RefreshCwIcon data-icon="inline-start" />
-                                        {t("Retry")}
-                                      </Button>
-                                    ) : null}
-                                  </ItemActions>
-                                ) : null}
-                              </Item>
-                            )
-                          })}
-                        </ItemGroup>
-                      </CardContent>
-                      <CardFooter className="justify-between gap-3">
-                        <span className="text-xs text-muted-foreground">
-                          {t("Updated {date}", {
-                            date: formatDate(format, workflow.updatedAt),
-                          })}
-                        </span>
-                        {!TERMINAL_WORKFLOW_STATUSES.has(workflow.status) ? (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() =>
-                              cancel.mutate({ runId: workflow.id })
-                            }
-                            disabled={!isOnline || cancel.isPending}
-                          >
-                            <BanIcon data-icon="inline-start" />
-                            {t("Cancel")}
-                          </Button>
-                        ) : null}
-                      </CardFooter>
-                    </>
-                  ) : null}
-                </Card>
-              </div>
-            )}
+            <WorkflowActivityPanel
+              workflowsQuery={workflowsQuery}
+              selectedWorkflow={selectedWorkflow}
+              workflow={workflow}
+              artifactKindLabel={artifactKindLabel}
+              setCreateOpen={setCreateOpen}
+              setSelectedRunId={setSelectedRunId}
+              approve={approve}
+              retry={retry}
+              cancel={cancel}
+              isOnline={isOnline}
+              formatDate={formatDate}
+            />
           </TabsContent>
 
           <TabsContent value="artifacts" className="pt-3">
@@ -871,7 +600,7 @@ export function MediaStudioClient() {
                 </AlertDescription>
               </Alert>
             ) : artifactsQuery.isPending ? (
-              <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.5fr)]">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.5fr)]">
                 <Skeleton className="h-96" />
                 <Skeleton className="h-96" />
               </div>
@@ -884,7 +613,7 @@ export function MediaStudioClient() {
                   <EmptyTitle>{t("No published artifacts")}</EmptyTitle>
                   <EmptyDescription>
                     {t(
-                      "An identity appears here as soon as planning starts; its revisions remain immutable and comparable."
+                      "It appears here as soon as planning starts, and every version stays available to compare."
                     )}
                   </EmptyDescription>
                 </EmptyHeader>
@@ -935,355 +664,24 @@ export function MediaStudioClient() {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  {selectedArtifact ? (
-                    <>
-                      <CardHeader>
-                        <CardTitle>{selectedArtifact.title}</CardTitle>
-                        <CardDescription>
-                          {artifactKindLabel(selectedArtifact.kind)} ·{" "}
-                          {t("identity revision {revision}", {
-                            revision: String(selectedArtifact.identityRevision),
-                          })}
-                        </CardDescription>
-                        <CardAction>
-                          <Badge variant="outline">
-                            {selectedArtifact.state}
-                          </Badge>
-                        </CardAction>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-5">
-                        <div>
-                          <h3 className="mb-2 font-medium">{t("Revisions")}</h3>
-                          {revisionsQuery.isPending ? (
-                            <div
-                              className="flex flex-col gap-2"
-                              role="status"
-                              aria-label={t("Loading revisions")}
-                            >
-                              <Skeleton className="h-14" />
-                              <Skeleton className="h-14" />
-                            </div>
-                          ) : revisionsQuery.error ? (
-                            <Alert variant="destructive">
-                              <AlertTitle>
-                                {t("Revision history unavailable")}
-                              </AlertTitle>
-                              <AlertDescription>
-                                {revisionsQuery.error.message}
-                              </AlertDescription>
-                            </Alert>
-                          ) : !revisionsQuery.data?.length ? (
-                            <Alert>
-                              <Clock3Icon />
-                              <AlertTitle>
-                                {t("First output pending")}
-                              </AlertTitle>
-                              <AlertDescription>
-                                {t(
-                                  "The workflow exists, but no revision has been published yet."
-                                )}
-                              </AlertDescription>
-                            </Alert>
-                          ) : (
-                            <ItemGroup className="gap-2">
-                              {revisionsQuery.data.map((revision) => (
-                                <Item
-                                  key={revision.id}
-                                  variant={
-                                    selectedRevision?.id === revision.id
-                                      ? "muted"
-                                      : "outline"
-                                  }
-                                  size="sm"
-                                >
-                                  <ItemMedia variant="icon">
-                                    <HistoryIcon />
-                                  </ItemMedia>
-                                  <ItemContent>
-                                    <ItemTitle>
-                                      {t("Revision {revision}", {
-                                        revision: String(revision.revision),
-                                      })}
-                                      {revision.current ? (
-                                        <Badge>{t("Published")}</Badge>
-                                      ) : null}
-                                    </ItemTitle>
-                                    <ItemDescription>
-                                      {revision.outputMime} ·{" "}
-                                      {formatDate(format, revision.createdAt)}
-                                    </ItemDescription>
-                                  </ItemContent>
-                                  <ItemActions>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => {
-                                        setSelectedRevisionId(revision.id)
-                                        if (compareRevisionId === revision.id) {
-                                          setCompareRevisionId(null)
-                                        }
-                                      }}
-                                    >
-                                      {t("Inspect")}
-                                    </Button>
-                                    {!revision.current ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          promote.mutate({
-                                            artifactId: selectedArtifact.id,
-                                            artifactRevisionId: revision.id,
-                                            expectedIdentityRevision:
-                                              selectedArtifact.identityRevision,
-                                          })
-                                        }
-                                        disabled={
-                                          !isOnline || promote.isPending
-                                        }
-                                      >
-                                        <RotateCcwIcon data-icon="inline-start" />
-                                        {t("Publish")}
-                                      </Button>
-                                    ) : null}
-                                  </ItemActions>
-                                </Item>
-                              ))}
-                            </ItemGroup>
-                          )}
-                        </div>
-
-                        {selectedRevision ? (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <h3 className="font-medium">
-                                  {t("Revision {revision}", {
-                                    revision: String(selectedRevision.revision),
-                                  })}
-                                </h3>
-                                <p className="text-xs text-muted-foreground">
-                                  {t("Manifest")}{" "}
-                                  {selectedRevision.manifestDigest.slice(0, 12)}
-                                  …
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap justify-end gap-2">
-                                {revisionsQuery.data &&
-                                revisionsQuery.data.length > 1 ? (
-                                  <Select
-                                    value={compareRevisionId ?? "none"}
-                                    onValueChange={(value) =>
-                                      setCompareRevisionId(
-                                        value === "none" ? null : value
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger
-                                      size="sm"
-                                      className="w-44"
-                                      aria-label={t("Compare with revision")}
-                                    >
-                                      <SelectValue placeholder={t("Compare")} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectGroup>
-                                        <SelectItem value="none">
-                                          {t("No comparison")}
-                                        </SelectItem>
-                                        {revisionsQuery.data
-                                          .filter(
-                                            (revision) =>
-                                              revision.id !==
-                                              selectedRevision.id
-                                          )
-                                          .map((revision) => (
-                                            <SelectItem
-                                              key={revision.id}
-                                              value={revision.id}
-                                            >
-                                              {t("Revision {revision}", {
-                                                revision: String(
-                                                  revision.revision
-                                                ),
-                                              })}
-                                            </SelectItem>
-                                          ))}
-                                      </SelectGroup>
-                                    </SelectContent>
-                                  </Select>
-                                ) : null}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setCreateSeed({
-                                      projectId: selectedArtifact.projectId,
-                                      kind: selectedArtifact.kind,
-                                      title: `${selectedArtifact.title} — ${t("revision")}`,
-                                      parentArtifactRevisionIds: [
-                                        selectedRevision.id,
-                                      ],
-                                    })
-                                    setCreateOpen(true)
-                                  }}
-                                  disabled={!isOnline}
-                                >
-                                  <RefreshCwIcon data-icon="inline-start" />
-                                  {t("Revise")}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => setPreviewOpen(true)}
-                                  disabled={!selectedRevision.outputFileId}
-                                >
-                                  <EyeIcon data-icon="inline-start" />
-                                  {t("Preview")}
-                                </Button>
-                              </div>
-                            </div>
-
-                            <Collapsible>
-                              <CollapsibleTrigger
-                                render={<Button variant="outline" size="sm" />}
-                              >
-                                <ChevronDownIcon data-icon="inline-start" />
-                                {t("Manifest and provenance")}
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mt-2">
-                                {manifestQuery.isPending ? (
-                                  <Skeleton className="h-48" />
-                                ) : manifestQuery.error ? (
-                                  <Alert variant="destructive">
-                                    <AlertTitle>
-                                      {t("Manifest unavailable")}
-                                    </AlertTitle>
-                                    <AlertDescription>
-                                      {manifestQuery.error.message}
-                                    </AlertDescription>
-                                  </Alert>
-                                ) : (
-                                  <pre className="max-h-96 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
-                                    {JSON.stringify(
-                                      manifestQuery.data,
-                                      null,
-                                      2
-                                    )}
-                                  </pre>
-                                )}
-                              </CollapsibleContent>
-                            </Collapsible>
-
-                            {comparisonRevision ? (
-                              <Card size="sm">
-                                <CardHeader>
-                                  <CardTitle>
-                                    {t("Revision comparison")}
-                                  </CardTitle>
-                                  <CardDescription>
-                                    {t(
-                                      "Immutable output metadata is compared side by side. Content remains available through each preview."
-                                    )}
-                                  </CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid gap-3 sm:grid-cols-2">
-                                  {[selectedRevision, comparisonRevision].map(
-                                    (revision) => (
-                                      <dl
-                                        key={revision.id}
-                                        className="grid gap-2 rounded-lg border p-3 text-sm"
-                                      >
-                                        <div>
-                                          <dt className="text-xs text-muted-foreground">
-                                            {t("Revision")}
-                                          </dt>
-                                          <dd className="font-medium">
-                                            {revision.revision}
-                                            {revision.current
-                                              ? ` · ${t("Published")}`
-                                              : ""}
-                                          </dd>
-                                        </div>
-                                        <div>
-                                          <dt className="text-xs text-muted-foreground">
-                                            {t("Output")}
-                                          </dt>
-                                          <dd>{revision.outputMime}</dd>
-                                        </div>
-                                        <div>
-                                          <dt className="text-xs text-muted-foreground">
-                                            {t("Created")}
-                                          </dt>
-                                          <dd>
-                                            {formatDate(
-                                              format,
-                                              revision.createdAt
-                                            )}
-                                          </dd>
-                                        </div>
-                                        <div>
-                                          <dt className="text-xs text-muted-foreground">
-                                            {t("Manifest")}
-                                          </dt>
-                                          <dd
-                                            className="truncate font-mono text-xs"
-                                            title={revision.manifestDigest}
-                                          >
-                                            {revision.manifestDigest}
-                                          </dd>
-                                        </div>
-                                      </dl>
-                                    )
-                                  )}
-                                </CardContent>
-                              </Card>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </CardContent>
-                      <CardFooter className="justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setState.mutate({
-                              artifactId: selectedArtifact.id,
-                              expectedIdentityRevision:
-                                selectedArtifact.identityRevision,
-                              state:
-                                selectedArtifact.state === "archived"
-                                  ? "active"
-                                  : "archived",
-                            })
-                          }
-                          disabled={!isOnline || setState.isPending}
-                        >
-                          <ArchiveIcon data-icon="inline-start" />
-                          {selectedArtifact.state === "archived"
-                            ? t("Reactivate")
-                            : t("Archive")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() =>
-                            setState.mutate({
-                              artifactId: selectedArtifact.id,
-                              expectedIdentityRevision:
-                                selectedArtifact.identityRevision,
-                              state: "trashed",
-                            })
-                          }
-                          disabled={!isOnline || setState.isPending}
-                        >
-                          <Trash2Icon data-icon="inline-start" />
-                          {t("Move to trash")}
-                        </Button>
-                      </CardFooter>
-                    </>
-                  ) : null}
-                </Card>
+                <ArtifactDetailPanel
+                  selectedArtifact={selectedArtifact}
+                  selectedRevision={selectedRevision}
+                  comparisonRevision={comparisonRevision}
+                  compareRevisionId={compareRevisionId}
+                  revisionsQuery={revisionsQuery}
+                  manifestQuery={manifestQuery}
+                  setState={setState}
+                  promote={promote}
+                  isOnline={isOnline}
+                  formatDate={formatDate}
+                  artifactKindLabel={artifactKindLabel}
+                  setPreviewOpen={setPreviewOpen}
+                  setCreateOpen={setCreateOpen}
+                  setCreateSeed={setCreateSeed}
+                  setCompareRevisionId={setCompareRevisionId}
+                  setSelectedRevisionId={setSelectedRevisionId}
+                />
               </div>
             )}
           </TabsContent>

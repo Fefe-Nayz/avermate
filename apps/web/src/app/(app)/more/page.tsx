@@ -243,6 +243,7 @@ export default function MorePage() {
             )}
             <span className="flex-1 text-sm">{t("Dark mode")}</span>
             <Switch
+              aria-label={t("Dark mode")}
               checked={resolvedTheme === "dark"}
               onCheckedChange={(checked) => {
                 haptic("selection")
@@ -284,7 +285,7 @@ export default function MorePage() {
           </p>
         ) : null}
 
-        <div className="grid gap-5 md:grid-cols-2 md:items-start">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:items-start">
           {visibleGroups.map((group, groupIndex) => (
             <section key={groupIndex} className="flex flex-col gap-1.5">
               {group.label ? (

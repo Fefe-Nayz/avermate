@@ -6,19 +6,25 @@ async function source(relativePath: string) {
 
 describe("learning mandatory Web completion", () => {
   test("validates and imports packs, edits hierarchy and prerequisites, and previews every structural operation", async () => {
-    const [view, model, router] = await Promise.all([
+    const [view, dialogs, operations, model, router] = await Promise.all([
       source("./concept-management.tsx"),
+      source("./concept-dialogs.tsx"),
+      source("./concept-operations.tsx"),
       source("./learning-model.ts"),
       source("../../../../server/src/routers/learning.ts"),
     ])
-    expect(view).toContain("parseConceptPackJson")
-    expect(view).toContain("learning.concepts.importPack")
-    expect(view).toContain("learning.concepts.update.mutationOptions")
-    expect(view).toContain("learning.concepts.updateObjective")
+    // The screen now composes the two: it owns the concept list, the dialogs
+    // own import and edit, and the operations screen owns merge/split/archive.
+    expect(view).toContain("<ConceptOperations")
+    expect(view).toContain("<ConceptImportDialog")
+    expect(dialogs).toContain("parseConceptPackJson")
+    expect(dialogs).toContain("learning.concepts.importPack")
+    expect(dialogs).toContain("learning.concepts.update.mutationOptions")
+    expect(dialogs).toContain("learning.concepts.updateObjective")
     for (const operation of ["Merge", "Split", "Archive"])
-      expect(view).toContain(`preview${operation}.mutationOptions`)
-    expect(view).toContain("learning.concepts.operations")
-    expect(view).toContain("previewDigest")
+      expect(operations).toContain(`preview${operation}.mutationOptions`)
+    expect(operations).toContain("learning.concepts.operations")
+    expect(operations).toContain("previewDigest")
     expect(model).toContain("hasDirectedCycle")
     expect(model).toContain("Year and subject")
     expect(router).toContain("prerequisites = objectives.length")
@@ -79,20 +85,25 @@ describe("learning mandatory Web completion", () => {
   })
 
   test("renders offline, stale, cancelled, loading, empty and error states with accessible controls", async () => {
-    const [hub, copy, concepts, plan, privacy] = await Promise.all([
-      source("./learning-client.tsx"),
-      source("./copy-review-workspace.tsx"),
-      source("./concept-management.tsx"),
-      source("./learning-plan-view.tsx"),
-      source("./learning-privacy-controls.tsx"),
-    ])
+    const [hub, copy, panel, concepts, operations, plan, privacy] =
+      await Promise.all([
+        source("./learning-client.tsx"),
+        source("./copy-review-workspace.tsx"),
+        source("./copy-review-panel.tsx"),
+        source("./concept-management.tsx"),
+        source("./concept-operations.tsx"),
+        source("./learning-plan-view.tsx"),
+        source("./learning-privacy-controls.tsx"),
+      ])
     expect(hub).toContain("useOnlineStatus")
     expect(hub).toContain('t("Some learning data may be stale")')
     expect(copy).toContain('t("Analysis cancelled")')
     expect(copy).toContain("<DialogTitle>")
-    expect(copy).toContain("aria-label={t(")
+    // The labelled controls sit in the review panes, which are their own
+    // component now.
+    expect(panel).toContain("aria-label={t(")
     expect(concepts).toContain("<Empty")
-    expect(concepts).toContain("<AlertDialogTitle>")
+    expect(operations).toContain("<AlertDialogTitle>")
     expect(concepts).toContain("<Label htmlFor=")
     expect(plan).toContain("<Skeleton")
     expect(plan).toContain("lg:grid-cols-2")

@@ -301,7 +301,7 @@ function CalendarView({
   const weekdayDates = days.slice(0, 7)
 
   return (
-    <div className="grid gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="overflow-hidden rounded-xl border bg-card">
         <div className="grid grid-cols-7 border-b bg-muted/30">
           {weekdayDates.map((day) => (

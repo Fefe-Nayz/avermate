@@ -80,6 +80,82 @@ function startOfWeek(value: Date): Date {
   return start
 }
 
+/**
+ * Weeks across, weekdays down.
+ *
+ * Lifted out of the component so the calendar can be measured without mounting
+ * a chart: which weekday rows exist and which week a cell lands in are
+ * arithmetic, and arithmetic is testable. Naming stays with the caller, because
+ * it is the caller that has a locale.
+ */
+export function calendarLayout<T extends { date: Date }>(
+  dated: readonly T[],
+  names: { weekday: (date: Date) => string; month: (date: Date) => string }
+): {
+  cells: (T & { week: number; weekday: number; weekdayLabel: string })[]
+  weeks: number[]
+  weekdayLabels: string[]
+  monthOf: (week: number) => string
+} | null {
+  if (dated.length === 0) return null
+
+  const origin = startOfWeek(
+    dated.reduce(
+      (earliest, item) => (item.date < earliest ? item.date : earliest),
+      dated[0]!.date
+    )
+  )
+  const laid = dated.map((item) => ({
+    ...item,
+    week: Math.round(
+      (startOfWeek(item.date).getTime() - origin.getTime()) /
+        MILLISECONDS_PER_WEEK
+    ),
+    weekday: item.date.getDay(),
+  }))
+  const weeks = [...new Set(laid.map((item) => item.week))].sort(
+    (left, right) => left - right
+  )
+  /**
+   * Only the weekdays the data actually lands on.
+   *
+   * A weekly series buckets to one day of the week, so all seven rows would
+   * leave six empty and squeeze the cells into a seventh of the card — which is
+   * what it did. Daily data still fills all seven and reads as the calendar it
+   * is; a weekly one collapses to the single row it deserves.
+   */
+  const present = new Set(laid.map((item) => item.weekday))
+  const rows = WEEKDAY_ORDER.filter((day) => present.has(day))
+  /**
+   * Weekday to label, rather than two arrays held in step by index.
+   *
+   * The parallel form worked, but only for as long as both filters stayed
+   * written the same way, and it needed a cast to index one with the other.
+   * `present` is built from `laid`, so every cell's weekday is a key here.
+   */
+  const labelFor = new Map<number, string>(
+    rows.map((day) => {
+      const sample = new Date(origin)
+      sample.setDate(sample.getDate() + ((day + 6) % 7))
+      return [day, names.weekday(sample)]
+    })
+  )
+  return {
+    cells: laid.map((item) => ({
+      ...item,
+      weekdayLabel: labelFor.get(item.weekday)!,
+    })),
+    weeks,
+    weekdayLabels: rows.map((day) => labelFor.get(day)!),
+    /** The month a week belongs to, for the axis that asks for one. */
+    monthOf: (week: number) => {
+      const day = new Date(origin)
+      day.setDate(day.getDate() + week * 7)
+      return names.month(day)
+    },
+  }
+}
+
 export function CardHeatmap({
   values,
   valueType,
@@ -247,59 +323,15 @@ export function CardHeatmap({
    */
   const calendar = useMemo(() => {
     if (xField !== "date") return null
-    const dated = prepared.cells.flatMap((item) =>
-      item.date ? [{ ...item, date: item.date }] : []
-    )
-    if (dated.length === 0) return null
-
-    const origin = startOfWeek(
-      dated.reduce(
-        (earliest, item) => (item.date < earliest ? item.date : earliest),
-        dated[0]!.date
-      )
-    )
-    const laid = dated.map((item) => ({
-      ...item,
-      week: Math.round(
-        (startOfWeek(item.date).getTime() - origin.getTime()) /
-          MILLISECONDS_PER_WEEK
+    return calendarLayout(
+      prepared.cells.flatMap((item) =>
+        item.date ? [{ ...item, date: item.date }] : []
       ),
-      weekday: item.date.getDay(),
-    }))
-    const weeks = [...new Set(laid.map((item) => item.week))].sort(
-      (left, right) => left - right
-    )
-    /**
-     * Only the weekdays the data actually lands on.
-     *
-     * A weekly series buckets to one day of the week, so all seven rows would
-     * leave six empty and squeeze the cells into a seventh of the card — which
-     * is what it did. Daily data still fills all seven and reads as the
-     * calendar it is; a weekly one collapses to the single row it deserves.
-     */
-    const present = new Set(laid.map((item) => item.weekday))
-    const weekdayLabels = WEEKDAY_ORDER.filter((day) => present.has(day)).map(
-      (day) => {
-        const sample = new Date(origin)
-        sample.setDate(sample.getDate() + ((day + 6) % 7))
-        return format.dateTime(sample, { weekday: "short" })
+      {
+        weekday: (date) => format.dateTime(date, { weekday: "short" }),
+        month: (date) => format.dateTime(date, { month: "short" }),
       }
     )
-    const rowFor = WEEKDAY_ORDER.filter((day) => present.has(day))
-    return {
-      cells: laid.map((item) => ({
-        ...item,
-        weekdayLabel: weekdayLabels[rowFor.indexOf(item.weekday as 0)]!,
-      })),
-      weeks,
-      weekdayLabels,
-      /** The month a week belongs to, for the axis that asks for one. */
-      monthOf: (week: number) => {
-        const day = new Date(origin)
-        day.setDate(day.getDate() + week * 7)
-        return format.dateTime(day, { month: "short" })
-      },
-    }
   }, [format, prepared.cells, xField])
 
   const definition = useMemo(() => {

@@ -33,12 +33,37 @@ function percent(value: number) {
   return `${Math.round(value * 100)} %`
 }
 
+/**
+ * What each kind of evidence is called.
+ *
+ * This was eight nested ternaries inside the render loop — a lookup table
+ * written as a conditional chain, which grows another branch every time a kind
+ * is added and reads as a staircase in the diff. A record says the same thing
+ * and makes a missing label a type error instead of a silent fall-through to
+ * "Provider snapshot".
+ */
+function useEvidenceKindLabel() {
+  const t = useExtracted()
+  const labels: Record<string, string> = {
+    "school-grade": t("School grade"),
+    "copy-region": t("Reviewed paper region"),
+    "teacher-comment": t("Teacher feedback"),
+    "quiz-question": t("Quiz question"),
+    exercise: t("Exercise"),
+    "self-assessment": t("Self-assessment"),
+    "manual-observation": t("Manual observation"),
+  }
+  const fallback = t("From your school")
+  return (kind: string) => labels[kind] ?? fallback
+}
+
 export function ObjectiveEvidenceView({
   objectiveId,
 }: {
   objectiveId: string
 }) {
   const t = useExtracted()
+  const kindLabel = useEvidenceKindLabel()
   const format = useFormatter()
   const queryClient = useQueryClient()
   const explanation = useQuery(
@@ -104,7 +129,7 @@ export function ObjectiveEvidenceView({
             </CardHeader>
             <CardContent>
               {projection ? (
-                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                   <Progress value={projection.estimate * 100}>
                     <ProgressLabel>{t("Mastery estimate")}</ProgressLabel>
                     <ProgressValue>
@@ -120,9 +145,7 @@ export function ObjectiveEvidenceView({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {t(
-                    "No projection is available until there is normalizable evidence."
-                  )}
+                  {t("There is nothing to estimate from yet.")}
                 </p>
               )}
             </CardContent>
@@ -134,7 +157,7 @@ export function ObjectiveEvidenceView({
           <AlertTitle>{t("This number is a versioned hypothesis")}</AlertTitle>
           <AlertDescription>
             {t(
-              "The calculation starts from a neutral prior, weights only observations with an explicit scale, and preserves the exclusions below."
+              "It starts from no assumption, counts only marks that have a scale, and keeps the exclusions below."
             )}
           </AlertDescription>
         </Alert>
@@ -164,7 +187,7 @@ export function ObjectiveEvidenceView({
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {evidence.data.map((row) => {
               const contribution = contributionById.get(row.id)
               const included = row.decision.state === "included"
@@ -178,21 +201,7 @@ export function ObjectiveEvidenceView({
                         })}
                       </p>
                       <CardTitle className="text-base">
-                        {row.kind === "school-grade"
-                          ? t("School grade")
-                          : row.kind === "copy-region"
-                            ? t("Reviewed paper region")
-                            : row.kind === "teacher-comment"
-                              ? t("Teacher feedback")
-                              : row.kind === "quiz-question"
-                                ? t("Quiz question")
-                                : row.kind === "exercise"
-                                  ? t("Exercise")
-                                  : row.kind === "self-assessment"
-                                    ? t("Self-assessment")
-                                    : row.kind === "manual-observation"
-                                      ? t("Manual observation")
-                                      : t("Provider snapshot")}
+                        {kindLabel(row.kind)}
                       </CardTitle>
                     </div>
                     <Badge variant={included ? "secondary" : "outline"}>

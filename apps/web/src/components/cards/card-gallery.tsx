@@ -177,7 +177,7 @@ export function CardGallery({ surface }: { surface: WidgetSurface }) {
           <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {category}
           </h2>
-          <div className="grid gap-4 @2xl/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 @2xl/main:grid-cols-2">
             {rows.map((template) => (
               <GalleryTile
                 key={template.id}

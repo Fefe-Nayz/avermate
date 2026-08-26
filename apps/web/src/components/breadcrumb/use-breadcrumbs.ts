@@ -67,6 +67,67 @@ export function useBreadcrumbs(): Crumb[] {
     enabled: inMaterials && Boolean(yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
+  /*
+   * Named, not numbered.
+   *
+   * A study project's trail said "Projet" and a marked copy said "Copie
+   * corrigée" — the same words on every one of them, which is a label for the
+   * *kind* of page, not for the page you are on. These resolve the real title,
+   * gated on the route so only that screen pays for the read.
+   */
+  /*
+   * The conversation is in `?thread=`, not in the path, so the trail has to
+   * read the query to say which one you are in. Without it every conversation
+   * announced itself as "Assistant".
+   */
+  const inAssistant = pathname === "/assistant"
+  const threadParam = searchParams.get("thread") ?? ""
+  const threadsQuery = useQuery({
+    ...orpc.assistant.threads.list.queryOptions({
+      input: {
+        limit: 30,
+        includeArchived: true,
+        includeDeleted: false,
+        starredOnly: false,
+      },
+    }),
+    enabled: inAssistant && Boolean(threadParam),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const threadTitle =
+    (
+      threadsQuery.data as
+        | { items?: ReadonlyArray<{ thread: { id: string; title: string } }> }
+        | undefined
+    )?.items?.find((item) => item.thread.id === threadParam)?.thread.title ?? ""
+
+  const inProjects = pathname.startsWith("/projects/")
+  const projectId = inProjects ? (pathname.split("/")[2] ?? "") : ""
+  const projectQuery = useQuery({
+    ...orpc.projects.list.queryOptions({ input: { include: "all" } }),
+    enabled: inProjects && Boolean(projectId),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const projectTitle =
+    (
+      projectQuery.data as
+        ReadonlyArray<{ id: string; title: string }> | undefined
+    )?.find((item) => item.id === projectId)?.title ?? ""
+
+  const inCopies = pathname.startsWith("/learning/copies/")
+  const analysisId = inCopies ? (pathname.split("/")[3] ?? "") : ""
+  const copiesQuery = useQuery({
+    ...orpc.learning.copies.list.queryOptions({ input: { yearId } }),
+    enabled: inCopies && Boolean(analysisId) && Boolean(yearId),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
+  const copyTitle =
+    (
+      copiesQuery.data as
+        | { items?: ReadonlyArray<{ id: string; title?: string | null }> }
+        | undefined
+    )?.items?.find((item) => item.id === analysisId)?.title ?? ""
+
   const folders = useMemo(
     () => (materialFolders.data ?? []) as readonly MaterialFolderLike[],
     [materialFolders.data]
@@ -532,11 +593,83 @@ export function useBreadcrumbs(): Crumb[] {
         return crumbs
       }
 
+      case "assistant": {
+        const crumbs: Crumb[] = [
+          { key: "assistant", label: t("Assistant"), href: "/assistant" },
+        ]
+        if (segments[1] === "actions") {
+          crumbs.push({ key: "actions", label: t("Action activity") })
+          return crumbs
+        }
+        if (threadTitle) crumbs.push({ key: "thread", label: threadTitle })
+        return crumbs
+      }
+
+      case "learning": {
+        const crumbs: Crumb[] = [
+          { key: "learning", label: t("Learning"), href: "/learning" },
+        ]
+        if (segments[1] === "copies")
+          crumbs.push({
+            key: "copy",
+            label: copyTitle || t("Marked work"),
+          })
+        if (segments[1] === "objectives")
+          crumbs.push({ key: "objective", label: t("Objective") })
+        return crumbs
+      }
+
+      case "projects": {
+        const crumbs: Crumb[] = [
+          { key: "projects", label: t("Study projects"), href: "/projects" },
+        ]
+        if (segments[1])
+          crumbs.push({ key: "project", label: projectTitle || t("Project") })
+        return crumbs
+      }
+
+      case "agenda": {
+        const crumbs: Crumb[] = [
+          { key: "agenda", label: t("Agenda"), href: "/agenda" },
+        ]
+        if (segments[1] === "new")
+          crumbs.push({ key: "new", label: t("New entry") })
+        else if (segments[2] === "edit")
+          crumbs.push({ key: "edit", label: t("Edit entry") })
+        return crumbs
+      }
+
+      case "averages":
+        return [
+          { key: "averages", label: t("Averages"), href: "/dashboard" },
+          ...(segments[1] ? [{ key: "average", label: t("Average") }] : []),
+        ]
+
+      case "announcements":
+        return [{ key: "announcements", label: t("Announcements") }]
+
+      case "review":
+        return [{ key: "review", label: t("Year review") }]
+
+      case "more":
+        return [{ key: "more", label: t("More") }]
+
       default:
-        return [{ key: root, label: root }]
+        /*
+         * A route with no case here used to print its own path segment —
+         * "learning", "projects", lowercase and untranslated — straight into
+         * the trail. Title-casing it is still a guess, but it is a guess that
+         * reads like a page name rather than like a URL.
+         */
+        return [
+          { key: root, label: root.charAt(0).toUpperCase() + root.slice(1) },
+        ]
     }
   }, [
+    copyTitle,
+    threadTitle,
     folderParam,
+    projectTitle,
     folders,
     openParam,
     openTitle,

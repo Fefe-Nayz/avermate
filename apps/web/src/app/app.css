@@ -12,6 +12,10 @@
  * while a desktop window can use the compact values without screen edits.
  */
 :root {
+  /* One height for the page header and the assistant panel's header,
+     so a docked panel reads as docked and not as something pasted on
+     top: they were 48px and 56px. */
+  --header-h: 3rem;
   --control-h: 2.5rem;
   --control-h-xs: 1.75rem;
   --control-h-sm: 2.25rem;
@@ -239,6 +243,22 @@
      The dot's white halo is a separate thing, gone at the source:
      `focusRing: false` on each definition stops the renderer emitting its
      `Canvas`-filled circle, so there is nothing here for CSS to chase. */
+  /*
+   * The chart may not be wider than the box it was given.
+   *
+   * The renderer writes an explicit pixel width onto `.ts-chart-host` from the
+   * width it was last handed, and does not take it back when the container
+   * narrows — every ancestor shrank to 340px while the host stayed at 678, so
+   * the card, the grid and then the page scrolled sideways. Navigating to a
+   * narrow window is fine because the first measurement is already narrow;
+   * only dragging across a breakpoint leaves the stale value behind. Capping
+   * it here means a stale width can clip a redraw for a frame, never widen
+   * the page.
+   */
+  .ts-chart-host {
+    max-width: 100%;
+  }
+
   .ts-chart:focus,
   .ts-chart:focus-visible,
   .ts-chart-host :focus,

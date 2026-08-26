@@ -172,7 +172,7 @@ export function ManagedOperationsClient() {
     ...orpc.managed.admin.reconcileExpiredReservations.mutationOptions(),
     onSuccess: async (result) => {
       toast.success(
-        t("Reconciled {count} expired reservations.", {
+        t("Released {count} expired holds.", {
           count: String(result.settled.length),
         })
       )
@@ -235,9 +235,7 @@ export function ManagedOperationsClient() {
         <AlertTriangleIcon />
         <AlertTitle>{t("Managed operations are unavailable")}</AlertTitle>
         <AlertDescription>
-          {t(
-            "No operational claim can be made until the control plane is reachable."
-          )}
+          {t("Nothing can be confirmed while the service is unreachable.")}
         </AlertDescription>
         <AlertAction>
           <Button
@@ -285,7 +283,7 @@ export function ManagedOperationsClient() {
       <div className="flex flex-col gap-4">
         <div className="hidden md:block">
           <h1 className="text-2xl font-semibold tracking-tight">
-            {t("Managed service control plane")}
+            {t("Managed service operations")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t(
@@ -315,7 +313,7 @@ export function ManagedOperationsClient() {
           </AlertDescription>
         </Alert>
 
-        <div className="grid gap-3 sm:grid-cols-2 @4xl/main:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 @4xl/main:grid-cols-4">
           <SummaryCard
             title={t("Managed readiness")}
             value={data.readiness.ready ? t("Ready") : t("Blocked")}
@@ -337,7 +335,7 @@ export function ManagedOperationsClient() {
           <SummaryCard
             title={t("Breakers requiring attention")}
             value={String(openBreakers)}
-            detail={t("Propagation remains authoritative server-side")}
+            detail={t("The server has the final say")}
             icon={BanIcon}
             state={openBreakers ? "open" : "closed"}
           />
@@ -350,7 +348,7 @@ export function ManagedOperationsClient() {
           />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 @4xl/main:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 @4xl/main:grid-cols-4">
           <SummaryCard
             title={t("Queued worker jobs")}
             value={String(queuedJobs)}
@@ -375,7 +373,7 @@ export function ManagedOperationsClient() {
           <SummaryCard
             title={t("Managed storage")}
             value={String(managedStorageBytes)}
-            detail={t("Authoritative bytes across active categories")}
+            detail={t("Total stored, across everything active")}
             icon={CloudCogIcon}
             state="active"
           />
@@ -390,7 +388,7 @@ export function ManagedOperationsClient() {
               )}
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 @4xl/main:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
             <CompactRows
               title={t("Worker pools")}
               rows={data.pools}
@@ -484,8 +482,7 @@ export function ManagedOperationsClient() {
                 reconcile={() =>
                   reconcile.mutate({
                     limit: 250,
-                    justification:
-                      "Operator reconciliation from managed console",
+                    justification: "Manual cleanup from the admin console",
                   })
                 }
               />
@@ -656,7 +653,7 @@ function InvitePanel({
           </Alert>
         ) : null}
         <form onSubmit={submit} className="flex flex-col gap-4">
-          <FieldGroup className="grid gap-4 @2xl/main:grid-cols-2">
+          <FieldGroup className="grid grid-cols-1 gap-4 @2xl/main:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="managed-invite-email">
                 {t("Bound email (optional)")}
@@ -705,7 +702,7 @@ function InvitePanel({
           </FieldGroup>
           <Field>
             <FieldLabel>{t("Eligible capabilities")}</FieldLabel>
-            <div className="grid gap-2 sm:grid-cols-2 @4xl/main:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 @4xl/main:grid-cols-3">
               {CAPABILITIES.map((capability) => (
                 <Field key={capability} orientation="horizontal">
                   <Checkbox
@@ -762,7 +759,7 @@ function AccessTables({
 }) {
   const t = useExtracted()
   return (
-    <div className="grid gap-4 @4xl/main:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>{t("Invitations")}</CardTitle>
@@ -922,7 +919,7 @@ function LimitForms({
 
   return (
     <>
-      <div className="grid gap-4 @4xl/main:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>{t("Revisioned quota policy")}</CardTitle>
@@ -950,7 +947,7 @@ function LimitForms({
                 })
               }}
             >
-              <FieldGroup className="grid gap-4 sm:grid-cols-2">
+              <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel>{t("Scope")}</FieldLabel>
                   <SelectControl
@@ -1147,10 +1144,10 @@ function LimitForms({
             </Button>
           </CardAction>
           <CardDescription>
-            {t("Reservation reconciliation is idempotent and append-only.")}
+            {t("Running this again changes nothing and erases nothing.")}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 @4xl/main:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
           <CompactRows
             title={t("Quota policies")}
             rows={data.controlPlane.quotas}
@@ -1269,7 +1266,7 @@ function OperationsPanel({
 
   return (
     <>
-      <div className="grid gap-4 @4xl/main:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-3">
         <SummaryCard
           title={t("Backup freshness")}
           value={
@@ -1311,7 +1308,7 @@ function OperationsPanel({
         />
       </div>
 
-      <div className="grid gap-4 @4xl/main:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>{t("Record redacted evidence")}</CardTitle>
@@ -1351,7 +1348,7 @@ function OperationsPanel({
                 })
               }}
             >
-              <FieldGroup className="grid gap-4 sm:grid-cols-2">
+              <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel>{t("Kind")}</FieldLabel>
                   <SelectControl
@@ -1495,7 +1492,7 @@ function OperationsPanel({
                 })
               }}
             >
-              <FieldGroup className="grid gap-4 sm:grid-cols-2">
+              <FieldGroup className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="gate-key">{t("Gate key")}</FieldLabel>
                   <Input
@@ -1567,7 +1564,7 @@ function OperationsPanel({
         </CardHeader>
         <CardContent>
           <form
-            className="grid gap-4 @4xl/main:grid-cols-2"
+            className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2"
             onSubmit={(event) => {
               event.preventDefault()
               createIncident({
@@ -1664,7 +1661,7 @@ function OperationsPanel({
             )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 @4xl/main:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
           <CompactRows
             title={t("Evidence")}
             rows={data.controlPlane.evidence}
@@ -1698,13 +1695,13 @@ function BillingPanel({ data }: { data: ManagedOperationsData }) {
           )}
         </AlertDescription>
       </Alert>
-      <div className="grid gap-4 @4xl/main:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>{t("Webhook inbox")}</CardTitle>
             <CardDescription>
               {t(
-                "Signed callbacks are deduplicated before asynchronous projection."
+                "Duplicate callbacks are dropped before anything is recorded."
               )}
             </CardDescription>
           </CardHeader>
@@ -1723,7 +1720,7 @@ function BillingPanel({ data }: { data: ManagedOperationsData }) {
             <CardTitle>{t("External price mappings")}</CardTitle>
             <CardDescription>
               {t(
-                "Mappings are immutable and cannot grant access by themselves."
+                "These links cannot be edited, and they grant no access on their own."
               )}
             </CardDescription>
           </CardHeader>
@@ -1746,7 +1743,7 @@ function BillingPanel({ data }: { data: ManagedOperationsData }) {
             <Badge variant="destructive">{t("Checkout off")}</Badge>
           </CardAction>
         </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <StatusFact
             label={t("Checkout enabled")}
             value={data.commercial.checkoutEnabled}
@@ -1788,7 +1785,7 @@ function CorrelationPanel({
         <CardTitle>{t("Redacted operation correlation")}</CardTitle>
         <CardDescription>
           {t(
-            "Follow reservation, usage and audit metadata by user-visible operation ID. Payload content is excluded."
+            "Track what was reserved, used and logged, by operation ID. The contents themselves are never included."
           )}
         </CardDescription>
       </CardHeader>
@@ -1817,7 +1814,7 @@ function CorrelationPanel({
           </Button>
         </form>
         {result ? (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatusFact
               label={t("Reservations")}
               value={result.reservations.length}

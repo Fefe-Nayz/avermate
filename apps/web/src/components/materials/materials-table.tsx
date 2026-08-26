@@ -213,7 +213,7 @@ export function MaterialsTable({
         size: 96,
         meta: { headerTitle: "Type", cellClassName: "whitespace-nowrap" },
         cell: ({ row }) => (
-          <Badge variant="outline" className="font-mono text-[0.65rem]">
+          <Badge variant="outline" className="font-mono text-xs">
             {row.original.badge}
           </Badge>
         ),
@@ -445,7 +445,14 @@ function NameCell({
         {presentation.icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        {/*
+         * Wraps, because the file name outranks everything beside it.
+         * On one fixed line the title was the only shrinkable item, so a
+         * long status badge squeezed it to zero width — a file browser row
+         * showing a badge and no file name. Measured at 390px: 0px title
+         * before, 163px after.
+         */}
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
           <span className="truncate text-sm font-medium">{row.title}</span>
           {originBadge?.(row)}
           {tagChips?.(row)}

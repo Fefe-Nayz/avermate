@@ -578,10 +578,14 @@ function DocumentToolbar({
             label: calloutLabels[kind],
           })}
           title={calloutLabels[kind]}
-          className="h-8 shrink-0 px-2 font-mono text-[0.68rem]"
+          className="shrink-0"
           onClick={() => onInsert(DOCUMENT_CALLOUT_SNIPPETS[kind])}
         >
-          {kind}
+          {/* The word, not the code. The readable label was already here —
+              it was the tooltip — while the button itself showed `DEF`,
+              `THM`, `PIEGE` in a 10.88px monospace face. The toolbar scrolls,
+              so the words fit. */}
+          {calloutLabels[kind]}
         </Button>
       ))}
     </div>

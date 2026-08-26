@@ -9,17 +9,15 @@ import type {
 import { useQuery } from "@tanstack/react-query"
 import {
   ActivityIcon,
-  ArrowLeftIcon,
   FilterIcon,
   GitBranchIcon,
   RotateCcwIcon,
   SearchXIcon,
 } from "lucide-react"
-import Link from "next/link"
 import { useExtracted } from "next-intl"
 import { useMemo, useState } from "react"
 import { useOnlineStatus } from "@/hooks/use-online-status"
-import { PageActions, PageMeta } from "@/components/shell/page-chrome"
+import { PageMeta } from "@/components/shell/page-chrome"
 import {
   Alert,
   AlertAction,
@@ -27,7 +25,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -191,7 +189,7 @@ function ActionFilters({
           }}
         >
           <FieldGroup>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field>
                 <FieldLabel htmlFor="action-from-date">{t("From")}</FieldLabel>
                 <Input
@@ -498,20 +496,26 @@ export function ActionActivityClient({
       <PageMeta
         title={t("Action activity")}
         subtitle={t(
-          "Approvals, tool calls, affected resources and selective undo"
+          "Everything the assistant changed for you, and what you can still undo"
         )}
         backHref="/assistant"
       />
-      <PageActions>
-        <Link
-          href="/assistant"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          <ArrowLeftIcon data-icon="inline-start" /> {t("Assistant")}
-        </Link>
-      </PageActions>
-
-      <div className="flex flex-col gap-5">
+      {/*
+        No "back to Assistant" button here any more.
+        
+        It portalled into the shell header, where it sat among the utilities
+        and read as one more icon rather than as the way out. This view now
+        opens in the conversation's own slot, which carries a close.
+      */}
+      <div className="flex flex-col gap-5 p-4">
+        <div>
+          <h2 className="text-lg font-semibold">{t("Action activity")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Everything the assistant changed for you, and what you can still undo"
+            )}
+          </p>
+        </div>
         {!isOnline ? (
           <Alert role="status">
             <ActivityIcon />
@@ -531,7 +535,7 @@ export function ActionActivityClient({
             </AlertTitle>
             <AlertDescription>
               {t(
-                "These ledger entries are the durable study-data mutations associated with the conversation. Creating or editing a conversation branch does not rewind them; conflicted undos must be reviewed explicitly."
+                "These are the changes this conversation made to your study data. Branching or editing the conversation does not undo them, and an undo that conflicts has to be reviewed by hand."
               )}
             </AlertDescription>
           </Alert>

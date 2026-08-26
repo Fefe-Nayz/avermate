@@ -7,9 +7,10 @@ async function source(relativePath: string) {
 
 describe("learning Web contract", () => {
   test("keeps the critical loop available outside chat and responsive", async () => {
-    const [hub, copy, objective, gradeCopies, quiz] = await Promise.all([
+    const [hub, copy, panel, objective, gradeCopies, quiz] = await Promise.all([
       source("./learning-client.tsx"),
       source("./copy-review-workspace.tsx"),
+      source("./copy-review-panel.tsx"),
       source("./objective-evidence-view.tsx"),
       source("../grades/grade-copies.tsx"),
       source("../documents/quiz-document-view.tsx"),
@@ -18,14 +19,14 @@ describe("learning Web contract", () => {
     expect(hub).toContain('TabsTrigger value="copies"')
     expect(hub).toContain('TabsTrigger value="plan"')
     expect(hub).toContain("lg:grid-cols-2")
-    expect(copy).toContain("<object")
-    expect(copy).toContain('type="application/pdf"')
-    expect(copy).toContain('t("Previous page")')
-    expect(copy).toContain('t("Undo confirmation")')
+    expect(panel).toContain("<object")
+    expect(panel).toContain('type="application/pdf"')
+    expect(panel).toContain('t("Previous page")')
+    expect(panel).toContain('t("Undo confirmation")')
     expect(copy).toContain("unsupportedInferences")
-    expect(copy).toContain("normalizedBboxStyle")
-    expect(copy).toContain('aria-label={t("Detected region map")}')
-    expect(copy).toContain("focusedRegionId === region.id")
+    expect(panel).toContain("normalizedBboxStyle")
+    expect(panel).toContain('aria-label={t("Detected region map")}')
+    expect(panel).toContain("focusedRegionId === region.id")
     expect(objective).toContain('t("Exclude from projection")')
     expect(objective).toContain('t("interval {low}–{high}"')
     expect(gradeCopies).toContain("learning.copies.request")
@@ -34,7 +35,8 @@ describe("learning Web contract", () => {
   })
 
   test("labels interactive copy controls and embeds the PDF with a title", async () => {
-    const copy = await source("./copy-review-workspace.tsx")
+    // The two review panes live in copy-review-panel.tsx now.
+    const copy = await source("./copy-review-panel.tsx")
     expect(copy).toContain('aria-label={t("Previous page")}')
     expect(copy).toContain('aria-label={t("Next page")}')
     expect(copy).toContain('aria-label={t("Original paper, page {page}"')

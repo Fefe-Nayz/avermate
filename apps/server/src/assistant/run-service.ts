@@ -860,7 +860,7 @@ export class AssistantGraphExecutor {
             id: newId("apart"),
             code: "assistant_restart_interrupted",
             message:
-              "La requête a été interrompue par un redémarrage. Relancez-la : Avermate ne la réexpédie pas automatiquement au fournisseur.",
+              "A restart interrupted this request. Send it again — Avermate never resends it to the provider on its own.",
             retryable: true,
           },
         ],
@@ -1810,7 +1810,7 @@ export class AssistantGraphExecutor {
                 type: "safe-error",
                 id: newId("apart"),
                 code: "assistant_run_failed",
-                message: "La réponse n’a pas pu être générée.",
+                message: "The response could not be generated.",
                 retryable: true,
               },
             ],

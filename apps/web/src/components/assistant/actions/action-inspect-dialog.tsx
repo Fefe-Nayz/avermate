@@ -65,9 +65,12 @@ export function ActionInspectDialog({
         <DialogHeader>
           <DialogTitle>{actionCopy.title(action)}</DialogTitle>
           <DialogDescription>
-            {t("Immutable action #{sequence} and its durable event history.", {
-              sequence: String(action.actionSequence),
-            })}
+            {t(
+              "Action #{sequence} and everything recorded about it. Neither can be edited.",
+              {
+                sequence: String(action.actionSequence),
+              }
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -136,7 +139,7 @@ export function ActionInspectDialog({
               </Alert>
             ) : events.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t("No durable events were returned for this action.")}
+                {t("Nothing was recorded for this action.")}
               </p>
             ) : (
               <ScrollArea className="max-h-80">

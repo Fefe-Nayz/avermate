@@ -158,7 +158,7 @@ export function LearningPrivacyControls({
           )}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-5 lg:grid-cols-2">
+      <CardContent className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {settings.isError ? (
           <Alert variant="destructive" className="lg:col-span-2">
             <AlertTitle>{t("Learning privacy and data")}</AlertTitle>
@@ -278,7 +278,7 @@ export function LearningPrivacyControls({
               <p className="font-medium">{t("Export preview")}</p>
               <p className="text-sm text-muted-foreground">
                 {t(
-                  "The export contains concepts, evidence, corrections, projections, plans and source references in both machine-readable JSON and Markdown."
+                  "The export holds your concepts, evidence, corrections, estimates, plans and sources — as JSON and as Markdown."
                 )}
               </p>
             </div>
@@ -313,7 +313,7 @@ export function LearningPrivacyControls({
               </AlertDescription>
             </Alert>
           ) : (
-            <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {Object.entries(preview.data?.counts ?? {}).map(
                 ([name, count]) => (
                   <div key={name} className="rounded-lg bg-muted/50 p-3">
@@ -352,7 +352,7 @@ export function LearningPrivacyControls({
           }}
         >
           <DatabaseZapIcon data-icon="inline-start" />
-          {t("Delete all computed learning data")}
+          {t("Delete everything Avermate worked out")}
         </Button>
         <Button
           variant="destructive"
@@ -382,20 +382,20 @@ export function LearningPrivacyControls({
               {deleteMode === "copy-analysis"
                 ? t("Delete copy-analysis derivatives?")
                 : deleteMode === "all-computed"
-                  ? t("Delete all computed learning data?")
+                  ? t("Delete everything Avermate worked out?")
                   : t("Delete every learning row?")}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteMode === "copy-analysis"
                 ? t(
-                    "OCR/model proposals, reviews and copy-derived evidence are deleted. Original grade attachments remain."
+                    "Everything read from your papers, and your reviews of it, is deleted. The papers you uploaded stay."
                   )
                 : deleteMode === "all-computed"
                   ? t(
                       "Model/parser evidence, mastery histories and learning-plan suggestions are also deleted. Concepts and human/provider evidence remain."
                     )
                   : t(
-                      "Every Learning row is deleted. Grades, original files, projects and authoritative planning tasks remain."
+                      "Every Learning row is deleted. Grades, original files, projects and your own planning tasks remain."
                     )}
             </AlertDialogDescription>
           </AlertDialogHeader>

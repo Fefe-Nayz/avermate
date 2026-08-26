@@ -27,7 +27,17 @@ function EpubReader({ row }: MaterialRenderProps) {
   const renditionRef = useRef<Rendition | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [rendering, setRendering] = useState(true)
-  const [renderError, setRenderError] = useState<string | null>(null)
+  /**
+   * What failed, not how to say it.
+   *
+   * Keeping the wording out of state keeps `t` out of the effect's
+   * dependencies: pulling it in would re-run the effect — and re-render the
+   * whole book — on any change to the formatter's identity.
+   */
+  const [renderError, setRenderError] = useState<{
+    scope: "book" | "page"
+    detail?: string
+  } | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
@@ -76,11 +86,10 @@ function EpubReader({ row }: MaterialRenderProps) {
       } catch (error) {
         if (disposed || controller.signal.aborted) return
         setRendering(false)
-        setRenderError(
-          error instanceof Error
-            ? error.message
-            : "This EPUB could not be opened."
-        )
+        setRenderError({
+          scope: "book",
+          detail: error instanceof Error ? error.message : undefined,
+        })
       }
     })()
 
@@ -121,11 +130,10 @@ function EpubReader({ row }: MaterialRenderProps) {
     if (!rendition) return
     void (direction === "previous" ? rendition.prev() : rendition.next()).catch(
       (error: unknown) => {
-        setRenderError(
-          error instanceof Error
-            ? error.message
-            : t("This page could not be opened.")
-        )
+        setRenderError({
+          scope: "page",
+          detail: error instanceof Error ? error.message : undefined,
+        })
       }
     )
   }
@@ -165,7 +173,12 @@ function EpubReader({ row }: MaterialRenderProps) {
         {renderError ? (
           <div className="absolute inset-0 flex bg-background">
             <RendererError
-              message={renderError}
+              message={
+                renderError.scope === "book"
+                  ? t("This EPUB could not be opened.")
+                  : t("This page could not be opened.")
+              }
+              detail={renderError.detail}
               onRetry={() => setAttempt((value) => value + 1)}
             />
           </div>

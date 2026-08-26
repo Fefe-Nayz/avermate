@@ -172,7 +172,7 @@ export function ProjectsClient({
     onSuccess: async (project) => {
       await refreshProject(project.id)
       setEditorOpen(false)
-      toast.success("Projet créé")
+      toast.success(t("Study project created"))
       router.push(`/projects/${project.id}`)
     },
     onError: (error) => toast.error(error.message),
@@ -182,7 +182,7 @@ export function ProjectsClient({
     onSuccess: async (project) => {
       await refreshProject(project.id)
       setEditorOpen(false)
-      toast.success("Projet mis à jour")
+      toast.success(t("Study project updated"))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -196,7 +196,7 @@ export function ProjectsClient({
     onSuccess: async () => {
       await refreshProject(selectedProjectId ?? undefined)
       setDeleteProject(null)
-      toast.success("Projet placé dans la corbeille")
+      toast.success(t("Study project moved to trash"))
       router.push("/projects")
     },
     onError: (error) => toast.error(error.message),
@@ -205,7 +205,7 @@ export function ProjectsClient({
     ...orpc.projects.restore.mutationOptions(),
     onSuccess: async (_, input) => {
       await refreshProject(input.projectId)
-      toast.success("Projet restauré")
+      toast.success(t("Study project restored"))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -213,7 +213,7 @@ export function ProjectsClient({
     ...orpc.projects.addItem.mutationOptions(),
     onSuccess: async (_, input) => {
       await refreshProject(input.projectId)
-      toast.success("Source ajoutée et indexation programmée")
+      toast.success(t("Source added. It is being indexed."))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -221,7 +221,7 @@ export function ProjectsClient({
     ...orpc.projects.removeItem.mutationOptions(),
     onSuccess: async (_, input) => {
       await refreshProject(input.projectId)
-      toast.success("Référence retirée — la source reste intacte")
+      toast.success(t("Reference removed. The source itself is untouched."))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -237,7 +237,7 @@ export function ProjectsClient({
     ...orpc.projects.retryIndex.mutationOptions(),
     onSuccess: async () => {
       if (selectedProjectId) await refreshProject(selectedProjectId)
-      toast.success("Réparation de l’index programmée")
+      toast.success(t("The index will be rebuilt."))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -279,8 +279,10 @@ export function ProjectsClient({
     return (
       <>
         <PageMeta
-          title={selected?.title ?? "Projet"}
-          subtitle="Sources, recherche et citations"
+          title={selected?.title ?? t("Study project")}
+          subtitle={t(
+            "The documents the assistant reads for this topic, and where each answer came from"
+          )}
           backHref="/projects"
         />
         <PageActions>
@@ -577,7 +579,7 @@ function ProjectGrid({
     )
   }
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {projects.map((project) => (
         <Card key={project.id}>
           <CardHeader>
@@ -702,7 +704,7 @@ function DeleteProjectDialog({
 function ProjectSkeleton() {
   return (
     <div
-      className="grid gap-4 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       aria-label="Chargement des projets"
     >
       <Skeleton className="h-44 w-full" />

@@ -139,9 +139,8 @@ export function useMediaStudioCopy() {
     if (input.available) return t("Available")
     if (input.message) return input.message
     if (input.reasonCode === "placement_unavailable")
-      return t("No conforming placement is configured.")
-    if (input.reasonCode === "capability_disabled")
-      return t("This capability is disabled.")
+      return t("No AI service is set up for this yet.")
+    if (input.reasonCode === "capability_disabled") return t("Turned off.")
     return t("Unavailable")
   }
 

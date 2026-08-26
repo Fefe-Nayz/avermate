@@ -29,7 +29,7 @@ function MindmapFlowNodeView({ data }: NodeProps<MindmapFlowNode>) {
       />
       <p className="text-sm leading-tight font-semibold">{data.label}</p>
       {data.note ? (
-        <p className="mt-1 line-clamp-2 text-[0.68rem] leading-snug text-muted-foreground">
+        <p className="mt-1 line-clamp-2 text-xs leading-snug text-muted-foreground">
           {data.note}
         </p>
       ) : null}

@@ -1,5 +1,6 @@
 "use client"
 
+import { cloneElement, isValidElement, useId } from "react"
 import type { ComponentType, ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
@@ -72,17 +73,40 @@ export function SettingsRow({
   children: ReactNode
   htmlFor?: string
 }) {
+  /**
+   * The control is told which text names it.
+   *
+   * The row rendered `<label htmlFor={htmlFor}>` beside the control, and not
+   * one of the fourteen call sites ever passed `htmlFor` — so every settings
+   * switch was announced with no name. Wrapping the control in the label does
+   * not fix it either: base-ui renders a `<span role="switch">`, and a span is
+   * not labelable, so the label would bind to the hidden checkbox instead.
+   * What that switch does read is `aria-labelledby`, so the row hands it the
+   * id of its own label text. A caller that already names its control, or that
+   * passes `htmlFor` for a genuinely labelable one, is left alone.
+   */
+  const labelId = useId()
+  const control =
+    isValidElement<Record<string, unknown>>(children) &&
+    !htmlFor &&
+    !children.props["aria-label"] &&
+    !children.props["aria-labelledby"]
+      ? cloneElement(children, { "aria-labelledby": labelId })
+      : children
+
   return (
     <div className="flex min-h-11 items-center gap-4">
       <label htmlFor={htmlFor} className="min-w-0 flex-1">
-        <span className="block text-sm">{label}</span>
+        <span id={labelId} className="block text-sm">
+          {label}
+        </span>
         {description ? (
           <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
             {description}
           </span>
         ) : null}
       </label>
-      <div className="shrink-0">{children}</div>
+      <div className="shrink-0">{control}</div>
     </div>
   )
 }

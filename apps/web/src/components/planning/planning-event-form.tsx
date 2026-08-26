@@ -353,7 +353,7 @@ export function PlanningEventForm({
       id: "when",
       title: t("When?"),
       content: (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <DateField
             label={kind === "lesson" ? t("Date") : t("Start date")}
             value={date}
@@ -420,7 +420,7 @@ export function PlanningEventForm({
       // of an existing series is an exception to it, not a new rhythm.
       when: kind === "lesson" && !editingLesson,
       content: (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SelectField
             label={t("Repeat")}
             value={repeat}
@@ -443,7 +443,7 @@ export function PlanningEventForm({
       id: "where",
       title: t("Where, and for which subject?"),
       content: (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SelectField
             label={t("Subject")}
             value={subjectId}

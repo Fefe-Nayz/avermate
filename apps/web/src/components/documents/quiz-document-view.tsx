@@ -226,7 +226,7 @@ export function QuizDocumentView({
                 onChange={(event) => setAnswer(index, event.target.value)}
               />
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {Array.from(
                   { length: question.blankCount },
                   (_, blankIndex) => (

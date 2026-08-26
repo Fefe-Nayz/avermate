@@ -229,7 +229,7 @@ export function ServiceKeysSection() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-3 @3xl/main:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 @3xl/main:grid-cols-2">
         {CREDENTIALS.map((credential) => {
           const stored = keys.data?.find(
             (entry) =>

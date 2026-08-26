@@ -333,7 +333,7 @@ function ProjectRetrievalEditor({
         </Select>
         <FieldDescription>
           {t(
-            "Advanced mode combines FTS, dense search, RRF, diversity, cross-encoder reranking, neighbor expansion and evidence packing with exact citations."
+            "Advanced mode searches by keyword and by meaning, merges the two rankings, drops near-duplicates, re-scores what is left, pulls in the surrounding passages and cites each one exactly."
           )}
         </FieldDescription>
       </Field>
@@ -369,7 +369,7 @@ function ProjectRetrievalEditor({
 
       {mode === "advanced-auto" ? (
         <Field>
-          <FieldLabel>{t("Immutable embedding space")}</FieldLabel>
+          <FieldLabel>{t("Embedding model is fixed")}</FieldLabel>
           <Select
             items={spaceItems}
             value={embeddingSpaceId}
@@ -605,7 +605,7 @@ export function RetrievalSettingsSection() {
         </Alert>
       ) : readiness.isPending ? (
         <div
-          className="grid gap-3 md:grid-cols-2"
+          className="grid grid-cols-1 gap-3 md:grid-cols-2"
           role="status"
           aria-label={t("Loading retrieval readiness")}
         >
@@ -613,7 +613,7 @@ export function RetrievalSettingsSection() {
           <Skeleton className="h-64" />
         </div>
       ) : data ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <ProviderReadinessCard
             label="Gemini Embedding 2"
             description={t(
@@ -639,7 +639,7 @@ export function RetrievalSettingsSection() {
                 : t("Cohere Rerank")
             }
             description={t(
-              "Cross-encoder after RRF fusion and diversity, before neighbor expansion."
+              "Re-scores the merged, de-duplicated results before surrounding passages are added."
             )}
             provider="cohere"
             placement={data.rerank.placement}
@@ -890,7 +890,7 @@ export function RetrievalSettingsSection() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               {t(
-                "Run the deterministic pre-ranked regression fixture to detect reporting regressions. It calls no provider and is not live model-quality evidence."
+                "Run the fixed sample set to check the scores still come out the same. It contacts no provider, and it does not measure how good the models are."
               )}
             </p>
             <Button

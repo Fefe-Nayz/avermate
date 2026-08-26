@@ -258,7 +258,7 @@ function TaskBoard({ tasks }: { tasks: PlanningItem[] }) {
         setStatus.mutate({ taskId, status: target })
       }}
     >
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {STATUSES.map((status) => (
           <TaskLane
             key={status}

@@ -155,9 +155,18 @@ export function LearningClient() {
 
   return (
     <>
+      {/*
+        Say what the page is for, not which nouns it contains.
+        
+        "From reviewed papers to your next actions" named the pipeline plan 037
+        describes without telling a student what they get out of it, which is
+        why nobody could tell what this page was.
+      */}
       <PageMeta
         title={t("Learning")}
-        subtitle={t("From reviewed papers to your next actions")}
+        subtitle={t(
+          "What your marked work shows you have learnt, and what to revise next"
+        )}
       />
       <PageActions>
         <Button
@@ -229,7 +238,7 @@ export function LearningClient() {
           </Alert>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Card size="sm">
             <CardHeader>
               <CardDescription>{t("Active objectives")}</CardDescription>
@@ -300,7 +309,7 @@ export function LearningClient() {
 
           <TabsContent value="mastery" className="mt-4">
             {mastery.isLoading ? (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <Skeleton className="h-40" />
                 <Skeleton className="h-40" />
               </div>
@@ -318,7 +327,7 @@ export function LearningClient() {
                 )}
               />
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 {masteryRows.map(({ objective, concept, projection }) => (
                   <Card key={objective.id} size="sm">
                     <CardHeader>
@@ -351,7 +360,7 @@ export function LearningClient() {
                       ) : (
                         <p className="text-sm text-muted-foreground">
                           {t(
-                            "There are no normalizable observations; Avermate does not invent a level."
+                            "Nothing here can be measured yet, so no level is shown."
                           )}
                         </p>
                       )}
@@ -550,7 +559,7 @@ function ProgressTimeline({
         icon={<HistoryIcon />}
         title={t("No history yet")}
         description={t(
-          "Future projections and results will appear here without being presented as proof of causality."
+          "Estimates and results will appear here. They show what tends to go together, not what causes what."
         )}
       />
     )

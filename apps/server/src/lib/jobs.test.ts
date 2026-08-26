@@ -131,6 +131,16 @@ afterAll(async () => {
 }, databaseHookTimeout);
 
 describe("durable jobs", () => {
+  test("uses one local SQLite lane while preserving remote concurrency", () => {
+    expect(queue.jobRunnerConcurrencyForDatabaseUrl("file:./dev.db")).toBe(1);
+    expect(queue.jobRunnerConcurrencyForDatabaseUrl(":memory:")).toBe(1);
+    expect(
+      queue.jobRunnerConcurrencyForDatabaseUrl(
+        "libsql://database.example.test",
+      ),
+    ).toBe(queue.DEFAULT_JOB_RUNNER_CONCURRENCY);
+  });
+
   test("enqueue, claim and complete preserve state and result", async () => {
     const runAt = new Date("2026-08-10T10:00:00.000Z");
     const job = await queue.enqueueJob({
@@ -461,6 +471,63 @@ describe("durable jobs", () => {
     expect(first.some((job) => job.kind === REAP_UNOWNED_FILES_JOB_KIND)).toBe(
       true,
     );
+  });
+
+  test("boot scheduling serializes writes and retries one transient database lock", async () => {
+    const now = new Date("2031-02-03T04:05:00.000Z");
+    const calls: string[] = [];
+    const delays: number[] = [];
+    let active = 0;
+    let maximumActive = 0;
+    let injectedBusy = false;
+    const enqueue: typeof queue.enqueueJob = async (input) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      try {
+        await Promise.resolve();
+        calls.push(input.kind);
+        if (input.kind === "maintenance.purgeMaterialTrash" && !injectedBusy) {
+          injectedBusy = true;
+          throw { cause: { code: "SQLITE_BUSY" } };
+        }
+        const timestamp = input.runAt ?? now;
+        return {
+          id: `job-${calls.length}`,
+          kind: input.kind,
+          payload: input.payload ?? null,
+          payloadVersion: input.payloadVersion ?? 1,
+          status: "queued",
+          attempts: 0,
+          maxAttempts: input.maxAttempts ?? 3,
+          runAt: timestamp,
+          lockedUntil: null,
+          lockedBy: null,
+          idempotencyKey: input.idempotencyKey ?? null,
+          result: null,
+          error: null,
+          userId: input.userId ?? null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      } finally {
+        active -= 1;
+      }
+    };
+
+    const scheduled = await handlers.scheduleDailyMaintenanceJobs(now, {
+      enqueue,
+      retryDelaysMs: [17],
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
+    });
+
+    expect(scheduled).toHaveLength(handlers.MAINTENANCE_JOB_KINDS.length + 3);
+    expect(maximumActive).toBe(1);
+    expect(
+      calls.filter((kind) => kind === "maintenance.purgeMaterialTrash"),
+    ).toHaveLength(2);
+    expect(delays).toEqual([17]);
   });
 
   test("maintenance handlers reap old MCP operations and automatic feedback", async () => {

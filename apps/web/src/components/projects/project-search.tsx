@@ -164,7 +164,7 @@ export function ProjectSearch({
         </h2>
         <p className="text-sm text-muted-foreground">
           {t(
-            "The pipeline follows the project policy: local FTS, embeddings, RRF fusion, diversity and reranking when ready. Every result points to an immutable version and location."
+            "Search follows this project's settings: by keyword, by meaning, merged and de-duplicated, then re-scored once that is ready. Every result points to a fixed version and an exact place in it."
           )}
         </p>
       </div>

@@ -2,6 +2,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { db } from "../db";
 import { mcpOperations } from "../db/schema";
 import { enqueueJob, registerJobHandler } from "../lib/jobs";
+import { retrySqliteBusy } from "../lib/sqlite-busy";
 import { purgeExpiredAutomaticFeedbackRows } from "../routers/admin-feedback";
 import { OCR_JOB_KIND, runOcrDocumentJob } from "./ocr";
 import {
@@ -111,6 +112,7 @@ export const MAINTENANCE_JOB_KINDS = [
 
 const DAY_MS = 86_400_000;
 let registered = false;
+type Enqueue = typeof enqueueJob;
 
 function utcDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -119,8 +121,9 @@ function utcDateKey(date: Date) {
 async function enqueueMaintenanceKind(
   kind: (typeof MAINTENANCE_JOB_KINDS)[number],
   runAt: Date,
+  enqueue: Enqueue = enqueueJob,
 ) {
-  return enqueueJob({
+  return enqueue({
     kind,
     payload: { scheduledFor: utcDateKey(runAt) },
     userId: null,
@@ -390,15 +393,39 @@ export function registerAllJobHandlers() {
   );
 }
 
-/** Idempotently schedules daily maintenance and the current storage-reaper bucket. */
-export async function scheduleDailyMaintenanceJobs(now = new Date()) {
-  return Promise.all([
+export interface DailyMaintenanceScheduleOptions {
+  enqueue?: Enqueue;
+  retryDelaysMs?: readonly number[];
+  sleep?: (delayMs: number) => Promise<void>;
+}
+
+/**
+ * Idempotently schedules daily maintenance and the current storage-reaper
+ * bucket. Boot scheduling is deliberately serial so these inserts do not add
+ * competing writers while other startup work may own a SQLite transaction.
+ */
+export async function scheduleDailyMaintenanceJobs(
+  now = new Date(),
+  options: DailyMaintenanceScheduleOptions = {},
+) {
+  const enqueue = options.enqueue ?? enqueueJob;
+  const operations: Array<() => ReturnType<Enqueue>> = [
     ...MAINTENANCE_JOB_KINDS.filter(
       (kind) => kind !== PURGE_MATERIAL_TRASH_JOB_KIND,
-    ).map((kind) => enqueueMaintenanceKind(kind, now)),
-    enqueueMaterialTrashMaintenanceJob(now),
-    enqueueStorageReaperJob(now),
-    enqueueOneDriveSubscriptionReconciliation(now),
-    enqueueGoogleDriveChannelReconciliation(now),
-  ]);
+    ).map((kind) => () => enqueueMaintenanceKind(kind, now, enqueue)),
+    () => enqueueMaterialTrashMaintenanceJob(now, { enqueue }),
+    () => enqueueStorageReaperJob(now, { enqueue }),
+    () => enqueueOneDriveSubscriptionReconciliation(now, { enqueue }),
+    () => enqueueGoogleDriveChannelReconciliation(now, { enqueue }),
+  ];
+  const scheduled: Array<Awaited<ReturnType<Enqueue>>> = [];
+  for (const operation of operations) {
+    scheduled.push(
+      await retrySqliteBusy(operation, {
+        delaysMs: options.retryDelaysMs,
+        sleep: options.sleep,
+      }),
+    );
+  }
+  return scheduled;
 }

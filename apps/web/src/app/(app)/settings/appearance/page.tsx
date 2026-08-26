@@ -225,7 +225,7 @@ export default function AppearanceSettingsPage() {
                 )}
               </p>
             </div>
-            <div className="grid gap-2 @sm/main:grid-cols-2 @lg/main:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 @sm/main:grid-cols-2 @lg/main:grid-cols-3">
               {THEME_STUDIO_PRESETS.map((preset) => {
                 const active = preferences.themePreset === preset.id
                 const light = preset.palette.light
@@ -274,7 +274,7 @@ export default function AppearanceSettingsPage() {
                       <span className="text-sm font-medium">
                         {preset.label}
                       </span>
-                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground capitalize">
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground capitalize">
                         {presetBadges[preset.badge]}
                       </span>
                     </span>
@@ -424,7 +424,7 @@ export default function AppearanceSettingsPage() {
            * pushes everything below it off the screen. A font is a name you
            * recognise, so a list you open is the right shape for it.
            */}
-          <div className="grid gap-4 @sm/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 @sm/main:grid-cols-2">
             <SelectField
               label={t("Body font")}
               options={FONT_CHOICES.map((font) => ({

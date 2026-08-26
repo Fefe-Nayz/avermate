@@ -30,32 +30,37 @@ export function durableActionLedgerWriter(input: {
   );
 }
 
+export async function sweepExpiredActionApprovals(workerId: string) {
+  const expired = await actionLedgerService().expireApprovals({
+    workerId,
+    limit: 100,
+  });
+  await Promise.allSettled(
+    expired.map(async (actionId) => {
+      const action = await actionLedgerService().getSystem(actionId);
+      if (action) {
+        await managedToolActionContinuationStore.discard(
+          action.userId,
+          actionId,
+        );
+      }
+    }),
+  );
+  return expired;
+}
+
 export function startActionApprovalSweeper(input?: {
   intervalMs?: number;
   workerId?: string;
+  runImmediately?: boolean;
 }): () => void {
   if (sweeperTimer) return () => undefined;
   const workerId = input?.workerId ?? `actions:${crypto.randomUUID()}`;
   const sweep = () =>
-    actionLedgerService()
-      .expireApprovals({ workerId, limit: 100 })
-      .then((expired) =>
-        Promise.allSettled(
-          expired.map(async (actionId) => {
-            const action = await actionLedgerService().getSystem(actionId);
-            if (action) {
-              await managedToolActionContinuationStore.discard(
-                action.userId,
-                actionId,
-              );
-            }
-          }),
-        ),
-      )
-      .catch((error) =>
-        console.error("[actions] approval expiry sweep failed", error),
-      );
-  void sweep();
+    sweepExpiredActionApprovals(workerId).catch((error) =>
+      console.error("[actions] approval expiry sweep failed", error),
+    );
+  if (input?.runImmediately !== false) void sweep();
   sweeperTimer = setInterval(
     sweep,
     Math.max(5_000, input?.intervalMs ?? 30_000),

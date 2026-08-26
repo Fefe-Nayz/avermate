@@ -210,7 +210,7 @@ export function ArtifactOutputDialog({
                 <EmptyTitle>{t("No published file")}</EmptyTitle>
                 <EmptyDescription>
                   {t(
-                    "This revision has a manifest but no previewable binary output."
+                    "This revision was recorded, but produced no file that can be previewed."
                   )}
                 </EmptyDescription>
               </EmptyHeader>

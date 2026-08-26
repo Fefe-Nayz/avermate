@@ -28,8 +28,16 @@ import {
   type AdminOverviewRange,
 } from "@/lib/route-query-inputs"
 
+/**
+ * A percentage, or an em dash when there is nothing to show.
+ *
+ * It used to read `(value ?? 0).toFixed(1)`, which printed a real-looking
+ * "0.0%" for every metric while the request was still in flight — so an admin
+ * opening this page saw a dead platform for as long as the load took.
+ * `decimal` below already answered this correctly; this did not.
+ */
 function percentage(value: number | null | undefined) {
-  return `${(value ?? 0).toFixed(1)}%`
+  return value == null ? "—" : `${value.toFixed(1)}%`
 }
 
 function decimal(value: number | null | undefined) {
@@ -70,6 +78,10 @@ export function AdminOverviewClient() {
     orpc.admin.overview.queryOptions({ input: adminOverviewInput(range) })
   )
   const data = overview.data
+
+  /** A count, on the same terms as `percentage` and `decimal` above. */
+  const count = (value: number | null | undefined) =>
+    value == null ? "—" : format.number(value)
 
   const ranges = [
     { value: "30", label: t("30 days") },
@@ -146,26 +158,26 @@ export function AdminOverviewClient() {
         <div className="grid grid-cols-2 gap-3 @lg/main:grid-cols-4">
           <Metric
             label={t("Accounts")}
-            value={format.number(data?.totals.users ?? 0)}
+            value={count(data?.totals.users)}
             description={t("{count} created in 30 days", {
               count: String(data?.last30Days.newUsers ?? 0),
             })}
           />
           <Metric
             label={t("Grades")}
-            value={format.number(data?.totals.grades ?? 0)}
+            value={count(data?.totals.grades)}
             description={t("{count} added in 30 days", {
               count: String(data?.last30Days.newGrades ?? 0),
             })}
           />
           <Metric
             label={t("Active users")}
-            value={format.number(data?.last30Days.activeUsers ?? 0)}
+            value={count(data?.last30Days.activeUsers)}
             description={t("Accounts that recorded a grade in 30 days")}
           />
           <Metric
             label={t("Suspended")}
-            value={format.number(data?.totals.bannedUsers ?? 0)}
+            value={count(data?.totals.bannedUsers)}
             description={t("{count} administrator accounts", {
               count: String(data?.totals.admins ?? 0),
             })}
@@ -204,7 +216,7 @@ export function AdminOverviewClient() {
           />
         </div>
 
-        <div className="grid gap-3 @lg/main:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-2">
           <Card className="gap-2 py-4">
             <CardHeader className="flex-row items-center justify-between px-4">
               <CardTitle className="text-sm font-medium">
@@ -239,7 +251,7 @@ export function AdminOverviewClient() {
           </Card>
         </div>
 
-        <div className="grid gap-3 @lg/main:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-3">
           <Card className="py-4">
             <CardHeader className="px-4">
               <CardTitle className="flex items-center gap-2 text-sm">
@@ -249,7 +261,7 @@ export function AdminOverviewClient() {
             <CardContent className="grid grid-cols-3 gap-2 px-4 text-center">
               <div className="rounded-lg bg-muted p-2">
                 <p className="numeric font-semibold">
-                  {format.number(data?.last7Days.newUsers ?? 0)}
+                  {count(data?.last7Days.newUsers)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {t("accounts")}
@@ -257,7 +269,7 @@ export function AdminOverviewClient() {
               </div>
               <div className="rounded-lg bg-muted p-2">
                 <p className="numeric font-semibold">
-                  {format.number(data?.last7Days.newGrades ?? 0)}
+                  {count(data?.last7Days.newGrades)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {t("grades")}
@@ -265,7 +277,7 @@ export function AdminOverviewClient() {
               </div>
               <div className="rounded-lg bg-muted p-2">
                 <p className="numeric font-semibold">
-                  {format.number(data?.last7Days.activeUsers ?? 0)}
+                  {count(data?.last7Days.activeUsers)}
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {t("active")}
@@ -305,7 +317,7 @@ export function AdminOverviewClient() {
           </Card>
         </div>
 
-        <div className="grid gap-3 @lg/main:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-2">
           <Card className="py-4">
             <CardHeader className="px-4">
               <CardTitle className="text-sm">

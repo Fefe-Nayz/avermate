@@ -1,9 +1,11 @@
 "use client"
 
 import {
-  ActivityIcon,
   ArchiveIcon,
   ArchiveRestoreIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ClockIcon,
   LoaderCircleIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -12,27 +14,27 @@ import {
   StarIcon,
   Trash2Icon,
 } from "lucide-react"
-import Link from "next/link"
 import { useExtracted, useFormatter } from "next-intl"
-import { useMemo, useState } from "react"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { useMemo, useState, type ReactNode } from "react"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import type {
   AssistantThreadSummary,
   AssistantWorkspaceActions,
 } from "./assistant-types"
 
-type RailSection = "recent" | "starred" | "archived" | "trash"
+const RAIL_SECTIONS = ["recent", "starred", "archived", "trash"] as const
+type RailSection = (typeof RAIL_SECTIONS)[number]
 
 function inSection(
   thread: AssistantThreadSummary,
@@ -59,7 +61,7 @@ function ThreadMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={t("Actions for {title}", { title: thread.title })}
-        render={<Button type="button" variant="ghost" size="icon-xs" />}
+        render={<Button type="button" variant="ghost" size="icon-sm" />}
         onClick={(event) => event.stopPropagation()}
       >
         <MoreHorizontalIcon />
@@ -143,10 +145,10 @@ function ThreadRow({
           onKeyDown={(event) => {
             if (event.key === "Escape") setRenaming(false)
           }}
-          className="h-8"
+          className="h-(--control-h-sm)"
           aria-label={t("Conversation title")}
         />
-        <Button type="submit" size="xs">
+        <Button type="submit" size="sm">
           {t("Save")}
         </Button>
       </form>
@@ -214,6 +216,18 @@ export function AssistantThreadRail({
 }) {
   const t = useExtracted()
   const [section, setSection] = useState<RailSection>("recent")
+  const sectionLabels: Record<RailSection, string> = {
+    recent: t("Recent"),
+    starred: t("Starred"),
+    archived: t("Archive"),
+    trash: t("Trash"),
+  }
+  const sectionIcons: Record<RailSection, ReactNode> = {
+    recent: <ClockIcon className="size-4 shrink-0 opacity-70" />,
+    starred: <StarIcon className="size-4 shrink-0 opacity-70" />,
+    archived: <ArchiveIcon className="size-4 shrink-0 opacity-70" />,
+    trash: <Trash2Icon className="size-4 shrink-0 opacity-70" />,
+  }
   const visible = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
     return threads
@@ -230,11 +244,21 @@ export function AssistantThreadRail({
   return (
     <aside
       className={cn(
-        "flex min-h-0 flex-col border-r bg-muted/15",
+        /*
+         * Opaque, because this panel now slides over the conversation instead
+         * of sitting beside it. `bg-muted/15` was fine as a column; as an
+         * overlay it let both layers show through each other.
+         */
+        "flex min-h-0 flex-col border-r bg-background @3xl:bg-muted/15",
         compact ? "w-64" : "w-72"
       )}
       aria-label={t("Conversations")}
     >
+      {/*
+        The action-activity link lives in the conversation header, and only
+        there. Both places pointed at `/assistant/actions` with the same icon,
+        so with the rail open the same button appeared twice, side by side.
+      */}
       <div className="flex items-center gap-2 p-3">
         <Button
           className="flex-1"
@@ -243,13 +267,6 @@ export function AssistantThreadRail({
         >
           <PlusIcon data-icon="inline-start" /> {t("New chat")}
         </Button>
-        <Link
-          href="/assistant/actions"
-          className={buttonVariants({ variant: "outline", size: "icon-sm" })}
-          aria-label={t("Open action activity")}
-        >
-          <ActivityIcon />
-        </Link>
       </div>
       <div className="px-3 pb-2">
         <div className="relative">
@@ -263,25 +280,52 @@ export function AssistantThreadRail({
           />
         </div>
       </div>
-      <Tabs
-        value={section}
-        onValueChange={(value) => setSection(value as RailSection)}
-      >
-        <TabsList className="mx-3 grid grid-cols-4">
-          <TabsTrigger value="recent" aria-label={t("Recent chats")}>
-            {t("Recent")}
-          </TabsTrigger>
-          <TabsTrigger value="starred" aria-label={t("Starred chats")}>
-            ★
-          </TabsTrigger>
-          <TabsTrigger value="archived" aria-label={t("Archived chats")}>
-            {t("Archive")}
-          </TabsTrigger>
-          <TabsTrigger value="trash" aria-label={t("Deleted chats")}>
-            {t("Trash")}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/*
+        One control, not four tabs.
+        
+        Four tabs in a 256px rail left 64px each: "Archive" and "Trash" barely
+        fit, "Starred" gave up and became a bare ★, and the whole strip had to
+        be read as a row of abbreviations. These are scopes over one list, and
+        a list has one scope at a time — so it names the scope it is showing,
+        with room for the word and its count.
+      */}
+      <div className="px-3 pb-1">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between"
+              />
+            }
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              {sectionIcons[section]}
+              <span className="truncate">{sectionLabels[section]}</span>
+            </span>
+            <ChevronDownIcon className="shrink-0 opacity-60" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-(--anchor-width)">
+            <DropdownMenuGroup>
+              {RAIL_SECTIONS.map((value) => (
+                <DropdownMenuItem
+                  key={value}
+                  onClick={() => setSection(value)}
+                  data-active={value === section ? "" : undefined}
+                >
+                  {sectionIcons[value]}
+                  <span className="flex-1">{sectionLabels[value]}</span>
+                  {value === section ? (
+                    <CheckIcon className="size-4 opacity-60" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <ScrollArea className="mt-2 min-h-0 flex-1">
         {loading ? (
           <div

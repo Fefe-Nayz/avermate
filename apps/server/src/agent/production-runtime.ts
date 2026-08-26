@@ -596,7 +596,7 @@ export class ProductionAgentRuntime implements AgentRuntime {
             id: newId("apart"),
             code: "provider_dispatch_unknown",
             message:
-              "Le fournisseur a peut-être reçu la requête avant l’interruption. Vérifiez l’état avant de réessayer.",
+              "The provider may have received the request before it stopped. Check before trying again.",
             retryable: false,
           },
         ],

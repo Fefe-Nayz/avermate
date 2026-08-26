@@ -13,15 +13,6 @@ import { useExtracted } from "next-intl"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   Progress,
   ProgressLabel,
   ProgressValue,
@@ -187,65 +178,54 @@ export function AssistantSpecializedToolResult({
   const kind = specializedToolResultKind(toolName)
   if (!kind) return null
 
+  /**
+   * One line of reassurance, not a statement of the rule.
+   *
+   * Each of these used to be a paragraph of specification prose — "reviewed
+   * regions become evidence only after an explicit confirmation" — printed
+   * under the title on every single occurrence of the tool. It answers a
+   * question nobody asked mid-conversation, and it answered it again every
+   * time. What is left is the part a student actually needs before deciding
+   * whether to act, and it only shows while the result can still change.
+   */
   const copy = {
     "copy-analysis": {
       title: t("Copy analysis"),
-      description: t(
-        "The copy is analyzed as a proposal. It never changes the school grade automatically."
-      ),
+      note: t("Nothing here changes your grade on its own."),
     },
     "copy-review": {
       title: t("Copy review"),
-      description: t(
-        "Reviewed regions become evidence only after an explicit confirmation."
-      ),
+      note: t("Nothing counts until you confirm it."),
     },
     concept: {
       title: t("Learning concept"),
-      description: t(
-        "An owned concept and its objectives in the selected academic scope."
-      ),
+      note: t("A concept of yours, with its objectives."),
     },
     evidence: {
       title: t("Learning evidence"),
-      description: t(
-        "Immutable observations and their latest inclusion decisions."
-      ),
+      note: t("What was observed. Nothing here is rewritten."),
     },
     mastery: {
       title: t("Mastery explanation"),
-      description: t(
-        "An explainable estimate with its interval and evidence contributions."
-      ),
+      note: t("An estimate, with what it was based on."),
     },
     plan: {
       title: t("Learning plan"),
-      description: t(
-        "Recommendations stay reviewable until you approve creating a planning task."
-      ),
+      note: t("Suggestions only. Nothing is added to your planning yet."),
     },
     "quiz-progress": {
       title: t("Quiz progress"),
-      description: t(
-        "Starting a quiz does not create mastery evidence; completed answers can be reviewed first."
-      ),
+      note: t("Trying a quiz never counts against you."),
     },
     "artifact-progress": {
       title: t("Artifact workflow"),
-      description: t(
-        "Inspectable generation stages preserve their sources and revision history."
-      ),
+      note: t("Each stage keeps its sources, so you can check them."),
     },
     "undo-compensation": {
       title: t("Undo preview"),
-      description: t(
-        "This preview shows the causal reverse order without changing any data."
-      ),
+      note: t("A preview. Nothing is undone yet."),
     },
-  } satisfies Record<
-    SpecializedToolResultKind,
-    { title: string; description: string }
-  >
+  } satisfies Record<SpecializedToolResultKind, { title: string; note: string }>
   const rows = resultRows(result)
   const progress = progressValue(result)
   const progressText =
@@ -268,29 +248,46 @@ export function AssistantSpecializedToolResult({
               ? t("Ready")
               : state
 
+  const settled = !(
+    state === "running" ||
+    state === "pending" ||
+    state === "queued"
+  )
+
+  /**
+   * A result inside a conversation, not a panel about itself.
+   *
+   * This was a `Card` with a header, a description, an action, a content
+   * region and a footer — five framed regions — and every row inside it was
+   * another bordered box. Three levels of border for one answer, which is how
+   * a chat ends up reading like an admin console. One frame now: a title line
+   * and the result under it.
+   */
   return (
-    <Card
-      size="sm"
-      className="my-3"
+    <section
+      className="my-3 overflow-hidden rounded-xl border"
       data-specialized-tool-result={kind}
       aria-busy={status === "running"}
     >
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <KindIcon kind={kind} />
+      <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
+        <KindIcon kind={kind} />
+        <h3 className="min-w-0 flex-1 truncate text-sm font-medium">
           {copy[kind].title}
-        </CardTitle>
-        <CardDescription>{copy[kind].description}</CardDescription>
-        <CardAction>
-          <Badge variant={isError ? "destructive" : "outline"}>
-            {localizedState}
-          </Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent
-        className="flex flex-col gap-3"
+        </h3>
+        <Badge
+          variant={isError ? "destructive" : "outline"}
+          className="shrink-0"
+        >
+          {localizedState}
+        </Badge>
+      </div>
+      <div
+        className="flex flex-col gap-3 px-3 py-3"
         aria-live={status === "running" ? "polite" : undefined}
       >
+        {settled ? null : (
+          <p className="text-xs text-muted-foreground">{copy[kind].note}</p>
+        )}
         {progress !== null ? (
           <Progress value={progress} aria-valuetext={progressText ?? undefined}>
             <ProgressLabel>{t("Progress")}</ProgressLabel>
@@ -298,13 +295,10 @@ export function AssistantSpecializedToolResult({
           </Progress>
         ) : null}
         {rows.length > 0 ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="divide-y rounded-lg border">
             {rows.map((row) => (
-              <li
-                key={row.id}
-                className="rounded-lg border bg-muted/20 px-3 py-2"
-              >
-                <p className="line-clamp-2 font-medium">{row.label}</p>
+              <li key={row.id} className="px-3 py-2">
+                <p className="line-clamp-2 text-sm font-medium">{row.label}</p>
                 {row.detail && row.detail !== row.label ? (
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                     {row.detail}
@@ -322,15 +316,17 @@ export function AssistantSpecializedToolResult({
                 : t("The result is ready in the Learning workspace.")}
           </p>
         )}
-      </CardContent>
-      <CardFooter className="justify-end">
         <Link
           href="/learning"
-          className={buttonVariants({ size: "sm", variant: "outline" })}
+          className={buttonVariants({
+            size: "sm",
+            variant: "ghost",
+            className: "-mx-2 self-start",
+          })}
         >
           {t("Open Learning")}
         </Link>
-      </CardFooter>
-    </Card>
+      </div>
+    </section>
   )
 }

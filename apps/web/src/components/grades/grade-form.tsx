@@ -122,7 +122,7 @@ function LockedValue({
       </FieldLabel>
       <div
         aria-readonly="true"
-        className="flex min-h-12 items-center rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground md:min-h-9"
+        className="flex min-h-(--control-h-form) items-center rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
       >
         {value}
       </div>
@@ -553,7 +553,7 @@ export function GradeForm({
               { provider: providerName }
             )
           : t(
-              "This result comes from {provider}, a secondary school source, and is excluded until that source becomes authoritative.",
+              "This result comes from {provider}, a secondary source, so it stays out of your average until you make that source the main one.",
               { provider: providerName }
             )
   const managementAside = providerManaged ? (
@@ -803,8 +803,12 @@ export function GradeForm({
               <Field>
                 <FieldLabel>{t("Result")}</FieldLabel>
                 {/* Same height as the input it stands in for, or the row it
-                    shares with "Out of" comes out uneven. */}
-                <div className="flex h-12 items-center gap-1.5 rounded-md border border-input bg-muted/40 px-3 py-1 text-base shadow-xs md:h-9 md:text-sm">
+                    shares with "Out of" comes out uneven — and it has to be
+                    the same *token*. `h-12 md:h-9` switches on width while
+                    `NumberField` switches on the pointer, so the two agreed on
+                    a desktop and drifted 8px apart on a wide touch screen and
+                    12px in a narrow desktop window. */}
+                <div className="flex h-(--control-h-form) items-center gap-1.5 rounded-md border border-input bg-muted/40 px-3 py-1 text-base shadow-xs md:text-sm">
                   <span className="numeric font-medium">
                     {effectiveValue === null
                       ? "—"

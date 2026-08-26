@@ -15,7 +15,10 @@ import { ScrollPaneProvider } from "./scroll-pane"
 import { usePaneScrollRestoration } from "@/hooks/use-pane-scroll-restoration"
 import { isFullBleedRoute } from "./page-layout"
 import { cn } from "@/lib/utils"
-import { AssistantPanel } from "@/components/assistant/assistant-panel"
+import {
+  AssistantPanel,
+  AssistantPanelProvider,
+} from "@/components/assistant/assistant-panel"
 
 /**
  * One tree, two layouts.
@@ -92,10 +95,28 @@ export function AppShell({ children }: { children: ReactNode }) {
       // navigation could shove the whole shell up with no way to scroll back.
       // Clip clips without ever becoming a scroll container.
       className="h-svh min-h-0 overflow-clip"
-      style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
+      /*
+       * `defaultWidth`, not an inline `--sidebar-width`.
+       *
+       * The provider keeps the width in state and writes it to that
+       * variable, then spreads the caller's `style` over the top — so a
+       * hard 16rem here won every drag, and the rail moved nothing.
+       */
+      defaultWidth="16rem"
     >
       <AppSidebar user={user} />
-      <div className="flex min-h-0 min-w-0 flex-1">
+      {/*
+        `SidebarInset` is a direct sibling of `AppSidebar`, and has to be.
+        
+        The inset look — the margin, the rounded corners, the shadow — comes
+        from `peer-data-[variant=inset]:*` on the inset, and `peer` only ever
+        matches a *preceding sibling*. A `<div className="flex …">` wrapping
+        the inset so the assistant panel could sit beside it made the inset a
+        grandchild, and the whole variant silently stopped applying. The rail's
+        drag position is measured from the inset's rect, so sidebar resizing
+        went with it. The panel is a third flex child of the same row instead.
+      */}
+      <AssistantPanelProvider userId={user.id}>
         <ScrollPaneProvider paneRef={scrollRef}>
           <SidebarInset className="min-w-0 overflow-clip">
             <SiteHeader user={user} />
@@ -136,8 +157,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             <MobileTabBar />
           </SidebarInset>
         </ScrollPaneProvider>
-        <AssistantPanel userId={user.id} />
-      </div>
+        <AssistantPanel />
+      </AssistantPanelProvider>
     </SidebarProvider>
   )
 }

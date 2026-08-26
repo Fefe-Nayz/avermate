@@ -9,6 +9,19 @@ export function ActionStateBadges({ action }: { action: AgentActionDto }) {
   const t = useExtracted()
   const execution = actionStatePresentation(action)
   const undo = undoStatePresentation(action)
+  /**
+   * Two lookup tables, not two ternary staircases.
+   *
+   * Eighteen branches between them before, which is how "Compensation failed"
+   * survived: nobody reads to the bottom of a staircase. It says "Undo failed"
+   * now, because compensation is the word the code uses and undo is the word
+   * the reader clicked.
+   */
+  const failedLabels: Record<string, string> = {
+    rejected: t("Rejected"),
+    expired: t("Expired"),
+    "inspect-required": t("Needs inspection"),
+  }
   const executionLabel =
     execution.state === "pending"
       ? action.status === "awaiting-approval"
@@ -18,33 +31,20 @@ export function ActionStateBadges({ action }: { action: AgentActionDto }) {
         ? t("Executing")
         : execution.state === "succeeded" || execution.state === "undone"
           ? t("Succeeded")
-          : action.status === "rejected"
-            ? t("Rejected")
-            : action.status === "expired"
-              ? t("Expired")
-              : action.status === "inspect-required"
-                ? t("Needs inspection")
-                : t("Failed")
-  const undoLabel =
-    action.undoState === "not-applicable"
-      ? t("No undo")
-      : action.undoState === "ineligible"
-        ? t("Not undoable")
-        : action.undoState === "eligible"
-          ? t("Undo available")
-          : action.undoState === "approval-pending"
-            ? t("Undo approval pending")
-            : action.undoState === "in-progress"
-              ? t("Undoing")
-              : action.undoState === "compensated"
-                ? t("Undone")
-                : action.undoState === "partially-compensated"
-                  ? t("Partially undone")
-                  : action.undoState === "conflicted"
-                    ? t("Undo conflict")
-                    : action.undoState === "failed"
-                      ? t("Compensation failed")
-                      : t("Undo blocked")
+          : (failedLabels[action.status] ?? t("Failed"))
+
+  const undoLabels: Record<string, string> = {
+    "not-applicable": t("No undo"),
+    ineligible: t("Not undoable"),
+    eligible: t("Undo available"),
+    "approval-pending": t("Undo approval pending"),
+    "in-progress": t("Undoing"),
+    compensated: t("Undone"),
+    "partially-compensated": t("Partially undone"),
+    conflicted: t("Undo conflict"),
+    failed: t("Undo failed"),
+  }
+  const undoLabel = undoLabels[action.undoState] ?? t("Undo blocked")
 
   return (
     <div className="flex flex-wrap justify-end gap-1.5">

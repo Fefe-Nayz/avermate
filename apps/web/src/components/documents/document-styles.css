@@ -1,7 +1,17 @@
 @import "katex/dist/katex.min.css";
 
 .study-markdown {
-  color: var(--foreground);
+  /*
+   * Inherit, never assert.
+   *
+   * A fixed `--foreground` here reverted the text to the page colour wherever
+   * this block sits on a surface that paints its own — most visibly inside the
+   * user's chat bubble, which is `bg-primary` with `text-primary-foreground`:
+   * in dark mode that produced near-white on a near-white pill, measured at a
+   * contrast ratio of 1.05. Inheriting gives the same colour on the page and
+   * the right one on every coloured surface.
+   */
+  color: inherit;
   font-size: 0.9375rem;
   line-height: 1.75;
   overflow-wrap: anywhere;

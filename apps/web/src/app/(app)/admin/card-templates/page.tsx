@@ -177,7 +177,7 @@ export default function AdminCardTemplatesPage() {
             )}
           </p>
         ) : (
-          <div className="grid gap-4 @2xl/main:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 @2xl/main:grid-cols-2">
             {((templates.data ?? []) as TemplateRow[]).map((template) => (
               <AdminTemplateCard
                 key={template.id}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useId } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CalendarClockIcon,
@@ -376,6 +376,7 @@ function AnnouncementFields({
   presets: Array<{ id: string; name: string; archived: boolean }>
   onChange: (draft: Draft) => void
 }) {
+  const messageId = useId()
   const t = useExtracted()
   return (
     <>
@@ -386,8 +387,9 @@ function AnnouncementFields({
         onChange={(event) => onChange({ ...draft, title: event.target.value })}
       />
       <Field>
-        <FieldLabel>{t("Message")}</FieldLabel>
+        <FieldLabel htmlFor={messageId}>{t("Message")}</FieldLabel>
         <Textarea
+          id={messageId}
           value={draft.message}
           maxLength={2000}
           rows={4}
@@ -441,7 +443,7 @@ function AnnouncementFields({
           <div
             role="group"
             aria-label={t("Target presets")}
-            className="grid gap-2 sm:grid-cols-2"
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2"
           >
             {presets.map((preset) => {
               const checked = draft.presetIds.includes(preset.id)
@@ -486,7 +488,7 @@ function AnnouncementFields({
           )}
         </Field>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DateTimeField
           label={t("Starts (optional)")}
           value={draft.startsAt}

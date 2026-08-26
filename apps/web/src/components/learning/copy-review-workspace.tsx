@@ -1,14 +1,10 @@
 "use client"
 
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangleIcon,
-  CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   Clock3Icon,
   CircleXIcon,
   FileSearchIcon,
@@ -34,7 +30,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -43,85 +38,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Progress,
   ProgressLabel,
   ProgressValue,
 } from "@/components/ui/progress"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { Textarea } from "@/components/ui/textarea"
 import { useOnlineStatus } from "@/hooks/use-online-status"
 import { orpc } from "@/lib/orpc"
-
-type ErrorTaxonomy =
-  | "missing-knowledge"
-  | "misunderstood-concept"
-  | "method-strategy"
-  | "calculation"
-  | "notation"
-  | "reading-instruction"
-  | "justification"
-  | "transfer"
-  | "time-management"
-  | "unclassified"
-
-type RegionDraft = {
-  selected: boolean
-  objectiveId: string | null
-  observedOutcome: string
-  denominator: string
-  difficulty: string
-  taxonomy: ErrorTaxonomy | null
-  explanation: string
-}
-
-const taxonomyValues: ErrorTaxonomy[] = [
-  "missing-knowledge",
-  "misunderstood-concept",
-  "method-strategy",
-  "calculation",
-  "notation",
-  "reading-instruction",
-  "justification",
-  "transfer",
-  "time-management",
-  "unclassified",
-]
-
-function newKey() {
-  return crypto.randomUUID()
-}
-
-export function normalizedBboxStyle(
-  bbox: [number, number, number, number] | undefined
-) {
-  if (!bbox) return null
-  const [left, top, right, bottom] = bbox
-  if (
-    bbox.some((value) => !Number.isFinite(value) || value < 0 || value > 1) ||
-    right <= left ||
-    bottom <= top
-  ) {
-    return null
-  }
-  return {
-    left: `${left * 100}%`,
-    top: `${top * 100}%`,
-    width: `${(right - left) * 100}%`,
-    height: `${(bottom - top) * 100}%`,
-  }
-}
+import { newKey, taxonomyValues, type RegionDraft } from "./copy-review-model"
+import { CopyReviewPanel } from "./copy-review-panel"
 
 export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
   const t = useExtracted()
@@ -196,7 +123,7 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
         }),
         queryClient.invalidateQueries({ queryKey: orpc.learning.key() }),
       ])
-      toast.success(t("Decision saved; evidence has been recomputed."))
+      toast.success(t("Saved. The estimate has been updated."))
     },
     onError: (error) => toast.error(error.message),
   })
@@ -246,28 +173,36 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
     value: objective.id,
     label: objective.statement,
   }))
+  /**
+   * What kind of mistake it was.
+   *
+   * A ten-branch ternary staircase before, rebuilt per option. A record reads
+   * as the list it is, and an unknown value falls to one place instead of
+   * sliding down nine comparisons to get there.
+   */
+  const taxonomyLabels: Record<string, string> = {
+    "missing-knowledge": t("Missing knowledge"),
+    "misunderstood-concept": t("Misunderstood concept"),
+    "method-strategy": t("Method or strategy"),
+    calculation: t("Calculation"),
+    notation: t("Notation"),
+    "reading-instruction": t("Reading the instructions"),
+    justification: t("Justification"),
+    transfer: t("Transfer"),
+    "time-management": t("Time management"),
+  }
+  /** Which part of the paper a region is. Four branches, one lookup. */
+  const regionLabels: Record<string, string> = {
+    "awarded-points": t("Score"),
+    "teacher-comment": t("Feedback"),
+    "teacher-mark": t("Feedback"),
+    question: t("Question"),
+  }
+  const regionLabel = (kind: string) => regionLabels[kind] ?? t("Answer")
+
   const taxonomyItems = taxonomyValues.map((value) => ({
     value,
-    label:
-      value === "missing-knowledge"
-        ? t("Missing knowledge")
-        : value === "misunderstood-concept"
-          ? t("Misunderstood concept")
-          : value === "method-strategy"
-            ? t("Method or strategy")
-            : value === "calculation"
-              ? t("Calculation")
-              : value === "notation"
-                ? t("Notation")
-                : value === "reading-instruction"
-                  ? t("Reading the instructions")
-                  : value === "justification"
-                    ? t("Justification")
-                    : value === "transfer"
-                      ? t("Transfer")
-                      : value === "time-management"
-                        ? t("Time management")
-                        : t("Unclassified"),
+    label: taxonomyLabels[value] ?? t("Unclassified"),
   }))
   const selectedRegions = useMemo(
     () =>
@@ -354,20 +289,15 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
         ? 100
         : 10
   const pages = analysis.proposalJson?.pages.length ?? analysis.pageCount ?? 1
-  const statusLabel =
-    analysis.status === "queued"
-      ? t("Queued")
-      : analysis.status === "running"
-        ? t("Running")
-        : analysis.status === "proposed"
-          ? t("Ready to review")
-          : analysis.status === "confirmed"
-            ? t("Confirmed")
-            : analysis.status === "dismissed"
-              ? t("Dismissed")
-              : analysis.status === "cancelled"
-                ? t("Cancelled")
-                : t("Failed")
+  const statusLabels: Record<string, string> = {
+    queued: t("Queued"),
+    running: t("Running"),
+    proposed: t("Ready to review"),
+    confirmed: t("Confirmed"),
+    dismissed: t("Dismissed"),
+    cancelled: t("Cancelled"),
+  }
+  const statusLabel = statusLabels[analysis.status] ?? t("Failed")
   return (
     <>
       <PageMeta
@@ -517,9 +447,7 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
                 <FileSearchIcon /> {t("Analysis in progress")}
               </CardTitle>
               <CardDescription>
-                {t(
-                  "The job is durable; you can leave this page and come back later."
-                )}
+                {t("This keeps running. You can leave the page and come back.")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -582,430 +510,25 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
           </Alert>
         ) : null}
 
-        {analysis.proposalJson ? (
-          <div className="grid min-h-[65vh] gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(24rem,0.95fr)]">
-            <Card className="overflow-hidden">
-              <CardHeader className="border-b">
-                <div>
-                  <CardTitle>{t("Original")}</CardTitle>
-                  <CardDescription>
-                    {t("Page {page} of {pages}", {
-                      page: String(page),
-                      pages: String(pages),
-                    })}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={t("Previous page")}
-                    disabled={page <= 1}
-                    onClick={() => setPage((value) => value - 1)}
-                  >
-                    <ChevronLeftIcon />
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="outline"
-                    aria-label={t("Next page")}
-                    disabled={page >= pages}
-                    onClick={() => setPage((value) => value + 1)}
-                  >
-                    <ChevronRightIcon />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="relative min-h-[32rem] p-0">
-                {copy.data.file.mimeType === "application/pdf" ? (
-                  <object
-                    aria-label={t("Original paper, page {page}", {
-                      page: String(page),
-                    })}
-                    data={`${copy.data.file.url}#page=${page}&view=FitH`}
-                    type="application/pdf"
-                    className="absolute inset-0 size-full"
-                  >
-                    <p className="p-6 text-sm">
-                      {t("Your browser cannot display this PDF.")}{" "}
-                      <a
-                        href={copy.data.file.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline"
-                      >
-                        {t("Open file")}
-                      </a>
-                      .
-                    </p>
-                  </object>
-                ) : (
-                  <Image
-                    src={copy.data.file.url}
-                    alt={t("Original paper, page {page}", {
-                      page: String(page),
-                    })}
-                    fill
-                    unoptimized
-                    sizes="(min-width: 1024px) 50vw, 100vw"
-                    className="object-contain"
-                  />
-                )}
-                <div
-                  className="pointer-events-none absolute inset-0 z-10"
-                  aria-label={t("Detected region map")}
-                >
-                  {proposalPage?.regions.map((region) => {
-                    const style = normalizedBboxStyle(region.bbox)
-                    if (!style) return null
-                    const selected = drafts[region.id]?.selected ?? false
-                    const focused = focusedRegionId === region.id
-                    return (
-                      <button
-                        key={region.id}
-                        type="button"
-                        className={`pointer-events-auto absolute border-2 transition-colors ${
-                          focused
-                            ? "border-primary bg-primary/20"
-                            : selected
-                              ? "border-emerald-500 bg-emerald-500/10"
-                              : "border-amber-500 bg-amber-500/10"
-                        }`}
-                        style={style}
-                        aria-label={t("Open detected region {region}", {
-                          region: region.id,
-                        })}
-                        onClick={() => {
-                          setFocusedRegionId(region.id)
-                          document
-                            .getElementById(`copy-region-${region.id}`)
-                            ?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "nearest",
-                            })
-                        }}
-                      />
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="min-w-0">
-              <CardHeader>
-                <div>
-                  <CardTitle>{t("Extraction to review")}</CardTitle>
-                  <CardDescription>
-                    {t(
-                      "Choose what becomes evidence and correct its objective mapping."
-                    )}
-                  </CardDescription>
-                </div>
-                <Badge variant="outline">
-                  {t("{count} regions", {
-                    count: String(proposalPage?.regions.length ?? 0),
-                  })}
-                </Badge>
-              </CardHeader>
-              <CardContent className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
-                {!proposalPage?.regions.length ? (
-                  <p className="text-sm text-muted-foreground">
-                    {t("No usable regions were found on this page.")}
-                  </p>
-                ) : (
-                  proposalPage.regions.map((region) => {
-                    const draft = drafts[region.id]
-                    if (!draft) return null
-                    return (
-                      <section
-                        key={region.id}
-                        id={`copy-region-${region.id}`}
-                        className={`rounded-xl border p-3 transition-shadow ${
-                          focusedRegionId === region.id
-                            ? "ring-2 ring-primary/40"
-                            : ""
-                        }`}
-                        onClick={() => setFocusedRegionId(region.id)}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Checkbox
-                            id={`region-${region.id}`}
-                            checked={draft.selected}
-                            onCheckedChange={(checked) =>
-                              mutateDraft(region.id, {
-                                selected: checked === true,
-                              })
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <Label
-                              htmlFor={`region-${region.id}`}
-                              className="cursor-pointer"
-                            >
-                              {region.kind === "awarded-points"
-                                ? t("Score region")
-                                : region.kind === "teacher-comment" ||
-                                    region.kind === "teacher-mark"
-                                  ? t("Feedback region")
-                                  : region.kind === "question"
-                                    ? t("Question region")
-                                    : t("Answer region")}
-                            </Label>
-                            <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap">
-                              {region.text}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {t("Extraction confidence: {confidence}%", {
-                                confidence: String(
-                                  Math.round(region.confidence * 100)
-                                ),
-                              })}
-                            </p>
-                            {region.bbox ? (
-                              <Badge variant="outline" className="mt-2">
-                                {normalizedBboxStyle(region.bbox)
-                                  ? t("Located on the original")
-                                  : t("Unscaled provider coordinates")}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                        {draft.selected ? (
-                          <div className="mt-3 grid gap-3 border-t pt-3">
-                            <div className="grid gap-1.5">
-                              <Label htmlFor={`objective-${region.id}`}>
-                                {t("Objective")}
-                              </Label>
-                              <Select
-                                items={objectiveItems}
-                                value={draft.objectiveId}
-                                onValueChange={(value) =>
-                                  mutateDraft(region.id, { objectiveId: value })
-                                }
-                              >
-                                <SelectTrigger
-                                  id={`objective-${region.id}`}
-                                  className="w-full"
-                                >
-                                  <SelectValue>
-                                    {(value) =>
-                                      objectiveItems.find(
-                                        (item) => item.value === value
-                                      )?.label ?? t("Choose an objective")
-                                    }
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent alignItemWithTrigger={false}>
-                                  <SelectGroup>
-                                    {objectiveItems.map((item) => (
-                                      <SelectItem
-                                        key={item.value}
-                                        value={item.value}
-                                      >
-                                        {item.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {region.awarded || draft.observedOutcome ? (
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="grid gap-1.5">
-                                  <Label htmlFor={`outcome-${region.id}`}>
-                                    {t("Detected points")}
-                                  </Label>
-                                  <Input
-                                    id={`outcome-${region.id}`}
-                                    inputMode="decimal"
-                                    value={draft.observedOutcome}
-                                    onChange={(event) =>
-                                      mutateDraft(region.id, {
-                                        observedOutcome: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                                <div className="grid gap-1.5">
-                                  <Label htmlFor={`denominator-${region.id}`}>
-                                    {t("Maximum points")}
-                                  </Label>
-                                  <Input
-                                    id={`denominator-${region.id}`}
-                                    inputMode="decimal"
-                                    value={draft.denominator}
-                                    onChange={(event) =>
-                                      mutateDraft(region.id, {
-                                        denominator: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                              </div>
-                            ) : null}
-                            <div className="grid gap-1.5">
-                              <Label htmlFor={`difficulty-${region.id}`}>
-                                {t("Explicit difficulty (optional, 0–1)")}
-                              </Label>
-                              <Input
-                                id={`difficulty-${region.id}`}
-                                inputMode="decimal"
-                                value={draft.difficulty}
-                                onChange={(event) =>
-                                  mutateDraft(region.id, {
-                                    difficulty: event.target.value,
-                                  })
-                                }
-                                placeholder={t("Unknown")}
-                              />
-                            </div>
-                            {draft.taxonomy ? (
-                              <>
-                                <div className="grid gap-1.5">
-                                  <Label htmlFor={`taxonomy-${region.id}`}>
-                                    {t("Suggested error type")}
-                                  </Label>
-                                  <Select
-                                    items={taxonomyItems}
-                                    value={draft.taxonomy}
-                                    onValueChange={(value) =>
-                                      mutateDraft(region.id, {
-                                        taxonomy: value as ErrorTaxonomy,
-                                      })
-                                    }
-                                  >
-                                    <SelectTrigger
-                                      id={`taxonomy-${region.id}`}
-                                      className="w-full"
-                                    >
-                                      <SelectValue>
-                                        {(value) =>
-                                          taxonomyItems.find(
-                                            (item) => item.value === value
-                                          )?.label
-                                        }
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectGroup>
-                                        {taxonomyItems.map((item) => (
-                                          <SelectItem
-                                            key={item.value}
-                                            value={item.value}
-                                          >
-                                            {item.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectGroup>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="grid gap-1.5">
-                                  <Label htmlFor={`explanation-${region.id}`}>
-                                    {t("Why this classification?")}
-                                  </Label>
-                                  <Textarea
-                                    id={`explanation-${region.id}`}
-                                    value={draft.explanation}
-                                    onChange={(event) =>
-                                      mutateDraft(region.id, {
-                                        explanation: event.target.value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                              </>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </section>
-                    )
-                  })
-                )}
-              </CardContent>
-              {analysis.status === "proposed" ? (
-                <CardFooter className="flex-wrap justify-between gap-2 border-t">
-                  <Button
-                    variant="ghost"
-                    disabled={!online || review.isPending}
-                    onClick={() =>
-                      review.mutate({
-                        analysisId,
-                        kind: "dismiss",
-                        expectedRevision: analysis.revision,
-                        regions: [],
-                        idempotencyKey: `dismiss:${newKey()}`,
-                      })
-                    }
-                  >
-                    <CircleXIcon /> {t("Dismiss suggestion")}
-                  </Button>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={
-                        !online ||
-                        review.isPending ||
-                        selectedRegions.length === 0
-                      }
-                      onClick={() =>
-                        review.mutate({
-                          analysisId,
-                          kind: "correct",
-                          expectedRevision: analysis.revision,
-                          regions: selectedRegions,
-                          idempotencyKey: `correct:${newKey()}`,
-                        })
-                      }
-                    >
-                      {t("Confirm my corrections")}
-                    </Button>
-                    <Button
-                      disabled={
-                        !online ||
-                        review.isPending ||
-                        selectedRegions.length === 0
-                      }
-                      onClick={() =>
-                        review.mutate({
-                          analysisId,
-                          kind: "confirm",
-                          expectedRevision: analysis.revision,
-                          regions: selectedRegions,
-                          idempotencyKey: `confirm:${newKey()}`,
-                        })
-                      }
-                    >
-                      {review.isPending ? <Spinner /> : <CheckCircle2Icon />}{" "}
-                      {t("Confirm")}
-                    </Button>
-                  </div>
-                </CardFooter>
-              ) : analysis.status === "confirmed" ? (
-                <CardFooter className="justify-between border-t">
-                  <p className="text-sm text-muted-foreground">
-                    {t("Evidence is saved without changing the grade.")}
-                  </p>
-                  <Button
-                    variant="outline"
-                    disabled={!online || review.isPending}
-                    onClick={() =>
-                      review.mutate({
-                        analysisId,
-                        kind: "unconfirm",
-                        expectedRevision: analysis.revision,
-                        regions: [],
-                        idempotencyKey: `undo:${newKey()}`,
-                      })
-                    }
-                  >
-                    <RotateCcwIcon /> {t("Undo confirmation")}
-                  </Button>
-                </CardFooter>
-              ) : null}
-            </Card>
-          </div>
-        ) : null}
+        <CopyReviewPanel
+          analysis={analysis}
+          analysisId={analysisId}
+          copy={copy}
+          drafts={drafts}
+          mutateDraft={mutateDraft}
+          objectiveItems={objectiveItems}
+          online={online}
+          page={page}
+          setPage={setPage}
+          pages={pages}
+          focusedRegionId={focusedRegionId}
+          setFocusedRegionId={setFocusedRegionId}
+          proposalPage={proposalPage}
+          regionLabel={regionLabel}
+          review={review}
+          selectedRegions={selectedRegions}
+          taxonomyItems={taxonomyItems}
+        />
 
         {analysis.proposalJson?.unsupportedInferences.length ? (
           <Alert>
@@ -1045,7 +568,7 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
               </DialogTitle>
               <DialogDescription>
                 {t(
-                  "A new immutable analysis is created. Revision {revision} and its review history are preserved.",
+                  "A new analysis is created. Version {revision} and everything you reviewed stay as they are.",
                   { revision: analysis.modelRevision }
                 )}
               </DialogDescription>

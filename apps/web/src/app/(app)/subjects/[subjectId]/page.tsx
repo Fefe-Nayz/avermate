@@ -482,13 +482,13 @@ export default function SubjectPage({
                   value={gradeQuery}
                   onChange={(event) => setGradeQuery(event.target.value)}
                   placeholder={t("Search grades…")}
-                  className="h-11 pl-9 md:h-9"
+                  className="h-(--control-h-form) pl-9"
                 />
               </div>
               <SortMenu
                 value={gradeSort}
                 onValueChange={setGradeSort}
-                className="h-11 md:h-9 md:w-9"
+                className="h-(--control-h-form) md:w-9"
                 options={[
                   { value: "date", label: t("Most recent") },
                   { value: "oldest", label: t("Oldest first") },

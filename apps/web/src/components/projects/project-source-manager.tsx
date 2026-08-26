@@ -207,7 +207,7 @@ export function ProjectSourceManager({
             />
           </InputGroup>
         </Field>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_13rem_auto] md:items-end">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_13rem_auto] md:items-end">
           <Field>
             <FieldLabel>Source disponible</FieldLabel>
             <Select
@@ -348,7 +348,7 @@ export function ProjectSourceManager({
                       }
                     >
                       {item.currentVersionId || item.sourceVersionId
-                        ? t("Immutable version ready")
+                        ? t("Version locked and ready")
                         : t("Version pending")}
                     </Badge>
                     <Badge

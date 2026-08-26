@@ -132,7 +132,7 @@ export function PeriodForm({
       // One step, not two: a period *is* the span between them, and asking for a
       // start without an end is asking half a question.
       content: (
-        <div className="grid gap-3 @lg/main:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 @lg/main:grid-cols-2">
           <DateField
             label={t("Starts")}
             value={startAt}

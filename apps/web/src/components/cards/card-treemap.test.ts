@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { HierarchyNode } from "@avermate/core"
-import { TREEMAP_ROOT, treemapTiles } from "./card-treemap"
+import {
+  labelledTreemapTiles,
+  TREEMAP_ROOT,
+  treemapTiles,
+} from "./card-treemap"
 
 const node = (
   id: string,
@@ -110,5 +114,39 @@ describe("treemap tiles", () => {
   test("says nothing when there is nothing to draw", () => {
     expect(treemapTiles([], 2)).toEqual([])
     expect(treemapTiles(tree, 0)).toEqual([])
+  })
+})
+
+describe("own-marks labelling", () => {
+  const shout = (subject: string) => `${subject} (mine)`
+
+  test("renames own-marks branches and leaves every other tile alone", () => {
+    const marks = [
+      ...tree,
+      node("perso", "sciences", 1, 0.1, true, "own-marks"),
+    ]
+    const labels = new Map(
+      labelledTreemapTiles(marks, 2, shout).map((tile) => [tile.id, tile.label])
+    )
+
+    expect(labels.get("perso")).toBe("perso (mine)")
+    expect(labels.get("maths")).toBe("maths")
+  })
+
+  test("labels the node the geometry was built from, when ids repeat", () => {
+    // `treemapTiles` resolves a repeated id last-wins, because it indexes the
+    // rows into a Map. The label pass used to scan with `find`, which is
+    // first-wins — so a duplicated id could be drawn as one node and named
+    // after the other. Both read the same way now.
+    const twice: HierarchyNode[] = [
+      node("art", null, 0, 0.2, true),
+      node("clash", null, 0, 0.4, true, "subject"),
+      node("clash", null, 0, 0.4, true, "own-marks"),
+    ]
+    const drawn = labelledTreemapTiles(twice, 2, shout)
+
+    expect(drawn.find((tile) => tile.id === "clash")?.label).toBe(
+      "clash (mine)"
+    )
   })
 })

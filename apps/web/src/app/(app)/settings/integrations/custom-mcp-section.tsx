@@ -238,7 +238,7 @@ export function CustomMcpSection() {
       </Alert>
 
       <form className="grid gap-4 rounded-xl border p-4" onSubmit={submit}>
-        <div className="grid gap-4 @lg/main:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 @lg/main:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="custom-mcp-name">{t("Server name")}</Label>
             <Input
@@ -265,7 +265,7 @@ export function CustomMcpSection() {
             />
           </div>
         </div>
-        <div className="grid gap-4 @lg/main:grid-cols-[minmax(12rem,0.55fr)_minmax(16rem,1fr)]">
+        <div className="grid grid-cols-1 gap-4 @lg/main:grid-cols-[minmax(12rem,0.55fr)_minmax(16rem,1fr)]">
           <div className="grid gap-1.5">
             <Label htmlFor="custom-mcp-auth">{t("Authentication")}</Label>
             <Select

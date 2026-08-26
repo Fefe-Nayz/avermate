@@ -181,7 +181,7 @@ export function HistoricalBranchDialog({
             </span>
             <span className="mt-1 block text-sm text-muted-foreground">
               {t(
-                "Review only the durable mutations recorded after this message's domain cursor. Conversation branches never rewind grades, documents or other study data."
+                "Review only the study-data changes recorded after this message. Branching a conversation never rewinds grades, documents or anything else."
               )}
             </span>
             {preview?.dataChanges && !preview.dataChanges.available ? (
@@ -206,7 +206,7 @@ export function HistoricalBranchDialog({
                   <Badge variant="destructive">{t("Truncated")}</Badge>
                 ) : null}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DataChangeGroup
                   title={t("Safe to undo")}
                   actions={dataReview.safeToCompensate}

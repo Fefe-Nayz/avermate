@@ -59,7 +59,7 @@ export function LinkIngestionBadge({
             : "outline"
       }
       aria-label={t("Link import status: {status}", { status: label })}
-      className="shrink-0"
+      className="max-w-full min-w-0"
     >
       {normalized === "pending" || normalized === "loading" ? (
         <Spinner className="size-3" />
@@ -72,7 +72,7 @@ export function LinkIngestionBadge({
       ) : (
         <Link2OffIcon aria-hidden className="size-3" />
       )}
-      {label}
+      <span className="truncate">{label}</span>
     </Badge>
   )
 }

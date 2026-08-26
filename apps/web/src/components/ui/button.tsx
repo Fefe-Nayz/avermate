@@ -4,7 +4,16 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-(length:--control-text) font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  // No radius in the base.
+  //
+  // It used to say `rounded-lg` here and the compact sizes said
+  // `rounded-[min(var(--radius-md),12px)]`, so the class list carried two.
+  // `<Button>` runs that through `cn`, which drops the loser and lands on
+  // 8px; a `<Link className={buttonVariants(...)}>` gets cva's raw string
+  // with both classes in it and the stylesheet order decides — 10px. Links
+  // styled as buttons were quietly 2px rounder than the buttons beside
+  // them. One radius per size, so there is nothing left to resolve.
+  "group/button inline-flex shrink-0 items-center justify-center border border-transparent bg-clip-padding text-(length:--control-text) font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -23,16 +32,16 @@ const buttonVariants = cva(
       // hierarchy, so viewport width never guesses the user's input device.
       size: {
         default:
-          "h-(--control-h) gap-1.5 px-(--control-px) has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-(--control-h) gap-1.5 rounded-lg px-(--control-px) has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-(--control-h-xs) gap-1 rounded-[min(var(--radius-md),10px)] px-(--control-px-xs) text-(length:--control-text-xs) in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-(--control-h-sm) gap-1 rounded-[min(var(--radius-md),12px)] px-(--control-px-sm) text-(length:--control-text-sm) in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-(--control-h-lg) gap-1.5 px-(--control-px-lg) text-(length:--control-text-lg) has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-(--control-h)",
+        lg: "h-(--control-h-lg) gap-1.5 rounded-lg px-(--control-px-lg) text-(length:--control-text-lg) has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        icon: "size-(--control-h) rounded-lg",
         "icon-xs":
           "size-(--control-h-xs) rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
           "size-(--control-h-sm) rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-(--control-icon-h-lg)",
+        "icon-lg": "size-(--control-icon-h-lg) rounded-lg",
       },
     },
     defaultVariants: {

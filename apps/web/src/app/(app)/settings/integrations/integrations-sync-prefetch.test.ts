@@ -113,13 +113,16 @@ describe("Moodle integration read model", () => {
   })
 
   test("hydrates production model placement and explicit routing policy", async () => {
-    const [page, client, section, composer, assistantClient] =
+    const [page, client, section, composer, assistantClient, workspace] =
       await Promise.all([
         source("./page.tsx"),
         source("./integrations-client.tsx"),
         source("./assistant-model-settings-section.tsx"),
         source("../../../../components/assistant/assistant-composer.tsx"),
         source("../../../../components/assistant/assistant-client.tsx"),
+        source(
+          "../../../../components/assistant/assistant-conversation-header.tsx"
+        ),
       ])
 
     expect(page).toContain("orpc.assistant.models.catalogue.queryOptions")
@@ -130,9 +133,14 @@ describe("Moodle integration read model", () => {
     expect(section).toContain("contentLeavesPlacement")
     expect(section).toContain("maximumEstimatedCostMinor")
     expect(section).toContain("configured-routes")
-    expect(composer).toContain("confirm-writes")
-    expect(composer).toContain("auto-reversible")
-    expect(composer).toContain("setApprovalMode")
+    // The approval mode left the composer for the conversation header: it is
+    // a disclosure about what the assistant may touch, not a per-message
+    // choice you make beside the send button.
+    expect(workspace).toContain("confirm-writes")
+    expect(workspace).toContain("auto-reversible")
+    expect(workspace).toContain("setApprovalMode")
+    // And it must not drift back: the writing bar is for writing.
+    expect(composer).not.toContain("setApprovalMode")
     expect(assistantClient).toContain(
       "orpc.assistant.models.preference.get.queryOptions"
     )

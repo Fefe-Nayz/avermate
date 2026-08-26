@@ -12,14 +12,25 @@ function ToasterBridge() {
   const { resolvedTheme } = useTheme()
   const isMobile = useIsMobile()
   return (
+    /*
+     * `950ad6a` set out to stop the toaster swallowing clicks aimed at the
+     * page, and put `pointer-events-none` on the wrong element. Measured at
+     * that revision: the container was `auto`, so its empty column still ate
+     * clicks — the very bug — while the toast itself was `none`, so a hit-test
+     * over a toast landed on `body`. Sonner pauses its dismiss timer on hover
+     * and dismisses on swipe, and both need the pointer to reach the toast, so
+     * a long error message ran out mid-sentence with no way to hold it or send
+     * it away. `b40ef32` noticed half of this and exempted buttons.
+     *
+     * The transparency belongs on the container, which is mostly empty space.
+     * The toasts inside it stay interactive.
+     */
     <Toaster
       position={isMobile ? "top-center" : "bottom-right"}
       theme={resolvedTheme === "dark" ? "dark" : "light"}
+      className="pointer-events-none"
       toastOptions={{
-        classNames: {
-          toast:
-            "pointer-events-none pt-safe has-[[data-button]]:pointer-events-auto has-[[data-close-button]]:pointer-events-auto md:pt-0 [&_[data-button]]:pointer-events-auto [&_[data-close-button]]:pointer-events-auto",
-        },
+        classNames: { toast: "pointer-events-auto pt-safe md:pt-0" },
       }}
     />
   )

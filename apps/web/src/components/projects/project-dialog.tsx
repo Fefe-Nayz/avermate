@@ -150,7 +150,7 @@ export function ProjectDialog({
             <FieldError>{titleError}</FieldError>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-[6rem_1fr_1fr]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[6rem_1fr_1fr]">
             <Field>
               <FieldLabel htmlFor="project-emoji">Emoji</FieldLabel>
               <Input

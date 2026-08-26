@@ -200,7 +200,7 @@ export function AgendaBoard({ yearId }: { yearId: string }) {
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="grid gap-3 @4xl/main:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 @4xl/main:grid-cols-3">
         {STATUSES.map((status) => (
           <BoardLane key={status} status={status} items={lanes[status]} />
         ))}

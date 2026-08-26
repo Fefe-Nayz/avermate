@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useId } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArchiveIcon,
@@ -164,6 +164,8 @@ export function AdminPresetsClient({
 }: {
   initialPresetId: string | null
 }) {
+  const draftDescriptionId = useId()
+  const newDescriptionId = useId()
   const t = useExtracted()
   const format = useFormatter()
   const queryClient = useQueryClient()
@@ -318,7 +320,7 @@ export function AdminPresetsClient({
           </Button>
         </div>
 
-        <div className="grid gap-4 @3xl/main:grid-cols-[17rem_minmax(0,1fr)] @3xl/main:items-start">
+        <div className="grid grid-cols-1 gap-4 @3xl/main:grid-cols-[17rem_minmax(0,1fr)] @3xl/main:items-start">
           <nav
             aria-label={t("Preset catalogue")}
             className="flex flex-col gap-1"
@@ -510,7 +512,7 @@ export function AdminPresetsClient({
                     icon={ScrollTextIcon}
                     title={t("How it appears during onboarding")}
                   >
-                    <div className="grid gap-3 @xl/main:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2">
                       <TextField
                         label={t("Name")}
                         value={draft.name}
@@ -528,8 +530,11 @@ export function AdminPresetsClient({
                       />
                     </div>
                     <Field>
-                      <FieldLabel>{t("Description")}</FieldLabel>
+                      <FieldLabel htmlFor={draftDescriptionId}>
+                        {t("Description")}
+                      </FieldLabel>
                       <Textarea
+                        id={draftDescriptionId}
                         rows={3}
                         value={draft.description}
                         onChange={(event) =>
@@ -646,8 +651,11 @@ export function AdminPresetsClient({
               }
             />
             <Field>
-              <FieldLabel>{t("Description")}</FieldLabel>
+              <FieldLabel htmlFor={newDescriptionId}>
+                {t("Description")}
+              </FieldLabel>
               <Textarea
+                id={newDescriptionId}
                 rows={3}
                 value={newDraft.description}
                 onChange={(event) =>
@@ -759,6 +767,7 @@ function RawConfigurationEditor({
       }
     >
       <Textarea
+        aria-label={t("Preset configuration")}
         className="min-h-80 font-mono text-xs"
         spellCheck={false}
         value={text}

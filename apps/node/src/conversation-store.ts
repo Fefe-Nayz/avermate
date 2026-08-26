@@ -287,8 +287,8 @@ export class FilesystemConversationStore implements ConversationStore {
                     state: run.status === "reserved" ? "pending" as const : "active" as const,
                     label:
                       run.status === "waiting-for-user"
-                        ? "En attente de votre réponse"
-                        : "Réponse en cours",
+                        ? "Waiting for your reply"
+                        : "Responding",
                   },
                 ],
             lastSequence: events.at(-1)?.sequence ?? 0,

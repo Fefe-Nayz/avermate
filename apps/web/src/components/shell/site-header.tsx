@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useMemo } from "react"
 import {
   BellIcon,
+  ChevronLeftIcon,
   MonitorIcon,
   MoonIcon,
   MoreHorizontalIcon,
@@ -33,10 +34,12 @@ import {
   type SeparatorNavItem,
 } from "@/components/ui/responsive-breadcrumb"
 import { useBreadcrumbs } from "@/components/breadcrumb/use-breadcrumbs"
+import { usePageChrome } from "./page-chrome"
 import { useCommandPalette } from "@/components/command/command-palette"
 import { useThemeControl } from "@/hooks/use-preferences"
 import { haptic } from "@/lib/haptics"
 import type { AuthenticatedUser } from "@/lib/authenticated-user"
+import { AssistantPanelTrigger } from "@/components/assistant/assistant-panel"
 import { ModeToggle } from "./mode-toggle"
 import { NavUser } from "./nav-user"
 import { PeriodSwitcher } from "./period-switcher"
@@ -59,6 +62,9 @@ function Chosen() {
 export function SiteHeader({ user }: { user: AuthenticatedUser }) {
   const t = useExtracted()
   const crumbs = useBreadcrumbs()
+  const chrome = usePageChrome()
+  const parentCrumb = crumbs.length > 1 ? crumbs.at(-2) : undefined
+  const backHref = chrome.backHref ?? parentCrumb?.href
   const palette = useCommandPalette()
   const { theme, resolvedTheme, setPreferredTheme } = useThemeControl()
 
@@ -127,8 +133,26 @@ export function SiteHeader({ user }: { user: AuthenticatedUser }) {
   )
 
   return (
-    <header className="pt-safe sticky top-0 z-30 hidden h-[calc(3rem+var(--spacing-safe-top))] shrink-0 items-center gap-1 border-b bg-background/80 pr-[max(0.75rem,var(--spacing-safe-right))] pl-[max(0.75rem,var(--spacing-safe-left))] backdrop-blur-sm md:flex">
+    <header className="pt-safe sticky top-0 z-30 hidden h-[calc(var(--header-h)+var(--spacing-safe-top))] shrink-0 items-center gap-1 border-b bg-background/80 pr-[max(0.75rem,var(--spacing-safe-right))] pl-[max(0.75rem,var(--spacing-safe-left))] backdrop-blur-sm md:flex">
       <SidebarTrigger className="-ml-1" />
+      {/*
+        The way out, on desktop too.
+        
+        `backHref` was only ever drawn by the mobile header, so a page like
+        Action activity — reached from inside a conversation — had no visible
+        return on a wide screen at all. The trail names the parent, but a back
+        arrow is what a reader looks for first.
+      */}
+      {backHref ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("Go back")}
+          render={<Link href={backHref} />}
+        >
+          <ChevronLeftIcon className="size-4" />
+        </Button>
+      ) : null}
       <Separator
         orientation="vertical"
         className="mx-1.5 data-vertical:h-4 data-vertical:self-auto"
@@ -208,6 +232,12 @@ export function SiteHeader({ user }: { user: AuthenticatedUser }) {
 
         {/* Above this width the utilities read as three quiet icons; below it
             they would crowd the trail, so they fold into one menu. */}
+        {/* Outside the folding cluster on purpose: the assistant is a
+            feature, not a utility, and below 1001px that cluster collapses
+            into a "More options" menu. Leaving it in there meant a phone had
+            no way to open the assistant at all. */}
+        <AssistantPanelTrigger />
+
         <div className="hidden items-center gap-1 min-[1001px]:flex">
           <ModeToggle />
           <Button

@@ -9,7 +9,11 @@ describe("managed beta Web surfaces", () => {
     expect(source).toContain("orpc.managed.beta.redeemInvite")
     expect(source).toContain("orpc.managed.beta.updateConsent")
     expect(source).toContain("Authoritative usage")
-    expect(source).toContain("Pending remote deletion")
+    // Same rule, said in words a customer can read: nothing is called
+    // deleted until the service confirms it.
+    expect(source).toContain(
+      "Nothing is called deleted until the service confirms it."
+    )
     expect(source).toContain("Core / BYOK / Node")
     expect(source).toContain("Checkout off")
     expect(source).toContain(

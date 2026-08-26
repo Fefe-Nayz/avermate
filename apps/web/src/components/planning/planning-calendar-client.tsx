@@ -464,7 +464,7 @@ function MonthView({
   const days = useMemo(() => monthGrid(month, 1), [month])
 
   return (
-    <div className="grid gap-4 @5xl/main:grid-cols-[minmax(0,1fr)_23rem]">
+    <div className="grid grid-cols-1 gap-4 @5xl/main:grid-cols-[minmax(0,1fr)_23rem]">
       <div className="overflow-hidden rounded-xl border bg-card">
         <div className="grid grid-cols-7 border-b bg-muted/30">
           {days.slice(0, 7).map((day) => (
@@ -879,7 +879,7 @@ function DayView({
   return (
     <section
       aria-labelledby="planning-day-title"
-      className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]"
+      className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]"
     >
       <div>
         <h2

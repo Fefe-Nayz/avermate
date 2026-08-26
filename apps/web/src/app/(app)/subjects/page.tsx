@@ -212,7 +212,7 @@ export default function SubjectsPage() {
          * phone, where the general average is the one thing worth seeing
          * without scrolling.
          */}
-        <div className="grid gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_19rem] @4xl/main:items-start">
+        <div className="grid grid-cols-1 gap-4 @4xl/main:grid-cols-[minmax(0,1fr)_19rem] @4xl/main:items-start">
           <aside className="flex flex-col gap-4 @4xl/main:order-2">
             <Link
               href="/averages/general"

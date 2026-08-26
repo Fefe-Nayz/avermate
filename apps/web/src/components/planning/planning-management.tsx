@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -80,27 +81,31 @@ export function ManagedItemActions({
         <EllipsisIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
-          {t("Managed by {provider}", { provider: label })}
-        </DropdownMenuLabel>
-        <DropdownMenuItem onClick={onDetach}>
-          <CopyPlusIcon />
-          <span>
-            {t("Detach as an editable copy")}
-            <span className="block text-xs text-muted-foreground">
-              {t("The synced original will be hidden.")}
+        {/* Base UI resolves a menu label through `MenuGroupContext`; outside a
+            group it throws at render rather than merely looking wrong. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {t("Managed by {provider}", { provider: label })}
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={onDetach}>
+            <CopyPlusIcon />
+            <span>
+              {t("Detach as an editable copy")}
+              <span className="block text-xs text-muted-foreground">
+                {t("The synced original will be hidden.")}
+              </span>
             </span>
-          </span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDismiss}>
-          <EyeOffIcon />
-          <span>
-            {t("Hide this synced item")}
-            <span className="block text-xs text-muted-foreground">
-              {t("It will stay hidden after the next sync.")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onDismiss}>
+            <EyeOffIcon />
+            <span>
+              {t("Hide this synced item")}
+              <span className="block text-xs text-muted-foreground">
+                {t("It will stay hidden after the next sync.")}
+              </span>
             </span>
-          </span>
-        </DropdownMenuItem>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -455,6 +455,7 @@ function YearSetupForm({
               <Button
                 variant="outline"
                 size="lg"
+                aria-label={t("Back")}
                 onClick={() => setStep("year")}
               >
                 <ArrowLeftIcon className="size-4" />
@@ -532,6 +533,7 @@ function YearSetupForm({
               <Button
                 variant="outline"
                 size="lg"
+                aria-label={t("Back")}
                 onClick={() => setStep("preset")}
               >
                 <ArrowLeftIcon className="size-4" />

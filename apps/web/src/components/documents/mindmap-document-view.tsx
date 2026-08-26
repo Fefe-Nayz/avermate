@@ -25,7 +25,7 @@ export function MindmapDocumentView({
   const t = useExtracted()
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(18rem,0.7fr)_minmax(0,1.6fr)]">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(18rem,0.7fr)_minmax(0,1.6fr)]">
       <section
         aria-labelledby="mindmap-outline-heading"
         className="rounded-xl border bg-card p-3 sm:p-4"

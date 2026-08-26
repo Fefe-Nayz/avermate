@@ -788,8 +788,8 @@ export class CoreConversationStore {
               state: run.status === "reserved" ? "pending" : "active",
               label:
                 run.status === "waiting-for-user"
-                  ? "En attente de votre réponse"
-                  : "Réponse en cours",
+                  ? "Waiting for your reply"
+                  : "Responding",
             },
           ];
       activeRunProjections.push({
@@ -1967,7 +1967,7 @@ export class CoreConversationStore {
           type: "safe-error",
           id: newId("apart"),
           code: "cancelled",
-          message: "Réponse interrompue par l’utilisateur.",
+          message: "You stopped this response.",
           retryable: true,
         },
       ],

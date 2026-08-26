@@ -358,7 +358,7 @@ export function PresetMembershipClient() {
               <Spinner className="size-5 text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid gap-2 @xl/main:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 @xl/main:grid-cols-2">
               {presets.data?.map((preset) => (
                 <PresetCard
                   key={preset.id}

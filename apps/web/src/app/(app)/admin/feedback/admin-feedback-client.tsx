@@ -190,7 +190,7 @@ export function AdminFeedbackClient() {
                 {t("Search")}
               </Button>
             </form>
-            <div className="grid gap-2 sm:grid-cols-2 @xl/main:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 @xl/main:grid-cols-5">
               <SelectControl
                 aria-label={t("Status filter")}
                 value={filters.status}
