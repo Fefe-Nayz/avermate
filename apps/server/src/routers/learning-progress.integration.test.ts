@@ -442,7 +442,13 @@ describe("learning progress scope", () => {
       estimate: 0.7,
       comparableObjectiveCount: 1,
       delta: 0.3,
-      trend: "improving",
+      trend: "uncertain",
+      variation: {
+        comparableObjectiveCount: 1,
+        uncertainObjectiveCount: 1,
+      },
+      precision: { score: 0.7, averageIntervalWidth: 0.3 },
+      evidence: { itemCount: 2 },
     });
     expect(progress.objectives.map((row) => row.subjectId)).toEqual([
       mathsId,

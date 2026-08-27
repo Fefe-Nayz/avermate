@@ -1,17 +1,28 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Client } from "@libsql/client";
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import sharp from "sharp";
 import { newId } from "../lib/id";
 import { CoreCorpusStore } from "../search/core-corpus-store";
 import { CorpusIndexService } from "../search/index-service";
 import { createCorpusTestDatabase, seedSource } from "../search/test-helpers";
-import { canonicalJson, normalizeForSearch, sha256 } from "../search/values";
+import {
+  canonicalJson,
+  jsonValue,
+  normalizeForSearch,
+  sha256,
+} from "../search/values";
 import { AssistantContextManifestService } from "./context-manifest";
 import type {
   CommittedVersionRef,
   ModelDescriptor,
   ModelGateway,
   ModelGatewayEvent,
+  OwnedLexicalQuery,
   OwnedSourceIdentity,
+  RerankProvider,
   StagedContentChunk,
 } from "@avermate/agent-contracts";
 import type { Api } from "../mcp/shared";
@@ -22,14 +33,23 @@ import {
   PRODUCTION_AGENT_RUNTIME_VERSION,
   ProductionAgentRuntime,
 } from "../agent/production-runtime";
+import { AiSdkDirectGateway } from "../agent/model-gateways";
 import {
+  ContextAssetHandleService,
+  OwnedFileContextAssetResolver,
+  type PreparedContextCitation,
+} from "../agent/multimodal-context";
+import type { OwnedStoredFile } from "../lib/owned-file-storage";
+import {
+  contextualRetrievalQuery,
   MockReadOnlyModelGateway,
   packConversationHistory,
   ReadOnlyAssistantRunService,
 } from "./run-service";
-import { hybridCorpusSearch } from "../search/hybrid";
+import { hybridCorpusSearch, type HybridSearchResult } from "../search/hybrid";
 import { SqliteFts5LexicalSearchBackend } from "../search/lexical";
 import { RoutedCorpusStore } from "../search/routed-corpus-store";
+import type { CorpusVectorRuntime } from "../search/vector-runtime";
 import { MOCK_ASSISTANT_MODEL } from "./catalogue";
 import {
   ConversationStoreError,
@@ -427,6 +447,58 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
       scoped.thread.id,
     ]);
     expect(listed.items[0]?.thread.projectId).toBe(projectA);
+
+    await client.execute({
+      sql: `UPDATE assistant_threads SET updatedAt = 1 WHERE id = ?`,
+      args: [scoped.thread.id],
+    });
+    const now = Math.floor(Date.now() / 1_000);
+    const newerThreadCount = 100;
+    await client.batch(
+      Array.from({ length: newerThreadCount }, (_, index) => ({
+        sql: `INSERT INTO assistant_threads
+          (id, userId, title, revision, projectId, placement, createdAt, updatedAt)
+          VALUES (?, ?, ?, 1, ?, 'core', ?, ?)`,
+        args: [
+          `athr_project_scale_${String(index).padStart(3, "0")}`,
+          "corpus-user-a",
+          `Conversation ${index + 1}`,
+          projectA,
+          now + index,
+          now + index,
+        ],
+      })),
+      "write",
+    );
+    // The original conversation is now the oldest of 101. It must remain
+    // directly addressable even though the presentation query returns 100.
+    expect(newerThreadCount + 1).toBe(101);
+    const bounded = await store.listThreads({
+      ownerId: "corpus-user-a",
+      projectId: projectA,
+      includeArchived: true,
+      limit: 100,
+    });
+    expect(bounded.items).toHaveLength(100);
+    expect(
+      bounded.items.some((item) => item.thread.id === scoped.thread.id),
+    ).toBe(false);
+    await expect(
+      store.getThreadDetail(
+        "corpus-user-a",
+        scoped.thread.id,
+        undefined,
+        projectA,
+      ),
+    ).resolves.toMatchObject({ thread: { id: scoped.thread.id } });
+    await expect(
+      store.getThreadDetail(
+        "corpus-user-a",
+        scoped.thread.id,
+        undefined,
+        projectB,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
   });
 });
 
@@ -911,13 +983,17 @@ describe("read-only runtime integration", () => {
         normalizedText: normalizeForSearch(text),
         tokenEstimate: Math.ceil(text.length / 4),
         contentHash: sha256(text),
-        locator: {
-          kind: "text" as const,
-          startOffset: ordinal * 100,
-          endOffset: ordinal * 100 + text.length,
-        },
+        locator:
+          ordinal === 30
+            ? { kind: "pdf" as const, page: 31 }
+            : {
+                kind: "text" as const,
+                startOffset: ordinal * 100,
+                endOffset: ordinal * 100 + text.length,
+              },
         headingPath: null,
-        evidenceKind: "native-text" as const,
+        evidenceKind:
+          ordinal === 30 ? ("visual-only" as const) : ("native-text" as const),
       };
     });
     const identity = {
@@ -932,7 +1008,7 @@ describe("read-only runtime integration", () => {
       contentHash: sha256(chunks.map((chunk) => chunk.text).join("\n")),
       extractorId: "far-context-test",
       extractorVersion: "1",
-      mimeType: "text/plain",
+      mimeType: "application/pdf",
       language: "fr",
       byteSize: chunks.reduce((sum, chunk) => sum + chunk.text.length, 0),
       locatorSchemaVersion: 1,
@@ -955,6 +1031,49 @@ describe("read-only runtime integration", () => {
         })
       ).rows[0]!.id,
     );
+    const visualFileId = `file-${newId("visual-context")}`;
+    const visualDerivativeId = `cder-${newId("visual-context")}`;
+    const visualDigest = "a".repeat(64);
+    await client.batch(
+      [
+        {
+          sql: `INSERT INTO files
+            (id, provider, storageKey, url, mimeType, byteSize, purpose,
+             status, previewStatus, userId, createdAt, updatedAt)
+            VALUES (?, 'local', ?, ?, 'image/png', 128, 'preview',
+              'stored', 'ready', ?, ?, ?)`,
+          args: [
+            visualFileId,
+            `visual-context/${visualFileId}`,
+            `/files/${visualFileId}`,
+            identity.ownerId,
+            now,
+            now,
+          ],
+        },
+        {
+          sql: `INSERT INTO content_derivatives
+            (id, versionId, chunkId, fileId, kind, status,
+             locatorSchemaVersion, locatorJson, contentHash, mimeType,
+             byteSize, estimatedInputTokens, rendererProfile,
+             rendererImageDigest, metadataJson, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, 'page-image', 'ready', 1, ?, ?,
+              'image/png', 128, 32, 'test-page-renderer', ?, '{}', ?, ?)`,
+          args: [
+            visualDerivativeId,
+            committed.versionId,
+            farChunkId,
+            visualFileId,
+            canonicalJson({ kind: "pdf", page: 31 }),
+            visualDigest,
+            `sha256:${"b".repeat(64)}`,
+            now,
+            now,
+          ],
+        },
+      ],
+      "write",
+    );
 
     const created = await store.createThread({
       ownerId: identity.ownerId,
@@ -963,6 +1082,10 @@ describe("read-only runtime integration", () => {
     });
     const capturedRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
     const baseGateway = new MockReadOnlyModelGateway();
+    const multimodalDescriptor: ModelDescriptor = {
+      ...baseGateway.descriptor,
+      modalities: ["text", "image"],
+    };
     const gateway: ModelGateway = {
       listModels: () => baseGateway.listModels(),
       stream: async function* (request) {
@@ -978,6 +1101,7 @@ describe("read-only runtime integration", () => {
       policyProjectIds: readonly string[];
     }> = [];
     const broker = createFirstPartyToolBroker({} as Api);
+    const contextAssetCapture: { assetId: string | null } = { assetId: null };
     const service = new ReadOnlyAssistantRunService(
       client,
       store,
@@ -985,8 +1109,9 @@ describe("read-only runtime integration", () => {
         list: async () => [MOCK_ASSISTANT_MODEL],
         resolve: async () => ({
           capability: MOCK_ASSISTANT_MODEL,
-          descriptor: baseGateway.descriptor,
+          descriptor: multimodalDescriptor,
           gateway,
+          contextMediaDelivery: "server-resolved",
         }),
       },
       () => broker.registry,
@@ -1004,6 +1129,12 @@ describe("read-only runtime integration", () => {
           reranker: null,
           persistTrace: false,
         });
+      },
+      {
+        mint: async ({ assetId }) => {
+          contextAssetCapture.assetId = assetId;
+          return `cah1.${"A".repeat(32)}` as import("@avermate/agent-contracts").ContextAssetHandle;
+        },
       },
     );
 
@@ -1037,7 +1168,11 @@ describe("read-only runtime integration", () => {
       policyProjectIds: [projectId],
     });
     expect(retrievalCalls[1]).toMatchObject({
-      input: { projectIds: [], sourceIds: [sourceId] },
+      input: {
+        projectIds: [projectId],
+        sourceIds: [sourceId],
+        contextAccess: "automatic",
+      },
       policyProjectIds: [projectId],
     });
     const secondRequest = capturedRequests[1]!;
@@ -1066,6 +1201,22 @@ describe("read-only runtime integration", () => {
         .filter((block) => block.trust === "retrieved-untrusted")
         .map((block) => block.sourceRef),
     ).toContain(farChunkId);
+    const visualEvidence = secondRequest.messages.find(
+      (block) => block.sourceRef === farChunkId,
+    );
+    expect(visualEvidence?.parts).toMatchObject([
+      { type: "text", evidence: { chunkId: farChunkId } },
+      {
+        type: "image",
+        mime: "image/png",
+        evidence: {
+          chunkId: farChunkId,
+          locator: { kind: "pdf", page: 31 },
+          digest: visualDigest,
+        },
+      },
+    ]);
+    expect(contextAssetCapture.assetId).toBe(visualDerivativeId);
     const retrievalMetadata = secondRequest.messages.find(
       (block) =>
         block.mediaType === "application/vnd.avermate.retrieval-run+json",
@@ -1086,6 +1237,599 @@ describe("read-only runtime integration", () => {
       new TextEncoder().encode(packedA!.content).byteLength,
     ).toBeLessThanOrEqual(700);
     expect(packedA?.messageIds.at(-1)).toBe(first.reservedOutputMessageId);
+    const followUp = contextualRetrievalQuery({
+      question: "Et pourquoi la deuxième échoue ici ?",
+      history: exactHistory,
+      projectTitles: ["Révision avancée"],
+    });
+    expect(followUp.originalQuery).toBe("Et pourquoi la deuxième échoue ici ?");
+    expect(followUp.resolvedQuery).toContain("BLEU-ALPHA");
+    expect(followUp.resolvedQuery).toContain("Révision avancée");
+    expect(followUp.previousUserMessageIds).toContain(first.userMessageId);
+    expect(followUp.queryDigest).toBe(sha256(followUp.resolvedQuery));
+
+    // A paired Node may advertise image input, but Core-issued context handles
+    // are intentionally not relayable. A frozen Core fallback still causes the
+    // exact visual evidence to be prepared once; per-attempt projection keeps
+    // the primary Node request text-only and hides the handle.
+    const nodeRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
+    let nodeHandleMinted = false;
+    const nodeLikeService = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: multimodalDescriptor,
+          gateway: {
+            ...gateway,
+            stream: async function* (request) {
+              nodeRequests.push(request);
+              yield* baseGateway.stream(request);
+            },
+          },
+          modelPlacement: {
+            kind: "node" as const,
+            nodeId: "paired-node-1",
+            capabilityRevision: "revision-1",
+          },
+          fallbackSelections: [
+            {
+              capability: MOCK_ASSISTANT_MODEL,
+              descriptor: multimodalDescriptor,
+              gateway,
+              contextMediaDelivery: "server-resolved" as const,
+              modelPlacement: {
+                kind: "core" as const,
+                instanceId: "core-fallback",
+              },
+            },
+          ],
+        }),
+      },
+      () => broker.registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      (input, options) =>
+        hybridCorpusSearch(input, {
+          ...options,
+          runtime: null,
+          reranker: null,
+          persistTrace: false,
+        }),
+      {
+        async mint() {
+          nodeHandleMinted = true;
+          return `cah1.${"N".repeat(32)}` as import("@avermate/agent-contracts").ContextAssetHandle;
+        },
+      },
+    );
+    const nodeTurn = await store.reserveTurn({
+      ownerId: identity.ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: second.reservedOutputMessageId,
+      clientRequestId: `history-node-${newId("request")}`,
+      markdown: "Rappelle la définition de xylophore tardif.",
+      modelKey: "mock-readonly",
+      attachments: [
+        { kind: "subject", referenceId: subjectId, label: "Source longue" },
+      ],
+    });
+    await nodeLikeService.runNow(identity.ownerId, nodeTurn.runId, broker);
+    const nodeEvidence = nodeRequests[0]?.messages.find(
+      (block) => block.sourceRef === farChunkId,
+    );
+    expect(nodeHandleMinted).toBe(true);
+    expect(nodeEvidence?.parts).toMatchObject([
+      { type: "text", evidence: { chunkId: farChunkId } },
+    ]);
+    expect(JSON.stringify(nodeEvidence)).not.toContain("cah1.");
+    expect(nodeEvidence?.content).toContain("xylophore tardif");
+
+    const third = await store.reserveTurn({
+      ownerId: identity.ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: nodeTurn.reservedOutputMessageId,
+      clientRequestId: `history-third-${newId("request")}`,
+      markdown: "Et pourquoi la deuxième échoue ici ?",
+      modelKey: "mock-readonly",
+    });
+    await service.runNow(identity.ownerId, third.runId, broker);
+    expect(retrievalCalls).toHaveLength(3);
+    const contextualInput = retrievalCalls[2]!.input;
+    expect(contextualInput.query).toContain(
+      "Rappelle la définition de xylophore tardif.",
+    );
+    expect(contextualInput.query).toContain(
+      "Et pourquoi la deuxième échoue ici ?",
+    );
+    const thirdRetrievalMetadata = capturedRequests[2]!.messages.find(
+      (block) =>
+        block.mediaType === "application/vnd.avermate.retrieval-run+json",
+    );
+    expect(thirdRetrievalMetadata?.content).toContain(
+      '\"original\":\"Et pourquoi la deuxième échoue ici ?\"',
+    );
+    expect(thirdRetrievalMetadata?.content).toContain(
+      '\"policy\":\"deterministic-conversation-window-v1\"',
+    );
+    expect(thirdRetrievalMetadata?.content).toContain(
+      `\"digest\":\"${sha256(contextualInput.query)}\"`,
+    );
+  });
+
+  test("delivers a dense-selected visual-only PDF page as verified provider bytes and preserves its exact citation", async () => {
+    const ownerId = "corpus-user-a";
+    const subjectId = `subject-${newId("visual-rag")}`;
+    const sourceId = `source-${newId("visual-rag")}`;
+    const projectId = await studyProject({
+      id: `project-${newId("visual-rag")}`,
+      advanced: true,
+    });
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Page scannée', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
+
+    // The indexed chunk deliberately contains neither OCR nor native text.
+    // Its answer exists only in the rendered PDF-page derivative.
+    const pagePng = new Uint8Array(
+      await sharp({
+        create: {
+          width: 8,
+          height: 8,
+          channels: 4,
+          background: { r: 220, g: 24, b: 36, alpha: 1 },
+        },
+      })
+        .png()
+        .toBuffer(),
+    );
+    const visualDigest = createHash("sha256").update(pagePng).digest("hex");
+    const emptyTextDigest = sha256("");
+    const chunks: StagedContentChunk[] = [
+      {
+        ordinal: 0,
+        text: "",
+        normalizedText: "",
+        tokenEstimate: 0,
+        contentHash: emptyTextDigest,
+        locator: { kind: "pdf", page: 7 },
+        headingPath: null,
+        evidenceKind: "visual-only",
+      },
+    ];
+    const identity: OwnedSourceIdentity = {
+      ownerId,
+      originKind: "subject",
+      originId: subjectId,
+    };
+    const corpus = new CoreCorpusStore(client);
+    const staged = await corpus.stageVersion({
+      identity,
+      sourceId,
+      versionKey: `visual-only-${newId("version")}`,
+      contentHash: sha256("visual-only-pdf-page-7"),
+      extractorId: "visual-only-test",
+      extractorVersion: "1",
+      mimeType: "application/pdf",
+      language: "fr",
+      byteSize: pagePng.byteLength,
+      locatorSchemaVersion: 1,
+      metadata: { testFixture: "no-machine-readable-text" },
+      chunks,
+    });
+    const committed = await corpus.commitVersion({
+      ownerId,
+      stagingId: staged.stagingId,
+      expectedSourceId: sourceId,
+      expectedPreviousVersionId: null,
+    });
+    await client.execute({
+      sql: `UPDATE content_sources
+        SET coverage = 'metadata-and-locators-only', updatedAt = ?
+        WHERE id = ? AND userId = ?`,
+      args: [now, sourceId, ownerId],
+    });
+    await client.execute({
+      sql: `INSERT INTO study_project_items
+        (id, projectId, kind, referenceId, sourceVersionId, trackingMode,
+         selectorReviewRequired, position, contextMode, addedAt)
+        VALUES (?, ?, 'subject', ?, NULL, 'follow-head', 0, 0, 'include', ?)`,
+      args: [`pitem-${newId("visual-rag")}`, projectId, subjectId, now],
+    });
+    const chunkId = String(
+      (
+        await client.execute({
+          sql: `SELECT id FROM content_chunks
+            WHERE versionId = ? AND ordinal = 0 LIMIT 1`,
+          args: [committed.versionId],
+        })
+      ).rows[0]!.id,
+    );
+    const derivativeId = `cder-${newId("visual-rag")}`;
+    const fileId = `file-${newId("visual-rag")}`;
+    const storageKey = `visual-rag/${fileId}.png`;
+    await client.batch(
+      [
+        {
+          sql: `INSERT INTO files
+            (id, provider, storageKey, url, mimeType, byteSize, purpose,
+             status, previewStatus, userId, createdAt, updatedAt)
+            VALUES (?, 'local', ?, ?, 'image/png', ?, 'preview',
+              'stored', 'ready', ?, ?, ?)`,
+          args: [
+            fileId,
+            storageKey,
+            `/files/${fileId}`,
+            pagePng.byteLength,
+            ownerId,
+            now,
+            now,
+          ],
+        },
+        {
+          sql: `INSERT INTO content_derivatives
+            (id, versionId, chunkId, fileId, kind, status,
+             locatorSchemaVersion, locatorJson, contentHash, mimeType,
+             byteSize, estimatedInputTokens, rendererProfile,
+             rendererImageDigest, metadataJson, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, 'page-image', 'ready', 1, ?, ?,
+              'image/png', ?, 16, 'test-page-renderer', ?, '{}', ?, ?)`,
+          args: [
+            derivativeId,
+            committed.versionId,
+            chunkId,
+            fileId,
+            canonicalJson({ kind: "pdf", page: 7 }),
+            visualDigest,
+            pagePng.byteLength,
+            `sha256:${visualDigest}`,
+            now,
+            now,
+          ],
+        },
+      ],
+      "write",
+    );
+
+    const handles = new ContextAssetHandleService("v".repeat(32));
+    const resolvedBindings: Array<{
+      ownerId: string;
+      derivativeId: string;
+      versionId: string;
+      chunkId: string;
+      locator: unknown;
+      digest: string;
+    }> = [];
+    const assetResolver = new OwnedFileContextAssetResolver({
+      handles,
+      async loadOwnedFile(requestOwnerId, requestedDerivativeId) {
+        const result = await client.execute({
+          sql: `SELECT files.id, files.userId, files.provider,
+              files.storageKey, files.mimeType, files.byteSize, files.status,
+              derivatives.id AS derivativeId,
+              derivatives.versionId, derivatives.chunkId,
+              derivatives.locatorJson, derivatives.contentHash
+            FROM content_derivatives AS derivatives
+            JOIN content_versions AS versions ON versions.id = derivatives.versionId
+            JOIN content_chunks AS chunks ON chunks.id = derivatives.chunkId
+              AND chunks.versionId = derivatives.versionId
+            JOIN content_sources AS sources ON sources.id = versions.sourceId
+            JOIN files ON files.id = derivatives.fileId
+              AND files.userId = sources.userId
+            WHERE derivatives.id = ? AND sources.userId = ?
+              AND derivatives.status = 'ready' AND files.status = 'stored'
+            LIMIT 1`,
+          args: [requestedDerivativeId, requestOwnerId],
+        });
+        const row = result.rows[0];
+        if (!row) return null;
+        resolvedBindings.push({
+          ownerId: String(row.userId),
+          derivativeId: String(row.derivativeId),
+          versionId: String(row.versionId),
+          chunkId: String(row.chunkId),
+          locator: jsonValue(row.locatorJson),
+          digest: String(row.contentHash),
+        });
+        return {
+          id: String(row.id),
+          userId: String(row.userId),
+          provider: String(row.provider),
+          storageKey: String(row.storageKey),
+          mimeType: String(row.mimeType),
+          byteSize: Number(row.byteSize),
+          status: String(row.status) as OwnedStoredFile["status"],
+        };
+      },
+      async readOwnedFile(requestOwnerId, file, options) {
+        expect(requestOwnerId).toBe(ownerId);
+        expect(file).toMatchObject({
+          id: fileId,
+          userId: ownerId,
+          storageKey,
+          mimeType: "image/png",
+          byteSize: pagePng.byteLength,
+          status: "stored",
+        });
+        expect(options?.maxBytes ?? 0).toBeGreaterThanOrEqual(
+          pagePng.byteLength,
+        );
+        return pagePng.buffer.slice(
+          pagePng.byteOffset,
+          pagePng.byteOffset + pagePng.byteLength,
+        ) as ArrayBuffer;
+      },
+    });
+
+    const descriptor: ModelDescriptor = {
+      id: "visual-rag-test-model",
+      provider: "mock",
+      displayName: "Visual RAG test model",
+      modalities: ["text", "image"],
+      capabilities: {
+        tools: true,
+        reasoningSummary: false,
+        cachedUsage: false,
+        structuredOutput: false,
+      },
+      contextWindow: 16_384,
+    };
+    const preparedCitations: PreparedContextCitation[] = [];
+    let providerImage: Uint8Array | null = null;
+    let providerText = "";
+    const gateway = new AiSdkDirectGateway({
+      models: [descriptor],
+      resolveModel: () => new MockLanguageModelV4({ modelId: descriptor.id }),
+      contextAssetResolver: assetResolver,
+      onContextPrepared(_request, prompt) {
+        preparedCitations.push(...prompt.citations);
+      },
+      streamFactory(_request, _model, prompt) {
+        for (const message of prompt.messages) {
+          if (message.role !== "user" || typeof message.content === "string") {
+            continue;
+          }
+          for (const part of message.content) {
+            if (part.type === "text") providerText += `${part.text}\n`;
+            if (part.type === "image") {
+              providerImage = new Uint8Array(part.image as Uint8Array);
+            }
+          }
+        }
+        if (!providerImage || !Buffer.from(providerImage).equals(pagePng)) {
+          throw new Error("The visual page did not reach the model payload");
+        }
+        return simulateReadableStream({
+          chunks: [
+            {
+              type: "text-delta",
+              id: "visual-answer",
+              delta: "Le carré de la page est rouge. [[cite:E1]]",
+            },
+            { type: "finish", finishReason: "stop", totalUsage: {} },
+          ],
+        });
+      },
+    });
+    const retrievalCalls: OwnedLexicalQuery[] = [];
+    const retrievalResults: HybridSearchResult[] = [];
+    const vectorRuntime = {
+      embedding: {
+        descriptor: () => ({
+          id: "test-embedding-space",
+          provider: "fixture",
+          model: "visual-page-fixture",
+          modelRevision: "visual-page-fixture@1",
+          dimensions: 3,
+          modalities: ["text" as const],
+          normalization: "provider-unit" as const,
+          preprocessingRevision: "visual-page-v1",
+          placement: "node" as const,
+        }),
+        embedText: async (inputs: readonly { contentHash: string }[]) =>
+          inputs.map((input) => ({
+            contentHash: input.contentHash,
+            values: [1, 0, 0],
+          })),
+      },
+      vector: {
+        forGeneration(requestOwnerId: string, generationId: string) {
+          expect(requestOwnerId).toBe(ownerId);
+          expect(generationId).toBe("visual-generation-fixture");
+          return {
+            capabilities: async () => ({
+              available: true,
+              implementation: "test-visual-vector",
+              dimensions: [3],
+            }),
+            search: async (query: {
+              ownerId: string;
+              spaceId: string;
+              limit: number;
+            }) => {
+              expect(query).toMatchObject({
+                ownerId,
+                spaceId: "test-embedding-space",
+              });
+              return [
+                {
+                  sourceId,
+                  versionId: committed.versionId,
+                  chunkId,
+                  score: 0.99,
+                },
+              ];
+            },
+          };
+        },
+      },
+    } as unknown as CorpusVectorRuntime;
+    const visualReranker: RerankProvider = {
+      descriptor: () => ({
+        id: "test-rerank-space",
+        provider: "fixture",
+        model: "visual-page-reranker",
+        modelRevision: "visual-page-reranker@1",
+        languages: ["fr"],
+        modalities: ["text"],
+        maximumCandidates: 50,
+        maximumTokensPerCandidate: 8_192,
+        scoreSemantics: "sigmoid-relevance",
+        placement: "node",
+        costUnit: "compute-token",
+      }),
+      rerank: async ({ operationId, candidates }) =>
+        candidates.map((candidate, rank) => ({
+          operationId,
+          candidateId: candidate.id,
+          rank,
+          score: 1 - rank / 10,
+        })),
+    };
+    const broker = createFirstPartyToolBroker({} as Api);
+    const service = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor,
+          gateway,
+          contextMediaDelivery: "server-resolved",
+        }),
+      },
+      () => broker.registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input, options) => {
+        retrievalCalls.push(input);
+        const result = await hybridCorpusSearch(input, {
+          ...options,
+          runtime: vectorRuntime,
+          reranker: visualReranker,
+          corpusGenerationId: "visual-generation-fixture",
+          persistTrace: false,
+        });
+        retrievalResults.push(result);
+        return result;
+      },
+      handles,
+    );
+
+    const created = await store.createThread({
+      ownerId,
+      title: "Analyse visuelle",
+      projectId,
+    });
+    const reservation = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `visual-rag-${newId("request")}`,
+      markdown: "Quelle couleur remplit le carré sur la page 7 ?",
+      modelKey: "mock-readonly",
+    });
+    await service.runNow(ownerId, reservation.runId, broker);
+
+    expect(retrievalCalls).toHaveLength(1);
+    expect(retrievalCalls[0]).toMatchObject({
+      ownerId,
+      projectIds: [projectId],
+      subjectIds: [],
+      contextAccess: "automatic",
+    });
+    expect(retrievalResults[0]).toMatchObject({
+      vectorUsed: true,
+      vectorImplementation: "test-visual-vector",
+      rerankUsed: true,
+      rerankImplementation: "test-rerank-space",
+      retrievalMode: "reranked",
+      fallbackReason: null,
+    });
+    expect(retrievalResults[0]?.candidates[0]).toMatchObject({
+      sourceId,
+      versionId: committed.versionId,
+      chunkId,
+      text: "",
+      snippet: "",
+      evidenceKind: "visual-only",
+      channels: ["dense"],
+      locator: { kind: "pdf", page: 7 },
+    });
+    expect(Buffer.from(providerImage ?? new Uint8Array())).toEqual(
+      Buffer.from(pagePng),
+    );
+    expect(providerText.toLocaleLowerCase("fr")).not.toContain("rouge");
+    expect(resolvedBindings).toEqual([
+      {
+        ownerId,
+        derivativeId,
+        versionId: committed.versionId,
+        chunkId,
+        locator: { kind: "pdf", page: 7 },
+        digest: visualDigest,
+      },
+    ]);
+    expect(
+      preparedCitations.find((citation) => citation.delivery === "media"),
+    ).toMatchObject({
+      sourceRef: chunkId,
+      chunkId,
+      page: 7,
+      locator: { kind: "pdf", page: 7 },
+      digest: visualDigest,
+      delivery: "media",
+    });
+
+    const detail = await store.getThreadDetail(ownerId, created.thread.id);
+    const manifest = detail.manifests.find(
+      (candidate) => candidate.runId === reservation.runId,
+    )!;
+    const proof = manifest.proofHandles[0]!;
+    expect(proof).toMatchObject({
+      runId: reservation.runId,
+      locator: { kind: "pdf", page: 7 },
+      evidenceDigest: visualDigest,
+      quotedContentHash: emptyTextDigest,
+      contentVersionReference: {
+        ownerId,
+        sourceVersionId: committed.versionId,
+        chunkId,
+        locator: { kind: "pdf", page: 7 },
+        quotedContentHash: emptyTextDigest,
+      },
+    });
+    const citation = detail.citations.find(
+      (candidate) => candidate.runId === reservation.runId,
+    );
+    expect(citation?.proofHandleId).toBe(proof.id);
+    const output = detail.messages.find(
+      (message) => message.id === reservation.reservedOutputMessageId,
+    );
+    expect(output?.parts).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        markdown: "Le carré de la page est rouge.",
+      }),
+    );
   });
 
   test("persists only explicitly selected proof handles and binds them to text claims", async () => {

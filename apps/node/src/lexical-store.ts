@@ -167,8 +167,15 @@ export class FilesystemLexicalSearchBackend implements LexicalSearchBackend {
     for (const indexed of Object.values(state.versions)) {
       if (indexed.ownerId !== this.#ownerId) continue;
       if (
+        (query.versionIds?.length ?? 0) > 0 &&
+        !query.versionIds?.includes(indexed.version.id)
+      ) {
+        continue;
+      }
+      if (
         query.yearIds.length > 0 &&
-        (!indexed.source.yearId || !query.yearIds.includes(indexed.source.yearId))
+        (!indexed.source.yearId ||
+          !query.yearIds.includes(indexed.source.yearId))
       ) {
         continue;
       }
@@ -185,9 +192,21 @@ export class FilesystemLexicalSearchBackend implements LexicalSearchBackend {
       ) {
         continue;
       }
-      if (
+      const directSource =
+        (query.sourceIds?.length ?? 0) > 0 &&
+        query.sourceIds?.includes(indexed.source.id);
+      const projectSource =
+        query.contextAccess !== "explicit-attachment" &&
         query.projectIds.length > 0 &&
-        !projectIds(indexed.version).some((id) => query.projectIds.includes(id))
+        projectIds(indexed.version).some((id) => query.projectIds.includes(id));
+      const scoped =
+        (query.sourceIds?.length ?? 0) > 0 || query.projectIds.length > 0;
+      if (
+        (query.contextAccess === "explicit-attachment" && !directSource) ||
+        (query.contextAccess !== "explicit-attachment" &&
+          scoped &&
+          !directSource &&
+          !projectSource)
       ) {
         continue;
       }
@@ -302,7 +321,9 @@ export class FilesystemLexicalSearchBackend implements LexicalSearchBackend {
   async #load() {
     if (this.#state) return this.#state;
     try {
-      const state = JSON.parse(await readFile(this.#path, "utf8")) as LexicalFile;
+      const state = JSON.parse(
+        await readFile(this.#path, "utf8"),
+      ) as LexicalFile;
       if (state.version !== 1 || !state.versions) {
         throw new Error("NODE_LEXICAL_STORE_VERSION_UNSUPPORTED");
       }

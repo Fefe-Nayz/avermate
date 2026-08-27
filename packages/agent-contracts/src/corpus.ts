@@ -237,17 +237,38 @@ export const lexicalSearchModeSchema = z.enum([
 ]);
 export type LexicalSearchMode = z.infer<typeof lexicalSearchModeSchema>;
 
+/**
+ * Describes why corpus context is being requested. Project sources marked
+ * `on-demand` are deliberately unavailable to automatic answer preloading,
+ * but remain available to an explicit agent search. Direct source attachments
+ * are always fenced by `sourceIds` and may opt into `explicit-attachment`.
+ */
+export const corpusContextAccessSchema = z.enum([
+  "automatic",
+  "agent-request",
+  "explicit-attachment",
+]);
+export type CorpusContextAccess = z.infer<typeof corpusContextAccessSchema>;
+
 export const ownedLexicalQuerySchema = z.strictObject({
   ownerId: boundedId,
   query: z.string().min(1).max(2_000),
   mode: lexicalSearchModeSchema,
   projectIds: z.array(boundedId).max(100),
-  /** Optional immutable source fence. When present, every retrieval channel
-   * must stay inside these already owner-authorized corpus sources. */
+  /**
+   * Directly selected immutable sources. They form a union with eligible
+   * project items (and are the complete fence when no project is supplied).
+   */
   sourceIds: z.array(boundedId).max(100).optional(),
+  /**
+   * Internal immutable-version fence used when Core dispatches an already
+   * authorized project scope to a paired Node. It can only narrow a query.
+   */
+  versionIds: z.array(boundedId).max(10_000).optional(),
   yearIds: z.array(boundedId).max(100),
   subjectIds: z.array(boundedId).max(100),
   originKinds: z.array(corpusOriginKindSchema).max(16),
+  contextAccess: corpusContextAccessSchema.optional(),
   limit: z.number().int().positive().max(100),
   cursor: z.string().max(512).nullable(),
   fallbackPolicy: z
@@ -377,6 +398,8 @@ export type EmbeddingRequestContext = {
   operationId: string;
   signal: AbortSignal;
   consent: ProviderConsent;
+  /** Revalidate mutable authorization immediately before provider dispatch. */
+  authorize?: () => Promise<void>;
 };
 
 export type TextEmbeddingInput = {

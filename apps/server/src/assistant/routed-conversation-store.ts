@@ -466,17 +466,32 @@ export class RoutedConversationStore extends CoreConversationStore {
     ownerId: string,
     threadId: string,
     branchId?: string | null,
+    expectedProjectId?: string,
   ) {
     const nodeId = await this.#threadPlacement(ownerId, threadId, true);
-    if (!nodeId) return super.getThreadDetail(ownerId, threadId, branchId);
+    if (!nodeId) {
+      return super.getThreadDetail(
+        ownerId,
+        threadId,
+        branchId,
+        expectedProjectId,
+      );
+    }
+    let stored: Awaited<ReturnType<ConversationDagRelay["get"]>>;
     try {
       await this.relay.assertOnline(ownerId, nodeId);
-      const stored = await this.relay.get({ nodeId, ownerId, threadId });
+      stored = await this.relay.get({ nodeId, ownerId, threadId });
       if (!stored) throw new Error("NODE_CONVERSATION_DAG_NOT_FOUND");
-      return partsPath(stored.detail, branchId);
     } catch (error) {
       unavailable(error);
     }
+    if (
+      expectedProjectId !== undefined &&
+      stored.detail.thread.projectId !== expectedProjectId
+    ) {
+      throw new ConversationStoreError("not_found", "Thread not found");
+    }
+    return partsPath(stored.detail, branchId);
   }
 
   override async listThreads(

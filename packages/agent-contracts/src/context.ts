@@ -1,4 +1,74 @@
 import { z } from "zod";
+import { sourceLocatorV1Schema } from "./corpus";
+
+const boundedId = z.string().min(1).max(256);
+const contentDigestSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/u, "expected a lowercase SHA-256 digest");
+
+/**
+ * An opaque server-side reference. Context contracts deliberately never carry
+ * storage keys, provider URLs or inline bytes across the durable boundary.
+ */
+export const contextAssetHandleSchema = z
+  .string()
+  .regex(/^cah1\.[A-Za-z0-9_-]{32,4096}$/u)
+  .brand<"ContextAssetHandle">();
+export type ContextAssetHandle = z.infer<typeof contextAssetHandleSchema>;
+
+const optionalEvidenceSchema = z
+  .strictObject({
+    chunkId: boundedId.nullable(),
+    locator: sourceLocatorV1Schema.nullable(),
+    digest: contentDigestSchema.nullable(),
+  })
+  .refine(
+    ({ locator, digest }) => (locator === null) === (digest === null),
+    "Text evidence must provide locator and digest together",
+  );
+
+export const contextTextPartSchema = z.strictObject({
+  type: z.literal("text"),
+  text: z.string().max(2_000_000),
+  mime: z.string().min(1).max(256),
+  evidence: optionalEvidenceSchema,
+});
+
+const contextMediaEvidenceSchema = z.strictObject({
+  chunkId: boundedId.nullable(),
+  locator: sourceLocatorV1Schema,
+  digest: contentDigestSchema,
+});
+
+export const contextImagePartSchema = z.strictObject({
+  type: z.literal("image"),
+  assetHandle: contextAssetHandleSchema,
+  mime: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  evidence: contextMediaEvidenceSchema,
+  /** OCR, caption or other owner-authorized text used for text-only models. */
+  fallbackText: z.string().min(1).max(2_000_000),
+});
+
+export const contextPdfPagePartSchema = z
+  .strictObject({
+    type: z.literal("pdf-page"),
+    assetHandle: contextAssetHandleSchema,
+    mime: z.literal("application/pdf"),
+    evidence: contextMediaEvidenceSchema,
+    /** OCR/native text for this exact page, never an implicit empty fallback. */
+    fallbackText: z.string().min(1).max(2_000_000),
+  })
+  .refine(({ evidence }) => evidence.locator.kind === "pdf", {
+    path: ["evidence", "locator"],
+    message: "A PDF page context part requires a PDF page locator",
+  });
+
+export const contextPartSchema = z.discriminatedUnion("type", [
+  contextTextPartSchema,
+  contextImagePartSchema,
+  contextPdfPagePartSchema,
+]);
+export type ContextPart = z.infer<typeof contextPartSchema>;
 
 export const contextTrustSchema = z.enum([
   "system-policy",
@@ -13,6 +83,11 @@ export const contextBlockSchema = z.strictObject({
   id: z.string().min(1).max(256),
   trust: contextTrustSchema,
   mediaType: z.string().min(1).max(256),
+  /**
+   * Canonical structured content when present. `content` remains required as
+   * the bounded legacy/text projection so version-1 manifests round-trip.
+   */
+  parts: z.array(contextPartSchema).min(1).max(256).optional(),
   content: z.string().max(2_000_000),
   sourceRef: z.string().min(1).max(512).nullable(),
   redactions: z.array(z.string().min(1).max(256)).max(1_000).default([]),
@@ -35,6 +110,8 @@ export const contextManifestSchema = z.strictObject({
 });
 export type ContextManifest = z.infer<typeof contextManifestSchema>;
 
-export function createContextManifest(input: ContextManifest): ContextManifest {
+export function createContextManifest(
+  input: z.input<typeof contextManifestSchema>,
+): ContextManifest {
   return contextManifestSchema.parse(input);
 }

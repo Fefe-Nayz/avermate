@@ -74,7 +74,7 @@ test("reviews a copy, plans study, completes a sourced quiz and keeps provider f
       response.url() === "http://localhost:5100/rpc/learning/plan/apply" &&
       response.request().method() === "POST"
   )
-  await page.getByRole("button", { name: "Schedule today" }).click()
+  await page.getByRole("button", { name: "Schedule today" }).first().click()
   expect((await applyResponse).ok()).toBe(true)
   await expect(page.getByRole("button", { name: "Open agenda" })).toBeVisible()
 

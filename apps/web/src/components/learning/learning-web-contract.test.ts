@@ -49,13 +49,23 @@ describe("learning Web contract", () => {
     )
     expect(hub).toContain('objective.measurementState === "unmeasured"')
     expect(hub).toContain("summary.measuredObjectiveCount")
-    expect(hub).toContain("summary.confidenceScore")
+    expect(hub).toContain("summary.variation")
+    expect(hub).toContain("summary.precision")
+    expect(hub).toContain("summary.evidence")
     expect(hub).toContain("summary.freshness")
     expect(hub).toContain("summary.nextAction")
+    expect(hub).toContain('t("Estimate precision")')
+    expect(hub).not.toContain('t("Confidence")')
+    expect(hub).not.toContain("highest-priority active suggestion")
     expect(hub).toContain("<ProgressTimeline")
     expect(hub).toContain("row.projection.evidenceCount > 0")
     expect(hub).not.toContain("projection?.estimate ?? 0.5")
     expect(hub).not.toContain("projection.estimate ?? 0.5")
+    expect(hub).toContain('aria-label={t("Loading learning summary")}')
+    expect(hub).toContain("progress.isError ? (")
+    expect(hub.indexOf("progress.isLoading ? (")).toBeLessThan(
+      hub.indexOf('t("Evidence coverage")')
+    )
   })
 
   test("hydrates the exact unfiltered learning query keys used by the client", async () => {
@@ -81,10 +91,13 @@ describe("learning Web contract", () => {
   })
 
   test("extracts every stable learning label for both locales", async () => {
-    const files = await Promise.all([
-      source("./learning-client.tsx"),
-      source("./copy-review-workspace.tsx"),
-      source("./objective-evidence-view.tsx"),
+    const [files, frenchCatalogue] = await Promise.all([
+      Promise.all([
+        source("./learning-client.tsx"),
+        source("./copy-review-workspace.tsx"),
+        source("./objective-evidence-view.tsx"),
+      ]),
+      source("../../../messages/fr.json"),
     ])
     for (const file of files) {
       expect(file).toContain("useExtracted")
@@ -93,6 +106,40 @@ describe("learning Web contract", () => {
     expect(files.join("\n")).not.toMatch(
       />\s*(?:Apprentissage|Maîtrise|Copies|Confirmer|Réessayer)\s*</
     )
+    expect(frenchCatalogue).toContain("Précision de l’estimation")
+  })
+
+  test("localizes every difficulty taxonomy through one exhaustive typed map", async () => {
+    const [model, labels, hub, review] = await Promise.all([
+      source("./copy-review-model.ts"),
+      source("./learning-labels.ts"),
+      source("./learning-client.tsx"),
+      source("./copy-review-workspace.tsx"),
+    ])
+    expect(model).toContain(
+      "export type ErrorTaxonomy = (typeof taxonomyValues)[number]"
+    )
+    expect(labels).toContain(
+      "useLearningTaxonomyLabels(): Record<ErrorTaxonomy, string>"
+    )
+    for (const taxonomy of [
+      "missing-knowledge",
+      "misunderstood-concept",
+      "method-strategy",
+      "calculation",
+      "notation",
+      "reading-instruction",
+      "justification",
+      "transfer",
+      "time-management",
+      "unclassified",
+    ]) {
+      expect(labels).toContain(
+        `${taxonomy.includes("-") ? `\"${taxonomy}\"` : taxonomy}: t(`
+      )
+    }
+    expect(hub).toContain("taxonomyLabels[difficulty.taxonomy]")
+    expect(review).toContain("label: taxonomyLabels[value]")
   })
 
   test("is reachable from every shared navigation model", async () => {

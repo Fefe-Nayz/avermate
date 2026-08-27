@@ -28,6 +28,104 @@ describe("project source version tracking", () => {
     expect(client).not.toContain('aria-label="Actions du projet"')
     expect(client).toContain('item.trackingMode === "pinned"')
     expect(client).toContain("Boolean(selectedVersion(item))")
+    expect(client).toContain("sourceSummary.indexed")
+    expect(client).toContain("sourceSummary.included")
+    expect(client).toContain("sourceSummary.onDemand")
+    expect(client).toContain("sourceSummary.excluded")
+    expect(client).toContain("sourceSummary.contextSearchable")
+    expect(client).toContain("sourceSummary.contextEligible")
+    expect(client).toContain("sourceSummary.automaticSearchable")
+    expect(client).toContain("sourceSummary.automaticEligible")
+    expect(client).toContain(
+      "sourceSummary.contextSearchable - sourceSummary.automaticSearchable"
+    )
+    expect(client).toContain('t("Automatic context")')
+    expect(client).toContain('t("Available on demand")')
+    expect(client).toContain("sourceSummary.recentContextItemIds.flatMap")
+    expect(client).toContain('item.contextMode === "exclude"')
+    expect(client).toContain('t("Technical index")')
+    expect(client).toContain('t("Assistant context rules")')
+    expect(client).toContain("sourceSummary.indexed}/{sourceSummary.total")
+    expect(client).toContain("sourceSummary.contextEligible === 0")
+    expect(client).toContain('t("Choose what belongs in the project context")')
+    expect(client).toContain("sourceSummary.contextEligible > 0")
+    expect(client).not.toContain("items.slice(0, 4)")
+  })
+
+  test("localizes source modes, states and actions instead of leaking French labels into English", async () => {
+    const manager = await source("./project-source-manager.tsx")
+
+    expect(manager).toContain('t("Always include")')
+    expect(manager).toContain('t("Available on demand")')
+    expect(manager).toContain('t("Exclude from context")')
+    expect(manager).toContain("const coverageText = useCoverageText()")
+    expect(manager).toContain("const indexStatusText = useIndexStatusText()")
+    expect(manager).toContain("coverageText(item.coverage)")
+    expect(manager).toContain("indexStatusText(item.indexStatus)")
+    expect(manager).toContain('aria-label={t("Move source up")}')
+    expect(manager).toContain('aria-label={t("Remove reference from project")}')
+    for (const hardcodedFrench of [
+      "Toujours inclure",
+      "À la demande",
+      "Exclure du contexte",
+      "Trouver une source",
+      "Choisir une source",
+      "Aucune source dans ce projet",
+      "Source manquante",
+      "Monter la source",
+      "Retirer la référence du projet",
+    ]) {
+      expect(manager).not.toContain(hardcodedFrench)
+    }
+  })
+
+  test("updates the context rule of an existing source through the owned project route", async () => {
+    const [manager, client] = await Promise.all([
+      source("./project-source-manager.tsx"),
+      source("./projects-client.tsx"),
+    ])
+
+    expect(manager).toContain("onContextMode({")
+    expect(manager).toContain("value={item.contextMode}")
+    expect(manager).toContain('t("Context for {source}"')
+    expect(manager).toContain("htmlFor={itemContextSelectId}")
+    expect(client).toContain(
+      "orpc.projects.setItemContextMode.mutationOptions()"
+    )
+    expect(client).toContain("onContextMode={(input) =>")
+    expect(client).toContain('t("Source context rule updated")')
+  })
+
+  test("localizes the project list and editor in both locales", async () => {
+    const [client, dialog] = await Promise.all([
+      source("./projects-client.tsx"),
+      source("./project-dialog.tsx"),
+    ])
+
+    expect(client).toContain('title={t("Study projects")}')
+    expect(client).toContain('t("Projects could not be loaded")')
+    expect(client).toContain('t("Create your first study project")')
+    expect(dialog).toContain("const t = useExtracted()")
+    expect(dialog).toContain('htmlFor="project-color"')
+    expect(dialog).toContain('id="project-color"')
+    expect(dialog).toContain('htmlFor="project-subject"')
+    expect(dialog).toContain('id="project-subject"')
+
+    for (const hardcodedFrench of [
+      "Projets d’étude",
+      "Nouveau projet",
+      "Les projets ne peuvent pas être chargés",
+      "Créez votre premier projet d’étude",
+      "Toutes les matières",
+      "Modifier le projet",
+      "Donnez un nom au projet",
+      "Matière par défaut",
+      "Instructions du projet",
+      "Créer le projet",
+    ]) {
+      expect(client).not.toContain(hardcodedFrench)
+      expect(dialog).not.toContain(hardcodedFrench)
+    }
   })
 
   test("imports files, Web pages and notes into Materials before attaching them", async () => {

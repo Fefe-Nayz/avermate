@@ -101,6 +101,7 @@ import {
   type ProjectFormValue,
 } from "./project-dialog"
 import { ProjectSearch } from "./project-search"
+import { ProjectRetrievalPolicyCard } from "./project-retrieval-policy-card"
 import {
   ProjectSourceManager,
   type ProjectSourceItem,
@@ -173,11 +174,6 @@ export function ProjectsClient({
     enabled: Boolean(selectedProjectId && yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
-  const embeddingQuery = useQuery({
-    ...orpc.projects.embeddingPrivacy.queryOptions(),
-    enabled: Boolean(selectedProjectId),
-    staleTime: COMMON_QUERY_STALE_TIME,
-  })
   const artifactsInput = { projectId: selectedProjectId }
   const artifactsQuery = useQuery({
     ...orpc.mediaStudio.listArtifacts.queryOptions({ input: artifactsInput }),
@@ -200,11 +196,19 @@ export function ProjectsClient({
     await Promise.all([
       queryClient.invalidateQueries({
         queryKey: orpc.projects.list.queryKey({ input: { include: "all" } }),
+        exact: true,
       }),
       ...(projectId
         ? [
             queryClient.invalidateQueries({
               queryKey: orpc.projects.get.queryKey({ input: { projectId } }),
+              exact: true,
+            }),
+            queryClient.invalidateQueries({
+              queryKey: orpc.projects.retrievalPolicy.queryKey({
+                input: { projectId },
+              }),
+              exact: true,
             }),
           ]
         : []),
@@ -297,6 +301,17 @@ export function ProjectsClient({
     },
     onError: (error) => toast.error(error.message),
   })
+  const setItemContextMode = useMutation({
+    ...orpc.projects.setItemContextMode.mutationOptions(),
+    onSuccess: async (_, input) => {
+      await refreshProject(input.projectId)
+      toast.success(t("Source context rule updated"))
+    },
+    onError: (error, input) => {
+      toast.error(error.message)
+      void refreshProject(input.projectId)
+    },
+  })
   const planArtifact = useMutation({
     ...orpc.mediaStudio.planArtifact.mutationOptions(),
     onSuccess: async () => {
@@ -324,7 +339,8 @@ export function ProjectsClient({
     removeItem.isPending ||
     reorder.isPending ||
     retry.isPending ||
-    setItemTracking.isPending
+    setItemTracking.isPending ||
+    setItemContextMode.isPending
 
   function submitProject(value: ProjectFormValue) {
     if (editable) {
@@ -525,6 +541,7 @@ export function ProjectsClient({
               <TabsContent value="overview" className="pt-4">
                 <ProjectOverview
                   items={projectQuery.data?.items as ProjectSourceItem[]}
+                  sourceSummary={projectQuery.data!.sourceSummary}
                   catalogue={catalogue}
                   artifacts={artifactsQuery.data ?? []}
                   artifactsLoading={artifactsQuery.isLoading}
@@ -563,60 +580,7 @@ export function ProjectsClient({
               </TabsContent>
 
               <TabsContent value="sources" className="pt-4">
-                {embeddingQuery.isPending ? (
-                  <Alert className="mb-4">
-                    <Clock3Icon />
-                    <AlertTitle>{t("Checking retrieval privacy")}</AlertTitle>
-                    <AlertDescription>
-                      {t(
-                        "Avermate is verifying whether this project uses private lexical search or an external embedding provider."
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                ) : embeddingQuery.isError ? (
-                  <Alert className="mb-4" variant="destructive">
-                    <BookOpenTextIcon />
-                    <AlertTitle>
-                      {t("Retrieval privacy could not be verified")}
-                    </AlertTitle>
-                    <AlertDescription className="flex flex-wrap items-center gap-3">
-                      <span>
-                        {t(
-                          "Search is not described as private until the server confirms its configuration."
-                        )}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={embeddingQuery.isFetching}
-                        onClick={() => void embeddingQuery.refetch()}
-                      >
-                        {t("Try again")}
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                ) : embeddingQuery.data.vectorConfigured ? (
-                  <Alert className="mb-4">
-                    <BookOpenTextIcon />
-                    <AlertTitle>{t("Hybrid search is active")}</AlertTitle>
-                    <AlertDescription>
-                      {t(
-                        "Semantic and lexical retrieval are combined. The configured privacy policy decides which content may leave this server."
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <Alert className="mb-4">
-                    <BookOpenTextIcon />
-                    <AlertTitle>{t("Private lexical search")}</AlertTitle>
-                    <AlertDescription>
-                      {t(
-                        "No source is sent to an embedding provider. Scanned PDFs need OCR before their text can be searched."
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                )}
+                <ProjectRetrievalPolicyCard projectId={selected.id} />
                 <ProjectSourceManager
                   projectId={selected.id}
                   revision={selected.revision}
@@ -628,6 +592,7 @@ export function ProjectsClient({
                   onReorder={(input) => reorder.mutate(input)}
                   onRetry={(input) => retry.mutate(input)}
                   onTracking={(input) => setItemTracking.mutate(input)}
+                  onContextMode={(input) => setItemContextMode.mutate(input)}
                 />
               </TabsContent>
 
@@ -704,13 +669,13 @@ export function ProjectsClient({
   return (
     <>
       <PageMeta
-        title="Projets d’étude"
-        subtitle="Vos notebooks scolaires, sources et recherches"
+        title={t("Study projects")}
+        subtitle={t("Your school notebooks, sources and research")}
       />
       <PageActions>
         <Button size="sm" onClick={() => setEditorOpen(true)}>
           <PlusIcon data-icon="inline-start" />
-          Nouveau projet
+          {t("New project")}
         </Button>
       </PageActions>
 
@@ -718,7 +683,7 @@ export function ProjectsClient({
         <ProjectSkeleton />
       ) : listQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>Les projets ne peuvent pas être chargés</AlertTitle>
+          <AlertTitle>{t("Projects could not be loaded")}</AlertTitle>
           <AlertDescription>{listQuery.error.message}</AlertDescription>
         </Alert>
       ) : live.length === 0 && trashed.length === 0 ? (
@@ -727,25 +692,28 @@ export function ProjectsClient({
             <EmptyMedia variant="icon">
               <FolderKanbanIcon />
             </EmptyMedia>
-            <EmptyTitle>Créez votre premier projet d’étude</EmptyTitle>
+            <EmptyTitle>{t("Create your first study project")}</EmptyTitle>
             <EmptyDescription>
-              Regroupez cours, fiches, notes et enregistrements sans déplacer
-              les originaux.
+              {t(
+                "Group courses, study guides, notes and recordings without moving the originals."
+              )}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button onClick={() => setEditorOpen(true)}>
               <PlusIcon data-icon="inline-start" />
-              Nouveau projet
+              {t("New project")}
             </Button>
           </EmptyContent>
         </Empty>
       ) : (
         <Tabs defaultValue="live">
           <TabsList>
-            <TabsTrigger value="live">Actifs ({live.length})</TabsTrigger>
+            <TabsTrigger value="live">
+              {t("Active ({count})", { count: String(live.length) })}
+            </TabsTrigger>
             <TabsTrigger value="trash">
-              Corbeille ({trashed.length})
+              {t("Trash ({count})", { count: String(trashed.length) })}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="live" className="pt-4">
@@ -795,6 +763,7 @@ export function ProjectsClient({
 
 function ProjectOverview({
   items,
+  sourceSummary,
   catalogue,
   artifacts,
   artifactsLoading,
@@ -805,6 +774,7 @@ function ProjectOverview({
   artifactKindLabel,
 }: {
   items: readonly ProjectSourceItem[]
+  sourceSummary: Awaited<ReturnType<typeof rpc.projects.get>>["sourceSummary"]
   catalogue: readonly ProjectSourceOption[]
   artifacts: readonly ProjectArtifact[]
   artifactsLoading: boolean
@@ -824,29 +794,41 @@ function ProjectOverview({
     !item.selectorReviewRequired &&
     Boolean(selectedVersion(item)) &&
     (item.indexStatus === "ready" || item.indexStatus === "indexed")
-  const ready = items.filter(isSearchable).length
-  const pending = items.filter(
-    (item) =>
-      item.indexStatus === "registered" || item.indexStatus === "indexing"
-  ).length
+  const automaticReady = sourceSummary.automaticSearchable
+  const onDemandReady = Math.max(
+    0,
+    sourceSummary.contextSearchable - sourceSummary.automaticSearchable
+  )
   const needsAttention = items.filter(
     (item) =>
-      item.missing ||
-      item.selectorReviewRequired ||
-      item.indexStatus === "failed" ||
-      item.indexStatus === "partial" ||
-      (!selectedVersion(item) &&
-        item.indexStatus !== "registered" &&
-        item.indexStatus !== "indexing")
+      item.contextMode !== "exclude" &&
+      (item.missing ||
+        item.selectorReviewRequired ||
+        item.indexStatus === "failed" ||
+        item.indexStatus === "partial" ||
+        (!selectedVersion(item) &&
+          item.indexStatus !== "registered" &&
+          item.indexStatus !== "indexing"))
   ).length
-  const readiness = items.length ? Math.round((ready / items.length) * 100) : 0
-  const recentSources = items.slice(0, 4).map((item) => ({
-    item,
-    source: catalogue.find(
-      (candidate) =>
-        candidate.kind === item.kind && candidate.id === item.referenceId
-    ),
-  }))
+  const automaticReadiness = sourceSummary.automaticEligible
+    ? Math.round((automaticReady / sourceSummary.automaticEligible) * 100)
+    : 0
+  const onDemandReadiness = sourceSummary.onDemand
+    ? Math.round((onDemandReady / sourceSummary.onDemand) * 100)
+    : 0
+  const recentSources = sourceSummary.recentContextItemIds.flatMap((itemId) => {
+    const item = items.find((candidate) => candidate.id === itemId)
+    if (!item || item.contextMode === "exclude") return []
+    return [
+      {
+        item,
+        source: catalogue.find(
+          (candidate) =>
+            candidate.kind === item.kind && candidate.id === item.referenceId
+        ),
+      },
+    ]
+  })
 
   const next =
     items.length === 0
@@ -859,35 +841,45 @@ function ProjectOverview({
           icon: <FilePlus2Icon data-icon="inline-start" />,
           action: onAddSource,
         }
-      : needsAttention > 0
+      : sourceSummary.contextEligible === 0
         ? {
-            title: t("Review sources that need attention"),
+            title: t("Choose what belongs in the project context"),
             description: t(
-              "At least one source is missing or only partly indexed. Fix it before relying on a generated answer."
+              "Every attached source is excluded. Include a source, or make it available on demand, before asking the assistant to use it."
             ),
-            label: t("Review sources"),
+            label: t("Manage sources"),
             icon: <BookOpenTextIcon data-icon="inline-start" />,
             action: onOpenSources,
           }
-        : artifacts.length === 0
+        : needsAttention > 0
           ? {
-              title: t("Turn these sources into understanding"),
+              title: t("Review sources that need attention"),
               description: t(
-                "Ask a first question, compare ideas across documents, or create a revision aid from the exact same context."
+                "At least one source is missing or only partly indexed. Fix it before relying on a generated answer."
               ),
-              label: t("Open the project assistant"),
-              icon: <BotIcon data-icon="inline-start" />,
-              action: onOpenChat,
+              label: t("Review sources"),
+              icon: <BookOpenTextIcon data-icon="inline-start" />,
+              action: onOpenSources,
             }
-          : {
-              title: t("Continue where you left off"),
-              description: t(
-                "The project context and generated study aids are ready. Continue the conversation or create the next revision."
-              ),
-              label: t("Continue studying"),
-              icon: <ArrowRightIcon data-icon="inline-end" />,
-              action: onOpenChat,
-            }
+          : artifacts.length === 0
+            ? {
+                title: t("Turn these sources into understanding"),
+                description: t(
+                  "Ask a first question, compare ideas across documents, or create a revision aid from the exact same context."
+                ),
+                label: t("Open the project assistant"),
+                icon: <BotIcon data-icon="inline-start" />,
+                action: onOpenChat,
+              }
+            : {
+                title: t("Continue where you left off"),
+                description: t(
+                  "The project context and generated study aids are ready. Continue the conversation or create the next revision."
+                ),
+                label: t("Continue studying"),
+                icon: <ArrowRightIcon data-icon="inline-end" />,
+                action: onOpenChat,
+              }
 
   return (
     <section
@@ -913,7 +905,7 @@ function ProjectOverview({
             {next.icon}
             {next.label}
           </Button>
-          {items.length > 0 ? (
+          {sourceSummary.contextEligible > 0 ? (
             <Button variant="outline" onClick={onCreateArtifact}>
               <FileOutputIcon data-icon="inline-start" />
               {t("Create a study aid")}
@@ -927,7 +919,9 @@ function ProjectOverview({
           <CardHeader>
             <CardTitle>{t("Source readiness")}</CardTitle>
             <CardDescription>
-              {t("What the assistant can reliably retrieve right now")}
+              {t(
+                "What the assistant can retrieve automatically or when requested"
+              )}
             </CardDescription>
             <CardAction>
               <Button size="sm" variant="ghost" onClick={onOpenSources}>
@@ -937,34 +931,84 @@ function ProjectOverview({
             </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {items.length > 0 ? (
-              <Progress value={readiness}>
-                <ProgressLabel>{t("Searchable")}</ProgressLabel>
-                <ProgressValue>
-                  {() => `${ready}/${items.length}`}
-                </ProgressValue>
-              </Progress>
-            ) : (
+            {sourceSummary.contextEligible === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t("No source has been attached yet.")}
+                {items.length > 0
+                  ? t(
+                      "No included or on-demand source is available to the assistant."
+                    )
+                  : t("No source has been attached yet.")}
               </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {sourceSummary.automaticEligible > 0 ? (
+                  <Progress value={automaticReadiness}>
+                    <ProgressLabel>{t("Automatic context")}</ProgressLabel>
+                    <ProgressValue>
+                      {() =>
+                        `${automaticReady}/${sourceSummary.automaticEligible}`
+                      }
+                    </ProgressValue>
+                  </Progress>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t("No source is included automatically.")}
+                  </p>
+                )}
+                {sourceSummary.onDemand > 0 ? (
+                  <Progress value={onDemandReadiness}>
+                    <ProgressLabel>{t("Available on demand")}</ProgressLabel>
+                    <ProgressValue>
+                      {() => `${onDemandReady}/${sourceSummary.onDemand}`}
+                    </ProgressValue>
+                  </Progress>
+                ) : null}
+              </div>
             )}
-            <div className="grid grid-cols-3 gap-3 rounded-lg border p-3 text-center">
-              <div>
-                <p className="numeric text-lg font-semibold">{ready}</p>
-                <p className="text-xs text-muted-foreground">{t("Ready")}</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{t("Technical index")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(
+                      "Across all attached sources, including sources excluded from assistant context."
+                    )}
+                  </p>
+                </div>
+                <Badge variant="outline" className="w-fit shrink-0">
+                  {sourceSummary.indexed}/{sourceSummary.total}
+                </Badge>
               </div>
               <div>
-                <p className="numeric text-lg font-semibold">{pending}</p>
-                <p className="text-xs text-muted-foreground">{t("Indexing")}</p>
-              </div>
-              <div>
-                <p className="numeric text-lg font-semibold">
-                  {needsAttention}
+                <p className="mb-2 text-sm font-medium">
+                  {t("Assistant context rules")}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {t("Needs review")}
-                </p>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border p-3 text-center">
+                  <div className="min-w-0">
+                    <p className="numeric text-lg font-semibold">
+                      {sourceSummary.included}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("Included")}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="numeric text-lg font-semibold">
+                      {sourceSummary.onDemand}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("On demand")}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="numeric text-lg font-semibold">
+                      {sourceSummary.excluded}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("Excluded")}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -1019,7 +1063,9 @@ function ProjectOverview({
           <CardHeader>
             <CardTitle>{t("Project context")}</CardTitle>
             <CardDescription>
-              {t("The first sources considered when grounding an answer")}
+              {t(
+                "Recently added included and on-demand sources; excluded sources never appear here."
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1041,9 +1087,7 @@ function ProjectOverview({
                     <Badge variant="outline">
                       {item.contextMode === "include"
                         ? t("Included")
-                        : item.contextMode === "on-demand"
-                          ? t("On demand")
-                          : t("Excluded")}
+                        : t("On demand")}
                     </Badge>
                   </ItemActions>
                 </Item>

@@ -228,6 +228,65 @@ describe("Gemini Embedding 2 HTTP contract", () => {
     expect(calls).toBe(0);
   });
 
+  test("revalidates mutable authorization immediately before every provider dispatch", async () => {
+    const pageA = syntheticPdf(["Première preuve"]);
+    const pageB = syntheticPdf(["Deuxième preuve"]);
+    const media = new Map([
+      ["file:page-a", pageA],
+      ["file:page-b", pageB],
+    ]);
+    let providerCalls = 0;
+    let authorizationChecks = 0;
+    const provider = new GeminiEmbeddingProvider({
+      apiKey: "fixture-key",
+      dimensions: 768,
+      resolveMedia: async (input) => ({
+        bytes: media.get(input.opaqueFileHandle)!,
+        mediaType: "application/pdf",
+      }),
+      fetch: async () => {
+        providerCalls += 1;
+        return Response.json({ embedding: { values: vector() } });
+      },
+    });
+    const signal = new AbortController().signal;
+    const context = {
+      ...consent(signal),
+      authorize: async () => {
+        authorizationChecks += 1;
+        if (authorizationChecks === 2) throw new Error("CONSENT_REVOKED");
+      },
+    };
+
+    await expect(
+      provider.embedMedia(
+        [
+          {
+            contentHash: createHash("sha256").update(pageA).digest("hex"),
+            modality: "pdf-page",
+            mediaType: "application/pdf",
+            opaqueFileHandle: "file:page-a",
+            locator: { kind: "pdf", page: 1 },
+            byteLength: pageA.byteLength,
+            estimatedInputTokens: 200,
+          },
+          {
+            contentHash: createHash("sha256").update(pageB).digest("hex"),
+            modality: "pdf-page",
+            mediaType: "application/pdf",
+            opaqueFileHandle: "file:page-b",
+            locator: { kind: "pdf", page: 2 },
+            byteLength: pageB.byteLength,
+            estimatedInputTokens: 200,
+          },
+        ],
+        context,
+      ),
+    ).rejects.toThrow("CONSENT_REVOKED");
+    expect(authorizationChecks).toBe(2);
+    expect(providerCalls).toBe(1);
+  });
+
   test("fails closed without the current disclosure", async () => {
     const provider = new GeminiEmbeddingProvider({
       apiKey: "fixture-key",
@@ -239,6 +298,18 @@ describe("Gemini Embedding 2 HTTP contract", () => {
     await expect(
       provider.embedText([{ contentHash: "a".repeat(64), text: "secret" }]),
     ).rejects.toThrow("EXPLICIT_CONSENT_REQUIRED");
+    await expect(
+      provider.embedText(
+        [{ contentHash: "b".repeat(64), text: "secret" }],
+        {
+          ...consent(new AbortController().signal),
+          consent: {
+            ...consent(new AbortController().signal).consent,
+            disclosureRevision: "gemini-embedding-school-content/2",
+          },
+        },
+      ),
+    ).rejects.toThrow("EXPLICIT_CONSENT_REQUIRED");
   });
 });
 
@@ -248,6 +319,76 @@ const candidates = [
 ];
 
 describe("rerank HTTP contracts", () => {
+  test("re-authorizes Cohere immediately before every provider dispatch", async () => {
+    let authorizationChecks = 0;
+    let providerCalls = 0;
+    const provider = new CohereRerankProvider({
+      apiKey: "fixture-key",
+      model: "rerank-v4.0-fast",
+      authorize: async () => {
+        authorizationChecks += 1;
+        throw new Error("fixture-consent-revoked");
+      },
+      fetch: async () => {
+        providerCalls += 1;
+        return Response.json({ results: [] });
+      },
+    });
+
+    await expect(
+      provider.rerank({
+        operationId: "cohere-revoked-op",
+        query: "question privée",
+        candidates,
+        topN: 1,
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow("fixture-consent-revoked");
+    expect(authorizationChecks).toBe(1);
+    expect(providerCalls).toBe(0);
+  });
+
+  test("discards Cohere scores when consent is revoked in flight", async () => {
+    let consentActive = true;
+    let authorizationChecks = 0;
+    let markStarted!: () => void;
+    let releaseProvider!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    const provider = new CohereRerankProvider({
+      apiKey: "fixture-key",
+      model: "rerank-v4.0-fast",
+      authorize: async () => {
+        authorizationChecks += 1;
+        if (!consentActive) throw new Error("fixture-consent-revoked");
+      },
+      fetch: async () => {
+        markStarted();
+        await released;
+        return Response.json({
+          results: [{ index: 0, relevance_score: 0.9 }],
+        });
+      },
+    });
+
+    const pending = provider.rerank({
+      operationId: "cohere-in-flight-revoke",
+      query: "question privée",
+      candidates,
+      topN: 1,
+      signal: new AbortController().signal,
+    });
+    await started;
+    consentActive = false;
+    releaseProvider();
+    await expect(pending).rejects.toThrow("fixture-consent-revoked");
+    expect(authorizationChecks).toBe(2);
+  });
+
   test("maps Cohere v2 indices without sending ids or metadata", async () => {
     let request: { url: string; body: Record<string, unknown> } | null = null;
     const provider = new CohereRerankProvider({

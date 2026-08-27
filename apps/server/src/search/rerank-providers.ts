@@ -128,6 +128,8 @@ export type CohereRerankProviderOptions = {
   model: "rerank-v4.0-pro" | "rerank-v4.0-fast";
   modelRevision?: string;
   fetch?: ProviderFetcher;
+  /** Revalidates the owner's current consent/credential immediately pre-dispatch. */
+  authorize?: () => Promise<void>;
   deadlineMs?: number;
 };
 
@@ -186,6 +188,8 @@ export class CohereRerankProvider implements RerankProvider {
       this.#descriptor.maximumTokensPerCandidate,
     );
     input.signal.throwIfAborted();
+    await this.options.authorize?.();
+    input.signal.throwIfAborted();
     const response = await this.#fetch(COHERE_ENDPOINT, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
@@ -202,12 +206,16 @@ export class CohereRerankProvider implements RerankProvider {
     const body = await boundedProviderJson(response, MAX_RERANK_RESPONSE_BYTES);
     const rows = resultRows(body, "results");
     if (!rows) throw new Error("COHERE_RERANK_MALFORMED_RESPONSE");
-    return scoresFromIndices({
+    const scores = scoresFromIndices({
       ...input,
       rows,
       scoreKey: "relevance_score",
       requireEveryCandidate: false,
     });
+    // A revoke can linearize while Cohere is processing the request. The HTTP
+    // call may finish, but its scores must not be admitted after revocation.
+    await this.options.authorize?.();
+    return scores;
   }
 }
 

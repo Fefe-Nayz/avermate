@@ -98,11 +98,58 @@ describe("Moodle integration read model", () => {
     expect(client).toContain("<RetrievalSettingsSection />")
     expect(section).toContain("orpc.retrieval.grantConsent.mutationOptions")
     expect(section).toContain("orpc.retrieval.revokeConsent.mutationOptions")
-    expect(section).toContain("orpc.retrieval.updateProject.mutationOptions")
+    expect(section).toContain("<ProjectRetrievalPolicyCard")
+    expect(section).toContain("orpc.projects.retrievalPolicy.queryKey")
+    expect(section).toContain("projects.isPending")
+    expect(section).toContain("projects.isError")
+    expect(section).toContain("projects.refetch()")
+    expect(section).toContain("htmlFor={projectSelectId}")
+    expect(section).toContain("id={projectSelectId}")
+    expect(section).toContain('t("No study projects yet")')
+    expect(section).toContain('t("Configured")')
+    expect(section).not.toContain('ready ? t("Ready")')
+    expect(section).not.toContain("geminiDisclosure?.summary")
+    expect(section).not.toContain("cohereDisclosure?.summary")
+    expect(section).not.toContain("consentTarget?.summary")
+    expect(section).toContain(
+      "Selected source content—text, images and PDF pages, and audio or video segments—is sent to Google Gemini to create search embeddings. Search queries are also sent; a follow-up query may include up to two recent user messages and three project titles. Secrets and signed URLs are never sent."
+    )
+    expect(section).toContain(
+      "The query and a bounded excerpt of already authorized candidates are sent to Cohere for ranking. The full corpus, secrets and signed URLs are never sent."
+    )
+    expect(section).not.toContain(
+      "orpc.retrieval.updateProject.mutationOptions"
+    )
+    expect(section).not.toContain("const advancedReady")
+    expect(section).toContain(
+      "Project rebuilds are proposed above only when the confirmed policy requires one."
+    )
     expect(section).toContain("orpc.retrieval.reindex.mutationOptions")
+    expect(section).toContain("Reindex all Core-stored content")
+    expect(section).toContain(
+      "This explicit global rebuild can send eligible content stored in Avermate Core to the embedding provider you authorized, including content used by lexical-only projects. Sources stored on a paired Node are not processed by the Core worker."
+    )
+    expect(section).not.toContain("Reindex the entire corpus")
     expect(section).toContain("orpc.retrieval.evaluate.mutationOptions")
     expect(section).toContain("orpc.retrieval.clearIndex.mutationOptions")
-    expect(section).toContain("delete-rebuildable-index")
+    expect(section).toContain("disable-all-vector-generations")
+    expect(section).toContain("Disable vector retrieval")
+    expect(section).toContain(
+      'result.publicationState === "superseded-by-reenable"'
+    )
+    expect(section).not.toContain('result.publicationState !== "disabled"')
+    expect(section).toContain(
+      "This global action disables every published or in-progress vector generation and cancels queued or running vector rebuilds."
+    )
+    expect(section).toContain(
+      "Project retrieval policies and space selections, source files, OCR, transcripts and rendered pages are preserved."
+    )
+    expect(section).toContain("orpc.projects.key()")
+    expect(section).toContain("orpc.projects.key()")
+    expect(section).not.toContain("projectId: projectId ?? undefined")
+    expect(section).not.toContain(
+      "this project's rebuildable vector derivatives"
+    )
     expect(section).toContain('id="retrieval"')
     expect(section).toContain("Gemini Embedding 2")
     expect(section).toContain("Local TEI reranker")

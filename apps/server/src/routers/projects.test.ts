@@ -296,16 +296,366 @@ describe("owned study projects and corpus API", () => {
     });
   });
 
-  test("rebuilds a configured vector space, reuses unchanged owned chunks and activates atomically", async () => {
-    const { runCorpusEmbeddingUnavailableJob, runCorpusIndexSourceJob } =
-      await import("../jobs/corpus");
-    const { OpenAICompatibleEmbeddingProvider, QdrantVectorIndex } =
-      await import("../search/vector-runtime");
+  test("does not demand cloud credentials or consent for a local embedding configuration", async () => {
+    const configured = {
+      CORPUS_EMBEDDING_ENABLED: "true",
+      CORPUS_EMBEDDING_PROVIDER: "fixture-local",
+      CORPUS_EMBEDDING_PLACEMENT: "full-self-host",
+      CORPUS_EMBEDDING_BASE_URL: "http://embedding.internal:8080/v1",
+      CORPUS_EMBEDDING_MODEL: "fixture-v1",
+      CORPUS_EMBEDDING_DIMENSION: "3",
+      CORPUS_VECTOR_URL: "http://qdrant.internal:6333",
+      CORPUS_EMBEDDING_LOCAL: "true",
+    } as const;
+    const previous = Object.fromEntries(
+      Object.keys(configured).map((key) => [key, process.env[key]]),
+    );
+    try {
+      Object.assign(process.env, configured);
+      const readiness = await apiA.retrieval.readiness();
+      expect(readiness.embedding).toMatchObject({
+        provider: "fixture-local",
+        complete: true,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        sendsSourceContentToThirdParties: false,
+      });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  test("owns retrieval policy per project, enforces CAS and refuses an unready advanced pipeline", async () => {
+    const project = await apiA.projects.create({
+      title: "Politique RAG",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const initial = await apiA.projects.retrievalPolicy({
+      projectId: String(project.id),
+    });
+    expect(initial).toMatchObject({
+      projectId: project.id,
+      revision: 1,
+      configured: {
+        retrievalMode: "lexical-only",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      },
+      status: "active",
+      effectiveMode: "lexical",
+      fallbackActive: false,
+      embedding: {
+        configurationReady: false,
+        runtimeReady: false,
+        vectorAvailable: false,
+      },
+    });
+    await expect(
+      apiB.projects.retrievalPolicy({ projectId: String(project.id) }),
+    ).rejects.toThrow("not found");
+
+    const updated = await apiA.projects.setRetrievalPolicy({
+      projectId: String(project.id),
+      revision: 1,
+      retrievalMode: "lexical-only",
+      fallbackPolicy: "fail",
+      embeddingSpaceId: "ignored-for-lexical",
+      rerankSpaceId: "ignored-for-lexical",
+    });
+    expect(updated).toMatchObject({
+      revision: 2,
+      status: "active",
+      effectiveMode: "lexical",
+      configured: {
+        fallbackPolicy: "fail",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      },
+    });
+    await expect(
+      apiA.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: 1,
+        retrievalMode: "lexical-only",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+    await expect(
+      apiA.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: 2,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: "emb_unowned-or-incompatible",
+        rerankSpaceId: "rerank_unowned-or-incompatible",
+      }),
+    ).rejects.toThrow("Advanced retrieval is not ready");
+  });
+
+  test("bumps the project revision atomically when retrieval coverage membership changes", async () => {
+    const project = await apiA.projects.create({
+      title: "Révision du corpus projet",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const added = await apiA.projects.addItem({
+      projectId: String(project.id),
+      kind: "material",
+      referenceId: "projects-material-a",
+      contextMode: "include",
+      label: null,
+    });
+    expect(
+      (await apiA.projects.retrievalPolicy({ projectId: String(project.id) }))
+        .revision,
+    ).toBe(2);
+    await expect(
+      apiA.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: 1,
+        retrievalMode: "lexical-only",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      }),
+    ).rejects.toThrow("changed elsewhere");
+
+    const contextMode = await apiA.projects.setItemContextMode({
+      projectId: String(project.id),
+      itemId: String(added.item?.id),
+      contextMode: "on-demand",
+    });
+    expect(contextMode).toMatchObject({
+      revision: 3,
+      item: { contextMode: "on-demand" },
+    });
+    await expect(
+      apiB.projects.setItemContextMode({
+        projectId: String(project.id),
+        itemId: String(added.item?.id),
+        contextMode: "exclude",
+      }),
+    ).rejects.toThrow("not found");
+
+    await apiA.projects.setItemTracking({
+      projectId: String(project.id),
+      itemId: String(added.item?.id),
+      trackingMode: "pinned",
+    });
+    expect(
+      (await apiA.projects.get({ projectId: String(project.id) })).project
+        .revision,
+    ).toBe(4);
+
+    await apiA.projects.removeItem({
+      projectId: String(project.id),
+      itemId: String(added.item?.id),
+    });
+    expect(
+      (await apiA.projects.get({ projectId: String(project.id) })).project
+        .revision,
+    ).toBe(5);
+  });
+
+  test("summarizes indexed and context sources without surfacing excluded recent context", async () => {
+    const { runCorpusIndexSourceJob } = await import("../jobs/corpus");
     await runCorpusIndexSourceJob({
       ownerId: userA,
       originKind: "material",
       originId: "projects-material-a",
     });
+    const now = Math.floor(Date.now() / 1_000);
+    await database.$client.batch(
+      [
+        {
+          sql: `INSERT INTO material_documents (id, title, sourceType, textContent, origin, yearId, userId, createdAt, updatedAt) VALUES ('projects-material-on-demand', 'Annexe', 'text', 'Une annexe à demander.', 'manual', ?, ?, ?, ?)`,
+          args: [yearA, userA, now, now],
+        },
+        {
+          sql: `INSERT INTO material_documents (id, title, sourceType, textContent, origin, yearId, userId, createdAt, updatedAt) VALUES ('projects-material-excluded', 'Brouillon', 'text', 'Un brouillon exclu.', 'manual', ?, ?, ?, ?)`,
+          args: [yearA, userA, now, now],
+        },
+      ],
+      "write",
+    );
+
+    const project = await apiA.projects.create({
+      title: "Résumé des sources",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const included = await apiA.projects.addItem({
+      projectId: String(project.id),
+      kind: "material",
+      referenceId: "projects-material-a",
+      contextMode: "include",
+      label: null,
+    });
+    const onDemand = await apiA.projects.addItem({
+      projectId: String(project.id),
+      kind: "material",
+      referenceId: "projects-material-on-demand",
+      contextMode: "on-demand",
+      label: null,
+    });
+    const excluded = await apiA.projects.addItem({
+      projectId: String(project.id),
+      kind: "material",
+      referenceId: "projects-material-excluded",
+      contextMode: "exclude",
+      label: null,
+    });
+    await runCorpusIndexSourceJob({
+      ownerId: userA,
+      originKind: "material",
+      originId: "projects-material-excluded",
+    });
+
+    const result = await apiA.projects.get({ projectId: String(project.id) });
+    expect(result.sourceSummary).toMatchObject({
+      total: 3,
+      indexed: 2,
+      included: 1,
+      onDemand: 1,
+      excluded: 1,
+      contextEligible: 2,
+      contextSearchable: 1,
+      automaticEligible: 1,
+      automaticSearchable: 1,
+    });
+    expect(result.sourceSummary.recentContextItemIds).toContain(
+      String(included.item?.id),
+    );
+    expect(result.sourceSummary.recentContextItemIds).toContain(
+      String(onDemand.item?.id),
+    );
+    expect(result.sourceSummary.recentContextItemIds).not.toContain(
+      String(excluded.item?.id),
+    );
+  });
+
+  test("scopes project reindexing to opted-in Core sources, preserves other advanced projects and reuses chunks", async () => {
+    const { runCorpusEmbeddingUnavailableJob, runCorpusIndexSourceJob } =
+      await import("../jobs/corpus");
+    const { OpenAICompatibleEmbeddingProvider, QdrantVectorIndex } =
+      await import("../search/vector-runtime");
+    const now = Math.floor(Date.now() / 1_000);
+    const scopedOrigins = [
+      "projects-reindex-include",
+      "projects-reindex-on-demand",
+      "projects-reindex-exclude",
+      "projects-reindex-other-advanced",
+      "projects-reindex-node-private",
+      "projects-reindex-lexical-only",
+    ] as const;
+    await database.$client.batch(
+      scopedOrigins.map((id) => ({
+        sql: `INSERT INTO material_documents (
+            id, title, sourceType, textContent, origin, yearId, userId,
+            createdAt, updatedAt
+          ) VALUES (?, ?, 'text', ?, 'manual', ?, ?, ?, ?)`,
+        args: [id, id, `Contenu ${id}`, yearA, userA, now, now],
+      })),
+      "write",
+    );
+    const scopedProject = await apiA.projects.create({
+      title: "Réindexation privée",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const otherAdvancedProject = await apiA.projects.create({
+      title: "Autre projet avancé",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const lexicalProject = await apiA.projects.create({
+      title: "Projet lexical",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    for (const [referenceId, contextMode] of [
+      ["projects-reindex-include", "include"],
+      ["projects-reindex-on-demand", "on-demand"],
+      ["projects-reindex-exclude", "exclude"],
+    ] as const) {
+      await apiA.projects.addItem({
+        projectId: String(scopedProject.id),
+        kind: "material",
+        referenceId,
+        contextMode,
+        label: null,
+      });
+    }
+    for (const referenceId of [
+      "projects-reindex-other-advanced",
+      "projects-reindex-node-private",
+    ] as const) {
+      await apiA.projects.addItem({
+        projectId: String(otherAdvancedProject.id),
+        kind: "material",
+        referenceId,
+        contextMode: "include",
+        label: null,
+      });
+    }
+    await apiA.projects.addItem({
+      projectId: String(lexicalProject.id),
+      kind: "material",
+      referenceId: "projects-reindex-lexical-only",
+      contextMode: "include",
+      label: null,
+    });
+    for (const originId of scopedOrigins) {
+      await runCorpusIndexSourceJob({
+        ownerId: userA,
+        originKind: "material",
+        originId,
+      });
+    }
 
     let embeddingCalls = 0;
     const embedding = new OpenAICompatibleEmbeddingProvider({
@@ -324,9 +674,23 @@ describe("owned study projects and corpus API", () => {
         });
       },
     });
+    const rerankDescriptor = {
+      id: "rerank-fixture",
+      provider: "fixture",
+      model: "fixture-reranker",
+      modelRevision: "fixture-reranker@1",
+      languages: ["fr"],
+      modalities: ["text" as const],
+      maximumCandidates: 50,
+      maximumTokensPerCandidate: 8_192,
+      scoreSemantics: "relevance-ordered" as const,
+      placement: "node" as const,
+      costUnit: "compute-token" as const,
+    };
     let collectionExists = false;
     let aliasActivations = 0;
     let storedPoints: Array<{
+      id: string | number;
       payload: Record<string, unknown>;
       vector: number[];
     }> = [];
@@ -353,11 +717,27 @@ describe("owned study projects and corpus API", () => {
         if (method === "POST" && url.endsWith("/points/scroll")) {
           return Response.json({ result: { points: storedPoints } });
         }
+        if (method === "POST" && url.endsWith("/points/query")) {
+          return Response.json({
+            result: {
+              points: storedPoints.map((point, index) => ({
+                score: 1 - index / Math.max(1, storedPoints.length + 1),
+                payload: point.payload,
+              })),
+            },
+          });
+        }
         if (method === "PUT" && url.includes("/points?wait=true")) {
           const body = JSON.parse(String(init?.body)) as {
             points: typeof storedPoints;
           };
-          storedPoints = body.points;
+          for (const point of body.points) {
+            const current = storedPoints.findIndex(
+              (candidate) => candidate.id === point.id,
+            );
+            if (current === -1) storedPoints.push(point);
+            else storedPoints[current] = point;
+          }
           return Response.json({ result: true });
         }
         if (method === "GET" && url.includes("/aliases/")) {
@@ -371,29 +751,815 @@ describe("owned study projects and corpus API", () => {
       },
     });
 
+    const embeddingDescriptor = embedding.descriptor();
+    const { setOwnedProjectRetrievalPolicy } =
+      await import("../search/project-retrieval-policy");
+    const readyEnvironment = (
+      eligibleVersionCount: number,
+      vectorAvailable = true,
+    ) => async () => ({
+      lexical: {
+        available: true,
+        implementation: "sqlite-fts5-unicode61-v1",
+      },
+      embedding: {
+        configurationReady: true,
+        provider: embeddingDescriptor.provider,
+        placement: "full-self-host",
+        sendsSourceContentToThirdParties: false,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: true,
+        vectorAvailable,
+        vectorImplementation: vectorAvailable
+          ? "fixture-vector-index"
+          : "vector-generation-unavailable",
+        compatibleSpace: { ...embeddingDescriptor, registered: false },
+      },
+      rerank: {
+        configurationReady: true,
+        provider: rerankDescriptor.provider,
+        placement: "node",
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: true,
+        compatibleSpace: rerankDescriptor,
+      },
+      generation: {
+        id: null,
+        state: null,
+        eligibleVersionCount,
+        indexedVersionCount: 0,
+        unsupportedVersionCount: 0,
+      },
+    });
+    for (const [projectId, eligibleVersionCount, vectorAvailable] of [
+      [String(scopedProject.id), 2, false],
+      [String(otherAdvancedProject.id), 2, true],
+    ] as const) {
+      const policy = await apiA.projects.retrievalPolicy({ projectId });
+      const updated = await setOwnedProjectRetrievalPolicy(
+        userA,
+        {
+          projectId,
+          revision: policy.revision,
+          retrievalMode: "advanced-auto",
+          fallbackPolicy: "fail",
+          embeddingSpaceId: embeddingDescriptor.id,
+          rerankSpaceId: rerankDescriptor.id,
+        },
+        {
+          inspectEnvironment: readyEnvironment(
+            eligibleVersionCount,
+            vectorAvailable,
+          ),
+        },
+      );
+      expect(updated).toMatchObject({
+        configured: { retrievalMode: "advanced-auto" },
+        status: "degraded",
+        reasons: ["embedding-reindex-required"],
+      });
+    }
+    await database.$client.execute({
+      sql: `UPDATE content_sources SET placement = 'node',
+          placementRef = 'node-private'
+        WHERE userId = ? AND originKind = 'material'
+          AND originId = 'projects-reindex-node-private'`,
+      args: [userA],
+    });
+    const placementState = await apiA.projects.retrievalPolicy({
+      projectId: String(otherAdvancedProject.id),
+    });
+    expect(placementState.reindex.unsupportedVersionCount).toBe(1);
+    expect(placementState.reasons).toContain(
+      "embedding-source-placement-unsupported",
+    );
+
+    const projectJob = await apiA.retrieval.reindex({
+      projectId: String(scopedProject.id),
+    });
+    const projectJobRow = await database.$client.execute({
+      sql: `SELECT payload FROM jobs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [projectJob.jobId, userA],
+    });
+    const projectJobPayload = JSON.parse(
+      String(projectJobRow.rows[0]?.payload),
+    ) as Record<string, unknown>;
+    expect(projectJobPayload).toMatchObject({
+      ownerId: userA,
+      scope: "advanced-projects",
+      requestedProjectId: scopedProject.id,
+    });
+    expect(projectJobPayload.publicationEpoch).toBeNumber();
+    await expect(
+      apiB.retrieval.reindex({ projectId: String(scopedProject.id) }),
+    ).rejects.toThrow("not found");
+    const globalJob = await apiA.retrieval.reindex({});
+    const globalJobRow = await database.$client.execute({
+      sql: `SELECT payload FROM jobs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [globalJob.jobId, userA],
+    });
+    const globalJobPayload = JSON.parse(
+      String(globalJobRow.rows[0]?.payload),
+    ) as Record<string, unknown>;
+    expect(globalJobPayload).toMatchObject({
+      ownerId: userA,
+      scope: "all",
+    });
+    expect(globalJobPayload.publicationEpoch).toBeNumber();
+    expect(Number(globalJobPayload.publicationEpoch)).toBe(
+      Number(projectJobPayload.publicationEpoch),
+    );
+    const publicationEpoch = Number(globalJobPayload.publicationEpoch);
+
     const first = await runCorpusEmbeddingUnavailableJob(
-      { ownerId: userA },
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        requestedProjectId: scopedProject.id,
+        publicationEpoch,
+      },
       { runtime: { embedding, vector } },
     );
     expect(first).toMatchObject({
       stage: "activated",
+      versions: 3,
       vectors: first.chunks,
-      versions: 1,
     });
+    if (first.stage !== "activated") {
+      throw new Error("Expected an activated project embedding generation");
+    }
     expect(first.chunks).toBeGreaterThan(0);
     expect(storedPoints).toHaveLength(first.chunks);
+    const embeddedSourceIds = [
+      ...new Set(storedPoints.map((point) => String(point.payload.sourceId))),
+    ];
+    const embeddedSources = await database.$client.execute({
+      sql: `SELECT originId FROM content_sources
+        WHERE userId = ? AND id IN (${embeddedSourceIds.map(() => "?").join(", ")})
+        ORDER BY originId`,
+      args: [userA, ...embeddedSourceIds],
+    });
+    expect(embeddedSources.rows.map((row) => String(row.originId))).toEqual([
+      "projects-reindex-include",
+      "projects-reindex-on-demand",
+      "projects-reindex-other-advanced",
+    ]);
+
+    const { hybridCorpusSearch } = await import("../search/hybrid");
+    const operationId = `project-policy-hybrid-${Date.now()}`;
+    const hybrid = await hybridCorpusSearch(
+      {
+        ownerId: userA,
+        query: "Contenu projects reindex include",
+        mode: "terms",
+        projectIds: [String(scopedProject.id)],
+        contextAccess: "automatic",
+        yearIds: [],
+        subjectIds: [],
+        originKinds: [],
+        limit: 3,
+        cursor: null,
+        operationId,
+      },
+      {
+        runtime: { embedding, vector },
+        reranker: {
+          descriptor: () => rerankDescriptor,
+          rerank: async ({ operationId: rerankOperationId, candidates }) =>
+            candidates.map((candidate, rank) => ({
+              operationId: rerankOperationId,
+              candidateId: candidate.id,
+              rank,
+              score: 1 - rank / Math.max(1, candidates.length + 1),
+            })),
+        },
+        corpusGenerationId: first.generationId,
+      },
+    );
+    expect(hybrid).toMatchObject({
+      retrievalMode: "reranked",
+      vectorUsed: true,
+      rerankUsed: true,
+    });
+    for (const stage of ["dense", "fusion", "rerank"] as const) {
+      expect(hybrid.stages.find((entry) => entry.stage === stage)?.status).toBe(
+        "used",
+      );
+    }
+    const trace = await database.$client.execute({
+      sql: `SELECT stagesJson FROM retrieval_traces
+        WHERE userId = ? AND operationId = ? LIMIT 1`,
+      args: [userA, operationId],
+    });
+    const tracedStages = JSON.parse(
+      String(trace.rows[0]?.stagesJson),
+    ) as Array<{
+      stage: string;
+      status: string;
+    }>;
+    for (const stage of ["dense", "fusion", "rerank"] as const) {
+      expect(tracedStages).toContainEqual(
+        expect.objectContaining({ stage, status: "used" }),
+      );
+    }
+    const callsAfterFirstGeneration = embeddingCalls;
 
     const second = await runCorpusEmbeddingUnavailableJob(
-      { ownerId: userA },
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        requestedProjectId: scopedProject.id,
+        publicationEpoch,
+      },
       { runtime: { embedding, vector } },
     );
     expect(second).toMatchObject({
       stage: "activated",
       chunks: first.chunks,
       vectors: first.chunks,
-      versions: 1,
+      versions: first.versions,
     });
-    expect(embeddingCalls).toBe(1);
+    expect(embeddingCalls).toBe(callsAfterFirstGeneration);
     expect(aliasActivations).toBe(2);
+
+    const legacyBeforeFirstFenceRotation =
+      await runCorpusEmbeddingUnavailableJob(
+        { ownerId: userA },
+        { runtime: { embedding, vector } },
+      );
+    expect(legacyBeforeFirstFenceRotation).toMatchObject({
+      stage: "activated",
+      versions: 3,
+    });
+    expect(aliasActivations).toBe(3);
+
+    const lexicalVersion = await database.$client.execute({
+      sql: `SELECT currentVersionId FROM content_sources
+        WHERE userId = ? AND originKind = 'material'
+          AND originId = 'projects-reindex-lexical-only' LIMIT 1`,
+      args: [userA],
+    });
+    const skipped = await runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        triggerVersionId: String(lexicalVersion.rows[0]?.currentVersionId),
+        publicationEpoch,
+      },
+      { runtime: { embedding, vector } },
+    );
+    expect(skipped).toMatchObject({
+      stage: "skipped",
+      reason: "trigger-version-not-in-advanced-project-scope",
+      versions: 3,
+    });
+    expect(aliasActivations).toBe(3);
+    await expect(
+      runCorpusEmbeddingUnavailableJob(
+        {
+          ownerId: userA,
+          scope: "advanced-projects",
+          requestedProjectId: lexicalProject.id,
+          publicationEpoch,
+        },
+        { runtime: { embedding, vector } },
+      ),
+    ).rejects.toThrow("CORPUS_REINDEX_PROJECT_POLICY_CHANGED");
+
+    let firstAliasEnteredResolve!: () => void;
+    let releaseFirstAliasResolve!: () => void;
+    let secondAliasEnteredResolve!: () => void;
+    const firstAliasEntered = new Promise<void>((resolve) => {
+      firstAliasEnteredResolve = resolve;
+    });
+    const releaseFirstAlias = new Promise<void>((resolve) => {
+      releaseFirstAliasResolve = resolve;
+    });
+    const secondAliasEntered = new Promise<void>((resolve) => {
+      secondAliasEnteredResolve = resolve;
+    });
+    const aliasTargets: string[] = [];
+    const appliedAliasTargets: string[] = [];
+    const generationSearchTargets: string[] = [];
+    const racingVector = new QdrantVectorIndex({
+      baseUrl: "http://qdrant.internal:6333",
+      collectionPrefix: "projects_race",
+      descriptor: embedding.descriptor(),
+      fetch: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (method === "GET" && url.includes("/collections/")) {
+          return Response.json({
+            result: { config: { params: { vectors: { size: 3 } } } },
+          });
+        }
+        if (method === "POST" && url.endsWith("/points/scroll")) {
+          return Response.json({ result: { points: [] } });
+        }
+        if (method === "PUT" && url.includes("/points?wait=true")) {
+          return Response.json({ result: true });
+        }
+        if (method === "GET" && url.includes("/aliases/")) {
+          return new Response(null, { status: 404 });
+        }
+        if (method === "POST" && url.endsWith("/collections/aliases")) {
+          const body = JSON.parse(String(init?.body)) as {
+            actions: Array<{
+              create_alias?: { collection_name?: string };
+            }>;
+          };
+          const target = String(
+            body.actions.find((action) => action.create_alias)?.create_alias
+              ?.collection_name,
+          );
+          aliasTargets.push(target);
+          if (aliasTargets.length === 1) {
+            firstAliasEnteredResolve();
+            await releaseFirstAlias;
+          } else {
+            secondAliasEnteredResolve();
+          }
+          appliedAliasTargets.push(target);
+          return Response.json({ result: true });
+        }
+        if (method === "POST" && url.endsWith("/points/query")) {
+          generationSearchTargets.push(
+            decodeURIComponent(
+              new URL(url).pathname.split("/collections/")[1]!.split("/")[0]!,
+            ),
+          );
+          return Response.json({ result: { points: [] } });
+        }
+        return new Response(null, { status: 404 });
+      },
+    });
+    const concurrentA = runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        publicationEpoch,
+      },
+      { runtime: { embedding, vector: racingVector } },
+    );
+    await firstAliasEntered;
+    const concurrentB = runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        publicationEpoch,
+      },
+      { runtime: { embedding, vector: racingVector } },
+    );
+    await secondAliasEntered;
+    const publishedB = await concurrentB;
+    releaseFirstAliasResolve();
+    const publishedA = await concurrentA;
+    if (publishedA.stage !== "activated" || publishedB.stage !== "activated") {
+      throw new Error("Expected both concurrent generations to activate");
+    }
+    const activeAfterRace = await database.$client.execute({
+      sql: `SELECT id FROM corpus_embedding_generations
+        WHERE userId = ? AND spaceId = ? AND state = 'active' LIMIT 1`,
+      args: [userA, embeddingDescriptor.id],
+    });
+    expect(String(activeAfterRace.rows[0]?.id)).toBe(publishedB.generationId);
+    expect(appliedAliasTargets.at(-1)).toBe(aliasTargets[0]);
+    expect(aliasTargets[0]).not.toBe(aliasTargets[1]);
+    await racingVector
+      .forGeneration(userA, String(activeAfterRace.rows[0]?.id))
+      .search({
+        ownerId: userA,
+        spaceId: embeddingDescriptor.id,
+        values: [1, 0, 0],
+        limit: 1,
+      });
+    expect(generationSearchTargets.at(-1)).toBe(aliasTargets[1]);
+    expect(generationSearchTargets.at(-1)).not.toBe(
+      appliedAliasTargets.at(-1),
+    );
+
+    const {
+      readEmbeddingPublicationFence,
+    } = await import("../search/embedding-publication-fence");
+    const { GEMINI_EMBEDDING_DISCLOSURE_REVISION } =
+      await import("../search/gemini-embedding");
+    const { COHERE_RERANK_DISCLOSURE_REVISION } =
+      await import("../search/rerank-providers");
+    await apiA.retrieval.grantConsent({
+      provider: "gemini",
+      capability: "embedding",
+      disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+      policyRevision: "projects-test/1",
+      confirmed: true,
+    });
+    await apiA.retrieval.grantConsent({
+      provider: "cohere",
+      capability: "rerank",
+      disclosureRevision: COHERE_RERANK_DISCLOSURE_REVISION,
+      policyRevision: "projects-test/1",
+      confirmed: true,
+    });
+    await database.$client.execute({
+      sql: `INSERT INTO jobs
+          (id, kind, payload, status, runAt, idempotencyKey, userId,
+           createdAt, updatedAt)
+        VALUES ('projects-consent-running', 'corpus.reembedSpace', ?,
+          'running', ?, 'projects-consent-running', ?, ?, ?)`,
+      args: [
+        JSON.stringify({
+          ownerId: userA,
+          scope: "advanced-projects",
+          publicationEpoch,
+        }),
+        now,
+        userA,
+        now,
+        now,
+      ],
+    });
+
+    let reusableEnteredResolve!: () => void;
+    let releaseReusableResolve!: () => void;
+    const reusableEntered = new Promise<void>((resolve) => {
+      reusableEnteredResolve = resolve;
+    });
+    const releaseReusable = new Promise<void>((resolve) => {
+      releaseReusableResolve = resolve;
+    });
+    let reusableBlocked = false;
+    let providerCallsAfterRevokeBoundary = 0;
+    const revokeRaceVector = new QdrantVectorIndex({
+      baseUrl: "http://qdrant.internal:6333",
+      collectionPrefix: "projects_revoke_race",
+      descriptor: embedding.descriptor(),
+      fetch: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (method === "GET" && url.includes("/collections/")) {
+          return Response.json({
+            result: { config: { params: { vectors: { size: 3 } } } },
+          });
+        }
+        if (method === "POST" && url.endsWith("/points/scroll")) {
+          if (!reusableBlocked) {
+            reusableBlocked = true;
+            reusableEnteredResolve();
+            await releaseReusable;
+          }
+          return Response.json({ result: { points: [] } });
+        }
+        if (method === "POST" && url.includes("/points/delete?wait=true")) {
+          return Response.json({ result: true });
+        }
+        return Response.json({ result: true });
+      },
+    });
+    const revokeRaceEmbedding = {
+      descriptor: () => embedding.descriptor(),
+      embedText: async (
+        input: readonly { contentHash: string }[],
+      ) => {
+        providerCallsAfterRevokeBoundary += 1;
+        return input.map((entry) => ({
+          contentHash: entry.contentHash,
+          values: [1, 0, 0],
+        }));
+      },
+    };
+    const revokeRace = runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        publicationEpoch,
+      },
+      {
+        runtime: {
+          embedding: revokeRaceEmbedding,
+          vector: revokeRaceVector,
+        },
+      },
+    );
+    await reusableEntered;
+    const fenceBeforeCohereRevoke =
+      await readEmbeddingPublicationFence(userA);
+    const cohereRevoked = await apiA.retrieval.revokeConsent({
+      provider: "cohere",
+      capability: "rerank",
+    });
+    expect(cohereRevoked).toMatchObject({
+      revoked: true,
+      publicationEpoch: null,
+      queuedJobsCancelled: 0,
+      runningJobsCancellationRequested: 0,
+      requiresExplicitReenable: false,
+    });
+    expect(await readEmbeddingPublicationFence(userA)).toEqual(
+      fenceBeforeCohereRevoke,
+    );
+    const revoked = await apiA.retrieval.revokeConsent({
+      provider: "gemini",
+      capability: "embedding",
+    });
+    expect(revoked).toMatchObject({
+      revoked: true,
+      queuedJobsCancelled: 2,
+      runningJobsCancellationRequested: 1,
+      requiresExplicitReenable: true,
+    });
+    if (revoked.publicationEpoch === null) {
+      throw new Error("Expected Gemini revocation to rotate the fence");
+    }
+    expect(revoked.publicationEpoch).toBeGreaterThan(publicationEpoch);
+    const revokedFence = await readEmbeddingPublicationFence(userA);
+    expect(revokedFence).toEqual({
+      enabled: false,
+      publicationEpoch: revoked.publicationEpoch,
+    });
+    releaseReusableResolve();
+    await expect(revokeRace).rejects.toThrow(
+      "CORPUS_EMBEDDING_PUBLICATION_FENCE_CHANGED",
+    );
+    expect(providerCallsAfterRevokeBoundary).toBe(0);
+    const cancelledByRevoke = await database.$client.execute({
+      sql: `SELECT id, status FROM jobs WHERE id IN (?, ?, ?)`,
+      args: [projectJob.jobId, globalJob.jobId, "projects-consent-running"],
+    });
+    const cancelledStatus = Object.fromEntries(
+      cancelledByRevoke.rows.map((row) => [String(row.id), row.status]),
+    );
+    expect(cancelledStatus).toEqual({
+      [globalJob.jobId]: "cancelled",
+      "projects-consent-running": "running",
+      [projectJob.jobId]: "cancelled",
+    });
+    const requestedCancellation = await database.$client.execute({
+      sql: `SELECT cancellation FROM job_runtime_metadata
+        WHERE jobId = 'projects-consent-running' LIMIT 1`,
+    });
+    expect(requestedCancellation.rows[0]?.cancellation).toBe("requested");
+    const repeatedRevoke = await apiA.retrieval.revokeConsent({
+      provider: "gemini",
+      capability: "embedding",
+    });
+    expect(repeatedRevoke).toMatchObject({
+      revoked: false,
+      publicationEpoch: null,
+      queuedJobsCancelled: 0,
+      runningJobsCancellationRequested: 0,
+      requiresExplicitReenable: false,
+    });
+    expect(await readEmbeddingPublicationFence(userA)).toEqual(revokedFence);
+
+    await apiA.retrieval.grantConsent({
+      provider: "gemini",
+      capability: "embedding",
+      disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+      policyRevision: "projects-test/2",
+      confirmed: true,
+    });
+    expect(await readEmbeddingPublicationFence(userA)).toEqual(revokedFence);
+    const reenabledJob = await apiA.retrieval.reindex({
+      projectId: String(scopedProject.id),
+    });
+    const reenabledJobRow = await database.$client.execute({
+      sql: `SELECT payload FROM jobs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [reenabledJob.jobId, userA],
+    });
+    const reenabledPayload = JSON.parse(
+      String(reenabledJobRow.rows[0]?.payload),
+    ) as Record<string, unknown>;
+    const reenabledEpoch = Number(reenabledPayload.publicationEpoch);
+    expect(reenabledEpoch).toBeGreaterThan(revokedFence.publicationEpoch);
+    expect(await readEmbeddingPublicationFence(userA)).toEqual({
+      enabled: true,
+      publicationEpoch: reenabledEpoch,
+    });
+
+    const protectedSource = await database.$client.execute({
+      sql: `SELECT sources.id, sources.currentVersionId
+        FROM content_sources AS sources
+        WHERE sources.userId = ? AND sources.originKind = 'material'
+          AND sources.originId = 'projects-reindex-include' LIMIT 1`,
+      args: [userA],
+    });
+    const protectedVersionId = String(
+      protectedSource.rows[0]?.currentVersionId,
+    );
+    const derivativeId = "projects-clear-protected-derivative";
+    const derivativeFileId = "projects-clear-protected-file";
+    const policiesBeforeClear = await database.$client.execute({
+      sql: `SELECT id, revision, retrievalMode, retrievalFallbackPolicy,
+          embeddingSpaceId, rerankSpaceId
+        FROM study_projects WHERE id IN (?, ?) ORDER BY id`,
+      args: [scopedProject.id, otherAdvancedProject.id],
+    });
+    await database.$client.batch(
+      [
+        {
+          sql: `INSERT INTO files
+            (id, provider, storageKey, url, mimeType, byteSize, purpose,
+             status, previewStatus, userId, createdAt, updatedAt)
+            VALUES (?, 'local', ?, ?, 'image/png', 128, 'preview',
+              'stored', 'ready', ?, ?, ?)`,
+          args: [
+            derivativeFileId,
+            `projects-clear/${derivativeFileId}`,
+            `/files/${derivativeFileId}`,
+            userA,
+            now,
+            now,
+          ],
+        },
+        {
+          sql: `INSERT INTO content_derivatives
+            (id, versionId, fileId, kind, status, locatorSchemaVersion,
+             locatorJson, contentHash, mimeType, byteSize,
+             estimatedInputTokens, rendererProfile, rendererImageDigest,
+             metadataJson, createdAt, updatedAt)
+            VALUES (?, ?, ?, 'page-image', 'ready', 1, ?, ?, 'image/png',
+              128, 32, 'test-page-renderer', ?, '{}', ?, ?)`,
+          args: [
+            derivativeId,
+            protectedVersionId,
+            derivativeFileId,
+            JSON.stringify({ kind: "pdf", page: 1 }),
+            "a".repeat(64),
+            `sha256:${"b".repeat(64)}`,
+            now,
+            now,
+          ],
+        },
+        {
+          sql: `INSERT INTO corpus_embedding_generations
+            (id, userId, spaceId, state, versionSetDigest,
+             expectedVersionCount, indexedVersionCount, activatedAt,
+             createdAt, updatedAt)
+            VALUES ('projects-clear-user-b-active', ?, ?, 'active', ?,
+              0, 0, ?, ?, ?)`,
+          args: [userB, embeddingDescriptor.id, "c".repeat(64), now, now, now],
+        },
+      ],
+      "write",
+    );
+
+    let clearProviderEnteredResolve!: () => void;
+    let releaseClearProviderResolve!: () => void;
+    const clearProviderEntered = new Promise<void>((resolve) => {
+      clearProviderEnteredResolve = resolve;
+    });
+    const releaseClearProvider = new Promise<void>((resolve) => {
+      releaseClearProviderResolve = resolve;
+    });
+    let clearProviderCalls = 0;
+    const clearRaceEmbedding = {
+      descriptor: () => embedding.descriptor(),
+      embedText: async (input: readonly { contentHash: string }[]) => {
+        clearProviderCalls += 1;
+        clearProviderEnteredResolve();
+        await releaseClearProvider;
+        return input.map((entry) => ({
+          contentHash: entry.contentHash,
+          values: [1, 0, 0],
+        }));
+      },
+    };
+    const clearRaceVector = new QdrantVectorIndex({
+      baseUrl: "http://qdrant.internal:6333",
+      collectionPrefix: "projects_clear_race",
+      descriptor: embedding.descriptor(),
+      fetch: async () => new Response(null, { status: 404 }),
+    });
+    const usageBeforeClearRace = await database.$client.execute({
+      sql: `SELECT COUNT(*) AS count FROM corpus_embedding_usage
+        WHERE userId = ? AND spaceId = ?`,
+      args: [userA, embeddingDescriptor.id],
+    });
+    const inFlightAtClear = runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userA,
+        scope: "advanced-projects",
+        publicationEpoch: reenabledEpoch,
+      },
+      {
+        runtime: {
+          embedding: clearRaceEmbedding,
+          vector: clearRaceVector,
+        },
+      },
+    );
+    await clearProviderEntered;
+
+    await expect(
+      apiA.retrieval.clearIndex({
+        projectId: String(scopedProject.id),
+        confirmation: "disable-all-vector-generations",
+      } as never),
+    ).rejects.toThrow();
+    const stillPublishedAfterRejectedProjectClear =
+      await database.$client.execute({
+        sql: `SELECT COUNT(*) AS count FROM corpus_embedding_generations
+          WHERE userId = ? AND state IN ('active', 'staging')`,
+        args: [userA],
+      });
+    expect(Number(stillPublishedAfterRejectedProjectClear.rows[0]?.count)).toBe(
+      2,
+    );
+
+    const cleared = await apiA.retrieval.clearIndex({
+      confirmation: "disable-all-vector-generations",
+    });
+    expect(cleared).toMatchObject({
+      generationsDisabled: 2,
+      versions: 3,
+      queuedJobsCancelled: 1,
+      runningJobsCancellationRequested: 1,
+      vectorGenerationsCleaned: 0,
+      vectorCleanup: "deferred",
+      publicationState: "disabled",
+      contentDerivativesDeleted: 0,
+      sourceFilesDeleted: 0,
+    });
+    expect("projectsDisabled" in cleared).toBe(false);
+    releaseClearProviderResolve();
+    await expect(inFlightAtClear).rejects.toThrow(
+      "CORPUS_EMBEDDING_PUBLICATION_FENCE_CHANGED",
+    );
+    expect(clearProviderCalls).toBe(1);
+    const usageAfterClearRace = await database.$client.execute({
+      sql: `SELECT COUNT(*) AS count FROM corpus_embedding_usage
+        WHERE userId = ? AND spaceId = ?`,
+      args: [userA, embeddingDescriptor.id],
+    });
+    expect(Number(usageAfterClearRace.rows[0]?.count)).toBe(
+      Number(usageBeforeClearRace.rows[0]?.count) + 1,
+    );
+    const generationStates = await database.$client.execute({
+      sql: `SELECT userId, state FROM corpus_embedding_generations
+        WHERE (userId = ? OR id = 'projects-clear-user-b-active')
+          AND state IN ('active', 'staging')
+        ORDER BY userId`,
+      args: [userA],
+    });
+    expect(generationStates.rows).toEqual([
+      expect.objectContaining({ userId: userB, state: "active" }),
+    ]);
+    const preserved = await database.$client.execute({
+      sql: `SELECT derivatives.status AS derivativeStatus,
+          files.status AS fileStatus, sources.currentVersionId AS currentVersionId
+        FROM content_derivatives AS derivatives
+        JOIN files ON files.id = derivatives.fileId
+        JOIN content_versions AS versions ON versions.id = derivatives.versionId
+        JOIN content_sources AS sources ON sources.id = versions.sourceId
+        WHERE derivatives.id = ? AND sources.userId = ? LIMIT 1`,
+      args: [derivativeId, userA],
+    });
+    expect(preserved.rows[0]).toMatchObject({
+      derivativeStatus: "ready",
+      fileStatus: "stored",
+      currentVersionId: protectedVersionId,
+    });
+    const policiesAfterClear = await database.$client.execute({
+      sql: `SELECT id, revision, retrievalMode, retrievalFallbackPolicy,
+          embeddingSpaceId, rerankSpaceId
+        FROM study_projects WHERE id IN (?, ?) ORDER BY id`,
+      args: [scopedProject.id, otherAdvancedProject.id],
+    });
+    expect(policiesAfterClear.rows).toEqual(policiesBeforeClear.rows);
+    const disabledFence = await readEmbeddingPublicationFence(userA);
+    expect(disabledFence.enabled).toBe(false);
+    expect(disabledFence.publicationEpoch).toBeGreaterThan(reenabledEpoch);
+    const { enqueueEmbedding } = await import("../jobs/corpus-derivatives");
+    expect(await enqueueEmbedding(userA, protectedVersionId)).toBeNull();
+    const queuedAfterClear = await database.$client.execute({
+      sql: `SELECT COUNT(*) AS count FROM jobs WHERE userId = ?
+        AND kind = 'corpus.reembedSpace' AND status = 'queued'`,
+      args: [userA],
+    });
+    expect(Number(queuedAfterClear.rows[0]?.count)).toBe(0);
+
+    const explicitRebuild = await apiA.retrieval.reindex({
+      projectId: String(scopedProject.id),
+    });
+    const explicitRebuildRow = await database.$client.execute({
+      sql: `SELECT payload FROM jobs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [explicitRebuild.jobId, userA],
+    });
+    const explicitRebuildPayload = JSON.parse(
+      String(explicitRebuildRow.rows[0]?.payload),
+    ) as Record<string, unknown>;
+    const explicitRebuildEpoch = Number(
+      explicitRebuildPayload.publicationEpoch,
+    );
+    expect(explicitRebuildEpoch).toBeGreaterThan(
+      disabledFence.publicationEpoch,
+    );
+    expect(await readEmbeddingPublicationFence(userA)).toEqual({
+      enabled: true,
+      publicationEpoch: explicitRebuildEpoch,
+    });
   });
 });

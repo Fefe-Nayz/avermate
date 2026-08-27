@@ -729,8 +729,17 @@ export class CoreConversationStore {
     ownerId: string,
     threadId: string,
     branchId?: string | null,
+    expectedProjectId?: string,
   ): Promise<AssistantThreadDetail> {
     const thread = await this.thread(ownerId, threadId, true);
+    if (
+      expectedProjectId !== undefined &&
+      thread.projectId !== expectedProjectId
+    ) {
+      // Use not_found so a project-scoped deep link cannot probe membership in
+      // another project, even when the caller owns both conversations.
+      throw new ConversationStoreError("not_found", "Thread not found");
+    }
     const [
       branchRows,
       messageRows,

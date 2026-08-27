@@ -205,7 +205,11 @@ export const assistantRouter = {
 
     get: protectedProcedure
       .input(
-        z.strictObject({ threadId: id, branchId: id.nullable().optional() }),
+        z.strictObject({
+          threadId: id,
+          branchId: id.nullable().optional(),
+          expectedProjectId: id.optional(),
+        }),
       )
       .handler(({ context, input }) =>
         call(() =>
@@ -213,6 +217,7 @@ export const assistantRouter = {
             context.session.user.id,
             input.threadId,
             input.branchId,
+            input.expectedProjectId,
           ),
         ),
       ),

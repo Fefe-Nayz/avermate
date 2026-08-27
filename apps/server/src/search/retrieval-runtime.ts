@@ -142,6 +142,8 @@ export async function createOwnedConfiguredRerankProvider(
   dependencies: {
     createNodeProvider?: typeof createPairedNodeRerankProvider;
     createNodeFetcher?: typeof createPairedNodeProviderFetcher;
+    resolveServiceKey?: typeof resolveProviderServiceKey;
+    loadConsent?: typeof loadRetrievalProviderConsent;
   } = {},
 ): Promise<RerankProvider | null> {
   const state = corpusRerankConfiguration(environment);
@@ -175,9 +177,12 @@ export async function createOwnedConfiguredRerankProvider(
     });
   }
   if (state.provider !== "cohere") return null;
+  const resolveServiceKey =
+    dependencies.resolveServiceKey ?? resolveProviderServiceKey;
+  const loadConsent = dependencies.loadConsent ?? loadRetrievalProviderConsent;
   const [credential, consent] = await Promise.all([
-    resolveProviderServiceKey(ownerId, "inference", "cohere"),
-    loadRetrievalProviderConsent(
+    resolveServiceKey(ownerId, "inference", "cohere"),
+    loadConsent(
       ownerId,
       "cohere",
       "rerank",
@@ -192,5 +197,26 @@ export async function createOwnedConfiguredRerankProvider(
     apiKey: credential.key,
     model: state.model as "rerank-v4.0-pro" | "rerank-v4.0-fast",
     modelRevision: state.modelRevision!,
+    authorize: async () => {
+      const [currentCredential, currentConsent] = await Promise.all([
+        resolveServiceKey(ownerId, "inference", "cohere"),
+        loadConsent(
+          ownerId,
+          "cohere",
+          "rerank",
+          COHERE_RERANK_DISCLOSURE_REVISION,
+        ),
+      ]);
+      if (!currentConsent) {
+        throw new Error("COHERE_RERANK_EXPLICIT_CONSENT_REQUIRED");
+      }
+      if (
+        !currentCredential ||
+        currentCredential.source !== "user" ||
+        currentCredential.invalidationToken !== credential.invalidationToken
+      ) {
+        throw new Error("COHERE_RERANK_CREDENTIAL_CHANGED");
+      }
+    },
   });
 }

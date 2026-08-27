@@ -39,6 +39,12 @@ import {
   normalizeForSearch,
   sha256,
 } from "./values";
+import { sourceOrProjectScopeSql } from "./context-access";
+import {
+  assertEmbeddingPublicationFence,
+  readEmbeddingPublicationFence,
+  type EmbeddingPublicationFence,
+} from "./embedding-publication-fence";
 
 type SqlClient = Pick<Client, "execute" | "transaction">;
 
@@ -87,29 +93,34 @@ function missingRetrievalSchema(error: unknown) {
 function authorizationSql(input: OwnedLexicalQuery, args: InValue[]) {
   const clauses = ["sources.userId = ?"];
   args.push(input.ownerId);
-  if (input.projectIds.length === 0) {
-    clauses.push("sources.currentVersionId = versions.id");
-  } else {
-    clauses.push(`EXISTS (
-      SELECT 1
-      FROM study_project_items AS project_items
-      JOIN study_projects AS projects ON projects.id = project_items.projectId
-      WHERE projects.userId = ?
-        AND projects.deletedAt IS NULL
-        AND project_items.kind = sources.originKind
-        AND project_items.referenceId = sources.originId
-        AND project_items.contextMode != 'exclude'
-        AND project_items.selectorReviewRequired = 0
-        AND (
-          (project_items.trackingMode = 'pinned'
-            AND project_items.sourceVersionId = versions.id)
-          OR (project_items.trackingMode = 'follow-head'
-            AND sources.currentVersionId = versions.id)
-        )
-        AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
-    )`);
-    args.push(input.ownerId, ...input.projectIds);
-  }
+  const scopedSources = sourceOrProjectScopeSql({
+    ...input,
+    args,
+    sourceSql: (placeholders) =>
+      `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
+    projectSql: (contextModeSql) => ({
+      sql: `EXISTS (
+        SELECT 1
+        FROM study_project_items AS project_items
+        JOIN study_projects AS projects ON projects.id = project_items.projectId
+        WHERE projects.userId = ?
+          AND projects.deletedAt IS NULL
+          AND project_items.kind = sources.originKind
+          AND project_items.referenceId = sources.originId
+          AND ${contextModeSql}
+          AND project_items.selectorReviewRequired = 0
+          AND (
+            (project_items.trackingMode = 'pinned'
+              AND project_items.sourceVersionId = versions.id)
+            OR (project_items.trackingMode = 'follow-head'
+              AND sources.currentVersionId = versions.id)
+          )
+          AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
+      )`,
+      args: [input.ownerId, ...input.projectIds],
+    }),
+  });
+  clauses.push(scopedSources ?? "sources.currentVersionId = versions.id");
   const addList = (column: string, values: readonly string[]) => {
     if (values.length === 0) return;
     clauses.push(`${column} IN (${values.map(() => "?").join(", ")})`);
@@ -118,7 +129,7 @@ function authorizationSql(input: OwnedLexicalQuery, args: InValue[]) {
   addList("sources.yearId", input.yearIds);
   addList("sources.subjectId", input.subjectIds);
   addList("sources.originKind", input.originKinds);
-  addList("sources.id", input.sourceIds ?? []);
+  addList("versions.id", input.versionIds ?? []);
   return clauses.join(" AND ");
 }
 
@@ -128,6 +139,24 @@ function policyFromLexical(candidates: readonly LexicalCandidate[]) {
     channels: ["lexical"],
     fusedScore: 1 / (61 + index),
   }));
+}
+
+/**
+ * Keep provider scores intact while making the user's direct attachments the
+ * first packing tier. The sort is stable, so relevance order within each tier
+ * remains exactly the order produced by lexical/RRF/rerank.
+ */
+function prioritizeExplicitSources<T extends { sourceId: string }>(
+  candidates: readonly T[],
+  sourceIds: readonly string[] | undefined,
+) {
+  const explicit = new Set(sourceIds ?? []);
+  if (explicit.size === 0) return [...candidates];
+  return [...candidates].sort(
+    (left, right) =>
+      Number(explicit.has(right.sourceId)) -
+      Number(explicit.has(left.sourceId)),
+  );
 }
 
 function relaxedQuestionTerms(query: string) {
@@ -196,6 +225,8 @@ async function explicitSourceOverview(
   if ((input.sourceIds?.length ?? 0) === 0) return [];
   const args: InValue[] = [];
   const authorization = authorizationSql(input, args);
+  const sourceIds = [...new Set(input.sourceIds ?? [])];
+  args.push(...sourceIds);
   const rows = await client.execute({
     sql: `WITH ranked AS (
         SELECT chunks.id AS chunkId, chunks.versionId, chunks.ordinal,
@@ -210,6 +241,7 @@ async function explicitSourceOverview(
         JOIN content_versions AS versions ON versions.id = chunks.versionId
         JOIN content_sources AS sources ON sources.id = versions.sourceId
         WHERE ${authorization}
+          AND sources.id IN (${sourceIds.map(() => "?").join(", ")})
       )
       SELECT * FROM ranked WHERE sourceRank <= 2
       ORDER BY sourceId, sourceRank, chunkId LIMIT ?`,
@@ -241,53 +273,143 @@ async function projectRetrievalPolicy(
   client: SqlClient,
   input: OwnedLexicalQuery,
 ) {
+  const placementArgs: InValue[] = [input.ownerId];
+  const placementClauses = [
+    "sources.userId = ?",
+    "sources.placement != 'core'",
+    "sources.currentVersionId IS NOT NULL",
+  ];
+  const addPlacementFilter = (column: string, values: readonly string[]) => {
+    if (values.length === 0) return;
+    placementClauses.push(`${column} IN (${values.map(() => "?").join(", ")})`);
+    placementArgs.push(...values);
+  };
+  addPlacementFilter("sources.yearId", input.yearIds);
+  addPlacementFilter("sources.subjectId", input.subjectIds);
+  addPlacementFilter("sources.originKind", input.originKinds);
+  if ((input.versionIds?.length ?? 0) > 0) {
+    placementClauses.push(`EXISTS (
+      SELECT 1 FROM content_versions AS placement_versions
+      WHERE placement_versions.sourceId = sources.id
+        AND placement_versions.id IN (${input.versionIds!.map(() => "?").join(", ")})
+    )`);
+    placementArgs.push(...input.versionIds!);
+  }
+  const placementScope = sourceOrProjectScopeSql({
+    ...input,
+    args: placementArgs,
+    sourceSql: (placeholders) => `sources.id IN (${placeholders})`,
+    projectSql: (contextModeSql) => ({
+      sql: `EXISTS (
+        SELECT 1 FROM study_project_items AS placement_items
+        JOIN study_projects AS placement_projects
+          ON placement_projects.id = placement_items.projectId
+        WHERE placement_projects.userId = ?
+          AND placement_projects.deletedAt IS NULL
+          AND placement_items.kind = sources.originKind
+          AND placement_items.referenceId = sources.originId
+          AND ${contextModeSql.replaceAll("project_items", "placement_items")}
+          AND placement_items.selectorReviewRequired = 0
+          AND placement_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
+      )`,
+      args: [input.ownerId, ...input.projectIds],
+    }),
+  });
+  if (placementScope) placementClauses.push(placementScope);
+  const unsupportedPlacement = await client.execute({
+    sql: `SELECT 1 FROM content_sources AS sources
+      WHERE ${placementClauses.join(" AND ")} LIMIT 1`,
+    args: placementArgs,
+  });
+  const placementCompatible = unsupportedPlacement.rows.length === 0;
+
   if (input.projectIds.length === 0) {
     return {
-      advanced: true,
+      advanced: placementCompatible,
+      advancedRequested: true,
+      denseCompatible: placementCompatible,
       fallback: input.fallbackPolicy ?? ("lexical-only" as const),
       embeddingSpaceId: null,
       rerankSpaceId: null,
+      unavailableStage: placementCompatible ? null : ("dense" as const),
+      unavailableReason: placementCompatible
+        ? null
+        : "dense-source-placement-incompatible",
     };
   }
   const ids = [...new Set(input.projectIds)];
   const rows = await client.execute({
-    sql: `SELECT id, retrievalMode, retrievalFallbackPolicy,
-        embeddingSpaceId, rerankSpaceId
-      FROM study_projects
-      WHERE userId = ? AND deletedAt IS NULL
-        AND id IN (${ids.map(() => "?").join(", ")})`,
+    sql: `SELECT projects.id, projects.retrievalMode,
+        projects.retrievalFallbackPolicy, projects.embeddingSpaceId,
+        projects.rerankSpaceId
+      FROM study_projects AS projects
+      WHERE projects.userId = ? AND projects.deletedAt IS NULL
+        AND projects.id IN (${ids.map(() => "?").join(", ")})`,
     args: [input.ownerId, ...ids],
   });
+  const advancedRows = rows.rows.filter(
+    (row) => row.retrievalMode === "advanced-auto",
+  );
   const embeddingSpaceIds = new Set(
-    rows.rows.flatMap((row) =>
+    advancedRows.flatMap((row) =>
       row.embeddingSpaceId === null ? [] : [String(row.embeddingSpaceId)],
     ),
   );
   const rerankSpaceIds = new Set(
-    rows.rows.flatMap((row) =>
+    advancedRows.flatMap((row) =>
       row.rerankSpaceId === null ? [] : [String(row.rerankSpaceId)],
     ),
   );
-  const advanced =
-    rows.rows.length === ids.length &&
-    rows.rows.every((row) => row.retrievalMode === "advanced-auto") &&
-    embeddingSpaceIds.size === 1 &&
-    rerankSpaceIds.size === 1;
-  const policies = rows.rows.map((row) => String(row.retrievalFallbackPolicy));
-  const fallback: RetrievalFallbackPolicy = input.fallbackPolicy
-    ? input.fallbackPolicy
-    : policies.includes("lexical-only")
-      ? "lexical-only"
-      : policies.includes("fail")
-        ? "fail"
-        : policies.includes("hybrid-without-rerank")
-          ? "hybrid-without-rerank"
-          : "lexical-only";
+  const allProjectsResolved = rows.rows.length === ids.length;
+  const allAdvanced =
+    allProjectsResolved && advancedRows.length === rows.rows.length;
+  const denseCompatible =
+    allAdvanced && placementCompatible && embeddingSpaceIds.size === 1;
+  const advanced = denseCompatible && rerankSpaceIds.size === 1;
+  const policies = advancedRows.map((row) =>
+    String(row.retrievalFallbackPolicy),
+  );
+  // A fail-closed advanced project is authoritative for the whole union. In
+  // particular, a lexical-only project must not silently downgrade it merely
+  // because both projects happen to be searched together.
+  const failClosed = policies.includes("fail");
+  const configuredFallback: RetrievalFallbackPolicy = policies.includes(
+    "lexical-only",
+  )
+    ? "lexical-only"
+    : policies.includes("hybrid-without-rerank")
+      ? "hybrid-without-rerank"
+      : "lexical-only";
+  const fallback: RetrievalFallbackPolicy = failClosed
+    ? "fail"
+    : allAdvanced && input.fallbackPolicy
+      ? input.fallbackPolicy
+      : configuredFallback;
+  const unavailableStage = !denseCompatible
+    ? ("dense" as const)
+    : !advanced
+      ? ("rerank" as const)
+      : null;
+  const unavailableReason = !allProjectsResolved
+    ? "retrieval-project-scope-incomplete"
+    : !allAdvanced
+      ? "dense-mixed-project-policies"
+      : !placementCompatible
+        ? "dense-source-placement-incompatible"
+        : embeddingSpaceIds.size !== 1
+          ? "dense-project-space-not-configured"
+          : rerankSpaceIds.size !== 1
+            ? "rerank-project-space-not-configured"
+            : null;
   return {
     advanced,
+    advancedRequested: advancedRows.length > 0,
+    denseCompatible,
     fallback,
     embeddingSpaceId: [...embeddingSpaceIds][0] ?? null,
     rerankSpaceId: [...rerankSpaceIds][0] ?? null,
+    unavailableStage,
+    unavailableReason,
   };
 }
 
@@ -558,9 +680,9 @@ export type HybridCorpusSearchOptions = {
   reranker?: RerankProvider | null;
   signal?: AbortSignal;
   /**
-   * Project settings can govern retrieval while the authorization scope is
-   * narrowed further (for example to documents explicitly attached to a
-   * project conversation). This never broadens `input`'s source fence.
+   * Project settings govern the advanced pipeline independently of the
+   * authorization union formed by eligible project items and direct sources.
+   * This policy selector can never add a source to that resolved input scope.
    */
   policyProjectIds?: readonly string[];
   /** Test/paired-node runtimes can provide their already selected generation. */
@@ -626,9 +748,13 @@ export async function hybridCorpusSearch(
   const scopeStarted = Date.now();
   const {
     advanced,
+    advancedRequested,
+    denseCompatible,
     fallback: fallbackPolicy,
     embeddingSpaceId,
     rerankSpaceId,
+    unavailableStage,
+    unavailableReason,
   } = await projectRetrievalPolicy(client, {
     ...input,
     projectIds: [...(options.policyProjectIds ?? input.projectIds)],
@@ -651,9 +777,19 @@ export async function hybridCorpusSearch(
   });
   let lexicalCandidates = lexicalSearch.candidates;
   let lexicalFallbackReason: string | null = null;
-  if (lexicalCandidates.length === 0 && (input.sourceIds?.length ?? 0) > 0) {
-    lexicalCandidates = await explicitSourceOverview(client, input);
-    if (lexicalCandidates.length > 0) {
+  if ((input.sourceIds?.length ?? 0) > 0) {
+    const overview = await explicitSourceOverview(client, input);
+    const seen = new Set(
+      lexicalCandidates.map((candidate) => candidate.chunkId),
+    );
+    lexicalCandidates = prioritizeExplicitSources(
+      [
+        ...lexicalCandidates,
+        ...overview.filter((candidate) => !seen.has(candidate.chunkId)),
+      ],
+      input.sourceIds,
+    );
+    if (lexicalSearch.candidates.length === 0 && overview.length > 0) {
       lexicalFallbackReason = "lexical:explicit-source-overview";
     }
   }
@@ -674,11 +810,14 @@ export async function hybridCorpusSearch(
       deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
       {
         limit: Math.min(RERANK_WINDOW, Math.max(input.limit, input.limit * 2)),
+        prioritySourceIds: input.sourceIds,
       },
     );
     stage(
       "diversity",
-      "round-robin-source-locator-v1",
+      (input.sourceIds?.length ?? 0) > 0
+        ? "round-robin-source-locator-explicit-first-v2"
+        : "round-robin-source-locator-v1",
       lexicalCandidates.length,
       selected.length,
       diversityStarted,
@@ -712,7 +851,9 @@ export async function hybridCorpusSearch(
     });
     stage(
       "packing",
-      "evidence-budget-v1",
+      (input.sourceIds?.length ?? 0) > 0
+        ? "evidence-budget-explicit-first-v2"
+        : "evidence-budget-v1",
       expanded.length,
       packed.packed.length,
       packingStarted,
@@ -732,20 +873,96 @@ export async function hybridCorpusSearch(
     };
   };
 
-  // Exact/phrase/prefix/cursor behavior remains lexical, as does any project
-  // that has not explicitly opted into advanced automatic retrieval.
-  if (input.mode !== "terms" || input.cursor || !advanced) {
+  // Exact/phrase/prefix/cursor behavior remains intentionally lexical. A
+  // lexical-only project also stays lexical without treating that explicit
+  // choice as an advanced-pipeline failure.
+  if (
+    input.mode !== "terms" ||
+    input.cursor ||
+    (!advanced && !advancedRequested)
+  ) {
     stage("dense", null, 0, 0, Date.now(), "skipped", "lexical-policy");
     stage("fusion", null, 0, 0, Date.now(), "skipped", "lexical-policy");
     stage("rerank", null, 0, 0, Date.now(), "skipped", "lexical-policy");
     return lexicalOnly(null);
   }
 
+  if (!advanced && fallbackPolicy === "fail") {
+    const failedStage = unavailableStage ?? "dense";
+    if (failedStage === "dense") {
+      stage(
+        "dense",
+        embeddingSpaceId,
+        0,
+        0,
+        Date.now(),
+        "failed",
+        unavailableReason ?? "advanced-policy-unavailable",
+      );
+      stage("fusion", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
+      stage("rerank", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
+    } else {
+      stage(
+        "dense",
+        embeddingSpaceId,
+        0,
+        0,
+        Date.now(),
+        "skipped",
+        "policy-fail-closed",
+      );
+      stage("fusion", null, 0, 0, Date.now(), "skipped", "policy-fail-closed");
+      stage(
+        "rerank",
+        rerankSpaceId,
+        0,
+        0,
+        Date.now(),
+        "failed",
+        unavailableReason ?? "advanced-policy-unavailable",
+      );
+    }
+    fallbackReason = `policy:${unavailableReason ?? "advanced-unavailable"}`;
+    await trace();
+    throw new Error(
+      failedStage === "rerank"
+        ? "RETRIEVAL_RERANK_FAILED"
+        : "RETRIEVAL_DENSE_FAILED",
+    );
+  }
+
+  const denseFallback =
+    !advanced && fallbackPolicy === "hybrid-without-rerank" && denseCompatible;
+  if (!advanced && !denseFallback) {
+    stage(
+      "dense",
+      embeddingSpaceId,
+      0,
+      0,
+      Date.now(),
+      "skipped",
+      unavailableReason ?? "lexical-policy",
+    );
+    stage("fusion", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
+    stage("rerank", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
+    return lexicalOnly(`policy:${unavailableReason ?? "advanced-unavailable"}`);
+  }
+
   let runtime: CorpusVectorRuntime | null = null;
+  let queryPublicationFence: EmbeddingPublicationFence | null = null;
   let vectorImplementation: string | null = null;
   let denseCandidates: LexicalCandidate[] = [];
   const denseStarted = Date.now();
   try {
+    if (options.runtime === undefined) {
+      queryPublicationFence = await readEmbeddingPublicationFence(
+        input.ownerId,
+      );
+      await assertEmbeddingPublicationFence(
+        input.ownerId,
+        queryPublicationFence.publicationEpoch,
+      );
+    }
     runtime =
       options.runtime === undefined
         ? await createOwnedCorpusVectorRuntime(input.ownerId)
@@ -757,19 +974,38 @@ export async function hybridCorpusSearch(
     ) {
       throw new Error("dense-project-space-not-configured");
     }
-    const capabilities = await runtime.vector.capabilities();
-    vectorImplementation = capabilities.implementation;
-    if (!capabilities.available) throw new Error("dense-index-unavailable");
-    if (options.runtime === undefined) {
+    if (!corpusGenerationId) {
       corpusGenerationId = await activeGenerationId(
         client,
         input.ownerId,
         runtime.embedding.descriptor().id,
       );
-      if (!corpusGenerationId) throw new Error("dense-generation-unavailable");
     }
+    if (!corpusGenerationId) throw new Error("dense-generation-unavailable");
+    const generationVector = runtime.vector.forGeneration(
+      input.ownerId,
+      corpusGenerationId,
+    );
+    const capabilities = await generationVector.capabilities();
+    vectorImplementation = capabilities.implementation;
+    if (!capabilities.available) throw new Error("dense-index-unavailable");
+    const authorizeEmbedding = async () => {
+      if (queryPublicationFence) {
+        await assertEmbeddingPublicationFence(
+          input.ownerId,
+          queryPublicationFence.publicationEpoch,
+        );
+      }
+      await runtime?.authorizeEmbedding?.();
+    };
+    await authorizeEmbedding();
     const context = runtime.consent
-      ? { operationId, signal, consent: runtime.consent }
+      ? {
+          operationId,
+          signal,
+          consent: runtime.consent,
+          authorize: authorizeEmbedding,
+        }
       : undefined;
     const [queryVector] = await runtime.embedding.embedText(
       [
@@ -781,14 +1017,25 @@ export async function hybridCorpusSearch(
       ],
       context,
     );
+    // A clear/revoke may linearize while the provider request is in flight.
+    // Re-authorize before the now-stale vector can be used for a read.
+    await authorizeEmbedding();
     if (!queryVector) throw new Error("dense-query-vector-missing");
-    const raw = await runtime.vector.search({
+    const raw = await generationVector.search({
       ownerId: input.ownerId,
       spaceId: runtime.embedding.descriptor().id,
       values: queryVector.values,
       limit: DENSE_POOL,
     });
-    denseCandidates = await hydrateOwnedVectorCandidates(raw, input, client);
+    const hydratedDenseCandidates = await hydrateOwnedVectorCandidates(
+      raw,
+      input,
+      client,
+    );
+    // Search and hydration can also overlap a clear/revoke. Do not admit any
+    // dense evidence unless the same fence epoch and consent are still live.
+    await authorizeEmbedding();
+    denseCandidates = hydratedDenseCandidates;
     stage(
       "dense",
       runtime.embedding.descriptor().id,
@@ -860,10 +1107,13 @@ export async function hybridCorpusSearch(
     limit: RERANK_WINDOW,
     maximumPerSource: 4,
     maximumPerLocator: 2,
+    prioritySourceIds: input.sourceIds,
   });
   stage(
     "diversity",
-    "round-robin-source-locator-v1",
+    (input.sourceIds?.length ?? 0) > 0
+      ? "round-robin-source-locator-explicit-first-v2"
+      : "round-robin-source-locator-v1",
     deduplicated.length,
     selected.length,
     diversityStarted,
@@ -874,66 +1124,89 @@ export async function hybridCorpusSearch(
   let rerankUsed = false;
   let rerankImplementation: string | null = null;
   const rerankStarted = Date.now();
-  try {
-    const reranker =
-      options.reranker === undefined
-        ? await createOwnedConfiguredRerankProvider(input.ownerId)
-        : options.reranker;
-    if (!reranker) throw new Error("rerank-provider-unavailable");
-    if (rerankSpaceId && reranker.descriptor().id !== rerankSpaceId) {
-      throw new Error("rerank-project-space-not-configured");
-    }
-    rerankImplementation = reranker.descriptor().id;
-    selected = await rerankRetrievalCandidates({
-      operationId,
-      query: input.query,
-      candidates: selected,
-      provider: reranker,
-      topN: Math.min(input.limit, selected.length),
-      signal,
-    });
-    rerankUsed = true;
+  if (denseFallback) {
+    fallbackReason = `rerank:${unavailableReason ?? "rerank-unavailable"}`;
     stage(
       "rerank",
-      rerankImplementation,
-      deduplicated.length,
+      rerankSpaceId,
+      selected.length,
       selected.length,
       rerankStarted,
-      "used",
+      "degraded",
+      unavailableReason ?? "rerank-unavailable",
     );
-  } catch (error) {
-    signal.throwIfAborted();
-    const reason =
-      error instanceof Error ? error.message.slice(0, 200) : "rerank-failed";
-    stage(
-      "rerank",
-      rerankImplementation,
-      selected.length,
-      0,
-      rerankStarted,
-      fallbackPolicy === "fail" ? "failed" : "degraded",
-      reason,
-    );
-    fallbackReason = `rerank:${reason}`;
-    if (fallbackPolicy === "fail") {
-      await trace();
-      throw new Error("RETRIEVAL_RERANK_FAILED");
-    }
-    if (fallbackPolicy === "lexical-only") {
-      const lexicalSelected = diversifyRetrievalCandidates(
-        deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
-        {
-          limit: Math.min(
-            RERANK_WINDOW,
-            Math.max(input.limit, input.limit * 2),
-          ),
-        },
+  } else {
+    try {
+      const reranker =
+        options.reranker === undefined
+          ? await createOwnedConfiguredRerankProvider(input.ownerId)
+          : options.reranker;
+      if (!reranker) throw new Error("rerank-provider-unavailable");
+      if (rerankSpaceId && reranker.descriptor().id !== rerankSpaceId) {
+        throw new Error("rerank-project-space-not-configured");
+      }
+      rerankImplementation = reranker.descriptor().id;
+      selected = await rerankRetrievalCandidates({
+        operationId,
+        query: input.query,
+        candidates: selected,
+        provider: reranker,
+        // Keep the whole bounded window so an explicit attachment cannot be
+        // discarded before the deterministic scope-priority tier is applied.
+        topN: selected.length,
+        signal,
+      });
+      rerankUsed = true;
+      stage(
+        "rerank",
+        rerankImplementation,
+        deduplicated.length,
+        selected.length,
+        rerankStarted,
+        "used",
       );
-      selected = await hydrateAuthorizedBodies(client, input, lexicalSelected);
+    } catch (error) {
+      signal.throwIfAborted();
+      const reason =
+        error instanceof Error ? error.message.slice(0, 200) : "rerank-failed";
+      stage(
+        "rerank",
+        rerankImplementation,
+        selected.length,
+        0,
+        rerankStarted,
+        fallbackPolicy === "fail" ? "failed" : "degraded",
+        reason,
+      );
+      fallbackReason = `rerank:${reason}`;
+      if (fallbackPolicy === "fail") {
+        await trace();
+        throw new Error("RETRIEVAL_RERANK_FAILED");
+      }
+      if (fallbackPolicy === "lexical-only") {
+        const lexicalSelected = diversifyRetrievalCandidates(
+          deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
+          {
+            limit: Math.min(
+              RERANK_WINDOW,
+              Math.max(input.limit, input.limit * 2),
+            ),
+            prioritySourceIds: input.sourceIds,
+          },
+        );
+        selected = await hydrateAuthorizedBodies(
+          client,
+          input,
+          lexicalSelected,
+        );
+      }
     }
   }
 
-  const winners = selected.slice(0, input.limit);
+  const winners = prioritizeExplicitSources(selected, input.sourceIds).slice(
+    0,
+    input.limit,
+  );
   const expansionStarted = Date.now();
   const neighbors = await authorizedNeighborUniverse(client, input, winners);
   const expanded = expandParentAndNeighbors(winners, [
@@ -957,7 +1230,9 @@ export async function hybridCorpusSearch(
   });
   stage(
     "packing",
-    "evidence-budget-v1",
+    (input.sourceIds?.length ?? 0) > 0
+      ? "evidence-budget-explicit-first-v2"
+      : "evidence-budget-v1",
     expanded.length,
     packed.packed.length,
     packingStarted,

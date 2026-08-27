@@ -24,6 +24,7 @@ import {
   RoutedCorpusContentReader,
   type AuthorizedCorpusChunkRow,
 } from "./corpus-content-reader";
+import { sourceOrProjectScopeSql } from "./context-access";
 import { SqliteFts5LexicalSearchBackend } from "./lexical";
 import {
   isNodeCorpusEnvelope,
@@ -269,34 +270,57 @@ function matchesScopeSql(input: OwnedLexicalQuery, args: InValue[]) {
   add("yearId", input.yearIds);
   add("subjectId", input.subjectIds);
   add("originKind", input.originKinds);
-  add("id", input.sourceIds ?? []);
+  const scopedSources = sourceOrProjectScopeSql({
+    ...input,
+    args,
+    sourceSql: (placeholders) => `id IN (${placeholders})`,
+    projectSql: (contextModeSql) => ({
+      sql: `EXISTS (
+        SELECT 1 FROM study_project_items AS project_items
+        JOIN study_projects AS projects ON projects.id = project_items.projectId
+        WHERE projects.userId = ? AND projects.deletedAt IS NULL
+          AND project_items.kind = content_sources.originKind
+          AND project_items.referenceId = content_sources.originId
+          AND ${contextModeSql}
+          AND project_items.selectorReviewRequired = 0
+          AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
+      )`,
+      args: [input.ownerId, ...input.projectIds],
+    }),
+  });
+  if (scopedSources) clauses.push(scopedSources);
   return clauses.join(" AND ");
 }
 
 function authorizedCandidateSql(input: OwnedLexicalQuery, args: InValue[]) {
   const clauses = ["sources.userId = ?", "sources.placement = 'node'"];
   args.push(input.ownerId);
-  if (input.projectIds.length === 0) {
-    clauses.push("sources.currentVersionId = versions.id");
-  } else {
-    clauses.push(`EXISTS (
-      SELECT 1 FROM study_project_items AS project_items
-      JOIN study_projects AS projects ON projects.id = project_items.projectId
-      WHERE projects.userId = ? AND projects.deletedAt IS NULL
-        AND project_items.kind = sources.originKind
-        AND project_items.referenceId = sources.originId
-        AND project_items.contextMode != 'exclude'
-        AND project_items.selectorReviewRequired = 0
-        AND (
-          (project_items.trackingMode = 'pinned'
-            AND project_items.sourceVersionId = versions.id)
-          OR (project_items.trackingMode = 'follow-head'
-            AND sources.currentVersionId = versions.id)
-        )
-        AND project_items.projectId IN (${input.projectIds.map(() => "?").join(",")})
-    )`);
-    args.push(input.ownerId, ...input.projectIds);
-  }
+  const scopedSources = sourceOrProjectScopeSql({
+    ...input,
+    args,
+    sourceSql: (placeholders) =>
+      `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
+    projectSql: (contextModeSql) => ({
+      sql: `EXISTS (
+        SELECT 1 FROM study_project_items AS project_items
+        JOIN study_projects AS projects ON projects.id = project_items.projectId
+        WHERE projects.userId = ? AND projects.deletedAt IS NULL
+          AND project_items.kind = sources.originKind
+          AND project_items.referenceId = sources.originId
+          AND ${contextModeSql}
+          AND project_items.selectorReviewRequired = 0
+          AND (
+            (project_items.trackingMode = 'pinned'
+              AND project_items.sourceVersionId = versions.id)
+            OR (project_items.trackingMode = 'follow-head'
+              AND sources.currentVersionId = versions.id)
+          )
+          AND project_items.projectId IN (${input.projectIds.map(() => "?").join(",")})
+      )`,
+      args: [input.ownerId, ...input.projectIds],
+    }),
+  });
+  clauses.push(scopedSources ?? "sources.currentVersionId = versions.id");
   const add = (column: string, values: readonly string[]) => {
     if (values.length === 0) return;
     clauses.push(`${column} IN (${values.map(() => "?").join(",")})`);
@@ -305,7 +329,7 @@ function authorizedCandidateSql(input: OwnedLexicalQuery, args: InValue[]) {
   add("sources.yearId", input.yearIds);
   add("sources.subjectId", input.subjectIds);
   add("sources.originKind", input.originKinds);
-  add("sources.id", input.sourceIds ?? []);
+  add("versions.id", input.versionIds ?? []);
   return clauses.join(" AND ");
 }
 
@@ -390,18 +414,60 @@ export class RoutedCorpusStore extends CoreCorpusStore {
     if (rows.rows.some((row) => row.placement === "core")) {
       candidates.push(...(await this.#local.search(input)));
     }
-    for (const nodeId of new Set(
-      rows.rows.flatMap((row) =>
-        row.placement === "node" && row.placementRef !== null
-          ? [String(row.placementRef)]
-          : [],
-      ),
-    )) {
-      nodeCandidates.push(
-        ...(await (await this.#node(nodeId, input.ownerId)).search(input)).map(
-          (candidate) => ({ nodeId, candidate }),
-        ),
-      );
+    if (
+      rows.rows.some(
+        (row) => row.placement === "node" && row.placementRef !== null,
+      )
+    ) {
+      // Resolve project context modes and pinned/follow-head versions against
+      // Core metadata before dispatch. A paired Node does not own project
+      // authorization state, so forwarding only projectIds would either lose
+      // valid production data or let `on-demand` candidates starve the bounded
+      // result window before Core's final authorization check.
+      const versionArgs: InValue[] = [];
+      const authorization = authorizedCandidateSql(input, versionArgs);
+      const authorizedVersions = await this.routedClient.execute({
+        sql: `SELECT DISTINCT sources.placementRef AS nodeId,
+            versions.id AS versionId
+          FROM content_versions AS versions
+          JOIN content_sources AS sources ON sources.id = versions.sourceId
+          WHERE ${authorization}
+          ORDER BY sources.placementRef, versions.id`,
+        args: versionArgs,
+      });
+      const versionsByNode = new Map<string, string[]>();
+      for (const row of authorizedVersions.rows) {
+        if (row.nodeId === null) continue;
+        const nodeId = String(row.nodeId);
+        const versionIds = versionsByNode.get(nodeId) ?? [];
+        versionIds.push(String(row.versionId));
+        versionsByNode.set(nodeId, versionIds);
+      }
+      for (const [nodeId, versionIds] of versionsByNode) {
+        for (let offset = 0; offset < versionIds.length; offset += 10_000) {
+          const authorizedVersionIds = versionIds.slice(
+            offset,
+            offset + 10_000,
+          );
+          nodeCandidates.push(
+            ...(
+              await (
+                await this.#node(nodeId, input.ownerId)
+              ).search({
+                ...input,
+                // The immutable version fence is the complete resolved union
+                // of direct attachments and eligible project items.
+                projectIds: [],
+                sourceIds: undefined,
+                versionIds: authorizedVersionIds,
+                contextAccess: "agent-request",
+                limit: 100,
+                cursor: null,
+              })
+            ).map((candidate) => ({ nodeId, candidate })),
+          );
+        }
+      }
     }
     if (nodeCandidates.length > 0) {
       const ids = [

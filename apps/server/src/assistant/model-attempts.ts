@@ -14,6 +14,67 @@ export type AssistantModelAttemptEvent = Readonly<{
   attempt: number;
 }>;
 
+function requestMessageCommitment(message: ModelRequest["messages"][number]) {
+  return {
+    trust: message.trust,
+    mediaType: message.mediaType,
+    content: message.content,
+    parts:
+      message.parts?.map((part) =>
+        part.type === "text"
+          ? part
+          : {
+              type: part.type,
+              mime: part.mime,
+              fallbackText: part.fallbackText,
+              evidence: part.evidence,
+              // The encrypted handle carries a random nonce. Bind the dispatch
+              // to immutable evidence while keeping retry/recovery digests
+              // stable for the same exact derivative.
+              assetHandle: "opaque-owner-bound-handle",
+            },
+      ) ?? null,
+    sourceRef: message.sourceRef,
+    redactions: message.redactions,
+  };
+}
+
+/**
+ * Core-issued asset handles are capabilities for a server-side resolver. They
+ * must never cross a gateway boundary that did not explicitly opt into that
+ * delivery contract. Keep the cited text part when one exists; for a
+ * media-only block, materialise its bounded OCR/text fallback instead.
+ */
+function messagesForSelection(
+  selection: AssistantGatewaySelection,
+  messages: ModelRequest["messages"],
+): ModelRequest["messages"] {
+  if (selection.contextMediaDelivery === "server-resolved") return messages;
+  return messages.map((message) => {
+    const structured = message.parts;
+    if (!structured?.some((part) => part.type !== "text")) return message;
+    const textParts = structured.filter((part) => part.type === "text");
+    return {
+      ...message,
+      parts:
+        textParts.length > 0
+          ? textParts
+          : structured.flatMap((part) =>
+              part.type === "text"
+                ? [part]
+                : [
+                    {
+                      type: "text" as const,
+                      text: part.fallbackText,
+                      mime: "text/plain",
+                      evidence: part.evidence,
+                    },
+                  ],
+            ),
+    };
+  });
+}
+
 /**
  * Execute the frozen primary route and, only after an explicit retryable
  * pre-output provider error, its ordered frozen fallbacks. A thrown transport
@@ -29,10 +90,7 @@ export async function* streamExplicitModelAttempts(input: {
   tools: ModelRequest["tools"];
   signal: AbortSignal;
   control?: AssistantRunExecutionControl;
-  onAttempt?: (
-    selection: AssistantGatewaySelection,
-    attempt: number,
-  ) => void;
+  onAttempt?: (selection: AssistantGatewaySelection, attempt: number) => void;
 }): AsyncGenerator<AssistantModelAttemptEvent> {
   const selections = [
     input.selection,
@@ -40,6 +98,7 @@ export async function* streamExplicitModelAttempts(input: {
   ];
   for (let attempt = 0; attempt < selections.length; attempt += 1) {
     const selection = selections[attempt]!;
+    const messages = messagesForSelection(selection, input.messages);
     const stableRequestKey = selection.providerSupportsStableRequestKey
       ? `assistant:${input.runId}:model-round:${input.round}:attempt:${attempt}`
       : null;
@@ -55,15 +114,7 @@ export async function* streamExplicitModelAttempts(input: {
         modelId: selection.descriptor.id,
         modelRevision: selection.modelRevision ?? selection.descriptor.id,
         placement: selection.modelPlacement ?? selection.capability.placement,
-        messages: input.messages.map(
-          ({ trust, mediaType, content, sourceRef, redactions }) => ({
-            trust,
-            mediaType,
-            content,
-            sourceRef,
-            redactions,
-          }),
-        ),
+        messages: messages.map(requestMessageCommitment),
         tools: input.tools,
       }),
     );
@@ -89,7 +140,7 @@ export async function* streamExplicitModelAttempts(input: {
         runId: input.runId,
         ...(stableRequestKey ? { requestKey: stableRequestKey } : {}),
         modelId: selection.descriptor.id,
-        messages: input.messages,
+        messages,
         tools: input.tools,
         abortSignal: input.signal,
       })) {

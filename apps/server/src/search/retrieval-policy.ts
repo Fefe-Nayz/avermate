@@ -72,10 +72,17 @@ export function diversifyRetrievalCandidates(
     limit: number;
     maximumPerSource?: number;
     maximumPerLocator?: number;
+    /**
+     * Explicitly attached sources win the first source-selection rounds while
+     * preserving each source's lexical/fused/reranked order. This is a scope
+     * priority, not an artificial relevance score.
+     */
+    prioritySourceIds?: readonly string[];
   },
 ) {
   const maximumPerSource = options.maximumPerSource ?? 4;
   const maximumPerLocator = options.maximumPerLocator ?? 2;
+  const prioritySourceIds = new Set(options.prioritySourceIds ?? []);
   const groups = new Map<string, PolicyCandidate[]>();
   for (const candidate of candidates) {
     const group = groups.get(candidate.sourceId) ?? [];
@@ -84,6 +91,8 @@ export function diversifyRetrievalCandidates(
   }
   const sourceOrder = [...groups.entries()].sort(
     ([leftId, left], [rightId, right]) =>
+      Number(prioritySourceIds.has(rightId)) -
+        Number(prioritySourceIds.has(leftId)) ||
       right[0]!.fusedScore - left[0]!.fusedScore ||
       leftId.localeCompare(rightId),
   );
@@ -295,6 +304,8 @@ export function retrievalScopeDigest(input: {
   projectIds: readonly string[];
   policyProjectIds?: readonly string[];
   sourceIds?: readonly string[];
+  versionIds?: readonly string[];
+  contextAccess?: "automatic" | "agent-request" | "explicit-attachment";
   yearIds: readonly string[];
   subjectIds: readonly string[];
   originKinds: readonly string[];
@@ -305,6 +316,8 @@ export function retrievalScopeDigest(input: {
       projectIds: [...input.projectIds].sort(),
       policyProjectIds: [...(input.policyProjectIds ?? [])].sort(),
       sourceIds: [...(input.sourceIds ?? [])].sort(),
+      versionIds: [...(input.versionIds ?? [])].sort(),
+      contextAccess: input.contextAccess ?? "agent-request",
       yearIds: [...input.yearIds].sort(),
       subjectIds: [...input.subjectIds].sort(),
       originKinds: [...input.originKinds].sort(),

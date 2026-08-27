@@ -14,6 +14,7 @@ import {
 } from "../search/corpus-content-reader";
 import { coreCorpusIndexService } from "../search/index-service";
 import { SqliteFts5LexicalSearchBackend } from "../search/lexical";
+import { assertEmbeddingPublicationFence } from "../search/embedding-publication-fence";
 import {
   createOwnedCorpusVectorRuntime,
   type ContentHashedVector,
@@ -34,8 +35,7 @@ export const CORPUS_REEMBED_SPACE_JOB_KIND = "corpus.reembedSpace";
 export const CORPUS_VERIFY_JOB_KIND = "corpus.verify";
 export const CORPUS_REPAIR_JOB_KIND = "corpus.repair";
 export const CORPUS_EVALUATE_JOB_KIND = "corpus.evaluateRetrieval";
-export const CORPUS_PRODUCE_DERIVATIVES_JOB_KIND =
-  "corpus.produceDerivatives";
+export const CORPUS_PRODUCE_DERIVATIVES_JOB_KIND = "corpus.produceDerivatives";
 
 const identitySchema = z
   .object({
@@ -72,7 +72,8 @@ const identitySchema = z
     ) {
       context.addIssue({
         code: "custom",
-        message: "Pinned conversation jobs require both selector and project item",
+        message:
+          "Pinned conversation jobs require both selector and project item",
       });
     }
   });
@@ -280,12 +281,48 @@ type CorpusMediaEmbeddingRow = Omit<CorpusEmbeddingRow, "text"> & {
   input: MediaEmbeddingInput;
 };
 
-const reembedPayloadSchema = z
+const scopedReembedPayloadSchema = z.discriminatedUnion("scope", [
+  z.strictObject({
+    ownerId: z.string().min(1).max(256),
+    scope: z.literal("all"),
+    publicationEpoch: z.number().int().nonnegative().optional(),
+  }),
+  z.strictObject({
+    ownerId: z.string().min(1).max(256),
+    scope: z.literal("advanced-projects"),
+    requestedProjectId: z.string().min(1).max(256).optional(),
+    triggerVersionId: z.string().min(1).max(256).optional(),
+    publicationEpoch: z.number().int().nonnegative().optional(),
+  }),
+]);
+
+const legacyReembedPayloadSchema = z
   .object({
     ownerId: z.string().min(1).max(256),
     projectId: z.string().min(1).max(256).optional(),
   })
   .strict();
+
+type ScopedReembedPayload = z.infer<typeof scopedReembedPayloadSchema>;
+
+function scopedReembedPayload(payload: unknown): ScopedReembedPayload {
+  const legacyVersion = embedVersionPayloadSchema.safeParse(payload);
+  if (legacyVersion.success) {
+    return {
+      ownerId: legacyVersion.data.ownerId,
+      scope: "advanced-projects",
+      triggerVersionId: legacyVersion.data.versionId,
+    };
+  }
+  const scoped = scopedReembedPayloadSchema.safeParse(payload);
+  if (scoped.success) return scoped.data;
+  const legacy = legacyReembedPayloadSchema.parse(payload);
+  return {
+    ownerId: legacy.ownerId,
+    scope: "advanced-projects",
+    ...(legacy.projectId ? { requestedProjectId: legacy.projectId } : {}),
+  };
+}
 
 function operationSignal(signal?: AbortSignal) {
   return signal ?? new AbortController().signal;
@@ -322,7 +359,7 @@ async function recordEmbeddingUsage(input: {
 async function embedTextRows(
   rows: readonly CorpusEmbeddingRow[],
   runtime: CorpusVectorRuntime,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; assertFence?: () => Promise<void> } = {},
 ) {
   if (rows.length === 0) return { vectors: 0, embedded: 0, reused: 0 };
   const descriptor = runtime.embedding.descriptor();
@@ -335,6 +372,7 @@ async function embedTextRows(
   let embedded = 0;
   for (let offset = 0; offset < rows.length; offset += 100) {
     signal.throwIfAborted();
+    await options.assertFence?.();
     const batch = rows.slice(offset, offset + 100);
     const reusable = await runtime.vector.reusable(
       [...new Set(batch.map((row) => row.contentHash))],
@@ -355,20 +393,45 @@ async function embedTextRows(
     }
     const missing = [...missingByHash.values()];
     const operationId = newId("embedop");
+    if (missing.length > 0) await options.assertFence?.();
     const generated = missing.length
       ? await runtime.embedding.embedText(
           missing,
-          runtime.consent ? { operationId, signal, consent: runtime.consent } : undefined,
+          runtime.consent
+            ? {
+                operationId,
+                signal,
+                consent: runtime.consent,
+                authorize: async () => {
+                  await options.assertFence?.();
+                  await runtime.authorizeEmbedding?.();
+                },
+              }
+            : undefined,
         )
       : [];
     if (generated.length !== missing.length) {
       throw new Error("Embedding provider returned a partial text batch");
     }
+    if (generated.length > 0) {
+      const usage = generated[0]?.usage;
+      await recordEmbeddingUsage({
+        operationId,
+        ownerId,
+        descriptor,
+        versionId: batch[0]!.versionId,
+        inputCount: missing.length,
+        inputTokens: usage?.inputTokens ?? null,
+        providerRequestId: usage?.providerRequestId ?? null,
+      });
+    }
+    await options.assertFence?.();
     const valuesByHash = new Map(
       generated.map((entry) => [entry.contentHash, entry.values]),
     );
     const vectors: ContentHashedVector[] = batch.map((row) => {
-      const values = reusable.get(row.contentHash) ?? valuesByHash.get(row.contentHash);
+      const values =
+        reusable.get(row.contentHash) ?? valuesByHash.get(row.contentHash);
       if (!values) throw new Error("Embedding provider omitted a corpus chunk");
       if (reusable.has(row.contentHash)) reused += 1;
       else embedded += 1;
@@ -383,18 +446,7 @@ async function embedTextRows(
       };
     });
     await runtime.vector.upsertContent(vectors);
-    if (generated.length > 0) {
-      const usage = generated[0]?.usage;
-      await recordEmbeddingUsage({
-        operationId,
-        ownerId,
-        descriptor,
-        versionId: batch[0]!.versionId,
-        inputCount: missing.length,
-        inputTokens: usage?.inputTokens ?? null,
-        providerRequestId: usage?.providerRequestId ?? null,
-      });
-    }
+    await options.assertFence?.();
   }
   return { vectors: rows.length, embedded, reused };
 }
@@ -402,7 +454,7 @@ async function embedTextRows(
 async function embedMediaRows(
   rows: readonly CorpusMediaEmbeddingRow[],
   runtime: CorpusVectorRuntime,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; assertFence?: () => Promise<void> } = {},
 ) {
   if (rows.length === 0) return { vectors: 0, embedded: 0, reused: 0 };
   const descriptor = runtime.embedding.descriptor();
@@ -418,6 +470,7 @@ async function embedMediaRows(
   let embedded = 0;
   for (let offset = 0; offset < rows.length; offset += 16) {
     signal.throwIfAborted();
+    await options.assertFence?.();
     const batch = rows.slice(offset, offset + 16);
     const reusable = await runtime.vector.reusable(
       [...new Set(batch.map((row) => row.contentHash))],
@@ -433,23 +486,46 @@ async function embedMediaRows(
     // visual chunk identities, so no lexical or neighbouring vector is lost.
     const missing = [...missingByHash.values()];
     const operationId = newId("embedop");
+    if (missing.length > 0) await options.assertFence?.();
     const generated = missing.length
       ? await runtime.embedding.embedMedia(missing, {
           operationId,
           signal,
-          consent: runtime.consent ?? (() => {
-            throw new Error("Cloud media embedding requires provider consent");
-          })(),
+          consent:
+            runtime.consent ??
+            (() => {
+              throw new Error(
+                "Cloud media embedding requires provider consent",
+                );
+              })(),
+          authorize: async () => {
+            await options.assertFence?.();
+            await runtime.authorizeEmbedding?.();
+          },
         })
       : [];
     if (generated.length !== missing.length) {
       throw new Error("Embedding provider returned a partial media batch");
     }
+    if (generated.length > 0) {
+      const usage = generated[0]?.usage;
+      await recordEmbeddingUsage({
+        operationId,
+        ownerId,
+        descriptor,
+        versionId: batch[0]!.versionId,
+        inputCount: missing.length,
+        inputTokens: usage?.inputTokens ?? null,
+        providerRequestId: usage?.providerRequestId ?? null,
+      });
+    }
+    await options.assertFence?.();
     const valuesByHash = new Map(
       generated.map((entry) => [entry.contentHash, entry.values]),
     );
     const vectors: ContentHashedVector[] = batch.map((row) => {
-      const values = reusable.get(row.contentHash) ?? valuesByHash.get(row.contentHash);
+      const values =
+        reusable.get(row.contentHash) ?? valuesByHash.get(row.contentHash);
       if (!values) throw new Error("Embedding provider omitted a media unit");
       if (reusable.has(row.contentHash)) reused += 1;
       else embedded += 1;
@@ -464,18 +540,7 @@ async function embedMediaRows(
       };
     });
     await runtime.vector.upsertContent(vectors);
-    if (generated.length > 0) {
-      const usage = generated[0]?.usage;
-      await recordEmbeddingUsage({
-        operationId,
-        ownerId,
-        descriptor,
-        versionId: batch[0]!.versionId,
-        inputCount: missing.length,
-        inputTokens: usage?.inputTokens ?? null,
-        providerRequestId: usage?.providerRequestId ?? null,
-      });
-    }
+    await options.assertFence?.();
   }
   return { vectors: rows.length, embedded, reused };
 }
@@ -501,21 +566,26 @@ async function rowsForVersion(ownerId: string, versionId: string) {
   return result.rows.flatMap<CorpusEmbeddingRow>((row) => {
     const body = hydrated.get(String(row.chunkId));
     return body
-      ? [{
-          ownerId: String(row.ownerId),
-          sourceId: String(row.sourceId),
-          versionId: String(row.versionId),
-          chunkId: String(row.chunkId),
-          contentHash: String(row.contentHash),
-          text: body.text,
-        }]
+      ? [
+          {
+            ownerId: String(row.ownerId),
+            sourceId: String(row.sourceId),
+            versionId: String(row.versionId),
+            chunkId: String(row.chunkId),
+            contentHash: String(row.contentHash),
+            text: body.text,
+          },
+        ]
       : [];
   });
 }
 
-function derivativeModality(kind: string): MediaEmbeddingInput["modality"] | null {
+function derivativeModality(
+  kind: string,
+): MediaEmbeddingInput["modality"] | null {
   if (kind === "pdf-page") return "pdf-page";
-  if (["page-image", "slide-image", "sheet-image"].includes(kind)) return "image";
+  if (["page-image", "slide-image", "sheet-image"].includes(kind))
+    return "image";
   if (kind === "audio-segment") return "audio";
   if (kind === "video-segment") return "video";
   return null;
@@ -552,7 +622,11 @@ async function mediaRowsForVersion(
   for (const row of result.rows) {
     const modality = derivativeModality(String(row.kind));
     const chunkId = String(row.chunkId);
-    if (!modality || !descriptor.modalities.includes(modality) || selected.has(chunkId)) {
+    if (
+      !modality ||
+      !descriptor.modalities.includes(modality) ||
+      selected.has(chunkId)
+    ) {
       continue;
     }
     const estimatedInputTokens = Number(row.estimatedInputTokens);
@@ -572,7 +646,8 @@ async function mediaRowsForVersion(
         ),
         byteLength: Number(row.byteSize),
         estimatedInputTokens:
-          Number.isSafeInteger(estimatedInputTokens) && estimatedInputTokens >= 0
+          Number.isSafeInteger(estimatedInputTokens) &&
+          estimatedInputTokens >= 0
             ? estimatedInputTokens
             : 0,
         ...(row.durationMs === null
@@ -584,24 +659,79 @@ async function mediaRowsForVersion(
   return [...selected.values()];
 }
 
-async function generationVersionIds(ownerId: string) {
+async function generationVersionIds(
+  input: ScopedReembedPayload,
+  spaceId: string,
+) {
+  if (input.scope === "all") {
+    const result = await db.$client.execute({
+      sql: `SELECT id FROM (
+          SELECT versions.id
+          FROM content_sources AS sources
+          JOIN content_versions AS versions
+            ON versions.id = sources.currentVersionId
+            AND versions.sourceId = sources.id
+          WHERE sources.userId = ? AND sources.placement = 'core'
+          UNION
+          SELECT versions.id
+          FROM study_project_items AS items
+          JOIN study_projects AS projects ON projects.id = items.projectId
+          JOIN content_versions AS versions ON versions.id = items.sourceVersionId
+          JOIN content_sources AS sources
+            ON sources.id = versions.sourceId
+            AND sources.userId = projects.userId
+            AND sources.originKind = items.kind
+            AND sources.originId = items.referenceId
+          WHERE projects.userId = ? AND projects.deletedAt IS NULL
+            AND items.trackingMode = 'pinned'
+            AND items.sourceVersionId IS NOT NULL
+            AND sources.placement = 'core'
+        ) ORDER BY id`,
+      args: [input.ownerId, input.ownerId],
+    });
+    return result.rows.map((row) => String(row.id));
+  }
+
+  if (input.requestedProjectId) {
+    const requested = await db.$client.execute({
+      sql: `SELECT 1 FROM study_projects
+        WHERE id = ? AND userId = ? AND deletedAt IS NULL
+          AND retrievalMode = 'advanced-auto' AND embeddingSpaceId = ?
+        LIMIT 1`,
+      args: [input.requestedProjectId, input.ownerId, spaceId],
+    });
+    if (requested.rows.length !== 1) {
+      throw new NonRetryableJobError("CORPUS_REINDEX_PROJECT_POLICY_CHANGED");
+    }
+  }
+
+  // One owner/space alias can only point at one immutable generation. Rebuild
+  // the union of every project that explicitly opted into this exact space so
+  // refreshing one project never evicts another advanced project's vectors.
+  // Lexical-only projects, excluded items and selectors awaiting review never
+  // cross the embedding-provider boundary.
   const result = await db.$client.execute({
-    sql: `SELECT id FROM (
-        SELECT versions.id
-        FROM content_sources AS sources
-        JOIN content_versions AS versions ON versions.id = sources.currentVersionId
-        WHERE sources.userId = ? AND sources.placement = 'core'
-        UNION
-        SELECT items.sourceVersionId AS id
-        FROM study_project_items AS items
-        JOIN study_projects AS projects ON projects.id = items.projectId
-        JOIN content_versions AS versions ON versions.id = items.sourceVersionId
-        JOIN content_sources AS sources ON sources.id = versions.sourceId
-        WHERE projects.userId = ? AND projects.deletedAt IS NULL
-          AND items.trackingMode = 'pinned' AND items.sourceVersionId IS NOT NULL
-          AND sources.userId = ?
-      ) ORDER BY id`,
-    args: [ownerId, ownerId, ownerId],
+    sql: `SELECT DISTINCT versions.id
+      FROM study_project_items AS items
+      JOIN study_projects AS projects ON projects.id = items.projectId
+      JOIN content_sources AS sources
+        ON sources.userId = projects.userId
+        AND sources.originKind = items.kind
+        AND sources.originId = items.referenceId
+      JOIN content_versions AS versions
+        ON versions.sourceId = sources.id
+        AND versions.id = CASE
+          WHEN items.trackingMode = 'pinned' THEN items.sourceVersionId
+          ELSE sources.currentVersionId
+        END
+      WHERE projects.userId = ? AND projects.deletedAt IS NULL
+        AND projects.retrievalMode = 'advanced-auto'
+        AND projects.embeddingSpaceId = ?
+        AND items.contextMode != 'exclude'
+        AND items.selectorReviewRequired = 0
+        AND sources.placement = 'core'
+      ORDER BY versions.id`,
+    args: [input.ownerId, spaceId],
   });
   return result.rows.map((row) => String(row.id));
 }
@@ -613,7 +743,12 @@ async function registerEmbeddingSpace(descriptor: EmbeddingSpaceDescriptor) {
     sql: `INSERT INTO corpus_embedding_spaces (
         id, descriptorJson, descriptorDigest, createdAt
       ) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
-    args: [descriptor.id, descriptorJson, digest, Math.floor(Date.now() / 1_000)],
+    args: [
+      descriptor.id,
+      descriptorJson,
+      digest,
+      Math.floor(Date.now() / 1_000),
+    ],
   });
   const existing = await db.$client.execute({
     sql: `SELECT descriptorDigest FROM corpus_embedding_spaces WHERE id = ? LIMIT 1`,
@@ -666,7 +801,8 @@ async function createGeneration(
 }
 
 function safeGenerationError(error: unknown) {
-  if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
+  if (error instanceof DOMException && error.name === "AbortError")
+    return "cancelled";
   const message = error instanceof Error ? error.message : "unknown";
   return /^[A-Z0-9_:-]{1,128}$/u.test(message)
     ? message.slice(0, 128)
@@ -683,10 +819,13 @@ export async function runCorpusEmbeddingUnavailableJob(
   options: { signal?: AbortSignal; runtime?: CorpusVectorRuntime | null } = {},
 ) {
   options.signal?.throwIfAborted();
-  const legacyVersion = embedVersionPayloadSchema.safeParse(payload);
-  const rebuild = reembedPayloadSchema.parse(
-    legacyVersion.success ? { ownerId: legacyVersion.data.ownerId } : payload,
-  );
+  const rebuild = scopedReembedPayload(payload);
+  const assertFence = () =>
+    assertEmbeddingPublicationFence(
+      rebuild.ownerId,
+      rebuild.publicationEpoch,
+    ).then(() => undefined);
+  await assertFence();
   const runtime =
     options.runtime === undefined
       ? await createOwnedCorpusVectorRuntime(rebuild.ownerId)
@@ -697,8 +836,37 @@ export async function runCorpusEmbeddingUnavailableJob(
     );
   }
   const descriptor = runtime.embedding.descriptor();
+  const versionIds = await generationVersionIds(rebuild, descriptor.id);
+  if (
+    rebuild.scope === "advanced-projects" &&
+    rebuild.triggerVersionId &&
+    !versionIds.includes(rebuild.triggerVersionId)
+  ) {
+    return {
+      stage: "skipped" as const,
+      reason: "trigger-version-not-in-advanced-project-scope" as const,
+      versions: versionIds.length,
+      vectors: 0,
+      chunks: 0,
+      spaceId: descriptor.id,
+    };
+  }
+  if (
+    rebuild.scope === "advanced-projects" &&
+    !rebuild.requestedProjectId &&
+    versionIds.length === 0
+  ) {
+    return {
+      stage: "skipped" as const,
+      reason: "advanced-project-scope-empty" as const,
+      versions: 0,
+      vectors: 0,
+      chunks: 0,
+      spaceId: descriptor.id,
+    };
+  }
+  await assertFence();
   await registerEmbeddingSpace(descriptor);
-  const versionIds = await generationVersionIds(rebuild.ownerId);
   const { generationId, versionSetDigest } = await createGeneration(
     rebuild.ownerId,
     descriptor,
@@ -717,8 +885,14 @@ export async function runCorpusEmbeddingUnavailableJob(
         mediaRowsForVersion(rebuild.ownerId, versionId, descriptor),
       ]);
       const [textReport, mediaReport] = await Promise.all([
-        embedTextRows(textRows, generationRuntime, options),
-        embedMediaRows(mediaRows, generationRuntime, options),
+        embedTextRows(textRows, generationRuntime, {
+          ...options,
+          assertFence,
+        }),
+        embedMediaRows(mediaRows, generationRuntime, {
+          ...options,
+          assertFence,
+        }),
       ]);
       const versionVectorCount = textReport.vectors + mediaReport.vectors;
       vectorCount += versionVectorCount;
@@ -758,10 +932,14 @@ export async function runCorpusEmbeddingUnavailableJob(
       throw new Error("EMBEDDING_GENERATION_INCOMPLETE");
     }
     options.signal?.throwIfAborted();
-    await generationRuntime.vector.activate();
     const now = Math.floor(Date.now() / 1_000);
     const transaction = await db.$client.transaction("write");
     try {
+      await assertEmbeddingPublicationFence(
+        rebuild.ownerId,
+        rebuild.publicationEpoch,
+        transaction,
+      );
       await transaction.execute({
         sql: `UPDATE corpus_embedding_generations
           SET state = 'superseded', updatedAt = ?
@@ -783,6 +961,18 @@ export async function runCorpusEmbeddingUnavailableJob(
       await transaction.rollback();
       throw error;
     }
+    // The durable generation row is the sole search pointer. The Qdrant alias
+    // remains a compatibility optimization only: concurrent jobs may activate
+    // aliases out of order, so search must always address the DB-selected
+    // immutable generation collection directly.
+    let compatibilityAliasActivated = false;
+    try {
+      await generationRuntime.vector.activate();
+      compatibilityAliasActivated = true;
+    } catch {
+      // A failed alias switch cannot invalidate the already-published immutable
+      // generation. Generation-fenced search remains available.
+    }
     return {
       stage: "activated" as const,
       generationId,
@@ -791,8 +981,15 @@ export async function runCorpusEmbeddingUnavailableJob(
       vectors: vectorCount,
       chunks: vectorCount,
       spaceId: descriptor.id,
+      compatibilityAliasActivated,
     };
   } catch (error) {
+    try {
+      await generationRuntime.vector.remove(versionIds);
+    } catch {
+      // The immutable generation stays non-active below. Provider-side cleanup
+      // is best effort and can be retried operationally without authorizing it.
+    }
     await db.$client.execute({
       sql: `UPDATE corpus_embedding_generations
         SET state = 'failed', errorCode = ?, updatedAt = ?

@@ -6,6 +6,7 @@ import type {
   ModelGateway,
   ModelRequest,
 } from "@avermate/agent-contracts";
+import { contextAssetHandleSchema } from "@avermate/agent-contracts";
 import {
   decideAssistantModelPolicy,
   PolicyConstrainedModelGateway,
@@ -316,9 +317,9 @@ function attemptSelection(input: {
     },
     stream:
       input.events ??
-      (async function* () {
+      async function* () {
         yield { type: "finish", reason: "stop" } as const;
-      }),
+      },
     async embed() {
       throw new Error("unused");
     },
@@ -395,7 +396,223 @@ function attemptControl() {
   return { control, claims, transitions };
 }
 
+function visualAttemptMessages(): ModelRequest["messages"] {
+  return [
+    {
+      id: "visual-context",
+      trust: "retrieved-untrusted",
+      mediaType: "application/vnd.avermate.evidence+json",
+      content: "cited text fallback",
+      sourceRef: "chunk-visual",
+      redactions: [],
+      parts: [
+        {
+          type: "text",
+          text: "cited text fallback",
+          mime: "application/vnd.avermate.evidence+json",
+          evidence: {
+            chunkId: "chunk-visual",
+            locator: { kind: "pdf", page: 7 },
+            digest: "a".repeat(64),
+          },
+        },
+        {
+          type: "image",
+          assetHandle: contextAssetHandleSchema.parse(`cah1.${"M".repeat(32)}`),
+          mime: "image/png",
+          fallbackText: "bounded OCR fallback",
+          evidence: {
+            chunkId: "chunk-visual",
+            locator: { kind: "pdf", page: 7 },
+            digest: "b".repeat(64),
+          },
+        },
+      ],
+    },
+  ];
+}
+
 describe("explicit model fallback execution", () => {
+  test("binds dispatch claims to immutable media evidence, not randomized handles", async () => {
+    const selection = attemptSelection({
+      modelKey: "media-model",
+      providerKey: "media-provider",
+    });
+    const claimedDigest = async (
+      assetSuffix: string,
+      evidenceDigest: string,
+    ) => {
+      const { control, claims } = attemptControl();
+      const message: ModelRequest["messages"][number] = {
+        id: "visual",
+        trust: "retrieved-untrusted",
+        mediaType: "multipart/mixed",
+        content: "same fallback",
+        sourceRef: "chunk-1",
+        redactions: [],
+        parts: [
+          {
+            type: "image",
+            assetHandle: contextAssetHandleSchema.parse(
+              `cah1.${assetSuffix.repeat(32)}`,
+            ),
+            mime: "image/png",
+            fallbackText: "same fallback",
+            evidence: {
+              chunkId: "chunk-1",
+              locator: { kind: "pdf", page: 1 },
+              digest: evidenceDigest,
+            },
+          },
+        ],
+      };
+      for await (const _attempted of streamExplicitModelAttempts({
+        selection,
+        ownerId: "owner-1",
+        runId: "run-media",
+        round: 0,
+        messages: [message],
+        tools: [],
+        signal: new AbortController().signal,
+        control,
+      })) {
+        // consume the terminal event
+      }
+      return claims[0]!.requestDigest;
+    };
+
+    const first = await claimedDigest("a", "b".repeat(64));
+    const sameEvidenceNewHandle = await claimedDigest("c", "b".repeat(64));
+    const differentEvidence = await claimedDigest("d", "e".repeat(64));
+
+    expect(sameEvidenceNewHandle).toBe(first);
+    expect(differentEvidence).not.toBe(first);
+  });
+
+  test("projects Core multimodal context to cited text before a Node fallback", async () => {
+    const coreRequests: ModelRequest[] = [];
+    const nodeRequests: ModelRequest[] = [];
+    const fallbackBase = attemptSelection({
+      modelKey: "node-text-fallback",
+      providerKey: "node-provider",
+      events: async function* (request) {
+        nodeRequests.push(request);
+        yield { type: "finish", reason: "stop" };
+      },
+    });
+    const fallback: AssistantGatewaySelection = {
+      ...fallbackBase,
+      capability: capability("node-text-fallback", "node", "node-provider"),
+      modelPlacement: {
+        kind: "node",
+        nodeId: "paired-node",
+        capabilityRevision: "node-revision-1",
+      },
+    };
+    const primaryBase = attemptSelection({
+      modelKey: "core-vision-primary",
+      providerKey: "core-provider",
+      events: async function* (request) {
+        coreRequests.push(request);
+        yield { type: "error", code: "CORE_BUSY", retryable: true };
+      },
+    });
+    const primary: AssistantGatewaySelection = {
+      ...primaryBase,
+      descriptor: { ...primaryBase.descriptor, modalities: ["text", "image"] },
+      contextMediaDelivery: "server-resolved",
+      fallbackSelections: [fallback],
+    };
+    const { control, claims } = attemptControl();
+
+    for await (const _event of streamExplicitModelAttempts({
+      selection: primary,
+      ownerId: "owner-1",
+      runId: "run-core-to-node",
+      round: 0,
+      messages: visualAttemptMessages(),
+      tools: [],
+      signal: new AbortController().signal,
+      control,
+    })) {
+      // consume the fallback response
+    }
+
+    expect(coreRequests[0]?.messages[0]?.parts?.[1]).toMatchObject({
+      type: "image",
+      assetHandle: `cah1.${"M".repeat(32)}`,
+      evidence: { digest: "b".repeat(64) },
+    });
+    expect(nodeRequests[0]?.messages[0]?.parts).toMatchObject([
+      { type: "text", text: "cited text fallback" },
+    ]);
+    expect(JSON.stringify(nodeRequests[0])).not.toContain("cah1.");
+    expect(claims).toHaveLength(2);
+    expect(claims[0]?.requestDigest).not.toBe(claims[1]?.requestDigest);
+  });
+
+  test("keeps Node text-only while delivering the same visual handle to a Core fallback", async () => {
+    const nodeRequests: ModelRequest[] = [];
+    const coreRequests: ModelRequest[] = [];
+    const coreBase = attemptSelection({
+      modelKey: "core-vision-fallback",
+      providerKey: "core-provider",
+      events: async function* (request) {
+        coreRequests.push(request);
+        yield { type: "finish", reason: "stop" };
+      },
+    });
+    const coreFallback: AssistantGatewaySelection = {
+      ...coreBase,
+      descriptor: { ...coreBase.descriptor, modalities: ["text", "image"] },
+      contextMediaDelivery: "server-resolved",
+    };
+    const nodeBase = attemptSelection({
+      modelKey: "node-text-primary",
+      providerKey: "node-provider",
+      events: async function* (request) {
+        nodeRequests.push(request);
+        yield { type: "error", code: "NODE_BUSY", retryable: true };
+      },
+    });
+    const primary: AssistantGatewaySelection = {
+      ...nodeBase,
+      capability: capability("node-text-primary", "node", "node-provider"),
+      modelPlacement: {
+        kind: "node",
+        nodeId: "paired-node",
+        capabilityRevision: "node-revision-1",
+      },
+      fallbackSelections: [coreFallback],
+    };
+    const { control, claims } = attemptControl();
+
+    for await (const _event of streamExplicitModelAttempts({
+      selection: primary,
+      ownerId: "owner-1",
+      runId: "run-node-to-core",
+      round: 0,
+      messages: visualAttemptMessages(),
+      tools: [],
+      signal: new AbortController().signal,
+      control,
+    })) {
+      // consume the fallback response
+    }
+
+    expect(nodeRequests[0]?.messages[0]?.parts).toMatchObject([
+      { type: "text", text: "cited text fallback" },
+    ]);
+    expect(JSON.stringify(nodeRequests[0])).not.toContain("cah1.");
+    expect(coreRequests[0]?.messages[0]?.parts?.[1]).toMatchObject({
+      type: "image",
+      assetHandle: `cah1.${"M".repeat(32)}`,
+      evidence: { digest: "b".repeat(64) },
+    });
+    expect(claims).toHaveLength(2);
+    expect(claims[0]?.requestDigest).not.toBe(claims[1]?.requestDigest);
+  });
+
   test("claims and executes only the next frozen route after a retryable pre-output error", async () => {
     let fallbackCalls = 0;
     const fallback = attemptSelection({
@@ -437,11 +654,13 @@ describe("explicit model fallback execution", () => {
     }
 
     expect(fallbackCalls).toBe(1);
-    expect(claims.map(({ attempt, modelKey, providerKey }) => ({
-      attempt,
-      modelKey,
-      providerKey,
-    }))).toEqual([
+    expect(
+      claims.map(({ attempt, modelKey, providerKey }) => ({
+        attempt,
+        modelKey,
+        providerKey,
+      })),
+    ).toEqual([
       { attempt: 0, modelKey: "node-primary", providerKey: "node-provider" },
       { attempt: 1, modelKey: "core-fallback", providerKey: "core-provider" },
     ]);

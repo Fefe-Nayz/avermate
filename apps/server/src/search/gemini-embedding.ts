@@ -23,7 +23,7 @@ export const GEMINI_EMBEDDING_MODEL = "gemini-embedding-2";
 export const GEMINI_EMBEDDING_ORIGIN =
   "https://generativelanguage.googleapis.com";
 export const GEMINI_EMBEDDING_DISCLOSURE_REVISION =
-  "gemini-embedding-school-content/1";
+  "gemini-embedding-school-content/3";
 
 const MODEL_RESOURCE = `models/${GEMINI_EMBEDDING_MODEL}`;
 const BATCH_ENDPOINT = `${GEMINI_EMBEDDING_ORIGIN}/v1beta/${MODEL_RESOURCE}:batchEmbedContents`;
@@ -289,6 +289,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
     ) {
       throw new Error("GEMINI_EMBEDDING_TOTAL_TEXT_LIMIT");
     }
+    await context?.authorize?.();
     const response = await this.#fetch(BATCH_ENDPOINT, {
       method: "POST",
       headers: {
@@ -349,6 +350,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
       context.signal.throwIfAborted();
       const entry = input[index]!;
       const media = resolved[index]!;
+      await context.authorize?.();
       const response = await this.#fetch(SINGLE_ENDPOINT, {
         method: "POST",
         headers: {

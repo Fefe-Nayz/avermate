@@ -447,6 +447,15 @@ export async function runNextJob(instanceId: string, now = new Date()) {
     });
     return await completeJob(job.id, result, { instanceId });
   } catch (error) {
+    if (!cancellationRequested) {
+      const [metadata] = await db
+        .select({ cancellation: jobRuntimeMetadata.cancellation })
+        .from(jobRuntimeMetadata)
+        .where(eq(jobRuntimeMetadata.jobId, job.id))
+        .limit(1)
+        .catch(() => []);
+      cancellationRequested = metadata?.cancellation === "requested";
+    }
     if (cancellationRequested) {
       return acknowledgeRunningCancellation(job.id, instanceId);
     }

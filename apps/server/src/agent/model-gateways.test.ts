@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -6,6 +7,7 @@ import type {
   ModelGatewayEvent,
   ModelRequest,
 } from "@avermate/agent-contracts";
+import { contextAssetHandleSchema } from "@avermate/agent-contracts";
 import {
   AiSdkDirectGateway,
   LiteLLMProxyGateway,
@@ -313,5 +315,217 @@ describe("model gateway normalization", () => {
         allowedOrigins: ["https://models.example.test"],
       }),
     ).toEqual([descriptor]);
+  });
+
+  test("performs explicit text fallback before provider dispatch", async () => {
+    const model = new MockLanguageModelV4({ modelId: descriptor.id });
+    let resolverCalled = false;
+    let dispatched = "";
+    const gateway = new AiSdkDirectGateway({
+      models: [descriptor],
+      resolveModel: () => model,
+      contextAssetResolver: {
+        async resolve() {
+          resolverCalled = true;
+          throw new Error("should not resolve for a text-only model");
+        },
+      },
+      streamFactory(_request, _model, prompt) {
+        dispatched = JSON.stringify(prompt.messages);
+        return simulateReadableStream({
+          chunks: [
+            {
+              type: "finish",
+              finishReason: "stop",
+              totalUsage: {},
+            },
+          ],
+        });
+      },
+    });
+    const mediaRequest: ModelRequest = {
+      ...request,
+      messages: [
+        {
+          ...request.messages[0]!,
+          mediaType: "multipart/mixed",
+          content: "OCR projection",
+          parts: [
+            {
+              type: "image",
+              assetHandle: contextAssetHandleSchema.parse(
+                `cah1.${"a".repeat(32)}`,
+              ),
+              mime: "image/png",
+              fallbackText: "OCR projection",
+              evidence: {
+                chunkId: "chunk-1",
+                locator: { kind: "pdf", page: 1 },
+                digest: "b".repeat(64),
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const events = [];
+    for await (const event of gateway.stream(mediaRequest)) events.push(event);
+    expect(resolverCalled).toBe(false);
+    expect(dispatched).toContain("OCR projection");
+    expect(dispatched).not.toContain("cah1.");
+    expect(events.at(-1)).toEqual({ type: "finish", reason: "stop" });
+  });
+
+  test("dispatches verified image bytes as an actual multimodal provider part", async () => {
+    const png = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    const digest = createHash("sha256").update(png).digest("hex");
+    const multimodalDescriptor: ModelDescriptor = {
+      ...descriptor,
+      id: "verified-image-model",
+      modalities: ["text", "image"],
+    };
+    const capture: {
+      dispatchedImage: Uint8Array | null;
+      preparedCitationDelivery: string | null;
+    } = { dispatchedImage: null, preparedCitationDelivery: null };
+    const gateway = new AiSdkDirectGateway({
+      models: [multimodalDescriptor],
+      resolveModel: () =>
+        new MockLanguageModelV4({ modelId: multimodalDescriptor.id }),
+      contextAssetResolver: {
+        async resolve() {
+          return {
+            ownerId: request.ownerId,
+            assetId: "derivative-1",
+            mime: "image/png",
+            byteSize: png.byteLength,
+            bytes: png,
+          };
+        },
+      },
+      onContextPrepared(_request, prompt) {
+        capture.preparedCitationDelivery =
+          prompt.citations[0]?.delivery ?? null;
+      },
+      streamFactory(_request, _model, prompt) {
+        const userMessage = prompt.messages.find(
+          (message) => message.role === "user",
+        );
+        if (!userMessage || typeof userMessage.content === "string") {
+          throw new Error("expected structured user content");
+        }
+        const imagePart = userMessage.content.find(
+          (part) => part.type === "image",
+        );
+        if (!imagePart || imagePart.type !== "image") {
+          throw new Error("expected a provider image part");
+        }
+        capture.dispatchedImage = imagePart.image as Uint8Array;
+        return simulateReadableStream({
+          chunks: [
+            {
+              type: "finish",
+              finishReason: "stop",
+              totalUsage: {},
+            },
+          ],
+        });
+      },
+    });
+    const mediaRequest: ModelRequest = {
+      ...request,
+      modelId: multimodalDescriptor.id,
+      messages: [
+        {
+          id: "visual-proof",
+          trust: "retrieved-untrusted",
+          mediaType: "multipart/mixed",
+          content: "OCR fallback",
+          sourceRef: "chunk-1",
+          redactions: [],
+          parts: [
+            {
+              type: "image",
+              assetHandle: contextAssetHandleSchema.parse(
+                `cah1.${"a".repeat(32)}`,
+              ),
+              mime: "image/png",
+              fallbackText: "OCR fallback",
+              evidence: {
+                chunkId: "chunk-1",
+                locator: { kind: "pdf", page: 2 },
+                digest,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const events = [];
+    for await (const event of gateway.stream(mediaRequest)) events.push(event);
+
+    expect(capture.dispatchedImage).toBeInstanceOf(Uint8Array);
+    expect(capture.dispatchedImage).toEqual(png);
+    expect(capture.preparedCitationDelivery).toBe("media");
+    expect(events.at(-1)).toEqual({ type: "finish", reason: "stop" });
+  });
+
+  test("fails closed before dispatch when compatible media lacks a resolver", async () => {
+    const multimodalDescriptor: ModelDescriptor = {
+      ...descriptor,
+      id: "image-model",
+      modalities: ["text", "image"],
+    };
+    let dispatched = false;
+    const gateway = new AiSdkDirectGateway({
+      models: [multimodalDescriptor],
+      resolveModel: () => new MockLanguageModelV4({ modelId: "image-model" }),
+      streamFactory() {
+        dispatched = true;
+        return simulateReadableStream({ chunks: [] });
+      },
+    });
+    const mediaRequest: ModelRequest = {
+      ...request,
+      modelId: multimodalDescriptor.id,
+      messages: [
+        {
+          ...request.messages[0]!,
+          mediaType: "multipart/mixed",
+          content: "fallback",
+          parts: [
+            {
+              type: "image",
+              assetHandle: contextAssetHandleSchema.parse(
+                `cah1.${"a".repeat(32)}`,
+              ),
+              mime: "image/png",
+              fallbackText: "fallback",
+              evidence: {
+                chunkId: null,
+                locator: { kind: "pdf", page: 1 },
+                digest: "b".repeat(64),
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const events = [];
+    for await (const event of gateway.stream(mediaRequest)) events.push(event);
+    expect(dispatched).toBe(false);
+    expect(events).toEqual([
+      {
+        type: "error",
+        code: "context_asset_resolver_unavailable",
+        retryable: false,
+      },
+    ]);
   });
 });

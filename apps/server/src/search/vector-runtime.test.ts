@@ -138,6 +138,10 @@ describe("optional corpus embedding configuration", () => {
         CORPUS_VECTOR_URL: "http://qdrant:6333",
       },
       {
+        readPublicationFence: async () => ({
+          enabled: true,
+          publicationEpoch: 0,
+        }),
         createNodeFetcher: async (input) => {
           nodeRequest = input;
           return async (_url, init) => {
@@ -167,6 +171,9 @@ describe("optional corpus embedding configuration", () => {
 
   test("carries the exact owner consent into the Gemini indexing and query runtime", async () => {
     const grantedAt = "2026-08-22T12:00:00.000Z";
+    let consentActive = true;
+    let consentLoads = 0;
+    let publicationFence = { enabled: true, publicationEpoch: 4 };
     const runtime = await createOwnedCorpusVectorRuntime(
       "owner-1",
       {
@@ -177,17 +184,23 @@ describe("optional corpus embedding configuration", () => {
         CORPUS_VECTOR_URL: "https://qdrant.example.test",
       },
       {
+        readPublicationFence: async () => publicationFence,
         resolveServiceKey: async () => ({
           key: "fixture-key-never-sent",
           source: "user",
           invalidationToken: "fixture-cas-token",
         }),
-        loadConsent: async () => ({
-          provider: "gemini",
-          capability: "embedding",
-          disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
-          grantedAt,
-        }),
+        loadConsent: async () => {
+          consentLoads += 1;
+          return consentActive
+            ? {
+                provider: "gemini",
+                capability: "embedding",
+                disclosureRevision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+                grantedAt,
+              }
+            : null;
+        },
       },
     );
 
@@ -202,6 +215,23 @@ describe("optional corpus embedding configuration", () => {
       model: "gemini-embedding-2",
       dimensions: 768,
     });
+    expect(consentLoads).toBe(1);
+    await runtime?.authorizeEmbedding?.();
+    expect(consentLoads).toBe(2);
+    consentActive = false;
+    await expect(runtime?.authorizeEmbedding?.()).rejects.toThrow(
+      "EXPLICIT_CONSENT_REQUIRED",
+    );
+    expect(consentLoads).toBe(3);
+
+    consentActive = true;
+    publicationFence = { enabled: true, publicationEpoch: 6 };
+    await expect(runtime?.authorizeEmbedding?.()).rejects.toThrow(
+      "CORPUS_EMBEDDING_PUBLICATION_FENCE_CHANGED",
+    );
+    // A stale runtime is rejected at the owner fence before consent is read;
+    // re-enabling at a newer epoch must not resurrect it.
+    expect(consentLoads).toBe(3);
   });
 
   test("validates provider ordering, finiteness and exact dimensions", async () => {
@@ -251,6 +281,41 @@ describe("optional corpus embedding configuration", () => {
 });
 
 describe("persistent Qdrant vector adapter", () => {
+  test("reads a selected generation collection without consulting the active alias", async () => {
+    const requests: string[] = [];
+    const vector = new QdrantVectorIndex({
+      baseUrl: "https://qdrant.example.test",
+      collectionPrefix: "school",
+      descriptor,
+      ownerId: "owner-a",
+      fetch: async (input, init) => {
+        const url = String(input);
+        requests.push(`${init?.method ?? "GET"} ${url}`);
+        if ((init?.method ?? "GET") === "POST") {
+          return Response.json({ result: { points: [] } });
+        }
+        return Response.json({
+          result: { config: { params: { vectors: { size: 3 } } } },
+        });
+      },
+    }).forGeneration("owner-a", "generation-a");
+
+    expect((await vector.capabilities()).available).toBe(true);
+    await vector.search({
+      ownerId: "owner-a",
+      spaceId: descriptor.id,
+      values: [1, 0, 0],
+      limit: 5,
+    });
+
+    expect(requests.some((request) => request.includes("_active"))).toBe(false);
+    const collectionTargets = requests.map(
+      (request) => request.match(/\/collections\/([^/]+)/u)?.[1] ?? null,
+    );
+    expect(collectionTargets).not.toContain(null);
+    expect(new Set(collectionTargets).size).toBe(1);
+  });
+
   test("filters ownership at query time and rejects hostile payload rows", async () => {
     let queryBody: Record<string, unknown> | null = null;
     const apiKeys: Array<string | null> = [];

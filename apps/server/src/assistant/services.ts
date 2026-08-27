@@ -6,6 +6,10 @@ import type {
 } from "@avermate/agent-contracts";
 import { db } from "../db";
 import { OpenAICompatibleGateway } from "../agent/model-gateways";
+import {
+  ContextAssetHandleService,
+  OwnedFileContextAssetResolver,
+} from "../agent/multimodal-context";
 import { createProductionAgentRuntime } from "../agent/production-runtime";
 import { CORPUS_INDEX_SOURCE_JOB_KIND } from "../jobs/corpus";
 import {
@@ -73,6 +77,7 @@ import { NodeModelGateway } from "../node/node-provider-adapters";
 import { createHash } from "node:crypto";
 import { nodePlacementMigrationReady } from "../node/readiness";
 import { registerPlacementMigrationAdapter } from "../node/placement-migration-adapters";
+import type { OwnedStoredFile } from "../lib/owned-file-storage";
 
 const mockGateway = new MockReadOnlyModelGateway();
 const managedModelRegistry = new ManagedModelPolicyRegistry(
@@ -80,6 +85,41 @@ const managedModelRegistry = new ManagedModelPolicyRegistry(
   env.MANAGED_REGION,
 );
 const managedCostControls = new ManagedCostControls(db.$client);
+const contextAssetHandles = new ContextAssetHandleService(
+  env.NODE_CREDENTIAL_MASTER_SECRET ?? env.BETTER_AUTH_SECRET,
+);
+const contextAssetResolver = new OwnedFileContextAssetResolver({
+  handles: contextAssetHandles,
+  async loadOwnedFile(ownerId, derivativeId) {
+    const result = await db.$client.execute({
+      sql: `SELECT files.id, files.userId, files.provider, files.storageKey,
+          files.mimeType, files.byteSize, files.status
+        FROM content_derivatives AS derivatives
+        JOIN content_versions AS versions ON versions.id = derivatives.versionId
+        JOIN content_chunks AS chunks ON chunks.id = derivatives.chunkId
+          AND chunks.versionId = derivatives.versionId
+        JOIN content_sources AS sources ON sources.id = versions.sourceId
+        JOIN files ON files.id = derivatives.fileId
+          AND files.userId = sources.userId
+        WHERE derivatives.id = ? AND sources.userId = ?
+          AND derivatives.status = 'ready' AND files.status = 'stored'
+        LIMIT 1`,
+      args: [derivativeId, ownerId],
+    });
+    const row = result.rows[0];
+    return row
+      ? {
+          id: String(row.id),
+          userId: String(row.userId),
+          provider: String(row.provider),
+          storageKey: String(row.storageKey),
+          mimeType: String(row.mimeType),
+          byteSize: Number(row.byteSize),
+          status: String(row.status) as OwnedStoredFile["status"],
+        }
+      : null;
+  },
+});
 
 function nodeModelKey(nodeId: string, modelId: string) {
   const node = createHash("sha256").update(nodeId).digest("hex").slice(0, 16);
@@ -254,7 +294,9 @@ function compatibleSelection(input: {
         allowedOrigins: [input.origin],
       },
       models: [input.descriptor],
+      contextAssetResolver,
     }),
+    contextMediaDelivery: "server-resolved" as const,
     modelRevision: `${input.descriptor.id}/2026-08-22`,
     providerRevision: `${input.provider}-openai-compatible/1`,
     modelPlacement:
@@ -599,6 +641,7 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
         allowedOrigins: [origin],
       },
       models: [mistralDescriptor],
+      contextAssetResolver,
     });
     if (managed) {
       if (!usesManagedOperatorSpend(credential)) {
@@ -623,6 +666,7 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
               unit,
             }),
         ),
+        contextMediaDelivery: "server-resolved" as const,
         modelRevision: "mistral-small-latest/2026-08-22",
         providerRevision: "mistral-openai-compatible/1",
         modelPlacement: {
@@ -640,6 +684,7 @@ class ProductionGatewayResolver implements AssistantGatewayResolver {
           : MISTRAL_INSTANCE_ASSISTANT_MODEL,
       descriptor: mistralDescriptor,
       gateway: directGateway,
+      contextMediaDelivery: "server-resolved" as const,
       modelRevision: "mistral-small-latest/2026-08-22",
       providerRevision: "mistral-openai-compatible/1",
       modelPlacement:
@@ -882,4 +927,5 @@ export const assistantRunService = createProductionAgentRuntime({
   sourceIndexer: coreCorpusIndexService,
   checkpoints: coreConversationCheckpointStore,
   lexical: routedCorpusStore,
+  contextAssetHandles,
 });

@@ -536,6 +536,29 @@ export const corpusEmbeddingSpaces = sqliteTable(
   ],
 );
 
+/**
+ * Monotonic owner fence for every embedding-provider dispatch and generation
+ * publication. Disabling rotates the epoch so already queued or in-flight work
+ * can never republish vectors after the user's global disable action returns.
+ */
+export const corpusEmbeddingOwnerStates = sqliteTable(
+  "corpus_embedding_owner_states",
+  {
+    userId: owner().primaryKey(),
+    publicationEpoch: integer().notNull().default(0),
+    enabled: integer({ mode: "boolean" }).notNull().default(true),
+    updatedAt: integer({ mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    check(
+      "corpus_embedding_owner_states_epoch_check",
+      sql`${table.publicationEpoch} >= 0`,
+    ),
+  ],
+);
+
 export type CorpusEmbeddingGenerationState =
   | "staging"
   | "active"

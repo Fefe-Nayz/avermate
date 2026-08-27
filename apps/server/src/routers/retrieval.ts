@@ -6,18 +6,29 @@ import {
   CORPUS_REPAIR_JOB_KIND,
 } from "../jobs/corpus";
 import { enqueueJob } from "../lib/jobs";
-import { conflict, notFound, protectedProcedure } from "../lib/orpc";
+import { badRequest, notFound, protectedProcedure } from "../lib/orpc";
 import { listProviderServiceKeyMetadata } from "../lib/service-keys";
 import { GEMINI_EMBEDDING_DISCLOSURE_REVISION } from "../search/gemini-embedding";
 import { COHERE_RERANK_DISCLOSURE_REVISION } from "../search/rerank-providers";
+import {
+  cancelOwnedEmbeddingJobs,
+  ensureEmbeddingPublicationFence,
+  readEmbeddingPublicationFence,
+  rotateEmbeddingPublicationFence,
+} from "../search/embedding-publication-fence";
 import {
   grantRetrievalProviderConsent,
   revokeRetrievalProviderConsent,
 } from "../search/retrieval-consent";
 import { corpusRerankConfiguration } from "../search/retrieval-runtime";
-import { corpusEmbeddingConfiguration } from "../search/vector-runtime";
-import { createOwnedCorpusVectorRuntime } from "../search/vector-runtime";
-import { tombstoneOwnedContentDerivatives } from "../search/derivatives";
+import {
+  corpusEmbeddingConfiguration,
+  createOwnedCorpusVectorRuntime,
+} from "../search/vector-runtime";
+import {
+  setOwnedProjectRetrievalPolicy,
+  setProjectRetrievalPolicyInputSchema,
+} from "../search/project-retrieval-policy";
 import { jsonValue } from "../search/values";
 import {
   FRENCH_SCHOOL_FIXTURE_REVISION,
@@ -41,7 +52,7 @@ const DISCLOSURES = [
     capability: "embedding" as const,
     revision: GEMINI_EMBEDDING_DISCLOSURE_REVISION,
     summary:
-      "Le texte et les pages ou segments sélectionnés sont envoyés à Google Gemini pour créer des représentations de recherche. Aucun secret ni URL signée n’est transmis.",
+      "Les contenus sources sélectionnés — texte, images et pages PDF, segments audio ou vidéo — sont envoyés à Google Gemini pour créer des embeddings. Les requêtes de recherche sont également envoyées ; une question de suivi peut inclure au plus deux messages utilisateur récents et trois titres de projet. Aucun secret ni URL signée n’est transmis.",
   },
   {
     provider: "cohere" as const,
@@ -134,6 +145,9 @@ export const retrievalRouter = {
       }));
     const embeddingConfiguration = corpusEmbeddingConfiguration();
     const rerankConfiguration = corpusRerankConfiguration();
+    const embeddingCredentialRequired =
+      embeddingConfiguration.provider === "gemini";
+    const rerankCredentialRequired = rerankConfiguration.provider === "cohere";
     const activeGeminiConsent = consents.some(
       (entry) =>
         entry.provider === "gemini" &&
@@ -154,10 +168,13 @@ export const retrievalRouter = {
       consents,
       embedding: {
         ...embeddingConfiguration,
-        credentialReady: keys.some(
-          (entry) => entry.provider === "gemini" && entry.status === "active",
-        ),
-        consentReady: activeGeminiConsent,
+        credentialReady:
+          !embeddingCredentialRequired ||
+          keys.some(
+            (entry) => entry.provider === "gemini" && entry.status === "active",
+          ),
+        consentRequired: embeddingCredentialRequired,
+        consentReady: !embeddingCredentialRequired || activeGeminiConsent,
         spaces: spaces.rows.map((row) => ({
           id: String(row.id),
           descriptor: jsonValue(row.descriptorJson),
@@ -177,12 +194,13 @@ export const retrievalRouter = {
       rerank: {
         ...rerankConfiguration,
         configuredSpaceId: configuredRerankSpaceId(),
-        credentialReady: keys.some(
-          (entry) => entry.provider === "cohere" && entry.status === "active",
-        ),
-        consentRequired: rerankConfiguration.provider === "cohere",
-        consentReady:
-          rerankConfiguration.placement === "node" || activeCohereConsent,
+        credentialReady:
+          !rerankCredentialRequired ||
+          keys.some(
+            (entry) => entry.provider === "cohere" && entry.status === "active",
+          ),
+        consentRequired: rerankCredentialRequired,
+        consentReady: !rerankCredentialRequired || activeCohereConsent,
         pairedNodeTransportRequired: rerankConfiguration.placement === "node",
       },
       jobs: jobs.rows.map((row) => ({
@@ -245,131 +263,210 @@ export const retrievalRouter = {
     ),
 
   updateProject: protectedProcedure
-    .input(
-      z.strictObject({
-        projectId: z.string().min(1),
-        revision: z.number().int().positive(),
-        retrievalMode: z.enum(["lexical-only", "advanced-auto"]),
-        fallbackPolicy: z.enum([
-          "fail",
-          "lexical-only",
-          "hybrid-without-rerank",
-        ]),
-        embeddingSpaceId: z.string().min(1).nullable(),
-        rerankSpaceId: z.string().min(1).nullable(),
-      }),
-    )
-    .handler(async ({ context, input }) => {
-      const userId = context.session.user.id;
-      await ownedProject(userId, input.projectId);
-      if (input.retrievalMode === "advanced-auto") {
-        if (!input.embeddingSpaceId || !input.rerankSpaceId) {
-          throw new Error("ADVANCED_RETRIEVAL_REQUIRES_EXACT_SPACES");
-        }
-        const space = await db.$client.execute({
-          sql: `SELECT 1 FROM corpus_embedding_spaces WHERE id = ? LIMIT 1`,
-          args: [input.embeddingSpaceId],
-        });
-        if (space.rows.length !== 1) {
-          throw new Error("EMBEDDING_SPACE_NOT_FOUND");
-        }
-        if (input.rerankSpaceId !== configuredRerankSpaceId()) {
-          throw new Error("RERANK_SPACE_NOT_CONFIGURED");
-        }
-      }
-      const updated = await db.$client.execute({
-        sql: `UPDATE study_projects SET retrievalMode = ?,
-            retrievalFallbackPolicy = ?, embeddingSpaceId = ?, rerankSpaceId = ?,
-            revision = revision + 1, updatedAt = ?
-          WHERE id = ? AND userId = ? AND revision = ? AND deletedAt IS NULL`,
-        args: [
-          input.retrievalMode,
-          input.fallbackPolicy,
-          input.retrievalMode === "advanced-auto"
-            ? input.embeddingSpaceId
-            : null,
-          input.retrievalMode === "advanced-auto" ? input.rerankSpaceId : null,
-          Math.floor(Date.now() / 1_000),
-          input.projectId,
-          userId,
-          input.revision,
-        ],
-      });
-      if (Number(updated.rowsAffected) !== 1) {
-        conflict("This study project changed elsewhere — reload it");
-      }
-      return { ok: true as const, revision: input.revision + 1 };
-    }),
+    .input(setProjectRetrievalPolicyInputSchema)
+    .handler(({ context, input }) =>
+      setOwnedProjectRetrievalPolicy(context.session.user.id, input),
+    ),
 
   reindex: protectedProcedure
     .input(z.strictObject({ projectId: z.string().min(1).optional() }))
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      if (input.projectId) await ownedProject(userId, input.projectId);
+      if (input.projectId) {
+        const project = await ownedProject(userId, input.projectId);
+        if (project.retrievalMode !== "advanced-auto") {
+          badRequest("Advanced retrieval is not enabled for this project");
+        }
+      }
+      if (!input.projectId) {
+        const advanced = await db.$client.execute({
+          sql: `SELECT 1 FROM study_projects WHERE userId = ?
+            AND deletedAt IS NULL AND retrievalMode = 'advanced-auto' LIMIT 1`,
+          args: [userId],
+        });
+        if (advanced.rows.length === 0) {
+          badRequest(
+            "Enable advanced retrieval on at least one project before rebuilding vectors",
+          );
+        }
+      }
+      const fence = await ensureEmbeddingPublicationFence(userId, true);
       const job = await enqueueJob({
         kind: CORPUS_REEMBED_SPACE_JOB_KIND,
-        payload: { ownerId: userId, projectId: input.projectId },
+        payload: input.projectId
+          ? {
+              ownerId: userId,
+              scope: "advanced-projects",
+              requestedProjectId: input.projectId,
+              publicationEpoch: fence.publicationEpoch,
+            }
+          : {
+              ownerId: userId,
+              scope: "all",
+              publicationEpoch: fence.publicationEpoch,
+            },
         userId,
-        idempotencyKey: `retrieval-reindex:${input.projectId ?? "all"}`,
+        idempotencyKey: `retrieval-reindex:${input.projectId ?? "all"}:epoch:${fence.publicationEpoch}`,
         newAttemptAfterTerminal: true,
         maxAttempts: 3,
       });
+      const currentFence = await readEmbeddingPublicationFence(userId);
+      if (
+        !currentFence.enabled ||
+        currentFence.publicationEpoch !== fence.publicationEpoch
+      ) {
+        await db.$client.batch(
+          [
+            {
+              sql: `UPDATE jobs SET status = 'cancelled', lockedBy = NULL,
+                  lockedUntil = NULL, updatedAt = ?
+                WHERE id = ? AND userId = ? AND status = 'queued'`,
+              args: [Math.floor(Date.now() / 1_000), job.id, userId],
+            },
+            {
+              sql: `INSERT INTO job_runtime_metadata
+                  (jobId, stage, cancellation, createdAt, updatedAt)
+                SELECT id, 'running', 'requested', ?, ? FROM jobs
+                WHERE id = ? AND userId = ? AND status = 'running'
+                ON CONFLICT(jobId) DO UPDATE SET
+                  cancellation = 'requested', updatedAt = excluded.updatedAt`,
+              args: [
+                Math.floor(Date.now() / 1_000),
+                Math.floor(Date.now() / 1_000),
+                job.id,
+                userId,
+              ],
+            },
+          ],
+          "write",
+        );
+        return { jobId: job.id, status: "cancelled" as const };
+      }
       return { jobId: job.id, status: job.status };
     }),
 
   clearIndex: protectedProcedure
     .input(
       z.strictObject({
-        projectId: z.string().min(1).optional(),
-        confirmation: z.literal("delete-rebuildable-index"),
+        confirmation: z.literal("disable-all-vector-generations"),
       }),
     )
-    .handler(async ({ context, input }) => {
+    .handler(async ({ context }) => {
       const userId = context.session.user.id;
-      if (input.projectId) await ownedProject(userId, input.projectId);
-      const versions = await db.$client.execute({
-        sql: input.projectId
-          ? `SELECT DISTINCT coalesce(items.sourceVersionId, sources.currentVersionId) AS id
-              FROM study_project_items AS items
-              JOIN study_projects AS projects ON projects.id = items.projectId
-              JOIN content_sources AS sources
-                ON sources.userId = projects.userId
-                AND sources.originKind = items.kind
-                AND sources.originId = items.referenceId
-              WHERE projects.id = ? AND projects.userId = ?
-                AND projects.deletedAt IS NULL`
-          : `SELECT DISTINCT versions.id
-              FROM content_versions AS versions
-              JOIN content_sources AS sources ON sources.id = versions.sourceId
-              WHERE sources.userId = ? AND (
-                sources.currentVersionId = versions.id OR EXISTS (
-                  SELECT 1 FROM study_project_items AS items
-                  JOIN study_projects AS projects ON projects.id = items.projectId
-                  WHERE projects.userId = sources.userId
-                    AND projects.deletedAt IS NULL
-                    AND items.sourceVersionId = versions.id
-                )
-              )`,
-        args: input.projectId ? [input.projectId, userId] : [userId],
-      });
-      const versionIds = versions.rows.flatMap((row) =>
-        row.id === null ? [] : [String(row.id)],
-      );
-      const runtime = await createOwnedCorpusVectorRuntime(userId);
-      if (runtime) await runtime.vector.remove(versionIds);
-      const derivatives = await tombstoneOwnedContentDerivatives({
-        ownerId: userId,
-        versionIds,
-      });
-      await db.$client.execute({
-        sql: `UPDATE corpus_embedding_generations
-          SET state = 'superseded', updatedAt = ?
-          WHERE userId = ? AND state = 'active'`,
-        args: [Math.floor(Date.now() / 1_000), userId],
-      });
+      const transaction = await db.$client.transaction("write");
+      let generationRows: Array<{
+        generationId: string;
+        spaceId: string;
+        versionId: string | null;
+      }> = [];
+      let queuedJobsCancelled = 0;
+      let runningJobsCancellationRequested = 0;
+      let disabledPublicationEpoch = 0;
+      try {
+        const disabledFence = await rotateEmbeddingPublicationFence(
+          userId,
+          false,
+          transaction,
+        );
+        disabledPublicationEpoch = disabledFence.publicationEpoch;
+        const cancelled = await cancelOwnedEmbeddingJobs(userId, transaction);
+        queuedJobsCancelled = cancelled.queuedJobsCancelled;
+        runningJobsCancellationRequested =
+          cancelled.runningJobsCancellationRequested;
+        const active = await transaction.execute({
+          sql: `SELECT generations.id AS generationId,
+              generations.spaceId AS spaceId,
+              members.versionId AS versionId
+            FROM corpus_embedding_generations AS generations
+            LEFT JOIN corpus_embedding_generation_versions AS members
+              ON members.generationId = generations.id
+            WHERE generations.userId = ?
+              AND generations.state IN ('active', 'staging')
+            ORDER BY generations.spaceId, generations.id, members.versionId`,
+          args: [userId],
+        });
+        generationRows = active.rows.map((row) => ({
+          generationId: String(row.generationId),
+          spaceId: String(row.spaceId),
+          versionId: row.versionId === null ? null : String(row.versionId),
+        }));
+        await transaction.execute({
+          sql: `UPDATE corpus_embedding_generations
+            SET state = 'superseded', updatedAt = ?
+            WHERE userId = ? AND state IN ('active', 'staging')`,
+          args: [Math.floor(Date.now() / 1_000), userId],
+        });
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+
+      const generations = [
+        ...new Map(
+          generationRows.map((row) => [row.generationId, row.spaceId]),
+        ).entries(),
+      ].map(([generationId, spaceId]) => ({ generationId, spaceId }));
+      const versionIds = [
+        ...new Set(
+          generationRows.flatMap((row) =>
+            row.versionId === null ? [] : [row.versionId],
+          ),
+        ),
+      ];
+      let vectorGenerationsCleaned = 0;
+      let vectorCleanup: "not-needed" | "completed" | "deferred" =
+        generations.length === 0 ? "not-needed" : "deferred";
+      try {
+        const runtime = await createOwnedCorpusVectorRuntime(userId);
+        if (runtime) {
+          const spaceId = runtime.embedding.descriptor().id;
+          const matching = generations.filter(
+            (generation) => generation.spaceId === spaceId,
+          );
+          for (const generation of matching) {
+            const generationVersionIds = generationRows.flatMap((row) =>
+              row.generationId === generation.generationId &&
+              row.versionId !== null
+                ? [row.versionId]
+                : [],
+            );
+            await runtime.vector
+              .forGeneration(userId, generation.generationId)
+              .remove(generationVersionIds);
+            vectorGenerationsCleaned += 1;
+          }
+          if (
+            vectorGenerationsCleaned === generations.length &&
+            runningJobsCancellationRequested === 0
+          ) {
+            vectorCleanup = "completed";
+          }
+        }
+      } catch {
+        // Publication state is the authorization boundary. If the configured
+        // vector service is unavailable, the now-superseded generations remain
+        // unqueryable even though provider-side physical cleanup was deferred.
+        vectorCleanup = "deferred";
+      }
+      const finalFence = await readEmbeddingPublicationFence(userId);
+      const publicationState = finalFence.enabled
+        ? ("superseded-by-reenable" as const)
+        : finalFence.publicationEpoch === disabledPublicationEpoch
+          ? ("disabled" as const)
+          : ("superseded-by-newer-disable" as const);
       return {
         versions: versionIds.length,
-        derivatives: derivatives.tombstoned,
+        generationsDisabled: generations.length,
+        queuedJobsCancelled,
+        runningJobsCancellationRequested,
+        vectorGenerationsCleaned,
+        vectorCleanup,
+        disabledPublicationEpoch,
+        publicationState,
+        currentPublicationEnabled: finalFence.enabled,
+        currentPublicationEpoch: finalFence.publicationEpoch,
+        contentDerivativesDeleted: 0 as const,
         sourceFilesDeleted: 0 as const,
       };
     }),

@@ -86,6 +86,30 @@ const previousMasteryProjection = alias(
   "previous_mastery_projection",
 );
 
+function learningProgressProjection(
+  projection: typeof learningMasteryProjections.$inferSelect | null,
+) {
+  if (!projection) return null;
+  return {
+    id: projection.id,
+    generation: projection.generation,
+    algorithmRevision: projection.algorithmRevision,
+    evidenceCursor: projection.evidenceCursor,
+    estimate: projection.estimate,
+    low: projection.low,
+    high: projection.high,
+    evidenceCount: projection.evidenceCount,
+    includedEvidenceIds: projection.explanationJson.contributions
+      .filter(
+        (contribution) =>
+          contribution.included && contribution.normalizedOutcome !== undefined,
+      )
+      .map((contribution) => contribution.evidenceId),
+    freshnessDays: projection.freshnessDays,
+    asOf: projection.asOf,
+  };
+}
+
 function masteryMeasurementState<T extends { evidenceCount: number }>(
   projection: T | null,
 ) {
@@ -2049,10 +2073,7 @@ export const learningRouter = {
               .where(
                 and(
                   eq(learningCopyAnalyses.userId, userId),
-                  eq(
-                    learningCopyAnalyses.attachmentId,
-                    input.attachmentId,
-                  ),
+                  eq(learningCopyAnalyses.attachmentId, input.attachmentId),
                   eq(
                     learningCopyAnalyses.modelRevision,
                     GRADE_COPY_ANALYSIS_MODEL_REVISION,
@@ -2265,18 +2286,9 @@ export const learningRouter = {
               .where(
                 and(
                   eq(learningCopyAnalyses.userId, userId),
-                  eq(
-                    learningCopyAnalyses.attachmentId,
-                    previous.attachmentId,
-                  ),
-                  eq(
-                    learningCopyAnalyses.sourceDigest,
-                    previous.sourceDigest,
-                  ),
-                  eq(
-                    learningCopyAnalyses.modelRevision,
-                    nextModelRevision,
-                  ),
+                  eq(learningCopyAnalyses.attachmentId, previous.attachmentId),
+                  eq(learningCopyAnalyses.sourceDigest, previous.sourceDigest),
+                  eq(learningCopyAnalyses.modelRevision, nextModelRevision),
                 ),
               )
               .limit(1)
@@ -3382,8 +3394,8 @@ export const learningRouter = {
           subjectName: row.subjectName,
           conceptId: row.concept.id,
           conceptLabel: row.concept.localLabel ?? row.concept.canonicalLabel,
-          current: row.projection,
-          previous: row.previousProjection,
+          current: learningProgressProjection(row.projection),
+          previous: learningProgressProjection(row.previousProjection),
         })),
         difficulties: difficultyRows,
         plan: activePlanRows.map((row) => ({

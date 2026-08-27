@@ -29,16 +29,26 @@ describe("project workspace recovery and privacy", () => {
   })
 
   test("never claims lexical privacy before the server confirms it", async () => {
-    const client = await source("./projects-client.tsx")
+    const [client, policyCard] = await Promise.all([
+      source("./projects-client.tsx"),
+      source("./project-retrieval-policy-card.tsx"),
+    ])
 
-    expect(client).toContain("embeddingQuery.isPending")
-    expect(client).toContain("embeddingQuery.isError")
-    expect(client).toContain('t("Checking retrieval privacy")')
-    expect(client).toContain('t("Retrieval privacy could not be verified")')
-    expect(client).toContain("embeddingQuery.data.vectorConfigured")
-    expect(client.indexOf("embeddingQuery.isError")).toBeLessThan(
-      client.indexOf("embeddingQuery.data.vectorConfigured")
+    expect(client).toContain(
+      "<ProjectRetrievalPolicyCard projectId={selected.id} />"
     )
+    expect(client).not.toContain("embeddingQuery")
+    expect(policyCard).toContain("policyQuery.isPending")
+    expect(policyCard).toContain("policyQuery.isError && !policy")
+    expect(policyCard).toContain('policy.status === "active"')
+    expect(policyCard).toContain("policy.effectiveMode")
+    expect(policyCard).toContain(
+      'policy.configured.retrievalMode === "lexical-only"'
+    )
+    expect(policyCard).toContain(
+      "policy.embedding.sendsSourceContentToThirdParties"
+    )
+    expect(policyCard).not.toContain("vectorConfigured")
   })
 
   test("opens the exact project artifact in Studio", async () => {

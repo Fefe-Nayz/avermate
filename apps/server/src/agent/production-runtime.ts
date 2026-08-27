@@ -29,6 +29,7 @@ import {
   type AssistantRegistryFactory,
   type AssistantRunExecutionControl,
   type AssistantContextRetriever,
+  type AssistantContextAssetHandleMinter,
   type ExplicitSourceIndexer,
 } from "../assistant/run-service";
 import {
@@ -76,6 +77,7 @@ export type ProductionAgentRuntimeDependencies = {
     "search"
   >;
   retrieval?: AssistantContextRetriever;
+  contextAssetHandles?: AssistantContextAssetHandleMinter;
   recoveryBrokerFactory?: (ownerId: string) => Promise<ToolBroker>;
   workerId?: string;
   leaseTtlMs?: number;
@@ -164,6 +166,7 @@ export class ProductionAgentRuntime implements AgentRuntime {
       dependencies.checkpoints,
       dependencies.lexical,
       dependencies.retrieval,
+      dependencies.contextAssetHandles,
     );
     this.#controls = new ProductionRunControlStore(dependencies.client);
     this.#workerId =

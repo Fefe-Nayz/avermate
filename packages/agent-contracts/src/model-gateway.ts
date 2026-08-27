@@ -41,7 +41,7 @@ export const modelDescriptorSchema = z.strictObject({
   provider: z.string().min(1).max(128),
   displayName: z.string().min(1).max(256),
   modalities: z.array(
-    z.enum(["text", "image", "audio", "video", "embedding"]),
+    z.enum(["text", "image", "file", "audio", "video", "embedding"]),
   ),
   capabilities: z.strictObject({
     tools: z.boolean(),

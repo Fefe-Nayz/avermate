@@ -11,6 +11,7 @@ import {
   type OwnedLexicalQuery,
 } from "@avermate/agent-contracts";
 import { db } from "../db";
+import { sourceOrProjectScopeSql } from "./context-access";
 import { jsonValue, normalizeForSearch } from "./values";
 
 type SqlClient = Pick<Client, "execute" | "transaction">;
@@ -75,28 +76,36 @@ function filterSql(input: OwnedLexicalQuery, args: InValue[]) {
   list("sources.yearId", input.yearIds);
   list("sources.subjectId", input.subjectIds);
   list("sources.originKind", input.originKinds);
-  list("sources.id", input.sourceIds ?? []);
-  if (input.projectIds.length > 0) {
-    clauses.push(`EXISTS (
-      SELECT 1
-      FROM study_project_items AS project_items
-      JOIN study_projects AS projects ON projects.id = project_items.projectId
-      WHERE projects.userId = ?
-        AND projects.deletedAt IS NULL
-        AND project_items.kind = sources.originKind
-        AND project_items.referenceId = sources.originId
-        AND project_items.contextMode != 'exclude'
-        AND project_items.selectorReviewRequired = 0
-        AND (
-          (project_items.trackingMode = 'pinned'
-            AND project_items.sourceVersionId = versions.id)
-          OR (project_items.trackingMode = 'follow-head'
-            AND sources.currentVersionId = versions.id)
-        )
-        AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
-    )`);
-    args.push(input.ownerId, ...input.projectIds);
-  }
+  list("versions.id", input.versionIds ?? []);
+  const scopedSources = sourceOrProjectScopeSql({
+    ...input,
+    args,
+    sourceSql: (placeholders) =>
+      `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
+    projectSql: (contextModeSql) => ({
+      sql: `EXISTS (
+        SELECT 1
+        FROM study_project_items AS project_items
+        JOIN study_projects AS projects ON projects.id = project_items.projectId
+        WHERE projects.userId = ?
+          AND projects.deletedAt IS NULL
+          AND project_items.kind = sources.originKind
+          AND project_items.referenceId = sources.originId
+          AND ${contextModeSql}
+          AND project_items.selectorReviewRequired = 0
+          AND (
+            (project_items.trackingMode = 'pinned'
+              AND project_items.sourceVersionId = versions.id)
+            OR (project_items.trackingMode = 'follow-head'
+              AND sources.currentVersionId = versions.id)
+          )
+          AND project_items.projectId IN (${input.projectIds.map(() => "?").join(", ")})
+      )`,
+      args: [input.ownerId, ...input.projectIds],
+    }),
+  });
+  if (scopedSources) clauses.push(scopedSources);
+  else clauses.push("sources.currentVersionId = versions.id");
   return clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
 }
 
@@ -264,7 +273,6 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
         WHERE ${predicate}
           AND sources.userId = ?
           AND sources.placement = 'core'
-          AND ${input.projectIds.length > 0 ? "1 = 1" : "sources.currentVersionId = versions.id"}
           ${filters}
         ORDER BY score DESC, chunks.id ASC
         LIMIT ? OFFSET ?
@@ -287,7 +295,6 @@ export class SqliteFts5LexicalSearchBackend implements LexicalSearchBackend {
         JOIN content_sources AS sources ON sources.id = versions.sourceId
         WHERE sources.userId = ?
           AND sources.placement = 'core'
-          AND ${input.projectIds.length > 0 ? "1 = 1" : "sources.currentVersionId = versions.id"}
           ${bodyFilters}
           AND chunks.id IN (${ids.map(() => "?").join(", ")})
       `,

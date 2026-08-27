@@ -69,6 +69,51 @@ describe("FilesystemLexicalSearchBackend", () => {
         },
       ],
     });
+    await backend.upsertVersion({
+      ownerId: "owner-1",
+      source: {
+        id: "source-2",
+        ownerId: "owner-1",
+        originKind: "study-document",
+        originId: "document-2",
+        yearId: "year-1",
+        subjectId: "subject-1",
+        currentVersionId: "version-2",
+        status: "ready",
+        coverage: "searchable-native-text",
+        placement: { kind: "node", nodeId: "node-1" },
+        placementRef: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      version: {
+        id: "version-2",
+        sourceId: "source-2",
+        versionKey: "v1",
+        contentHash: digest,
+        extractorId: "extractor-1",
+        extractorVersion: "1",
+        mimeType: "text/plain",
+        language: "fr",
+        byteSize: 64,
+        locatorSchemaVersion: 1,
+        metadata: { projectIds: ["project-2"] },
+        createdAt: now,
+      },
+      chunks: [
+        {
+          chunkId: "chunk-committed-2",
+          ordinal: 0,
+          text: "La photosynthèse transforme aussi le carbone.",
+          normalizedText: "la photosynthese transforme aussi le carbone",
+          tokenEstimate: 7,
+          contentHash: digest,
+          locator: { kind: "text", startOffset: 0, endOffset: 47 },
+          headingPath: null,
+          evidenceKind: "native-text",
+        },
+      ],
+    });
     const restarted = new FilesystemLexicalSearchBackend({
       path,
       ownerId: "owner-1",
@@ -87,14 +132,62 @@ describe("FilesystemLexicalSearchBackend", () => {
     });
     expect(results).toHaveLength(1);
     expect(results[0]?.chunkId).toBe("chunk-committed-1");
+    const scopeBase = {
+      ownerId: "owner-1",
+      query: "photosynthese transforme",
+      mode: "terms" as const,
+      projectIds: ["project-1"],
+      yearIds: ["year-1"],
+      subjectIds: [] as string[],
+      originKinds: [] as [],
+      limit: 10,
+      cursor: null,
+    };
+    expect(
+      (
+        await restarted.search({
+          ...scopeBase,
+          sourceIds: ["source-2"],
+          contextAccess: "automatic",
+        })
+      ).map((candidate) => candidate.sourceId),
+    ).toEqual(["source-1", "source-2"]);
+    expect(
+      (
+        await restarted.search({
+          ...scopeBase,
+          sourceIds: ["source-2"],
+          contextAccess: "explicit-attachment",
+        })
+      ).map((candidate) => candidate.sourceId),
+    ).toEqual(["source-2"]);
+    expect(
+      await restarted.search({
+        ...scopeBase,
+        sourceIds: [],
+        versionIds: ["version-2"],
+        contextAccess: "explicit-attachment",
+      }),
+    ).toEqual([]);
+    expect(
+      (
+        await restarted.search({
+          ...scopeBase,
+          projectIds: [],
+          versionIds: ["version-2"],
+        })
+      ).map((candidate) => candidate.versionId),
+    ).toEqual(["version-2"]);
     expect((await restarted.verify()).consistent).toBe(true);
-    expect(await restarted.exportOwner("owner-1")).toMatchObject([
-      {
-        ownerId: "owner-1",
-        version: { id: "version-1" },
-        chunks: [{ chunkId: "chunk-committed-1" }],
-      },
-    ]);
+    expect(await restarted.exportOwner("owner-1")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ownerId: "owner-1",
+          version: expect.objectContaining({ id: "version-1" }),
+          chunks: [expect.objectContaining({ chunkId: "chunk-committed-1" })],
+        }),
+      ]),
+    );
     expect(
       await restarted.getChunks("owner-1", ["chunk-committed-1"]),
     ).toMatchObject([
@@ -126,7 +219,7 @@ describe("FilesystemLexicalSearchBackend", () => {
       }),
     ).rejects.toThrow("NODE_LEXICAL_OWNER_MISMATCH");
     expect(await restarted.deleteOwner("owner-1")).toEqual({
-      deletedVersions: 1,
+      deletedVersions: 2,
     });
     expect(await restarted.exportOwner("owner-1")).toEqual([]);
   });

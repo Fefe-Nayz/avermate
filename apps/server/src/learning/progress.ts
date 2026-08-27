@@ -3,15 +3,23 @@ import type { LearningActivityKind, LearningErrorTaxonomy } from "../db/schema";
 const DAY_MS = 86_400_000;
 
 export type LearningProgressTrend =
-  "improving" | "stable" | "declining" | "insufficient-data";
+  | "improving"
+  | "stable"
+  | "declining"
+  | "uncertain"
+  | "method-changed"
+  | "insufficient-data";
 
 export type LearningProgressProjectionInput = {
   id: string;
   generation: number;
+  algorithmRevision: string;
+  evidenceCursor: string;
   estimate: number;
   low: number;
   high: number;
   evidenceCount: number;
+  includedEvidenceIds?: readonly string[];
   freshnessDays: number | null;
   asOf: Date;
 };
@@ -77,10 +85,14 @@ function intervalPair(low: number, high: number): [number, number] {
   return [low, high];
 }
 
-function trend(delta: number | null): LearningProgressTrend {
+const TREND_THRESHOLD = 0.02;
+const MIN_EVIDENCE_PER_SNAPSHOT = 2;
+const MAX_COMPARABLE_INTERVAL_WIDTH = 0.5;
+
+function directionalTrend(delta: number | null): LearningProgressTrend {
   if (delta === null) return "insufficient-data";
-  if (delta >= 0.02) return "improving";
-  if (delta <= -0.02) return "declining";
+  if (delta >= TREND_THRESHOLD) return "improving";
+  if (delta <= -TREND_THRESHOLD) return "declining";
   return "stable";
 }
 
@@ -88,54 +100,187 @@ function measurement(projection: LearningProgressProjectionInput | null) {
   if (!isMeasuredProjection(projection)) return null;
   const measured = projection!;
   const intervalWidth = bounded(measured.high - measured.low);
+  const precision = {
+    // This is a UI-oriented precision indicator, not a new statistical
+    // probability: the persisted interval remains the source of truth.
+    score: rounded(1 - intervalWidth),
+    level:
+      intervalWidth <= 0.25
+        ? ("high" as const)
+        : intervalWidth <= 0.5
+          ? ("medium" as const)
+          : ("low" as const),
+    intervalWidth: rounded(intervalWidth),
+  };
+  const freshnessStatus =
+    measured.freshnessDays === null
+      ? ("unknown" as const)
+      : measured.freshnessDays <= 30
+        ? ("fresh" as const)
+        : measured.freshnessDays <= 90
+          ? ("aging" as const)
+          : ("stale" as const);
   return {
     projectionId: measured.id,
     generation: measured.generation,
+    algorithmRevision: measured.algorithmRevision,
     estimate: measured.estimate,
     interval: intervalPair(measured.low, measured.high),
-    intervalWidth: rounded(intervalWidth),
-    confidence: {
-      // This is an UI-oriented precision indicator, not a new statistical
-      // probability: the persisted interval remains the source of truth.
-      score: rounded(1 - intervalWidth),
-      level:
-        intervalWidth <= 0.25
-          ? ("high" as const)
-          : intervalWidth <= 0.5
-            ? ("medium" as const)
-            : ("low" as const),
+    precision,
+    evidence: {
+      count: measured.evidenceCount,
     },
-    evidenceCount: measured.evidenceCount,
-    freshnessDays: measured.freshnessDays,
-    freshness:
-      measured.freshnessDays === null
-        ? ("unknown" as const)
-        : measured.freshnessDays <= 30
-          ? ("fresh" as const)
-          : measured.freshnessDays <= 90
-            ? ("aging" as const)
-            : ("stale" as const),
+    freshness: {
+      days: measured.freshnessDays,
+      status: freshnessStatus,
+    },
     asOf: measured.asOf,
   };
 }
 
-function projectionDelta(
+function evidenceIdDifference(
+  current: readonly string[] | undefined,
+  previous: readonly string[] | undefined,
+) {
+  if (!current || !previous) return { addedCount: null, removedCount: null };
+  const currentIds = new Set(current);
+  const previousIds = new Set(previous);
+  return {
+    addedCount: current.filter((id) => !previousIds.has(id)).length,
+    removedCount: previous.filter((id) => !currentIds.has(id)).length,
+  };
+}
+
+function projectionComparison(
   current: LearningProgressProjectionInput | null,
   previous: LearningProgressProjectionInput | null,
 ) {
   if (!isMeasuredProjection(current) || !isMeasuredProjection(previous))
     return null;
-  const estimate = rounded(current!.estimate - previous!.estimate);
-  return {
-    estimate,
-    intervalLow: rounded(current!.low - previous!.low),
-    intervalHigh: rounded(current!.high - previous!.high),
-    previousEstimate: previous!.estimate,
-    previousAsOf: previous!.asOf,
+
+  const measuredCurrent = current!;
+  const measuredPrevious = previous!;
+  const currentIntervalWidth = rounded(
+    bounded(measuredCurrent.high - measuredCurrent.low),
+  );
+  const previousIntervalWidth = rounded(
+    bounded(measuredPrevious.high - measuredPrevious.low),
+  );
+  const intervalsOverlap =
+    Math.max(measuredCurrent.low, measuredPrevious.low) <=
+    Math.min(measuredCurrent.high, measuredPrevious.high);
+  const evidenceDifference = evidenceIdDifference(
+    measuredCurrent.includedEvidenceIds,
+    measuredPrevious.includedEvidenceIds,
+  );
+  const evidence = {
+    currentCount: measuredCurrent.evidenceCount,
+    previousCount: measuredPrevious.evidenceCount,
+    countDelta: measuredCurrent.evidenceCount - measuredPrevious.evidenceCount,
+    changed: measuredCurrent.evidenceCursor !== measuredPrevious.evidenceCursor,
+    ...evidenceDifference,
+    sufficient:
+      measuredCurrent.evidenceCount >= MIN_EVIDENCE_PER_SNAPSHOT &&
+      measuredPrevious.evidenceCount >= MIN_EVIDENCE_PER_SNAPSHOT,
+  };
+  const precision = {
+    currentIntervalWidth,
+    previousIntervalWidth,
+    intervalsOverlap,
+    sufficient:
+      currentIntervalWidth <= MAX_COMPARABLE_INTERVAL_WIDTH &&
+      previousIntervalWidth <= MAX_COMPARABLE_INTERVAL_WIDTH,
+  };
+  const method = {
+    currentRevision: measuredCurrent.algorithmRevision,
+    previousRevision: measuredPrevious.algorithmRevision,
+    changed:
+      measuredCurrent.algorithmRevision !== measuredPrevious.algorithmRevision,
+  };
+  const common = {
+    previousEstimate: measuredPrevious.estimate,
+    previousAsOf: measuredPrevious.asOf,
     elapsedDays: rounded(
-      Math.max(0, current!.asOf.getTime() - previous!.asOf.getTime()) / DAY_MS,
+      Math.max(
+        0,
+        measuredCurrent.asOf.getTime() - measuredPrevious.asOf.getTime(),
+      ) / DAY_MS,
     ),
-    trend: trend(estimate),
+    precision,
+    evidence,
+    method,
+  };
+  if (method.changed) {
+    return {
+      ...common,
+      variation: null,
+      trend: "method-changed" as const,
+    };
+  }
+
+  const estimate = rounded(
+    measuredCurrent.estimate - measuredPrevious.estimate,
+  );
+  const candidateTrend = directionalTrend(estimate);
+  const trend =
+    !evidence.sufficient ||
+    !precision.sufficient ||
+    (evidence.removedCount !== null && evidence.removedCount > 0) ||
+    (candidateTrend !== "stable" && intervalsOverlap)
+      ? ("uncertain" as const)
+      : candidateTrend;
+  return {
+    ...common,
+    variation: {
+      estimate,
+      intervalLow: rounded(measuredCurrent.low - measuredPrevious.low),
+      intervalHigh: rounded(measuredCurrent.high - measuredPrevious.high),
+    },
+    trend,
+  };
+}
+
+function aggregateVariation<
+  T extends {
+    trend: LearningProgressTrend;
+    delta: { estimate: number } | null;
+  },
+>(rows: readonly T[]) {
+  const comparable = rows.filter(
+    (row): row is T & { delta: { estimate: number } } => row.delta !== null,
+  );
+  const delta = mean(comparable.map((row) => row.delta.estimate));
+  const methodChangedObjectiveCount = rows.filter(
+    (row) => row.trend === "method-changed",
+  ).length;
+  const uncertainObjectiveCount = rows.filter(
+    (row) => row.trend === "uncertain",
+  ).length;
+  const directional = new Set(
+    comparable
+      .map((row) => row.trend)
+      .filter((value) => value === "improving" || value === "declining"),
+  );
+  let trend: LearningProgressTrend;
+  if (comparable.length === 0) {
+    trend = methodChangedObjectiveCount
+      ? "method-changed"
+      : "insufficient-data";
+  } else if (
+    methodChangedObjectiveCount > 0 ||
+    uncertainObjectiveCount > 0 ||
+    directional.size > 1
+  ) {
+    trend = "uncertain";
+  } else {
+    trend = directionalTrend(delta);
+  }
+  return {
+    delta,
+    trend,
+    comparableObjectiveCount: comparable.length,
+    uncertainObjectiveCount,
+    methodChangedObjectiveCount,
   };
 }
 
@@ -216,7 +361,8 @@ export function buildLearningProgress(input: {
 }) {
   const objectives = input.objectives.map((row) => {
     const currentMeasurement = measurement(row.current);
-    const delta = projectionDelta(row.current, row.previous);
+    const comparison = projectionComparison(row.current, row.previous);
+    const delta = comparison?.variation ?? null;
     const difficulties = aggregateDifficulties(
       input.difficulties.filter((item) => item.objectiveId === row.id),
     );
@@ -233,8 +379,9 @@ export function buildLearningProgress(input: {
         ? ("measured" as const)
         : ("unmeasured" as const),
       measurement: currentMeasurement,
+      comparison,
       delta,
-      trend: delta?.trend ?? ("insufficient-data" as const),
+      trend: comparison?.trend ?? ("insufficient-data" as const),
       difficulties,
       recurringDifficulties: difficulties.filter((item) => item.recurring),
       nextAction: chooseNextAction(
@@ -260,9 +407,45 @@ export function buildLearningProgress(input: {
         (row) => (row.subjectId ?? "__unassigned__") === key,
       );
       const measured = rows.filter((row) => row.measurement !== null);
-      const comparable = rows.filter((row) => row.delta !== null);
       const estimate = mean(measured.map((row) => row.measurement!.estimate));
-      const delta = mean(comparable.map((row) => row.delta!.estimate));
+      const variation = aggregateVariation(rows);
+      const evidence = {
+        objectiveCount: rows.length,
+        measuredObjectiveCount: measured.length,
+        unmeasuredObjectiveCount: rows.length - measured.length,
+        coverage: rows.length ? rounded(measured.length / rows.length) : 0,
+        itemCount: measured.reduce(
+          (total, row) => total + row.measurement!.evidence.count,
+          0,
+        ),
+      };
+      const precision = {
+        score: mean(measured.map((row) => row.measurement!.precision.score)),
+        averageIntervalWidth: mean(
+          measured.map((row) => row.measurement!.precision.intervalWidth),
+        ),
+      };
+      const freshness = {
+        fresh: measured.filter(
+          (row) => row.measurement!.freshness.status === "fresh",
+        ).length,
+        aging: measured.filter(
+          (row) => row.measurement!.freshness.status === "aging",
+        ).length,
+        stale: measured.filter(
+          (row) => row.measurement!.freshness.status === "stale",
+        ).length,
+        unknown: measured.filter(
+          (row) => row.measurement!.freshness.status === "unknown",
+        ).length,
+        averageDays: mean(
+          measured.flatMap((row) =>
+            row.measurement!.freshness.days === null
+              ? []
+              : [row.measurement!.freshness.days],
+          ),
+        ),
+      };
       const difficulties = aggregateDifficulties(
         input.difficulties.filter(
           (row) => (row.subjectId ?? "__unassigned__") === key,
@@ -270,10 +453,8 @@ export function buildLearningProgress(input: {
       );
       return {
         ...subject,
-        objectiveCount: rows.length,
-        measuredObjectiveCount: measured.length,
-        unmeasuredObjectiveCount: rows.length - measured.length,
-        coverage: rows.length ? rounded(measured.length / rows.length) : 0,
+        ...evidence,
+        evidence,
         estimate,
         interval:
           measured.length > 0
@@ -282,19 +463,10 @@ export function buildLearningProgress(input: {
                 mean(measured.map((row) => row.measurement!.interval[1]))!,
               )
             : null,
-        confidenceScore: mean(
-          measured.map((row) => row.measurement!.confidence.score),
-        ),
-        averageFreshnessDays: mean(
-          measured.flatMap((row) =>
-            row.measurement!.freshnessDays === null
-              ? []
-              : [row.measurement!.freshnessDays],
-          ),
-        ),
-        comparableObjectiveCount: comparable.length,
-        delta,
-        trend: trend(delta),
+        precision,
+        freshness,
+        ...variation,
+        variation,
         difficulties,
         recurringDifficulties: difficulties.filter((item) => item.recurring),
         nextAction: chooseNextAction(
@@ -309,25 +481,63 @@ export function buildLearningProgress(input: {
     );
 
   const measured = objectives.filter((row) => row.measurement !== null);
-  const comparable = objectives.filter((row) => row.delta !== null);
-  const delta = mean(comparable.map((row) => row.delta!.estimate));
+  const variation = aggregateVariation(objectives);
+  const evidence = {
+    objectiveCount: objectives.length,
+    measuredObjectiveCount: measured.length,
+    unmeasuredObjectiveCount: objectives.length - measured.length,
+    coverage: objectives.length
+      ? rounded(measured.length / objectives.length)
+      : 0,
+    itemCount: measured.reduce(
+      (total, row) => total + row.measurement!.evidence.count,
+      0,
+    ),
+  };
+  const precision = {
+    score: mean(measured.map((row) => row.measurement!.precision.score)),
+    averageIntervalWidth: mean(
+      measured.map((row) => row.measurement!.precision.intervalWidth),
+    ),
+  };
+  const freshness = {
+    fresh: measured.filter(
+      (row) => row.measurement!.freshness.status === "fresh",
+    ).length,
+    aging: measured.filter(
+      (row) => row.measurement!.freshness.status === "aging",
+    ).length,
+    stale: measured.filter(
+      (row) => row.measurement!.freshness.status === "stale",
+    ).length,
+    unknown: measured.filter(
+      (row) => row.measurement!.freshness.status === "unknown",
+    ).length,
+    averageDays: mean(
+      measured.flatMap((row) =>
+        row.measurement!.freshness.days === null
+          ? []
+          : [row.measurement!.freshness.days],
+      ),
+    ),
+  };
   const difficulties = aggregateDifficulties(input.difficulties);
   return {
     methodology: {
-      version: 1,
+      version: 2,
       measuredDefinition: "positive-numeric-evidence-count",
-      confidenceDefinition: "one-minus-persisted-interval-width",
-      deltaDefinition: "current-minus-previous-measured-generation",
-      trendThreshold: 0.02,
+      precisionDefinition: "one-minus-persisted-interval-width",
+      variationDefinition:
+        "current-minus-previous-measured-generation-with-same-algorithm-revision",
+      trendThreshold: TREND_THRESHOLD,
+      minimumEvidencePerSnapshot: MIN_EVIDENCE_PER_SNAPSHOT,
+      maximumComparableIntervalWidth: MAX_COMPARABLE_INTERVAL_WIDTH,
+      overlappingIntervalsAreUncertain: true,
       recurringDifficultyMinimumObservations: 2,
     },
     summary: {
-      objectiveCount: objectives.length,
-      measuredObjectiveCount: measured.length,
-      unmeasuredObjectiveCount: objectives.length - measured.length,
-      coverage: objectives.length
-        ? rounded(measured.length / objectives.length)
-        : 0,
+      ...evidence,
+      evidence,
       estimate: mean(measured.map((row) => row.measurement!.estimate)),
       interval:
         measured.length > 0
@@ -336,30 +546,10 @@ export function buildLearningProgress(input: {
               mean(measured.map((row) => row.measurement!.interval[1]))!,
             )
           : null,
-      confidenceScore: mean(
-        measured.map((row) => row.measurement!.confidence.score),
-      ),
-      comparableObjectiveCount: comparable.length,
-      delta,
-      trend: trend(delta),
-      freshness: {
-        fresh: measured.filter((row) => row.measurement!.freshness === "fresh")
-          .length,
-        aging: measured.filter((row) => row.measurement!.freshness === "aging")
-          .length,
-        stale: measured.filter((row) => row.measurement!.freshness === "stale")
-          .length,
-        unknown: measured.filter(
-          (row) => row.measurement!.freshness === "unknown",
-        ).length,
-        averageDays: mean(
-          measured.flatMap((row) =>
-            row.measurement!.freshnessDays === null
-              ? []
-              : [row.measurement!.freshnessDays],
-          ),
-        ),
-      },
+      precision,
+      ...variation,
+      variation,
+      freshness,
       nextAction: chooseNextAction(input.plan),
     },
     objectives,

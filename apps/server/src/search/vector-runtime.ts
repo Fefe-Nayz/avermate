@@ -27,6 +27,7 @@ import {
   GEMINI_EMBEDDING_DISCLOSURE_REVISION,
   GeminiEmbeddingProvider,
 } from "./gemini-embedding";
+import { readEmbeddingPublicationFence } from "./embedding-publication-fence";
 import { canonicalJson, sha256 } from "./values";
 
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -151,6 +152,7 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
     if (input.length === 0) return [];
     if (input.length > 256)
       throw new Error("Embedding batches are limited to 256 inputs");
+    await context?.authorize?.();
     const response = await this.#fetch(this.#endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -274,6 +276,17 @@ export class QdrantVectorIndex implements VectorIndex {
     return this.options.descriptor.dimensions;
   }
 
+  /**
+   * Reads from an immutable generation when one was selected explicitly.
+   * The mutable active alias is only a discovery/default pointer; it must not
+   * override the generation recorded by Core for an in-flight retrieval.
+   */
+  private get readTarget() {
+    return this.options.ownerId && this.options.generationId
+      ? this.#collection
+      : this.#alias;
+  }
+
   forGeneration(ownerId: string, generationId: string) {
     if (!ownerId.trim() || !generationId.trim()) {
       throw new Error("Vector generation requires owner and generation ids");
@@ -341,7 +354,7 @@ export class QdrantVectorIndex implements VectorIndex {
 
   async capabilities(): Promise<VectorCapabilities> {
     try {
-      const info = await this.collectionInfo(this.#alias);
+      const info = await this.collectionInfo(this.readTarget);
       const available =
         info !== null && this.dimensionFromInfo(info) === this.dimension;
       return {
@@ -527,7 +540,7 @@ export class QdrantVectorIndex implements VectorIndex {
     const capabilities = await this.capabilities();
     if (!capabilities.available) return [];
     const response = await this.request(
-      `/collections/${encodeURIComponent(this.#alias)}/points/query`,
+      `/collections/${encodeURIComponent(this.readTarget)}/points/query`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -578,6 +591,7 @@ export type CorpusVectorRuntime = {
   embedding: EmbeddingProvider;
   vector: QdrantVectorIndex;
   consent?: ProviderConsent;
+  authorizeEmbedding?: () => Promise<void>;
 };
 
 export type CorpusEmbeddingConfiguration = {
@@ -730,10 +744,23 @@ export async function createOwnedCorpusVectorRuntime(
     }) => Promise<Fetcher>;
     resolveServiceKey?: typeof resolveProviderServiceKey;
     loadConsent?: typeof loadRetrievalProviderConsent;
+    readPublicationFence?: typeof readEmbeddingPublicationFence;
   } = {},
 ): Promise<CorpusVectorRuntime | null> {
   const state = corpusEmbeddingConfiguration(environment);
   if (!state.complete) return null;
+  const readPublicationFence =
+    dependencies.readPublicationFence ?? readEmbeddingPublicationFence;
+  const capturedPublicationFence = await readPublicationFence(ownerId);
+  const authorizePublication = async () => {
+    const current = await readPublicationFence(ownerId);
+    if (
+      !current.enabled ||
+      current.publicationEpoch !== capturedPublicationFence.publicationEpoch
+    ) {
+      throw new Error("CORPUS_EMBEDDING_PUBLICATION_FENCE_CHANGED");
+    }
+  };
   if (state.provider !== "gemini") {
     if (environment.CORPUS_EMBEDDING_PLACEMENT === "node") {
       const createNodeFetcher =
@@ -745,11 +772,17 @@ export async function createOwnedCorpusVectorRuntime(
         ...(nodeId ? { nodeId } : {}),
         purpose: "embedding",
       });
-      return createConfiguredCorpusVectorRuntime(environment, ownerId, {
+      const runtime = createConfiguredCorpusVectorRuntime(environment, ownerId, {
         nodeProviderFetch,
       });
+      return runtime
+        ? { ...runtime, authorizeEmbedding: authorizePublication }
+        : null;
     }
-    return createConfiguredCorpusVectorRuntime(environment, ownerId);
+    const runtime = createConfiguredCorpusVectorRuntime(environment, ownerId);
+    return runtime
+      ? { ...runtime, authorizeEmbedding: authorizePublication }
+      : null;
   }
   if (state.placement !== "hosted-core") {
     throw new Error("GEMINI_EMBEDDING_REQUIRES_HOSTED_CORE_BYOK_PLACEMENT");
@@ -762,13 +795,14 @@ export async function createOwnedCorpusVectorRuntime(
   if (![768, 1536, 3072].includes(dimensions ?? 0)) {
     throw new Error("GEMINI_EMBEDDING_DIMENSION_MUST_BE_768_1536_OR_3072");
   }
+  const loadConsent = dependencies.loadConsent ?? loadRetrievalProviderConsent;
   const [credential, consent] = await Promise.all([
     (dependencies.resolveServiceKey ?? resolveProviderServiceKey)(
       ownerId,
       "inference",
       "gemini",
     ) as Promise<ResolvedServiceKey | null>,
-    (dependencies.loadConsent ?? loadRetrievalProviderConsent)(
+    loadConsent(
       ownerId,
       "gemini",
       "embedding",
@@ -803,6 +837,18 @@ export async function createOwnedCorpusVectorRuntime(
   return {
     embedding,
     consent,
+    authorizeEmbedding: async () => {
+      await authorizePublication();
+      const current = await loadConsent(
+        ownerId,
+        "gemini",
+        "embedding",
+        GEMINI_EMBEDDING_DISCLOSURE_REVISION,
+      );
+      if (!current) {
+        throw new Error("GEMINI_EMBEDDING_EXPLICIT_CONSENT_REQUIRED");
+      }
+    },
     vector: new QdrantVectorIndex({
       baseUrl: environment.CORPUS_VECTOR_URL!,
       apiKey: environment.CORPUS_VECTOR_API_KEY,

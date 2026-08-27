@@ -20,11 +20,19 @@ import {
   type ModelEndpointPolicy,
   type ModelTransport,
 } from "./model-endpoint-policy";
+import {
+  ContextMediaError,
+  prepareModelPrompt,
+  type ContextAssetResolver,
+  type ContextMediaBudgets,
+  type PreparedModelPrompt,
+} from "./multimodal-context";
 
 type UnknownRecord = Record<string, unknown>;
 type AiSdkStreamFactory = (
   request: ModelRequest,
   model: LanguageModel,
+  prompt: PreparedModelPrompt,
 ) => AsyncIterable<unknown>;
 
 export class UnsupportedGatewayCapabilityError extends Error {
@@ -181,17 +189,8 @@ export async function* normalizeAiSdkStream(
 function defaultStreamFactory(
   request: ModelRequest,
   model: LanguageModel,
+  prompt: PreparedModelPrompt,
 ): AsyncIterable<unknown> {
-  const system = request.messages
-    .filter((block) => block.trust === "system-policy")
-    .map((block) => block.content)
-    .join("\n\n");
-  const messages = request.messages
-    .filter((block) => block.trust !== "system-policy")
-    .map((block) => ({
-      role: "user" as const,
-      content: `[trust=${block.trust}]\n${block.content}`,
-    }));
   const tools = Object.fromEntries(
     request.tools.map((tool) => [
       tool.name,
@@ -203,8 +202,8 @@ function defaultStreamFactory(
   );
   return streamText({
     model,
-    ...(system ? { system } : {}),
-    messages,
+    ...(prompt.system ? { system: prompt.system } : {}),
+    messages: prompt.messages,
     tools,
     ...(request.maximumOutputTokens
       ? { maxOutputTokens: request.maximumOutputTokens }
@@ -222,6 +221,14 @@ export type AiSdkDirectGatewayOptions = {
   embed?: (request: EmbedRequest) => Promise<EmbedResult>;
   transcribe?: (request: TranscriptionRequest) => Promise<TranscriptionResult>;
   estimate?: (request: ModelRequest) => Promise<UsageEstimate>;
+  /** Server/Node-local resolver; opaque handles are never sent to providers. */
+  contextAssetResolver?: ContextAssetResolver;
+  contextMediaBudgets?: Partial<ContextMediaBudgets>;
+  /** Observability/citation hook after immutable verification, before dispatch. */
+  onContextPrepared?: (
+    request: ModelRequest,
+    prompt: PreparedModelPrompt,
+  ) => void | Promise<void>;
 };
 
 export class AiSdkDirectGateway implements ModelGateway {
@@ -231,6 +238,9 @@ export class AiSdkDirectGateway implements ModelGateway {
   readonly #embed?: AiSdkDirectGatewayOptions["embed"];
   readonly #transcribe?: AiSdkDirectGatewayOptions["transcribe"];
   readonly #estimate?: AiSdkDirectGatewayOptions["estimate"];
+  readonly #contextAssetResolver?: ContextAssetResolver;
+  readonly #contextMediaBudgets?: Partial<ContextMediaBudgets>;
+  readonly #onContextPrepared?: AiSdkDirectGatewayOptions["onContextPrepared"];
 
   constructor(options: AiSdkDirectGatewayOptions) {
     this.#models = options.models.map((model) =>
@@ -241,6 +251,9 @@ export class AiSdkDirectGateway implements ModelGateway {
     this.#embed = options.embed;
     this.#transcribe = options.transcribe;
     this.#estimate = options.estimate;
+    this.#contextAssetResolver = options.contextAssetResolver;
+    this.#contextMediaBudgets = options.contextMediaBudgets;
+    this.#onContextPrepared = options.onContextPrepared;
   }
 
   async listModels(_context: ModelAccessContext): Promise<ModelDescriptor[]> {
@@ -257,19 +270,34 @@ export class AiSdkDirectGateway implements ModelGateway {
     );
     if (!descriptor) throw new Error("Unknown model ID");
     try {
+      const prompt = await prepareModelPrompt({
+        request,
+        descriptor,
+        assetResolver: this.#contextAssetResolver,
+        mediaBudgets: this.#contextMediaBudgets,
+      });
+      await this.#onContextPrepared?.(request, prompt);
       yield* normalizeAiSdkStream(
-        this.#streamFactory(request, this.#resolveModel(request.modelId)),
+        this.#streamFactory(
+          request,
+          this.#resolveModel(request.modelId),
+          prompt,
+        ),
         {
           reasoningSummaryAuthorized: descriptor.capabilities.reasoningSummary,
         },
       );
-    } catch {
+    } catch (error) {
       yield {
         type: "error",
-        code: request.abortSignal?.aborted
-          ? "cancelled"
-          : "provider_stream_error",
-        retryable: true,
+        code:
+          request.abortSignal?.aborted
+            ? "cancelled"
+            : error instanceof ContextMediaError
+              ? error.code.toLowerCase()
+              : "provider_stream_error",
+        retryable:
+          request.abortSignal?.aborted || !(error instanceof ContextMediaError),
       };
     }
   }
@@ -305,6 +333,9 @@ export type OpenAICompatibleGatewayOptions = {
   endpointPolicy: ModelEndpointPolicy;
   models: readonly ModelDescriptor[];
   transport?: ModelTransport;
+  contextAssetResolver?: ContextAssetResolver;
+  contextMediaBudgets?: Partial<ContextMediaBudgets>;
+  onContextPrepared?: AiSdkDirectGatewayOptions["onContextPrepared"];
 };
 
 export class OpenAICompatibleGateway extends AiSdkDirectGateway {
@@ -337,6 +368,9 @@ export class OpenAICompatibleGateway extends AiSdkDirectGateway {
     super({
       models: options.models,
       resolveModel: (modelId) => provider.chatModel(modelId),
+      contextAssetResolver: options.contextAssetResolver,
+      contextMediaBudgets: options.contextMediaBudgets,
+      onContextPrepared: options.onContextPrepared,
     });
   }
 }

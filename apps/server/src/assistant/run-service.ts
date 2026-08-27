@@ -8,6 +8,8 @@ import {
   type AssistantMessage,
   type AssistantRunModelPolicy,
   type ContextBlock,
+  type ContextAssetHandle,
+  type ContextPart,
   type ModelCapability,
   type ModelDescriptor,
   type ModelGateway,
@@ -27,7 +29,7 @@ import {
   type HybridCorpusSearchOptions,
   type HybridSearchResult,
 } from "../search/hybrid";
-import { canonicalJson, sha256 } from "../search/values";
+import { canonicalJson, jsonValue, sha256 } from "../search/values";
 import {
   noOpToolCapabilities,
   noOpToolEvents,
@@ -60,6 +62,12 @@ export type AssistantGatewaySelection = {
   providerRevision?: string;
   modelPlacement?: ModelPlacement;
   providerSupportsStableRequestKey?: boolean;
+  /**
+   * The selected gateway resolves owner-bound context handles on the trusted
+   * server immediately before provider dispatch. Remote Node gateways do not
+   * currently support Core-issued handles and therefore leave this unset.
+   */
+  contextMediaDelivery?: "server-resolved";
   /** Ordered exact routes frozen on the run; provider SDK fallback stays off. */
   fallbackSelections?: readonly AssistantGatewaySelection[];
 };
@@ -266,6 +274,31 @@ function utf8Bytes(value: string) {
   return contextEncoder.encode(value).byteLength;
 }
 
+function contextBlockCommitment(block: ContextBlock) {
+  return {
+    trust: block.trust,
+    mediaType: block.mediaType,
+    content: block.content,
+    parts:
+      block.parts?.map((part) =>
+        part.type === "text"
+          ? part
+          : {
+              type: part.type,
+              mime: part.mime,
+              fallbackText: part.fallbackText,
+              evidence: part.evidence,
+              // Handles are randomized transport capabilities. The durable
+              // commitment binds their immutable owner-checked content digest
+              // and locator instead, so crash recovery remains deterministic.
+              assetHandle: "opaque-owner-bound-handle",
+            },
+      ) ?? null,
+    sourceRef: block.sourceRef,
+    redactions: block.redactions,
+  };
+}
+
 /** Return a deterministic prefix without ever exceeding the byte fence. */
 function boundedUtf8Prefix(value: string, maximumBytes: number) {
   if (maximumBytes <= 0) return "";
@@ -291,6 +324,90 @@ function historicalMessageText(message: AssistantMessage) {
     })
     .join("\n\n")
     .trim();
+}
+
+const CONTEXT_DEPENDENT_QUESTION =
+  /(?:^|\s)(?:ça|cela|ceci|celui|celle|ceux|celles|premi(?:er|ère)|deuxième|second(?:e)?|dernier|dernière|ici|là|elle|elles|eux|le premier|la première|la deuxième|the first|the second|the former|the latter|this|that|these|those|it|they|them|here|there)(?:\s|[?.!,;:]|$)/iu;
+const FOLLOW_UP_OPENING =
+  /^(?:et|mais|donc|alors|du coup|pourquoi|comment|and|but|so|then|why|how)\b/iu;
+
+export type ContextualRetrievalQuery = {
+  originalQuery: string;
+  resolvedQuery: string;
+  queryDigest: string;
+  policy: "deterministic-conversation-window-v1";
+  previousUserMessageIds: readonly string[];
+};
+
+/**
+ * Resolve short/anaphoric follow-ups without a hidden model call. The exact
+ * deterministic input is traceable and always preserves the current question.
+ */
+export function contextualRetrievalQuery(input: {
+  question: string;
+  history: readonly AssistantMessage[];
+  projectTitles?: readonly string[];
+}): ContextualRetrievalQuery {
+  const originalQuery = input.question.trim().slice(0, 2_000);
+  const previous = input.history
+    .filter((message) => message.role === "user")
+    .flatMap((message) => {
+      const markdown = historicalMessageText(message);
+      return markdown ? [{ id: message.id, markdown }] : [];
+    })
+    .slice(-2);
+  const needsHistory =
+    previous.length > 0 &&
+    (CONTEXT_DEPENDENT_QUESTION.test(originalQuery) ||
+      (originalQuery.length <= 240 && FOLLOW_UP_OPENING.test(originalQuery)));
+  const projectTitles = [...new Set(input.projectTitles ?? [])]
+    .map((title) => title.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  if (!needsHistory && projectTitles.length === 0) {
+    return {
+      originalQuery,
+      resolvedQuery: originalQuery,
+      queryDigest: sha256(originalQuery),
+      policy: "deterministic-conversation-window-v1",
+      previousUserMessageIds: [],
+    };
+  }
+  const current = `Current question:\n${originalQuery}`;
+  if (current.length >= 2_000) {
+    return {
+      originalQuery,
+      resolvedQuery: originalQuery,
+      queryDigest: sha256(originalQuery),
+      policy: "deterministic-conversation-window-v1",
+      previousUserMessageIds: [],
+    };
+  }
+  const prefixParts: string[] = [];
+  if (projectTitles.length > 0) {
+    prefixParts.push(`Project:\n${projectTitles.join(" · ")}`);
+  }
+  if (needsHistory) {
+    prefixParts.push(
+      `Previous user context:\n${previous.map((entry) => entry.markdown).join("\n---\n")}`,
+    );
+  }
+  const prefixBudget = Math.max(0, 2_000 - current.length - 2);
+  const prefix = prefixParts.join("\n\n");
+  const boundedPrefix =
+    prefix.length <= prefixBudget
+      ? prefix
+      : prefix.slice(Math.max(0, prefix.length - prefixBudget));
+  const resolvedQuery = `${boundedPrefix}${boundedPrefix ? "\n\n" : ""}${current}`;
+  return {
+    originalQuery,
+    resolvedQuery,
+    queryDigest: sha256(resolvedQuery),
+    policy: "deterministic-conversation-window-v1",
+    previousUserMessageIds: needsHistory
+      ? previous.map((entry) => entry.id)
+      : [],
+  };
 }
 
 export type PackedConversationHistory = {
@@ -377,6 +494,133 @@ export type AssistantContextRetriever = (
   input: OwnedLexicalQuery,
   options: HybridCorpusSearchOptions,
 ) => Promise<HybridSearchResult>;
+
+export interface AssistantContextAssetHandleMinter {
+  mint(input: {
+    ownerId: string;
+    assetId: string;
+  }): Promise<ContextAssetHandle>;
+}
+
+type RetrievedCandidate = HybridSearchResult["candidates"][number];
+
+async function candidateVisualContextPart(input: {
+  client: AssistantSqlClient;
+  handles?: AssistantContextAssetHandleMinter;
+  ownerId: string;
+  candidate: RetrievedCandidate;
+  descriptor: ModelDescriptor;
+  deliveryEnabled: boolean;
+  fallbackText: string;
+}): Promise<Extract<ContextPart, { type: "image" | "pdf-page" }> | null> {
+  if (!input.handles || !input.deliveryEnabled) return null;
+  if (
+    !input.descriptor.modalities.includes("image") &&
+    !input.descriptor.modalities.includes("file")
+  ) {
+    return null;
+  }
+  const rows = await input.client.execute({
+    sql: `SELECT derivatives.id, derivatives.fileId, derivatives.kind,
+        derivatives.locatorJson, derivatives.contentHash,
+        derivatives.mimeType, derivatives.byteSize
+      FROM content_derivatives AS derivatives
+      JOIN content_versions AS versions ON versions.id = derivatives.versionId
+      JOIN content_chunks AS chunks ON chunks.id = derivatives.chunkId
+        AND chunks.versionId = derivatives.versionId
+      JOIN content_sources AS sources ON sources.id = versions.sourceId
+      JOIN files ON files.id = derivatives.fileId
+        AND files.userId = sources.userId
+      WHERE sources.userId = ? AND derivatives.versionId = ?
+        AND derivatives.chunkId = ? AND derivatives.status = 'ready'
+        AND files.status = 'stored'
+      ORDER BY derivatives.id`,
+    args: [input.ownerId, input.candidate.versionId, input.candidate.chunkId],
+  });
+  const locatorJson = canonicalJson(input.candidate.locator);
+  const eligible: Array<{
+    row: (typeof rows.rows)[number];
+    locator: ReturnType<typeof sourceLocatorV1Schema.parse>;
+    mediaType: "image" | "pdf-page";
+    mime: string;
+  }> = [];
+  for (const row of rows.rows) {
+    const locator = sourceLocatorV1Schema.parse(jsonValue(row.locatorJson));
+    if (canonicalJson(locator) !== locatorJson) continue;
+    const kind = String(row.kind);
+    const mime = String(row.mimeType).toLocaleLowerCase("en");
+    if (
+      ["page-image", "slide-image", "sheet-image"].includes(kind) &&
+      ["image/png", "image/jpeg", "image/webp"].includes(mime)
+    ) {
+      eligible.push({ row, locator, mediaType: "image", mime });
+      continue;
+    }
+    if (
+      kind === "pdf-page" &&
+      mime === "application/pdf" &&
+      locator.kind === "pdf"
+    ) {
+      eligible.push({ row, locator, mediaType: "pdf-page", mime });
+    }
+  }
+  const supported = eligible.filter((entry) =>
+    entry.mediaType === "image"
+      ? input.descriptor.modalities.includes("image")
+      : input.descriptor.modalities.includes("file"),
+  );
+  // Prefer a rendered image when both modalities are supported: it is the
+  // narrowest exact unit and is consistently understood by vision models.
+  // Remaining tie-breakers are immutable DB fields so retries select the same
+  // derivative independently of query planner/order details.
+  supported.sort((left, right) => {
+    const mediaRank = (entry: (typeof supported)[number]) =>
+      entry.mediaType === "image" ? 0 : 1;
+    return (
+      mediaRank(left) - mediaRank(right) ||
+      String(left.row.kind).localeCompare(String(right.row.kind), "en") ||
+      String(left.row.contentHash).localeCompare(
+        String(right.row.contentHash),
+        "en",
+      ) ||
+      String(left.row.id).localeCompare(String(right.row.id), "en")
+    );
+  });
+  const selected = supported[0];
+  if (!selected) return null;
+  const digest = String(selected.row.contentHash);
+  if (!/^[a-f0-9]{64}$/u.test(digest)) return null;
+  const assetHandle = await input.handles.mint({
+    ownerId: input.ownerId,
+    // Bind the capability to the immutable derivative identity, not merely to
+    // its backing file. Resolution revalidates the complete owner/source/
+    // derivative relationship at the provider-dispatch boundary.
+    assetId: String(selected.row.id),
+  });
+  const evidence = {
+    chunkId: input.candidate.chunkId,
+    locator: selected.locator,
+    digest,
+  };
+  const fallbackText =
+    input.fallbackText.trim() ||
+    "No machine-readable text is available for this visual evidence.";
+  return selected.mediaType === "image"
+    ? {
+        type: "image",
+        assetHandle,
+        mime: selected.mime as "image/png" | "image/jpeg" | "image/webp",
+        evidence,
+        fallbackText,
+      }
+    : {
+        type: "pdf-page",
+        assetHandle,
+        mime: "application/pdf",
+        evidence,
+        fallbackText,
+      };
+}
 
 const sourceKindForAttachment = {
   material: "material",
@@ -470,6 +714,7 @@ export class AssistantGraphExecutor {
     private readonly checkpoints?: CoreConversationCheckpointStore,
     lexical?: Pick<LexicalSearchBackend, "search">,
     retrieval?: AssistantContextRetriever,
+    private readonly contextAssetHandles?: AssistantContextAssetHandleMinter,
   ) {
     this.#lexical = lexical ?? new SqliteFts5LexicalSearchBackend(client);
     this.#retrieval = retrieval ?? hybridCorpusSearch;
@@ -732,7 +977,7 @@ export class AssistantGraphExecutor {
         tokenEstimate: Math.ceil(
           new TextEncoder().encode(block.content).byteLength / 4,
         ),
-        digest: sha256(block.content),
+        digest: sha256(canonicalJson(contextBlockCommitment(block))),
       })),
       evidence: state.evidence,
     });
@@ -1054,14 +1299,40 @@ export class AssistantGraphExecutor {
       );
       const question = inputMarkdown(storedParts);
       const configuration = runConfiguration(storedParts);
+      const frozenSelections = [
+        selection,
+        ...(selection.fallbackSelections ?? []),
+      ];
       const maxTokens = Math.min(
-        ...[selection, ...(selection.fallbackSelections ?? [])].map(
-          (candidate) =>
-            typeof candidate.descriptor.contextWindow === "number"
-              ? candidate.descriptor.contextWindow
-              : 16_384,
+        ...frozenSelections.map((candidate) =>
+          typeof candidate.descriptor.contextWindow === "number"
+            ? candidate.descriptor.contextWindow
+            : 16_384,
         ),
       );
+      const mediaSelections = frozenSelections.filter(
+        (candidate) =>
+          candidate.contextMediaDelivery === "server-resolved" &&
+          (candidate.descriptor.modalities.includes("image") ||
+            candidate.descriptor.modalities.includes("file")),
+      );
+      const visualDeliveryDescriptor: ModelDescriptor | null =
+        mediaSelections[0]
+          ? {
+              ...mediaSelections[0].descriptor,
+              // Build the immutable evidence once for every frozen route. Each
+              // attempt later projects it to that route's transport contract.
+              modalities: [
+                ...new Set(
+                  mediaSelections.flatMap((candidate) =>
+                    candidate.descriptor.modalities.filter(
+                      (modality) => modality === "image" || modality === "file",
+                    ),
+                  ),
+                ),
+              ],
+            }
+          : null;
       const reservedOutputTokens = Math.min(
         2_048,
         Math.max(256, maxTokens >> 3),
@@ -1180,6 +1451,7 @@ export class AssistantGraphExecutor {
         projectContextBytes += bytes;
         return true;
       };
+      const retrievalProjectTitles: string[] = [];
       if (uniqueProjectIds.length > 0) {
         const projects = await this.client.execute({
           sql: `SELECT id, title, instructionsMarkdown, contextPolicyVersion,
@@ -1196,6 +1468,7 @@ export class AssistantGraphExecutor {
         for (const projectId of uniqueProjectIds) {
           const row = projectById.get(projectId);
           if (!row) continue;
+          retrievalProjectTitles.push(String(row.title));
           addProjectBlock({
             id: newId("ctx"),
             trust: "application-data",
@@ -1252,12 +1525,13 @@ export class AssistantGraphExecutor {
         }
       }
 
+      const conversationHistory = await this.conversations.historyBeforeMessage(
+        ownerId,
+        started.threadId,
+        started.inputMessageId,
+      );
       const history = packConversationHistory(
-        await this.conversations.historyBeforeMessage(
-          ownerId,
-          started.threadId,
-          started.inputMessageId,
-        ),
+        conversationHistory,
         Math.min(64 * 1024, Math.max(1_024, contextByteBudget >> 2)),
       );
       if (history) {
@@ -1366,31 +1640,34 @@ export class AssistantGraphExecutor {
 
       const uniqueExplicitSourceIds = [...new Set(explicitSourceIds)];
       const explicitScopeRequested = uniqueExplicitSources.length > 0;
-      const retrieval =
-        explicitScopeRequested && uniqueExplicitSourceIds.length === 0
-          ? null
-          : await this.#retrieval(
-              {
-                ownerId,
-                query: boundedQuestion.slice(0, 2_000),
-                mode: "terms",
-                projectIds: explicitScopeRequested ? [] : uniqueProjectIds,
-                ...(explicitScopeRequested
-                  ? { sourceIds: uniqueExplicitSourceIds }
-                  : {}),
-                yearIds: [...new Set(yearIds)],
-                subjectIds: [...new Set(subjectIds)],
-                originKinds: [],
-                limit: 12,
-                cursor: null,
-              },
-              {
-                client: this.client,
-                lexical: this.#lexical,
-                signal,
-                policyProjectIds: uniqueProjectIds,
-              },
-            );
+      const retrievalQuery = contextualRetrievalQuery({
+        question: boundedQuestion,
+        history: conversationHistory,
+        projectTitles: retrievalProjectTitles,
+      });
+      const retrieval = await this.#retrieval(
+        {
+          ownerId,
+          query: retrievalQuery.resolvedQuery,
+          mode: "terms",
+          projectIds: uniqueProjectIds,
+          ...(uniqueExplicitSourceIds.length > 0
+            ? { sourceIds: uniqueExplicitSourceIds }
+            : {}),
+          yearIds: [...new Set(yearIds)],
+          subjectIds: [...new Set(subjectIds)],
+          originKinds: [],
+          contextAccess: "automatic",
+          limit: 12,
+          cursor: null,
+        },
+        {
+          client: this.client,
+          lexical: this.#lexical,
+          signal,
+          policyProjectIds: uniqueProjectIds,
+        },
+      );
       signal.throwIfAborted();
       addBlock({
         id: newId("ctx"),
@@ -1404,32 +1681,68 @@ export class AssistantGraphExecutor {
             searchableExplicitSourceCount: uniqueExplicitSourceIds.length,
             yearIds: [...new Set(yearIds)],
             subjectIds: [...new Set(subjectIds)],
+            contextAccess: "automatic",
           },
-          mode: retrieval?.retrievalMode ?? "unavailable",
+          query: {
+            original: retrievalQuery.originalQuery,
+            resolved: retrievalQuery.resolvedQuery,
+            digest: retrievalQuery.queryDigest,
+            policy: retrievalQuery.policy,
+            previousUserMessageIds: retrievalQuery.previousUserMessageIds,
+          },
+          mode: retrieval.retrievalMode,
           fallbackReason:
-            retrieval?.fallbackReason ??
-            (explicitScopeRequested
-              ? "explicit-sources-not-indexed"
-              : "retrieval-unavailable"),
-          operationId: retrieval?.operationId ?? null,
-          evidenceCount: retrieval?.candidates.length ?? 0,
+            retrieval.fallbackReason ??
+            (explicitScopeRequested && uniqueExplicitSourceIds.length === 0
+              ? "explicit-sources-not-indexed; project scope retained"
+              : null),
+          operationId: retrieval.operationId,
+          evidenceCount: retrieval.candidates.length,
         }),
-        sourceRef: retrieval?.operationId ?? started.inputMessageId,
+        sourceRef: retrieval.operationId,
         redactions: [],
       });
-      for (const candidate of retrieval?.candidates ?? []) {
+      for (const candidate of retrieval.candidates) {
         if (includedChunks.has(candidate.chunkId)) continue;
         const text = candidate.text ?? candidate.snippet;
         const evidenceKey = evidenceKeyForOrdinal(evidence.length);
+        const locator = sourceLocatorV1Schema.parse(candidate.locator);
+        const content = citedEvidenceContextContent({
+          evidenceKey,
+          content: text,
+        });
+        const visualPart = await candidateVisualContextPart({
+          client: this.client,
+          handles: this.contextAssetHandles,
+          ownerId,
+          candidate,
+          descriptor: visualDeliveryDescriptor ?? selection.descriptor,
+          deliveryEnabled: visualDeliveryDescriptor !== null,
+          fallbackText: text,
+        });
         if (
           addBlock({
             id: newId("ctx"),
             trust: "retrieved-untrusted",
             mediaType: "application/vnd.avermate.evidence+json",
-            content: citedEvidenceContextContent({
-              evidenceKey,
-              content: text,
-            }),
+            content,
+            ...(visualPart
+              ? {
+                  parts: [
+                    {
+                      type: "text" as const,
+                      text: content,
+                      mime: "application/vnd.avermate.evidence+json",
+                      evidence: {
+                        chunkId: candidate.chunkId,
+                        locator,
+                        digest: candidate.contentHash,
+                      },
+                    },
+                    visualPart,
+                  ],
+                }
+              : {}),
             sourceRef: candidate.chunkId,
             redactions: [],
           })
@@ -1438,8 +1751,11 @@ export class AssistantGraphExecutor {
           evidence.push({
             sourceVersionId: candidate.versionId,
             chunkId: candidate.chunkId,
-            locator: sourceLocatorV1Schema.parse(candidate.locator),
-            evidenceDigest: sha256(text),
+            locator,
+            // A citation to visual-only evidence must remain bound to the
+            // exact immutable bytes dispatched to the model. The chunk hash
+            // remains available as quotedContentHash for corpus integrity.
+            evidenceDigest: visualPart?.evidence.digest ?? sha256(text),
             quotedContentHash: candidate.contentHash,
           });
         }
@@ -1471,22 +1787,14 @@ export class AssistantGraphExecutor {
           tokenEstimate: Math.ceil(
             new TextEncoder().encode(block.content).byteLength / 4,
           ),
-          digest: sha256(block.content),
+          digest: sha256(canonicalJson(contextBlockCommitment(block))),
         })),
         evidence,
       });
       await control?.freezeContextManifest(
         sha256(
           canonicalJson({
-            blocks: blocks.map(
-              ({ trust, mediaType, content, sourceRef, redactions }) => ({
-                trust,
-                mediaType,
-                content,
-                sourceRef,
-                redactions,
-              }),
-            ),
+            blocks: blocks.map(contextBlockCommitment),
             evidence,
           }),
         ),
@@ -1866,7 +2174,7 @@ export class AssistantGraphExecutor {
             tokenEstimate: Math.ceil(
               new TextEncoder().encode(block.content).byteLength / 4,
             ),
-            digest: sha256(block.content),
+            digest: sha256(canonicalJson(contextBlockCommitment(block))),
           })),
           evidence,
         });

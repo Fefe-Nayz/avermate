@@ -23,6 +23,7 @@ import {
 import { useExtracted, useFormatter } from "next-intl"
 import { toast } from "sonner"
 import { ConceptManagement } from "@/components/learning/concept-management"
+import { useLearningTaxonomyLabels } from "@/components/learning/learning-labels"
 import { LearningPlanView } from "@/components/learning/learning-plan-view"
 import { LearningPrivacyControls } from "@/components/learning/learning-privacy-controls"
 import { PageActions, PageMeta } from "@/components/shell/page-chrome"
@@ -88,6 +89,10 @@ function useTrendLabel() {
         return t("Declining")
       case "stable":
         return t("Stable")
+      case "uncertain":
+        return t("Uncertain")
+      case "method-changed":
+        return t("Calculation method changed")
       default:
         return t("Not enough history")
     }
@@ -108,7 +113,7 @@ function QueryFailure({
       <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
         {message}
         <Button size="sm" variant="outline" onClick={retry}>
-          <RefreshCwIcon /> {t("Try again")}
+          <RefreshCwIcon data-icon="inline-start" /> {t("Try again")}
         </Button>
       </AlertDescription>
     </Alert>
@@ -277,59 +282,96 @@ export function LearningClient() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Evidence coverage")}</CardDescription>
-              <CardTitle className="numeric text-2xl">
-                {summary
-                  ? `${summary.measuredObjectiveCount}/${summary.objectiveCount}`
-                  : "—"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                {summary?.objectiveCount
-                  ? t("{coverage} of objectives have reviewed evidence.", {
-                      coverage: percent(summary.coverage),
-                    })
-                  : t("No objective is measurable in this scope yet.")}
-              </p>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Measured estimate")}</CardDescription>
-              <CardTitle className="numeric text-2xl">
-                {summary?.estimate === null || summary?.estimate === undefined
-                  ? t("Not measured")
-                  : percent(summary.estimate)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                {t("Only objectives with included evidence contribute.")}
-              </p>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Direction")}</CardDescription>
-              <CardTitle className="text-2xl">
-                {summary ? trendLabel(summary.trend) : "—"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                {summary?.delta === null || summary?.delta === undefined
-                  ? t("Two measured snapshots are needed for a trend.")
-                  : t("Change of {delta} across comparable objectives.", {
-                      delta: signedPercent(summary.delta),
-                    })}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        {progress.isLoading ? (
+          <div
+            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+            role="status"
+            aria-label={t("Loading learning summary")}
+          >
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+          </div>
+        ) : progress.isError ? (
+          <QueryFailure
+            message={progress.error.message}
+            retry={() => progress.refetch()}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Card size="sm">
+              <CardHeader>
+                <CardDescription>{t("Evidence coverage")}</CardDescription>
+                <CardTitle className="numeric text-2xl">
+                  {summary
+                    ? `${summary.measuredObjectiveCount}/${summary.objectiveCount}`
+                    : "—"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  {summary?.objectiveCount
+                    ? t("{coverage} of objectives have reviewed evidence.", {
+                        coverage: percent(summary.coverage),
+                      })
+                    : t("No objective is measurable in this scope yet.")}
+                </p>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardDescription>{t("Measured estimate")}</CardDescription>
+                <CardTitle className="numeric text-2xl">
+                  {summary?.estimate === null || summary?.estimate === undefined
+                    ? t("Not measured")
+                    : percent(summary.estimate)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  {t("Only objectives with included evidence contribute.")}
+                </p>
+              </CardContent>
+            </Card>
+            <Card size="sm">
+              <CardHeader>
+                <CardDescription>{t("Direction")}</CardDescription>
+                <CardTitle className="text-2xl">
+                  {summary ? trendLabel(summary.variation.trend) : "—"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  {!summary
+                    ? t(
+                        "Two measured snapshots using the same calculation method are needed for a trend."
+                      )
+                    : summary.variation.trend === "method-changed"
+                      ? t(
+                          "The calculation method changed, so no learning change is shown."
+                        )
+                      : summary.variation.delta === null
+                        ? t(
+                            "Two measured snapshots using the same calculation method are needed for a trend."
+                          )
+                        : summary.variation.trend === "uncertain"
+                          ? t(
+                              "Observed change of {delta}, but interval overlap or limited evidence prevents a direction claim.",
+                              {
+                                delta: signedPercent(summary.variation.delta),
+                              }
+                            )
+                          : t(
+                              "Change of {delta} across comparable objectives.",
+                              {
+                                delta: signedPercent(summary.variation.delta),
+                              }
+                            )}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Tabs value={tab} onValueChange={setTab} className="min-w-0">
           <TabsList
@@ -355,12 +397,7 @@ export function LearningClient() {
                 <Skeleton className="h-64" />
                 <Skeleton className="h-64" />
               </div>
-            ) : progress.isError ? (
-              <QueryFailure
-                message={progress.error.message}
-                retry={() => progress.refetch()}
-              />
-            ) : (
+            ) : progress.isError ? null : (
               <LearningOverview
                 data={progress.data}
                 onOpenPlan={() => setTab("plan")}
@@ -585,6 +622,7 @@ function LearningOverview({
 }) {
   const t = useExtracted()
   const trendLabel = useTrendLabel()
+  const taxonomyLabels = useLearningTaxonomyLabels()
   if (!data || data.summary.objectiveCount === 0) {
     return (
       <LearningEmpty
@@ -638,7 +676,7 @@ function LearningOverview({
             <p className="text-sm text-pretty text-muted-foreground">
               {summary.nextAction
                 ? t(
-                    "This is the highest-priority active suggestion in the selected scope. Open the plan to schedule or dismiss it."
+                    "This is the next active suggestion based on its status and schedule. Open the plan to schedule or dismiss it."
                   )
                 : t(
                     "Generate a bounded plan from reviewed evidence, deadlines, prerequisites and the time you actually have."
@@ -655,9 +693,11 @@ function LearningOverview({
 
         <Card>
           <CardHeader>
-            <CardTitle>{t("Measurement quality")}</CardTitle>
+            <CardTitle>{t("Measurement signals")}</CardTitle>
             <CardDescription>
-              {t("Coverage, confidence and freshness stay separate from level")}
+              {t(
+                "Variation, estimate precision, evidence and freshness are shown separately from level"
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -672,31 +712,39 @@ function LearningOverview({
             <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-4">
               <div>
                 <p className="numeric text-lg font-semibold">
-                  {summary.confidenceScore === null
+                  {summary.variation.delta === null
                     ? "—"
-                    : percent(summary.confidenceScore)}
+                    : signedPercent(summary.variation.delta)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {t("Confidence")}
+                  {t("Variation")}
                 </p>
               </div>
               <div>
                 <p className="numeric text-lg font-semibold">
-                  {summary.freshness.fresh}
+                  {summary.precision.score === null
+                    ? "—"
+                    : percent(summary.precision.score)}
                 </p>
-                <p className="text-xs text-muted-foreground">{t("Fresh")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("Estimate precision")}
+                </p>
               </div>
               <div>
                 <p className="numeric text-lg font-semibold">
-                  {summary.freshness.aging}
+                  {summary.evidence.itemCount}
                 </p>
-                <p className="text-xs text-muted-foreground">{t("Aging")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("Evidence items")}
+                </p>
               </div>
               <div>
                 <p className="numeric text-lg font-semibold">
-                  {summary.freshness.stale}
+                  {summary.freshness.fresh}/{summary.measuredObjectiveCount}
                 </p>
-                <p className="text-xs text-muted-foreground">{t("Stale")}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("Fresh measurements")}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -706,18 +754,38 @@ function LearningOverview({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendIcon trend={summary.trend} />
+            <TrendIcon trend={summary.variation.trend} />
             {t("Progress direction")}
           </CardTitle>
           <CardDescription>
-            {summary.delta === null
+            {summary.variation.trend === "method-changed"
               ? t(
-                  "No trend is claimed until at least two measured snapshots are comparable."
+                  "The calculation method changed. Avermate keeps both estimates but does not present their difference as learning progress."
                 )
-              : t("Average change: {delta} across {count} objectives.", {
-                  delta: signedPercent(summary.delta),
-                  count: String(summary.comparableObjectiveCount),
-                })}
+              : summary.variation.delta === null
+                ? t(
+                    "No trend is claimed until at least two measured snapshots using the same calculation method are comparable."
+                  )
+                : summary.variation.trend === "uncertain"
+                  ? t(
+                      "Average observed change: {delta} across {count} objectives, with {uncertain} uncertain and {methodChanged} method-changed comparisons.",
+                      {
+                        delta: signedPercent(summary.variation.delta),
+                        count: String(
+                          summary.variation.comparableObjectiveCount
+                        ),
+                        uncertain: String(
+                          summary.variation.uncertainObjectiveCount
+                        ),
+                        methodChanged: String(
+                          summary.variation.methodChangedObjectiveCount
+                        ),
+                      }
+                    )
+                  : t("Average change: {delta} across {count} objectives.", {
+                      delta: signedPercent(summary.variation.delta),
+                      count: String(summary.variation.comparableObjectiveCount),
+                    })}
           </CardDescription>
         </CardHeader>
         {data.subjects.length ? (
@@ -730,7 +798,7 @@ function LearningOverview({
                   variant="outline"
                 >
                   <ItemMedia variant="icon">
-                    <TrendIcon trend={subject.trend} />
+                    <TrendIcon trend={subject.variation.trend} />
                   </ItemMedia>
                   <ItemContent>
                     <ItemTitle>
@@ -751,7 +819,7 @@ function LearningOverview({
                         : percent(subject.estimate)}
                     </Badge>
                     <Badge variant="secondary">
-                      {trendLabel(subject.trend)}
+                      {trendLabel(subject.variation.trend)}
                     </Badge>
                   </ItemActions>
                 </Item>
@@ -833,7 +901,7 @@ function LearningOverview({
                     </ItemMedia>
                     <ItemContent>
                       <ItemTitle>
-                        {taxonomyLabel(difficulty.taxonomy)}
+                        {taxonomyLabels[difficulty.taxonomy]}
                       </ItemTitle>
                       <ItemDescription>
                         {t(
@@ -872,12 +940,6 @@ function TrendIcon({ trend }: { trend: string }) {
   if (trend === "declining") return <TrendingDownIcon />
   if (trend === "stable") return <MinusIcon />
   return <CircleDashedIcon />
-}
-
-function taxonomyLabel(value: string) {
-  return value
-    .replaceAll("-", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function LearningEmpty({

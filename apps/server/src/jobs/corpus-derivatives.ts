@@ -13,6 +13,7 @@ import { deleteFile, storeFile } from "../lib/storage";
 import { enqueueJob, NonRetryableJobError } from "../lib/jobs";
 import { newId } from "../lib/id";
 import { registerContentDerivative } from "../search/derivatives";
+import { readEmbeddingPublicationFence } from "../search/embedding-publication-fence";
 import { coreCorpusIndexService } from "../search/index-service";
 import { createOwnedCorpusVectorRuntime } from "../search/vector-runtime";
 import { canonicalJson, jsonValue, sha256 } from "../search/values";
@@ -208,7 +209,9 @@ async function loadReadyDerivativeKeys(ownerId: string, versionId: string) {
   );
 }
 
-async function enqueueEmbedding(ownerId: string, versionId: string) {
+export async function enqueueEmbedding(ownerId: string, versionId: string) {
+  const fence = await readEmbeddingPublicationFence(ownerId);
+  if (!fence.enabled) return null;
   let runtime: Awaited<ReturnType<typeof createOwnedCorpusVectorRuntime>>;
   try {
     runtime = await createOwnedCorpusVectorRuntime(ownerId);
@@ -218,11 +221,44 @@ async function enqueueEmbedding(ownerId: string, versionId: string) {
   if (!runtime) return null;
   const job = await enqueueJob({
     kind: CORPUS_REEMBED_SPACE_JOB_KIND,
-    payload: { ownerId },
+    payload: {
+      ownerId,
+      scope: "advanced-projects",
+      triggerVersionId: versionId,
+      publicationEpoch: fence.publicationEpoch,
+    },
     userId: ownerId,
-    idempotencyKey: `${runtime.embedding.descriptor().id}:${ownerId}:trigger:${versionId}`,
+    idempotencyKey: `${runtime.embedding.descriptor().id}:${ownerId}:epoch:${fence.publicationEpoch}:trigger:${versionId}`,
     maxAttempts: 4,
   });
+  const currentFence = await readEmbeddingPublicationFence(ownerId);
+  if (
+    !currentFence.enabled ||
+    currentFence.publicationEpoch !== fence.publicationEpoch
+  ) {
+    const now = Math.floor(Date.now() / 1_000);
+    await db.$client.batch(
+      [
+        {
+          sql: `UPDATE jobs SET status = 'cancelled', lockedBy = NULL,
+              lockedUntil = NULL, updatedAt = ?
+            WHERE id = ? AND userId = ? AND status = 'queued'`,
+          args: [now, job.id, ownerId],
+        },
+        {
+          sql: `INSERT INTO job_runtime_metadata
+              (jobId, stage, cancellation, createdAt, updatedAt)
+            SELECT id, 'running', 'requested', ?, ? FROM jobs
+            WHERE id = ? AND userId = ? AND status = 'running'
+            ON CONFLICT(jobId) DO UPDATE SET
+              cancellation = 'requested', updatedAt = excluded.updatedAt`,
+          args: [now, now, job.id, ownerId],
+        },
+      ],
+      "write",
+    );
+    return null;
+  }
   return job.id;
 }
 

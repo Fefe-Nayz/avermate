@@ -184,17 +184,19 @@ async function seedRetrieval(scope: Awaited<ReturnType<typeof mainScope>>) {
     subjectId: scope.subject.id,
     coverage: "searchable-native-text",
   })
-  const staged = await coreCorpusIndexService.store.stageVersion({
+  const versionKey = "e2e-retrieval-v1"
+  const contentHash = sha256(text)
+  const stagedVersion = {
     identity,
     sourceId: source.id,
-    versionKey: "e2e-retrieval-v1",
-    contentHash: sha256(text),
+    versionKey,
+    contentHash,
     extractorId: "e2e-browser-fixture",
     extractorVersion: "1",
     mimeType: "application/pdf",
     language: "fr",
     byteSize: utf8Size(text),
-    locatorSchemaVersion: 1,
+    locatorSchemaVersion: 1 as const,
     metadata: { fixture: true, evidence: "synthetic-source-text" },
     chunks: [
       {
@@ -212,13 +214,89 @@ async function seedRetrieval(scope: Awaited<ReturnType<typeof mainScope>>) {
         evidenceKind: "native-text" as const,
       },
     ],
-  })
-  const committed = await coreCorpusIndexService.store.commitVersion({
-    ownerId: scope.user.id,
-    stagingId: staged.stagingId,
-    expectedSourceId: source.id,
-    expectedPreviousVersionId: null,
-  })
+  }
+  let committed: {
+    ownerId: string
+    sourceId: string
+    versionId: string
+    contentHash: string
+  } | null = null
+  let lastCommitError: unknown = null
+
+  // The demo seed may already have indexed this material, and two Playwright
+  // coordinators can briefly overlap. Keep the production CAS strict: read the
+  // current pointer immediately before each commit, retry a lost race, and
+  // treat only this exact immutable fixture version as an idempotent success.
+  for (let attempt = 0; attempt < 5 && !committed; attempt += 1) {
+    const currentSource = await coreCorpusIndexService.store.getSource(identity)
+    if (!currentSource || currentSource.id !== source.id) {
+      throw new Error("The E2E corpus source changed identity")
+    }
+    if (currentSource.currentVersionId) {
+      const currentVersion = await coreCorpusIndexService.store.resolveVersion({
+        ownerId: scope.user.id,
+        sourceId: source.id,
+        versionId: currentSource.currentVersionId,
+      })
+      if (
+        currentVersion.versionKey === versionKey &&
+        currentVersion.contentHash === contentHash
+      ) {
+        committed = {
+          ownerId: scope.user.id,
+          sourceId: source.id,
+          versionId: currentVersion.id,
+          contentHash,
+        }
+        break
+      }
+    }
+
+    try {
+      const staged =
+        await coreCorpusIndexService.store.stageVersion(stagedVersion)
+      const beforeCommit =
+        await coreCorpusIndexService.store.getSource(identity)
+      if (!beforeCommit || beforeCommit.id !== source.id) {
+        throw new Error("The E2E corpus source changed identity")
+      }
+      committed = await coreCorpusIndexService.store.commitVersion({
+        ownerId: scope.user.id,
+        stagingId: staged.stagingId,
+        expectedSourceId: source.id,
+        expectedPreviousVersionId: beforeCommit.currentVersionId,
+      })
+    } catch (error) {
+      lastCommitError = error
+      const afterRace = await coreCorpusIndexService.store.getSource(identity)
+      if (afterRace?.currentVersionId) {
+        const winningVersion =
+          await coreCorpusIndexService.store.resolveVersion({
+            ownerId: scope.user.id,
+            sourceId: source.id,
+            versionId: afterRace.currentVersionId,
+          })
+        if (
+          winningVersion.versionKey === versionKey &&
+          winningVersion.contentHash === contentHash
+        ) {
+          committed = {
+            ownerId: scope.user.id,
+            sourceId: source.id,
+            versionId: winningVersion.id,
+            contentHash,
+          }
+          break
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)))
+    }
+  }
+  if (!committed) {
+    throw (
+      lastCommitError ?? new Error("Unable to publish the E2E corpus version")
+    )
+  }
   await db.insert(studyProjectItems).values({
     projectId: project.id,
     kind: "material",

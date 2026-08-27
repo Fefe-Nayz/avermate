@@ -3,6 +3,7 @@ import type { Client } from "@libsql/client";
 import type {
   LexicalVersionInput,
   NodeLexicalSearchTransport,
+  OwnedLexicalQuery,
   StagedContentVersion,
 } from "@avermate/agent-contracts";
 import { CoreCorpusStore } from "./core-corpus-store";
@@ -327,6 +328,7 @@ describe("RoutedCorpusStore sealed Node placement", () => {
 
     let nodeOnline = true;
     let tamperCandidateIdentity = false;
+    const nodeSearchQueries: OwnedLexicalQuery[] = [];
     const remote = new Map<string, LexicalVersionInput[]>();
     const fakeTransport = {
       async online() {
@@ -367,32 +369,43 @@ describe("RoutedCorpusStore sealed Node placement", () => {
           .filter((entry) => entry.ownerId === input.ownerId)
           .flatMap((entry) => entry.chunks);
         return input.chunkIds.map((chunkId) => {
-          const chunk = chunks.find((candidate) => candidate.chunkId === chunkId);
+          const chunk = chunks.find(
+            (candidate) => candidate.chunkId === chunkId,
+          );
           if (!chunk) throw new Error("NODE_LEXICAL_CHUNK_NOT_FOUND");
           return structuredClone(chunk);
         });
       },
-      async searchLexical(input: { nodeId: string; ownerId: string }) {
+      async searchLexical(input: {
+        nodeId: string;
+        ownerId: string;
+        query: OwnedLexicalQuery;
+      }) {
+        nodeSearchQueries.push(structuredClone(input.query));
         const version = (remote.get(input.nodeId) ?? []).find(
           (entry) =>
             entry.ownerId === input.ownerId &&
-            entry.source.id === routedSourceId,
+            entry.source.id === routedSourceId &&
+            (!(input.query.versionIds?.length ?? 0) ||
+              input.query.versionIds?.includes(entry.version.id)),
         );
         const chunk = version?.chunks[0];
         if (!version || !chunk?.chunkId) return [];
-        return [{
-          sourceId: tamperCandidateIdentity
-            ? "forged-source"
-            : version.source.id,
-          versionId: version.version.id,
-          chunkId: chunk.chunkId,
-          ordinal: chunk.ordinal,
-          score: 1,
-          snippet: "untrusted Node snippet",
-          locator: chunk.locator,
-          contentHash: chunk.contentHash,
-          evidenceKind: chunk.evidenceKind,
-        }];
+        return [
+          {
+            sourceId: tamperCandidateIdentity
+              ? "forged-source"
+              : version.source.id,
+            versionId: version.version.id,
+            chunkId: chunk.chunkId,
+            ordinal: chunk.ordinal,
+            score: 1,
+            snippet: "untrusted Node snippet",
+            locator: chunk.locator,
+            contentHash: chunk.contentHash,
+            evidenceKind: chunk.evidenceKind,
+          },
+        ];
       },
     } as unknown as NodeLexicalSearchTransport;
     const routed = new RoutedCorpusStore(
@@ -416,16 +429,22 @@ describe("RoutedCorpusStore sealed Node placement", () => {
       byteSize: plaintext.length,
       locatorSchemaVersion: 1,
       metadata: {},
-      chunks: [{
-        ordinal: 0,
-        text: plaintext,
-        normalizedText: normalizeForSearch(plaintext),
-        tokenEstimate: 12,
-        contentHash: sha256(plaintext),
-        locator: { kind: "text", startOffset: 0, endOffset: plaintext.length },
-        headingPath: ["Analyse"],
-        evidenceKind: "native-text",
-      }],
+      chunks: [
+        {
+          ordinal: 0,
+          text: plaintext,
+          normalizedText: normalizeForSearch(plaintext),
+          tokenEstimate: 12,
+          contentHash: sha256(plaintext),
+          locator: {
+            kind: "text",
+            startOffset: 0,
+            endOffset: plaintext.length,
+          },
+          headingPath: ["Analyse"],
+          evidenceKind: "native-text",
+        },
+      ],
     };
     const stage = await routed.stageVersion(stagedVersion);
     const committed = await routed.commitVersion({
@@ -469,9 +488,7 @@ describe("RoutedCorpusStore sealed Node placement", () => {
       ).rows[0]?.count,
     ).toBe(0);
     expect(
-      remote
-        .get("node-a")
-        ?.find((entry) => entry.source.id === routedSourceId)
+      remote.get("node-a")?.find((entry) => entry.source.id === routedSourceId)
         ?.chunks[0]?.text,
     ).toBe(plaintext);
 
@@ -493,6 +510,74 @@ describe("RoutedCorpusStore sealed Node placement", () => {
     expect(nodeResults).toMatchObject([
       { chunkId: String(sealed.id), snippet: plaintext },
     ]);
+    expect(nodeSearchQueries.at(-1)).toMatchObject({
+      projectIds: [],
+      versionIds: [committed.versionId],
+      limit: 100,
+    });
+
+    const now = Math.floor(Date.now() / 1_000);
+    await client.batch(
+      [
+        {
+          sql: `INSERT INTO study_projects
+            (id, userId, title, description, yearId, revision,
+             contextPolicyVersion, createdAt, updatedAt)
+            VALUES ('routed-context-project', ?, 'Analyse', '',
+              'corpus-year-b', 1, 1, ?, ?)`,
+          args: [routedOwnerId, now, now],
+        },
+        {
+          sql: `INSERT INTO study_project_items
+            (id, projectId, kind, referenceId, position, contextMode, addedAt)
+            VALUES ('routed-context-item', 'routed-context-project',
+              'material', ?, 0, 'on-demand', ?)`,
+          args: [routedOriginId, now],
+        },
+      ],
+      "write",
+    );
+    const projectQuery = {
+      ownerId: routedOwnerId,
+      query: "variation",
+      mode: "terms" as const,
+      projectIds: ["routed-context-project"],
+      yearIds: [] as string[],
+      subjectIds: [] as string[],
+      originKinds: ["material" as const],
+      limit: 5,
+      cursor: null,
+    };
+    const callsBeforeAutomatic = nodeSearchQueries.length;
+    expect(
+      await routed.search({
+        ...projectQuery,
+        contextAccess: "automatic",
+      }),
+    ).toEqual([]);
+    expect(nodeSearchQueries).toHaveLength(callsBeforeAutomatic);
+    expect(
+      await routed.search({
+        ...projectQuery,
+        contextAccess: "agent-request",
+      }),
+    ).toMatchObject([{ chunkId: String(sealed.id) }]);
+    expect(nodeSearchQueries.at(-1)).toMatchObject({
+      projectIds: [],
+      versionIds: [committed.versionId],
+    });
+    await client.execute({
+      sql: `UPDATE study_project_items SET contextMode = 'include'
+        WHERE id = 'routed-context-item'`,
+      args: [],
+    });
+    expect(
+      await routed.search({
+        ...projectQuery,
+        contextAccess: "automatic",
+      }),
+    ).toMatchObject([{ chunkId: String(sealed.id) }]);
+
     tamperCandidateIdentity = true;
     await expect(
       routed.search({
@@ -528,9 +613,7 @@ describe("RoutedCorpusStore sealed Node placement", () => {
       },
     });
     expect(
-      remote
-        .get("node-b")
-        ?.find((entry) => entry.source.id === routedSourceId)
+      remote.get("node-b")?.find((entry) => entry.source.id === routedSourceId)
         ?.chunks[0]?.text,
     ).toBe(plaintext);
     expect(
@@ -566,13 +649,19 @@ describe("RoutedCorpusStore sealed Node placement", () => {
       versionKey: "direct-node-v1",
       contentHash: sha256(directText),
       byteSize: directText.length,
-      chunks: [{
-        ...stagedVersion.chunks[0]!,
-        text: directText,
-        normalizedText: normalizeForSearch(directText),
-        contentHash: sha256(directText),
-        locator: { kind: "text", startOffset: 0, endOffset: directText.length },
-      }],
+      chunks: [
+        {
+          ...stagedVersion.chunks[0]!,
+          text: directText,
+          normalizedText: normalizeForSearch(directText),
+          contentHash: sha256(directText),
+          locator: {
+            kind: "text",
+            startOffset: 0,
+            endOffset: directText.length,
+          },
+        },
+      ],
     });
     const directCommitted = await routed.commitVersion({
       ownerId: routedOwnerId,
@@ -581,9 +670,7 @@ describe("RoutedCorpusStore sealed Node placement", () => {
       expectedPreviousVersionId: null,
     });
     expect(
-      remote
-        .get("node-b")
-        ?.find((entry) => entry.source.id === directSource.id)
+      remote.get("node-b")?.find((entry) => entry.source.id === directSource.id)
         ?.chunks[0]?.text,
     ).toBe(directText);
     expect(
@@ -865,6 +952,10 @@ describe("mandatory lexical retrieval, citations and deterministic hybrid primit
           sql: `INSERT INTO study_project_items (id, projectId, kind, referenceId, position, contextMode, addedAt) VALUES ('eval-project-item', 'eval-project', 'material', 'eval-origin-material', 0, 'include', ?)`,
           args: [now],
         },
+        {
+          sql: `INSERT INTO study_project_items (id, projectId, kind, referenceId, position, contextMode, addedAt) VALUES ('eval-project-on-demand', 'eval-project', 'study-document', 'eval-origin-study-document', 1, 'on-demand', ?)`,
+          args: [now],
+        },
       ],
       "write",
     );
@@ -885,6 +976,66 @@ describe("mandatory lexical retrieval, citations and deterministic hybrid primit
     expect(results.some((entry) => entry.sourceId === "eval-private-b")).toBe(
       false,
     );
+
+    const base = {
+      ownerId,
+      mode: "terms" as const,
+      projectIds: ["eval-project"],
+      yearIds: [] as string[],
+      subjectIds: [] as string[],
+      originKinds: [] as [],
+      limit: 10,
+      cursor: null,
+    };
+    expect(
+      await backend.search({
+        ...base,
+        query: "photosynthèse",
+        contextAccess: "automatic",
+      }),
+    ).toEqual([]);
+    expect(
+      (
+        await backend.search({
+          ...base,
+          query: "photosynthèse",
+          contextAccess: "agent-request",
+        })
+      )[0]?.sourceId,
+    ).toBe(evalSources.get("study-document")!);
+    // Public project search and the `search.query` tool omit contextAccess;
+    // that deliberate default is an agent-request, so on-demand sources stay
+    // searchable without entering automatic answer preloading.
+    expect(
+      (
+        await backend.search({
+          ...base,
+          query: "photosynthèse",
+        })
+      )[0]?.sourceId,
+    ).toBe(evalSources.get("study-document")!);
+    const union = await backend.search({
+      ...base,
+      query: "La ",
+      mode: "exact",
+      contextAccess: "automatic",
+      sourceIds: [evalSources.get("study-document")!],
+      limit: 100,
+    });
+    expect(new Set(union.map((entry) => entry.sourceId))).toEqual(
+      new Set([
+        evalSources.get("material")!,
+        evalSources.get("study-document")!,
+      ]),
+    );
+    expect(
+      await backend.search({
+        ...base,
+        query: "photosynthèse",
+        contextAccess: "explicit-attachment",
+        sourceIds: [],
+      }),
+    ).toEqual([]);
   });
 
   test("paginates deterministically and rebuild equals incremental state", async () => {

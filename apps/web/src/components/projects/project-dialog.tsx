@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useExtracted } from "next-intl"
 import {
   Dialog,
   DialogContent,
@@ -53,14 +54,6 @@ export interface ProjectFormValue {
   contextPolicyJson: Record<string, unknown>
 }
 
-const colors = [
-  { label: "Automatique", value: null },
-  { label: "Accent principal", value: "primary" },
-  { label: "Accent 1", value: "chart-1" },
-  { label: "Accent 2", value: "chart-2" },
-  { label: "Accent 3", value: "chart-3" },
-]
-
 export function ProjectDialog({
   open,
   onOpenChange,
@@ -78,6 +71,7 @@ export function ProjectDialog({
   pending: boolean
   onSubmit: (value: ProjectFormValue) => void
 }) {
+  const t = useExtracted()
   const [title, setTitle] = useState(project?.title ?? "")
   const [description, setDescription] = useState(project?.description ?? "")
   const [emoji, setEmoji] = useState(project?.emoji ?? "")
@@ -90,8 +84,15 @@ export function ProjectDialog({
   )
   const [titleError, setTitleError] = useState<string | null>(null)
 
+  const colors = [
+    { label: t("Automatic"), value: null },
+    { label: t("Primary accent"), value: "primary" },
+    { label: t("Accent 1"), value: "chart-1" },
+    { label: t("Accent 2"), value: "chart-2" },
+    { label: t("Accent 3"), value: "chart-3" },
+  ]
   const subjectItems = [
-    { label: "Toutes les matières", value: null },
+    { label: t("All subjects"), value: null },
     ...subjects.map((subject) => ({
       label: subject.name,
       value: subject.id,
@@ -101,7 +102,7 @@ export function ProjectDialog({
   function submit() {
     const cleanTitle = title.trim()
     if (!cleanTitle) {
-      setTitleError("Donnez un nom au projet.")
+      setTitleError(t("Give the project a name."))
       return
     }
     onSubmit({
@@ -125,17 +126,18 @@ export function ProjectDialog({
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {project ? "Modifier le projet" : "Nouveau projet d’étude"}
+            {project ? t("Edit project") : t("New study project")}
           </DialogTitle>
           <DialogDescription>
-            Regroupez des sources sans les déplacer. Les instructions guideront
-            les futurs assistants sans leur donner de permission supplémentaire.
+            {t(
+              "Group sources without moving them. Instructions guide future assistants without granting extra permissions."
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <FieldGroup>
           <Field data-invalid={Boolean(titleError)}>
-            <FieldLabel htmlFor="project-title">Nom</FieldLabel>
+            <FieldLabel htmlFor="project-title">{t("Name")}</FieldLabel>
             <Input
               id="project-title"
               value={title}
@@ -152,7 +154,7 @@ export function ProjectDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[6rem_1fr_1fr]">
             <Field>
-              <FieldLabel htmlFor="project-emoji">Emoji</FieldLabel>
+              <FieldLabel htmlFor="project-emoji">{t("Emoji")}</FieldLabel>
               <Input
                 id="project-emoji"
                 value={emoji}
@@ -162,13 +164,13 @@ export function ProjectDialog({
               />
             </Field>
             <Field>
-              <FieldLabel>Couleur</FieldLabel>
+              <FieldLabel htmlFor="project-color">{t("Color")}</FieldLabel>
               <Select
                 items={colors}
                 value={color}
                 onValueChange={(value) => setColor(value)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="project-color" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -183,13 +185,15 @@ export function ProjectDialog({
               </Select>
             </Field>
             <Field>
-              <FieldLabel>Matière par défaut</FieldLabel>
+              <FieldLabel htmlFor="project-subject">
+                {t("Default subject")}
+              </FieldLabel>
               <Select
                 items={subjectItems}
                 value={subjectId}
                 onValueChange={(value) => setSubjectId(value)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger id="project-subject" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -206,7 +210,9 @@ export function ProjectDialog({
           </div>
 
           <Field>
-            <FieldLabel htmlFor="project-description">Description</FieldLabel>
+            <FieldLabel htmlFor="project-description">
+              {t("Description")}
+            </FieldLabel>
             <Textarea
               id="project-description"
               value={description}
@@ -218,7 +224,7 @@ export function ProjectDialog({
 
           <Field>
             <FieldLabel htmlFor="project-instructions">
-              Instructions du projet
+              {t("Project instructions")}
             </FieldLabel>
             <Textarea
               id="project-instructions"
@@ -226,22 +232,25 @@ export function ProjectDialog({
               onChange={(event) => setInstructions(event.target.value)}
               maxLength={64 * 1_024}
               rows={7}
-              placeholder="Ex. Privilégier le programme de terminale et signaler toute contradiction entre deux sources."
+              placeholder={t(
+                "For example: prioritize the final-year curriculum and flag contradictions between sources."
+              )}
             />
             <FieldDescription>
-              Le contenu importé reste non fiable : il ne peut jamais modifier
-              ces instructions ni les permissions du compte.
+              {t(
+                "Imported content remains untrusted: it can never change these instructions or account permissions."
+              )}
             </FieldDescription>
           </Field>
         </FieldGroup>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Annuler
+            {t("Cancel")}
           </Button>
           <Button onClick={submit} disabled={pending}>
             {pending ? <Spinner data-icon="inline-start" /> : null}
-            {project ? "Enregistrer" : "Créer le projet"}
+            {project ? t("Save") : t("Create project")}
           </Button>
         </DialogFooter>
       </DialogContent>

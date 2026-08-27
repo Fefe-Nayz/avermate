@@ -20,7 +20,7 @@ test("searches the real project corpus and opens its exact PDF locator", async (
     )
   ).toBeVisible()
 
-  await page.getByRole("tab", { name: "Recherche" }).click()
+  await page.getByRole("tab", { name: "Search", exact: true }).click()
   const searchResponse = page.waitForResponse(
     (response) =>
       response.url() === "http://localhost:5100/rpc/projects/search" &&

@@ -423,6 +423,50 @@ describe("durable jobs", () => {
     USER_CANCELLABLE_JOB_KINDS.delete(kind);
   });
 
+  test("acknowledges a cancellation even when the handler exits before the poll interval", async () => {
+    const kind = `test.jobs.immediate-cancel.${crypto.randomUUID()}`;
+    const { USER_CANCELLABLE_JOB_KINDS } = await import("../routers/jobs");
+    USER_CANCELLABLE_JOB_KINDS.add(kind);
+    let started!: () => void;
+    let failImmediately!: () => void;
+    const didStart = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const failure = new Promise<never>((_resolve, reject) => {
+      failImmediately = () =>
+        reject(new queue.NonRetryableJobError("publication fence changed"));
+    });
+    queue.registerJobHandler(kind, async () => {
+      started();
+      return failure;
+    });
+    const runAt = new Date();
+    const job = await queue.enqueueJob({
+      kind,
+      userId: "jobs-user-a",
+      runAt,
+    });
+    const execution = queue.runNextJob("runner-immediate-cancel", runAt);
+    await didStart;
+    await apiA.jobs.cancel({ jobId: job.id });
+    failImmediately();
+
+    expect(await execution).toMatchObject({
+      id: job.id,
+      status: "cancelled",
+      error: null,
+    });
+    const [metadata] = await database
+      .select()
+      .from(schema.jobRuntimeMetadata)
+      .where(eq(schema.jobRuntimeMetadata.jobId, job.id));
+    expect(metadata).toMatchObject({
+      stage: "terminal",
+      cancellation: "acknowledged",
+    });
+    USER_CANCELLABLE_JOB_KINDS.delete(kind);
+  });
+
   test("the router enforces ownership and hides system jobs", async () => {
     const owned = await queue.enqueueJob({
       kind: "export.documentPptx",

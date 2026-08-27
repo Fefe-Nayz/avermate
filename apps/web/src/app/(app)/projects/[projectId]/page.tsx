@@ -27,7 +27,7 @@ export default async function ProjectPage({
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({
-      ...orpc.projects.embeddingPrivacy.queryOptions(),
+      ...orpc.projects.retrievalPolicy.queryOptions({ input: { projectId } }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({

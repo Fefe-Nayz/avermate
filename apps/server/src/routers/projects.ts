@@ -30,6 +30,11 @@ import {
   corpusEmbeddingConfiguration,
   createOwnedCorpusVectorRuntime,
 } from "../search/vector-runtime";
+import {
+  readOwnedProjectRetrievalPolicy,
+  setOwnedProjectRetrievalPolicy,
+  setProjectRetrievalPolicyInputSchema,
+} from "../search/project-retrieval-policy";
 
 const projectIdInput = z.object({ projectId: z.string().min(1) }).strict();
 const sourceKindSchema = corpusOriginKindSchema.exclude(["conversation"]);
@@ -149,6 +154,48 @@ async function listItems(userId: string, projectId: string) {
   }));
 }
 
+type ProjectItem = Awaited<ReturnType<typeof listItems>>[number];
+
+function selectedVersion(item: ProjectItem) {
+  return item.trackingMode === "pinned"
+    ? item.sourceVersionId
+    : item.currentVersionId;
+}
+
+export function summarizeProjectSources(items: readonly ProjectItem[]) {
+  const indexed = (item: ProjectItem) =>
+    !item.missing &&
+    !item.selectorReviewRequired &&
+    item.indexStatus === "ready" &&
+    selectedVersion(item) !== null;
+  const recentContextItemIds = items
+    .filter((item) => item.contextMode !== "exclude")
+    .toSorted(
+      (left, right) =>
+        (right.addedAt?.getTime() ?? 0) - (left.addedAt?.getTime() ?? 0),
+    )
+    .slice(0, 4)
+    .map((item) => item.id);
+  return {
+    total: items.length,
+    indexed: items.filter(indexed).length,
+    included: items.filter((item) => item.contextMode === "include").length,
+    onDemand: items.filter((item) => item.contextMode === "on-demand").length,
+    excluded: items.filter((item) => item.contextMode === "exclude").length,
+    contextEligible: items.filter((item) => item.contextMode !== "exclude")
+      .length,
+    contextSearchable: items.filter(
+      (item) => item.contextMode !== "exclude" && indexed(item),
+    ).length,
+    automaticEligible: items.filter((item) => item.contextMode === "include")
+      .length,
+    automaticSearchable: items.filter(
+      (item) => item.contextMode === "include" && indexed(item),
+    ).length,
+    recentContextItemIds,
+  };
+}
+
 async function assertScope(
   userId: string,
   yearId: string | null,
@@ -260,11 +307,25 @@ export const projectsRouter = {
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
       const project = await requireProject(userId, input.projectId);
+      const items = await listItems(userId, input.projectId);
       return {
         project: projectProjection(project),
-        items: await listItems(userId, input.projectId),
+        items,
+        sourceSummary: summarizeProjectSources(items),
       };
     }),
+
+  retrievalPolicy: protectedProcedure
+    .input(projectIdInput)
+    .handler(({ context, input }) =>
+      readOwnedProjectRetrievalPolicy(context.session.user.id, input.projectId),
+    ),
+
+  setRetrievalPolicy: protectedProcedure
+    .input(setProjectRetrievalPolicyInputSchema)
+    .handler(({ context, input }) =>
+      setOwnedProjectRetrievalPolicy(context.session.user.id, input),
+    ),
 
   update: protectedProcedure
     .input(
@@ -427,18 +488,19 @@ export const projectsRouter = {
       }
       const itemId = newId("pitem");
       const now = Math.floor(Date.now() / 1_000);
-      const position =
-        input.position ??
-        Number(
-          (
-            await db.$client.execute({
-              sql: `SELECT count(*) AS count FROM study_project_items WHERE projectId = ?`,
-              args: [input.projectId],
-            })
-          ).rows[0]?.count ?? 0,
-        );
+      const transaction = await db.$client.transaction("write");
       try {
-        await db.$client.execute({
+        const position =
+          input.position ??
+          Number(
+            (
+              await transaction.execute({
+                sql: `SELECT count(*) AS count FROM study_project_items WHERE projectId = ?`,
+                args: [input.projectId],
+              })
+            ).rows[0]?.count ?? 0,
+          );
+        await transaction.execute({
           sql: `INSERT INTO study_project_items (
             id, projectId, kind, referenceId, sourceVersionId, trackingMode,
             selectorReviewRequired, position, contextMode, label, addedAt
@@ -455,9 +517,24 @@ export const projectsRouter = {
             now,
           ],
         });
+        const bumped = await transaction.execute({
+          sql: `UPDATE study_projects SET revision = revision + 1,
+              updatedAt = ?
+            WHERE id = ? AND userId = ? AND revision = ?
+              AND deletedAt IS NULL`,
+          args: [now, input.projectId, userId, Number(project.revision)],
+        });
+        if (Number(bumped.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        await transaction.commit();
       } catch (error) {
+        await transaction.rollback();
         if (String(error).includes("UNIQUE constraint failed")) {
           conflict("This source is already in the project");
+        }
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
         }
         throw error;
       }
@@ -476,21 +553,49 @@ export const projectsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireProject(userId, input.projectId);
-      const deleted = await db.$client.batch(
-        [
-          {
-            sql: `DELETE FROM content_version_references WHERE userId = ? AND ownerKind = 'project-item' AND ownerId = ?`,
-            args: [userId, input.itemId],
-          },
-          {
-            sql: `DELETE FROM study_project_items WHERE id = ? AND projectId = ? AND EXISTS (SELECT 1 FROM study_projects WHERE id = ? AND userId = ?)`,
-            args: [input.itemId, input.projectId, input.projectId, userId],
-          },
-        ],
-        "write",
-      );
-      if (Number(deleted[1]?.rowsAffected ?? 0) !== 1) notFound("Project item");
+      const project = await requireProject(userId, input.projectId);
+      const transaction = await db.$client.transaction("write");
+      try {
+        await transaction.execute({
+          sql: `DELETE FROM content_version_references
+            WHERE userId = ? AND ownerKind = 'project-item' AND ownerId = ?`,
+          args: [userId, input.itemId],
+        });
+        const deleted = await transaction.execute({
+          sql: `DELETE FROM study_project_items
+            WHERE id = ? AND projectId = ? AND EXISTS (
+              SELECT 1 FROM study_projects WHERE id = ? AND userId = ?
+            )`,
+          args: [input.itemId, input.projectId, input.projectId, userId],
+        });
+        if (Number(deleted.rowsAffected) !== 1) {
+          throw new Error("project-item-not-found");
+        }
+        const bumped = await transaction.execute({
+          sql: `UPDATE study_projects SET revision = revision + 1,
+              updatedAt = ?
+            WHERE id = ? AND userId = ? AND revision = ?`,
+          args: [
+            Math.floor(Date.now() / 1_000),
+            input.projectId,
+            userId,
+            Number(project.revision),
+          ],
+        });
+        if (Number(bumped.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        if (String(error).includes("project-item-not-found")) {
+          notFound("Project item");
+        }
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
+        }
+        throw error;
+      }
       return { ok: true as const };
     }),
 
@@ -552,6 +657,73 @@ export const projectsRouter = {
       return { ok: true as const };
     }),
 
+  setItemContextMode: protectedProcedure
+    .input(
+      z
+        .object({
+          projectId: z.string().min(1),
+          itemId: z.string().min(1),
+          contextMode: z.enum(["include", "on-demand", "exclude"]),
+        })
+        .strict(),
+    )
+    .handler(async ({ context, input }) => {
+      const userId = context.session.user.id;
+      const project = await requireProject(userId, input.projectId);
+      const revision = Number(project.revision) + 1;
+      const transaction = await db.$client.transaction("write");
+      try {
+        const changed = await transaction.execute({
+          sql: `UPDATE study_project_items SET contextMode = ?
+            WHERE id = ? AND projectId = ? AND EXISTS (
+              SELECT 1 FROM study_projects
+              WHERE id = ? AND userId = ? AND deletedAt IS NULL
+            )`,
+          args: [
+            input.contextMode,
+            input.itemId,
+            input.projectId,
+            input.projectId,
+            userId,
+          ],
+        });
+        if (Number(changed.rowsAffected) !== 1) {
+          throw new Error("project-item-not-found");
+        }
+        const bumped = await transaction.execute({
+          sql: `UPDATE study_projects SET revision = ?, updatedAt = ?
+            WHERE id = ? AND userId = ? AND revision = ?
+              AND deletedAt IS NULL`,
+          args: [
+            revision,
+            Math.floor(Date.now() / 1_000),
+            input.projectId,
+            userId,
+            Number(project.revision),
+          ],
+        });
+        if (Number(bumped.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
+        }
+        if (String(error).includes("project-item-not-found")) {
+          notFound("Project item");
+        }
+        throw error;
+      }
+      return {
+        item: (await listItems(userId, input.projectId)).find(
+          (entry) => entry.id === input.itemId,
+        ),
+        revision,
+      };
+    }),
+
   setItemTracking: protectedProcedure
     .input(
       z
@@ -564,7 +736,7 @@ export const projectsRouter = {
     )
     .handler(async ({ context, input }) => {
       const userId = context.session.user.id;
-      await requireProject(userId, input.projectId);
+      const project = await requireProject(userId, input.projectId);
       const result = await db.$client.execute({
         sql: `SELECT items.kind, items.referenceId, sources.currentVersionId
           FROM study_project_items AS items
@@ -587,24 +759,52 @@ export const projectsRouter = {
       if (row.currentVersionId === null) {
         badRequest("Index this source before changing its version tracking");
       }
-      const changed = await db.$client.execute({
-        sql: `UPDATE study_project_items SET trackingMode = ?,
-            sourceVersionId = ?, selectorReviewRequired = 0
-          WHERE id = ? AND projectId = ? AND EXISTS (
-            SELECT 1 FROM study_projects
-            WHERE id = ? AND userId = ? AND deletedAt IS NULL
-          )`,
-        args: [
-          input.trackingMode,
-          row.currentVersionId,
-          input.itemId,
-          input.projectId,
-          input.projectId,
-          userId,
-        ],
-      });
-      if (Number(changed.rowsAffected) !== 1) {
-        conflict("This project source changed elsewhere — reload it");
+      const transaction = await db.$client.transaction("write");
+      try {
+        const changed = await transaction.execute({
+          sql: `UPDATE study_project_items SET trackingMode = ?,
+              sourceVersionId = ?, selectorReviewRequired = 0
+            WHERE id = ? AND projectId = ? AND EXISTS (
+              SELECT 1 FROM study_projects
+              WHERE id = ? AND userId = ? AND deletedAt IS NULL
+            )`,
+          args: [
+            input.trackingMode,
+            row.currentVersionId,
+            input.itemId,
+            input.projectId,
+            input.projectId,
+            userId,
+          ],
+        });
+        if (Number(changed.rowsAffected) !== 1) {
+          throw new Error("project-source-changed");
+        }
+        const bumped = await transaction.execute({
+          sql: `UPDATE study_projects SET revision = revision + 1,
+              updatedAt = ?
+            WHERE id = ? AND userId = ? AND revision = ?
+              AND deletedAt IS NULL`,
+          args: [
+            Math.floor(Date.now() / 1_000),
+            input.projectId,
+            userId,
+            Number(project.revision),
+          ],
+        });
+        if (Number(bumped.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback();
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
+        }
+        if (String(error).includes("project-source-changed")) {
+          conflict("This project source changed elsewhere — reload it");
+        }
+        throw error;
       }
       const kind = sourceKindSchema.parse(row.kind);
       const job = await enqueueSourceIndex({
@@ -784,9 +984,29 @@ export const projectsRouter = {
     } catch {
       // A malformed or unreachable optional provider must never disable lexical search.
     }
-    const vector = runtime
-      ? await runtime.vector.capabilities()
-      : { available: false, implementation: "not-configured", dimensions: [] };
+    const descriptor = runtime?.embedding.descriptor() ?? null;
+    const activeGeneration = descriptor
+      ? await db.$client.execute({
+          sql: `SELECT id FROM corpus_embedding_generations
+            WHERE userId = ? AND spaceId = ? AND state = 'active' LIMIT 1`,
+          args: [context.session.user.id, descriptor.id],
+        })
+      : null;
+    const generationId = activeGeneration?.rows[0]?.id
+      ? String(activeGeneration.rows[0].id)
+      : null;
+    const vector =
+      runtime && generationId
+        ? await runtime.vector
+            .forGeneration(context.session.user.id, generationId)
+            .capabilities()
+        : {
+            available: false,
+            implementation: runtime
+              ? "vector-generation-unavailable"
+              : "not-configured",
+            dimensions: [],
+          };
     return {
       mode: vector.available ? ("hybrid" as const) : ("lexical-only" as const),
       lexicalAvailable: (

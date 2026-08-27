@@ -45,18 +45,19 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import {
-  coverageLabel,
   nextItemOrder,
   type ProjectSourceKind,
   type ProjectSourceOption,
 } from "./project-model"
+
+type ProjectContextMode = "include" | "on-demand" | "exclude"
 
 export interface ProjectSourceItem {
   id: string
   kind: string
   referenceId: string
   position: number
-  contextMode: string
+  contextMode: ProjectContextMode
   label: string | null
   sourceId: string | null
   indexStatus: string | null
@@ -70,11 +71,30 @@ export interface ProjectSourceItem {
   selectorReviewRequired: boolean
 }
 
-const contextModes = [
-  { label: "Toujours inclure", value: "include" },
-  { label: "À la demande", value: "on-demand" },
-  { label: "Exclure du contexte", value: "exclude" },
-]
+function useCoverageText() {
+  const t = useExtracted()
+  return (coverage: string | null) => {
+    if (coverage === "searchable-native-text") return t("Indexed native text")
+    if (coverage === "searchable-ocr") return t("Indexed OCR")
+    if (coverage === "metadata-and-locators-only") {
+      return t("OCR is required to search the text")
+    }
+    if (coverage === "unsupported") return t("Not indexable")
+    return t("Index pending")
+  }
+}
+
+function useIndexStatusText() {
+  const t = useExtracted()
+  return (status: string | null) => {
+    if (status === "ready" || status === "indexed") return t("Ready")
+    if (status === "indexing") return t("Indexing")
+    if (status === "registered") return t("Queued")
+    if (status === "failed") return t("Failed")
+    if (status === "partial") return t("Partially indexed")
+    return t("Not started")
+  }
+}
 
 function sourceKey(source: Pick<ProjectSourceOption, "kind" | "id">) {
   return `${source.kind}:${source.id}`
@@ -101,6 +121,7 @@ export function ProjectSourceManager({
   onReorder,
   onRetry,
   onTracking,
+  onContextMode,
 }: {
   projectId: string
   revision: number
@@ -125,13 +146,28 @@ export function ProjectSourceManager({
     itemId: string
     trackingMode: "pinned" | "follow-head"
   }) => void
+  onContextMode: (input: {
+    projectId: string
+    itemId: string
+    contextMode: ProjectContextMode
+  }) => void
 }) {
   const t = useExtracted()
+  const coverageText = useCoverageText()
+  const indexStatusText = useIndexStatusText()
   const [filter, setFilter] = useState("")
   const [selected, setSelected] = useState<string | null>(null)
-  const [contextMode, setContextMode] = useState<
-    "include" | "on-demand" | "exclude"
-  >("include")
+  const [contextMode, setContextMode] = useState<ProjectContextMode>("include")
+  const sourceSelectId = `available-source-${projectId}`
+  const contextSelectId = `source-context-${projectId}`
+  const contextModes: readonly {
+    label: string
+    value: ProjectContextMode
+  }[] = [
+    { label: t("Always include"), value: "include" },
+    { label: t("Available on demand"), value: "on-demand" },
+    { label: t("Exclude from context"), value: "exclude" },
+  ]
 
   const attached = useMemo(
     () => new Set(items.map((item) => `${item.kind}:${item.referenceId}`)),
@@ -182,19 +218,24 @@ export function ProjectSourceManager({
             id="project-sources-title"
             className="font-heading text-lg font-medium"
           >
-            Sources
+            {t("Sources")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            Une référence reste dans son emplacement d’origine et conserve sa
-            version citée.
+            {t(
+              "A reference stays in its original location and keeps the version used for citations."
+            )}
           </p>
         </div>
-        <Badge variant="secondary">{items.length} source(s)</Badge>
+        <Badge variant="secondary">
+          {t("{count, plural, one {# source} other {# sources}}", {
+            count: items.length,
+          })}
+        </Badge>
       </div>
 
       <FieldGroup className="rounded-xl border p-4">
         <Field>
-          <FieldLabel htmlFor="source-filter">Trouver une source</FieldLabel>
+          <FieldLabel htmlFor="source-filter">{t("Find a source")}</FieldLabel>
           <InputGroup>
             <InputGroupAddon>
               <SearchIcon />
@@ -203,23 +244,25 @@ export function ProjectSourceManager({
               id="source-filter"
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Document, matière, note ou enregistrement…"
+              placeholder={t("Document, subject, grade or recording…")}
             />
           </InputGroup>
         </Field>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_13rem_auto] md:items-end">
           <Field>
-            <FieldLabel>Source disponible</FieldLabel>
+            <FieldLabel htmlFor={sourceSelectId}>
+              {t("Available source")}
+            </FieldLabel>
             <Select
               items={sourceItems}
               value={selected}
               onValueChange={(value) => setSelected(value)}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id={sourceSelectId} className="w-full">
                 <SelectValue>
                   {(value: string | null) =>
                     sourceItems.find((item) => item.value === value)?.label ??
-                    "Choisir une source"
+                    t("Choose a source")
                   }
                 </SelectValue>
               </SelectTrigger>
@@ -243,15 +286,15 @@ export function ProjectSourceManager({
             </Select>
           </Field>
           <Field>
-            <FieldLabel>Contexte</FieldLabel>
+            <FieldLabel htmlFor={contextSelectId}>{t("Context")}</FieldLabel>
             <Select
               items={contextItems}
               value={contextMode}
               onValueChange={(value) =>
-                setContextMode(value as "include" | "on-demand" | "exclude")
+                setContextMode(value as ProjectContextMode)
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id={contextSelectId} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -271,7 +314,7 @@ export function ProjectSourceManager({
             ) : (
               <FilePlus2Icon data-icon="inline-start" />
             )}
-            Ajouter
+            {t("Add")}
           </Button>
         </div>
       </FieldGroup>
@@ -282,9 +325,9 @@ export function ProjectSourceManager({
             <EmptyMedia variant="icon">
               <FilePlus2Icon />
             </EmptyMedia>
-            <EmptyTitle>Aucune source dans ce projet</EmptyTitle>
+            <EmptyTitle>{t("No sources in this project")}</EmptyTitle>
             <EmptyDescription>
-              Ajoutez un document, une matière, une note ou un enregistrement.
+              {t("Add a document, subject, grade or recording.")}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -303,20 +346,25 @@ export function ProjectSourceManager({
             const indexing =
               item.indexStatus === "indexing" ||
               item.indexStatus === "registered"
+            const itemLabel = item.label ?? source?.title ?? item.referenceId
+            const itemContextSelectId = `source-context-${projectId}-${item.id}`
             return (
               <Item key={item.id} variant="outline">
                 <ItemContent>
                   <ItemTitle>
-                    {item.label ?? source?.title ?? item.referenceId}
+                    {itemLabel}
                     {item.missing ? (
-                      <Badge variant="destructive">Source manquante</Badge>
+                      <Badge variant="destructive">{t("Missing source")}</Badge>
                     ) : null}
                     {indexing ? (
-                      <Badge variant="secondary">Indexation…</Badge>
+                      <Badge variant="secondary">{t("Indexing…")}</Badge>
                     ) : null}
                   </ItemTitle>
                   <ItemDescription>
-                    {coverageLabel(item.coverage)} · {item.contextMode}
+                    {coverageText(item.coverage)} ·{" "}
+                    {contextModes.find(
+                      (mode) => mode.value === item.contextMode
+                    )?.label ?? t("Unknown context rule")}
                     {item.kind === "conversation"
                       ? item.selectorReviewRequired
                         ? t(" · branch needs review")
@@ -362,17 +410,62 @@ export function ProjectSourceManager({
                       }
                     >
                       {t("Retrieval index: {status}", {
-                        status: item.indexStatus ?? t("not started"),
+                        status: indexStatusText(item.indexStatus),
                       })}
                     </Badge>
                     <Badge variant="outline">
                       {t("Coverage: {coverage}", {
-                        coverage: coverageLabel(item.coverage),
+                        coverage: coverageText(item.coverage),
                       })}
                     </Badge>
                   </div>
                 </ItemContent>
-                <ItemActions>
+                <ItemActions className="basis-full flex-wrap justify-end sm:basis-auto">
+                  <Field className="min-w-0 flex-1 sm:w-44 sm:flex-none">
+                    <FieldLabel
+                      className="sr-only"
+                      htmlFor={itemContextSelectId}
+                    >
+                      {t("Context for {source}", { source: itemLabel })}
+                    </FieldLabel>
+                    <Select
+                      items={contextItems}
+                      value={item.contextMode}
+                      disabled={pendingAction}
+                      onValueChange={(value) => {
+                        if (
+                          value !== "include" &&
+                          value !== "on-demand" &&
+                          value !== "exclude"
+                        ) {
+                          return
+                        }
+                        if (value === item.contextMode) return
+                        onContextMode({
+                          projectId,
+                          itemId: item.id,
+                          contextMode: value,
+                        })
+                      }}
+                    >
+                      <SelectTrigger
+                        id={itemContextSelectId}
+                        size="sm"
+                        className="w-full"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {contextModes.map((mode) => (
+                            <SelectItem key={mode.value} value={mode.value}>
+                              {mode.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
                   {item.kind === "conversation" &&
                   item.selectorReviewRequired ? (
                     <Button
@@ -417,7 +510,7 @@ export function ProjectSourceManager({
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    aria-label="Monter la source"
+                    aria-label={t("Move source up")}
                     disabled={pendingAction || index === 0}
                     onClick={() => move(item.id, -1)}
                   >
@@ -426,7 +519,7 @@ export function ProjectSourceManager({
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    aria-label="Descendre la source"
+                    aria-label={t("Move source down")}
                     disabled={pendingAction || index === items.length - 1}
                     onClick={() => move(item.id, 1)}
                   >
@@ -436,7 +529,7 @@ export function ProjectSourceManager({
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label="Réparer l’index"
+                      aria-label={t("Repair index")}
                       disabled={pendingAction || item.missing}
                       onClick={() =>
                         onRetry({
@@ -451,7 +544,7 @@ export function ProjectSourceManager({
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    aria-label="Retirer la référence du projet"
+                    aria-label={t("Remove reference from project")}
                     disabled={pendingAction}
                     onClick={() => onRemove({ projectId, itemId: item.id })}
                   >

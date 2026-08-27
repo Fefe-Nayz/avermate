@@ -49,9 +49,11 @@ import { useOnlineStatus } from "@/hooks/use-online-status"
 import { orpc } from "@/lib/orpc"
 import { newKey, taxonomyValues, type RegionDraft } from "./copy-review-model"
 import { CopyReviewPanel } from "./copy-review-panel"
+import { useLearningTaxonomyLabels } from "./learning-labels"
 
 export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
   const t = useExtracted()
+  const taxonomyLabels = useLearningTaxonomyLabels()
   const router = useRouter()
   const online = useOnlineStatus()
   const queryClient = useQueryClient()
@@ -173,24 +175,6 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
     value: objective.id,
     label: objective.statement,
   }))
-  /**
-   * What kind of mistake it was.
-   *
-   * A ten-branch ternary staircase before, rebuilt per option. A record reads
-   * as the list it is, and an unknown value falls to one place instead of
-   * sliding down nine comparisons to get there.
-   */
-  const taxonomyLabels: Record<string, string> = {
-    "missing-knowledge": t("Missing knowledge"),
-    "misunderstood-concept": t("Misunderstood concept"),
-    "method-strategy": t("Method or strategy"),
-    calculation: t("Calculation"),
-    notation: t("Notation"),
-    "reading-instruction": t("Reading the instructions"),
-    justification: t("Justification"),
-    transfer: t("Transfer"),
-    "time-management": t("Time management"),
-  }
   /** Which part of the paper a region is. Four branches, one lookup. */
   const regionLabels: Record<string, string> = {
     "awarded-points": t("Score"),
@@ -202,7 +186,7 @@ export function CopyReviewWorkspace({ analysisId }: { analysisId: string }) {
 
   const taxonomyItems = taxonomyValues.map((value) => ({
     value,
-    label: taxonomyLabels[value] ?? t("Unclassified"),
+    label: taxonomyLabels[value],
   }))
   const selectedRegions = useMemo(
     () =>

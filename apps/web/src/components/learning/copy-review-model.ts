@@ -7,19 +7,7 @@
  * between them.
  */
 
-export type ErrorTaxonomy =
-  | "missing-knowledge"
-  | "misunderstood-concept"
-  | "method-strategy"
-  | "calculation"
-  | "notation"
-  | "reading-instruction"
-  | "justification"
-  | "transfer"
-  | "time-management"
-  | "unclassified"
-
-export const taxonomyValues: ErrorTaxonomy[] = [
+export const taxonomyValues = [
   "missing-knowledge",
   "misunderstood-concept",
   "method-strategy",
@@ -30,7 +18,9 @@ export const taxonomyValues: ErrorTaxonomy[] = [
   "transfer",
   "time-management",
   "unclassified",
-]
+] as const
+
+export type ErrorTaxonomy = (typeof taxonomyValues)[number]
 
 /** One region of a scanned paper, as the reviewer is editing it. */
 export type RegionDraft = {

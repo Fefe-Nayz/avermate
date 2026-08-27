@@ -1,7 +1,10 @@
-import { and, eq } from "drizzle-orm";
 import type { ProviderConsent } from "@avermate/agent-contracts";
 import { db } from "../db";
 import { retrievalProviderConsents } from "../db/schema";
+import {
+  cancelOwnedEmbeddingJobs,
+  rotateEmbeddingPublicationFence,
+} from "./embedding-publication-fence";
 import { COHERE_RERANK_DISCLOSURE_REVISION } from "./rerank-providers";
 import { GEMINI_EMBEDDING_DISCLOSURE_REVISION } from "./gemini-embedding";
 
@@ -76,17 +79,54 @@ export async function revokeRetrievalProviderConsent(input: {
   provider: "gemini" | "cohere";
   capability: "embedding" | "rerank";
 }) {
-  const revokedAt = new Date();
-  const rows = await db
-    .update(retrievalProviderConsents)
-    .set({ revokedAt, updatedAt: revokedAt })
-    .where(
-      and(
-        eq(retrievalProviderConsents.userId, input.userId),
-        eq(retrievalProviderConsents.provider, input.provider),
-        eq(retrievalProviderConsents.capability, input.capability),
-      ),
-    )
-    .returning({ id: retrievalProviderConsents.id });
-  return { revoked: rows.length > 0 };
+  const revokedAt = Math.floor(Date.now() / 1_000);
+  const transaction = await db.$client.transaction("write");
+  try {
+    const updated = await transaction.execute({
+      sql: `UPDATE retrieval_provider_consents
+        SET revokedAt = ?, updatedAt = ?
+        WHERE userId = ? AND provider = ? AND capability = ?
+          AND revokedAt IS NULL`,
+      args: [
+        revokedAt,
+        revokedAt,
+        input.userId,
+        input.provider,
+        input.capability,
+      ],
+    });
+    let queuedJobsCancelled = 0;
+    let runningJobsCancellationRequested = 0;
+    let publicationEpoch: number | null = null;
+    if (
+      Number(updated.rowsAffected) > 0 &&
+      input.provider === "gemini" &&
+      input.capability === "embedding"
+    ) {
+      const fence = await rotateEmbeddingPublicationFence(
+        input.userId,
+        false,
+        transaction,
+      );
+      publicationEpoch = fence.publicationEpoch;
+      const cancelled = await cancelOwnedEmbeddingJobs(
+        input.userId,
+        transaction,
+      );
+      queuedJobsCancelled = cancelled.queuedJobsCancelled;
+      runningJobsCancellationRequested =
+        cancelled.runningJobsCancellationRequested;
+    }
+    await transaction.commit();
+    return {
+      revoked: Number(updated.rowsAffected) > 0,
+      publicationEpoch,
+      queuedJobsCancelled,
+      runningJobsCancellationRequested,
+      requiresExplicitReenable: publicationEpoch !== null,
+    };
+  } catch (error) {
+    await transaction.rollback().catch(() => undefined);
+    throw error;
+  }
 }

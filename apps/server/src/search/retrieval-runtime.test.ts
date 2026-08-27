@@ -107,4 +107,57 @@ describe("configured rerank runtime", () => {
     expect(creatorInput).toMatchObject({ provider: "qwen3", ownerId: "owner-1" });
     expect(provider).toBe(expected);
   });
+
+  test("revalidates Cohere consent and credential on a stale runtime", async () => {
+    const { createOwnedConfiguredRerankProvider } = await import(
+      "./retrieval-runtime"
+    );
+    let consentActive = true;
+    let consentLoads = 0;
+    const credential = {
+      key: "fixture-key-never-sent",
+      source: "user" as const,
+      invalidationToken: "fixture-credential-v1",
+    };
+    const provider = await createOwnedConfiguredRerankProvider(
+      "owner-1",
+      {
+        CORPUS_RERANK_ENABLED: "true",
+        CORPUS_RERANK_PROVIDER: "cohere",
+        CORPUS_RERANK_MODEL: "rerank-v4.0-fast",
+        CORPUS_RERANK_MODEL_REVISION: "rerank-v4.0-fast@fixture",
+        CORPUS_RERANK_PLACEMENT: "core",
+      },
+      {
+        resolveServiceKey: async () => credential,
+        loadConsent: async () => {
+          consentLoads += 1;
+          return consentActive
+            ? {
+                provider: "cohere",
+                capability: "rerank",
+                disclosureRevision: "cohere-rerank-school-content/1",
+                grantedAt: "2026-08-27T10:00:00.000Z",
+              }
+            : null;
+        },
+      },
+    );
+
+    expect(provider).not.toBeNull();
+    expect(consentLoads).toBe(1);
+    consentActive = false;
+    await expect(
+      provider!.rerank({
+        operationId: "stale-cohere-runtime",
+        query: "question privée",
+        candidates: [
+          { id: "chunk-a", text: "preuve privée", tokenEstimate: 3 },
+        ],
+        topN: 1,
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow("COHERE_RERANK_EXPLICIT_CONSENT_REQUIRED");
+    expect(consentLoads).toBe(2);
+  });
 });

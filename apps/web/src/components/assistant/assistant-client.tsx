@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { AgentApprovalMode } from "@avermate/agent-contracts"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useExtracted } from "next-intl"
 import {
   useCallback,
@@ -23,7 +23,7 @@ import { uploadBrowserFile } from "@/lib/file-upload"
 import { env } from "@/lib/env"
 import { orpc, rpc } from "@/lib/orpc"
 import { activeRun } from "./assistant-thread-model"
-import { resolveProjectScopedThreadSelection } from "./assistant-project-scope"
+import { assistantHrefWithoutInvalidThread } from "./assistant-deep-link"
 import { AssistantWorkspace } from "./assistant-workspace"
 import {
   findBranchContainingMessage,
@@ -100,6 +100,7 @@ export function AssistantWorkspaceClient({
   const t = useExtracted()
   const queryClient = useQueryClient()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const year = useMaybeYear()
   const [searchQuery, setSearchQuery] = useState("")
@@ -139,13 +140,6 @@ export function AssistantWorkspaceClient({
         })
       : orpc.assistant.threads.list.queryOptions({ input: threadListInput })
   )
-  // Search results are only a presentation subset. Keep the unsearched,
-  // project-filtered list as the authority that validates a selected thread.
-  // With no search both observers share one TanStack query and one request.
-  const projectThreadScopeQuery = useQuery({
-    ...orpc.assistant.threads.list.queryOptions({ input: threadListInput }),
-    enabled: Boolean(projectId),
-  })
   const threads = useMemo<AssistantThreadSummary[]>(
     () =>
       (threadsQuery.data?.items ?? []).map((item) => ({
@@ -156,28 +150,11 @@ export function AssistantWorkspaceClient({
       })),
     [threadsQuery.data]
   )
-  const projectThreadIds = useMemo(
-    () =>
-      (projectThreadScopeQuery.data?.items ?? []).map((item) => item.thread.id),
-    [projectThreadScopeQuery.data]
-  )
-  const threadSelection = resolveProjectScopedThreadSelection({
-    projectId,
-    selectedThreadId,
-    projectThreadIds,
-    projectScopeReady: projectThreadScopeQuery.isSuccess,
-    fallbackThreadId: threads[0]?.id ?? null,
-  })
-  const effectiveThreadId = threadSelection.effectiveThreadId
-
-  useEffect(() => {
-    if (!threadSelection.resetSelection) return
-    const resetFrame = window.requestAnimationFrame(() => {
-      setSelectedThreadId(null)
-      setSelectedBranchId(null)
-    })
-    return () => window.cancelAnimationFrame(resetFrame)
-  }, [threadSelection.resetSelection])
+  // A bounded presentation list must never be the authority for a deep link.
+  // `threads.get` validates expectedProjectId server-side, so the 101st (or
+  // older) conversation remains directly addressable without exposing a
+  // conversation from another project while the list is loading.
+  const effectiveThreadId = selectedThreadId ?? threads[0]?.id ?? null
 
   const previousProjectIdRef = useRef(projectId)
   useEffect(() => {
@@ -195,9 +172,10 @@ export function AssistantWorkspaceClient({
         ? {
             threadId: effectiveThreadId,
             branchId: selectedBranchId ?? undefined,
+            ...(projectId ? { expectedProjectId: projectId } : {}),
           }
         : null,
-    [effectiveThreadId, selectedBranchId]
+    [effectiveThreadId, projectId, selectedBranchId]
   )
   const detailQuery = useQuery({
     ...orpc.assistant.threads.get.queryOptions({
@@ -205,6 +183,37 @@ export function AssistantWorkspaceClient({
     }),
     enabled: detailInput !== null,
   })
+  useEffect(() => {
+    if (!projectId || !selectedThreadId || !detailQuery.error) return
+    const code =
+      typeof detailQuery.error === "object" && detailQuery.error !== null
+        ? (detailQuery.error as { code?: unknown }).code
+        : null
+    if (code !== "NOT_FOUND") return
+    const cleanHref = assistantHrefWithoutInvalidThread(
+      pathname,
+      searchParams.toString()
+    )
+    const resetFrame = window.requestAnimationFrame(() => {
+      setSelectedThreadId(null)
+      setSelectedBranchId(null)
+      router.replace(cleanHref, { scroll: false })
+      toast.error(
+        t(
+          "This conversation is unavailable in this project. The project assistant was reset."
+        )
+      )
+    })
+    return () => window.cancelAnimationFrame(resetFrame)
+  }, [
+    detailQuery.error,
+    pathname,
+    projectId,
+    router,
+    searchParams,
+    selectedThreadId,
+    t,
+  ])
   const modelsQuery = useQuery(orpc.assistant.models.list.queryOptions())
   const modelCatalogueQuery = useQuery(
     orpc.assistant.models.catalogue.queryOptions()
