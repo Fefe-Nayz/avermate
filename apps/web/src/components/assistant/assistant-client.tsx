@@ -23,6 +23,7 @@ import { uploadBrowserFile } from "@/lib/file-upload"
 import { env } from "@/lib/env"
 import { orpc, rpc } from "@/lib/orpc"
 import { activeRun } from "./assistant-thread-model"
+import { resolveProjectScopedThreadSelection } from "./assistant-project-scope"
 import { AssistantWorkspace } from "./assistant-workspace"
 import {
   findBranchContainingMessage,
@@ -84,6 +85,7 @@ export function AssistantWorkspaceClient({
   paneCloseHref,
   className,
   compactRail = false,
+  projectId,
 }: {
   onClose?: () => void
   expandHref?: string
@@ -92,6 +94,8 @@ export function AssistantWorkspaceClient({
   paneCloseHref?: string
   className?: string
   compactRail?: boolean
+  /** Restrict the rail to one project and bind every new thread to it. */
+  projectId?: string
 }) {
   const t = useExtracted()
   const queryClient = useQueryClient()
@@ -122,6 +126,7 @@ export function AssistantWorkspaceClient({
   )
 
   const threadListInput = {
+    ...(projectId ? { projectId } : {}),
     limit: 100,
     includeArchived: true,
     includeDeleted: true,
@@ -134,6 +139,13 @@ export function AssistantWorkspaceClient({
         })
       : orpc.assistant.threads.list.queryOptions({ input: threadListInput })
   )
+  // Search results are only a presentation subset. Keep the unsearched,
+  // project-filtered list as the authority that validates a selected thread.
+  // With no search both observers share one TanStack query and one request.
+  const projectThreadScopeQuery = useQuery({
+    ...orpc.assistant.threads.list.queryOptions({ input: threadListInput }),
+    enabled: Boolean(projectId),
+  })
   const threads = useMemo<AssistantThreadSummary[]>(
     () =>
       (threadsQuery.data?.items ?? []).map((item) => ({
@@ -144,7 +156,39 @@ export function AssistantWorkspaceClient({
       })),
     [threadsQuery.data]
   )
-  const effectiveThreadId = selectedThreadId ?? threads[0]?.id ?? null
+  const projectThreadIds = useMemo(
+    () =>
+      (projectThreadScopeQuery.data?.items ?? []).map((item) => item.thread.id),
+    [projectThreadScopeQuery.data]
+  )
+  const threadSelection = resolveProjectScopedThreadSelection({
+    projectId,
+    selectedThreadId,
+    projectThreadIds,
+    projectScopeReady: projectThreadScopeQuery.isSuccess,
+    fallbackThreadId: threads[0]?.id ?? null,
+  })
+  const effectiveThreadId = threadSelection.effectiveThreadId
+
+  useEffect(() => {
+    if (!threadSelection.resetSelection) return
+    const resetFrame = window.requestAnimationFrame(() => {
+      setSelectedThreadId(null)
+      setSelectedBranchId(null)
+    })
+    return () => window.cancelAnimationFrame(resetFrame)
+  }, [threadSelection.resetSelection])
+
+  const previousProjectIdRef = useRef(projectId)
+  useEffect(() => {
+    if (previousProjectIdRef.current === projectId) return
+    previousProjectIdRef.current = projectId
+    const resetFrame = window.requestAnimationFrame(() => {
+      setSelectedBranchId(null)
+    })
+    return () => window.cancelAnimationFrame(resetFrame)
+  }, [projectId])
+
   const detailInput = useMemo(
     () =>
       effectiveThreadId
@@ -409,10 +453,16 @@ export function AssistantWorkspaceClient({
     () => ({
       createThread: () =>
         runAction(async () => {
-          const created = await rpc.assistant.threads.create({})
+          const created = await rpc.assistant.threads.create({
+            projectId: projectId ?? null,
+          })
+          // A project selection is validated against its filtered list. Make
+          // that list authoritative before selecting the newly created id;
+          // the global assistant keeps its immediate-selection behavior.
+          if (projectId) await refresh()
           setSelectedBranchId(created.branch.id)
           setSelectedThreadId(created.thread.id)
-          await refresh()
+          if (!projectId) await refresh()
           return created.thread.id
         }),
       selectThread: (threadId) => {
@@ -641,6 +691,7 @@ export function AssistantWorkspaceClient({
       router,
       runAction,
       t,
+      projectId,
       threads,
       year,
     ]

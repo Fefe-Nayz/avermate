@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type ReactNode } from "react"
+import { useMemo, useSyncExternalStore, type ReactNode } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useExtracted } from "next-intl"
 import { useQuery } from "@tanstack/react-query"
@@ -38,6 +38,10 @@ export interface Crumb {
   siblings?: Array<{ key: string; label: string; href: string }>
 }
 
+const subscribeToHydration = () => () => {}
+const getHydratedSnapshot = () => true
+const getServerHydrationSnapshot = () => false
+
 /**
  * The trail for the current route.
  *
@@ -52,6 +56,20 @@ export function useBreadcrumbs(): Crumb[] {
   const t = useExtracted()
   const year = useMaybeYear()
   const yearId = year?.yearId ?? ""
+  /*
+   * The project name is hydrated by the page boundary below this shell,
+   * while the browser QueryClient deliberately survives client navigations.
+   * On a hard load that can otherwise make the server render a generic label
+   * ("Project") and the first browser render reuse a cached title, producing a
+   * hydration mismatch in ResponsiveBreadcrumb. `useSyncExternalStore` keeps
+   * the server and hydration snapshots identical, then enables the richer
+   * cached label immediately after hydration without an effect-owned flag.
+   */
+  const canUseProjectQueryLabel = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydrationSnapshot
+  )
 
   // The materials browser puts the folder you are in in the address, so the
   // trail can say where that is. Only that screen pays for the read, and it has
@@ -108,11 +126,12 @@ export function useBreadcrumbs(): Crumb[] {
     enabled: inProjects && Boolean(projectId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
-  const projectTitle =
-    (
-      projectQuery.data as
-        ReadonlyArray<{ id: string; title: string }> | undefined
-    )?.find((item) => item.id === projectId)?.title ?? ""
+  const projectTitle = canUseProjectQueryLabel
+    ? ((
+        projectQuery.data as
+          ReadonlyArray<{ id: string; title: string }> | undefined
+      )?.find((item) => item.id === projectId)?.title ?? "")
+    : ""
 
   const inCopies = pathname.startsWith("/learning/copies/")
   const analysisId = inCopies ? (pathname.split("/")[3] ?? "") : ""

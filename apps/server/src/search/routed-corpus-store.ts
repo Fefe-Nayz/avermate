@@ -33,9 +33,7 @@ import { canonicalJson, jsonValue } from "./values";
 
 type ExecuteClient = Pick<Client, "execute">;
 type SqlClient = Pick<Client, "execute" | "batch" | "transaction">;
-type CorpusPlanePlacement =
-  | { kind: "core" }
-  | { kind: "node"; nodeId: string };
+type CorpusPlanePlacement = { kind: "core" } | { kind: "node"; nodeId: string };
 
 function iso(value: unknown) {
   return new Date(Number(value) * 1_000).toISOString();
@@ -82,10 +80,7 @@ async function sourceIdsAtPlacement(
              AND placement = 'node' AND placementRef = ? ORDER BY id`
         : `SELECT id FROM content_sources WHERE userId = ?
              AND placement = 'core' ORDER BY id`,
-    args:
-      placement.kind === "node"
-        ? [ownerId, placement.nodeId]
-        : [ownerId],
+    args: placement.kind === "node" ? [ownerId, placement.nodeId] : [ownerId],
   });
   return result.rows.map((row) => String(row.id));
 }
@@ -123,9 +118,7 @@ async function loadCoreVersions(
           ? { kind: "node", nodeId: String(sourceRow.placementRef) }
           : { kind: "core" },
       placementRef:
-        sourceRow.placementRef === null
-          ? null
-          : String(sourceRow.placementRef),
+        sourceRow.placementRef === null ? null : String(sourceRow.placementRef),
       createdAt: iso(sourceRow.createdAt),
       updatedAt: iso(sourceRow.updatedAt),
     });
@@ -251,10 +244,7 @@ async function loadLocalIndexedVersions(
   return versions;
 }
 
-function samePlacement(
-  left: CapabilityPlacement,
-  right: CapabilityPlacement,
-) {
+function samePlacement(left: CapabilityPlacement, right: CapabilityPlacement) {
   return (
     left.kind === right.kind &&
     (left.kind !== "node" ||
@@ -279,6 +269,7 @@ function matchesScopeSql(input: OwnedLexicalQuery, args: InValue[]) {
   add("yearId", input.yearIds);
   add("subjectId", input.subjectIds);
   add("originKind", input.originKinds);
+  add("id", input.sourceIds ?? []);
   return clauses.join(" AND ");
 }
 
@@ -314,14 +305,13 @@ function authorizedCandidateSql(input: OwnedLexicalQuery, args: InValue[]) {
   add("sources.yearId", input.yearIds);
   add("sources.subjectId", input.subjectIds);
   add("sources.originKind", input.originKinds);
+  add("sources.id", input.sourceIds ?? []);
   return clauses.join(" AND ");
 }
 
 function boundedBodySnippet(text: string) {
   const normalized = text.trim().replaceAll(/\s+/gu, " ");
-  return normalized.length > 520
-    ? `${normalized.slice(0, 519)}…`
-    : normalized;
+  return normalized.length > 520 ? `${normalized.slice(0, 519)}…` : normalized;
 }
 
 /**
@@ -336,10 +326,9 @@ export class RoutedCorpusStore extends CoreCorpusStore {
 
   constructor(
     private readonly routedClient: SqlClient = db.$client,
-    private readonly transport: NodeLexicalSearchTransport =
-      relayNodeProviderTransport,
-    envelopeSecret =
-      env.NODE_CREDENTIAL_MASTER_SECRET ?? env.BETTER_AUTH_SECRET,
+    private readonly transport: NodeLexicalSearchTransport = relayNodeProviderTransport,
+    envelopeSecret = env.NODE_CREDENTIAL_MASTER_SECRET ??
+      env.BETTER_AUTH_SECRET,
   ) {
     super(routedClient);
     this.#local = new SqliteFts5LexicalSearchBackend(routedClient);
@@ -409,9 +398,9 @@ export class RoutedCorpusStore extends CoreCorpusStore {
       ),
     )) {
       nodeCandidates.push(
-        ...(
-          await (await this.#node(nodeId, input.ownerId)).search(input)
-        ).map((candidate) => ({ nodeId, candidate })),
+        ...(await (await this.#node(nodeId, input.ownerId)).search(input)).map(
+          (candidate) => ({ nodeId, candidate }),
+        ),
       );
     }
     if (nodeCandidates.length > 0) {
@@ -516,7 +505,9 @@ export class RoutedCorpusStore extends CoreCorpusStore {
           sql: `UPDATE content_sources SET status = 'failed', error = ?,
               updatedAt = ? WHERE id = ? AND userId = ?`,
           args: [
-            error instanceof Error ? error.message : "NODE_INDEX_PUBLISH_FAILED",
+            error instanceof Error
+              ? error.message
+              : "NODE_INDEX_PUBLISH_FAILED",
             Math.floor(Date.now() / 1_000),
             committed.sourceId,
             input.ownerId,
@@ -556,9 +547,7 @@ export class RoutedCorpusStore extends CoreCorpusStore {
           input.source.kind,
           input.source.kind === "node" ? input.source.nodeId : null,
           input.destination.kind,
-          input.destination.kind === "node"
-            ? input.destination.nodeId
-            : null,
+          input.destination.kind === "node" ? input.destination.nodeId : null,
           now + 300,
           now,
         ],
@@ -795,7 +784,8 @@ export class RoutedCorpusStore extends CoreCorpusStore {
       }
       return {
         itemCount: sourceVersions.length,
-        copiedBytes: new TextEncoder().encode(canonicalJson(sourceVersions)).byteLength,
+        copiedBytes: new TextEncoder().encode(canonicalJson(sourceVersions))
+          .byteLength,
         sourceDigest,
         destinationDigest,
       };
@@ -865,7 +855,8 @@ export class RoutedCorpusStore extends CoreCorpusStore {
     }
     return {
       itemCount: sourceVersions.length,
-      copiedBytes: new TextEncoder().encode(canonicalJson(sourceVersions)).byteLength,
+      copiedBytes: new TextEncoder().encode(canonicalJson(sourceVersions))
+        .byteLength,
       sourceDigest,
       destinationDigest,
     };

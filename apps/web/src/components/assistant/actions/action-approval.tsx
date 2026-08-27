@@ -19,27 +19,28 @@ import { Spinner } from "@/components/ui/spinner"
 import { actionConsequence, approvalExpiryState } from "./action-model"
 import { useActionCopy } from "./use-action-copy"
 
-function approvalReason(
-  action: AgentActionDto,
-  t: ReturnType<typeof useExtracted>
-): string {
-  if (action.risk === "irreversible") {
-    return t(
-      "This effect cannot be reliably reversed and always needs your confirmation."
-    )
+function useApprovalReason() {
+  const t = useExtracted()
+
+  return (action: AgentActionDto): string => {
+    if (action.risk === "irreversible") {
+      return t(
+        "This effect cannot be reliably reversed and always needs your confirmation."
+      )
+    }
+    if (action.effect === "external") {
+      return t(
+        "This action can affect an external system, so Avermate will not run it silently."
+      )
+    }
+    if (action.risk === "high") {
+      return t("This one is risky, so it needs a clear yes from you.")
+    }
+    if (action.compensatorId) {
+      return t("You can undo this, as long as nothing else changes it first.")
+    }
+    return t("This change needs your approval before it happens.")
   }
-  if (action.effect === "external") {
-    return t(
-      "This action can affect an external system, so Avermate will not run it silently."
-    )
-  }
-  if (action.risk === "high") {
-    return t("This one is risky, so it needs a clear yes from you.")
-  }
-  if (action.compensatorId) {
-    return t("You can undo this, as long as nothing else changes it first.")
-  }
-  return t("This change needs your approval before it happens.")
 }
 
 function useApprovalExpiry(expiresAt: string) {
@@ -96,18 +97,31 @@ function LiveActionApprovalPanel({
   onDecision: (decision: "approve" | "reject") => void
 }) {
   const t = useExtracted()
+  const approvalReason = useApprovalReason()
   const expiry = useApprovalExpiry(expiresAt)
   const approveButtonRef = useRef<HTMLButtonElement>(null)
-  const minutes = Math.floor(expiry.remainingSeconds / 60)
+  const days = Math.floor(expiry.remainingSeconds / 86_400)
+  const hours = Math.floor((expiry.remainingSeconds % 86_400) / 3_600)
+  const minutes = Math.floor((expiry.remainingSeconds % 3_600) / 60)
   const seconds = expiry.remainingSeconds % 60
   const expiryLabel = expiry.expired
     ? t("Approval expired")
-    : minutes > 0
-      ? t("Expires in {minutes}m {seconds}s", {
-          minutes: String(minutes),
-          seconds: seconds.toString().padStart(2, "0"),
+    : days > 0
+      ? t("Expires in {days}d {hours}h", {
+          days: String(days),
+          hours: String(hours),
         })
-      : t("Expires in {seconds}s", { seconds: String(seconds) })
+      : hours > 0
+        ? t("Expires in {hours}h {minutes}m", {
+            hours: String(hours),
+            minutes: String(minutes),
+          })
+        : minutes > 0
+          ? t("Expires in {minutes}m {seconds}s", {
+              minutes: String(minutes),
+              seconds: seconds.toString().padStart(2, "0"),
+            })
+          : t("Expires in {seconds}s", { seconds: String(seconds) })
   /**
    * Nine branches of ternary before, naming the taxonomy rather than the
    * consequence: "Delete effect", "Irreversible risk". Somebody deciding
@@ -139,7 +153,7 @@ function LiveActionApprovalPanel({
         {expiry.expired ? t("Approval expired") : t("Approval required")}
       </AlertTitle>
       <AlertDescription className="flex flex-col gap-3">
-        <span>{approvalReason(action, t)}</span>
+        <span>{approvalReason(action)}</span>
         <span className="flex flex-wrap gap-1.5">
           <Badge variant="outline">{effectLabel}</Badge>
           <Badge
@@ -196,15 +210,16 @@ export function ActionApprovalDialog({
 }) {
   const t = useExtracted()
   const actionCopy = useActionCopy()
+  const approvalReason = useApprovalReason()
   if (!action) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" closeLabel={t("Close")}>
         <DialogHeader>
           <DialogTitle>{actionCopy.title(action)}</DialogTitle>
           <DialogDescription>
-            {actionConsequence(action) ?? approvalReason(action, t)}
+            {actionConsequence(action) ?? approvalReason(action)}
           </DialogDescription>
         </DialogHeader>
         <ActionApprovalPanel

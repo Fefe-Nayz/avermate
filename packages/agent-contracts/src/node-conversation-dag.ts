@@ -18,6 +18,7 @@ export type NodeConversationDagSnapshot = z.infer<
 
 export const nodeConversationDagListInputSchema = z.strictObject({
   query: z.string().max(500).optional(),
+  projectId: z.string().min(1).max(256).optional(),
   includeArchived: z.boolean().default(false),
   includeDeleted: z.boolean().default(false),
   starredOnly: z.boolean().default(false),

@@ -4,14 +4,20 @@ import Link from "next/link"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  ActivityIcon,
   ChevronRightIcon,
+  CircleDashedIcon,
   Clock3Icon,
   FileCheck2Icon,
   FileSearchIcon,
   HistoryIcon,
+  ListChecksIcon,
+  MinusIcon,
   RefreshCwIcon,
   SparklesIcon,
   TargetIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
   WifiOffIcon,
 } from "lucide-react"
 import { useExtracted, useFormatter } from "next-intl"
@@ -26,6 +32,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -41,6 +48,15 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
+import {
   Progress,
   ProgressLabel,
   ProgressValue,
@@ -49,11 +65,33 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useOnlineStatus } from "@/hooks/use-online-status"
-import { orpc } from "@/lib/orpc"
+import { orpc, rpc } from "@/lib/orpc"
 import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 
 function percent(value: number) {
   return `${Math.round(value * 100)} %`
+}
+
+function signedPercent(value: number) {
+  const points = Math.round(value * 100)
+  return `${points > 0 ? "+" : ""}${points} pts`
+}
+
+function useTrendLabel() {
+  const t = useExtracted()
+
+  return (trend: string) => {
+    switch (trend) {
+      case "improving":
+        return t("Improving")
+      case "declining":
+        return t("Declining")
+      case "stable":
+        return t("Stable")
+      default:
+        return t("Not enough history")
+    }
+  }
 }
 
 function QueryFailure({
@@ -79,12 +117,14 @@ function QueryFailure({
 
 export function LearningClient() {
   const t = useExtracted()
+  const trendLabel = useTrendLabel()
   const copyStatusLabels = useCopyStatusLabels()
   const queryClient = useQueryClient()
   const { yearId, subjects } = useYear()
   const online = useOnlineStatus()
   const [subjectId, setSubjectId] = useState<string | null>(null)
   const [availableMinutes, setAvailableMinutes] = useState(30)
+  const [tab, setTab] = useState("overview")
   const scope = { yearId: yearId ?? "", subjectId }
   const concepts = useQuery({
     ...orpc.learning.concepts.list.queryOptions({ input: scope }),
@@ -98,7 +138,7 @@ export function LearningClient() {
   })
   const copies = useQuery({
     ...orpc.learning.copies.list.queryOptions({
-      input: { yearId: yearId ?? "" },
+      input: scope,
     }),
     enabled: Boolean(yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
@@ -111,13 +151,13 @@ export function LearningClient() {
   })
   const plan = useQuery({
     ...orpc.learning.plan.list.queryOptions({
-      input: { yearId: yearId ?? "" },
+      input: scope,
     }),
     enabled: Boolean(yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
   const progress = useQuery({
-    ...orpc.learning.progress.queryOptions({ input: { yearId: yearId ?? "" } }),
+    ...orpc.learning.progress.queryOptions({ input: scope }),
     enabled: Boolean(yearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
@@ -146,12 +186,7 @@ export function LearningClient() {
 
   const scopedSubjects = subjects.filter((subject) => !subject.parentId)
   const masteryRows = mastery.data ?? []
-  const averageMastery = masteryRows.length
-    ? masteryRows.reduce(
-        (sum, row) => sum + (row.projection?.estimate ?? 0.5),
-        0
-      ) / masteryRows.length
-    : null
+  const summary = progress.data?.summary ?? null
 
   return (
     <>
@@ -188,32 +223,6 @@ export function LearningClient() {
       </PageActions>
 
       <main className="flex min-w-0 flex-col gap-5">
-        <div className="hidden items-start justify-between gap-4 md:flex">
-          <div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight">
-              {t("Learning")}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {t("Every estimate remains linked to evidence you reviewed.")}
-            </p>
-          </div>
-          <Button
-            disabled={!online || !yearId || propose.isPending}
-            onClick={() =>
-              yearId &&
-              propose.mutate({
-                yearId,
-                subjectId,
-                limit: 5,
-                availableMinutes,
-              })
-            }
-          >
-            {propose.isPending ? <Spinner /> : <SparklesIcon />}
-            {t("Suggest a plan")}
-          </Button>
-        </div>
-
         {!online ? (
           <Alert variant="destructive">
             <WifiOffIcon />
@@ -226,7 +235,11 @@ export function LearningClient() {
           </Alert>
         ) : null}
 
-        {concepts.isStale || copies.isStale || plan.isStale ? (
+        {concepts.isStale ||
+        copies.isStale ||
+        plan.isStale ||
+        mastery.isStale ||
+        progress.isStale ? (
           <Alert>
             <Clock3Icon />
             <AlertTitle>{t("Some learning data may be stale")}</AlertTitle>
@@ -238,50 +251,15 @@ export function LearningClient() {
           </Alert>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Active objectives")}</CardDescription>
-              <CardTitle className="numeric text-2xl">
-                {concepts.data?.objectives.length ?? "—"}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Average estimate")}</CardDescription>
-              <CardTitle className="numeric text-2xl">
-                {averageMastery === null ? "—" : percent(averageMastery)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-          <Card size="sm">
-            <CardHeader>
-              <CardDescription>{t("Papers to review")}</CardDescription>
-              <CardTitle className="numeric text-2xl">
-                {
-                  (copies.data ?? []).filter(({ analysis }) =>
-                    ["proposed", "failed"].includes(analysis.status)
-                  ).length
-                }
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-
-        <LearningPrivacyControls
-          online={online}
-          providers={(copies.data ?? []).map(({ analysis }) => ({
-            provider: analysis.provider,
-            model: analysis.model,
-            modelRevision: analysis.modelRevision,
-          }))}
-        />
-
-        <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+        <div
+          className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1"
+          role="group"
+          aria-label={t("Filter learning by subject")}
+        >
           <Button
             size="sm"
             variant={subjectId === null ? "default" : "outline"}
+            aria-pressed={subjectId === null}
             onClick={() => setSubjectId(null)}
           >
             {t("All subjects")}
@@ -291,6 +269,7 @@ export function LearningClient() {
               key={subject.id}
               size="sm"
               variant={subjectId === subject.id ? "default" : "outline"}
+              aria-pressed={subjectId === subject.id}
               onClick={() => setSubjectId(subject.id)}
             >
               {subject.name}
@@ -298,14 +277,97 @@ export function LearningClient() {
           ))}
         </div>
 
-        <Tabs defaultValue="mastery" className="min-w-0">
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="mastery">{t("Mastery")}</TabsTrigger>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Card size="sm">
+            <CardHeader>
+              <CardDescription>{t("Evidence coverage")}</CardDescription>
+              <CardTitle className="numeric text-2xl">
+                {summary
+                  ? `${summary.measuredObjectiveCount}/${summary.objectiveCount}`
+                  : "—"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                {summary?.objectiveCount
+                  ? t("{coverage} of objectives have reviewed evidence.", {
+                      coverage: percent(summary.coverage),
+                    })
+                  : t("No objective is measurable in this scope yet.")}
+              </p>
+            </CardContent>
+          </Card>
+          <Card size="sm">
+            <CardHeader>
+              <CardDescription>{t("Measured estimate")}</CardDescription>
+              <CardTitle className="numeric text-2xl">
+                {summary?.estimate === null || summary?.estimate === undefined
+                  ? t("Not measured")
+                  : percent(summary.estimate)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                {t("Only objectives with included evidence contribute.")}
+              </p>
+            </CardContent>
+          </Card>
+          <Card size="sm">
+            <CardHeader>
+              <CardDescription>{t("Direction")}</CardDescription>
+              <CardTitle className="text-2xl">
+                {summary ? trendLabel(summary.trend) : "—"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                {summary?.delta === null || summary?.delta === undefined
+                  ? t("Two measured snapshots are needed for a trend.")
+                  : t("Change of {delta} across comparable objectives.", {
+                      delta: signedPercent(summary.delta),
+                    })}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+          <TabsList
+            variant="line"
+            className="no-scrollbar max-w-full justify-start overflow-x-auto overflow-y-hidden"
+          >
+            <TabsTrigger value="overview">
+              <ActivityIcon data-icon="inline-start" />
+              {t("Overview")}
+            </TabsTrigger>
+            <TabsTrigger value="plan">{t("Plan")}</TabsTrigger>
+            <TabsTrigger value="mastery">{t("Objectives")}</TabsTrigger>
             <TabsTrigger value="copies">{t("Papers")}</TabsTrigger>
             <TabsTrigger value="concepts">{t("Concepts")}</TabsTrigger>
-            <TabsTrigger value="plan">{t("Plan")}</TabsTrigger>
-            <TabsTrigger value="progress">{t("Progress")}</TabsTrigger>
+            <TabsTrigger value="history">
+              {t("Measurement history")}
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overview" className="mt-4">
+            {progress.isLoading ? (
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+              </div>
+            ) : progress.isError ? (
+              <QueryFailure
+                message={progress.error.message}
+                retry={() => progress.refetch()}
+              />
+            ) : (
+              <LearningOverview
+                data={progress.data}
+                onOpenPlan={() => setTab("plan")}
+                onOpenObjectives={() => setTab("mastery")}
+              />
+            )}
+          </TabsContent>
 
           <TabsContent value="mastery" className="mt-4">
             {mastery.isLoading ? (
@@ -328,7 +390,7 @@ export function LearningClient() {
               />
             ) : (
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                {masteryRows.map(({ objective, concept, projection }) => (
+                {masteryRows.map(({ objective, concept, measurement }) => (
                   <Card key={objective.id} size="sm">
                     <CardHeader>
                       <div className="min-w-0">
@@ -340,27 +402,27 @@ export function LearningClient() {
                         </CardTitle>
                       </div>
                       <Badge variant="outline">
-                        {projection
+                        {measurement
                           ? t("{count} evidence items", {
-                              count: String(projection.evidenceCount),
+                              count: String(measurement.evidenceCount),
                             })
-                          : t("No evidence")}
+                          : t("Not measured")}
                       </Badge>
                     </CardHeader>
                     <CardContent>
-                      {projection ? (
-                        <Progress value={projection.estimate * 100}>
+                      {measurement ? (
+                        <Progress value={measurement.estimate * 100}>
                           <ProgressLabel>{t("Estimate")}</ProgressLabel>
                           <ProgressValue>
                             {() =>
-                              `${percent(projection.estimate)} · ${percent(projection.low)}–${percent(projection.high)}`
+                              `${percent(measurement.estimate)} · ${percent(measurement.low)}–${percent(measurement.high)}`
                             }
                           </ProgressValue>
                         </Progress>
                       ) : (
                         <p className="text-sm text-muted-foreground">
                           {t(
-                            "Nothing here can be measured yet, so no level is shown."
+                            "Nothing here can be measured yet, so no level or artificial midpoint is shown."
                           )}
                         </p>
                       )}
@@ -470,7 +532,7 @@ export function LearningClient() {
             />
           </TabsContent>
 
-          <TabsContent value="progress" className="mt-4">
+          <TabsContent value="history" className="mt-4">
             {progress.isLoading ? (
               <Skeleton className="h-64" />
             ) : progress.isError ? (
@@ -483,6 +545,15 @@ export function LearningClient() {
             )}
           </TabsContent>
         </Tabs>
+
+        <LearningPrivacyControls
+          online={online}
+          providers={(copies.data ?? []).map(({ analysis }) => ({
+            provider: analysis.provider,
+            model: analysis.model,
+            modelRevision: analysis.modelRevision,
+          }))}
+        />
       </main>
     </>
   )
@@ -499,6 +570,314 @@ function useCopyStatusLabels(): Record<string, string> {
     cancelled: t("Cancelled"),
     failed: t("Failed"),
   }
+}
+
+type LearningProgressData = Awaited<ReturnType<typeof rpc.learning.progress>>
+
+function LearningOverview({
+  data,
+  onOpenPlan,
+  onOpenObjectives,
+}: {
+  data: LearningProgressData | undefined
+  onOpenPlan: () => void
+  onOpenObjectives: () => void
+}) {
+  const t = useExtracted()
+  const trendLabel = useTrendLabel()
+  if (!data || data.summary.objectiveCount === 0) {
+    return (
+      <LearningEmpty
+        icon={<CircleDashedIcon />}
+        title={t("Nothing is being measured yet")}
+        description={t(
+          "Create learning objectives, then connect reviewed papers, quizzes or other evidence. Avermate will not invent a level without them."
+        )}
+        action={
+          <Button onClick={onOpenObjectives}>
+            <TargetIcon data-icon="inline-start" />
+            {t("Open objectives")}
+          </Button>
+        }
+      />
+    )
+  }
+
+  const { summary } = data
+  const unmeasured = data.objectives.filter(
+    (objective) => objective.measurementState === "unmeasured"
+  )
+
+  return (
+    <section
+      aria-labelledby="learning-overview-title"
+      className="flex flex-col gap-4"
+    >
+      <h2 id="learning-overview-title" className="sr-only">
+        {t("Learning overview")}
+      </h2>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardDescription>{t("Next useful action")}</CardDescription>
+            <CardTitle>
+              {summary.nextAction?.title ?? t("Build your next revision plan")}
+            </CardTitle>
+            {summary.nextAction ? (
+              <CardAction>
+                <Badge variant="secondary">
+                  {t("{minutes} min", {
+                    minutes: String(summary.nextAction.estimatedMinutes),
+                  })}
+                </Badge>
+              </CardAction>
+            ) : null}
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-pretty text-muted-foreground">
+              {summary.nextAction
+                ? t(
+                    "This is the highest-priority active suggestion in the selected scope. Open the plan to schedule or dismiss it."
+                  )
+                : t(
+                    "Generate a bounded plan from reviewed evidence, deadlines, prerequisites and the time you actually have."
+                  )}
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={onOpenPlan}>
+              <ListChecksIcon data-icon="inline-start" />
+              {summary.nextAction ? t("Open the plan") : t("Build a plan")}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Measurement quality")}</CardTitle>
+            <CardDescription>
+              {t("Coverage, confidence and freshness stay separate from level")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Progress value={summary.coverage * 100}>
+              <ProgressLabel>{t("Evidence coverage")}</ProgressLabel>
+              <ProgressValue>
+                {() =>
+                  `${summary.measuredObjectiveCount}/${summary.objectiveCount}`
+                }
+              </ProgressValue>
+            </Progress>
+            <div className="grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-4">
+              <div>
+                <p className="numeric text-lg font-semibold">
+                  {summary.confidenceScore === null
+                    ? "—"
+                    : percent(summary.confidenceScore)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("Confidence")}
+                </p>
+              </div>
+              <div>
+                <p className="numeric text-lg font-semibold">
+                  {summary.freshness.fresh}
+                </p>
+                <p className="text-xs text-muted-foreground">{t("Fresh")}</p>
+              </div>
+              <div>
+                <p className="numeric text-lg font-semibold">
+                  {summary.freshness.aging}
+                </p>
+                <p className="text-xs text-muted-foreground">{t("Aging")}</p>
+              </div>
+              <div>
+                <p className="numeric text-lg font-semibold">
+                  {summary.freshness.stale}
+                </p>
+                <p className="text-xs text-muted-foreground">{t("Stale")}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendIcon trend={summary.trend} />
+            {t("Progress direction")}
+          </CardTitle>
+          <CardDescription>
+            {summary.delta === null
+              ? t(
+                  "No trend is claimed until at least two measured snapshots are comparable."
+                )
+              : t("Average change: {delta} across {count} objectives.", {
+                  delta: signedPercent(summary.delta),
+                  count: String(summary.comparableObjectiveCount),
+                })}
+          </CardDescription>
+        </CardHeader>
+        {data.subjects.length ? (
+          <CardContent>
+            <ItemGroup className="gap-2">
+              {data.subjects.map((subject) => (
+                <Item
+                  key={subject.subjectId ?? "unassigned"}
+                  size="sm"
+                  variant="outline"
+                >
+                  <ItemMedia variant="icon">
+                    <TrendIcon trend={subject.trend} />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>
+                      {subject.subjectName ?? t("Unassigned objectives")}
+                    </ItemTitle>
+                    <ItemDescription>
+                      {t("{measured}/{total} measured · {coverage} coverage", {
+                        measured: String(subject.measuredObjectiveCount),
+                        total: String(subject.objectiveCount),
+                        coverage: percent(subject.coverage),
+                      })}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <Badge variant="outline">
+                      {subject.estimate === null
+                        ? t("Not measured")
+                        : percent(subject.estimate)}
+                    </Badge>
+                    <Badge variant="secondary">
+                      {trendLabel(subject.trend)}
+                    </Badge>
+                  </ItemActions>
+                </Item>
+              ))}
+            </ItemGroup>
+          </CardContent>
+        ) : null}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Evidence still needed")}</CardTitle>
+            <CardDescription>
+              {t(
+                "These objectives are unknown, not weak. Add or review evidence before drawing a conclusion."
+              )}
+            </CardDescription>
+            <CardAction>
+              <Badge variant="outline">{unmeasured.length}</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {unmeasured.length ? (
+              <ItemGroup className="gap-2">
+                {unmeasured.slice(0, 5).map((objective) => (
+                  <Item key={objective.id} size="sm" variant="outline">
+                    <ItemMedia variant="icon">
+                      <CircleDashedIcon />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{objective.statement}</ItemTitle>
+                      <ItemDescription>
+                        {objective.conceptLabel}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        render={
+                          <Link href={`/learning/objectives/${objective.id}`} />
+                        }
+                      >
+                        {t("Inspect")}
+                        <ChevronRightIcon data-icon="inline-end" />
+                      </Button>
+                    </ItemActions>
+                  </Item>
+                ))}
+              </ItemGroup>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("Every objective in this scope has reviewed evidence.")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("Recurring difficulties")}</CardTitle>
+            <CardDescription>
+              {t("Confirmed patterns observed more than once")}
+            </CardDescription>
+            <CardAction>
+              <Badge variant="outline">
+                {data.recurringDifficulties.length}
+              </Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {data.recurringDifficulties.length ? (
+              <ItemGroup className="gap-2">
+                {data.recurringDifficulties.slice(0, 5).map((difficulty) => (
+                  <Item key={difficulty.taxonomy} size="sm" variant="outline">
+                    <ItemMedia variant="icon">
+                      <TargetIcon />
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>
+                        {taxonomyLabel(difficulty.taxonomy)}
+                      </ItemTitle>
+                      <ItemDescription>
+                        {t(
+                          "{count} observations across {objectives} objectives",
+                          {
+                            count: String(difficulty.observationCount),
+                            objectives: String(difficulty.objectiveCount),
+                          }
+                        )}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
+                      <Badge variant="secondary">
+                        {t("severity {severity}", {
+                          severity: percent(difficulty.averageSeverity),
+                        })}
+                      </Badge>
+                    </ItemActions>
+                  </Item>
+                ))}
+              </ItemGroup>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t("No recurring confirmed pattern in this scope.")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  )
+}
+
+function TrendIcon({ trend }: { trend: string }) {
+  if (trend === "improving") return <TrendingUpIcon />
+  if (trend === "declining") return <TrendingDownIcon />
+  if (trend === "stable") return <MinusIcon />
+  return <CircleDashedIcon />
+}
+
+function taxonomyLabel(value: string) {
+  return value
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function LearningEmpty({
@@ -536,6 +915,7 @@ function ProgressTimeline({
             estimate: number
             low: number
             high: number
+            evidenceCount: number
             createdAt: Date
           }
           objective: { statement: string }
@@ -553,7 +933,9 @@ function ProgressTimeline({
 }) {
   const t = useExtracted()
   const format = useFormatter()
-  if (!data || (!data.projections.length && !data.schoolGrades.length))
+  const measuredProjections =
+    data?.projections.filter((row) => row.projection.evidenceCount > 0) ?? []
+  if (!data || (!measuredProjections.length && !data.schoolGrades.length))
     return (
       <LearningEmpty
         icon={<HistoryIcon />}
@@ -564,7 +946,7 @@ function ProgressTimeline({
       />
     )
   const events = [
-    ...data.projections.map((row) => ({
+    ...measuredProjections.map((row) => ({
       id: row.projection.id,
       at: row.projection.createdAt,
       kind: "projection" as const,

@@ -24,6 +24,19 @@ function codeOf(name: string): string {
 }
 
 describe("conversation placement", () => {
+  test("binds a project workspace to both thread discovery and creation", () => {
+    const client = codeOf("./assistant-client.tsx")
+
+    expect(client).toContain("projectId?: string")
+    expect(client).toContain("...(projectId ? { projectId } : {})")
+    expect(client).toContain("orpc.assistant.threads.search.queryOptions")
+    expect(client).toContain("orpc.assistant.threads.list.queryOptions")
+    expect(client).toContain("input: { ...threadListInput, query:")
+    expect(client).toContain("input: threadListInput")
+    expect(client).toContain("rpc.assistant.threads.create({")
+    expect(client).toContain("projectId: projectId ?? null")
+  })
+
   test("a thread pinned to a Node says so whatever model is chosen", () => {
     expect(placementOf(node, model("managed"))).toEqual({ kind: "node" })
     expect(placementOf(node, model("direct-byok"))).toEqual({ kind: "node" })

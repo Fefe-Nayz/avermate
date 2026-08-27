@@ -137,10 +137,11 @@ export function useMediaStudioCopy() {
     message?: string
   }) {
     if (input.available) return t("Available")
-    if (input.message) return input.message
     if (input.reasonCode === "placement_unavailable")
-      return t("No AI service is set up for this yet.")
-    if (input.reasonCode === "capability_disabled") return t("Turned off.")
+      return t("Connect a compatible self-hosted worker to enable this.")
+    if (input.reasonCode === "capability_disabled")
+      return t("This capability is not enabled yet.")
+    if (input.message) return input.message
     return t("Unavailable")
   }
 

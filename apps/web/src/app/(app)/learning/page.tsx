@@ -26,19 +26,19 @@ export default async function LearningPage() {
     }),
     queryClient.prefetchQuery({
       ...orpc.learning.copies.list.queryOptions({
-        input: { yearId: activeYearId },
+        input: { yearId: activeYearId, subjectId: null },
       }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({
       ...orpc.learning.plan.list.queryOptions({
-        input: { yearId: activeYearId },
+        input: { yearId: activeYearId, subjectId: null },
       }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
     queryClient.prefetchQuery({
       ...orpc.learning.progress.queryOptions({
-        input: { yearId: activeYearId },
+        input: { yearId: activeYearId, subjectId: null },
       }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),

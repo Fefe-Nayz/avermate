@@ -28,6 +28,7 @@ import {
   type AssistantGatewaySelection,
   type AssistantRegistryFactory,
   type AssistantRunExecutionControl,
+  type AssistantContextRetriever,
   type ExplicitSourceIndexer,
 } from "../assistant/run-service";
 import {
@@ -70,7 +71,11 @@ export type ProductionAgentRuntimeDependencies = {
   registryFactory: AssistantRegistryFactory;
   sourceIndexer?: ExplicitSourceIndexer;
   checkpoints: CoreConversationCheckpointStore;
-  lexical?: Pick<import("@avermate/agent-contracts").LexicalSearchBackend, "search">;
+  lexical?: Pick<
+    import("@avermate/agent-contracts").LexicalSearchBackend,
+    "search"
+  >;
+  retrieval?: AssistantContextRetriever;
   recoveryBrokerFactory?: (ownerId: string) => Promise<ToolBroker>;
   workerId?: string;
   leaseTtlMs?: number;
@@ -114,16 +119,16 @@ function catalogueRevision(
             approvalMode !== "read-only" || descriptor.effect === "read",
         )
         .map((descriptor) => ({
-        id: descriptor.id,
-        version: descriptor.version,
-        effect: descriptor.effect,
-        risk: descriptor.risk,
-        approval: descriptor.approval,
-        compensation: descriptor.compensation,
-        idempotency: descriptor.idempotency,
-        crashRecovery: descriptor.crashRecovery ?? "inspect-required",
-        requiredScopes: [...descriptor.requiredScopes].sort(),
-        inputSchema: z.toJSONSchema(descriptor.inputSchema),
+          id: descriptor.id,
+          version: descriptor.version,
+          effect: descriptor.effect,
+          risk: descriptor.risk,
+          approval: descriptor.approval,
+          compensation: descriptor.compensation,
+          idempotency: descriptor.idempotency,
+          crashRecovery: descriptor.crashRecovery ?? "inspect-required",
+          requiredScopes: [...descriptor.requiredScopes].sort(),
+          inputSchema: z.toJSONSchema(descriptor.inputSchema),
         })),
     ),
   )}`;
@@ -147,7 +152,9 @@ export class ProductionAgentRuntime implements AgentRuntime {
   readonly #workerId: string;
   readonly #leaseTtlMs: number;
 
-  constructor(private readonly dependencies: ProductionAgentRuntimeDependencies) {
+  constructor(
+    private readonly dependencies: ProductionAgentRuntimeDependencies,
+  ) {
     this.#executor = new AssistantGraphExecutor(
       dependencies.client,
       dependencies.conversations,
@@ -156,6 +163,7 @@ export class ProductionAgentRuntime implements AgentRuntime {
       dependencies.sourceIndexer,
       dependencies.checkpoints,
       dependencies.lexical,
+      dependencies.retrieval,
     );
     this.#controls = new ProductionRunControlStore(dependencies.client);
     this.#workerId =
@@ -237,8 +245,12 @@ export class ProductionAgentRuntime implements AgentRuntime {
   ): Promise<AgentRuntimeState> {
     const active = this.#active.get(runId);
     if (active) return active;
-    const completion = this.#execute(ownerId, runId, broker, approvalResume)
-      .finally(() => this.#active.delete(runId));
+    const completion = this.#execute(
+      ownerId,
+      runId,
+      broker,
+      approvalResume,
+    ).finally(() => this.#active.delete(runId));
     this.#active.set(runId, completion);
     return completion;
   }
@@ -262,7 +274,8 @@ export class ProductionAgentRuntime implements AgentRuntime {
       run.modelKey,
       runId,
     );
-    const registry = broker?.registry ?? (await this.dependencies.registryFactory(ownerId));
+    const registry =
+      broker?.registry ?? (await this.dependencies.registryFactory(ownerId));
     const placement = exactPlacement(selection);
     const modelRevision =
       selection.modelRevision ?? `${selection.descriptor.id}/adapter-1`;
@@ -310,17 +323,20 @@ export class ProductionAgentRuntime implements AgentRuntime {
     // the executor returns; releasing concurrently with that write used to
     // leave a successfully completed run with an active lease on SQLite.
     let pendingHeartbeat = Promise.resolve();
-    const heartbeat = setInterval(() => {
-      pendingHeartbeat = pendingHeartbeat.then(async () => {
-        try {
-          lease = await this.#controls.renewLease(fence(), this.#leaseTtlMs);
-        } catch {
-          // The fenced operation below remains authoritative. A failed
-          // heartbeat must not create an unhandled rejection, and release will
-          // surface a stale fence instead of silently retaining the lease.
-        }
-      });
-    }, Math.max(2_000, Math.floor(this.#leaseTtlMs / 3)));
+    const heartbeat = setInterval(
+      () => {
+        pendingHeartbeat = pendingHeartbeat.then(async () => {
+          try {
+            lease = await this.#controls.renewLease(fence(), this.#leaseTtlMs);
+          } catch {
+            // The fenced operation below remains authoritative. A failed
+            // heartbeat must not create an unhandled rejection, and release will
+            // surface a stale fence instead of silently retaining the lease.
+          }
+        });
+      },
+      Math.max(2_000, Math.floor(this.#leaseTtlMs / 3)),
+    );
     (heartbeat as unknown as { unref?: () => void }).unref?.();
     const control: AssistantRunExecutionControl = {
       approvalMode: run.approvalMode,
@@ -413,7 +429,9 @@ export class ProductionAgentRuntime implements AgentRuntime {
 
   async start(inputValue: AgentRunInput): Promise<AgentRunHandle> {
     const input = agentRunInputSchema.parse(inputValue);
-    if (input.graphSchemaVersion !== String(PRODUCTION_AGENT_GRAPH_SCHEMA_VERSION)) {
+    if (
+      input.graphSchemaVersion !== String(PRODUCTION_AGENT_GRAPH_SCHEMA_VERSION)
+    ) {
       throw new Error("Unsupported production graph schema version");
     }
     const run = await this.dependencies.conversations.run(
@@ -558,8 +576,7 @@ export class ProductionAgentRuntime implements AgentRuntime {
       interrupt:
         phase === "interrupted"
           ? {
-              kind:
-                run.status === "waiting-approval" ? "approval" : "question",
+              kind: run.status === "waiting-approval" ? "approval" : "question",
             }
           : null,
     };
@@ -584,7 +601,10 @@ export class ProductionAgentRuntime implements AgentRuntime {
       });
       const ownerId = row.rows[0]?.userId;
       if (!ownerId) continue;
-      const run = await this.dependencies.conversations.run(String(ownerId), runId);
+      const run = await this.dependencies.conversations.run(
+        String(ownerId),
+        runId,
+      );
       await this.dependencies.conversations.finalizeRun({
         ownerId: String(ownerId),
         runId,

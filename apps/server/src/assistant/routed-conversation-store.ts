@@ -28,9 +28,7 @@ type ConversationMigrationSnapshot = {
   events: StoredConversationEvent[];
 };
 
-function migrationDigest(
-  snapshots: readonly ConversationMigrationSnapshot[],
-) {
+function migrationDigest(snapshots: readonly ConversationMigrationSnapshot[]) {
   const canonical = [...snapshots]
     .sort((left, right) =>
       left.detail.thread.id.localeCompare(right.detail.thread.id),
@@ -77,11 +75,10 @@ export interface ConversationDagRelay {
     ownerId: string;
     query: NodeConversationDagListInput;
   }): Promise<AssistantThreadListItem[]>;
-  get(input: {
-    nodeId: string;
-    ownerId: string;
-    threadId: string;
-  }): Promise<{ detail: AssistantThreadDetail; events: StoredConversationEvent[] } | null>;
+  get(input: { nodeId: string; ownerId: string; threadId: string }): Promise<{
+    detail: AssistantThreadDetail;
+    events: StoredConversationEvent[];
+  } | null>;
   delete(input: {
     nodeId: string;
     ownerId: string;
@@ -194,11 +191,7 @@ export class NodeConversationEnvelopeCodec implements NodeConversationPayloadCod
 
   openParts(input: Parameters<NodeConversationPayloadCodec["openParts"]>[0]) {
     const sealed = input.parts[0];
-    if (
-      input.parts.length !== 1 ||
-      !sealed ||
-      sealed.type !== "node-sealed"
-    ) {
+    if (input.parts.length !== 1 || !sealed || sealed.type !== "node-sealed") {
       throw new Error("NODE_CONVERSATION_ENVELOPE_REQUIRED");
     }
     return assistantPartV1Schema
@@ -229,22 +222,24 @@ export class NodeConversationEnvelopeCodec implements NodeConversationPayloadCod
   }
 }
 
-function partsPath(
-  detail: AssistantThreadDetail,
-  branchId?: string | null,
-) {
+function partsPath(detail: AssistantThreadDetail, branchId?: string | null) {
   const selectedBranchId = branchId ?? detail.thread.activeBranchId;
   const branch = detail.branches.find((item) => item.id === selectedBranchId);
   if (selectedBranchId && !branch) {
     throw new ConversationStoreError("not_found", "Branch not found");
   }
-  const messages = new Map(detail.messages.map((message) => [message.id, message]));
+  const messages = new Map(
+    detail.messages.map((message) => [message.id, message]),
+  );
   const reversed: string[] = [];
   const seen = new Set<string>();
   let cursor = branch?.headMessageId ?? null;
   while (cursor) {
     if (seen.has(cursor)) {
-      throw new ConversationStoreError("invalid_state", "Conversation DAG is cyclic");
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Conversation DAG is cyclic",
+      );
     }
     seen.add(cursor);
     reversed.push(cursor);
@@ -279,7 +274,11 @@ export class RoutedConversationStore extends CoreConversationStore {
     this.#codec = codec;
   }
 
-  async #threadPlacement(ownerId: string, threadId: string, includeDeleted = false) {
+  async #threadPlacement(
+    ownerId: string,
+    threadId: string,
+    includeDeleted = false,
+  ) {
     const result = await this.metadataClient.execute({
       sql: `SELECT placement, placementRef FROM assistant_threads
         WHERE id = ? AND userId = ? ${includeDeleted ? "" : "AND deletedAt IS NULL"}
@@ -311,7 +310,8 @@ export class RoutedConversationStore extends CoreConversationStore {
       args: [messageId, ownerId],
     });
     const row = result.rows[0];
-    if (!row) throw new ConversationStoreError("not_found", "Message not found");
+    if (!row)
+      throw new ConversationStoreError("not_found", "Message not found");
     return String(row.threadId);
   }
 
@@ -366,9 +366,7 @@ export class RoutedConversationStore extends CoreConversationStore {
     // getThreadDetail only needs execute calls on this path. Using the active
     // transaction lets Node -> Core verify the exact staged destination before
     // the placement switch is committed.
-    const reader = new CoreConversationStore(
-      client as AssistantSqlClient,
-    );
+    const reader = new CoreConversationStore(client as AssistantSqlClient);
     return {
       detail: await reader.getThreadDetail(ownerId, threadId),
       events: await this.#eventsFrom(client, threadId),
@@ -485,10 +483,20 @@ export class RoutedConversationStore extends CoreConversationStore {
     input: Parameters<CoreConversationStore["listThreads"]>[0],
   ) {
     const core = await super.listThreads(input);
+    const refClauses = [
+      "userId = ?",
+      "placement = 'node'",
+      "placementRef IS NOT NULL",
+    ];
+    const refArgs: string[] = [input.ownerId];
+    if (input.projectId) {
+      refClauses.push("projectId = ?");
+      refArgs.push(input.projectId);
+    }
     const refs = await this.metadataClient.execute({
       sql: `SELECT DISTINCT placementRef FROM assistant_threads
-        WHERE userId = ? AND placement = 'node' AND placementRef IS NOT NULL`,
-      args: [input.ownerId],
+        WHERE ${refClauses.join(" AND ")}`,
+      args: refArgs,
     });
     if (refs.rows.length === 0) return core;
     const remote: AssistantThreadListItem[] = [];
@@ -502,6 +510,7 @@ export class RoutedConversationStore extends CoreConversationStore {
             ownerId: input.ownerId,
             query: {
               ...(input.query ? { query: input.query } : {}),
+              ...(input.projectId ? { projectId: input.projectId } : {}),
               includeArchived: input.includeArchived ?? false,
               includeDeleted: input.includeDeleted ?? false,
               starredOnly: input.starredOnly ?? false,
@@ -514,15 +523,20 @@ export class RoutedConversationStore extends CoreConversationStore {
       }
     }
     const byId = new Map(
-      [...core.items.filter((item) => item.thread.placement.kind === "core"), ...remote].map(
-        (item) => [item.thread.id, item],
-      ),
+      [
+        ...core.items.filter((item) => item.thread.placement.kind === "core"),
+        ...remote,
+      ].map((item) => [item.thread.id, item]),
     );
-    const cursor = input.cursor ? Number(input.cursor) : Number.MAX_SAFE_INTEGER;
+    const cursor = input.cursor
+      ? Number(input.cursor)
+      : Number.MAX_SAFE_INTEGER;
     const limit = Math.min(Math.max(input.limit ?? 30, 1), 100);
     const items = [...byId.values()]
       .filter(
-        (item) => new Date(item.thread.updatedAt).getTime() / 1_000 < cursor,
+        (item) =>
+          (!input.projectId || item.thread.projectId === input.projectId) &&
+          new Date(item.thread.updatedAt).getTime() / 1_000 < cursor,
       )
       .sort((left, right) =>
         right.thread.updatedAt.localeCompare(left.thread.updatedAt),
@@ -533,18 +547,27 @@ export class RoutedConversationStore extends CoreConversationStore {
       nextCursor:
         items.length === limit
           ? String(
-              Math.floor(new Date(items.at(-1)!.thread.updatedAt).getTime() / 1_000),
+              Math.floor(
+                new Date(items.at(-1)!.thread.updatedAt).getTime() / 1_000,
+              ),
             )
           : null,
     };
   }
 
-  override async messageParts(ownerId: string, threadId: string, messageId: string) {
+  override async messageParts(
+    ownerId: string,
+    threadId: string,
+    messageId: string,
+  ) {
     const nodeId = await this.#threadPlacement(ownerId, threadId);
     if (!nodeId) return super.messageParts(ownerId, threadId, messageId);
     const detail = await this.getThreadDetail(ownerId, threadId);
-    const message = detail.messages.find((candidate) => candidate.id === messageId);
-    if (!message) throw new ConversationStoreError("not_found", "Message not found");
+    const message = detail.messages.find(
+      (candidate) => candidate.id === messageId,
+    );
+    if (!message)
+      throw new ConversationStoreError("not_found", "Message not found");
     return message.parts;
   }
 
@@ -593,7 +616,8 @@ export class RoutedConversationStore extends CoreConversationStore {
         ORDER BY updatedAt, id LIMIT ?`,
       args: [nodeId, Math.max(1, Math.min(1_000, limit))],
     });
-    const outcomes: Array<{ threadId: string; outcome: "synced" | "failed" }> = [];
+    const outcomes: Array<{ threadId: string; outcome: "synced" | "failed" }> =
+      [];
     for (const row of result.rows) {
       const threadId = String(row.id);
       try {
@@ -646,7 +670,11 @@ export class RoutedConversationStore extends CoreConversationStore {
         snapshots.push(snapshot);
       } else {
         snapshots.push(
-          await this.#coreSnapshot(this.metadataClient, input.ownerId, threadId),
+          await this.#coreSnapshot(
+            this.metadataClient,
+            input.ownerId,
+            threadId,
+          ),
         );
       }
     }
@@ -785,7 +813,9 @@ export class RoutedConversationStore extends CoreConversationStore {
     };
   }
 
-  override reserveTurn(input: Parameters<CoreConversationStore["reserveTurn"]>[0]) {
+  override reserveTurn(
+    input: Parameters<CoreConversationStore["reserveTurn"]>[0],
+  ) {
     return this.#mutateThread(
       input.ownerId,
       input.threadId,
@@ -794,43 +824,71 @@ export class RoutedConversationStore extends CoreConversationStore {
     );
   }
 
-  override async reserveRetry(input: Parameters<CoreConversationStore["reserveRetry"]>[0]) {
+  override async reserveRetry(
+    input: Parameters<CoreConversationStore["reserveRetry"]>[0],
+  ) {
     const threadId = await this.#messageThread(input.ownerId, input.messageId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.reserveRetry(input), "branch");
+    return this.#mutateThread(
+      input.ownerId,
+      threadId,
+      () => super.reserveRetry(input),
+      "branch",
+    );
   }
 
-  override async editMessage(input: Parameters<CoreConversationStore["editMessage"]>[0]) {
+  override async editMessage(
+    input: Parameters<CoreConversationStore["editMessage"]>[0],
+  ) {
     const threadId = await this.#messageThread(input.ownerId, input.messageId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.editMessage(input), "branch");
+    return this.#mutateThread(
+      input.ownerId,
+      threadId,
+      () => super.editMessage(input),
+      "branch",
+    );
   }
 
   override async startRun(ownerId: string, runId: string) {
     const threadId = await this.#runThread(ownerId, runId);
-    return this.#mutateThread(ownerId, threadId, () => super.startRun(ownerId, runId));
+    return this.#mutateThread(ownerId, threadId, () =>
+      super.startRun(ownerId, runId),
+    );
   }
 
-  override async markProviderDispatch(input: Parameters<CoreConversationStore["markProviderDispatch"]>[0]) {
+  override async markProviderDispatch(
+    input: Parameters<CoreConversationStore["markProviderDispatch"]>[0],
+  ) {
     const threadId = await this.#runThread(input.ownerId, input.runId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.markProviderDispatch(input));
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.markProviderDispatch(input),
+    );
   }
 
-  override async bindConversationCheckpoint(input: Parameters<CoreConversationStore["bindConversationCheckpoint"]>[0]) {
+  override async bindConversationCheckpoint(
+    input: Parameters<CoreConversationStore["bindConversationCheckpoint"]>[0],
+  ) {
     const threadId = await this.#runThread(input.ownerId, input.runId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.bindConversationCheckpoint(input));
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.bindConversationCheckpoint(input),
+    );
   }
 
-  override async appendRunEvent(input: Parameters<CoreConversationStore["appendRunEvent"]>[0]) {
+  override async appendRunEvent(
+    input: Parameters<CoreConversationStore["appendRunEvent"]>[0],
+  ) {
     const threadId = await this.#runThread(input.ownerId, input.runId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.appendRunEvent(input));
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.appendRunEvent(input),
+    );
   }
 
-  override async finalizeRun(input: Parameters<CoreConversationStore["finalizeRun"]>[0]) {
+  override async finalizeRun(
+    input: Parameters<CoreConversationStore["finalizeRun"]>[0],
+  ) {
     const threadId = await this.#runThread(input.ownerId, input.runId);
     const nodeId = await this.#threadPlacement(input.ownerId, threadId, true);
-    const result = await this.#mutateThread(
-      input.ownerId,
-      threadId,
-      () => super.finalizeRun(input),
+    const result = await this.#mutateThread(input.ownerId, threadId, () =>
+      super.finalizeRun(input),
     );
     return nodeId
       ? { ...result, output: { ...result.output, parts: input.finalParts } }
@@ -839,29 +897,51 @@ export class RoutedConversationStore extends CoreConversationStore {
 
   override async cancelRun(ownerId: string, runId: string) {
     const threadId = await this.#runThread(ownerId, runId);
-    return this.#mutateThread(ownerId, threadId, () => super.cancelRun(ownerId, runId));
+    return this.#mutateThread(ownerId, threadId, () =>
+      super.cancelRun(ownerId, runId),
+    );
   }
 
-  override async respondToQuestion(input: Parameters<CoreConversationStore["respondToQuestion"]>[0]) {
+  override async respondToQuestion(
+    input: Parameters<CoreConversationStore["respondToQuestion"]>[0],
+  ) {
     const threadId = await this.#runThread(input.ownerId, input.runId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.respondToQuestion(input));
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.respondToQuestion(input),
+    );
   }
 
-  override updateThread(input: Parameters<CoreConversationStore["updateThread"]>[0]) {
-    return this.#mutateThread(input.ownerId, input.threadId, () => super.updateThread(input));
+  override updateThread(
+    input: Parameters<CoreConversationStore["updateThread"]>[0],
+  ) {
+    return this.#mutateThread(input.ownerId, input.threadId, () =>
+      super.updateThread(input),
+    );
   }
 
-  override trashThread(input: Parameters<CoreConversationStore["trashThread"]>[0]) {
-    return this.#mutateThread(input.ownerId, input.threadId, () => super.trashThread(input));
+  override trashThread(
+    input: Parameters<CoreConversationStore["trashThread"]>[0],
+  ) {
+    return this.#mutateThread(input.ownerId, input.threadId, () =>
+      super.trashThread(input),
+    );
   }
 
-  override restoreThread(input: Parameters<CoreConversationStore["restoreThread"]>[0]) {
-    return this.#mutateThread(input.ownerId, input.threadId, () => super.restoreThread(input));
+  override restoreThread(
+    input: Parameters<CoreConversationStore["restoreThread"]>[0],
+  ) {
+    return this.#mutateThread(input.ownerId, input.threadId, () =>
+      super.restoreThread(input),
+    );
   }
 
-  override async createAttachment(input: Parameters<CoreConversationStore["createAttachment"]>[0]) {
+  override async createAttachment(
+    input: Parameters<CoreConversationStore["createAttachment"]>[0],
+  ) {
     const threadId = await this.#messageThread(input.ownerId, input.messageId);
-    return this.#mutateThread(input.ownerId, threadId, () => super.createAttachment(input));
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.createAttachment(input),
+    );
   }
 
   override async purgeExpired(ownerId?: string) {
@@ -869,11 +949,16 @@ export class RoutedConversationStore extends CoreConversationStore {
       sql: `SELECT id, userId, placementRef FROM assistant_threads
         WHERE deletedAt IS NOT NULL AND purgeAfter <= ? AND placement = 'node'
           ${ownerId ? "AND userId = ?" : ""}`,
-      args: ownerId ? [Math.floor(Date.now() / 1_000), ownerId] : [Math.floor(Date.now() / 1_000)],
+      args: ownerId
+        ? [Math.floor(Date.now() / 1_000), ownerId]
+        : [Math.floor(Date.now() / 1_000)],
     });
     for (const row of result.rows) {
       try {
-        await this.relay.assertOnline(String(row.userId), String(row.placementRef));
+        await this.relay.assertOnline(
+          String(row.userId),
+          String(row.placementRef),
+        );
         await this.relay.delete({
           nodeId: String(row.placementRef),
           ownerId: String(row.userId),

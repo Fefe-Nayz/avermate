@@ -1,12 +1,29 @@
+import { z } from "zod"
 import { MediaStudioClient } from "@/components/media-studio/media-studio-client"
 import { prepareAuthenticatedShell } from "@/lib/authenticated-data"
 import { getServerOrpc } from "@/lib/orpc/server"
 import { COMMON_QUERY_STALE_TIME } from "@/lib/query-policy"
 import { HydrateClient } from "@/lib/query-server"
+const studioLocatorSchema = z.string().trim().min(1).max(256)
 
-export default async function MediaStudioPage() {
+function studioLocator(value: string | string[] | undefined): string | null {
+  const result = studioLocatorSchema.safeParse(value)
+  return result.success ? result.data : null
+}
+
+export default async function MediaStudioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    project?: string | string[]
+    artifact?: string | string[]
+  }>
+}) {
   const { queryClient } = await prepareAuthenticatedShell()
   const orpc = getServerOrpc()
+  const query = await searchParams
+  const projectId = studioLocator(query.project)
+  const artifactId = studioLocator(query.artifact)
 
   await Promise.all([
     queryClient.prefetchQuery({
@@ -23,19 +40,22 @@ export default async function MediaStudioPage() {
     }),
     queryClient.prefetchQuery({
       ...orpc.mediaStudio.listWorkflows.queryOptions({
-        input: { projectId: null, artifactId: null, limit: 50 },
+        input: { projectId, artifactId: null, limit: 50 },
       }),
     }),
     queryClient.prefetchQuery({
       ...orpc.mediaStudio.listArtifacts.queryOptions({
-        input: { projectId: null },
+        input: { projectId },
       }),
     }),
   ])
 
   return (
     <HydrateClient queryClient={queryClient}>
-      <MediaStudioClient />
+      <MediaStudioClient
+        initialProjectId={projectId}
+        initialArtifactId={artifactId}
+      />
     </HydrateClient>
   )
 }

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { runConversationStoreConformance } from "@avermate/agent-contracts";
+import {
+  runConversationStoreConformance,
+  type NodeConversationDagSnapshot,
+} from "@avermate/agent-contracts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -67,5 +70,63 @@ describe("FilesystemConversationStore", () => {
       deletedRuns: 1,
       deletedEvents: 0,
     });
+  });
+
+  test("filters project conversations before applying the Node result limit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "avermate-conversations-"));
+    roots.push(root);
+    const store = new FilesystemConversationStore({
+      path: join(root, "conversations.json"),
+      maximumBytes: 10 * 1024 * 1024,
+    });
+    const timestamp = "2026-08-27T10:00:00.000Z";
+    const snapshot = (
+      threadId: string,
+      projectId: string,
+    ): NodeConversationDagSnapshot => ({
+      ownerId: "owner-projects",
+      detail: {
+        thread: {
+          id: threadId,
+          userId: "owner-projects",
+          title: `Conversation ${threadId}`,
+          activeBranchId: null,
+          projectId,
+          placement: { kind: "node", nodeId: "node-1" },
+          revision: 1,
+          starredAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          purgeAfter: null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        branches: [],
+        activeBranchId: null,
+        activePathMessageIds: [],
+        messages: [],
+        runs: [],
+        citations: [],
+        attachments: [],
+        usage: [],
+        manifests: [],
+        activeRunProjections: [],
+      },
+      events: [],
+      syncKey: `sync-${threadId}`,
+    });
+    await store.importDag(snapshot("thread-project-a", "project-a"));
+    await store.importDag(snapshot("thread-project-b", "project-b"));
+
+    const projectA = await store.listDags("owner-projects", {
+      projectId: "project-a",
+      includeArchived: false,
+      includeDeleted: false,
+      starredOnly: false,
+      limit: 1,
+    });
+    expect(projectA.map((item) => item.thread.id)).toEqual([
+      "thread-project-a",
+    ]);
   });
 });

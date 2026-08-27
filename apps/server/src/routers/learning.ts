@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 import { PersonalTaskCommandError } from "../actions/personal-task-command";
 import { db } from "../db";
@@ -43,6 +44,10 @@ import {
   type GradeCopyAnalysisJobPayload,
 } from "../learning/copy-analysis";
 import { projectObjectiveMastery } from "../learning/mastery";
+import {
+  buildLearningProgress,
+  isMeasuredProjection,
+} from "../learning/progress";
 import { learningPlanPolicy } from "../learning/planning-policy";
 import {
   applyLearningPlanItemCommand,
@@ -58,6 +63,11 @@ import { canonicalJson, sha256 } from "../search/values";
 
 const id = z.string().trim().min(1).max(256);
 const idempotencyKey = z.string().trim().min(8).max(256);
+const activeLearningPlanStatus = z.enum([
+  "proposed",
+  "accepted",
+  "in-progress",
+]);
 const errorTaxonomy = z.enum([
   "missing-knowledge",
   "misunderstood-concept",
@@ -70,6 +80,24 @@ const errorTaxonomy = z.enum([
   "time-management",
   "unclassified",
 ]);
+
+const previousMasteryProjection = alias(
+  learningMasteryProjections,
+  "previous_mastery_projection",
+);
+
+function masteryMeasurementState<T extends { evidenceCount: number }>(
+  projection: T | null,
+) {
+  const measured = isMeasuredProjection(projection);
+  return {
+    measured,
+    measurementState: measured
+      ? ("measured" as const)
+      : ("unmeasured" as const),
+    measurement: measured ? projection : null,
+  };
+}
 
 const importedObjectiveSchema = z.object({
   stableKey: z.string().trim().min(1).max(160),
@@ -1865,7 +1893,7 @@ export const learningRouter = {
   },
   copies: {
     list: protectedProcedure
-      .input(z.object({ yearId: id }))
+      .input(z.object({ yearId: id, subjectId: id.nullable().optional() }))
       .handler(async ({ context, input }) => {
         await requireYear(context.session.user.id, input.yearId);
         return db
@@ -1881,6 +1909,9 @@ export const learningRouter = {
             and(
               eq(learningCopyAnalyses.userId, context.session.user.id),
               eq(learningCopyAnalyses.yearId, input.yearId),
+              input.subjectId
+                ? eq(learningCopyAnalyses.subjectId, input.subjectId)
+                : undefined,
             ),
           )
           .orderBy(desc(learningCopyAnalyses.createdAt));
@@ -2727,13 +2758,18 @@ export const learningRouter = {
           )
           .limit(1);
         if (!row) notFound("Learning concept");
-        return { objective, concept: row.concept, projection: row.projection };
+        return {
+          objective,
+          concept: row.concept,
+          projection: row.projection,
+          ...masteryMeasurementState(row.projection),
+        };
       }),
     list: protectedProcedure
       .input(z.object({ yearId: id, subjectId: id.nullable().optional() }))
       .handler(async ({ context, input }) => {
         await requireYear(context.session.user.id, input.yearId);
-        return db
+        const rows = await db
           .select({
             objective: learningObjectives,
             concept: learningConcepts,
@@ -2769,6 +2805,10 @@ export const learningRouter = {
             asc(learningConcepts.sortOrder),
             asc(learningObjectives.statement),
           );
+        return rows.map((row) => ({
+          ...row,
+          ...masteryMeasurementState(row.projection),
+        }));
       }),
     explain: protectedProcedure
       .input(z.object({ objectiveId: id }))
@@ -2794,7 +2834,12 @@ export const learningRouter = {
             ),
           )
           .limit(1);
-        return { objective, projection: projection?.projection ?? null };
+        const current = projection?.projection ?? null;
+        return {
+          objective,
+          projection: current,
+          ...masteryMeasurementState(current),
+        };
       }),
     recompute: protectedProcedure
       .input(z.object({ objectiveId: id }))
@@ -2804,7 +2849,7 @@ export const learningRouter = {
   },
   plan: {
     list: protectedProcedure
-      .input(z.object({ yearId: id }))
+      .input(z.object({ yearId: id, subjectId: id.nullable().optional() }))
       .handler(async ({ context, input }) => {
         await requireYear(context.session.user.id, input.yearId);
         return db
@@ -2835,6 +2880,9 @@ export const learningRouter = {
             and(
               eq(learningPlanItems.userId, context.session.user.id),
               eq(learningPlanItems.yearId, input.yearId),
+              input.subjectId
+                ? eq(learningPlanItems.subjectId, input.subjectId)
+                : undefined,
             ),
           )
           .orderBy(desc(learningPlanItems.createdAt));
@@ -2935,7 +2983,10 @@ export const learningRouter = {
             ),
         ]);
         const projectionByObjective = new Map(
-          candidates.map((row) => [row.objective.id, row.projection]),
+          candidates.map((row) => [
+            row.objective.id,
+            isMeasuredProjection(row.projection) ? row.projection : null,
+          ]),
         );
         const prerequisitesByObjective = new Map<string, string[]>();
         const requiredBy = new Map<string, string[]>();
@@ -2956,6 +3007,9 @@ export const learningRouter = {
         }
         const now = Date.now();
         const scored = candidates.map((row) => {
+          const measurement = isMeasuredProjection(row.projection)
+            ? row.projection
+            : null;
           const dueAt = row.objective.subjectId
             ? (dueBySubject.get(row.objective.subjectId) ?? null)
             : null;
@@ -2964,11 +3018,12 @@ export const learningRouter = {
           const neededByObjectiveIds = requiredBy.get(row.objective.id) ?? [];
           return {
             ...row,
+            measurement,
             policy: learningPlanPolicy({
-              estimate: row.projection?.estimate ?? null,
-              low: row.projection?.low ?? null,
-              high: row.projection?.high ?? null,
-              freshnessDays: row.projection?.freshnessDays ?? null,
+              estimate: measurement?.estimate ?? null,
+              low: measurement?.low ?? null,
+              high: measurement?.high ?? null,
+              freshnessDays: measurement?.freshnessDays ?? null,
               dueAt,
               prerequisiteEstimates: prerequisiteIds.map((objectiveId) => ({
                 id: objectiveId,
@@ -3020,16 +3075,16 @@ export const learningRouter = {
               objectiveId: row.objective.id,
               rationaleJson: {
                 ...row.policy,
-                reason: row.projection
+                reason: row.measurement
                   ? "low-or-uncertain-mastery"
                   : "objective-without-evidence",
               },
               evidenceCursor: cursor,
               activityKind:
-                row.projection && row.projection.evidenceCount >= 2
+                row.measurement && row.measurement.evidenceCount >= 2
                   ? "quiz"
                   : "course-review",
-              difficulty: row.projection?.estimate ?? null,
+              difficulty: row.measurement?.estimate ?? null,
               estimatedMinutes: row.policy.estimatedMinutes,
               yearId: row.objective.yearId,
               subjectId: row.objective.subjectId,
@@ -3123,51 +3178,237 @@ export const learningRouter = {
       }),
   },
   progress: protectedProcedure
-    .input(z.object({ yearId: id }))
+    .input(z.object({ yearId: id, subjectId: id.nullable().optional() }))
     .handler(async ({ context, input }) => {
-      await requireYear(context.session.user.id, input.yearId);
-      const projections = await db
+      const userId = context.session.user.id;
+      await requireYear(userId, input.yearId);
+      const objectiveRows = await db
         .select({
-          projection: learningMasteryProjections,
           objective: learningObjectives,
           concept: learningConcepts,
+          subjectName: subjects.name,
+          projection: learningMasteryProjections,
+          previousProjection: previousMasteryProjection,
         })
-        .from(learningMasteryProjections)
-        .innerJoin(
-          learningObjectives,
-          eq(learningObjectives.id, learningMasteryProjections.objectiveId),
-        )
+        .from(learningObjectives)
         .innerJoin(
           learningConcepts,
           eq(learningConcepts.id, learningObjectives.conceptId),
         )
+        .leftJoin(
+          subjects,
+          and(
+            eq(subjects.id, learningObjectives.subjectId),
+            eq(subjects.userId, userId),
+          ),
+        )
+        .leftJoin(
+          learningMasteryCurrent,
+          and(
+            eq(learningMasteryCurrent.objectiveId, learningObjectives.id),
+            eq(learningMasteryCurrent.userId, userId),
+          ),
+        )
+        .leftJoin(
+          learningMasteryProjections,
+          and(
+            eq(
+              learningMasteryProjections.id,
+              learningMasteryCurrent.projectionId,
+            ),
+            eq(learningMasteryProjections.userId, userId),
+          ),
+        )
+        .leftJoin(
+          previousMasteryProjection,
+          and(
+            eq(previousMasteryProjection.objectiveId, learningObjectives.id),
+            eq(
+              previousMasteryProjection.generation,
+              sql`${learningMasteryCurrent.generation} - 1`,
+            ),
+            eq(previousMasteryProjection.userId, userId),
+          ),
+        )
         .where(
           and(
-            eq(learningMasteryProjections.userId, context.session.user.id),
+            eq(learningObjectives.userId, userId),
             eq(learningObjectives.yearId, input.yearId),
+            input.subjectId
+              ? eq(learningObjectives.subjectId, input.subjectId)
+              : undefined,
+            isNull(learningObjectives.archivedAt),
           ),
         )
-        .orderBy(desc(learningMasteryProjections.createdAt))
-        .limit(200);
-      const schoolGrades = await db
-        .select({
-          id: grades.id,
-          name: grades.name,
-          value: grades.value,
-          outOf: grades.outOf,
-          passedAt: grades.passedAt,
-          subjectId: grades.subjectId,
-        })
-        .from(grades)
-        .where(
-          and(
-            eq(grades.userId, context.session.user.id),
-            eq(grades.yearId, input.yearId),
-          ),
-        )
-        .orderBy(desc(grades.passedAt))
-        .limit(100);
+        .orderBy(
+          asc(subjects.name),
+          asc(learningConcepts.sortOrder),
+          asc(learningObjectives.statement),
+        );
+      const objectiveIds = objectiveRows.map((row) => row.objective.id);
+      const [projections, schoolGrades, difficultyRows, activePlanRows] =
+        await Promise.all([
+          objectiveIds.length
+            ? db
+                .select({
+                  projection: learningMasteryProjections,
+                  objective: learningObjectives,
+                  concept: learningConcepts,
+                })
+                .from(learningMasteryProjections)
+                .innerJoin(
+                  learningObjectives,
+                  eq(
+                    learningObjectives.id,
+                    learningMasteryProjections.objectiveId,
+                  ),
+                )
+                .innerJoin(
+                  learningConcepts,
+                  eq(learningConcepts.id, learningObjectives.conceptId),
+                )
+                .where(
+                  and(
+                    eq(learningMasteryProjections.userId, userId),
+                    inArray(learningObjectives.id, objectiveIds),
+                  ),
+                )
+                .orderBy(desc(learningMasteryProjections.createdAt))
+                .limit(200)
+            : [],
+          db
+            .select({
+              id: grades.id,
+              name: grades.name,
+              value: grades.value,
+              outOf: grades.outOf,
+              passedAt: grades.passedAt,
+              subjectId: grades.subjectId,
+            })
+            .from(grades)
+            .where(
+              and(
+                eq(grades.userId, userId),
+                eq(grades.yearId, input.yearId),
+                input.subjectId
+                  ? eq(grades.subjectId, input.subjectId)
+                  : undefined,
+              ),
+            )
+            .orderBy(desc(grades.passedAt))
+            .limit(100),
+          objectiveIds.length
+            ? db
+                .select({
+                  id: learningErrorObservations.id,
+                  objectiveId: learningErrorObservations.objectiveId,
+                  subjectId: learningObjectives.subjectId,
+                  taxonomy: learningErrorObservations.taxonomy,
+                  severity: learningErrorObservations.severity,
+                  confidence: learningErrorObservations.confidence,
+                  occurredAt: learningEvidence.occurredAt,
+                })
+                .from(learningErrorObservations)
+                .innerJoin(
+                  learningEvidence,
+                  eq(learningEvidence.id, learningErrorObservations.evidenceId),
+                )
+                .innerJoin(
+                  learningObjectives,
+                  eq(
+                    learningObjectives.id,
+                    learningErrorObservations.objectiveId,
+                  ),
+                )
+                .where(
+                  and(
+                    eq(learningErrorObservations.userId, userId),
+                    inArray(
+                      learningErrorObservations.objectiveId,
+                      objectiveIds,
+                    ),
+                    or(
+                      eq(learningErrorObservations.status, "confirmed"),
+                      eq(learningErrorObservations.status, "corrected"),
+                    ),
+                  ),
+                )
+            : [],
+          objectiveIds.length
+            ? db
+                .select({
+                  item: learningPlanItems,
+                  objective: learningObjectives,
+                  concept: learningConcepts,
+                  planningTask: planningTasks,
+                })
+                .from(learningPlanItems)
+                .innerJoin(
+                  learningObjectives,
+                  eq(learningObjectives.id, learningPlanItems.objectiveId),
+                )
+                .innerJoin(
+                  learningConcepts,
+                  eq(learningConcepts.id, learningObjectives.conceptId),
+                )
+                .leftJoin(
+                  planningTasks,
+                  and(
+                    eq(planningTasks.id, learningPlanItems.planningTaskId),
+                    eq(planningTasks.userId, userId),
+                    isNull(planningTasks.trashedAt),
+                  ),
+                )
+                .where(
+                  and(
+                    eq(learningPlanItems.userId, userId),
+                    inArray(learningPlanItems.objectiveId, objectiveIds),
+                    or(
+                      eq(learningPlanItems.status, "proposed"),
+                      eq(learningPlanItems.status, "accepted"),
+                      eq(learningPlanItems.status, "in-progress"),
+                    ),
+                  ),
+                )
+            : [],
+        ]);
+      const progress = buildLearningProgress({
+        objectives: objectiveRows.map((row) => ({
+          id: row.objective.id,
+          statement: row.objective.statement,
+          expectedLevel: row.objective.expectedLevel,
+          yearId: row.objective.yearId,
+          subjectId: row.objective.subjectId,
+          subjectName: row.subjectName,
+          conceptId: row.concept.id,
+          conceptLabel: row.concept.localLabel ?? row.concept.canonicalLabel,
+          current: row.projection,
+          previous: row.previousProjection,
+        })),
+        difficulties: difficultyRows,
+        plan: activePlanRows.map((row) => ({
+          id: row.item.id,
+          objectiveId: row.item.objectiveId,
+          subjectId: row.item.subjectId,
+          status: activeLearningPlanStatus.parse(row.item.status),
+          activityKind: row.item.activityKind,
+          estimatedMinutes: row.item.estimatedMinutes,
+          title:
+            row.planningTask?.title ??
+            row.concept.localLabel ??
+            row.concept.canonicalLabel,
+          planningTaskId: row.item.planningTaskId,
+          scheduledAt: row.planningTask?.scheduledAt ?? null,
+          dueAt: row.planningTask?.dueAt ?? null,
+          createdAt: row.item.createdAt,
+        })),
+      });
       return {
+        scope: {
+          yearId: input.yearId,
+          subjectId: input.subjectId ?? null,
+        },
+        ...progress,
         projections,
         schoolGrades,
         disclaimer:

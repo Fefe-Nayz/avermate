@@ -135,12 +135,15 @@ export async function rerankRetrievalCandidates(input: {
       id: candidate.chunkId,
       text: candidate.text ?? candidate.snippet,
       tokenEstimate:
-        candidate.tokenEstimate ?? estimateTokens(candidate.text ?? candidate.snippet),
+        candidate.tokenEstimate ??
+        estimateTokens(candidate.text ?? candidate.snippet),
     })),
     topN: Math.min(input.topN, window.length),
     signal: input.signal,
   });
-  const candidateById = new Map(window.map((candidate) => [candidate.chunkId, candidate]));
+  const candidateById = new Map(
+    window.map((candidate) => [candidate.chunkId, candidate]),
+  );
   const expected = Math.min(input.topN, window.length);
   const scoreIds = new Set(scores.map((score) => score.candidateId));
   if (
@@ -163,10 +166,7 @@ export async function rerankRetrievalCandidates(input: {
   }));
 }
 
-function headingParent(
-  candidate: PolicyCandidate,
-  possible: PolicyCandidate,
-) {
+function headingParent(candidate: PolicyCandidate, possible: PolicyCandidate) {
   const child = candidate.headingPath ?? [];
   const parent = possible.headingPath ?? [];
   return (
@@ -186,7 +186,8 @@ export function expandParentAndNeighbors(
   const radius = options.neighborRadius ?? 1;
   const maximum = options.maximumExpandedPerWinner ?? 3;
   const universe = [...authorizedUniverse].sort(
-    (left, right) => left.ordinal - right.ordinal || left.chunkId.localeCompare(right.chunkId),
+    (left, right) =>
+      left.ordinal - right.ordinal || left.chunkId.localeCompare(right.chunkId),
   );
   // Winners are packed first so an expansion can never displace a later,
   // stronger winner when the evidence budget is tight.
@@ -208,7 +209,10 @@ export function expandParentAndNeighbors(
       .sort((left, right) => {
         const leftDistance = Math.abs(left.ordinal - winner.ordinal);
         const rightDistance = Math.abs(right.ordinal - winner.ordinal);
-        return leftDistance - rightDistance || left.chunkId.localeCompare(right.chunkId);
+        return (
+          leftDistance - rightDistance ||
+          left.chunkId.localeCompare(right.chunkId)
+        );
       })
       .slice(0, maximum);
     for (const candidate of expansions) {
@@ -259,9 +263,12 @@ export function packRetrievalContext(
     const candidateVisuals = visual(candidate) ? 1 : 0;
     let reason: string | null = null;
     if (packed.length >= budget.maximumEvidenceItems) reason = "evidence-count";
-    else if (tokens + candidateTokens > budget.maximumTokens) reason = "token-budget";
-    else if (bytes + candidateBytes > budget.maximumUtf8Bytes) reason = "byte-budget";
-    else if (visuals + candidateVisuals > budget.maximumVisualItems) reason = "visual-budget";
+    else if (tokens + candidateTokens > budget.maximumTokens)
+      reason = "token-budget";
+    else if (bytes + candidateBytes > budget.maximumUtf8Bytes)
+      reason = "byte-budget";
+    else if (visuals + candidateVisuals > budget.maximumVisualItems)
+      reason = "visual-budget";
     if (reason) {
       excluded.push({ chunkId: candidate.chunkId, reason });
       continue;
@@ -274,27 +281,40 @@ export function packRetrievalContext(
   return {
     packed,
     excluded,
-    usage: { tokens, bytes, visualItems: visuals, evidenceItems: packed.length },
+    usage: {
+      tokens,
+      bytes,
+      visualItems: visuals,
+      evidenceItems: packed.length,
+    },
   };
 }
 
 export function retrievalScopeDigest(input: {
   ownerId: string;
   projectIds: readonly string[];
+  policyProjectIds?: readonly string[];
+  sourceIds?: readonly string[];
   yearIds: readonly string[];
   subjectIds: readonly string[];
   originKinds: readonly string[];
 }) {
-  return sha256(canonicalJson({
-    ownerId: input.ownerId,
-    projectIds: [...input.projectIds].sort(),
-    yearIds: [...input.yearIds].sort(),
-    subjectIds: [...input.subjectIds].sort(),
-    originKinds: [...input.originKinds].sort(),
-  }));
+  return sha256(
+    canonicalJson({
+      ownerId: input.ownerId,
+      projectIds: [...input.projectIds].sort(),
+      policyProjectIds: [...(input.policyProjectIds ?? [])].sort(),
+      sourceIds: [...(input.sourceIds ?? [])].sort(),
+      yearIds: [...input.yearIds].sort(),
+      subjectIds: [...input.subjectIds].sort(),
+      originKinds: [...input.originKinds].sort(),
+    }),
+  );
 }
 
-export function retrievalStage(input: RetrievalStageTrace): RetrievalStageTrace {
+export function retrievalStage(
+  input: RetrievalStageTrace,
+): RetrievalStageTrace {
   return input;
 }
 
@@ -302,7 +322,8 @@ export function fallbackForFailure(
   policy: RetrievalFallbackPolicy,
   stage: "dense" | "rerank",
 ) {
-  if (policy === "fail") throw new Error(`RETRIEVAL_${stage.toUpperCase()}_FAILED`);
+  if (policy === "fail")
+    throw new Error(`RETRIEVAL_${stage.toUpperCase()}_FAILED`);
   if (stage === "dense") return "lexical-only" as const;
   return policy === "hybrid-without-rerank"
     ? ("hybrid-without-rerank" as const)

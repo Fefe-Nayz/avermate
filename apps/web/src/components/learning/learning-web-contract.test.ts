@@ -15,10 +15,16 @@ describe("learning Web contract", () => {
       source("../grades/grade-copies.tsx"),
       source("../documents/quiz-document-view.tsx"),
     ])
+    expect(hub).toContain('TabsTrigger value="overview"')
     expect(hub).toContain('TabsTrigger value="mastery"')
     expect(hub).toContain('TabsTrigger value="copies"')
     expect(hub).toContain('TabsTrigger value="plan"')
+    expect(hub).toContain('TabsTrigger value="history"')
     expect(hub).toContain("lg:grid-cols-2")
+    expect(hub).toContain('role="group"')
+    expect(hub).toContain('aria-label={t("Filter learning by subject")}')
+    expect(hub).toContain("aria-pressed={subjectId === null}")
+    expect(hub).toContain("aria-pressed={subjectId === subject.id}")
     expect(panel).toContain("<object")
     expect(panel).toContain('type="application/pdf"')
     expect(panel).toContain('t("Previous page")')
@@ -32,6 +38,36 @@ describe("learning Web contract", () => {
     expect(gradeCopies).toContain("learning.copies.request")
     expect(quiz).toContain('"practice"')
     expect(quiz).toContain('"progress"')
+  })
+
+  test("separates measured progress, measurement quality and cautious history", async () => {
+    const hub = await source("./learning-client.tsx")
+
+    expect(hub).toContain('const [tab, setTab] = useState("overview")')
+    expect(hub).toContain(
+      "orpc.learning.progress.queryOptions({ input: scope })"
+    )
+    expect(hub).toContain('objective.measurementState === "unmeasured"')
+    expect(hub).toContain("summary.measuredObjectiveCount")
+    expect(hub).toContain("summary.confidenceScore")
+    expect(hub).toContain("summary.freshness")
+    expect(hub).toContain("summary.nextAction")
+    expect(hub).toContain("<ProgressTimeline")
+    expect(hub).toContain("row.projection.evidenceCount > 0")
+    expect(hub).not.toContain("projection?.estimate ?? 0.5")
+    expect(hub).not.toContain("projection.estimate ?? 0.5")
+  })
+
+  test("hydrates the exact unfiltered learning query keys used by the client", async () => {
+    const page = await source("../../app/(app)/learning/page.tsx")
+
+    for (const procedure of ["copies.list", "plan.list", "progress"]) {
+      const start = page.indexOf(`orpc.learning.${procedure}.queryOptions`)
+      expect(start).toBeGreaterThan(-1)
+      expect(page.slice(start, start + 220)).toContain(
+        "input: { yearId: activeYearId, subjectId: null }"
+      )
+    }
   })
 
   test("labels interactive copy controls and embeds the PDF with a title", async () => {

@@ -6,7 +6,9 @@ import {
   defaultMigrationsFolder,
   migrateClient,
   prepareMigrationBaseline,
+  repairLegacyDemoActionFixtures,
 } from "./migrate";
+import { demoActionDigests } from "./demo-action-fixtures";
 
 // SAFETY: the checked-in Drizzle journal is exercised by the dedicated
 // migration-history test before this count is used.
@@ -784,6 +786,87 @@ describe("migration baseline adoption", () => {
         name: "Custom resource policy",
         linkCount: 1,
       });
+    } finally {
+      client.close();
+    }
+  });
+
+  test("repairs only the invalid legacy demo action fixtures idempotently", async () => {
+    const client = createClient({ url: ":memory:" });
+    try {
+      await client.executeMultiple(`
+        CREATE TABLE agent_actions (
+          id text PRIMARY KEY NOT NULL,
+          userId text NOT NULL,
+          toolId text NOT NULL,
+          idempotencyKey text NOT NULL,
+          argumentsHash text NOT NULL,
+          previewHash text NOT NULL,
+          status text NOT NULL,
+          createdAt integer NOT NULL
+        );
+        CREATE TABLE agent_approvals (
+          id text PRIMARY KEY NOT NULL,
+          actionId text NOT NULL UNIQUE,
+          userId text NOT NULL,
+          state text NOT NULL,
+          argumentsHash text NOT NULL,
+          previewHash text NOT NULL,
+          expiresAt integer NOT NULL,
+          createdAt integer NOT NULL
+        );
+        INSERT INTO agent_actions VALUES
+          ('task', 'demo', 'planning.tasks.create', 'seed-action-task',
+           'seed-hash-task', 'seed-preview-task', 'completed', 1000),
+          ('grade', 'demo', 'grades.update', 'seed-action-grade',
+           'seed-hash-grade', 'seed-preview-grade', 'awaiting-approval', 1000),
+          ('unrelated', 'real-user', 'planning.tasks.create', 'real-action',
+           'seed-hash-task', 'seed-preview-task', 'completed', 1000);
+      `);
+
+      expect(await repairLegacyDemoActionFixtures(client)).toBe(3);
+      expect(await repairLegacyDemoActionFixtures(client)).toBe(0);
+
+      const actions = await client.execute(`
+        SELECT id, argumentsHash, previewHash
+        FROM agent_actions ORDER BY id
+      `);
+      expect(actions.rows).toEqual([
+        expect.objectContaining({
+          id: "grade",
+          argumentsHash: demoActionDigests.grade.argumentsHash,
+          previewHash: demoActionDigests.grade.previewHash,
+        }),
+        expect.objectContaining({
+          id: "task",
+          argumentsHash: demoActionDigests.task.argumentsHash,
+          previewHash: demoActionDigests.task.previewHash,
+        }),
+        expect.objectContaining({
+          id: "unrelated",
+          argumentsHash: "seed-hash-task",
+          previewHash: "seed-preview-task",
+        }),
+      ]);
+      const approvals = await client.execute(`
+        SELECT actionId, state, argumentsHash, previewHash, expiresAt
+        FROM agent_approvals
+      `);
+      expect(approvals.rows).toEqual([
+        expect.objectContaining({
+          actionId: "grade",
+          state: "pending",
+          argumentsHash: demoActionDigests.grade.argumentsHash,
+          previewHash: demoActionDigests.grade.previewHash,
+          expiresAt: 605800,
+        }),
+      ]);
+      expect(
+        actions.rows
+          .filter((row) => row.id !== "unrelated")
+          .flatMap((row) => [row.argumentsHash, row.previewHash])
+          .every((hash) => /^[a-f0-9]{64}$/u.test(String(hash))),
+      ).toBe(true);
     } finally {
       client.close();
     }

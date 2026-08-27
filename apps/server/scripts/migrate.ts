@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 
 import { databaseClientConfig } from "../src/db/client-config";
+import { demoActionDigests } from "./demo-action-fixtures";
 
 type BaselineStatus = "adopted" | "fresh" | "journaled";
 
@@ -199,6 +200,77 @@ export async function bootstrapOAuthResource(
   );
 }
 
+/**
+ * Repairs the two showcase actions written by the original plan-030 demo seed.
+ *
+ * Those fixtures used human-readable placeholders where the public action DTO
+ * requires 64-character SHA-256 digests. Reading action activity therefore
+ * failed contract validation for every account that owned the showcase data.
+ * Match every legacy marker so real ledger rows can never be rewritten.
+ */
+export async function repairLegacyDemoActionFixtures(client: Client) {
+  const result = await client.batch(
+    [
+      {
+        sql: `
+          UPDATE agent_actions
+          SET argumentsHash = ?, previewHash = ?
+          WHERE toolId = 'planning.tasks.create'
+            AND idempotencyKey = 'seed-action-task'
+            AND argumentsHash = 'seed-hash-task'
+            AND previewHash = 'seed-preview-task'
+        `,
+        args: [
+          demoActionDigests.task.argumentsHash,
+          demoActionDigests.task.previewHash,
+        ],
+      },
+      {
+        sql: `
+          UPDATE agent_actions
+          SET argumentsHash = ?, previewHash = ?
+          WHERE toolId = 'grades.update'
+            AND idempotencyKey = 'seed-action-grade'
+            AND argumentsHash = 'seed-hash-grade'
+            AND previewHash = 'seed-preview-grade'
+        `,
+        args: [
+          demoActionDigests.grade.argumentsHash,
+          demoActionDigests.grade.previewHash,
+        ],
+      },
+      {
+        sql: `
+          INSERT INTO agent_approvals (
+            id, actionId, userId, state, argumentsHash, previewHash,
+            expiresAt, createdAt
+          )
+          SELECT
+            'aappr_' || lower(hex(randomblob(8))), action.id, action.userId,
+            'pending', action.argumentsHash, action.previewHash,
+            action.createdAt + 604800, action.createdAt
+          FROM agent_actions AS action
+          WHERE action.toolId = 'grades.update'
+            AND action.idempotencyKey = 'seed-action-grade'
+            AND action.argumentsHash = ?
+            AND action.previewHash = ?
+            AND action.status = 'awaiting-approval'
+            AND NOT EXISTS (
+              SELECT 1 FROM agent_approvals AS approval
+              WHERE approval.actionId = action.id
+            )
+        `,
+        args: [
+          demoActionDigests.grade.argumentsHash,
+          demoActionDigests.grade.previewHash,
+        ],
+      },
+    ],
+    "write",
+  );
+  return result.reduce((count, item) => count + item.rowsAffected, 0);
+}
+
 export async function migrateConfiguredDatabase() {
   const client = createClient(
     databaseClientConfig({
@@ -209,6 +281,7 @@ export async function migrateConfiguredDatabase() {
 
   try {
     const baseline = await migrateClient(client);
+    await repairLegacyDemoActionFixtures(client);
     const resourceUrl =
       process.env.MCP_RESOURCE_URL ??
       (process.env.BETTER_AUTH_URL

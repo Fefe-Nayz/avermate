@@ -561,14 +561,12 @@ export class CoreConversationStore {
       threadId,
       selector,
       projectItemId,
-    }).catch(
-      (error) => {
-        console.error(
-          "[assistant] conversation indexing enqueue failed",
-          error instanceof Error ? error.message : "Unknown queue error",
-        );
-      },
-    );
+    }).catch((error) => {
+      console.error(
+        "[assistant] conversation indexing enqueue failed",
+        error instanceof Error ? error.message : "Unknown queue error",
+      );
+    });
   }
 
   async createThread(input: {
@@ -589,6 +587,20 @@ export class CoreConversationStore {
     const now = sqlTimestamp();
     const transaction = await this.client.transaction("write");
     try {
+      if (input.projectId) {
+        const project = await one(
+          transaction,
+          `SELECT id FROM study_projects
+           WHERE id = ? AND userId = ? AND deletedAt IS NULL LIMIT 1`,
+          [input.projectId, input.ownerId],
+        );
+        if (!project) {
+          throw new ConversationStoreError(
+            "forbidden",
+            "The study project is not owned by this account",
+          );
+        }
+      }
       await execute(transaction, {
         sql: `INSERT INTO assistant_threads
           (id, userId, title, revision, projectId, placement, placementRef,
@@ -637,6 +649,7 @@ export class CoreConversationStore {
 
   async listThreads(input: {
     ownerId: string;
+    projectId?: string;
     cursor?: string | null;
     limit?: number;
     includeArchived?: boolean;
@@ -655,6 +668,10 @@ export class CoreConversationStore {
     if (!input.includeDeleted) clauses.push("t.deletedAt IS NULL");
     if (!input.includeArchived) clauses.push("t.archivedAt IS NULL");
     if (input.starredOnly) clauses.push("t.starredAt IS NOT NULL");
+    if (input.projectId) {
+      clauses.push("t.projectId = ?");
+      args.push(input.projectId);
+    }
     if (input.query?.trim()) {
       clauses.push(`(lower(t.title) LIKE ? OR EXISTS (
         SELECT 1 FROM assistant_messages sm, json_each(sm.partsJson) AS part
@@ -822,8 +839,51 @@ export class CoreConversationStore {
       `SELECT partsJson FROM assistant_messages WHERE id = ? AND threadId = ? LIMIT 1`,
       [messageId, threadId],
     );
-    if (!row) throw new ConversationStoreError("not_found", "Message not found");
+    if (!row)
+      throw new ConversationStoreError("not_found", "Message not found");
     return assistantPartV1Schema.array().parse(jsonValue(row.partsJson));
+  }
+
+  /**
+   * Resolve the exact ancestor chain of a run input. Sibling messages and the
+   * current input are deliberately excluded, so retries and edited branches
+   * receive the same deterministic history they were based on.
+   */
+  async historyBeforeMessage(
+    ownerId: string,
+    threadId: string,
+    messageId: string,
+  ): Promise<AssistantMessage[]> {
+    const detail = await this.getThreadDetail(ownerId, threadId);
+    const byId = new Map(
+      detail.messages.map((message) => [message.id, message] as const),
+    );
+    const current = byId.get(messageId);
+    if (!current) {
+      throw new ConversationStoreError("not_found", "Message not found");
+    }
+    const reversed: AssistantMessage[] = [];
+    const seen = new Set<string>([messageId]);
+    let cursor = current.parentMessageId;
+    while (cursor) {
+      if (seen.has(cursor)) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Conversation DAG is cyclic",
+        );
+      }
+      seen.add(cursor);
+      const message = byId.get(cursor);
+      if (!message) {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Conversation history is incomplete",
+        );
+      }
+      reversed.push(message);
+      cursor = message.parentMessageId;
+    }
+    return reversed.reverse();
   }
 
   async reserveTurn(input: {
@@ -1008,8 +1068,8 @@ export class CoreConversationStore {
               "user",
               input.expectedHeadMessageId,
               textParts(input.markdown, {
-              skillId: input.skillId,
-              planMode: input.planMode,
+                skillId: input.skillId,
+                planMode: input.planMode,
               }),
             ),
           ),
@@ -1312,9 +1372,7 @@ export class CoreConversationStore {
               String(row.threadId),
               messageId,
               "assistant",
-              row.parentMessageId === null
-                ? null
-                : String(row.parentMessageId),
+              row.parentMessageId === null ? null : String(row.parentMessageId),
               textParts(input.markdown),
             ),
           ),
@@ -1686,10 +1744,11 @@ export class CoreConversationStore {
               input.outputMessageId,
               "assistant",
               String(run.inputMessageId),
-              assistantPartV1Schema.array().parse(jsonValue(existing.partsJson)),
+              assistantPartV1Schema
+                .array()
+                .parse(jsonValue(existing.partsJson)),
             ),
-          ) !==
-            canonicalJson(parts) ||
+          ) !== canonicalJson(parts) ||
           run.status !== input.terminal
         ) {
           throw new ConversationStoreError(

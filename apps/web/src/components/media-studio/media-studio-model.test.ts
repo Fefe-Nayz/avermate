@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   outputPreviewKind,
+  selectedArtifactFromResults,
   selectedProjectSourceVersions,
   stageCanApprove,
   stageCanRetry,
@@ -29,6 +30,34 @@ describe("media studio presentation", () => {
     expect(outputPreviewKind("image/png")).toBe("image")
     expect(outputPreviewKind("text/html")).toBe("html")
     expect(outputPreviewKind("application/zip")).toBe("unknown")
+  })
+
+  test("selects a deep-linked artifact only from the project-filtered results", () => {
+    const artifacts = [{ id: "first" }, { id: "requested" }]
+
+    expect(selectedArtifactFromResults(artifacts, "requested")).toBe(
+      artifacts[1]
+    )
+    expect(selectedArtifactFromResults(artifacts, "another-project")).toBe(
+      artifacts[0]
+    )
+    expect(selectedArtifactFromResults([], "requested")).toBeNull()
+    expect(selectedArtifactFromResults(undefined, "requested")).toBeNull()
+  })
+
+  test("carries the artifact locator from the route into the Studio client", async () => {
+    const [page, client] = await Promise.all([
+      Bun.file(
+        new URL("../../app/(app)/materials/studio/page.tsx", import.meta.url)
+      ).text(),
+      Bun.file(new URL("./media-studio-client.tsx", import.meta.url)).text(),
+    ])
+
+    expect(page).toContain("artifact?: string | string[]")
+    expect(page).toContain("initialArtifactId={artifactId}")
+    expect(client).toContain("initialArtifactId = null")
+    expect(client).toContain('initialArtifactId ? "artifacts" : "workflows"')
+    expect(client).toContain("selectedArtifactFromResults(")
   })
 
   test("freezes the exact pinned or followed project source versions", () => {

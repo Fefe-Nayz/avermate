@@ -46,12 +46,12 @@ import {
   materialFolders,
   planningTasks,
   studyDocuments,
+  agentApprovals,
   agentActionSequences,
   agentActions,
   assistantBranches,
   assistantMessages,
   assistantThreads,
-  contentSources,
   learningConceptSets,
   learningConcepts,
   learningMasteryCurrent,
@@ -72,6 +72,7 @@ import {
 } from "../src/db/schema";
 import { auth } from "../src/lib/auth";
 import { newId } from "../src/lib/id";
+import { coreCorpusIndexService } from "../src/search/index-service";
 import { canonicalPair } from "../src/lib/social-policy";
 import {
   cardSemanticsFromDefinition,
@@ -86,6 +87,7 @@ import {
   type DemoProfile,
   type DemoUser,
 } from "./seed-demo-data";
+import { demoActionDigests } from "./demo-action-fixtures";
 
 interface DemoCard {
   row: typeof dashboardCards.$inferInsert;
@@ -1529,26 +1531,21 @@ async function seedStudyLife(input: {
   // trigger enforces it ("project item source is not owned or
   // year-compatible"), which is plan 028's rule that an answer must be able to
   // cite an owned, indexed source rather than a bare row id.
-  await db.insert(contentSources).values([
+  const projectSources = [
     {
-      userId,
-      yearId,
-      subjectId: subject.maths,
-      originKind: "material",
+      ownerId: userId,
+      originKind: "material" as const,
       originId: filmedCourse,
-      status: "ready",
-      coverage: "metadata-and-locators-only",
     },
     {
-      userId,
-      yearId,
-      subjectId: subject.maths,
-      originKind: "study-document",
+      ownerId: userId,
+      originKind: "study-document" as const,
       originId: recurrenceSheet,
-      status: "ready",
-      coverage: "searchable-native-text",
     },
-  ]);
+  ];
+  for (const identity of projectSources) {
+    await coreCorpusIndexService.ensureRegistered(identity);
+  }
   await db.insert(studyProjectItems).values([
     {
       projectId: suitesProject,
@@ -1565,6 +1562,14 @@ async function seedStudyLife(input: {
       label: "Fiche - raisonnement par recurrence",
     },
   ]);
+  // A source marked ready without an immutable version made Projects claim
+  // that it was searchable while Studio correctly reported zero usable
+  // inputs. Index through the production service so the demo exercises the
+  // same current-version pointer, FTS publication and project references as a
+  // real import.
+  for (const identity of projectSources) {
+    await coreCorpusIndexService.indexSource(identity);
+  }
 
   // ---------------------------------------------------- assistant thread
   // One finished exchange, attached to the project above, so /assistant opens
@@ -1689,7 +1694,8 @@ async function seedStudyLife(input: {
     {
       id: heredity,
       conceptId: recurrenceConcept,
-      statement: "Utiliser l'hypothese de recurrence dans le passage au rang suivant.",
+      statement:
+        "Utiliser l'hypothese de recurrence dans le passage au rang suivant.",
       expectedLevel: 4,
       yearId,
       subjectId: subject.maths,
@@ -1709,8 +1715,24 @@ async function seedStudyLife(input: {
   // One objective solid, one still uncertain: the interval is the point, so a
   // demo that only ever showed a confident estimate would misrepresent it.
   const projections = [
-    { objectiveId: initialisation, estimate: 0.82, low: 0.71, high: 0.9, alpha: 9, beta: 2, count: 11 },
-    { objectiveId: heredity, estimate: 0.46, low: 0.24, high: 0.69, alpha: 3, beta: 4, count: 4 },
+    {
+      objectiveId: initialisation,
+      estimate: 0.82,
+      low: 0.71,
+      high: 0.9,
+      alpha: 9,
+      beta: 2,
+      count: 11,
+    },
+    {
+      objectiveId: heredity,
+      estimate: 0.46,
+      low: 0.24,
+      high: 0.69,
+      alpha: 3,
+      beta: 4,
+      count: 4,
+    },
   ];
   for (const [index, projection] of projections.entries()) {
     const projectionId = newId("lproj");
@@ -1765,9 +1787,12 @@ async function seedStudyLife(input: {
   // finished write and one still waiting on the reader, so /assistant/actions
   // shows both the record and the approval it is there to ask for.
   // The ledger numbers from 1 — `agent_actions_sequence_check` is `> 0`.
+  const taskActionId = newId("aact");
+  const gradeActionId = newId("aact");
   await db.insert(agentActionSequences).values({ userId, nextSequence: 3 });
   await db.insert(agentActions).values([
     {
+      id: taskActionId,
       userId,
       actorKind: "embedded-agent",
       threadId: thread,
@@ -1776,7 +1801,7 @@ async function seedStudyLife(input: {
       toolVersion: 1,
       effect: "create",
       risk: "low",
-      argumentsHash: "seed-hash-task",
+      argumentsHash: demoActionDigests.task.argumentsHash,
       idempotencyKey: "seed-action-task",
       actionSequence: 1,
       redactedInputJson: {
@@ -1784,13 +1809,14 @@ async function seedStudyLife(input: {
         dueAt: isoDay(day(1)),
       },
       previewJson: { creates: 1, updates: 0, deletes: 0 },
-      previewHash: "seed-preview-task",
+      previewHash: demoActionDigests.task.previewHash,
       status: "completed",
       resultSummaryJson: { created: "Refaire les exercices 12 a 18" },
       startedAt: day(-2, 19),
       completedAt: day(-2, 19),
     },
     {
+      id: gradeActionId,
       userId,
       actorKind: "embedded-agent",
       threadId: thread,
@@ -1801,15 +1827,26 @@ async function seedStudyLife(input: {
       // Higher risk on purpose: this is the case the approval flow exists for,
       // and a demo where everything is low risk never shows it.
       risk: "high",
-      argumentsHash: "seed-hash-grade",
+      argumentsHash: demoActionDigests.grade.argumentsHash,
       idempotencyKey: "seed-action-grade",
       actionSequence: 2,
-      redactedInputJson: { subject: "Mathematiques", note: "corriger 12 -> 12.5" },
+      redactedInputJson: {
+        subject: "Mathematiques",
+        note: "corriger 12 -> 12.5",
+      },
       previewJson: { creates: 0, updates: 1, deletes: 0 },
-      previewHash: "seed-preview-grade",
+      previewHash: demoActionDigests.grade.previewHash,
       status: "awaiting-approval",
     },
   ]);
+  await db.insert(agentApprovals).values({
+    actionId: gradeActionId,
+    userId,
+    argumentsHash: demoActionDigests.grade.argumentsHash,
+    previewHash: demoActionDigests.grade.previewHash,
+    expiresAt: day(7, 19),
+    createdAt: now,
+  });
 }
 
 async function seedSocialDemo(primary: Awaited<ReturnType<typeof seedFull>>) {

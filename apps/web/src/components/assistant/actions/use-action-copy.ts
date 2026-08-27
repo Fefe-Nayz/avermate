@@ -11,6 +11,8 @@ export function useActionCopy() {
     switch (action.toolId) {
       case "planning.tasks.create":
         return t("Create a personal task")
+      case "grades.update":
+        return t("Update a grade")
       case "artifact.plan":
         return t("Plan an artifact workflow")
       case "artifact.cancel":

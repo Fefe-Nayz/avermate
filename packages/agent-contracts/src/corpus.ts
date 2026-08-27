@@ -242,6 +242,9 @@ export const ownedLexicalQuerySchema = z.strictObject({
   query: z.string().min(1).max(2_000),
   mode: lexicalSearchModeSchema,
   projectIds: z.array(boundedId).max(100),
+  /** Optional immutable source fence. When present, every retrieval channel
+   * must stay inside these already owner-authorized corpus sources. */
+  sourceIds: z.array(boundedId).max(100).optional(),
   yearIds: z.array(boundedId).max(100),
   subjectIds: z.array(boundedId).max(100),
   originKinds: z.array(corpusOriginKindSchema).max(16),
@@ -416,7 +419,10 @@ export interface EmbeddingProvider {
 
 export const rerankCandidateSchema = z.strictObject({
   id: boundedId,
-  text: z.string().min(1).max(64 * 1024),
+  text: z
+    .string()
+    .min(1)
+    .max(64 * 1024),
   tokenEstimate: z.number().int().nonnegative().max(32_768),
 });
 export type RerankCandidate = z.infer<typeof rerankCandidateSchema>;
@@ -446,9 +452,7 @@ export const rerankSpaceDescriptorSchema = z.strictObject({
   placement: z.enum(["core", "node", "managed"]),
   costUnit: z.enum(["search-unit", "compute-token", "none"]),
 });
-export type RerankSpaceDescriptor = z.infer<
-  typeof rerankSpaceDescriptorSchema
->;
+export type RerankSpaceDescriptor = z.infer<typeof rerankSpaceDescriptorSchema>;
 
 export interface RerankProvider {
   descriptor(): RerankSpaceDescriptor;

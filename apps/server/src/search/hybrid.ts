@@ -33,13 +33,42 @@ import {
   createOwnedCorpusVectorRuntime,
   type CorpusVectorRuntime,
 } from "./vector-runtime";
-import { estimateTokens, jsonValue, sha256 } from "./values";
+import {
+  estimateTokens,
+  jsonValue,
+  normalizeForSearch,
+  sha256,
+} from "./values";
 
 type SqlClient = Pick<Client, "execute" | "transaction">;
 
 const LEXICAL_POOL = 80;
 const DENSE_POOL = 80;
 const RERANK_WINDOW = 50;
+const QUESTION_STOP_WORDS = new Set([
+  "avec",
+  "cette",
+  "dans",
+  "des",
+  "document",
+  "explique",
+  "faire",
+  "jointe",
+  "les",
+  "pour",
+  "pourquoi",
+  "que",
+  "quelle",
+  "quelles",
+  "quels",
+  "signifie",
+  "source",
+  "sont",
+  "the",
+  "une",
+  "what",
+  "with",
+]);
 
 function vectorSnippet(text: string) {
   const trimmed = text.trim();
@@ -89,6 +118,7 @@ function authorizationSql(input: OwnedLexicalQuery, args: InValue[]) {
   addList("sources.yearId", input.yearIds);
   addList("sources.subjectId", input.subjectIds);
   addList("sources.originKind", input.originKinds);
+  addList("sources.id", input.sourceIds ?? []);
   return clauses.join(" AND ");
 }
 
@@ -98,6 +128,113 @@ function policyFromLexical(candidates: readonly LexicalCandidate[]) {
     channels: ["lexical"],
     fusedScore: 1 / (61 + index),
   }));
+}
+
+function relaxedQuestionTerms(query: string) {
+  const unique = new Map<string, number>();
+  for (const [index, term] of (
+    normalizeForSearch(query).match(/[\p{L}\p{N}_]+/gu) ?? []
+  ).entries()) {
+    if (term.length < 3 || QUESTION_STOP_WORDS.has(term)) continue;
+    if (!unique.has(term)) unique.set(term, index);
+  }
+  return [...unique]
+    .sort(
+      ([left, leftIndex], [right, rightIndex]) =>
+        right.length - left.length || leftIndex - rightIndex,
+    )
+    .slice(0, 8)
+    .map(([term]) => term);
+}
+
+async function lexicalQuestionSearch(
+  lexical: Pick<LexicalSearchBackend, "search">,
+  input: OwnedLexicalQuery,
+) {
+  const primary = await lexical.search(input);
+  if (primary.length > 0 || input.mode !== "terms" || input.cursor !== null) {
+    return { candidates: primary, queryCount: 1 };
+  }
+  const terms = relaxedQuestionTerms(input.query);
+  if (terms.length <= 1) return { candidates: primary, queryCount: 1 };
+  const ranked = new Map<
+    string,
+    { candidate: LexicalCandidate; score: number }
+  >();
+  for (const term of terms) {
+    const candidates = await lexical.search({
+      ...input,
+      query: term,
+      limit: Math.min(24, input.limit),
+    });
+    for (const [index, candidate] of candidates.entries()) {
+      const current = ranked.get(candidate.chunkId);
+      const score = (current?.score ?? 0) + 1 / (61 + index);
+      ranked.set(candidate.chunkId, {
+        candidate: current?.candidate ?? candidate,
+        score,
+      });
+    }
+  }
+  return {
+    candidates: [...ranked.values()]
+      .sort(
+        (left, right) =>
+          right.score - left.score ||
+          left.candidate.chunkId.localeCompare(right.candidate.chunkId),
+      )
+      .map(({ candidate, score }) => ({ ...candidate, score }))
+      .slice(0, input.limit),
+    queryCount: 1 + terms.length,
+  };
+}
+
+async function explicitSourceOverview(
+  client: SqlClient,
+  input: OwnedLexicalQuery,
+) {
+  if ((input.sourceIds?.length ?? 0) === 0) return [];
+  const args: InValue[] = [];
+  const authorization = authorizationSql(input, args);
+  const rows = await client.execute({
+    sql: `WITH ranked AS (
+        SELECT chunks.id AS chunkId, chunks.versionId, chunks.ordinal,
+          chunks.text, chunks.normalizedText, chunks.tokenEstimate,
+          chunks.contentHash, chunks.locatorJson, chunks.headingPathJson,
+          chunks.evidenceKind, versions.sourceId, sources.userId,
+          sources.placement, sources.placementRef,
+          row_number() OVER (
+            PARTITION BY versions.sourceId ORDER BY chunks.ordinal, chunks.id
+          ) AS sourceRank
+        FROM content_chunks AS chunks
+        JOIN content_versions AS versions ON versions.id = chunks.versionId
+        JOIN content_sources AS sources ON sources.id = versions.sourceId
+        WHERE ${authorization}
+      )
+      SELECT * FROM ranked WHERE sourceRank <= 2
+      ORDER BY sourceId, sourceRank, chunkId LIMIT ?`,
+    args: [...args, Math.min(100, input.limit)],
+  });
+  const hydrated = await new RoutedCorpusContentReader(client).hydrate(
+    rows.rows as unknown as AuthorizedCorpusChunkRow[],
+  );
+  return rows.rows.flatMap<LexicalCandidate>((row) => {
+    const body = hydrated.get(String(row.chunkId));
+    if (!body) return [];
+    return [
+      lexicalCandidateSchema.parse({
+        sourceId: String(row.sourceId),
+        versionId: String(row.versionId),
+        chunkId: String(row.chunkId),
+        ordinal: Number(row.ordinal),
+        score: 0,
+        snippet: vectorSnippet(body.text),
+        locator: sourceLocatorV1Schema.parse(jsonValue(row.locatorJson)),
+        contentHash: String(row.contentHash),
+        evidenceKind: row.evidenceKind,
+      }),
+    ];
+  });
 }
 
 async function projectRetrievalPolicy(
@@ -164,7 +301,10 @@ export async function hydrateOwnedVectorCandidates(
   client: SqlClient = db.$client,
 ): Promise<LexicalCandidate[]> {
   if (candidates.length === 0) return [];
-  const ids = [...new Set(candidates.map((entry) => entry.chunkId))].slice(0, 800);
+  const ids = [...new Set(candidates.map((entry) => entry.chunkId))].slice(
+    0,
+    800,
+  );
   const metadataArgs: InValue[] = [];
   const metadataAuthorization = authorizationSql(input, metadataArgs);
   metadataArgs.push(...ids);
@@ -280,7 +420,10 @@ async function authorizedNeighborUniverse(
   for (const winner of winners) {
     const current = windows.get(winner.versionId);
     windows.set(winner.versionId, {
-      minimum: Math.max(0, Math.min(current?.minimum ?? Infinity, winner.ordinal - 1)),
+      minimum: Math.max(
+        0,
+        Math.min(current?.minimum ?? Infinity, winner.ordinal - 1),
+      ),
       maximum: Math.max(current?.maximum ?? -Infinity, winner.ordinal + 1),
     });
   }
@@ -310,24 +453,26 @@ async function authorizedNeighborUniverse(
   return rows.rows.flatMap<PolicyCandidate>((row) => {
     const body = hydrated.get(String(row.chunkId));
     if (!body) return [];
-    return [{
-      ...lexicalCandidateSchema.parse({
-        sourceId: String(row.sourceId),
-        versionId: String(row.versionId),
-        chunkId: String(row.chunkId),
-        ordinal: Number(row.ordinal),
-        score: 0,
-        snippet: vectorSnippet(body.text),
-        locator: sourceLocatorV1Schema.parse(jsonValue(row.locatorJson)),
-        contentHash: String(row.contentHash),
-        evidenceKind: row.evidenceKind,
-      }),
-      channels: [],
-      fusedScore: 0,
-      text: body.text,
-      tokenEstimate: Number(row.tokenEstimate),
-      headingPath: body.headingPath,
-    }];
+    return [
+      {
+        ...lexicalCandidateSchema.parse({
+          sourceId: String(row.sourceId),
+          versionId: String(row.versionId),
+          chunkId: String(row.chunkId),
+          ordinal: Number(row.ordinal),
+          score: 0,
+          snippet: vectorSnippet(body.text),
+          locator: sourceLocatorV1Schema.parse(jsonValue(row.locatorJson)),
+          contentHash: String(row.contentHash),
+          evidenceKind: row.evidenceKind,
+        }),
+        channels: [],
+        fusedScore: 0,
+        text: body.text,
+        tokenEstimate: Number(row.tokenEstimate),
+        headingPath: body.headingPath,
+      },
+    ];
   });
 }
 
@@ -394,7 +539,8 @@ async function persistTrace(
 }
 
 export type HybridSearchResult = {
-  candidates: readonly LexicalCandidate[];
+  /** Fully hydrated, authorization-fenced and budget-packed evidence. */
+  candidates: readonly PolicyCandidate[];
   vectorUsed: boolean;
   vectorImplementation: string | null;
   rerankUsed: boolean;
@@ -405,18 +551,26 @@ export type HybridSearchResult = {
   stages: readonly RetrievalStageTrace[];
 };
 
+export type HybridCorpusSearchOptions = {
+  client?: SqlClient;
+  lexical?: Pick<LexicalSearchBackend, "search">;
+  runtime?: CorpusVectorRuntime | null;
+  reranker?: RerankProvider | null;
+  signal?: AbortSignal;
+  /**
+   * Project settings can govern retrieval while the authorization scope is
+   * narrowed further (for example to documents explicitly attached to a
+   * project conversation). This never broadens `input`'s source fence.
+   */
+  policyProjectIds?: readonly string[];
+  /** Test/paired-node runtimes can provide their already selected generation. */
+  corpusGenerationId?: string | null;
+  persistTrace?: boolean;
+};
+
 export async function hybridCorpusSearch(
   input: OwnedLexicalQuery,
-  options: {
-    client?: SqlClient;
-    lexical?: Pick<LexicalSearchBackend, "search">;
-    runtime?: CorpusVectorRuntime | null;
-    reranker?: RerankProvider | null;
-    signal?: AbortSignal;
-    /** Test/paired-node runtimes can provide their already selected generation. */
-    corpusGenerationId?: string | null;
-    persistTrace?: boolean;
-  } = {},
+  options: HybridCorpusSearchOptions = {},
 ): Promise<HybridSearchResult> {
   const client = options.client ?? db.$client;
   const lexical =
@@ -427,7 +581,10 @@ export async function hybridCorpusSearch(
   const signal = options.signal ?? new AbortController().signal;
   const operationId = input.operationId ?? newId("retrieval");
   const queryDigest = sha256(input.query);
-  const scopeDigest = retrievalScopeDigest(input);
+  const scopeDigest = retrievalScopeDigest({
+    ...input,
+    policyProjectIds: options.policyProjectIds,
+  });
   const stages: RetrievalStageTrace[] = [];
   let fallbackReason: string | null = null;
   let corpusGenerationId: string | null = options.corpusGenerationId ?? null;
@@ -472,29 +629,80 @@ export async function hybridCorpusSearch(
     fallback: fallbackPolicy,
     embeddingSpaceId,
     rerankSpaceId,
-  } = await projectRetrievalPolicy(client, input);
-  stage("scope", null, input.projectIds.length, input.projectIds.length, scopeStarted, "used");
+  } = await projectRetrievalPolicy(client, {
+    ...input,
+    projectIds: [...(options.policyProjectIds ?? input.projectIds)],
+  });
+  const policyProjectCount =
+    options.policyProjectIds?.length ?? input.projectIds.length;
+  stage(
+    "scope",
+    null,
+    policyProjectCount,
+    policyProjectCount,
+    scopeStarted,
+    "used",
+  );
 
   const lexicalStarted = Date.now();
-  const lexicalCandidates = await lexical.search({
+  const lexicalSearch = await lexicalQuestionSearch(lexical, {
     ...input,
     limit: Math.min(LEXICAL_POOL, Math.max(input.limit, LEXICAL_POOL)),
   });
-  stage("lexical", "sqlite-fts5-unicode61-v1", 1, lexicalCandidates.length, lexicalStarted, "used");
+  let lexicalCandidates = lexicalSearch.candidates;
+  let lexicalFallbackReason: string | null = null;
+  if (lexicalCandidates.length === 0 && (input.sourceIds?.length ?? 0) > 0) {
+    lexicalCandidates = await explicitSourceOverview(client, input);
+    if (lexicalCandidates.length > 0) {
+      lexicalFallbackReason = "lexical:explicit-source-overview";
+    }
+  }
+  stage(
+    "lexical",
+    "sqlite-fts5-unicode61-v1",
+    lexicalSearch.queryCount,
+    lexicalCandidates.length,
+    lexicalStarted,
+    lexicalFallbackReason ? "degraded" : "used",
+    lexicalFallbackReason,
+  );
 
   const lexicalOnly = async (reason: string | null = null) => {
-    fallbackReason = reason;
+    fallbackReason = reason ?? lexicalFallbackReason;
     const diversityStarted = Date.now();
     const selected = diversifyRetrievalCandidates(
       deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
-      { limit: Math.min(RERANK_WINDOW, Math.max(input.limit, input.limit * 2)) },
+      {
+        limit: Math.min(RERANK_WINDOW, Math.max(input.limit, input.limit * 2)),
+      },
     );
-    stage("diversity", "round-robin-source-locator-v1", lexicalCandidates.length, selected.length, diversityStarted, "used");
+    stage(
+      "diversity",
+      "round-robin-source-locator-v1",
+      lexicalCandidates.length,
+      selected.length,
+      diversityStarted,
+      "used",
+    );
     const bodies = await hydrateAuthorizedBodies(client, input, selected);
     const expansionStarted = Date.now();
-    const neighbors = await authorizedNeighborUniverse(client, input, bodies.slice(0, input.limit));
-    const expanded = expandParentAndNeighbors(bodies.slice(0, input.limit), [...bodies, ...neighbors]);
-    stage("expansion", "parent-neighbor-radius-1-v1", bodies.length, expanded.length, expansionStarted, "used");
+    const neighbors = await authorizedNeighborUniverse(
+      client,
+      input,
+      bodies.slice(0, input.limit),
+    );
+    const expanded = expandParentAndNeighbors(bodies.slice(0, input.limit), [
+      ...bodies,
+      ...neighbors,
+    ]);
+    stage(
+      "expansion",
+      "parent-neighbor-radius-1-v1",
+      bodies.length,
+      expanded.length,
+      expansionStarted,
+      "used",
+    );
     const packingStarted = Date.now();
     const packed = packRetrievalContext(expanded, {
       maximumTokens: 12_000,
@@ -502,7 +710,14 @@ export async function hybridCorpusSearch(
       maximumVisualItems: 8,
       maximumEvidenceItems: input.limit,
     });
-    stage("packing", "evidence-budget-v1", expanded.length, packed.packed.length, packingStarted, "used");
+    stage(
+      "packing",
+      "evidence-budget-v1",
+      expanded.length,
+      packed.packed.length,
+      packingStarted,
+      "used",
+    );
     await trace(packed.packed.map((candidate) => candidate.chunkId));
     return {
       candidates: packed.packed,
@@ -574,11 +789,27 @@ export async function hybridCorpusSearch(
       limit: DENSE_POOL,
     });
     denseCandidates = await hydrateOwnedVectorCandidates(raw, input, client);
-    stage("dense", runtime.embedding.descriptor().id, 1, denseCandidates.length, denseStarted, "used");
+    stage(
+      "dense",
+      runtime.embedding.descriptor().id,
+      1,
+      denseCandidates.length,
+      denseStarted,
+      "used",
+    );
   } catch (error) {
     signal.throwIfAborted();
-    const reason = error instanceof Error ? error.message.slice(0, 200) : "dense-failed";
-    stage("dense", runtime?.embedding.descriptor().id ?? null, 1, 0, denseStarted, fallbackPolicy === "fail" ? "failed" : "degraded", reason);
+    const reason =
+      error instanceof Error ? error.message.slice(0, 200) : "dense-failed";
+    stage(
+      "dense",
+      runtime?.embedding.descriptor().id ?? null,
+      1,
+      0,
+      denseStarted,
+      fallbackPolicy === "fail" ? "failed" : "degraded",
+      reason,
+    );
     fallbackReason = `dense:${reason}`;
     stage("fusion", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
     stage("rerank", null, 0, 0, Date.now(), "skipped", "dense-unavailable");
@@ -594,19 +825,35 @@ export async function hybridCorpusSearch(
     lexical: lexicalCandidates,
     vector: denseCandidates,
   });
-  const lexicalById = new Map(lexicalCandidates.map((entry) => [entry.chunkId, entry]));
-  const denseById = new Map(denseCandidates.map((entry) => [entry.chunkId, entry]));
+  const lexicalById = new Map(
+    lexicalCandidates.map((entry) => [entry.chunkId, entry]),
+  );
+  const denseById = new Map(
+    denseCandidates.map((entry) => [entry.chunkId, entry]),
+  );
   const fusedCandidates = fused.flatMap<PolicyCandidate>((ranked) => {
-    const candidate = lexicalById.get(ranked.chunkId) ?? denseById.get(ranked.chunkId);
+    const candidate =
+      lexicalById.get(ranked.chunkId) ?? denseById.get(ranked.chunkId);
     if (!candidate) return [];
-    return [{
-      ...candidate,
-      channels: ranked.channels.map((channel) => channel === "vector" ? "dense" as const : "lexical" as const),
-      fusedScore: ranked.score,
-    }];
+    return [
+      {
+        ...candidate,
+        channels: ranked.channels.map((channel) =>
+          channel === "vector" ? ("dense" as const) : ("lexical" as const),
+        ),
+        fusedScore: ranked.score,
+      },
+    ];
   });
   const deduplicated = deduplicateRetrievalCandidates(fusedCandidates);
-  stage("fusion", "weighted-rrf-k60-v1", lexicalCandidates.length + denseCandidates.length, deduplicated.length, fusionStarted, "used");
+  stage(
+    "fusion",
+    "weighted-rrf-k60-v1",
+    lexicalCandidates.length + denseCandidates.length,
+    deduplicated.length,
+    fusionStarted,
+    "used",
+  );
 
   const diversityStarted = Date.now();
   let selected = diversifyRetrievalCandidates(deduplicated, {
@@ -614,7 +861,14 @@ export async function hybridCorpusSearch(
     maximumPerSource: 4,
     maximumPerLocator: 2,
   });
-  stage("diversity", "round-robin-source-locator-v1", deduplicated.length, selected.length, diversityStarted, "used");
+  stage(
+    "diversity",
+    "round-robin-source-locator-v1",
+    deduplicated.length,
+    selected.length,
+    diversityStarted,
+    "used",
+  );
   selected = await hydrateAuthorizedBodies(client, input, selected);
 
   let rerankUsed = false;
@@ -639,11 +893,27 @@ export async function hybridCorpusSearch(
       signal,
     });
     rerankUsed = true;
-    stage("rerank", rerankImplementation, deduplicated.length, selected.length, rerankStarted, "used");
+    stage(
+      "rerank",
+      rerankImplementation,
+      deduplicated.length,
+      selected.length,
+      rerankStarted,
+      "used",
+    );
   } catch (error) {
     signal.throwIfAborted();
-    const reason = error instanceof Error ? error.message.slice(0, 200) : "rerank-failed";
-    stage("rerank", rerankImplementation, selected.length, 0, rerankStarted, fallbackPolicy === "fail" ? "failed" : "degraded", reason);
+    const reason =
+      error instanceof Error ? error.message.slice(0, 200) : "rerank-failed";
+    stage(
+      "rerank",
+      rerankImplementation,
+      selected.length,
+      0,
+      rerankStarted,
+      fallbackPolicy === "fail" ? "failed" : "degraded",
+      reason,
+    );
     fallbackReason = `rerank:${reason}`;
     if (fallbackPolicy === "fail") {
       await trace();
@@ -652,7 +922,12 @@ export async function hybridCorpusSearch(
     if (fallbackPolicy === "lexical-only") {
       const lexicalSelected = diversifyRetrievalCandidates(
         deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
-        { limit: Math.min(RERANK_WINDOW, Math.max(input.limit, input.limit * 2)) },
+        {
+          limit: Math.min(
+            RERANK_WINDOW,
+            Math.max(input.limit, input.limit * 2),
+          ),
+        },
       );
       selected = await hydrateAuthorizedBodies(client, input, lexicalSelected);
     }
@@ -661,8 +936,18 @@ export async function hybridCorpusSearch(
   const winners = selected.slice(0, input.limit);
   const expansionStarted = Date.now();
   const neighbors = await authorizedNeighborUniverse(client, input, winners);
-  const expanded = expandParentAndNeighbors(winners, [...selected, ...neighbors]);
-  stage("expansion", "parent-neighbor-radius-1-v1", winners.length, expanded.length, expansionStarted, "used");
+  const expanded = expandParentAndNeighbors(winners, [
+    ...selected,
+    ...neighbors,
+  ]);
+  stage(
+    "expansion",
+    "parent-neighbor-radius-1-v1",
+    winners.length,
+    expanded.length,
+    expansionStarted,
+    "used",
+  );
   const packingStarted = Date.now();
   const packed = packRetrievalContext(expanded, {
     maximumTokens: 12_000,
@@ -670,7 +955,14 @@ export async function hybridCorpusSearch(
     maximumVisualItems: 8,
     maximumEvidenceItems: input.limit,
   });
-  stage("packing", "evidence-budget-v1", expanded.length, packed.packed.length, packingStarted, "used");
+  stage(
+    "packing",
+    "evidence-budget-v1",
+    expanded.length,
+    packed.packed.length,
+    packingStarted,
+    "used",
+  );
   await trace(packed.packed.map((candidate) => candidate.chunkId));
   const vectorUsed = fallbackReason?.startsWith("rerank:")
     ? fallbackPolicy === "hybrid-without-rerank"

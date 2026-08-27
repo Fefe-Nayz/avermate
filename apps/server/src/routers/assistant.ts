@@ -132,6 +132,7 @@ async function authenticatedAssistantBroker(
 }
 
 const listInput = z.strictObject({
+  projectId: id.optional(),
   cursor,
   limit: z.number().int().min(1).max(100).default(30),
   includeArchived: z.boolean().default(false),
@@ -695,15 +696,9 @@ export const assistantRouter = {
         await assistantRunService.respondToQuestion({
           ownerId: context.session.user.id,
           ...input,
-          broker: await authenticatedAssistantBroker(
-            context,
-            run.approvalMode,
-          ),
+          broker: await authenticatedAssistantBroker(context, run.approvalMode),
         });
-        return coreConversationStore.run(
-          context.session.user.id,
-          input.runId,
-        );
+        return coreConversationStore.run(context.session.user.id, input.runId);
       }),
 
     resume: protectedProcedure

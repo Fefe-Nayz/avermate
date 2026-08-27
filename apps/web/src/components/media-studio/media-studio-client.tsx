@@ -56,7 +56,10 @@ import {
   type ArtifactPlanSeed,
   type ArtifactPlanValue,
 } from "./create-artifact-dialog"
-import { TERMINAL_WORKFLOW_STATUSES } from "./media-studio-model"
+import {
+  selectedArtifactFromResults,
+  TERMINAL_WORKFLOW_STATUSES,
+} from "./media-studio-model"
 import { useMediaStudioCopy } from "./media-studio-copy"
 
 function formatDate(
@@ -70,19 +73,25 @@ function formatDate(
   })
 }
 
-export function MediaStudioClient() {
+export function MediaStudioClient({
+  initialProjectId = null,
+  initialArtifactId = null,
+}: {
+  initialProjectId?: string | null
+  initialArtifactId?: string | null
+}) {
   const t = useExtracted()
   const format = useFormatter()
   const isOnline = useOnlineStatus()
   const { artifactKindLabel, capabilityReason } = useMediaStudioCopy()
   const queryClient = useQueryClient()
-  const [projectId, setProjectId] = useState<string | null>(null)
-  const [tab, setTab] = useState("workflows")
+  const [projectId, setProjectId] = useState<string | null>(initialProjectId)
+  const [tab, setTab] = useState(initialArtifactId ? "artifacts" : "workflows")
   const [createOpen, setCreateOpen] = useState(false)
   const [createSeed, setCreateSeed] = useState<ArtifactPlanSeed | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(
-    null
+    initialArtifactId
   )
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(
     null
@@ -135,12 +144,10 @@ export function MediaStudioClient() {
   })
   const workflow = workflowQuery.data ?? selectedWorkflow
 
-  const selectedArtifact =
-    artifactsQuery.data?.find(
-      (artifact) => artifact.id === selectedArtifactId
-    ) ??
-    artifactsQuery.data?.[0] ??
-    null
+  const selectedArtifact = selectedArtifactFromResults(
+    artifactsQuery.data,
+    selectedArtifactId
+  )
   const revisionsQuery = useQuery({
     ...orpc.mediaStudio.listRevisions.queryOptions({
       input: { artifactId: selectedArtifact?.id ?? "_" },
@@ -501,10 +508,14 @@ export function MediaStudioClient() {
               )}
             </div>
             <p className="mt-2 max-w-prose text-sm text-pretty text-muted-foreground">
-              {videoConsentQuery.data?.notice ??
-                t(
-                  "Only the video you ask for is processed, and the platform's own rules still apply."
-                )}
+              {videoConsentQuery.data?.revision === "video-audio-extraction.v1"
+                ? t(
+                    "Audio extraction starts only when you request it. It is not available for protected, private, authenticated, age-restricted or publisher-blocked media."
+                  )
+                : (videoConsentQuery.data?.notice ??
+                  t(
+                    "Only the video you ask for is processed, and the platform's own rules still apply."
+                  ))}
             </p>
             {videoConsentQuery.data?.active &&
             videoConsentQuery.data.acceptedAt ? (
@@ -562,7 +573,7 @@ export function MediaStudioClient() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList
             variant="line"
-            className="max-w-full overflow-x-auto overflow-y-hidden"
+            className="no-scrollbar max-w-full overflow-x-auto overflow-y-hidden"
           >
             <TabsTrigger value="workflows">
               <SparklesIcon data-icon="inline-start" />

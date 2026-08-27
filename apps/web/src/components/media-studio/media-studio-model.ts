@@ -28,6 +28,15 @@ export function stageCanRetry(status: string): boolean {
   return ["failed", "cancelled"].includes(status)
 }
 
+export function selectedArtifactFromResults<T extends { id: string }>(
+  artifacts: readonly T[] | null | undefined,
+  requestedId: string | null
+): T | null {
+  const fallback = artifacts?.[0]
+  if (!fallback) return null
+  return artifacts.find((artifact) => artifact.id === requestedId) ?? fallback
+}
+
 export function selectedProjectSourceVersions(
   items: readonly {
     contextMode: string

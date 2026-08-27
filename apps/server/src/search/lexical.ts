@@ -75,6 +75,7 @@ function filterSql(input: OwnedLexicalQuery, args: InValue[]) {
   list("sources.yearId", input.yearIds);
   list("sources.subjectId", input.subjectIds);
   list("sources.originKind", input.originKinds);
+  list("sources.id", input.sourceIds ?? []);
   if (input.projectIds.length > 0) {
     clauses.push(`EXISTS (
       SELECT 1

@@ -45,11 +45,7 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
-function runKey(input: {
-  threadId: string;
-  branchId: string;
-  runId: string;
-}) {
+function runKey(input: { threadId: string; branchId: string; runId: string }) {
   return canonicalDigest({
     threadId: input.threadId,
     branchId: input.branchId,
@@ -233,15 +229,20 @@ export class FilesystemConversationStore implements ConversationStore {
     return this.#exclusive((state) => {
       const threadId = snapshot.detail.thread.id;
       const existing = state.dags[threadId];
-      if (existing?.snapshot.ownerId !== undefined &&
-          existing.snapshot.ownerId !== snapshot.ownerId) {
+      if (
+        existing?.snapshot.ownerId !== undefined &&
+        existing.snapshot.ownerId !== snapshot.ownerId
+      ) {
         throw new Error("NODE_CONVERSATION_DAG_OWNER_MISMATCH");
       }
       if (existing?.syncKeys.includes(snapshot.syncKey)) {
         return clone(existing.snapshot);
       }
       const previousMessages = new Map(
-        existing?.snapshot.detail.messages.map((message) => [message.id, message]) ?? [],
+        existing?.snapshot.detail.messages.map((message) => [
+          message.id,
+          message,
+        ]) ?? [],
       );
       const previousEvents = new Map(
         existing?.snapshot.events.map((event) => [event.eventId, event]) ?? [],
@@ -267,7 +268,9 @@ export class FilesystemConversationStore implements ConversationStore {
           ["reserved", "running", "waiting-for-user"].includes(run.status),
         )
         .map((run) => {
-          const events = merged.events.filter((event) => event.runId === run.id);
+          const events = merged.events.filter(
+            (event) => event.runId === run.id,
+          );
           const markdown = events
             .filter((event) => event.type === "text.message.delta")
             .map((event) => {
@@ -284,7 +287,10 @@ export class FilesystemConversationStore implements ConversationStore {
                   {
                     type: "status" as const,
                     id: `stream-${run.id}`,
-                    state: run.status === "reserved" ? "pending" as const : "active" as const,
+                    state:
+                      run.status === "reserved"
+                        ? ("pending" as const)
+                        : ("active" as const),
                     label:
                       run.status === "waiting-for-user"
                         ? "Waiting for your reply"
@@ -328,6 +334,7 @@ export class FilesystemConversationStore implements ConversationStore {
           (detail.thread.deletedAt && !filter.includeDeleted) ||
           (detail.thread.archivedAt && !filter.includeArchived) ||
           (filter.starredOnly && !detail.thread.starredAt) ||
+          (filter.projectId && detail.thread.projectId !== filter.projectId) ||
           (query &&
             !detail.thread.title.toLocaleLowerCase().includes(query) &&
             !matched)
@@ -355,7 +362,10 @@ export class FilesystemConversationStore implements ConversationStore {
       .map(clone);
   }
 
-  async getDag(ownerId: string, threadId: string): Promise<NodeConversationDagGetResult | null> {
+  async getDag(
+    ownerId: string,
+    threadId: string,
+  ): Promise<NodeConversationDagGetResult | null> {
     const state = await this.#load();
     const stored = state.dags[threadId];
     if (!stored || stored.snapshot.ownerId !== ownerId) return null;
@@ -395,7 +405,10 @@ export class FilesystemConversationStore implements ConversationStore {
       }
       delete state.dags[threadId];
       for (const [key, run] of Object.entries(state.runs)) {
-        if (run.record.ownerId === ownerId && run.record.threadId === threadId) {
+        if (
+          run.record.ownerId === ownerId &&
+          run.record.threadId === threadId
+        ) {
           delete state.runs[key];
         }
       }
@@ -436,8 +449,7 @@ export class FilesystemConversationStore implements ConversationStore {
     if (this.#state) return this.#state;
     try {
       const state = JSON.parse(await readFile(this.#path, "utf8")) as
-        | ConversationFile
-        | undefined;
+        ConversationFile | undefined;
       if (!state || ![1, 2].includes(state.version) || !state.runs) {
         throw new Error("NODE_CONVERSATION_STORE_VERSION_UNSUPPORTED");
       }

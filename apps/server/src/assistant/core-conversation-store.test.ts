@@ -7,9 +7,12 @@ import { createCorpusTestDatabase, seedSource } from "../search/test-helpers";
 import { canonicalJson, normalizeForSearch, sha256 } from "../search/values";
 import { AssistantContextManifestService } from "./context-manifest";
 import type {
+  CommittedVersionRef,
   ModelDescriptor,
   ModelGateway,
   ModelGatewayEvent,
+  OwnedSourceIdentity,
+  StagedContentChunk,
 } from "@avermate/agent-contracts";
 import type { Api } from "../mcp/shared";
 import { createFirstPartyToolBroker } from "../tools/first-party";
@@ -21,8 +24,12 @@ import {
 } from "../agent/production-runtime";
 import {
   MockReadOnlyModelGateway,
+  packConversationHistory,
   ReadOnlyAssistantRunService,
 } from "./run-service";
+import { hybridCorpusSearch } from "../search/hybrid";
+import { SqliteFts5LexicalSearchBackend } from "../search/lexical";
+import { RoutedCorpusStore } from "../search/routed-corpus-store";
 import { MOCK_ASSISTANT_MODEL } from "./catalogue";
 import {
   ConversationStoreError,
@@ -56,6 +63,56 @@ afterAll(() => client.close(), databaseHookTimeout);
 
 async function thread(ownerId = "corpus-user-a") {
   return store.createThread({ ownerId, title: "Algèbre" });
+}
+
+async function studyProject(input: {
+  id: string;
+  ownerId?: string;
+  instructions?: string | null;
+  advanced?: boolean;
+}) {
+  const ownerId = input.ownerId ?? "corpus-user-a";
+  const now = Math.floor(Date.now() / 1_000);
+  await client.execute({
+    sql: `INSERT INTO study_projects
+      (id, userId, title, description, instructionsMarkdown,
+       contextPolicyVersion, contextPolicyJson, retrievalMode,
+       retrievalFallbackPolicy, embeddingSpaceId, rerankSpaceId,
+       createdAt, updatedAt)
+      VALUES (?, ?, ?, '', ?, 1, ?, ?, 'lexical-only', ?, ?, ?, ?)`,
+    args: [
+      input.id,
+      ownerId,
+      `Projet ${input.id}`,
+      input.instructions ?? null,
+      JSON.stringify({
+        sourceSelection: "project-items",
+        extractedInstructionsTrusted: false,
+      }),
+      input.advanced ? "advanced-auto" : "lexical-only",
+      input.advanced ? "test-embedding-space" : null,
+      input.advanced ? "test-rerank-space" : null,
+      now,
+      now,
+    ],
+  });
+  return input.id;
+}
+
+async function publishLexicalVersion(input: {
+  corpus: CoreCorpusStore;
+  identity: OwnedSourceIdentity;
+  committed: CommittedVersionRef;
+  chunks: readonly StagedContentChunk[];
+}) {
+  const source = await input.corpus.getSource(input.identity);
+  if (!source) throw new Error("Test source missing after commit");
+  await new SqliteFts5LexicalSearchBackend(client).upsertVersion({
+    ownerId: input.identity.ownerId,
+    source,
+    version: await input.corpus.resolveVersion(input.committed),
+    chunks: [...input.chunks],
+  });
 }
 
 function usage() {
@@ -333,6 +390,44 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
     expect(detail.messages).toHaveLength(0);
     expect(detail.runs).toHaveLength(0);
   });
+
+  test("validates project ownership at creation and lists threads by owned project", async () => {
+    const projectA = await studyProject({
+      id: `project-a-${newId("thread-scope")}`,
+    });
+    const projectB = await studyProject({
+      id: `project-b-${newId("thread-scope")}`,
+      ownerId: "corpus-user-b",
+    });
+    const scoped = await store.createThread({
+      ownerId: "corpus-user-a",
+      title: "Chat du projet",
+      projectId: projectA,
+    });
+    await store.createThread({
+      ownerId: "corpus-user-a",
+      title: "Chat personnel",
+    });
+
+    await expect(
+      store.createThread({
+        ownerId: "corpus-user-a",
+        title: "Projet étranger",
+        projectId: projectB,
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+
+    const listed = await store.listThreads({
+      ownerId: "corpus-user-a",
+      projectId: projectA,
+      includeArchived: true,
+      limit: 100,
+    });
+    expect(listed.items.map((item) => item.thread.id)).toEqual([
+      scoped.thread.id,
+    ]);
+    expect(listed.items[0]?.thread.projectId).toBe(projectA);
+  });
 });
 
 describe("RoutedConversationStore crash recovery", () => {
@@ -344,14 +439,20 @@ describe("RoutedConversationStore crash recovery", () => {
       assertOnline: async () => undefined,
       import: async (input) => {
         if (rejectImports) throw new Error("INJECTED_IMPORT_FAILURE");
-        snapshots.set(input.snapshot.detail.thread.id, structuredClone(input.snapshot));
+        snapshots.set(
+          input.snapshot.detail.thread.id,
+          structuredClone(input.snapshot),
+        );
         return input.snapshot;
       },
       list: async () => [],
       get: async ({ threadId }) => {
         const snapshot = snapshots.get(threadId);
         return snapshot
-          ? { detail: structuredClone(snapshot.detail), events: structuredClone(snapshot.events) }
+          ? {
+              detail: structuredClone(snapshot.detail),
+              events: structuredClone(snapshot.events),
+            }
           : null;
       },
       delete: async ({ threadId }) => {
@@ -412,10 +513,7 @@ describe("RoutedConversationStore crash recovery", () => {
       args: [created.thread.id],
     });
     if (pendingRun.rows[0]) {
-      await routed.cancelRun(
-        "corpus-user-a",
-        String(pendingRun.rows[0].id),
-      );
+      await routed.cancelRun("corpus-user-a", String(pendingRun.rows[0].id));
     }
   });
 
@@ -541,7 +639,10 @@ describe("RoutedConversationStore crash recovery", () => {
       selectedNode: async () => "node-corrupt",
       assertOnline: async () => undefined,
       import: async (input) => {
-        snapshots.set(input.snapshot.detail.thread.id, structuredClone(input.snapshot));
+        snapshots.set(
+          input.snapshot.detail.thread.id,
+          structuredClone(input.snapshot),
+        );
         return input.snapshot;
       },
       list: async () => [],
@@ -777,6 +878,216 @@ describe("context proof handles and exports", () => {
 });
 
 describe("read-only runtime integration", () => {
+  test("inherits project policy, packs branch history and retrieves a far attached chunk through the hybrid kernel", async () => {
+    const subjectId = `subject-${newId("far-context")}`;
+    const sourceId = `source-${newId("far-context")}`;
+    const projectId = await studyProject({
+      id: `project-${newId("advanced-context")}`,
+      instructions: "Réponds en français et distingue toujours les preuves.",
+      advanced: true,
+    });
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Document lointain', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", "corpus-user-a", now, now],
+    });
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
+    const corpus = new CoreCorpusStore(client);
+    const chunks = Array.from({ length: 31 }, (_, ordinal) => {
+      const text =
+        ordinal === 30
+          ? "Le xylophore tardif désigne la preuve située après les vingt-quatre premiers passages."
+          : `Passage ${ordinal} sans le terme cible du test.`;
+      return {
+        ordinal,
+        text,
+        normalizedText: normalizeForSearch(text),
+        tokenEstimate: Math.ceil(text.length / 4),
+        contentHash: sha256(text),
+        locator: {
+          kind: "text" as const,
+          startOffset: ordinal * 100,
+          endOffset: ordinal * 100 + text.length,
+        },
+        headingPath: null,
+        evidenceKind: "native-text" as const,
+      };
+    });
+    const identity = {
+      ownerId: "corpus-user-a",
+      originKind: "subject" as const,
+      originId: subjectId,
+    };
+    const staged = await corpus.stageVersion({
+      identity,
+      sourceId,
+      versionKey: `far-context-${newId("version")}`,
+      contentHash: sha256(chunks.map((chunk) => chunk.text).join("\n")),
+      extractorId: "far-context-test",
+      extractorVersion: "1",
+      mimeType: "text/plain",
+      language: "fr",
+      byteSize: chunks.reduce((sum, chunk) => sum + chunk.text.length, 0),
+      locatorSchemaVersion: 1,
+      metadata: {},
+      chunks,
+    });
+    const committed = await corpus.commitVersion({
+      ownerId: identity.ownerId,
+      stagingId: staged.stagingId,
+      expectedSourceId: sourceId,
+      expectedPreviousVersionId: null,
+    });
+    await publishLexicalVersion({ corpus, identity, committed, chunks });
+    const farChunkId = String(
+      (
+        await client.execute({
+          sql: `SELECT id FROM content_chunks
+            WHERE versionId = ? AND ordinal = 30 LIMIT 1`,
+          args: [committed.versionId],
+        })
+      ).rows[0]!.id,
+    );
+
+    const created = await store.createThread({
+      ownerId: identity.ownerId,
+      title: "Révision avancée",
+      projectId,
+    });
+    const capturedRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
+    const baseGateway = new MockReadOnlyModelGateway();
+    const gateway: ModelGateway = {
+      listModels: () => baseGateway.listModels(),
+      stream: async function* (request) {
+        capturedRequests.push(request);
+        yield* baseGateway.stream(request);
+      },
+      embed: () => baseGateway.embed(),
+      transcribe: () => baseGateway.transcribe(),
+      estimate: () => baseGateway.estimate(),
+    };
+    const retrievalCalls: Array<{
+      input: Parameters<typeof hybridCorpusSearch>[0];
+      policyProjectIds: readonly string[];
+    }> = [];
+    const broker = createFirstPartyToolBroker({} as Api);
+    const service = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: baseGateway.descriptor,
+          gateway,
+        }),
+      },
+      () => broker.registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input, options) => {
+        retrievalCalls.push({
+          input,
+          policyProjectIds: [...(options.policyProjectIds ?? [])],
+        });
+        return hybridCorpusSearch(input, {
+          ...options,
+          runtime: null,
+          reranker: null,
+          persistTrace: false,
+        });
+      },
+    );
+
+    const first = await store.reserveTurn({
+      ownerId: identity.ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `history-first-${newId("request")}`,
+      markdown: "Mémorise que mon repère de travail est BLEU-ALPHA.",
+      modelKey: "mock-readonly",
+    });
+    await service.runNow(identity.ownerId, first.runId, broker);
+    const second = await store.reserveTurn({
+      ownerId: identity.ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: first.reservedOutputMessageId,
+      clientRequestId: `history-second-${newId("request")}`,
+      markdown: "Que signifie xylophore tardif dans la source jointe ?",
+      modelKey: "mock-readonly",
+      attachments: [
+        { kind: "subject", referenceId: subjectId, label: "Source longue" },
+      ],
+    });
+    await service.runNow(identity.ownerId, second.runId, broker);
+
+    expect(retrievalCalls).toHaveLength(2);
+    expect(retrievalCalls[0]).toMatchObject({
+      input: { projectIds: [projectId] },
+      policyProjectIds: [projectId],
+    });
+    expect(retrievalCalls[1]).toMatchObject({
+      input: { projectIds: [], sourceIds: [sourceId] },
+      policyProjectIds: [projectId],
+    });
+    const secondRequest = capturedRequests[1]!;
+    const policy = secondRequest.messages.find(
+      (block) =>
+        block.mediaType === "application/vnd.avermate.project-policy+json",
+    );
+    expect(policy?.content).toContain('"inheritedFromThread":true');
+    expect(policy?.content).toContain('"mode":"advanced-auto"');
+    expect(
+      secondRequest.messages.some(
+        (block) =>
+          block.sourceRef === `project:${projectId}` &&
+          block.content.includes("Réponds en français"),
+      ),
+    ).toBe(true);
+    const history = secondRequest.messages.find(
+      (block) =>
+        block.mediaType ===
+        "application/vnd.avermate.conversation-history+json",
+    );
+    expect(history?.content).toContain("BLEU-ALPHA");
+    expect(history?.content).toContain('"role":"assistant"');
+    expect(
+      secondRequest.messages
+        .filter((block) => block.trust === "retrieved-untrusted")
+        .map((block) => block.sourceRef),
+    ).toContain(farChunkId);
+    const retrievalMetadata = secondRequest.messages.find(
+      (block) =>
+        block.mediaType === "application/vnd.avermate.retrieval-run+json",
+    );
+    expect(retrievalMetadata?.content).toContain(
+      '"fallbackReason":"dense:dense-provider-unavailable"',
+    );
+
+    const exactHistory = await store.historyBeforeMessage(
+      identity.ownerId,
+      created.thread.id,
+      second.userMessageId,
+    );
+    const packedA = packConversationHistory(exactHistory, 700);
+    const packedB = packConversationHistory(exactHistory, 700);
+    expect(packedA).toEqual(packedB);
+    expect(
+      new TextEncoder().encode(packedA!.content).byteLength,
+    ).toBeLessThanOrEqual(700);
+    expect(packedA?.messageIds.at(-1)).toBe(first.reservedOutputMessageId);
+  });
+
   test("persists only explicitly selected proof handles and binds them to text claims", async () => {
     const subjectId = `subject-${newId("citation")}`;
     const sourceId = `source-${newId("citation")}`;
@@ -788,12 +1099,30 @@ describe("read-only runtime integration", () => {
         ) VALUES (?, 'Biologie citée', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
       args: [subjectId, "corpus-year-a", "corpus-user-a", now, now],
     });
-    await seedSource(client, { id: sourceId, originId: subjectId });
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
     const corpus = new CoreCorpusStore(client);
     const passages = [
       "La mitochondrie produit une grande partie de l’ATP cellulaire.",
       "Le noyau contient la majeure partie du génome de la cellule.",
     ];
+    const chunks = passages.map((text, ordinal) => ({
+      ordinal,
+      text,
+      normalizedText: normalizeForSearch(text),
+      tokenEstimate: Math.ceil(text.length / 4),
+      contentHash: sha256(text),
+      locator: {
+        kind: "text" as const,
+        startOffset: 0,
+        endOffset: text.length,
+      },
+      headingPath: null,
+      evidenceKind: "native-text" as const,
+    }));
     const staged = await corpus.stageVersion({
       identity: {
         ownerId: "corpus-user-a",
@@ -810,26 +1139,23 @@ describe("read-only runtime integration", () => {
       byteSize: passages.join("\n").length,
       locatorSchemaVersion: 1,
       metadata: {},
-      chunks: passages.map((text, ordinal) => ({
-        ordinal,
-        text,
-        normalizedText: normalizeForSearch(text),
-        tokenEstimate: Math.ceil(text.length / 4),
-        contentHash: sha256(text),
-        locator: {
-          kind: "text" as const,
-          startOffset: 0,
-          endOffset: text.length,
-        },
-        headingPath: null,
-        evidenceKind: "native-text" as const,
-      })),
+      chunks,
     });
-    await corpus.commitVersion({
+    const committed = await corpus.commitVersion({
       ownerId: "corpus-user-a",
       stagingId: staged.stagingId,
       expectedSourceId: sourceId,
       expectedPreviousVersionId: null,
+    });
+    await publishLexicalVersion({
+      corpus,
+      identity: {
+        ownerId: "corpus-user-a",
+        originKind: "subject",
+        originId: subjectId,
+      },
+      committed,
+      chunks,
     });
 
     const created = await thread();
@@ -1047,7 +1373,7 @@ describe("read-only runtime integration", () => {
         }),
       },
       () => broker.registry,
-      new CorpusIndexService(client),
+      new CorpusIndexService(client, new RoutedCorpusStore(client)),
     );
 
     await service.runNow("corpus-user-a", reservation.runId, broker);

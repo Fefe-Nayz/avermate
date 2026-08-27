@@ -1431,7 +1431,7 @@ export function firstPartyToolDescriptors(
       id: "learning.mastery.get",
       title: "Read one mastery projection",
       description:
-        "Read one current owned estimate with its objective, concept, interval and algorithm revision.",
+        "Read one current owned projection with its objective, concept and interval. A neutral prior remains inspectable under projection but is explicitly unmeasured until measurement is non-null.",
       scope: "avermate:learning.read",
       inputSchema: z.strictObject({ objectiveId: id }),
       execute: (client, input) => client.learning.mastery.get(input),
@@ -1441,7 +1441,7 @@ export function firstPartyToolDescriptors(
       id: "learning.mastery.list",
       title: "List mastery projections",
       description:
-        "List current estimates, intervals, evidence counts and algorithm revisions for an owned academic scope.",
+        "List current projections, honest measurement state, intervals, evidence counts and algorithm revisions for an owned academic scope.",
       scope: "avermate:learning.read",
       inputSchema: z.strictObject({
         yearId: id,
@@ -1466,7 +1466,10 @@ export function firstPartyToolDescriptors(
       description:
         "List pedagogical recommendations and their authoritative planning-task links.",
       scope: "avermate:learning.read",
-      inputSchema: z.strictObject({ yearId: id }),
+      inputSchema: z.strictObject({
+        yearId: id,
+        subjectId: id.nullable().optional(),
+      }),
       execute: (client, input) => client.learning.plan.list(input),
     }),
     readDescriptor({

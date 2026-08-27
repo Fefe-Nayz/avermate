@@ -5,6 +5,7 @@ import {
   sourceLocatorV1Schema,
   type AgentApprovalMode,
   type AssistantPartV1,
+  type AssistantMessage,
   type AssistantRunModelPolicy,
   type ContextBlock,
   type ModelCapability,
@@ -15,15 +16,17 @@ import {
   type ModelPlacement,
   type ModelReadiness,
   type OwnedSourceIdentity,
+  type OwnedLexicalQuery,
 } from "@avermate/agent-contracts";
 import { z } from "zod";
 import { newId } from "../lib/id";
 import type { LexicalSearchBackend } from "@avermate/agent-contracts";
 import { SqliteFts5LexicalSearchBackend } from "../search/lexical";
 import {
-  RoutedCorpusContentReader,
-  type AuthorizedCorpusChunkRow,
-} from "../search/corpus-content-reader";
+  hybridCorpusSearch,
+  type HybridCorpusSearchOptions,
+  type HybridSearchResult,
+} from "../search/hybrid";
 import { canonicalJson, sha256 } from "../search/values";
 import {
   noOpToolCapabilities,
@@ -257,6 +260,124 @@ function runConfiguration(partsJson: unknown) {
   };
 }
 
+const contextEncoder = new TextEncoder();
+
+function utf8Bytes(value: string) {
+  return contextEncoder.encode(value).byteLength;
+}
+
+/** Return a deterministic prefix without ever exceeding the byte fence. */
+function boundedUtf8Prefix(value: string, maximumBytes: number) {
+  if (maximumBytes <= 0) return "";
+  if (utf8Bytes(value) <= maximumBytes) return value;
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (utf8Bytes(value.slice(0, middle)) <= maximumBytes) low = middle;
+    else high = middle - 1;
+  }
+  return value.slice(0, low);
+}
+
+function historicalMessageText(message: AssistantMessage) {
+  return message.parts
+    .flatMap((part) => {
+      if (part.type === "text") return [part.markdown];
+      if (part.type === "safe-error") {
+        return [`[${part.code}] ${part.message}`];
+      }
+      return [];
+    })
+    .join("\n\n")
+    .trim();
+}
+
+export type PackedConversationHistory = {
+  content: string;
+  messageIds: readonly string[];
+  truncated: boolean;
+};
+
+/**
+ * Pack the newest contiguous suffix of one exact branch path, then restore
+ * chronological order. A single oversized newest turn is deterministically
+ * truncated instead of allowing older siblings or arbitrary rows to leak in.
+ */
+export function packConversationHistory(
+  messages: readonly AssistantMessage[],
+  maximumUtf8Bytes: number,
+): PackedConversationHistory | null {
+  if (!Number.isSafeInteger(maximumUtf8Bytes) || maximumUtf8Bytes <= 0) {
+    return null;
+  }
+  const entries = messages.flatMap((message) => {
+    const markdown = historicalMessageText(message);
+    return markdown
+      ? [
+          {
+            id: message.id,
+            role: message.role,
+            authorship: message.authorship,
+            markdown,
+          },
+        ]
+      : [];
+  });
+  const serialize = (selected: typeof entries, truncated: boolean) =>
+    canonicalJson({
+      schemaVersion: 1,
+      kind: "conversation-branch-history",
+      chronological: true,
+      truncated,
+      messages: selected,
+    });
+  const selected: typeof entries = [];
+  let truncated = false;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const candidate = entries[index]!;
+    const next = [candidate, ...selected];
+    if (utf8Bytes(serialize(next, false)) <= maximumUtf8Bytes) {
+      selected.unshift(candidate);
+      continue;
+    }
+    truncated = true;
+    if (selected.length === 0) {
+      let low = 0;
+      let high = candidate.markdown.length;
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        const partial = [
+          { ...candidate, markdown: candidate.markdown.slice(0, middle) },
+        ];
+        if (utf8Bytes(serialize(partial, true)) <= maximumUtf8Bytes)
+          low = middle;
+        else high = middle - 1;
+      }
+      if (low > 0) {
+        selected.push({
+          ...candidate,
+          markdown: candidate.markdown.slice(0, low),
+        });
+      }
+    }
+    break;
+  }
+  if (selected.length === 0) return null;
+  const content = serialize(selected, truncated);
+  if (utf8Bytes(content) > maximumUtf8Bytes) return null;
+  return {
+    content,
+    messageIds: selected.map((entry) => entry.id),
+    truncated,
+  };
+}
+
+export type AssistantContextRetriever = (
+  input: OwnedLexicalQuery,
+  options: HybridCorpusSearchOptions,
+) => Promise<HybridSearchResult>;
+
 const sourceKindForAttachment = {
   material: "material",
   document: "study-document",
@@ -286,7 +407,7 @@ export class MockReadOnlyModelGateway implements ModelGateway {
   }
 
   async *stream(request: Parameters<ModelGateway["stream"]>[0]) {
-    const question = request.messages.find(
+    const question = request.messages.findLast(
       (message) => message.trust === "user-instruction",
     )?.content;
     const evidence = request.messages.filter(
@@ -337,6 +458,7 @@ export class MockReadOnlyModelGateway implements ModelGateway {
 export class AssistantGraphExecutor {
   readonly #active = new Map<string, AbortController>();
   readonly #lexical: Pick<LexicalSearchBackend, "search">;
+  readonly #retrieval: AssistantContextRetriever;
   readonly #manifests: AssistantContextManifestService;
 
   constructor(
@@ -347,8 +469,10 @@ export class AssistantGraphExecutor {
     private readonly sourceIndexer?: ExplicitSourceIndexer,
     private readonly checkpoints?: CoreConversationCheckpointStore,
     lexical?: Pick<LexicalSearchBackend, "search">,
+    retrieval?: AssistantContextRetriever,
   ) {
     this.#lexical = lexical ?? new SqliteFts5LexicalSearchBackend(client);
+    this.#retrieval = retrieval ?? hybridCorpusSearch;
     this.#manifests = new AssistantContextManifestService(client);
   }
 
@@ -577,15 +701,17 @@ export class AssistantGraphExecutor {
       },
     ];
     const maxTokens = Math.min(
-      ...[selection, ...(selection.fallbackSelections ?? [])].map((candidate) =>
-        typeof candidate.descriptor.contextWindow === "number"
-          ? candidate.descriptor.contextWindow
-          : 16_384,
+      ...[selection, ...(selection.fallbackSelections ?? [])].map(
+        (candidate) =>
+          typeof candidate.descriptor.contextWindow === "number"
+            ? candidate.descriptor.contextWindow
+            : 16_384,
       ),
     );
     const usedTokens = Math.ceil(
       blocks.reduce(
-        (sum, block) => sum + new TextEncoder().encode(block.content).byteLength,
+        (sum, block) =>
+          sum + new TextEncoder().encode(block.content).byteLength,
         0,
       ) / 4,
     );
@@ -710,7 +836,11 @@ export class AssistantGraphExecutor {
     }> = [];
     for (const claim of parsedAnswer.claims) {
       const claimPartId = newId("apart");
-      answerParts.push({ type: "text", id: claimPartId, markdown: claim.markdown });
+      answerParts.push({
+        type: "text",
+        id: claimPartId,
+        markdown: claim.markdown,
+      });
       for (const proofHandleId of claim.proofHandleIds) {
         const ordinal = citations.length;
         citations.push({ ordinal, proofHandleId, claimPartId });
@@ -744,10 +874,9 @@ export class AssistantGraphExecutor {
       modelKey: completedSelection.capability.modelKey,
       modelRevision:
         completedSelection.modelRevision ?? completedSelection.descriptor.id,
-      source:
-        Object.values(usage).every((item) => item === "unknown")
-          ? "unknown"
-          : "provider",
+      source: Object.values(usage).every((item) => item === "unknown")
+        ? "unknown"
+        : "provider",
       inputTokens: token(usage.inputTokens),
       outputTokens: token(usage.outputTokens),
       reasoningTokens: token(usage.reasoningTokens),
@@ -926,10 +1055,11 @@ export class AssistantGraphExecutor {
       const question = inputMarkdown(storedParts);
       const configuration = runConfiguration(storedParts);
       const maxTokens = Math.min(
-        ...[selection, ...(selection.fallbackSelections ?? [])].map((candidate) =>
-          typeof candidate.descriptor.contextWindow === "number"
-            ? candidate.descriptor.contextWindow
-            : 16_384,
+        ...[selection, ...(selection.fallbackSelections ?? [])].map(
+          (candidate) =>
+            typeof candidate.descriptor.contextWindow === "number"
+              ? candidate.descriptor.contextWindow
+              : 16_384,
         ),
       );
       const reservedOutputTokens = Math.min(
@@ -985,19 +1115,6 @@ export class AssistantGraphExecutor {
           redactions: [],
         });
       }
-      const boundedQuestion = question.slice(
-        0,
-        Math.max(1_000, contextByteBudget >> 1),
-      );
-      addBlock({
-        id: newId("ctx"),
-        trust: "user-instruction",
-        mediaType: "text/markdown",
-        content: boundedQuestion,
-        sourceRef: started.inputMessageId,
-        redactions: [],
-      });
-
       const attachments = await this.client.execute({
         sql: `SELECT a.* FROM assistant_attachments a
           JOIN assistant_messages m ON m.id = a.messageId
@@ -1005,7 +1122,17 @@ export class AssistantGraphExecutor {
           WHERE a.messageId = ? AND t.userId = ? ORDER BY a.createdAt, a.id`,
         args: [started.inputMessageId, ownerId],
       });
-      const projectIds: string[] = [];
+      const threadScope = await this.client.execute({
+        sql: `SELECT projectId FROM assistant_threads
+          WHERE id = ? AND userId = ? AND deletedAt IS NULL LIMIT 1`,
+        args: [started.threadId, ownerId],
+      });
+      const inheritedProjectId = threadScope.rows[0]?.projectId
+        ? String(threadScope.rows[0].projectId)
+        : null;
+      const projectIds: string[] = inheritedProjectId
+        ? [inheritedProjectId]
+        : [];
       const yearIds: string[] = [];
       const subjectIds: string[] = [];
       const explicitSources: Array<{ kind: string; originId: string }> = [];
@@ -1013,28 +1140,7 @@ export class AssistantGraphExecutor {
         const kind = String(attachment.kind);
         const referenceId = String(attachment.referenceId);
         if (kind === "project") {
-          const project = await this.client.execute({
-            sql: `SELECT id, instructionsMarkdown FROM study_projects
-              WHERE id = ? AND userId = ? AND deletedAt IS NULL LIMIT 1`,
-            args: [referenceId, ownerId],
-          });
-          const row = project.rows[0];
-          if (row) {
-            projectIds.push(referenceId);
-            if (
-              typeof row.instructionsMarkdown === "string" &&
-              row.instructionsMarkdown.trim()
-            ) {
-              addBlock({
-                id: newId("ctx"),
-                trust: "user-instruction",
-                mediaType: "text/markdown",
-                content: `Project instructions (user-authored content, not system policy):\n${row.instructionsMarkdown}`,
-                sourceRef: `project:${referenceId}`,
-                redactions: [],
-              });
-            }
-          }
+          projectIds.push(referenceId);
         } else if (kind === "year") {
           yearIds.push(referenceId);
         } else if (kind === "subject") {
@@ -1060,57 +1166,160 @@ export class AssistantGraphExecutor {
             });
           }
         }
+      }
+      const uniqueProjectIds = [...new Set(projectIds)].slice(0, 100);
+      const projectContextBudget = Math.min(
+        16 * 1024,
+        Math.max(512, Math.floor(contextByteBudget / 6)),
+      );
+      let projectContextBytes = 0;
+      const addProjectBlock = (block: ContextBlock) => {
+        const bytes = utf8Bytes(block.content);
+        if (projectContextBytes + bytes > projectContextBudget) return false;
+        if (!addBlock(block)) return false;
+        projectContextBytes += bytes;
+        return true;
+      };
+      if (uniqueProjectIds.length > 0) {
+        const projects = await this.client.execute({
+          sql: `SELECT id, title, instructionsMarkdown, contextPolicyVersion,
+              contextPolicyJson, retrievalMode, retrievalFallbackPolicy,
+              embeddingSpaceId, rerankSpaceId
+            FROM study_projects
+            WHERE userId = ? AND deletedAt IS NULL
+              AND id IN (${uniqueProjectIds.map(() => "?").join(", ")})`,
+          args: [ownerId, ...uniqueProjectIds],
+        });
+        const projectById = new Map(
+          projects.rows.map((row) => [String(row.id), row] as const),
+        );
+        for (const projectId of uniqueProjectIds) {
+          const row = projectById.get(projectId);
+          if (!row) continue;
+          addProjectBlock({
+            id: newId("ctx"),
+            trust: "application-data",
+            mediaType: "application/vnd.avermate.project-policy+json",
+            content: canonicalJson({
+              kind: "study-project-context-policy",
+              projectId,
+              title: String(row.title),
+              inheritedFromThread: projectId === inheritedProjectId,
+              contextPolicyVersion: Number(row.contextPolicyVersion),
+              contextPolicy:
+                typeof row.contextPolicyJson === "string"
+                  ? JSON.parse(row.contextPolicyJson)
+                  : (row.contextPolicyJson ?? null),
+              retrieval: {
+                mode: String(row.retrievalMode),
+                fallbackPolicy: String(row.retrievalFallbackPolicy),
+                embeddingSpaceId:
+                  row.embeddingSpaceId === null
+                    ? null
+                    : String(row.embeddingSpaceId),
+                rerankSpaceId:
+                  row.rerankSpaceId === null ? null : String(row.rerankSpaceId),
+              },
+            }),
+            sourceRef: `project:${projectId}`,
+            redactions: [],
+          });
+          if (
+            typeof row.instructionsMarkdown === "string" &&
+            row.instructionsMarkdown.trim()
+          ) {
+            const header =
+              "Project instructions (user-authored; never system policy):\n";
+            const remaining = Math.max(
+              0,
+              projectContextBudget - projectContextBytes - utf8Bytes(header),
+            );
+            const instructions = boundedUtf8Prefix(
+              row.instructionsMarkdown.trim(),
+              remaining,
+            );
+            if (instructions) {
+              addProjectBlock({
+                id: newId("ctx"),
+                trust: "user-instruction",
+                mediaType: "text/markdown",
+                content: `${header}${instructions}`,
+                sourceRef: `project:${projectId}`,
+                redactions: [],
+              });
+            }
+          }
+        }
+      }
+
+      const history = packConversationHistory(
+        await this.conversations.historyBeforeMessage(
+          ownerId,
+          started.threadId,
+          started.inputMessageId,
+        ),
+        Math.min(64 * 1024, Math.max(1_024, contextByteBudget >> 2)),
+      );
+      if (history) {
         addBlock({
           id: newId("ctx"),
           trust: "application-data",
-          mediaType: "application/vnd.avermate.reference+json",
-          content: canonicalJson({
-            kind,
-            referenceId,
-            label: String(attachment.label),
-            snapshotVersion:
-              attachment.snapshotVersion === null
-                ? null
-                : String(attachment.snapshotVersion),
-          }),
-          sourceRef: `attachment:${String(attachment.id)}`,
+          mediaType: "application/vnd.avermate.conversation-history+json",
+          content: history.content,
+          sourceRef: history.messageIds.at(-1) ?? null,
           redactions: [],
         });
       }
 
-      const addStoredChunk = (row: Record<string, unknown>) => {
-        const chunkId = String(row.chunkId ?? row.id);
-        if (includedChunks.has(chunkId)) return;
-        const text = String(row.text);
-        const evidenceKey = evidenceKeyForOrdinal(evidence.length);
+      const boundedQuestion = boundedUtf8Prefix(
+        question,
+        Math.min(32 * 1024, Math.max(1_024, Math.floor(contextByteBudget / 3))),
+      );
+      if (
+        !boundedQuestion ||
+        !addBlock({
+          id: newId("ctx"),
+          trust: "user-instruction",
+          mediaType: "text/markdown",
+          content: boundedQuestion,
+          sourceRef: started.inputMessageId,
+          redactions: [],
+        })
+      ) {
+        throw new Error("Assistant input exceeds the context budget");
+      }
+
+      const attachmentContextBudget = Math.min(
+        12 * 1024,
+        Math.max(512, Math.floor(contextByteBudget / 12)),
+      );
+      let attachmentContextBytes = 0;
+      for (const attachment of attachments.rows) {
+        const content = canonicalJson({
+          kind: String(attachment.kind),
+          referenceId: String(attachment.referenceId),
+          label: String(attachment.label),
+          snapshotVersion:
+            attachment.snapshotVersion === null
+              ? null
+              : String(attachment.snapshotVersion),
+        });
+        const bytes = utf8Bytes(content);
+        if (attachmentContextBytes + bytes > attachmentContextBudget) break;
         if (
-          !addBlock({
+          addBlock({
             id: newId("ctx"),
-            trust: "retrieved-untrusted",
-            mediaType: "application/vnd.avermate.evidence+json",
-            content: citedEvidenceContextContent({
-              evidenceKey,
-              content: text,
-            }),
-            sourceRef: chunkId,
+            trust: "application-data",
+            mediaType: "application/vnd.avermate.reference+json",
+            content,
+            sourceRef: `attachment:${String(attachment.id)}`,
             redactions: [],
           })
         ) {
-          return;
+          attachmentContextBytes += bytes;
         }
-        includedChunks.add(chunkId);
-        evidence.push({
-          sourceVersionId: String(row.versionId),
-          chunkId,
-          locator: sourceLocatorV1Schema.parse(
-            typeof row.locatorJson === "string"
-              ? JSON.parse(row.locatorJson)
-              : row.locatorJson,
-          ),
-          evidenceDigest: sha256(text),
-          quotedContentHash: String(row.contentHash),
-        });
-      };
+      }
+
       const uniqueExplicitSources = [
         ...new Map(
           explicitSources.map((source) => [
@@ -1119,92 +1328,120 @@ export class AssistantGraphExecutor {
           ]),
         ).values(),
       ].slice(0, 50);
-      for (const [index, source] of uniqueExplicitSources.entries()) {
-        if (this.sourceIndexer && index < 8) {
-          const indexed = await this.client.execute({
-            sql: `SELECT currentVersionId FROM content_sources
-              WHERE userId = ? AND originKind = ? AND originId = ? LIMIT 1`,
-            args: [ownerId, source.kind, source.originId],
-          });
-          if (!indexed.rows[0]?.currentVersionId) {
-            try {
-              await this.sourceIndexer.indexSource(
-                {
-                  ownerId,
-                  originKind: source.kind as OwnedSourceIdentity["originKind"],
-                  originId: source.originId,
-                },
-                { signal },
-              );
-            } catch (error) {
-              signal.throwIfAborted();
-              addBlock({
-                id: newId("ctx"),
-                trust: "application-data",
-                mediaType: "text/plain",
-                content:
-                  "An explicitly attached source could not be indexed for this run. Do not claim to have read it.",
-                sourceRef: `source:${source.kind}:${source.originId}`,
-                redactions: [],
-              });
-              console.error(
-                "[assistant] explicit source indexing failed",
-                error instanceof Error ? error.message : "Unknown error",
-              );
-            }
-          }
-        }
-        const chunks = await this.client.execute({
-          sql: `SELECT c.id AS chunkId, c.versionId, c.text,
-              c.normalizedText, c.contentHash, c.locatorJson,
-              c.headingPathJson, s.userId, s.placement, s.placementRef
-            FROM content_sources s
-            JOIN content_versions v ON v.id = s.currentVersionId
-            JOIN content_chunks c ON c.versionId = v.id
-            WHERE s.userId = ? AND s.originKind = ? AND s.originId = ?
-            ORDER BY c.ordinal LIMIT 24`,
+      const explicitSourceIds: string[] = [];
+      for (const source of uniqueExplicitSources) {
+        let indexed = await this.client.execute({
+          sql: `SELECT id, currentVersionId FROM content_sources
+            WHERE userId = ? AND originKind = ? AND originId = ? LIMIT 1`,
           args: [ownerId, source.kind, source.originId],
         });
-        const bodies = await new RoutedCorpusContentReader(this.client).hydrate(
-          chunks.rows as unknown as AuthorizedCorpusChunkRow[],
-        );
-        for (const chunk of chunks.rows) {
-          const body = bodies.get(String(chunk.chunkId));
-          if (body) addStoredChunk({ ...chunk, text: body.text });
+        if (!indexed.rows[0]?.currentVersionId && this.sourceIndexer) {
+          try {
+            await this.sourceIndexer.indexSource(
+              {
+                ownerId,
+                originKind: source.kind as OwnedSourceIdentity["originKind"],
+                originId: source.originId,
+              },
+              { signal },
+            );
+            indexed = await this.client.execute({
+              sql: `SELECT id, currentVersionId FROM content_sources
+                WHERE userId = ? AND originKind = ? AND originId = ? LIMIT 1`,
+              args: [ownerId, source.kind, source.originId],
+            });
+          } catch (error) {
+            signal.throwIfAborted();
+            console.error(
+              "[assistant] explicit source indexing failed",
+              error instanceof Error ? error.message : "Unknown error",
+            );
+          }
+        }
+        const row = indexed.rows[0];
+        if (row?.id && row.currentVersionId) {
+          explicitSourceIds.push(String(row.id));
         }
       }
 
-      const candidates = boundedQuestion
-        ? await this.#lexical.search({
-            ownerId,
-            query: boundedQuestion.slice(0, 2_000),
-            mode: "terms",
-            projectIds,
-            yearIds,
-            subjectIds,
-            originKinds: [],
-            limit: 8,
-            cursor: null,
-          })
-        : [];
+      const uniqueExplicitSourceIds = [...new Set(explicitSourceIds)];
+      const explicitScopeRequested = uniqueExplicitSources.length > 0;
+      const retrieval =
+        explicitScopeRequested && uniqueExplicitSourceIds.length === 0
+          ? null
+          : await this.#retrieval(
+              {
+                ownerId,
+                query: boundedQuestion.slice(0, 2_000),
+                mode: "terms",
+                projectIds: explicitScopeRequested ? [] : uniqueProjectIds,
+                ...(explicitScopeRequested
+                  ? { sourceIds: uniqueExplicitSourceIds }
+                  : {}),
+                yearIds: [...new Set(yearIds)],
+                subjectIds: [...new Set(subjectIds)],
+                originKinds: [],
+                limit: 12,
+                cursor: null,
+              },
+              {
+                client: this.client,
+                lexical: this.#lexical,
+                signal,
+                policyProjectIds: uniqueProjectIds,
+              },
+            );
       signal.throwIfAborted();
-      for (const candidate of candidates) {
-        const chunk = await this.client.execute({
-          sql: `SELECT c.id AS chunkId, c.versionId, c.text,
-              c.normalizedText, c.contentHash, c.locatorJson,
-              c.headingPathJson, s.userId, s.placement, s.placementRef
-            FROM content_chunks c JOIN content_versions v ON v.id = c.versionId
-            JOIN content_sources s ON s.id = v.sourceId
-            WHERE c.id = ? AND c.versionId = ? AND s.userId = ? LIMIT 1`,
-          args: [candidate.chunkId, candidate.versionId, ownerId],
-        });
-        if (chunk.rows[0]) {
-          const body = (
-            await new RoutedCorpusContentReader(this.client).hydrate([
-              chunk.rows[0] as unknown as AuthorizedCorpusChunkRow,
-            ])
-          ).get(String(chunk.rows[0].chunkId));
-          if (body) addStoredChunk({ ...chunk.rows[0], text: body.text });
+      addBlock({
+        id: newId("ctx"),
+        trust: "application-data",
+        mediaType: "application/vnd.avermate.retrieval-run+json",
+        content: canonicalJson({
+          kind: "assistant-context-retrieval",
+          scope: {
+            projectIds: uniqueProjectIds,
+            explicitSourceCount: uniqueExplicitSources.length,
+            searchableExplicitSourceCount: uniqueExplicitSourceIds.length,
+            yearIds: [...new Set(yearIds)],
+            subjectIds: [...new Set(subjectIds)],
+          },
+          mode: retrieval?.retrievalMode ?? "unavailable",
+          fallbackReason:
+            retrieval?.fallbackReason ??
+            (explicitScopeRequested
+              ? "explicit-sources-not-indexed"
+              : "retrieval-unavailable"),
+          operationId: retrieval?.operationId ?? null,
+          evidenceCount: retrieval?.candidates.length ?? 0,
+        }),
+        sourceRef: retrieval?.operationId ?? started.inputMessageId,
+        redactions: [],
+      });
+      for (const candidate of retrieval?.candidates ?? []) {
+        if (includedChunks.has(candidate.chunkId)) continue;
+        const text = candidate.text ?? candidate.snippet;
+        const evidenceKey = evidenceKeyForOrdinal(evidence.length);
+        if (
+          addBlock({
+            id: newId("ctx"),
+            trust: "retrieved-untrusted",
+            mediaType: "application/vnd.avermate.evidence+json",
+            content: citedEvidenceContextContent({
+              evidenceKey,
+              content: text,
+            }),
+            sourceRef: candidate.chunkId,
+            redactions: [],
+          })
+        ) {
+          includedChunks.add(candidate.chunkId);
+          evidence.push({
+            sourceVersionId: candidate.versionId,
+            chunkId: candidate.chunkId,
+            locator: sourceLocatorV1Schema.parse(candidate.locator),
+            evidenceDigest: sha256(text),
+            quotedContentHash: candidate.contentHash,
+          });
         }
       }
       const usedTokens = Math.ceil(
@@ -1711,10 +1948,9 @@ export class AssistantGraphExecutor {
         modelKey: completedSelection.capability.modelKey,
         modelRevision:
           completedSelection.modelRevision ?? completedSelection.descriptor.id,
-        source:
-          Object.values(usage).every((item) => item === "unknown")
-            ? "unknown"
-            : "provider",
+        source: Object.values(usage).every((item) => item === "unknown")
+          ? "unknown"
+          : "provider",
         inputTokens: token(usage.inputTokens),
         outputTokens: token(usage.outputTokens),
         reasoningTokens: token(usage.reasoningTokens),
