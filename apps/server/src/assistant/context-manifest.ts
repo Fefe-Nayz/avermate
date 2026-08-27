@@ -44,6 +44,10 @@ export class AssistantContextManifestService {
       maxTokens: number;
       usedTokens: number;
       reservedOutputTokens: number;
+      textTokens?: number;
+      mediaTokens?: number;
+      estimationPolicy?:
+        "legacy-text-only-v1" | "utf8-text-plus-conservative-media-v1";
     };
     items: ManifestItem[];
     evidence: ContextEvidenceInput[];
@@ -68,6 +72,21 @@ export class AssistantContextManifestService {
       input.budget.maxTokens
     ) {
       throw new Error("Context manifest exceeds its declared token budget");
+    }
+    const hasBreakdown =
+      input.budget.textTokens !== undefined ||
+      input.budget.mediaTokens !== undefined ||
+      input.budget.estimationPolicy !== undefined;
+    if (
+      hasBreakdown &&
+      (input.budget.textTokens === undefined ||
+        input.budget.mediaTokens === undefined ||
+        input.budget.estimationPolicy !==
+          "utf8-text-plus-conservative-media-v1" ||
+        input.budget.textTokens + input.budget.mediaTokens !==
+          input.budget.usedTokens)
+    ) {
+      throw new Error("Context manifest token breakdown is inconsistent");
     }
     const items = input.items.map((item) =>
       contextManifestItemSchema.parse(item),

@@ -7,6 +7,16 @@ const contentDigestSchema = z
   .regex(/^[a-f0-9]{64}$/u, "expected a lowercase SHA-256 digest");
 
 /**
+ * Provider tokenizers price visual inputs differently and their accounting can
+ * change independently of a stored derivative. Context packing therefore uses
+ * a deliberately coarse, provider-neutral upper-bound per visual unit instead
+ * of presenting a provider-specific estimate as exact accounting.
+ */
+export const CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS = 8_192 as const;
+export const CONTEXT_MEDIA_TOKEN_ESTIMATION_POLICY =
+  "conservative-provider-neutral-v1" as const;
+
+/**
  * An opaque server-side reference. Context contracts deliberately never carry
  * storage keys, provider URLs or inline bytes across the durable boundary.
  */
@@ -45,6 +55,12 @@ export const contextImagePartSchema = z.strictObject({
   assetHandle: contextAssetHandleSchema,
   mime: z.enum(["image/png", "image/jpeg", "image/webp"]),
   evidence: contextMediaEvidenceSchema,
+  estimatedInputTokens: z
+    .literal(CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS)
+    .optional(),
+  tokenEstimationPolicy: z
+    .literal(CONTEXT_MEDIA_TOKEN_ESTIMATION_POLICY)
+    .optional(),
   /** OCR, caption or other owner-authorized text used for text-only models. */
   fallbackText: z.string().min(1).max(2_000_000),
 });
@@ -55,6 +71,12 @@ export const contextPdfPagePartSchema = z
     assetHandle: contextAssetHandleSchema,
     mime: z.literal("application/pdf"),
     evidence: contextMediaEvidenceSchema,
+    estimatedInputTokens: z
+      .literal(CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS)
+      .optional(),
+    tokenEstimationPolicy: z
+      .literal(CONTEXT_MEDIA_TOKEN_ESTIMATION_POLICY)
+      .optional(),
     /** OCR/native text for this exact page, never an implicit empty fallback. */
     fallbackText: z.string().min(1).max(2_000_000),
   })

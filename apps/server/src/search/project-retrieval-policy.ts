@@ -5,17 +5,23 @@ import { db } from "../db";
 import { badRequest, conflict, notFound } from "../lib/orpc";
 import { listProviderServiceKeyMetadata } from "../lib/service-keys";
 import { COHERE_RERANK_DISCLOSURE_REVISION } from "./rerank-providers";
+import { rotateAdvancedCorpusAfterPolicyChange } from "./advanced-corpus-publication";
 import {
   corpusRerankConfiguration,
   createOwnedConfiguredRerankProvider,
 } from "./retrieval-runtime";
 import { SqliteFts5LexicalSearchBackend } from "./lexical";
-import { ensureEmbeddingPublicationFence } from "./embedding-publication-fence";
+import {
+  ensureEmbeddingPublicationFence,
+  readEmbeddingPublicationFence,
+} from "./embedding-publication-fence";
 import { GEMINI_EMBEDDING_DISCLOSURE_REVISION } from "./gemini-embedding";
+import { selectOwnedEmbeddingGeneration } from "./embedding-generation-selection";
 import {
   deriveProjectRetrievalPolicyState,
   type ProjectRetrievalPolicyConfiguration,
   type ProjectRetrievalPolicyEnvironment,
+  type ProjectRetrievalPolicyReason,
 } from "./project-retrieval-policy-state";
 import {
   corpusEmbeddingConfiguration,
@@ -76,21 +82,21 @@ function activeProviderKey(
   );
 }
 
-async function projectGenerationCoverage(
+export async function projectGenerationCoverage(
   userId: string,
   projectId: string,
   spaceId: string | null,
+  publicationEpoch: number | null,
 ) {
-  const generation = spaceId
-    ? await db.$client.execute({
-        sql: `SELECT id FROM corpus_embedding_generations
-          WHERE userId = ? AND spaceId = ? AND state = 'active' LIMIT 1`,
-        args: [userId, spaceId],
-      })
-    : null;
-  const generationId = generation?.rows[0]?.id
-    ? String(generation.rows[0].id)
-    : null;
+  const generationId =
+    spaceId && publicationEpoch !== null
+      ? await selectOwnedEmbeddingGeneration({
+          client: db.$client,
+          ownerId: userId,
+          spaceId,
+          publicationEpoch,
+        })
+      : null;
   const coverage = await db.$client.execute({
     sql: `WITH selected AS (
         SELECT DISTINCT CASE
@@ -139,6 +145,7 @@ async function inspectEnvironment(
 ): Promise<ProjectRetrievalPolicyEnvironment> {
   const embeddingConfiguration = corpusEmbeddingConfiguration();
   const rerankConfiguration = corpusRerankConfiguration();
+  const publicationFence = await readEmbeddingPublicationFence(userId);
   const embeddingConsentRequired = embeddingConfiguration.provider === "gemini";
   const rerankConsentRequired = rerankConfiguration.provider === "cohere";
   const [keys, embeddingConsent, rerankConsent, lexicalCapabilities] =
@@ -171,6 +178,11 @@ async function inspectEnvironment(
     ReturnType<typeof createOwnedCorpusVectorRuntime>
   > = null;
   try {
+    // A disabled publication fence still needs a read-only runtime descriptor
+    // so the last lexical-only project can opt back into advanced retrieval.
+    // The captured fence continues to reject every provider dispatch until the
+    // policy transaction explicitly re-enables it, and coverage below remains
+    // detached from all generations while publication is disabled.
     embeddingRuntime = await createOwnedCorpusVectorRuntime(userId);
   } catch {
     // Readiness is fail-closed and never exposes provider or network errors.
@@ -180,6 +192,7 @@ async function inspectEnvironment(
     userId,
     projectId,
     embeddingDescriptor?.id ?? null,
+    publicationFence.enabled ? publicationFence.publicationEpoch : null,
   );
   const vectorCapabilities = !embeddingRuntime
     ? {
@@ -298,9 +311,28 @@ export async function setOwnedProjectRetrievalPolicy(
     candidate,
     environment,
   );
-  const blockers = candidateState.reasons.filter(
-    (reason) => reason !== "embedding-reindex-required",
-  );
+  const denseCanBeBootstrapped =
+    candidateState.reindex.required &&
+    candidateState.reindex.canReindex &&
+    candidateState.reasons.every(
+      (reason) =>
+        reason === "embedding-reindex-required" || reason.startsWith("rerank-"),
+    );
+  const rerankIsOptional =
+    candidate.fallbackPolicy === "hybrid-without-rerank" &&
+    (candidateState.denseReady || denseCanBeBootstrapped);
+  const optionalRerankReasons = new Set<ProjectRetrievalPolicyReason>([
+    "rerank-configuration-incomplete",
+    "rerank-credential-required",
+    "rerank-consent-required",
+    "rerank-runtime-unavailable",
+    "rerank-space-required",
+  ]);
+  const blockers = candidateState.reasons.filter((reason) => {
+    if (reason === "embedding-reindex-required") return false;
+    if (rerankIsOptional && optionalRerankReasons.has(reason)) return false;
+    return true;
+  });
   if (input.retrievalMode === "advanced-auto" && blockers.length > 0) {
     badRequest(`Advanced retrieval is not ready (${blockers.join(", ")})`);
   }
@@ -331,14 +363,10 @@ export async function setOwnedProjectRetrievalPolicy(
     if (!wasAdvanced && candidate.retrievalMode === "advanced-auto") {
       await ensureEmbeddingPublicationFence(userId, true, transaction);
     } else if (wasAdvanced && candidate.retrievalMode === "lexical-only") {
-      const remainingAdvanced = await transaction.execute({
-        sql: `SELECT 1 FROM study_projects WHERE userId = ?
-          AND deletedAt IS NULL AND retrievalMode = 'advanced-auto' LIMIT 1`,
-        args: [userId],
+      await rotateAdvancedCorpusAfterPolicyChange({
+        ownerId: userId,
+        transaction,
       });
-      if (remainingAdvanced.rows.length === 0) {
-        await ensureEmbeddingPublicationFence(userId, false, transaction);
-      }
     }
     await transaction.commit();
   } catch (error) {

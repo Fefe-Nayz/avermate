@@ -17,15 +17,16 @@ export default async function ProjectPage({
   const { projectId } = await params
   const { activeYearId, queryClient } = await prepareAuthenticatedShell()
   const orpc = getServerOrpc()
+  const projectPromise = queryClient.fetchQuery({
+    ...orpc.projects.get.queryOptions({ input: { projectId } }),
+    staleTime: COMMON_QUERY_STALE_TIME,
+  })
   await Promise.all([
     queryClient.prefetchQuery({
       ...orpc.projects.list.queryOptions({ input: { include: "all" } }),
       staleTime: COMMON_QUERY_STALE_TIME,
     }),
-    queryClient.prefetchQuery({
-      ...orpc.projects.get.queryOptions({ input: { projectId } }),
-      staleTime: COMMON_QUERY_STALE_TIME,
-    }),
+    projectPromise,
     queryClient.prefetchQuery({
       ...orpc.projects.retrievalPolicy.queryOptions({ input: { projectId } }),
       staleTime: COMMON_QUERY_STALE_TIME,
@@ -47,6 +48,21 @@ export default async function ProjectPage({
         input: lectureRecordingsInput(activeYearId),
       }),
       staleTime: COMMON_QUERY_STALE_TIME,
+    }),
+    projectPromise.then((result) => {
+      const yearId = result.project.yearId
+      if (!yearId) return
+      const scope = { yearId, subjectId: result.project.subjectId }
+      return Promise.all([
+        queryClient.prefetchQuery({
+          ...orpc.learning.progress.queryOptions({ input: scope }),
+          staleTime: COMMON_QUERY_STALE_TIME,
+        }),
+        queryClient.prefetchQuery({
+          ...orpc.learning.plan.list.queryOptions({ input: scope }),
+          staleTime: COMMON_QUERY_STALE_TIME,
+        }),
+      ])
     }),
   ])
   return (

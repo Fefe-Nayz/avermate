@@ -12,6 +12,7 @@ describe("project source version tracking", () => {
       "overview",
       "chat",
       "sources",
+      "learning",
       "productions",
       "search",
     ]) {
@@ -22,6 +23,7 @@ describe("project source version tracking", () => {
     expect(client).toContain("<AssistantWorkspaceClient")
     expect(client).toContain("projectId={selected.id}")
     expect(client).toContain("<ProjectSourceManager")
+    expect(client).toContain("<ProjectLearningOverview")
     expect(client).toContain("<ProjectProductions")
     expect(client).toContain("<ProjectSearch")
     expect(client).toContain('aria-label={t("Project actions")}')

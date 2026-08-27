@@ -539,6 +539,7 @@ export class QdrantVectorIndex implements VectorIndex {
       return [];
     const capabilities = await this.capabilities();
     if (!capabilities.available) return [];
+    const versionIds = [...new Set(query.versionIds ?? [])];
     const response = await this.request(
       `/collections/${encodeURIComponent(this.readTarget)}/points/query`,
       {
@@ -549,6 +550,9 @@ export class QdrantVectorIndex implements VectorIndex {
             must: [
               { key: "ownerId", match: { value: query.ownerId } },
               { key: "spaceId", match: { value: query.spaceId } },
+              ...(versionIds.length > 0
+                ? [{ key: "versionId", match: { any: versionIds } }]
+                : []),
             ],
           },
           limit: Math.max(1, Math.min(800, query.limit)),
@@ -567,6 +571,8 @@ export class QdrantVectorIndex implements VectorIndex {
         if (
           payload?.ownerId !== query.ownerId ||
           payload.spaceId !== query.spaceId ||
+          (versionIds.length > 0 &&
+            !versionIds.includes(payload.versionId ?? "")) ||
           !payload.sourceId ||
           !payload.versionId ||
           !payload.chunkId ||
@@ -772,9 +778,13 @@ export async function createOwnedCorpusVectorRuntime(
         ...(nodeId ? { nodeId } : {}),
         purpose: "embedding",
       });
-      const runtime = createConfiguredCorpusVectorRuntime(environment, ownerId, {
-        nodeProviderFetch,
-      });
+      const runtime = createConfiguredCorpusVectorRuntime(
+        environment,
+        ownerId,
+        {
+          nodeProviderFetch,
+        },
+      );
       return runtime
         ? { ...runtime, authorizeEmbedding: authorizePublication }
         : null;

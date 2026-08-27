@@ -495,14 +495,10 @@ export async function createNodeDaemon(
               retrieval: {
                 version: 1 as const,
                 lexical: true as const,
-                vectorSpaces: config.retrieval.embeddingEndpoint
-                  ? [
-                      {
-                        model: config.retrieval.embeddingModel!,
-                        dimensions: config.retrieval.embeddingDimensions,
-                      },
-                    ]
-                  : [],
+                // A configured embedding route is a provider capability, not a
+                // queryable local vector index. Keep the v1 field present but
+                // empty until the Node owns a real vector runtime and preflight.
+                vectorSpaces: [],
                 providers: retrievalProviders,
               },
             }

@@ -11,10 +11,44 @@ process.env.DISABLE_EMAIL = "true";
 const imageDigest = `sha256:${"a".repeat(64)}`;
 
 describe("configured rerank runtime", () => {
+  test("projects an invalid hostile endpoint without exposing server topology or URL secrets", async () => {
+    const { publicCorpusRerankConfiguration } =
+      await import("./retrieval-runtime");
+    const hostileUrl =
+      "https://operator:private-token@rerank.internal:8443?api_key=do-not-return";
+    const projection = publicCorpusRerankConfiguration({
+      CORPUS_RERANK_ENABLED: "true",
+      CORPUS_RERANK_PROVIDER: "tei",
+      CORPUS_RERANK_MODEL: "Alibaba-NLP/gte-multilingual-reranker-base",
+      CORPUS_RERANK_PLACEMENT: "node",
+      CORPUS_RERANK_BASE_URL: hostileUrl,
+      CORPUS_RERANK_NODE_ID: "private-node-identity",
+      CORPUS_RERANK_MODEL_REVISION: "b".repeat(40),
+      CORPUS_RERANK_IMAGE_DIGEST: imageDigest,
+      CORPUS_RERANK_TEI_REVISION: "c".repeat(40),
+    });
+
+    expect(projection).toEqual({
+      enabled: true,
+      complete: false,
+      provider: "tei",
+      model: "Alibaba-NLP/gte-multilingual-reranker-base",
+      modelRevision: "b".repeat(40),
+      placement: "node",
+      descriptorId: null,
+      reason: "incomplete",
+    });
+    const serialized = JSON.stringify(projection);
+    expect(serialized).not.toContain(hostileUrl);
+    expect(serialized).not.toContain("private-token");
+    expect(serialized).not.toContain("api_key");
+    expect(serialized).not.toContain("private-node-identity");
+    expect(serialized).not.toContain("rerank.internal");
+  });
+
   test("injects the paired Node fetch transport into the TEI provider", async () => {
-    const { createOwnedConfiguredRerankProvider } = await import(
-      "./retrieval-runtime"
-    );
+    const { createOwnedConfiguredRerankProvider } =
+      await import("./retrieval-runtime");
     let fetcherRequested: unknown;
     const provider = await createOwnedConfiguredRerankProvider(
       "owner-1",
@@ -53,18 +87,15 @@ describe("configured rerank runtime", () => {
   });
 
   test("selects the dedicated Qwen3 worker without presenting it as TEI", async () => {
-    const {
-      corpusRerankConfiguration,
-      createOwnedConfiguredRerankProvider,
-    } = await import("./retrieval-runtime");
+    const { corpusRerankConfiguration, createOwnedConfiguredRerankProvider } =
+      await import("./retrieval-runtime");
     const environment = {
       CORPUS_RERANK_ENABLED: "true",
       CORPUS_RERANK_PROVIDER: "qwen3",
       CORPUS_RERANK_MODEL: "Qwen/Qwen3-Reranker-0.6B",
       CORPUS_RERANK_PLACEMENT: "node",
       CORPUS_RERANK_BASE_URL: "http://qwen3-reranker:8080",
-      CORPUS_RERANK_MODEL_REVISION:
-        "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+      CORPUS_RERANK_MODEL_REVISION: "e61197ed45024b0ed8a2d74b80b4d909f1255473",
       CORPUS_RERANK_IMAGE_DIGEST: imageDigest,
       CORPUS_RERANK_RUNTIME_REVISION:
         "sentence-transformers-5.4.0+transformers-4.57.3+torch-2.8.0",
@@ -104,14 +135,16 @@ describe("configured rerank runtime", () => {
         }) as never,
       },
     );
-    expect(creatorInput).toMatchObject({ provider: "qwen3", ownerId: "owner-1" });
+    expect(creatorInput).toMatchObject({
+      provider: "qwen3",
+      ownerId: "owner-1",
+    });
     expect(provider).toBe(expected);
   });
 
   test("revalidates Cohere consent and credential on a stale runtime", async () => {
-    const { createOwnedConfiguredRerankProvider } = await import(
-      "./retrieval-runtime"
-    );
+    const { createOwnedConfiguredRerankProvider } =
+      await import("./retrieval-runtime");
     let consentActive = true;
     let consentLoads = 0;
     const credential = {

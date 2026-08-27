@@ -583,8 +583,8 @@ export function RetrievalSettingsSection() {
                 clearIndex.isPending ||
                 !data?.embedding.generations.some(
                   (generation) =>
-                    generation.state === "active" ||
-                    generation.state === "staging"
+                    generation.effectiveState === "active" ||
+                    generation.effectiveState === "staging"
                 )
               }
               onClick={() => setClearIndexOpen(true)}
@@ -661,7 +661,9 @@ export function RetrievalSettingsSection() {
                     <ItemContent>
                       <ItemTitle>
                         {t("Generation")} {generation.id.slice(0, 12)}…
-                        <Badge variant="outline">{generation.state}</Badge>
+                        <Badge variant="outline">
+                          {generation.effectiveState}
+                        </Badge>
                       </ItemTitle>
                       <ItemDescription>
                         {t("Space")} {generation.spaceId.slice(0, 16)}… ·{" "}

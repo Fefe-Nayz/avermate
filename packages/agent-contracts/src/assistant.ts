@@ -390,6 +390,13 @@ export const assistantContextManifestSchema = z.strictObject({
     maxTokens: z.number().int().positive(),
     usedTokens: z.number().int().nonnegative(),
     reservedOutputTokens: z.number().int().nonnegative(),
+    /** Text projection estimated with the stable UTF-8/4 policy. */
+    textTokens: z.number().int().nonnegative().optional(),
+    /** Conservative visual-input allowance, never provider billing data. */
+    mediaTokens: z.number().int().nonnegative().optional(),
+    estimationPolicy: z
+      .enum(["legacy-text-only-v1", "utf8-text-plus-conservative-media-v1"])
+      .optional(),
   }),
   items: z.array(contextManifestItemSchema).max(2_000),
   proofHandles: z.array(contextProofHandleSchema).max(2_000),

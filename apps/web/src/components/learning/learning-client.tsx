@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ActivityIcon,
@@ -120,32 +120,74 @@ function QueryFailure({
   )
 }
 
-export function LearningClient() {
+type LearningTab =
+  "overview" | "plan" | "mastery" | "copies" | "concepts" | "history"
+
+export function LearningClient({
+  initialTab = "overview",
+  initialYearId = null,
+  initialSubjectId = null,
+}: {
+  initialTab?: LearningTab
+  initialYearId?: string | null
+  initialSubjectId?: string | null
+}) {
   const t = useExtracted()
   const trendLabel = useTrendLabel()
   const copyStatusLabels = useCopyStatusLabels()
   const queryClient = useQueryClient()
-  const { yearId, subjects } = useYear()
+  const { yearId, subjects, selectYear } = useYear()
   const online = useOnlineStatus()
-  const [subjectId, setSubjectId] = useState<string | null>(null)
+  const [pendingYearId, setPendingYearId] = useState(initialYearId)
+  const [subjectSelection, setSubjectSelection] = useState({
+    yearId: initialYearId ?? yearId,
+    subjectId: initialSubjectId,
+  })
   const [availableMinutes, setAvailableMinutes] = useState(30)
-  const [tab, setTab] = useState("overview")
-  const scope = { yearId: yearId ?? "", subjectId }
+  const [tab, setTab] = useState<LearningTab>(initialTab)
+  const scopedYearId = pendingYearId ?? yearId
+  const subjectId =
+    subjectSelection.yearId === scopedYearId ? subjectSelection.subjectId : null
+  const scope = { yearId: scopedYearId ?? "", subjectId }
+
+  useEffect(() => {
+    if (!pendingYearId) return
+    if (pendingYearId !== yearId) {
+      selectYear(pendingYearId)
+      return
+    }
+
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) setPendingYearId(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [pendingYearId, selectYear, yearId])
+
+  function selectSubject(nextSubjectId: string | null) {
+    setSubjectSelection({
+      yearId: scopedYearId,
+      subjectId: nextSubjectId,
+    })
+  }
+
   const concepts = useQuery({
     ...orpc.learning.concepts.list.queryOptions({ input: scope }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(scopedYearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
   const mastery = useQuery({
     ...orpc.learning.mastery.list.queryOptions({ input: scope }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(scopedYearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
   const copies = useQuery({
     ...orpc.learning.copies.list.queryOptions({
       input: scope,
     }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(scopedYearId),
     staleTime: COMMON_QUERY_STALE_TIME,
     refetchInterval: (query) =>
       query.state.data?.some(({ analysis }) =>
@@ -158,12 +200,12 @@ export function LearningClient() {
     ...orpc.learning.plan.list.queryOptions({
       input: scope,
     }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(scopedYearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
   const progress = useQuery({
     ...orpc.learning.progress.queryOptions({ input: scope }),
-    enabled: Boolean(yearId),
+    enabled: Boolean(scopedYearId),
     staleTime: COMMON_QUERY_STALE_TIME,
   })
 
@@ -211,11 +253,11 @@ export function LearningClient() {
       <PageActions>
         <Button
           size="sm"
-          disabled={!online || !yearId || propose.isPending}
+          disabled={!online || !scopedYearId || propose.isPending}
           onClick={() =>
-            yearId &&
+            scopedYearId &&
             propose.mutate({
-              yearId,
+              yearId: scopedYearId,
               subjectId,
               limit: 5,
               availableMinutes,
@@ -265,7 +307,7 @@ export function LearningClient() {
             size="sm"
             variant={subjectId === null ? "default" : "outline"}
             aria-pressed={subjectId === null}
-            onClick={() => setSubjectId(null)}
+            onClick={() => selectSubject(null)}
           >
             {t("All subjects")}
           </Button>
@@ -275,7 +317,7 @@ export function LearningClient() {
               size="sm"
               variant={subjectId === subject.id ? "default" : "outline"}
               aria-pressed={subjectId === subject.id}
-              onClick={() => setSubjectId(subject.id)}
+              onClick={() => selectSubject(subject.id)}
             >
               {subject.name}
             </Button>
@@ -373,7 +415,11 @@ export function LearningClient() {
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as LearningTab)}
+          className="min-w-0"
+        >
           <TabsList
             variant="line"
             className="no-scrollbar max-w-full justify-start overflow-x-auto overflow-y-hidden"
@@ -549,7 +595,7 @@ export function LearningClient() {
               error={concepts.error?.message}
               onChanged={refresh}
               subjectId={subjectId}
-              yearId={yearId}
+              yearId={scopedYearId}
               online={online}
             />
           </TabsContent>
@@ -562,7 +608,7 @@ export function LearningClient() {
               stale={plan.isStale}
               online={online}
               onChanged={refresh}
-              yearId={yearId}
+              yearId={scopedYearId}
               subjectId={subjectId}
               availableMinutes={availableMinutes}
               onAvailableMinutes={setAvailableMinutes}

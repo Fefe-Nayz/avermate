@@ -25,6 +25,50 @@ afterEach(async () => {
 });
 
 describe("node daemon health", () => {
+  test("does not advertise configured retrieval providers as local vector indexes", async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "avermate-node-retrieval-manifest-"),
+    );
+    roots.push(root);
+    const config = defaultDevZeroConfig(join(root, "data"));
+    config.storage.filesystemRoot = join(root, "objects");
+    config.retrieval.embeddingEndpoint = "http://127.0.0.1:8081/v1/embeddings";
+    config.retrieval.embeddingProvider = "tei";
+    config.retrieval.embeddingModel = "school-embedding";
+    config.retrieval.embeddingRevision = "school-embedding-r1";
+    config.retrieval.embeddingDimensions = [768];
+    config.retrieval.rerankEndpoint = "http://127.0.0.1:8082/v1/rerank";
+    config.retrieval.rerankProvider = "qwen3";
+    config.retrieval.rerankModel = "school-reranker";
+    config.retrieval.rerankRevision = "school-reranker-r1";
+    config.retrieval.rerankImageDigest = `sha256:${"a".repeat(64)}`;
+    config.retrieval.rerankRuntimeRevision = "qwen3-runtime-r1";
+
+    const daemon = await createNodeDaemon({ config });
+    expect((await daemon.manifest()).features.retrieval).toEqual({
+      version: 1,
+      lexical: true,
+      vectorSpaces: [],
+      providers: [
+        {
+          purpose: "embedding",
+          provider: "tei",
+          model: "school-embedding",
+          modelRevision: "school-embedding-r1",
+          dimensions: 768,
+        },
+        {
+          purpose: "rerank",
+          provider: "qwen3",
+          model: "school-reranker",
+          modelRevision: "school-reranker-r1",
+          imageDigest: `sha256:${"a".repeat(64)}`,
+          runtimeRevision: "qwen3-runtime-r1",
+        },
+      ],
+    });
+  });
+
   test("advertises MCP only with the exact reviewed transport limits", async () => {
     const root = await mkdtemp(join(tmpdir(), "avermate-node-mcp-manifest-"));
     roots.push(root);

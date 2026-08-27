@@ -20,7 +20,10 @@ import {
   grantRetrievalProviderConsent,
   revokeRetrievalProviderConsent,
 } from "../search/retrieval-consent";
-import { corpusRerankConfiguration } from "../search/retrieval-runtime";
+import {
+  corpusRerankConfiguration,
+  publicCorpusRerankConfiguration,
+} from "../search/retrieval-runtime";
 import {
   corpusEmbeddingConfiguration,
   createOwnedCorpusVectorRuntime,
@@ -85,45 +88,54 @@ function configuredRerankSpaceId() {
 export const retrievalRouter = {
   readiness: protectedProcedure.handler(async ({ context }) => {
     const userId = context.session.user.id;
-    const [keyRows, consentRows, spaces, generations, jobs, evaluations] =
-      await Promise.all([
-        listProviderServiceKeyMetadata(userId),
-        db.$client.execute({
-          sql: `SELECT provider, capability, disclosureRevision, policyRevision,
+    const [
+      keyRows,
+      consentRows,
+      spaces,
+      generations,
+      jobs,
+      evaluations,
+      publicationFence,
+    ] = await Promise.all([
+      listProviderServiceKeyMetadata(userId),
+      db.$client.execute({
+        sql: `SELECT provider, capability, disclosureRevision, policyRevision,
               grantedAt, revokedAt
             FROM retrieval_provider_consents WHERE userId = ?`,
-          args: [userId],
-        }),
-        db.$client.execute(
-          `SELECT id, descriptorJson, createdAt FROM corpus_embedding_spaces ORDER BY createdAt DESC`,
-        ),
-        db.$client.execute({
-          sql: `SELECT id, spaceId, state, expectedVersionCount,
+        args: [userId],
+      }),
+      db.$client.execute(
+        `SELECT id, descriptorJson, createdAt FROM corpus_embedding_spaces ORDER BY createdAt DESC`,
+      ),
+      db.$client.execute({
+        sql: `SELECT id, spaceId, state, publicationEpoch,
+              expectedVersionCount,
               indexedVersionCount, activatedAt, errorCode, updatedAt
             FROM corpus_embedding_generations
             WHERE userId = ? ORDER BY updatedAt DESC`,
-          args: [userId],
-        }),
-        db.$client.execute({
-          sql: `SELECT id, kind, status, error, createdAt, updatedAt
+        args: [userId],
+      }),
+      db.$client.execute({
+        sql: `SELECT id, kind, status, error, createdAt, updatedAt
             FROM jobs WHERE userId = ? AND kind IN (?, ?, ?, ?)
             ORDER BY createdAt DESC LIMIT 20`,
-          args: [
-            userId,
-            CORPUS_REEMBED_SPACE_JOB_KIND,
-            CORPUS_REPAIR_JOB_KIND,
-            "corpus.embedChunks",
-            CORPUS_EVALUATE_JOB_KIND,
-          ],
-        }),
-        db.$client.execute({
-          sql: `SELECT id, fixtureRevision, status, metricsJson, errorCode,
+        args: [
+          userId,
+          CORPUS_REEMBED_SPACE_JOB_KIND,
+          CORPUS_REPAIR_JOB_KIND,
+          "corpus.embedChunks",
+          CORPUS_EVALUATE_JOB_KIND,
+        ],
+      }),
+      db.$client.execute({
+        sql: `SELECT id, fixtureRevision, status, metricsJson, errorCode,
               evaluatedAt, createdAt
             FROM retrieval_evaluations WHERE userId = ?
             ORDER BY createdAt DESC LIMIT 5`,
-          args: [userId],
-        }),
-      ]);
+        args: [userId],
+      }),
+      readEmbeddingPublicationFence(userId),
+    ]);
     const consents = consentRows.rows.map((row) => ({
       provider: String(row.provider),
       capability: String(row.capability),
@@ -145,6 +157,7 @@ export const retrievalRouter = {
       }));
     const embeddingConfiguration = corpusEmbeddingConfiguration();
     const rerankConfiguration = corpusRerankConfiguration();
+    const publicRerankConfiguration = publicCorpusRerankConfiguration();
     const embeddingCredentialRequired =
       embeddingConfiguration.provider === "gemini";
     const rerankCredentialRequired = rerankConfiguration.provider === "cohere";
@@ -168,6 +181,7 @@ export const retrievalRouter = {
       consents,
       embedding: {
         ...embeddingConfiguration,
+        publicationFence,
         credentialReady:
           !embeddingCredentialRequired ||
           keys.some(
@@ -180,19 +194,41 @@ export const retrievalRouter = {
           descriptor: jsonValue(row.descriptorJson),
           createdAt: iso(row.createdAt),
         })),
-        generations: generations.rows.map((row) => ({
-          id: String(row.id),
-          spaceId: String(row.spaceId),
-          state: String(row.state),
-          expectedVersionCount: Number(row.expectedVersionCount),
-          indexedVersionCount: Number(row.indexedVersionCount),
-          activatedAt: iso(row.activatedAt),
-          errorCode: row.errorCode === null ? null : String(row.errorCode),
-          updatedAt: iso(row.updatedAt),
-        })),
+        generations: generations.rows.map((row) => {
+          const state = String(row.state);
+          const publicationEpoch = Number(row.publicationEpoch);
+          const isCurrentPublicationEpoch =
+            publicationEpoch === publicationFence.publicationEpoch;
+          const publicationAuthorized =
+            publicationFence.enabled && isCurrentPublicationEpoch;
+          const effectiveState =
+            state === "active" || state === "staging"
+              ? !isCurrentPublicationEpoch
+                ? "superseded"
+                : publicationFence.enabled
+                  ? state
+                  : "disabled"
+              : state;
+          return {
+            id: String(row.id),
+            spaceId: String(row.spaceId),
+            // Keep the persisted state for diagnostics, but never use it as
+            // evidence that a generation survived an owner-fence rotation.
+            state,
+            effectiveState,
+            publicationEpoch,
+            isCurrentPublicationEpoch,
+            publicationAuthorized,
+            expectedVersionCount: Number(row.expectedVersionCount),
+            indexedVersionCount: Number(row.indexedVersionCount),
+            activatedAt: iso(row.activatedAt),
+            errorCode: row.errorCode === null ? null : String(row.errorCode),
+            updatedAt: iso(row.updatedAt),
+          };
+        }),
       },
       rerank: {
-        ...rerankConfiguration,
+        ...publicRerankConfiguration,
         configuredSpaceId: configuredRerankSpaceId(),
         credentialReady:
           !rerankCredentialRequired ||
@@ -358,6 +394,7 @@ export const retrievalRouter = {
         generationId: string;
         spaceId: string;
         versionId: string | null;
+        state: string;
       }> = [];
       let queuedJobsCancelled = 0;
       let runningJobsCancellationRequested = 0;
@@ -373,22 +410,22 @@ export const retrievalRouter = {
         queuedJobsCancelled = cancelled.queuedJobsCancelled;
         runningJobsCancellationRequested =
           cancelled.runningJobsCancellationRequested;
-        const active = await transaction.execute({
+        const ownedGenerations = await transaction.execute({
           sql: `SELECT generations.id AS generationId,
               generations.spaceId AS spaceId,
-              members.versionId AS versionId
+              generations.state AS state, members.versionId AS versionId
             FROM corpus_embedding_generations AS generations
             LEFT JOIN corpus_embedding_generation_versions AS members
               ON members.generationId = generations.id
             WHERE generations.userId = ?
-              AND generations.state IN ('active', 'staging')
             ORDER BY generations.spaceId, generations.id, members.versionId`,
           args: [userId],
         });
-        generationRows = active.rows.map((row) => ({
+        generationRows = ownedGenerations.rows.map((row) => ({
           generationId: String(row.generationId),
           spaceId: String(row.spaceId),
           versionId: row.versionId === null ? null : String(row.versionId),
+          state: String(row.state),
         }));
         await transaction.execute({
           sql: `UPDATE corpus_embedding_generations
@@ -407,6 +444,11 @@ export const retrievalRouter = {
           generationRows.map((row) => [row.generationId, row.spaceId]),
         ).entries(),
       ].map(([generationId, spaceId]) => ({ generationId, spaceId }));
+      const generationsDisabled = new Set(
+        generationRows
+          .filter((row) => row.state === "active" || row.state === "staging")
+          .map((row) => row.generationId),
+      ).size;
       const versionIds = [
         ...new Set(
           generationRows.flatMap((row) =>
@@ -457,7 +499,7 @@ export const retrievalRouter = {
           : ("superseded-by-newer-disable" as const);
       return {
         versions: versionIds.length,
-        generationsDisabled: generations.length,
+        generationsDisabled,
         queuedJobsCancelled,
         runningJobsCancellationRequested,
         vectorGenerationsCleaned,

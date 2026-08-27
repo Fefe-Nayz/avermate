@@ -315,6 +315,20 @@ export class RoutedConversationStore extends CoreConversationStore {
     return String(row.threadId);
   }
 
+  async #attachmentThread(ownerId: string, attachmentId: string) {
+    const result = await this.metadataClient.execute({
+      sql: `SELECT messages.threadId FROM assistant_attachments AS attachments
+        JOIN assistant_messages AS messages ON messages.id = attachments.messageId
+        JOIN assistant_threads AS threads ON threads.id = messages.threadId
+        WHERE attachments.id = ? AND threads.userId = ? LIMIT 1`,
+      args: [attachmentId, ownerId],
+    });
+    const row = result.rows[0];
+    if (!row)
+      throw new ConversationStoreError("not_found", "Attachment not found");
+    return String(row.threadId);
+  }
+
   async #preflight(ownerId: string, threadId: string) {
     const nodeId = await this.#threadPlacement(ownerId, threadId, true);
     if (!nodeId) return null;
@@ -956,6 +970,30 @@ export class RoutedConversationStore extends CoreConversationStore {
     const threadId = await this.#messageThread(input.ownerId, input.messageId);
     return this.#mutateThread(input.ownerId, threadId, () =>
       super.createAttachment(input),
+    );
+  }
+
+  override async freezeAttachmentSnapshot(
+    input: Parameters<CoreConversationStore["freezeAttachmentSnapshot"]>[0],
+  ) {
+    const threadId = await this.#attachmentThread(
+      input.ownerId,
+      input.attachmentId,
+    );
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.freezeAttachmentSnapshot(input),
+    );
+  }
+
+  override async freezeTaskAttachmentSnapshot(
+    input: Parameters<CoreConversationStore["freezeTaskAttachmentSnapshot"]>[0],
+  ) {
+    const threadId = await this.#attachmentThread(
+      input.ownerId,
+      input.attachmentId,
+    );
+    return this.#mutateThread(input.ownerId, threadId, () =>
+      super.freezeTaskAttachmentSnapshot(input),
     );
   }
 

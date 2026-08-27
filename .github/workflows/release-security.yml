@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "main"
+      - "rewrite"
 
 permissions:
   contents: read
@@ -19,7 +20,6 @@ jobs:
     timeout-minutes: 15
     env:
       AVERMATE_SECURITY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-      GITLEAKS_CACHE_DIR: ${{ runner.temp }}/avermate-security-tools/gitleaks
     steps:
       - name: Checkout complete history
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -35,7 +35,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Verify security fixtures and policy
+        env:
+          GITLEAKS_CACHE_DIR: ${{ runner.temp }}/avermate-security-tools/gitleaks
         run: bun run security:test
 
       - name: Scan release candidates and reachable history
+        env:
+          GITLEAKS_CACHE_DIR: ${{ runner.temp }}/avermate-security-tools/gitleaks
         run: bun run release:guard

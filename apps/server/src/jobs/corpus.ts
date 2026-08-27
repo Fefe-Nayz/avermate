@@ -496,8 +496,8 @@ async function embedMediaRows(
             (() => {
               throw new Error(
                 "Cloud media embedding requires provider consent",
-                );
-              })(),
+              );
+            })(),
           authorize: async () => {
             await options.assertFence?.();
             await runtime.authorizeEmbedding?.();
@@ -763,6 +763,7 @@ async function createGeneration(
   ownerId: string,
   descriptor: EmbeddingSpaceDescriptor,
   versionIds: readonly string[],
+  publicationEpoch: number,
 ) {
   const generationId = newId("egen");
   const versionSetDigest = sha256(canonicalJson([...versionIds].sort()));
@@ -771,13 +772,14 @@ async function createGeneration(
   try {
     await transaction.execute({
       sql: `INSERT INTO corpus_embedding_generations (
-          id, userId, spaceId, state, versionSetDigest,
+          id, userId, spaceId, state, publicationEpoch, versionSetDigest,
           expectedVersionCount, indexedVersionCount, createdAt, updatedAt
-        ) VALUES (?, ?, ?, 'staging', ?, ?, 0, ?, ?)`,
+        ) VALUES (?, ?, ?, 'staging', ?, ?, ?, 0, ?, ?)`,
       args: [
         generationId,
         ownerId,
         descriptor.id,
+        publicationEpoch,
         versionSetDigest,
         versionIds.length,
         now,
@@ -871,6 +873,7 @@ export async function runCorpusEmbeddingUnavailableJob(
     rebuild.ownerId,
     descriptor,
     versionIds,
+    rebuild.publicationEpoch ?? 0,
   );
   const generationRuntime: CorpusVectorRuntime = {
     ...runtime,

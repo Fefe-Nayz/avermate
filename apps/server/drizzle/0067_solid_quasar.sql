@@ -1,0 +1,1 @@
+ALTER TABLE `corpus_embedding_generations` ADD `publicationEpoch` integer DEFAULT 0 NOT NULL;

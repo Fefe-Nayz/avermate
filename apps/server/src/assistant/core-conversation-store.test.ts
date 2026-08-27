@@ -54,6 +54,7 @@ import { MOCK_ASSISTANT_MODEL } from "./catalogue";
 import {
   ConversationStoreError,
   CoreConversationStore,
+  type AssistantSqlClient,
 } from "./core-conversation-store";
 import {
   RoutedConversationStore,
@@ -411,6 +412,121 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
     expect(detail.runs).toHaveLength(0);
   });
 
+  test("keeps one immutable attachment snapshot when competing freezes observe different heads", async () => {
+    const ownerId = "corpus-user-a";
+    const subjectId = `subject-${newId("freeze-cas")}`;
+    const sourceId = `source-${newId("freeze-cas")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Freeze CAS', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
+    const created = await thread(ownerId);
+    const reservation = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `freeze-cas-${newId("request")}`,
+      markdown: "Fige cette source.",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          snapshotVersion: null,
+          label: "Freeze CAS",
+        },
+      ],
+    });
+    const attachmentResult = await client.execute({
+      sql: `SELECT id, snapshotVersion FROM assistant_attachments
+        WHERE messageId = ? LIMIT 1`,
+      args: [reservation.userMessageId],
+    });
+    const attachmentId = String(attachmentResult.rows[0]!.id);
+    expect(attachmentResult.rows[0]?.snapshotVersion).toBeNull();
+
+    const corpus = new CoreCorpusStore(client);
+    const identity: OwnedSourceIdentity = {
+      ownerId,
+      originKind: "subject",
+      originId: subjectId,
+    };
+    const commit = async (label: string, previous: string | null) => {
+      const text = `Version ${label}`;
+      const chunks: StagedContentChunk[] = [
+        {
+          ordinal: 0,
+          text,
+          normalizedText: normalizeForSearch(text),
+          tokenEstimate: 3,
+          contentHash: sha256(text),
+          locator: { kind: "text", startOffset: 0, endOffset: text.length },
+          headingPath: null,
+          evidenceKind: "native-text",
+        },
+      ];
+      const staged = await corpus.stageVersion({
+        identity,
+        sourceId,
+        versionKey: `freeze-${label}-${newId("version")}`,
+        contentHash: sha256(text),
+        extractorId: "freeze-cas-test",
+        extractorVersion: "1",
+        mimeType: "text/plain",
+        language: "fr",
+        byteSize: text.length,
+        locatorSchemaVersion: 1,
+        metadata: {},
+        chunks,
+      });
+      return corpus.commitVersion({
+        ownerId,
+        stagingId: staged.stagingId,
+        expectedSourceId: sourceId,
+        expectedPreviousVersionId: previous,
+      });
+    };
+    const versionN = await commit("N", null);
+    const versionN1 = await commit("N+1", versionN.versionId);
+
+    const competing = await Promise.all([
+      store.freezeAttachmentSnapshot({
+        ownerId,
+        attachmentId,
+        expectedVersionId: versionN.versionId,
+      }),
+      store.freezeAttachmentSnapshot({
+        ownerId,
+        attachmentId,
+        expectedVersionId: versionN1.versionId,
+      }),
+    ]);
+    expect(competing).toEqual([versionN.versionId, versionN.versionId]);
+    const frozen = await client.execute({
+      sql: `SELECT snapshotVersion FROM assistant_attachments WHERE id = ?`,
+      args: [attachmentId],
+    });
+    expect(frozen.rows[0]?.snapshotVersion).toBe(versionN.versionId);
+    const references = await client.execute({
+      sql: `SELECT sourceVersionId FROM content_version_references
+        WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+      args: [attachmentId],
+    });
+    expect(references.rows.map((row) => row.sourceVersionId)).toEqual([
+      versionN.versionId,
+    ]);
+  });
+
   test("validates project ownership at creation and lists threads by owned project", async () => {
     const projectA = await studyProject({
       id: `project-a-${newId("thread-scope")}`,
@@ -500,6 +616,82 @@ describe("CoreConversationStore DAG, CAS and idempotency", () => {
       ),
     ).rejects.toMatchObject({ code: "not_found" });
   });
+
+  test("revalidates purge eligibility atomically when restore wins after the maintenance scan", async () => {
+    const ownerId = "corpus-user-a";
+    const created = await thread(ownerId);
+    const trashed = await store.trashThread({
+      ownerId,
+      threadId: created.thread.id,
+      expectedRevision: created.thread.revision,
+      retentionDays: 1,
+    });
+    await client.execute({
+      sql: `UPDATE assistant_threads SET purgeAfter = 0 WHERE id = ?`,
+      args: [created.thread.id],
+    });
+    let restoreInjected = false;
+    const racingClient: AssistantSqlClient = {
+      execute: async (input) => {
+        const result = await client.execute(input);
+        if (
+          !restoreInjected &&
+          typeof input !== "string" &&
+          input.sql.includes(
+            "SELECT id FROM assistant_threads WHERE deletedAt IS NOT NULL",
+          )
+        ) {
+          restoreInjected = true;
+          await store.restoreThread({
+            ownerId,
+            threadId: created.thread.id,
+            expectedRevision: trashed.revision,
+          });
+        }
+        return result;
+      },
+      batch: client.batch.bind(client),
+      transaction: client.transaction.bind(client),
+    };
+    const racingStore = new CoreConversationStore(racingClient);
+
+    expect(await racingStore.purgeExpired(ownerId)).toEqual([]);
+    expect(restoreInjected).toBe(true);
+    await expect(
+      store.getThreadDetail(ownerId, created.thread.id),
+    ).resolves.toMatchObject({
+      thread: { id: created.thread.id, deletedAt: null },
+    });
+  });
+
+  test("rejects corpus snapshot ids on attachment kinds without corpus snapshot semantics", async () => {
+    const ownerId = "corpus-user-a";
+    const created = await thread(ownerId);
+    for (const kind of ["task", "project", "year"] as const) {
+      await expect(
+        store.reserveTurn({
+          ownerId,
+          threadId: created.thread.id,
+          branchId: created.branch.id,
+          expectedHeadMessageId: null,
+          clientRequestId: `invalid-${kind}-${newId("request")}`,
+          markdown: "Snapshot invalide",
+          modelKey: "mock-readonly",
+          attachments: [
+            {
+              kind,
+              referenceId: `${kind}-${newId("foreign-reference")}`,
+              snapshotVersion: `cver-${newId("foreign-snapshot")}`,
+              label: "Snapshot mensonger",
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: "invalid_state" });
+    }
+    const detail = await store.getThreadDetail(ownerId, created.thread.id);
+    expect(detail.messages).toHaveLength(0);
+    expect(detail.attachments).toHaveLength(0);
+  });
 });
 
 describe("RoutedConversationStore crash recovery", () => {
@@ -587,6 +779,151 @@ describe("RoutedConversationStore crash recovery", () => {
     if (pendingRun.rows[0]) {
       await routed.cancelRun("corpus-user-a", String(pendingRun.rows[0].id));
     }
+  });
+
+  test("syncs a post-index attachment freeze to Node and reconciles an interrupted relay write", async () => {
+    const ownerId = "corpus-user-a";
+    const subjectId = `subject-${newId("node-freeze")}`;
+    const sourceId = `source-${newId("node-freeze")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Node freeze', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    await seedSource(client, {
+      id: sourceId,
+      originId: subjectId,
+      subjectId,
+    });
+    const snapshots = new Map<string, NodeConversationDagSnapshot>();
+    let rejectImports = false;
+    const relay: ConversationDagRelay = {
+      selectedNode: async () => "node-attachment-freeze",
+      assertOnline: async () => undefined,
+      import: async (input) => {
+        if (rejectImports) throw new Error("INJECTED_FREEZE_SYNC_FAILURE");
+        snapshots.set(
+          input.snapshot.detail.thread.id,
+          structuredClone(input.snapshot),
+        );
+        return input.snapshot;
+      },
+      list: async () => [],
+      get: async ({ threadId }) => {
+        const snapshot = snapshots.get(threadId);
+        return snapshot ? structuredClone(snapshot) : null;
+      },
+      delete: async ({ threadId }) => ({
+        deleted: snapshots.delete(threadId),
+      }),
+    };
+    const routed = new RoutedConversationStore(
+      client,
+      relay,
+      "test-only-node-attachment-freeze-secret-000001",
+    );
+    const created = await routed.createThread({
+      ownerId,
+      title: "Node attachment freeze",
+      placement: "node",
+    });
+    const reservation = await routed.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `node-freeze-${newId("request")}`,
+      markdown: "Fige après indexation.",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          snapshotVersion: null,
+          label: "Node freeze",
+        },
+      ],
+    });
+    const attachmentRow = await client.execute({
+      sql: `SELECT id, snapshotVersion FROM assistant_attachments
+        WHERE messageId = ? LIMIT 1`,
+      args: [reservation.userMessageId],
+    });
+    const attachmentId = String(attachmentRow.rows[0]!.id);
+    expect(attachmentRow.rows[0]?.snapshotVersion).toBeNull();
+
+    const corpus = new CoreCorpusStore(client);
+    const text = "Version figée après indexation Node";
+    const chunks: StagedContentChunk[] = [
+      {
+        ordinal: 0,
+        text,
+        normalizedText: normalizeForSearch(text),
+        tokenEstimate: Math.ceil(text.length / 4),
+        contentHash: sha256(text),
+        locator: { kind: "text", startOffset: 0, endOffset: text.length },
+        headingPath: null,
+        evidenceKind: "native-text",
+      },
+    ];
+    const staged = await corpus.stageVersion({
+      identity: { ownerId, originKind: "subject", originId: subjectId },
+      sourceId,
+      versionKey: `node-freeze-${newId("version")}`,
+      contentHash: sha256(text),
+      extractorId: "node-freeze-test",
+      extractorVersion: "1",
+      mimeType: "text/plain",
+      language: "fr",
+      byteSize: text.length,
+      locatorSchemaVersion: 1,
+      metadata: {},
+      chunks,
+    });
+    const committed = await corpus.commitVersion({
+      ownerId,
+      stagingId: staged.stagingId,
+      expectedSourceId: sourceId,
+      expectedPreviousVersionId: null,
+    });
+
+    rejectImports = true;
+    await expect(
+      routed.freezeAttachmentSnapshot({
+        ownerId,
+        attachmentId,
+        expectedVersionId: committed.versionId,
+      }),
+    ).rejects.toMatchObject({ code: "placement_unavailable" });
+    const coreFrozen = await client.execute({
+      sql: `SELECT snapshotVersion FROM assistant_attachments WHERE id = ?`,
+      args: [attachmentId],
+    });
+    expect(coreFrozen.rows[0]?.snapshotVersion).toBe(committed.versionId);
+    expect(
+      snapshots
+        .get(created.thread.id)
+        ?.detail.attachments.find((item) => item.id === attachmentId)
+        ?.snapshotVersion,
+    ).toBeNull();
+
+    rejectImports = false;
+    expect(await routed.reconcileNode("node-attachment-freeze")).toContainEqual(
+      {
+        threadId: created.thread.id,
+        outcome: "synced",
+      },
+    );
+    expect(
+      snapshots
+        .get(created.thread.id)
+        ?.detail.attachments.find((item) => item.id === attachmentId)
+        ?.snapshotVersion,
+    ).toBe(committed.versionId);
+    await routed.cancelRun(ownerId, reservation.runId);
   });
 
   test("verifies destination readback in both directions before switching", async () => {
@@ -789,6 +1126,35 @@ describe("RoutedConversationStore crash recovery", () => {
 });
 
 describe("context proof handles and exports", () => {
+  test("rejects a manifest whose text and media breakdown understates used tokens", async () => {
+    const created = await thread();
+    const reservation = await store.reserveTurn({
+      ownerId: "corpus-user-a",
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `bad-media-budget-${newId("request")}`,
+      markdown: "Budget",
+      modelKey: "mock-readonly",
+    });
+    await expect(
+      new AssistantContextManifestService(client).commit({
+        ownerId: "corpus-user-a",
+        runId: reservation.runId,
+        budget: {
+          maxTokens: 16_000,
+          usedTokens: 1_000,
+          reservedOutputTokens: 2_000,
+          textTokens: 600,
+          mediaTokens: 8_192,
+          estimationPolicy: "utf8-text-plus-conservative-media-v1",
+        },
+        items: [],
+        evidence: [],
+      }),
+    ).rejects.toThrow("token breakdown is inconsistent");
+  });
+
   test("allows citations only through the same run committed manifest", async () => {
     const created = await thread();
     const reservation = await store.reserveTurn({
@@ -1162,7 +1528,7 @@ describe("read-only runtime integration", () => {
     });
     await service.runNow(identity.ownerId, second.runId, broker);
 
-    expect(retrievalCalls).toHaveLength(2);
+    expect(retrievalCalls).toHaveLength(3);
     expect(retrievalCalls[0]).toMatchObject({
       input: { projectIds: [projectId] },
       policyProjectIds: [projectId],
@@ -1170,8 +1536,16 @@ describe("read-only runtime integration", () => {
     expect(retrievalCalls[1]).toMatchObject({
       input: {
         projectIds: [projectId],
-        sourceIds: [sourceId],
         contextAccess: "automatic",
+      },
+      policyProjectIds: [projectId],
+    });
+    expect(retrievalCalls[2]).toMatchObject({
+      input: {
+        projectIds: [],
+        sourceIds: [sourceId],
+        versionIds: [committed.versionId],
+        contextAccess: "explicit-attachment",
       },
       policyProjectIds: [projectId],
     });
@@ -1339,8 +1713,8 @@ describe("read-only runtime integration", () => {
       modelKey: "mock-readonly",
     });
     await service.runNow(identity.ownerId, third.runId, broker);
-    expect(retrievalCalls).toHaveLength(3);
-    const contextualInput = retrievalCalls[2]!.input;
+    expect(retrievalCalls).toHaveLength(4);
+    const contextualInput = retrievalCalls[3]!.input;
     expect(contextualInput.query).toContain(
       "Rappelle la définition de xylophore tardif.",
     );
@@ -1359,6 +1733,628 @@ describe("read-only runtime integration", () => {
     );
     expect(thirdRetrievalMetadata?.content).toContain(
       `\"digest\":\"${sha256(contextualInput.query)}\"`,
+    );
+  });
+
+  test("fails closed when a global attachment snapshot is unavailable and gives the model an unambiguous instruction", async () => {
+    const ownerId = "corpus-user-a";
+    const subjectId = `subject-${newId("unavailable-attachment")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Pièce indisponible', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    const attachedSourceId = `source-${newId("attached-snapshot")}`;
+    const foreignSourceId = `source-${newId("foreign-snapshot")}`;
+    const foreignOriginId = `different-${newId("snapshot-origin")}`;
+    await seedSource(client, {
+      id: attachedSourceId,
+      originId: subjectId,
+      subjectId,
+    });
+    await seedSource(client, {
+      id: foreignSourceId,
+      originId: foreignOriginId,
+    });
+    const corpus = new CoreCorpusStore(client);
+    const stageSingleChunk = async (input: {
+      sourceId: string;
+      originId: string;
+      text: string;
+    }) => {
+      const identity: OwnedSourceIdentity = {
+        ownerId,
+        originKind: "subject",
+        originId: input.originId,
+      };
+      const chunks: StagedContentChunk[] = [
+        {
+          ordinal: 0,
+          text: input.text,
+          normalizedText: normalizeForSearch(input.text),
+          tokenEstimate: Math.ceil(input.text.length / 4),
+          contentHash: sha256(input.text),
+          locator: {
+            kind: "text",
+            startOffset: 0,
+            endOffset: input.text.length,
+          },
+          headingPath: null,
+          evidenceKind: "native-text",
+        },
+      ];
+      const staged = await corpus.stageVersion({
+        identity,
+        sourceId: input.sourceId,
+        versionKey: `attachment-scope-${newId("version")}`,
+        contentHash: sha256(input.text),
+        extractorId: "attachment-scope-test",
+        extractorVersion: "1",
+        mimeType: "text/plain",
+        language: "fr",
+        byteSize: input.text.length,
+        locatorSchemaVersion: 1,
+        metadata: {},
+        chunks,
+      });
+      const committed = await corpus.commitVersion({
+        ownerId,
+        stagingId: staged.stagingId,
+        expectedSourceId: input.sourceId,
+        expectedPreviousVersionId: null,
+      });
+      await publishLexicalVersion({ corpus, identity, committed, chunks });
+      return committed;
+    };
+    await stageSingleChunk({
+      sourceId: attachedSourceId,
+      originId: subjectId,
+      text: "La tête courante de la pièce jointe ne doit jamais remplacer un snapshot invalide.",
+    });
+    const foreignSnapshot = await stageSingleChunk({
+      sourceId: foreignSourceId,
+      originId: foreignOriginId,
+      text: "Cette version appartient à une autre source du même utilisateur.",
+    });
+    const created = await thread(ownerId);
+    const reservation = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `unavailable-attachment-${newId("request")}`,
+      markdown: "Réponds uniquement à partir de la pièce jointe.",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          snapshotVersion: null,
+          label: "Pièce indisponible",
+        },
+      ],
+    });
+    // New writes reject this state. Corrupt the row directly to exercise the
+    // runtime's defense-in-depth for legacy/imported metadata.
+    const reservedAttachment = await client.execute({
+      sql: `SELECT id FROM assistant_attachments WHERE messageId = ? LIMIT 1`,
+      args: [reservation.userMessageId],
+    });
+    const reservedAttachmentId = String(reservedAttachment.rows[0]!.id);
+    await client.batch(
+      [
+        {
+          sql: `DELETE FROM content_version_references
+            WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+          args: [reservedAttachmentId],
+        },
+        {
+          sql: `UPDATE assistant_attachments SET snapshotVersion = ? WHERE id = ?`,
+          args: [foreignSnapshot.versionId, reservedAttachmentId],
+        },
+      ],
+      "write",
+    );
+    const capturedRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
+    const retrievalInputs: OwnedLexicalQuery[] = [];
+    const baseGateway = new MockReadOnlyModelGateway();
+    const gateway: ModelGateway = {
+      listModels: () => baseGateway.listModels(),
+      stream: async function* (request) {
+        capturedRequests.push(request);
+        yield* baseGateway.stream(request);
+      },
+      embed: () => baseGateway.embed(),
+      transcribe: () => baseGateway.transcribe(),
+      estimate: () => baseGateway.estimate(),
+    };
+    const service = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: baseGateway.descriptor,
+          gateway,
+        }),
+      },
+      () => createFirstPartyToolBroker({} as Api).registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input) => {
+        retrievalInputs.push(input);
+        // A buggy or malicious backend must not be able to turn the empty
+        // explicit fence into broad user-corpus evidence.
+        return {
+          candidates: [
+            {
+              sourceId: "unexpected-broad-source",
+              versionId: "unexpected-broad-version",
+              chunkId: "unexpected-broad-chunk",
+              ordinal: 0,
+              score: 1,
+              snippet: "Broad corpus content that must be discarded",
+              locator: { kind: "text", startOffset: 0, endOffset: 10 },
+              contentHash: "b".repeat(64),
+              evidenceKind: "native-text",
+              channels: ["lexical"],
+              fusedScore: 1,
+              text: "Broad corpus content that must be discarded",
+              tokenEstimate: 10,
+              headingPath: null,
+            },
+          ],
+          vectorUsed: false,
+          vectorImplementation: null,
+          rerankUsed: false,
+          rerankImplementation: null,
+          retrievalMode: "lexical",
+          fallbackReason: null,
+          operationId: `retrieval-${newId("closed")}`,
+          stages: [],
+        } satisfies HybridSearchResult;
+      },
+    );
+
+    await service.runNow(ownerId, reservation.runId);
+
+    expect(retrievalInputs).toHaveLength(1);
+    expect(retrievalInputs[0]).toMatchObject({
+      projectIds: [],
+      contextAccess: "explicit-attachment",
+    });
+    expect(retrievalInputs[0]?.sourceIds).toBeUndefined();
+    expect(retrievalInputs[0]?.versionIds).toBeUndefined();
+    const request = capturedRequests[0]!;
+    expect(
+      request.messages.filter((block) => block.trust === "retrieved-untrusted"),
+    ).toHaveLength(0);
+    const unavailable = request.messages.find(
+      (block) =>
+        block.mediaType ===
+        "application/vnd.avermate.explicit-source-unavailable+json",
+    );
+    expect(unavailable?.trust).toBe("system-policy");
+    expect(unavailable?.content).toContain(
+      '"scopeBehavior":"closed-empty-when-no-searchable-attachment"',
+    );
+    expect(unavailable?.content).toContain(
+      '"reason":"snapshot-version-unavailable"',
+    );
+    expect(unavailable?.content).toContain(
+      "Do not claim to have read, searched, or cited",
+    );
+    const retrievalMetadata = request.messages.find(
+      (block) =>
+        block.mediaType === "application/vnd.avermate.retrieval-run+json",
+    );
+    expect(retrievalMetadata?.content).toContain(
+      '"contextAccess":"explicit-attachment"',
+    );
+    expect(retrievalMetadata?.content).toContain(
+      '"fallbackReason":"explicit-sources-unavailable; search closed empty"',
+    );
+  });
+
+  test("loads an owned task as application data and rejects hostile broad retrieval", async () => {
+    const ownerId = "corpus-user-a";
+    const taskId = `ptask-${newId("assistant-task")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO planning_tasks (
+          id, title, notes, localNote, status, sortOrder, revision,
+          yearId, userId, syncState, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, 'doing', 0, 3, ?, ?, 'detached', ?, ?)`,
+      args: [
+        taskId,
+        "Relire le chapitre 4",
+        "Comparer les deux démonstrations.",
+        "Insister sur le contre-exemple.",
+        "corpus-year-a",
+        ownerId,
+        now,
+        now,
+      ],
+    });
+    const created = await thread(ownerId);
+    const reservation = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `task-scope-${newId("request")}`,
+      markdown: "Aide-moi à faire cette tâche.",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "task",
+          referenceId: taskId,
+          snapshotVersion: null,
+          label: "Relire le chapitre 4",
+        },
+      ],
+    });
+    const newlyFrozenTask = await client.execute({
+      sql: `SELECT id, frozenPayloadVersion FROM assistant_attachments
+        WHERE messageId = ? AND kind = 'task' LIMIT 1`,
+      args: [reservation.userMessageId],
+    });
+    expect(newlyFrozenTask.rows[0]?.frozenPayloadVersion).toBe(1);
+    // Simulate an attachment written by a pre-0068 server. First use must
+    // backfill it once, after which retries remain immutable.
+    await client.execute({
+      sql: `UPDATE assistant_attachments
+        SET frozenPayloadVersion = NULL, frozenPayloadJson = NULL,
+          frozenPayloadDigest = NULL, frozenSourceRevision = NULL
+        WHERE id = ?`,
+      args: [newlyFrozenTask.rows[0]!.id],
+    });
+    const capturedRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
+    const retrievalInputs: OwnedLexicalQuery[] = [];
+    const baseGateway = new MockReadOnlyModelGateway();
+    const gateway: ModelGateway = {
+      listModels: () => baseGateway.listModels(),
+      stream: async function* (request) {
+        capturedRequests.push(request);
+        yield* baseGateway.stream(request);
+      },
+      embed: () => baseGateway.embed(),
+      transcribe: () => baseGateway.transcribe(),
+      estimate: () => baseGateway.estimate(),
+    };
+    const service = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: baseGateway.descriptor,
+          gateway,
+        }),
+      },
+      () => createFirstPartyToolBroker({} as Api).registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input) => {
+        retrievalInputs.push(input);
+        return {
+          candidates: [
+            {
+              sourceId: "hostile-global-source",
+              versionId: "hostile-global-version",
+              chunkId: "hostile-global-chunk",
+              ordinal: 0,
+              score: 1,
+              snippet: "Unrelated corpus evidence",
+              locator: { kind: "text", startOffset: 0, endOffset: 10 },
+              contentHash: "c".repeat(64),
+              evidenceKind: "native-text",
+              channels: ["lexical"],
+              fusedScore: 1,
+              text: "Unrelated corpus evidence",
+              tokenEstimate: 10,
+              headingPath: null,
+            },
+          ],
+          vectorUsed: false,
+          vectorImplementation: null,
+          rerankUsed: false,
+          rerankImplementation: null,
+          retrievalMode: "lexical",
+          fallbackReason: null,
+          operationId: `retrieval-${newId("task-scope")}`,
+          stages: [],
+        } satisfies HybridSearchResult;
+      },
+    );
+
+    await service.runNow(ownerId, reservation.runId);
+    await client.execute({
+      sql: `UPDATE planning_tasks SET title = ?, notes = ?, revision = revision + 1,
+        updatedAt = ? WHERE id = ? AND userId = ?`,
+      args: [
+        "Titre modifié après envoi",
+        "MUTATION_QUI_NE_DOIT_PAS_RETROAGIR",
+        now + 1,
+        taskId,
+        ownerId,
+      ],
+    });
+    const retry = await store.reserveRetry({
+      ownerId,
+      messageId: reservation.reservedOutputMessageId,
+      clientRequestId: `task-retry-${newId("request")}`,
+      modelKey: "mock-readonly",
+    });
+    await service.runNow(ownerId, retry.runId);
+
+    expect(retrievalInputs).toHaveLength(2);
+    for (const input of retrievalInputs) {
+      expect(input).toMatchObject({
+        projectIds: [],
+        contextAccess: "explicit-attachment",
+      });
+      expect(input.sourceIds).toBeUndefined();
+      expect(input.versionIds).toBeUndefined();
+    }
+    expect(capturedRequests).toHaveLength(2);
+    for (const request of capturedRequests) {
+      const taskBlock = request.messages.find(
+        (block) =>
+          block.mediaType === "application/vnd.avermate.planning-task+json",
+      );
+      expect(taskBlock?.trust).toBe("application-data");
+      expect(taskBlock?.content).toContain("Relire le chapitre 4");
+      expect(taskBlock?.content).toContain("contre-exemple");
+      expect(taskBlock?.content).not.toContain(
+        "MUTATION_QUI_NE_DOIT_PAS_RETROAGIR",
+      );
+      expect(
+        request.messages.filter(
+          (block) => block.trust === "retrieved-untrusted",
+        ),
+      ).toHaveLength(0);
+    }
+    const frozenTask = await client.execute({
+      sql: `SELECT frozenPayloadVersion, frozenPayloadDigest,
+          frozenSourceRevision, frozenPayloadJson
+        FROM assistant_attachments WHERE messageId = ? AND kind = 'task'`,
+      args: [reservation.userMessageId],
+    });
+    expect(frozenTask.rows[0]?.frozenPayloadVersion).toBe(1);
+    expect(frozenTask.rows[0]?.frozenSourceRevision).toBe(3);
+    expect(String(frozenTask.rows[0]?.frozenPayloadDigest)).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(String(frozenTask.rows[0]?.frozenPayloadJson)).not.toContain(
+      "MUTATION_QUI_NE_DOIT_PAS_RETROAGIR",
+    );
+  });
+
+  test("retries an attachment against its owned immutable snapshot after the source head advances", async () => {
+    const ownerId = "corpus-user-a";
+    const subjectId = `subject-${newId("snapshot-fence")}`;
+    const sourceId = `source-${newId("snapshot-fence")}`;
+    const now = Math.floor(Date.now() / 1_000);
+    await client.execute({
+      sql: `INSERT INTO subjects (
+          id, name, coefficient, kind, isMain, bonus, sortOrder,
+          yearId, userId, createdAt, updatedAt
+        ) VALUES (?, 'Archive immuable', 1, 'subject', 1, 0, 0, ?, ?, ?, ?)`,
+      args: [subjectId, "corpus-year-a", ownerId, now, now],
+    });
+    await seedSource(client, { id: sourceId, originId: subjectId, subjectId });
+    const corpus = new CoreCorpusStore(client);
+    const identity: OwnedSourceIdentity = {
+      ownerId,
+      originKind: "subject",
+      originId: subjectId,
+    };
+    const commitTextVersion = async (
+      versionLabel: string,
+      texts: readonly string[],
+      expectedPreviousVersionId: string | null,
+    ) => {
+      const chunks: StagedContentChunk[] = texts.map((text, ordinal) => ({
+        ordinal,
+        text,
+        normalizedText: normalizeForSearch(text),
+        tokenEstimate: Math.ceil(text.length / 4),
+        contentHash: sha256(text),
+        locator: {
+          kind: "text",
+          startOffset: ordinal * 1_000,
+          endOffset: ordinal * 1_000 + text.length,
+        },
+        headingPath: null,
+        evidenceKind: "native-text",
+      }));
+      const joinedText = texts.join("\n");
+      const staged = await corpus.stageVersion({
+        identity,
+        sourceId,
+        versionKey: `${versionLabel}-${newId("snapshot-version")}`,
+        contentHash: sha256(joinedText),
+        extractorId: "snapshot-fence-test",
+        extractorVersion: "1",
+        mimeType: "text/plain",
+        language: "fr",
+        byteSize: joinedText.length,
+        locatorSchemaVersion: 1,
+        metadata: {},
+        chunks,
+      });
+      const committed = await corpus.commitVersion({
+        ownerId,
+        stagingId: staged.stagingId,
+        expectedSourceId: sourceId,
+        expectedPreviousVersionId,
+      });
+      await publishLexicalVersion({ corpus, identity, committed, chunks });
+      return committed;
+    };
+    const snapshot = await commitTextVersion(
+      "n",
+      [
+        "Préface historique sans le terme recherché.",
+        "Deuxième passage historique sans réponse.",
+        "Troisième passage historique sans réponse.",
+        "Quatrième passage historique sans réponse.",
+        "SNAPSHOT CIBLE : la valeur immuable est VERSION-N.",
+      ],
+      null,
+    );
+    const created = await thread(ownerId);
+    const first = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: null,
+      clientRequestId: `snapshot-first-${newId("request")}`,
+      markdown: "Quelle est la valeur de SNAPSHOT CIBLE ?",
+      modelKey: "mock-readonly",
+      attachments: [
+        {
+          kind: "subject",
+          referenceId: subjectId,
+          // The real Web send path sends null. The server must resolve and
+          // freeze the immutable head before the source can advance.
+          snapshotVersion: null,
+          label: "Archive N",
+        },
+      ],
+    });
+    const frozenBeforeAdvance = await store.getThreadDetail(
+      ownerId,
+      created.thread.id,
+    );
+    const frozenAttachment = frozenBeforeAdvance.attachments.find(
+      (attachment) => attachment.messageId === first.userMessageId,
+    );
+    expect(frozenAttachment?.snapshotVersion).toBe(snapshot.versionId);
+    const snapshotReachability = await client.execute({
+      sql: `SELECT sourceVersionId FROM content_version_references
+        WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+      args: [frozenAttachment!.id],
+    });
+    expect(snapshotReachability.rows.map((row) => row.sourceVersionId)).toEqual(
+      [snapshot.versionId],
+    );
+    const next = await commitTextVersion(
+      "n-plus-one",
+      ["SNAPSHOT CIBLE : la valeur courante est VERSION-N-PLUS-UN."],
+      snapshot.versionId,
+    );
+    const capturedRequests: Array<Parameters<ModelGateway["stream"]>[0]> = [];
+    const retrievalInputs: OwnedLexicalQuery[] = [];
+    const baseGateway = new MockReadOnlyModelGateway();
+    const gateway: ModelGateway = {
+      listModels: () => baseGateway.listModels(),
+      stream: async function* (request) {
+        capturedRequests.push(request);
+        yield* baseGateway.stream(request);
+      },
+      embed: () => baseGateway.embed(),
+      transcribe: () => baseGateway.transcribe(),
+      estimate: () => baseGateway.estimate(),
+    };
+    const broker = createFirstPartyToolBroker({} as Api);
+    const service = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: baseGateway.descriptor,
+          gateway,
+        }),
+      },
+      () => broker.registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input, options) => {
+        retrievalInputs.push(input);
+        return hybridCorpusSearch(input, {
+          ...options,
+          runtime: null,
+          reranker: null,
+          persistTrace: false,
+        });
+      },
+    );
+
+    await service.runNow(ownerId, first.runId, broker);
+    const latest = await commitTextVersion(
+      "n-plus-two",
+      ["SNAPSHOT CIBLE : la valeur courante est VERSION-N-PLUS-DEUX."],
+      next.versionId,
+    );
+    const retry = await store.reserveRetry({
+      ownerId,
+      messageId: first.reservedOutputMessageId,
+      clientRequestId: `snapshot-retry-${newId("request")}`,
+      modelKey: "mock-readonly",
+    });
+    await service.runNow(ownerId, retry.runId, broker);
+
+    expect(retrievalInputs).toHaveLength(2);
+    for (const input of retrievalInputs) {
+      expect(input).toMatchObject({
+        projectIds: [],
+        sourceIds: [sourceId],
+        versionIds: [snapshot.versionId],
+        contextAccess: "explicit-attachment",
+      });
+    }
+    expect(latest.versionId).not.toBe(snapshot.versionId);
+    for (const request of capturedRequests) {
+      const evidenceText = request.messages
+        .filter((block) => block.trust === "retrieved-untrusted")
+        .map((block) => block.content)
+        .join("\n");
+      expect(evidenceText).toContain("VERSION-N");
+      expect(evidenceText).not.toContain("VERSION-N-PLUS-UN");
+      expect(evidenceText).not.toContain("VERSION-N-PLUS-DEUX");
+    }
+    const detail = await store.getThreadDetail(ownerId, created.thread.id);
+    const runIds = new Set([first.runId, retry.runId]);
+    const proofs = detail.manifests
+      .filter((manifest) => runIds.has(manifest.runId))
+      .flatMap((manifest) => manifest.proofHandles);
+    expect(proofs.length).toBeGreaterThanOrEqual(2);
+    expect(
+      proofs.every(
+        (proof) =>
+          proof.contentVersionReference.sourceVersionId === snapshot.versionId,
+      ),
+    ).toBe(true);
+
+    await corpus.markVersionForGc(snapshot.versionId);
+    expect((await corpus.collectGarbage()).deletedVersionIds).not.toContain(
+      snapshot.versionId,
+    );
+    const trashed = await store.trashThread({
+      ownerId,
+      threadId: created.thread.id,
+      expectedRevision: detail.thread.revision,
+      retentionDays: 1,
+    });
+    await client.execute({
+      sql: `UPDATE assistant_threads SET purgeAfter = 0 WHERE id = ?`,
+      args: [trashed.id],
+    });
+    expect(await store.purgeExpired(ownerId)).toContain(created.thread.id);
+    expect((await corpus.collectGarbage()).deletedVersionIds).toContain(
+      snapshot.versionId,
     );
   });
 
@@ -1712,6 +2708,14 @@ describe("read-only runtime integration", () => {
           descriptor,
           gateway,
           contextMediaDelivery: "server-resolved",
+          fallbackSelections: [
+            {
+              capability: MOCK_ASSISTANT_MODEL,
+              descriptor: { ...descriptor, contextWindow: 12_000 },
+              gateway,
+              contextMediaDelivery: "server-resolved" as const,
+            },
+          ],
         }),
       },
       () => broker.registry,
@@ -1759,9 +2763,9 @@ describe("read-only runtime integration", () => {
     expect(retrievalResults[0]).toMatchObject({
       vectorUsed: true,
       vectorImplementation: "test-visual-vector",
-      rerankUsed: true,
-      rerankImplementation: "test-rerank-space",
-      retrievalMode: "reranked",
+      rerankUsed: false,
+      rerankImplementation: null,
+      retrievalMode: "hybrid",
       fallbackReason: null,
     });
     expect(retrievalResults[0]?.candidates[0]).toMatchObject({
@@ -1804,6 +2808,18 @@ describe("read-only runtime integration", () => {
       (candidate) => candidate.runId === reservation.runId,
     )!;
     const proof = manifest.proofHandles[0]!;
+    expect(manifest.budget).toMatchObject({
+      maxTokens: 12_000,
+      mediaTokens: 8_192,
+      estimationPolicy: "utf8-text-plus-conservative-media-v1",
+    });
+    expect(manifest.budget.usedTokens).toBe(
+      manifest.budget.textTokens! + manifest.budget.mediaTokens!,
+    );
+    expect(
+      manifest.items.find((item) => item.referenceId === chunkId)
+        ?.tokenEstimate,
+    ).toBeGreaterThanOrEqual(8_192);
     expect(proof).toMatchObject({
       runId: reservation.runId,
       locator: { kind: "pdf", page: 7 },
@@ -1830,6 +2846,98 @@ describe("read-only runtime integration", () => {
         markdown: "Le carré de la page est rouge.",
       }),
     );
+
+    const constrainedRequests: Array<Parameters<ModelGateway["stream"]>[0]> =
+      [];
+    const constrainedDescriptor: ModelDescriptor = {
+      ...descriptor,
+      id: "visual-rag-constrained-model",
+      contextWindow: 9_000,
+    };
+    const constrainedGateway: ModelGateway = {
+      listModels: async () => [constrainedDescriptor],
+      stream: async function* (request) {
+        constrainedRequests.push(request);
+        yield {
+          type: "content-delta",
+          delta:
+            "La preuve visuelle dépasse le budget de cette route. [[abstain]]",
+        } satisfies ModelGatewayEvent;
+        yield { type: "finish", reason: "stop" } satisfies ModelGatewayEvent;
+      },
+      embed: async () => {
+        throw new Error("unused");
+      },
+      transcribe: async () => {
+        throw new Error("unused");
+      },
+      estimate: async () => ({
+        usage: {
+          inputTokens: "unknown",
+          outputTokens: "unknown",
+          reasoningTokens: "unknown",
+          cachedReadTokens: "unknown",
+          cachedWriteTokens: "unknown",
+        },
+        estimatedCostMinor: 0,
+        currency: "EUR",
+      }),
+    };
+    const constrainedService = new ReadOnlyAssistantRunService(
+      client,
+      store,
+      {
+        list: async () => [MOCK_ASSISTANT_MODEL],
+        resolve: async () => ({
+          capability: MOCK_ASSISTANT_MODEL,
+          descriptor: constrainedDescriptor,
+          gateway: constrainedGateway,
+          contextMediaDelivery: "server-resolved",
+        }),
+      },
+      () => broker.registry,
+      undefined,
+      undefined,
+      new SqliteFts5LexicalSearchBackend(client),
+      async (input, options) =>
+        hybridCorpusSearch(input, {
+          ...options,
+          runtime: vectorRuntime,
+          reranker: visualReranker,
+          corpusGenerationId: "visual-generation-fixture",
+          persistTrace: false,
+        }),
+      handles,
+    );
+    const constrainedTurn = await store.reserveTurn({
+      ownerId,
+      threadId: created.thread.id,
+      branchId: created.branch.id,
+      expectedHeadMessageId: reservation.reservedOutputMessageId,
+      clientRequestId: `visual-budget-${newId("request")}`,
+      markdown: "Relis la page 7 dans la fenêtre la plus petite.",
+      modelKey: "mock-readonly",
+    });
+    await constrainedService.runNow(ownerId, constrainedTurn.runId, broker);
+    const constrainedEvidence = constrainedRequests[0]?.messages.find(
+      (block) => block.sourceRef === chunkId,
+    );
+    expect(constrainedEvidence?.parts).toMatchObject([{ type: "text" }]);
+    expect(
+      constrainedEvidence?.parts?.some((part) => part.type !== "text"),
+    ).toBe(false);
+    const constrainedDetail = await store.getThreadDetail(
+      ownerId,
+      created.thread.id,
+    );
+    const constrainedManifest = constrainedDetail.manifests.find(
+      (candidate) => candidate.runId === constrainedTurn.runId,
+    )!;
+    expect(constrainedManifest.budget).toMatchObject({
+      maxTokens: 9_000,
+      mediaTokens: 0,
+      estimationPolicy: "utf8-text-plus-conservative-media-v1",
+    });
   });
 
   test("persists only explicitly selected proof handles and binds them to text claims", async () => {
@@ -2133,6 +3241,20 @@ describe("read-only runtime integration", () => {
       "corpus-user-a",
       created.thread.id,
     );
+    const attachment = detail.attachments.find(
+      (candidate) => candidate.messageId === reservation.userMessageId,
+    );
+    expect(attachment?.snapshotVersion).toBe(
+      String(indexed.rows[0]?.currentVersionId),
+    );
+    const attachmentReference = await client.execute({
+      sql: `SELECT sourceVersionId FROM content_version_references
+        WHERE ownerKind = 'assistant-citation' AND ownerId = ?`,
+      args: [attachment!.id],
+    });
+    expect(attachmentReference.rows.map((row) => row.sourceVersionId)).toEqual([
+      indexed.rows[0]?.currentVersionId,
+    ]);
     expect(detail.manifests.at(-1)?.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

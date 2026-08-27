@@ -3,6 +3,7 @@ import { createRouterClient } from "@orpc/server";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProjectRetrievalPolicyEnvironment } from "../search/project-retrieval-policy-state";
 
 const directory = mkdtempSync(join(tmpdir(), "avermate-projects-test-"));
 process.env.DATABASE_URL = `file:${join(directory, "projects.db")}`;
@@ -329,6 +330,45 @@ describe("owned study projects and corpus API", () => {
     }
   });
 
+  test("never exposes a hostile reranker endpoint through retrieval readiness", async () => {
+    const configured = {
+      CORPUS_RERANK_ENABLED: "true",
+      CORPUS_RERANK_PROVIDER: "tei",
+      CORPUS_RERANK_MODEL: "Alibaba-NLP/gte-multilingual-reranker-base",
+      CORPUS_RERANK_PLACEMENT: "node",
+      CORPUS_RERANK_BASE_URL:
+        "https://operator:private-token@rerank.internal:8443?api_key=hidden",
+      CORPUS_RERANK_NODE_ID: "private-node-identity",
+      CORPUS_RERANK_MODEL_REVISION: "b".repeat(40),
+      CORPUS_RERANK_IMAGE_DIGEST: `sha256:${"c".repeat(64)}`,
+      CORPUS_RERANK_TEI_REVISION: "d".repeat(40),
+    } as const;
+    const previous = Object.fromEntries(
+      Object.keys(configured).map((key) => [key, process.env[key]]),
+    );
+    try {
+      Object.assign(process.env, configured);
+      const readiness = await apiA.retrieval.readiness();
+      expect(readiness.rerank).toMatchObject({
+        enabled: true,
+        complete: false,
+        provider: "tei",
+        placement: "node",
+        reason: "incomplete",
+      });
+      const serialized = JSON.stringify(readiness);
+      expect(serialized).not.toContain("private-token");
+      expect(serialized).not.toContain("api_key");
+      expect(serialized).not.toContain("private-node-identity");
+      expect(serialized).not.toContain("rerank.internal");
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   test("owns retrieval policy per project, enforces CAS and refuses an unready advanced pipeline", async () => {
     const project = await apiA.projects.create({
       title: "Politique RAG",
@@ -404,6 +444,687 @@ describe("owned study projects and corpus API", () => {
         rerankSpaceId: "rerank_unowned-or-incompatible",
       }),
     ).rejects.toThrow("Advanced retrieval is not ready");
+  });
+
+  test("activates dense hybrid retrieval without requiring a reranker", async () => {
+    const project = await apiA.projects.create({
+      title: "Hybride local sans reranker",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const embeddingSpace = {
+      id: "emb_local_ready",
+      provider: "fixture-local",
+      model: "fixture-v1",
+      modelRevision: "1",
+      dimensions: 3,
+      modalities: ["text"] as ["text"],
+      normalization: "provider-unit" as const,
+      preprocessingRevision: "avermate-retrieval-v1",
+      placement: "core" as const,
+      registered: true,
+    };
+    const environment: ProjectRetrievalPolicyEnvironment = {
+      lexical: {
+        available: true,
+        implementation: "sqlite-fts5-unicode61-v1",
+      },
+      embedding: {
+        configurationReady: true,
+        provider: embeddingSpace.provider,
+        placement: "full-self-host",
+        sendsSourceContentToThirdParties: false,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: true,
+        vectorAvailable: true,
+        vectorImplementation: "fixture-vector-index",
+        compatibleSpace: embeddingSpace,
+      },
+      rerank: {
+        configurationReady: false,
+        provider: null,
+        placement: null,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: false,
+        compatibleSpace: null,
+      },
+      generation: {
+        id: "egen_local_ready",
+        state: "active",
+        eligibleVersionCount: 1,
+        indexedVersionCount: 1,
+        unsupportedVersionCount: 0,
+      },
+    };
+    const { setOwnedProjectRetrievalPolicy } =
+      await import("../search/project-retrieval-policy");
+
+    await expect(
+      setOwnedProjectRetrievalPolicy(
+        userA,
+        {
+          projectId: String(project.id),
+          revision: 1,
+          retrievalMode: "advanced-auto",
+          fallbackPolicy: "hybrid-without-rerank",
+          embeddingSpaceId: embeddingSpace.id,
+          rerankSpaceId: "rerank_incompatible",
+        },
+        { inspectEnvironment: async () => environment },
+      ),
+    ).rejects.toThrow("rerank-space-incompatible");
+
+    const updated = await setOwnedProjectRetrievalPolicy(
+      userA,
+      {
+        projectId: String(project.id),
+        revision: 1,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpace.id,
+        rerankSpaceId: null,
+      },
+      { inspectEnvironment: async () => environment },
+    );
+
+    expect(updated).toMatchObject({
+      revision: 2,
+      status: "active",
+      effectiveMode: "hybrid",
+      denseReady: true,
+      rerankReady: false,
+      fallbackActive: true,
+      configured: {
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpace.id,
+        rerankSpaceId: null,
+      },
+    });
+    const stored = await database.$client.execute({
+      sql: `SELECT revision, retrievalMode, retrievalFallbackPolicy,
+          embeddingSpaceId, rerankSpaceId
+        FROM study_projects WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [project.id, userA],
+    });
+    expect(stored.rows[0]).toMatchObject({
+      revision: 2,
+      retrievalMode: "advanced-auto",
+      retrievalFallbackPolicy: "hybrid-without-rerank",
+      embeddingSpaceId: embeddingSpace.id,
+      rerankSpaceId: null,
+    });
+
+    const bootstrapProject = await apiA.projects.create({
+      title: "Hybride à indexer sans reranker",
+      description: "",
+      yearId: yearA,
+      subjectId: subjectA,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    const bootstrap = await setOwnedProjectRetrievalPolicy(
+      userA,
+      {
+        projectId: String(bootstrapProject.id),
+        revision: 1,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpace.id,
+        rerankSpaceId: null,
+      },
+      {
+        inspectEnvironment: async () => ({
+          ...environment,
+          embedding: {
+            ...environment.embedding,
+            vectorAvailable: false,
+            vectorImplementation: "vector-generation-unavailable",
+          },
+          generation: {
+            id: null,
+            state: null,
+            eligibleVersionCount: 1,
+            indexedVersionCount: 0,
+            unsupportedVersionCount: 0,
+          },
+        }),
+      },
+    );
+    expect(bootstrap).toMatchObject({
+      status: "degraded",
+      effectiveMode: "unavailable",
+      denseReady: false,
+      rerankReady: false,
+      reasons: expect.arrayContaining(["embedding-reindex-required"]),
+      reindex: { required: true, canReindex: true },
+    });
+  });
+
+  test("can reactivate advanced retrieval and bootstrap a new generation after the last project disables its owner fence", async () => {
+    const userId = "projects-reactivation-user";
+    const materialId = "projects-reactivation-material";
+    const yearId = "projects-reactivation-year";
+    const now = Math.floor(Date.now() / 1_000);
+    await database.$client.batch(
+      [
+        {
+          sql: `INSERT INTO users
+              (id, name, email, emailVerified, role, banned, createdAt, updatedAt)
+            VALUES (?, 'Reactivation', ?, 1, 'user', 0, ?, ?)`,
+          args: [userId, `${userId}@example.test`, now, now],
+        },
+        {
+          sql: `INSERT INTO years
+              (id, name, startsAt, endsAt, userId, createdAt, updatedAt)
+            VALUES (?, 'Reactivation', ?, ?, ?, ?, ?)`,
+          args: [yearId, now, now + 31_536_000, userId, now, now],
+        },
+        {
+          sql: `INSERT INTO material_documents
+              (id, title, sourceType, textContent, origin, yearId, userId,
+               createdAt, updatedAt)
+            VALUES (?, 'Fence bootstrap', 'text', ?, 'manual', ?, ?, ?, ?)`,
+          args: [
+            materialId,
+            "A source that must be embedded after explicit reactivation.",
+            yearId,
+            userId,
+            now,
+            now,
+          ],
+        },
+      ],
+      "write",
+    );
+    const api = createRouterClient<AppRouter, Record<never, never>>(
+      (await import("./index")).appRouter,
+      {
+        context: { headers: new Headers(), session: sessionFor(userId) },
+      },
+    );
+    const project = await api.projects.create({
+      title: "Réactivation du RAG",
+      description: "",
+      yearId,
+      subjectId: null,
+      instructionsMarkdown: null,
+      contextPolicyVersion: 1,
+      contextPolicyJson: null,
+      emoji: null,
+      color: null,
+    });
+    await api.projects.addItem({
+      projectId: String(project.id),
+      kind: "material",
+      referenceId: materialId,
+      contextMode: "include",
+      label: null,
+    });
+    const { runCorpusIndexSourceJob } = await import("../jobs/corpus");
+    await runCorpusIndexSourceJob({
+      ownerId: userId,
+      originKind: "material",
+      originId: materialId,
+    });
+
+    const configured = {
+      AVERMATE_DEPLOYMENT_MODE: "full-self-host",
+      CORPUS_EMBEDDING_ENABLED: "true",
+      CORPUS_EMBEDDING_PROVIDER: "fixture-reactivation",
+      CORPUS_EMBEDDING_PLACEMENT: "full-self-host",
+      CORPUS_EMBEDDING_BASE_URL: "http://embedding.internal:8080/v1",
+      CORPUS_EMBEDDING_MODEL: "fixture-v1",
+      CORPUS_EMBEDDING_DIMENSION: "3",
+      CORPUS_VECTOR_URL: "http://qdrant.internal:6333",
+      CORPUS_EMBEDDING_LOCAL: "true",
+      CORPUS_RERANK_ENABLED: "false",
+    } as const;
+    const previous = Object.fromEntries(
+      Object.keys(configured).map((key) => [key, process.env[key]]),
+    );
+    try {
+      Object.assign(process.env, configured);
+      const initial = await api.projects.retrievalPolicy({
+        projectId: String(project.id),
+      });
+      const compatibleSpace = initial.embedding.compatibleSpaces[0];
+      const embeddingSpaceId = compatibleSpace?.id;
+      expect(embeddingSpaceId).toBeString();
+
+      const advanced = await api.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: initial.revision,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpaceId!,
+        rerankSpaceId: null,
+      });
+      expect(advanced).toMatchObject({
+        configured: { retrievalMode: "advanced-auto" },
+        reasons: expect.arrayContaining(["embedding-reindex-required"]),
+        reindex: { required: true, canReindex: true },
+      });
+
+      const { readEmbeddingPublicationFence } =
+        await import("../search/embedding-publication-fence");
+      const initialFence = await readEmbeddingPublicationFence(userId);
+      expect(initialFence.enabled).toBe(true);
+
+      const lexical = await api.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: advanced.revision,
+        retrievalMode: "lexical-only",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      });
+      const disabledFence = await readEmbeddingPublicationFence(userId);
+      expect(disabledFence).toMatchObject({ enabled: false });
+      expect(disabledFence.publicationEpoch).toBeGreaterThan(
+        initialFence.publicationEpoch,
+      );
+      await database.$client.batch(
+        [
+          {
+            sql: `INSERT INTO corpus_embedding_spaces
+                (id, descriptorJson, descriptorDigest, createdAt)
+              VALUES (?, ?, ?, ?)`,
+            args: [
+              embeddingSpaceId!,
+              JSON.stringify(compatibleSpace),
+              "d".repeat(64),
+              now,
+            ],
+          },
+          {
+            sql: `INSERT INTO corpus_embedding_generations
+                (id, userId, spaceId, state, publicationEpoch,
+                 versionSetDigest, expectedVersionCount, indexedVersionCount,
+                 activatedAt, createdAt, updatedAt)
+              VALUES ('projects-reactivation-stale-generation', ?, ?, 'active',
+                ?, ?, 1, 1, ?, ?, ?)`,
+            args: [
+              userId,
+              embeddingSpaceId!,
+              initialFence.publicationEpoch,
+              "e".repeat(64),
+              now,
+              now,
+              now,
+            ],
+          },
+        ],
+        "write",
+      );
+      const disabledReadiness = await api.retrieval.readiness();
+      expect(disabledReadiness.embedding.publicationFence).toEqual(
+        disabledFence,
+      );
+      expect(
+        disabledReadiness.embedding.generations.find(
+          (generation) =>
+            generation.id === "projects-reactivation-stale-generation",
+        ),
+      ).toMatchObject({
+        state: "active",
+        effectiveState: "superseded",
+        publicationEpoch: initialFence.publicationEpoch,
+        isCurrentPublicationEpoch: false,
+        publicationAuthorized: false,
+      });
+
+      const disabledReadModel = await api.projects.retrievalPolicy({
+        projectId: String(project.id),
+      });
+      expect(disabledReadModel).toMatchObject({
+        revision: lexical.revision,
+        configured: { retrievalMode: "lexical-only" },
+        embedding: {
+          runtimeReady: true,
+          compatibleSpaces: [{ id: embeddingSpaceId }],
+        },
+      });
+
+      const reactivated = await api.projects.setRetrievalPolicy({
+        projectId: String(project.id),
+        revision: lexical.revision,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpaceId!,
+        rerankSpaceId: null,
+      });
+      expect(reactivated).toMatchObject({
+        configured: { retrievalMode: "advanced-auto" },
+        reasons: expect.arrayContaining(["embedding-reindex-required"]),
+        reindex: {
+          required: true,
+          canReindex: true,
+          eligibleVersionCount: 1,
+          indexedVersionCount: 0,
+        },
+      });
+      const reenabledFence = await readEmbeddingPublicationFence(userId);
+      expect(reenabledFence).toMatchObject({ enabled: true });
+      expect(reenabledFence.publicationEpoch).toBeGreaterThan(
+        disabledFence.publicationEpoch,
+      );
+      expect(
+        (await api.retrieval.readiness()).embedding.generations.find(
+          (generation) =>
+            generation.id === "projects-reactivation-stale-generation",
+        ),
+      ).toMatchObject({
+        state: "active",
+        effectiveState: "superseded",
+        publicationAuthorized: false,
+      });
+
+      const rebuild = await api.retrieval.reindex({
+        projectId: String(project.id),
+      });
+      const queued = await database.$client.execute({
+        sql: `SELECT payload, status FROM jobs
+          WHERE id = ? AND userId = ? LIMIT 1`,
+        args: [rebuild.jobId, userId],
+      });
+      expect(queued.rows[0]?.status).toBe("queued");
+      expect(JSON.parse(String(queued.rows[0]?.payload))).toMatchObject({
+        ownerId: userId,
+        scope: "advanced-projects",
+        requestedProjectId: project.id,
+        publicationEpoch: reenabledFence.publicationEpoch,
+      });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  test("fences a captured rebuild when one advanced project leaves and rebuilds the remaining live corpus", async () => {
+    const userId = "projects-policy-race-user";
+    const yearId = "projects-policy-race-year";
+    const now = Math.floor(Date.now() / 1_000);
+    await database.$client.batch(
+      [
+        {
+          sql: `INSERT INTO users
+              (id, name, email, emailVerified, role, banned, createdAt, updatedAt)
+            VALUES (?, 'Policy race', ?, 1, 'user', 0, ?, ?)`,
+          args: [userId, `${userId}@example.test`, now, now],
+        },
+        {
+          sql: `INSERT INTO years
+              (id, name, startsAt, endsAt, userId, createdAt, updatedAt)
+            VALUES (?, 'Policy race', ?, ?, ?, ?, ?)`,
+          args: [yearId, now, now + 31_536_000, userId, now, now],
+        },
+        ...["a", "b"].map((suffix) => ({
+          sql: `INSERT INTO material_documents
+              (id, title, sourceType, textContent, origin, yearId, userId,
+               createdAt, updatedAt)
+            VALUES (?, ?, 'text', ?, 'manual', ?, ?, ?, ?)`,
+          args: [
+            `projects-policy-race-material-${suffix}`,
+            `Policy race ${suffix}`,
+            `Corpus ${suffix} captured before the policy transition.`,
+            yearId,
+            userId,
+            now,
+            now,
+          ],
+        })),
+      ],
+      "write",
+    );
+    const api = createRouterClient<AppRouter, Record<never, never>>(
+      (await import("./index")).appRouter,
+      {
+        context: { headers: new Headers(), session: sessionFor(userId) },
+      },
+    );
+    const projects = [];
+    const { runCorpusEmbeddingUnavailableJob, runCorpusIndexSourceJob } =
+      await import("../jobs/corpus");
+    for (const suffix of ["a", "b"] as const) {
+      const project = await api.projects.create({
+        title: `Policy race ${suffix}`,
+        description: "",
+        yearId,
+        subjectId: null,
+        instructionsMarkdown: null,
+        contextPolicyVersion: 1,
+        contextPolicyJson: null,
+        emoji: null,
+        color: null,
+      });
+      await api.projects.addItem({
+        projectId: String(project.id),
+        kind: "material",
+        referenceId: `projects-policy-race-material-${suffix}`,
+        contextMode: "include",
+        label: null,
+      });
+      await runCorpusIndexSourceJob({
+        ownerId: userId,
+        originKind: "material",
+        originId: `projects-policy-race-material-${suffix}`,
+      });
+      projects.push(project);
+    }
+
+    const descriptor = {
+      id: "emb_projects_policy_race",
+      provider: "fixture",
+      model: "fixture-v1",
+      modelRevision: "1",
+      dimensions: 3,
+      modalities: ["text" as const],
+      normalization: "provider-unit" as const,
+      preprocessingRevision: "avermate-retrieval-v1",
+      placement: "core" as const,
+    };
+    const environment: ProjectRetrievalPolicyEnvironment = {
+      lexical: {
+        available: true,
+        implementation: "sqlite-fts5-unicode61-v1",
+      },
+      embedding: {
+        configurationReady: true,
+        provider: descriptor.provider,
+        placement: "full-self-host",
+        sendsSourceContentToThirdParties: false,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: true,
+        vectorAvailable: false,
+        vectorImplementation: "vector-generation-unavailable",
+        compatibleSpace: { ...descriptor, registered: false },
+      },
+      rerank: {
+        configurationReady: false,
+        provider: null,
+        placement: null,
+        credentialReady: true,
+        consentRequired: false,
+        consentReady: true,
+        runtimeReady: false,
+        compatibleSpace: null,
+      },
+      generation: {
+        id: null,
+        state: null,
+        eligibleVersionCount: 1,
+        indexedVersionCount: 0,
+        unsupportedVersionCount: 0,
+      },
+    };
+    const { setOwnedProjectRetrievalPolicy } =
+      await import("../search/project-retrieval-policy");
+    for (const project of projects) {
+      const current = await api.projects.get({
+        projectId: String(project.id),
+      });
+      await setOwnedProjectRetrievalPolicy(
+        userId,
+        {
+          projectId: String(project.id),
+          revision: current.project.revision,
+          retrievalMode: "advanced-auto",
+          fallbackPolicy: "hybrid-without-rerank",
+          embeddingSpaceId: descriptor.id,
+          rerankSpaceId: null,
+        },
+        { inspectEnvironment: async () => environment },
+      );
+    }
+
+    const { readEmbeddingPublicationFence } =
+      await import("../search/embedding-publication-fence");
+    const capturedFence = await readEmbeddingPublicationFence(userId);
+    let reusableEnteredResolve!: () => void;
+    let releaseReusableResolve!: () => void;
+    const reusableEntered = new Promise<void>((resolve) => {
+      reusableEnteredResolve = resolve;
+    });
+    const releaseReusable = new Promise<void>((resolve) => {
+      releaseReusableResolve = resolve;
+    });
+    let blocked = false;
+    let providerCallsAfterPolicyBoundary = 0;
+    const { QdrantVectorIndex } = await import("../search/vector-runtime");
+    const vector = new QdrantVectorIndex({
+      baseUrl: "http://qdrant.internal:6333",
+      collectionPrefix: "projects_policy_race",
+      descriptor,
+      fetch: async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (method === "GET" && url.includes("/collections/")) {
+          return Response.json({
+            result: { config: { params: { vectors: { size: 3 } } } },
+          });
+        }
+        if (method === "POST" && url.endsWith("/points/scroll")) {
+          if (!blocked) {
+            blocked = true;
+            reusableEnteredResolve();
+            await releaseReusable;
+          }
+          return Response.json({ result: { points: [] } });
+        }
+        if (method === "POST" && url.includes("/points/delete?wait=true")) {
+          return Response.json({ result: true });
+        }
+        return Response.json({ result: true });
+      },
+    });
+    const embedding = {
+      descriptor: () => descriptor,
+      embedText: async (input: readonly { contentHash: string }[]) => {
+        providerCallsAfterPolicyBoundary += 1;
+        return input.map((entry) => ({
+          contentHash: entry.contentHash,
+          values: [1, 0, 0],
+        }));
+      },
+    };
+    const capturedRebuild = runCorpusEmbeddingUnavailableJob(
+      {
+        ownerId: userId,
+        scope: "advanced-projects",
+        publicationEpoch: capturedFence.publicationEpoch,
+      },
+      { runtime: { embedding, vector } as never },
+    );
+    await reusableEntered;
+
+    const leaving = await api.projects.get({
+      projectId: String(projects[0]!.id),
+    });
+    await setOwnedProjectRetrievalPolicy(
+      userId,
+      {
+        projectId: String(projects[0]!.id),
+        revision: leaving.project.revision,
+        retrievalMode: "lexical-only",
+        fallbackPolicy: "lexical-only",
+        embeddingSpaceId: null,
+        rerankSpaceId: null,
+      },
+      { inspectEnvironment: async () => environment },
+    );
+    const reducedFence = await readEmbeddingPublicationFence(userId);
+    expect(reducedFence).toMatchObject({ enabled: true });
+    expect(reducedFence.publicationEpoch).toBeGreaterThan(
+      capturedFence.publicationEpoch,
+    );
+    const replacement = await database.$client.execute({
+      sql: `SELECT id, payload, status FROM jobs
+        WHERE userId = ? AND kind = 'corpus.reembedSpace'
+          AND idempotencyKey = ? LIMIT 1`,
+      args: [
+        userId,
+        `retrieval-auto-reindex:epoch:${reducedFence.publicationEpoch}`,
+      ],
+    });
+    expect(replacement.rows[0]?.status).toBe("queued");
+    expect(JSON.parse(String(replacement.rows[0]?.payload))).toMatchObject({
+      ownerId: userId,
+      scope: "advanced-projects",
+      publicationEpoch: reducedFence.publicationEpoch,
+    });
+
+    releaseReusableResolve();
+    await expect(capturedRebuild).rejects.toThrow(
+      "CORPUS_EMBEDDING_PUBLICATION_FENCE_CHANGED",
+    );
+    expect(providerCallsAfterPolicyBoundary).toBe(0);
+
+    await api.projects.trash({ projectId: String(projects[1]!.id) });
+    const trashedFence = await readEmbeddingPublicationFence(userId);
+    expect(trashedFence.enabled).toBe(false);
+    expect(trashedFence.publicationEpoch).toBeGreaterThan(
+      reducedFence.publicationEpoch,
+    );
+    const cancelledReplacement = await database.$client.execute({
+      sql: `SELECT status FROM jobs WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [String(replacement.rows[0]?.id), userId],
+    });
+    expect(cancelledReplacement.rows[0]?.status).toBe("cancelled");
+
+    await api.projects.restore({ projectId: String(projects[1]!.id) });
+    const restoredFence = await readEmbeddingPublicationFence(userId);
+    expect(restoredFence.enabled).toBe(true);
+    expect(restoredFence.publicationEpoch).toBeGreaterThan(
+      trashedFence.publicationEpoch,
+    );
+    const restoredRebuild = await database.$client.execute({
+      sql: `SELECT payload, status FROM jobs WHERE userId = ? AND kind = ?
+        AND idempotencyKey = ? LIMIT 1`,
+      args: [
+        userId,
+        "corpus.reembedSpace",
+        `retrieval-auto-reindex:epoch:${restoredFence.publicationEpoch}`,
+      ],
+    });
+    expect(restoredRebuild.rows[0]?.status).toBe("queued");
   });
 
   test("bumps the project revision atomically when retrieval coverage membership changes", async () => {
@@ -752,49 +1473,48 @@ describe("owned study projects and corpus API", () => {
     });
 
     const embeddingDescriptor = embedding.descriptor();
-    const { setOwnedProjectRetrievalPolicy } =
+    const { projectGenerationCoverage, setOwnedProjectRetrievalPolicy } =
       await import("../search/project-retrieval-policy");
-    const readyEnvironment = (
-      eligibleVersionCount: number,
-      vectorAvailable = true,
-    ) => async () => ({
-      lexical: {
-        available: true,
-        implementation: "sqlite-fts5-unicode61-v1",
-      },
-      embedding: {
-        configurationReady: true,
-        provider: embeddingDescriptor.provider,
-        placement: "full-self-host",
-        sendsSourceContentToThirdParties: false,
-        credentialReady: true,
-        consentRequired: false,
-        consentReady: true,
-        runtimeReady: true,
-        vectorAvailable,
-        vectorImplementation: vectorAvailable
-          ? "fixture-vector-index"
-          : "vector-generation-unavailable",
-        compatibleSpace: { ...embeddingDescriptor, registered: false },
-      },
-      rerank: {
-        configurationReady: true,
-        provider: rerankDescriptor.provider,
-        placement: "node",
-        credentialReady: true,
-        consentRequired: false,
-        consentReady: true,
-        runtimeReady: true,
-        compatibleSpace: rerankDescriptor,
-      },
-      generation: {
-        id: null,
-        state: null,
-        eligibleVersionCount,
-        indexedVersionCount: 0,
-        unsupportedVersionCount: 0,
-      },
-    });
+    const readyEnvironment =
+      (eligibleVersionCount: number, vectorAvailable = true) =>
+      async () => ({
+        lexical: {
+          available: true,
+          implementation: "sqlite-fts5-unicode61-v1",
+        },
+        embedding: {
+          configurationReady: true,
+          provider: embeddingDescriptor.provider,
+          placement: "full-self-host",
+          sendsSourceContentToThirdParties: false,
+          credentialReady: true,
+          consentRequired: false,
+          consentReady: true,
+          runtimeReady: true,
+          vectorAvailable,
+          vectorImplementation: vectorAvailable
+            ? "fixture-vector-index"
+            : "vector-generation-unavailable",
+          compatibleSpace: { ...embeddingDescriptor, registered: false },
+        },
+        rerank: {
+          configurationReady: true,
+          provider: rerankDescriptor.provider,
+          placement: "node",
+          credentialReady: true,
+          consentRequired: false,
+          consentReady: true,
+          runtimeReady: true,
+          compatibleSpace: rerankDescriptor,
+        },
+        generation: {
+          id: null,
+          state: null,
+          eligibleVersionCount,
+          indexedVersionCount: 0,
+          unsupportedVersionCount: 0,
+        },
+      });
     for (const [projectId, eligibleVersionCount, vectorAvailable] of [
       [String(scopedProject.id), 2, false],
       [String(otherAdvancedProject.id), 2, true],
@@ -892,6 +1612,14 @@ describe("owned study projects and corpus API", () => {
     if (first.stage !== "activated") {
       throw new Error("Expected an activated project embedding generation");
     }
+    const firstGenerationFence = await database.$client.execute({
+      sql: `SELECT publicationEpoch FROM corpus_embedding_generations
+        WHERE id = ? AND userId = ? LIMIT 1`,
+      args: [first.generationId, userA],
+    });
+    expect(Number(firstGenerationFence.rows[0]?.publicationEpoch)).toBe(
+      publicationEpoch,
+    );
     expect(first.chunks).toBeGreaterThan(0);
     expect(storedPoints).toHaveLength(first.chunks);
     const embeddedSourceIds = [
@@ -1138,13 +1866,10 @@ describe("owned study projects and corpus API", () => {
         limit: 1,
       });
     expect(generationSearchTargets.at(-1)).toBe(aliasTargets[1]);
-    expect(generationSearchTargets.at(-1)).not.toBe(
-      appliedAliasTargets.at(-1),
-    );
+    expect(generationSearchTargets.at(-1)).not.toBe(appliedAliasTargets.at(-1));
 
-    const {
-      readEmbeddingPublicationFence,
-    } = await import("../search/embedding-publication-fence");
+    const { readEmbeddingPublicationFence } =
+      await import("../search/embedding-publication-fence");
     const { GEMINI_EMBEDDING_DISCLOSURE_REVISION } =
       await import("../search/gemini-embedding");
     const { COHERE_RERANK_DISCLOSURE_REVISION } =
@@ -1220,9 +1945,7 @@ describe("owned study projects and corpus API", () => {
     });
     const revokeRaceEmbedding = {
       descriptor: () => embedding.descriptor(),
-      embedText: async (
-        input: readonly { contentHash: string }[],
-      ) => {
+      embedText: async (input: readonly { contentHash: string }[]) => {
         providerCallsAfterRevokeBoundary += 1;
         return input.map((entry) => ({
           contentHash: entry.contentHash,
@@ -1244,8 +1967,7 @@ describe("owned study projects and corpus API", () => {
       },
     );
     await reusableEntered;
-    const fenceBeforeCohereRevoke =
-      await readEmbeddingPublicationFence(userA);
+    const fenceBeforeCohereRevoke = await readEmbeddingPublicationFence(userA);
     const cohereRevoked = await apiA.retrieval.revokeConsent({
       provider: "cohere",
       capability: "rerank",
@@ -1338,7 +2060,18 @@ describe("owned study projects and corpus API", () => {
       enabled: true,
       publicationEpoch: reenabledEpoch,
     });
-
+    const coverageBeforeRebuild = await projectGenerationCoverage(
+      userA,
+      String(scopedProject.id),
+      embeddingDescriptor.id,
+      reenabledEpoch,
+    );
+    expect(coverageBeforeRebuild).toMatchObject({
+      id: null,
+      state: null,
+      eligibleVersionCount: 2,
+      indexedVersionCount: 0,
+    });
     const protectedSource = await database.$client.execute({
       sql: `SELECT sources.id, sources.currentVersionId
         FROM content_sources AS sources

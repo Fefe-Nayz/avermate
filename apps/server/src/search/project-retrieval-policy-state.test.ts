@@ -240,17 +240,54 @@ describe("project retrieval policy state", () => {
       environment({ rerank: unavailableRerank }),
     );
 
-    expect(state.status).toBe("degraded");
+    expect(state.status).toBe("active");
     expect(state.effectiveMode).toBe("hybrid");
+    expect(state.denseReady).toBe(true);
+    expect(state.rerankReady).toBe(false);
+    expect(state.fallbackActive).toBe(true);
     expect(state.reasons).toContain("rerank-runtime-unavailable");
     expect(state.reasons).toContain("rerank-space-incompatible");
+  });
+
+  test("does not call a hybrid fallback ready when the dense stage is unavailable", () => {
+    const state = deriveProjectRetrievalPolicyState(
+      {
+        projectId: "project-a",
+        revision: 8,
+        retrievalMode: "advanced-auto",
+        fallbackPolicy: "hybrid-without-rerank",
+        embeddingSpaceId: embeddingSpace.id,
+        rerankSpaceId: null,
+      },
+      environment({
+        embedding: {
+          ...environment().embedding,
+          credentialReady: false,
+          runtimeReady: false,
+          vectorAvailable: false,
+        },
+        rerank: {
+          ...environment().rerank,
+          runtimeReady: false,
+          compatibleSpace: null,
+        },
+      }),
+    );
+
+    expect(state).toMatchObject({
+      status: "degraded",
+      effectiveMode: "unavailable",
+      denseReady: false,
+      rerankReady: false,
+      fallbackActive: true,
+    });
   });
 
   test("fails closed when an eligible source is not on the Core embedding plane", () => {
     const state = deriveProjectRetrievalPolicyState(
       {
         projectId: "project-a",
-        revision: 8,
+        revision: 9,
         retrievalMode: "advanced-auto",
         fallbackPolicy: "lexical-only",
         embeddingSpaceId: embeddingSpace.id,

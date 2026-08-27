@@ -37,10 +37,7 @@ export type AssistantOutboxState =
 export type AssistantOutboxKind =
   "event" | "terminal" | "checkpoint-committed" | "checkpoint-gc";
 export type AssistantRunLeaseState =
-  | "active"
-  | "released"
-  | "expired"
-  | "fenced";
+  "active" | "released" | "expired" | "fenced";
 
 const timestamps = {
   createdAt: integer({ mode: "timestamp" })
@@ -281,8 +278,7 @@ export const assistantRuns = sqliteTable(
       .notNull()
       .default({ kind: "core", instanceId: "legacy" }),
     policyRevision: text().notNull().default("assistant-policy/1"),
-    modelPolicyJson: text({ mode: "json" })
-      .$type<AssistantRunModelPolicy>(),
+    modelPolicyJson: text({ mode: "json" }).$type<AssistantRunModelPolicy>(),
     toolCatalogRevision: text().notNull().default("legacy/1"),
     contextManifestDigest: text(),
     branchIdentityDigest: text(),
@@ -702,6 +698,14 @@ export const assistantAttachments = sqliteTable(
     kind: text().$type<AssistantAttachmentKind>().notNull(),
     referenceId: text().notNull(),
     snapshotVersion: text(),
+    /**
+     * Immutable structured snapshot for non-corpus attachments such as tasks.
+     * Legacy rows may leave these columns null and are frozen on first use.
+     */
+    frozenPayloadVersion: integer(),
+    frozenPayloadJson: text({ mode: "json" }).$type<unknown>(),
+    frozenPayloadDigest: text(),
+    frozenSourceRevision: integer(),
     label: text().notNull(),
     fileId: text().references(() => files.id, {
       onDelete: "restrict",

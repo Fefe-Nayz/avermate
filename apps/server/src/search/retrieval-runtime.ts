@@ -112,10 +112,13 @@ export function corpusRerankConfiguration(
     }
   })();
   const complete = Boolean(
-    enabled && provider && model && placement &&
-      ((provider === "cohere" && placement === "core" && cohereDescriptor) ||
-        teiDescriptor ||
-        qwen3Descriptor),
+    enabled &&
+    provider &&
+    model &&
+    placement &&
+    ((provider === "cohere" && placement === "core" && cohereDescriptor) ||
+      teiDescriptor ||
+      qwen3Descriptor),
   );
   return {
     enabled,
@@ -129,9 +132,33 @@ export function corpusRerankConfiguration(
     imageDigest,
     runtimeRevision: runtimeRevision ?? teiRevision,
     descriptorId: complete
-      ? (cohereDescriptor?.id ?? teiDescriptor?.id ?? qwen3Descriptor?.id ?? null)
+      ? (cohereDescriptor?.id ??
+        teiDescriptor?.id ??
+        qwen3Descriptor?.id ??
+        null)
       : null,
     reason: !enabled ? "disabled" : complete ? "configured" : "incomplete",
+  };
+}
+
+/**
+ * Explicit browser-safe projection. Endpoint URLs, paired-node identities,
+ * image digests and other operator topology stay server-side even when an
+ * invalid optional configuration cannot construct a runtime descriptor.
+ */
+export function publicCorpusRerankConfiguration(
+  environment: NodeJS.ProcessEnv = process.env,
+) {
+  const configuration = corpusRerankConfiguration(environment);
+  return {
+    enabled: configuration.enabled,
+    complete: configuration.complete,
+    provider: configuration.provider,
+    model: configuration.model,
+    modelRevision: configuration.modelRevision,
+    placement: configuration.placement,
+    descriptorId: configuration.descriptorId,
+    reason: configuration.reason,
   };
 }
 
@@ -182,12 +209,7 @@ export async function createOwnedConfiguredRerankProvider(
   const loadConsent = dependencies.loadConsent ?? loadRetrievalProviderConsent;
   const [credential, consent] = await Promise.all([
     resolveServiceKey(ownerId, "inference", "cohere"),
-    loadConsent(
-      ownerId,
-      "cohere",
-      "rerank",
-      COHERE_RERANK_DISCLOSURE_REVISION,
-    ),
+    loadConsent(ownerId, "cohere", "rerank", COHERE_RERANK_DISCLOSURE_REVISION),
   ]);
   if (!credential || !consent) return null;
   if (credential.source !== "user") {

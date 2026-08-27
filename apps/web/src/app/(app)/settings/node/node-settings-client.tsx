@@ -1219,12 +1219,47 @@ function useFeatureSummaries(node: NodeRecord): string[] {
     )
   }
   if (features.retrieval) {
-    lines.push(
-      t("Retrieval: lexical {lexical}, {spaces} vector spaces.", {
-        lexical: features.retrieval.lexical ? t("ready") : t("missing"),
-        spaces: String(features.retrieval.vectorSpaces.length),
-      })
-    )
+    if (features.retrieval.vectorSpaces.length > 0) {
+      lines.push(
+        t(
+          "Retrieval: lexical {lexical}; {spaces} local vector spaces advertised.",
+          {
+            lexical: features.retrieval.lexical ? t("ready") : t("missing"),
+            spaces: String(features.retrieval.vectorSpaces.length),
+          }
+        )
+      )
+    } else {
+      lines.push(
+        t(
+          "Retrieval: lexical {lexical}; no local vector index is advertised.",
+          {
+            lexical: features.retrieval.lexical ? t("ready") : t("missing"),
+          }
+        )
+      )
+    }
+    const retrievalProviders = features.retrieval.providers ?? []
+    for (const provider of retrievalProviders) {
+      lines.push(
+        provider.purpose === "embedding"
+          ? t("Embedding provider route: {provider} · {model}.", {
+              provider: provider.provider,
+              model: provider.model,
+            })
+          : t("Reranking provider route: {provider} · {model}.", {
+              provider: provider.provider,
+              model: provider.model,
+            })
+      )
+    }
+    if (retrievalProviders.length > 0) {
+      lines.push(
+        t(
+          "Provider routes are configured capabilities; they do not imply a local vector index."
+        )
+      )
+    }
   }
   if (features.models) {
     lines.push(

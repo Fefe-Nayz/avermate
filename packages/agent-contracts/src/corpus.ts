@@ -545,6 +545,8 @@ export type VectorQuery = {
   spaceId: string;
   values: readonly number[];
   limit: number;
+  /** Optional immutable-version fence applied inside the vector collection. */
+  versionIds?: readonly string[];
 };
 export type VectorCandidate = {
   sourceId: string;

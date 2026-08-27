@@ -16,11 +16,14 @@ import {
   protectedProcedure,
 } from "../lib/orpc";
 import { CoreCitationResolver } from "../search/citations";
+import { rotateAdvancedCorpusAfterPolicyChange } from "../search/advanced-corpus-publication";
 import {
   RoutedCorpusContentReader,
   type AuthorizedCorpusChunkRow,
 } from "../search/corpus-content-reader";
 import { hybridCorpusSearch } from "../search/hybrid";
+import { selectOwnedEmbeddingGeneration } from "../search/embedding-generation-selection";
+import { readEmbeddingPublicationFence } from "../search/embedding-publication-fence";
 import { coreCorpusIndexService } from "../search/index-service";
 import {
   lexicalCursor,
@@ -425,31 +428,76 @@ export const projectsRouter = {
   trash: protectedProcedure
     .input(projectIdInput)
     .handler(async ({ context, input }) => {
-      await requireProject(context.session.user.id, input.projectId);
-      await db.$client.execute({
-        sql: `UPDATE study_projects SET deletedAt = ?, updatedAt = ?, revision = revision + 1 WHERE id = ? AND userId = ?`,
-        args: [
-          Math.floor(Date.now() / 1_000),
-          Math.floor(Date.now() / 1_000),
-          input.projectId,
-          context.session.user.id,
-        ],
-      });
+      const userId = context.session.user.id;
+      const project = await requireProject(userId, input.projectId);
+      if (project.deletedAt !== null) return { ok: true as const };
+      const now = Math.floor(Date.now() / 1_000);
+      const transaction = await db.$client.transaction("write");
+      try {
+        const changed = await transaction.execute({
+          sql: `UPDATE study_projects
+            SET deletedAt = ?, updatedAt = ?, revision = revision + 1
+            WHERE id = ? AND userId = ? AND revision = ?
+              AND deletedAt IS NULL`,
+          args: [now, now, input.projectId, userId, Number(project.revision)],
+        });
+        if (Number(changed.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        if (project.retrievalMode === "advanced-auto") {
+          await rotateAdvancedCorpusAfterPolicyChange({
+            ownerId: userId,
+            transaction,
+          });
+        }
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback().catch(() => undefined);
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
+        }
+        throw error;
+      }
       return { ok: true as const };
     }),
 
   restore: protectedProcedure
     .input(projectIdInput)
     .handler(async ({ context, input }) => {
-      await requireProject(context.session.user.id, input.projectId);
-      await db.$client.execute({
-        sql: `UPDATE study_projects SET deletedAt = NULL, updatedAt = ?, revision = revision + 1 WHERE id = ? AND userId = ?`,
-        args: [
-          Math.floor(Date.now() / 1_000),
-          input.projectId,
-          context.session.user.id,
-        ],
-      });
+      const userId = context.session.user.id;
+      const project = await requireProject(userId, input.projectId);
+      if (project.deletedAt === null) return { ok: true as const };
+      const transaction = await db.$client.transaction("write");
+      try {
+        const changed = await transaction.execute({
+          sql: `UPDATE study_projects
+            SET deletedAt = NULL, updatedAt = ?, revision = revision + 1
+            WHERE id = ? AND userId = ? AND revision = ?
+              AND deletedAt IS NOT NULL`,
+          args: [
+            Math.floor(Date.now() / 1_000),
+            input.projectId,
+            userId,
+            Number(project.revision),
+          ],
+        });
+        if (Number(changed.rowsAffected) !== 1) {
+          throw new Error("project-revision-conflict");
+        }
+        if (project.retrievalMode === "advanced-auto") {
+          await rotateAdvancedCorpusAfterPolicyChange({
+            ownerId: userId,
+            transaction,
+          });
+        }
+        await transaction.commit();
+      } catch (error) {
+        await transaction.rollback().catch(() => undefined);
+        if (String(error).includes("project-revision-conflict")) {
+          conflict("This study project changed elsewhere — reload it");
+        }
+        throw error;
+      }
       return { ok: true as const };
     }),
 
@@ -978,22 +1026,25 @@ export const projectsRouter = {
 
   embeddingPrivacy: protectedProcedure.handler(async ({ context }) => {
     const configuration = corpusEmbeddingConfiguration();
+    const publicationFence = await readEmbeddingPublicationFence(
+      context.session.user.id,
+    );
     let runtime = null;
-    try {
-      runtime = await createOwnedCorpusVectorRuntime(context.session.user.id);
-    } catch {
-      // A malformed or unreachable optional provider must never disable lexical search.
+    if (publicationFence.enabled) {
+      try {
+        runtime = await createOwnedCorpusVectorRuntime(context.session.user.id);
+      } catch {
+        // A malformed optional provider must never disable lexical search.
+      }
     }
     const descriptor = runtime?.embedding.descriptor() ?? null;
-    const activeGeneration = descriptor
-      ? await db.$client.execute({
-          sql: `SELECT id FROM corpus_embedding_generations
-            WHERE userId = ? AND spaceId = ? AND state = 'active' LIMIT 1`,
-          args: [context.session.user.id, descriptor.id],
+    const generationId = descriptor
+      ? await selectOwnedEmbeddingGeneration({
+          client: db.$client,
+          ownerId: context.session.user.id,
+          spaceId: descriptor.id,
+          publicationEpoch: publicationFence.publicationEpoch,
         })
-      : null;
-    const generationId = activeGeneration?.rows[0]?.id
-      ? String(activeGeneration.rows[0].id)
       : null;
     const vector =
       runtime && generationId

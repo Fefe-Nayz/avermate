@@ -41,6 +41,19 @@ describe("Avermate Node Web settings", () => {
     expect(source).toContain('record.state === "verified_deleted"')
   })
 
+  test("distinguishes provider configuration from a local vector index", async () => {
+    const source = await read("./node-settings-client.tsx")
+    expect(source).toContain("no local vector index is advertised.")
+    expect(source).toContain("Embedding provider route: {provider} · {model}.")
+    expect(source).toContain("Reranking provider route: {provider} · {model}.")
+    expect(source).toContain(
+      "Provider routes are configured capabilities; they do not imply a local vector index."
+    )
+    expect(source).not.toContain(
+      "Retrieval: lexical {lexical}, {spaces} vector spaces."
+    )
+  })
+
   test("renders independent placements and the verified migration workflow", async () => {
     const source = await read("./node-settings-client.tsx")
     expect(source).toContain("NODE_CAPABILITIES.map")

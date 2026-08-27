@@ -11,7 +11,8 @@ describe("project retrieval policy controls", () => {
     expect(card).toContain("orpc.projects.retrievalPolicy.queryOptions")
     expect(card).toContain('policy.status === "active"')
     expect(card).toContain("policy.effectiveMode")
-    expect(card).toContain("policy.reasons.map")
+    expect(card).toContain("policy.reasons")
+    expect(card).toContain("OPTIONAL_RERANK_REASONS.has(reason)")
     expect(card).toContain("policy.reindex.required")
     expect(card).toContain("refetchInterval: (query)")
     expect(card).toContain("Date.now() >= reindexPollingUntil")
@@ -71,6 +72,8 @@ describe("project retrieval policy controls", () => {
     expect(card).toContain('t("Not in use")')
     expect(card).toContain("policy?.embedding.selectedSpaceCompatible")
     expect(card).toContain("policy?.rerank.selectedSpaceCompatible")
+    expect(card).toContain("policy?.denseReady")
+    expect(card).toContain("policy?.rerankReady")
     expect(card).toContain("!policy.reindex.required")
     expect(card).toContain("policy.embedding.sendsSourceContentToThirdParties")
     expect(card).toContain('"embedding-source-placement-unsupported"')
@@ -91,6 +94,33 @@ describe("project retrieval policy controls", () => {
     )
     expect(card).not.toContain(
       "Embedding and reranking providers are not called in lexical-only mode."
+    )
+  })
+
+  test("allows dense hybrid retrieval while keeping reranking explicitly optional", async () => {
+    const card = await source("./project-retrieval-policy-card.tsx")
+
+    expect(card).toContain(
+      'const rerankerOptional = fallback === "hybrid-without-rerank"'
+    )
+    expect(card).toContain(
+      "!rerankerOptional && (!rerankItems.length || !rerankProviderReady)"
+    )
+    expect(card).toContain("(!rerankerOptional && !rerankSpaceId)")
+    expect(card).toContain('policy?.effectiveMode === "hybrid"')
+    expect(card).toContain('? "not-in-use"')
+    expect(card).toContain("OPTIONAL_RERANK_REASONS.has(reason)")
+    expect(card).toContain(
+      "A compatible reranker is used when available, but is not required."
+    )
+    expect(card).toContain("or choose hybrid search without reranking.")
+    const selectableStart = card.indexOf("const advancedSelectable =")
+    const selectableEnd = card.indexOf(
+      "const requiredRerankerUnavailable",
+      selectableStart
+    )
+    expect(card.slice(selectableStart, selectableEnd)).not.toContain(
+      "rerankItems.length"
     )
   })
 

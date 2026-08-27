@@ -53,11 +53,12 @@ describe("plan 027 catalogue audit", () => {
 
   test("classifies every directly declared oRPC procedure", () => {
     const rows = inventoryOrpc(root);
-    // Advanced media ingestion adds five reviewed reads and one reviewed
-    // mutation. Keep their individual classifications explicit below.
+    // Advanced media ingestion and project-owned retrieval policy controls
+    // are reviewed explicitly below. Keep every new procedure in this
+    // fingerprint deliberate rather than silently widening the surface.
     // Keep this fingerprint explicit so every future router change requires a
     // fresh agent-exposure review rather than silently widening the surface.
-    expect(rows).toHaveLength(468);
+    expect(rows).toHaveLength(471);
     expect(
       new Set(rows.map((row) => `${row.source}:${row.procedure}`)).size,
     ).toBe(rows.length);
@@ -77,10 +78,15 @@ describe("plan 027 catalogue audit", () => {
       ["mediaStudio.listWorkflows", "safe-after-output-narrowing"],
       ["mediaStudio.listRevisions", "safe-after-output-narrowing"],
       ["mediaStudio.getOutputHandles", "safe-after-output-narrowing"],
+      ["projects.retrievalPolicy", "safe-after-output-narrowing"],
+      ["projects.setRetrievalPolicy", "requires-preview-or-compensation"],
+      ["projects.setItemContextMode", "requires-preview-or-compensation"],
     ] as const) {
       expect(rows).toContainEqual({
         procedure,
-        source: "apps/server/src/routers/media-studio.ts",
+        source: procedure.startsWith("projects.")
+          ? "apps/server/src/routers/projects.ts"
+          : "apps/server/src/routers/media-studio.ts",
         classification,
         fileTransport: "none",
       });

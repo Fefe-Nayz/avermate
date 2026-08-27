@@ -51,6 +51,14 @@ type RetrievalMode = RetrievalPolicy["configured"]["retrievalMode"]
 type FallbackPolicy = RetrievalPolicy["configured"]["fallbackPolicy"]
 type StageStatus = "active" | "available" | "needs-attention" | "not-in-use"
 
+const OPTIONAL_RERANK_REASONS = new Set<RetrievalPolicy["reasons"][number]>([
+  "rerank-configuration-incomplete",
+  "rerank-credential-required",
+  "rerank-consent-required",
+  "rerank-runtime-unavailable",
+  "rerank-space-required",
+])
+
 function isConflictError(error: unknown) {
   return (
     typeof error === "object" &&
@@ -219,15 +227,16 @@ function PolicyEditor({
     policy.rerank.credentialReady &&
     policy.rerank.consentReady &&
     policy.rerank.runtimeReady
+  const rerankerOptional = fallback === "hybrid-without-rerank"
   const sourcePlacementUnsupported = policy.reindex.unsupportedVersionCount > 0
   const lexicalUnavailable = !policy.lexical.available
   const advancedSelectable =
     policy.lexical.available &&
     embeddingItems.length > 0 &&
-    rerankItems.length > 0 &&
     embeddingProviderReady &&
-    rerankProviderReady &&
     !sourcePlacementUnsupported
+  const requiredRerankerUnavailable =
+    !rerankerOptional && (!rerankItems.length || !rerankProviderReady)
 
   return (
     <FieldGroup>
@@ -265,9 +274,13 @@ function PolicyEditor({
         </ToggleGroup>
         <FieldDescription id={modeDescriptionId}>
           {advanced
-            ? t(
-                "Advanced mode combines keyword and semantic retrieval, then reranks compatible results."
-              )
+            ? rerankerOptional
+              ? t(
+                  "Advanced mode combines keyword and semantic retrieval. A compatible reranker is used when available, but is not required."
+                )
+              : t(
+                  "Advanced mode combines keyword and semantic retrieval, then reranks compatible results."
+                )
             : t(
                 "Lexical mode searches indexed text locally and never calls an embedding or reranking provider."
               )}
@@ -345,9 +358,13 @@ function PolicyEditor({
               </SelectContent>
             </Select>
             <FieldDescription id={rerankDescriptionId}>
-              {t(
-                "The reranker must match the provider configured for this server."
-              )}
+              {rerankerOptional
+                ? t(
+                    "Optional with this fallback. When selected, the reranker must match the provider configured for this server."
+                  )
+                : t(
+                    "The reranker must match the provider configured for this server."
+                  )}
             </FieldDescription>
           </Field>
         </div>
@@ -427,13 +444,28 @@ function PolicyEditor({
             ) : (
               <>
                 {t(
-                  "Configure compatible embedding and reranking providers, credentials and consent before enabling advanced RAG."
+                  "Configure a compatible embedding provider, credentials and consent before enabling advanced RAG."
                 )}{" "}
                 <Link href="/settings/integrations#retrieval">
                   {t("Open retrieval settings")}
                 </Link>
               </>
             )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {advanced && requiredRerankerUnavailable ? (
+        <Alert>
+          <CircleAlertIcon />
+          <AlertTitle>{t("Advanced providers need setup")}</AlertTitle>
+          <AlertDescription>
+            {t(
+              "Configure a compatible reranking provider, credentials and consent, or choose hybrid search without reranking."
+            )}{" "}
+            <Link href="/settings/integrations#retrieval">
+              {t("Open retrieval settings")}
+            </Link>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -448,7 +480,10 @@ function PolicyEditor({
             !online ||
             saving ||
             (advanced &&
-              (!advancedSelectable || !embeddingSpaceId || !rerankSpaceId))
+              (!advancedSelectable ||
+                !embeddingSpaceId ||
+                requiredRerankerUnavailable ||
+                (!rerankerOptional && !rerankSpaceId)))
           }
           onClick={() =>
             onSave({
@@ -597,12 +632,12 @@ export function ProjectRetrievalPolicyCard({
   )
   const advancedPolicy = policy?.configured.retrievalMode === "advanced-auto"
   const embeddingOperational = Boolean(
-    embeddingReady &&
+    policy?.denseReady &&
     policy?.embedding.selectedSpaceCompatible &&
     !policy.reindex.required
   )
   const rerankOperational = Boolean(
-    rerankReady && policy?.rerank.selectedSpaceCompatible
+    policy?.rerankReady && policy?.rerank.selectedSpaceCompatible
   )
   const embeddingStatus: StageStatus = !advancedPolicy
     ? embeddingReady
@@ -619,13 +654,30 @@ export function ProjectRetrievalPolicyCard({
     ? rerankReady
       ? "available"
       : "not-in-use"
-    : rerankOperational && policy?.effectiveMode === "reranked"
-      ? "active"
-      : rerankOperational
-        ? "available"
-        : "needs-attention"
+    : policy?.effectiveMode === "hybrid" &&
+        policy.configured.fallbackPolicy === "hybrid-without-rerank"
+      ? "not-in-use"
+      : rerankOperational && policy?.effectiveMode === "reranked"
+        ? "active"
+        : rerankOperational
+          ? "available"
+          : "needs-attention"
+  const optionalRerankerNotInUse = Boolean(
+    policy?.effectiveMode === "hybrid" &&
+    policy.configured.fallbackPolicy === "hybrid-without-rerank"
+  )
   const degradedReasons = policy
-    ? [...new Set(policy.reasons.map((reason) => degradedReasonLabel(reason)))]
+    ? [
+        ...new Set(
+          policy.reasons
+            .filter(
+              (reason) =>
+                !optionalRerankerNotInUse ||
+                !OPTIONAL_RERANK_REASONS.has(reason)
+            )
+            .map((reason) => degradedReasonLabel(reason))
+        ),
+      ]
     : []
   const reindexPolling = Boolean(
     online &&

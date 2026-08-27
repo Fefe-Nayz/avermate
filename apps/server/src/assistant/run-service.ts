@@ -1,5 +1,6 @@
 import {
   assistantPartV1Schema,
+  CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS,
   contextBlockSchema,
   normalizedUsageSchema,
   sourceLocatorV1Schema,
@@ -17,6 +18,7 @@ import {
   type NormalizedUsage,
   type ModelPlacement,
   type ModelReadiness,
+  type LexicalCandidate,
   type OwnedSourceIdentity,
   type OwnedLexicalQuery,
 } from "@avermate/agent-contracts";
@@ -29,7 +31,12 @@ import {
   type HybridCorpusSearchOptions,
   type HybridSearchResult,
 } from "../search/hybrid";
-import { canonicalJson, jsonValue, sha256 } from "../search/values";
+import {
+  canonicalJson,
+  jsonValue,
+  normalizeForSearch,
+  sha256,
+} from "../search/values";
 import {
   noOpToolCapabilities,
   noOpToolEvents,
@@ -287,6 +294,8 @@ function contextBlockCommitment(block: ContextBlock) {
               type: part.type,
               mime: part.mime,
               fallbackText: part.fallbackText,
+              estimatedInputTokens: part.estimatedInputTokens,
+              tokenEstimationPolicy: part.tokenEstimationPolicy,
               evidence: part.evidence,
               // Handles are randomized transport capabilities. The durable
               // commitment binds their immutable owner-checked content digest
@@ -297,6 +306,64 @@ function contextBlockCommitment(block: ContextBlock) {
     sourceRef: block.sourceRef,
     redactions: block.redactions,
   };
+}
+
+type ContextTokenBudgetBreakdown = {
+  textTokens: number;
+  mediaTokens: number;
+  totalTokens: number;
+};
+
+function contextBlockTokenBudget(
+  block: ContextBlock,
+): ContextTokenBudgetBreakdown {
+  const textTokens = Math.ceil(utf8Bytes(block.content) / 4);
+  const mediaTokens =
+    block.parts?.reduce(
+      (sum, part) =>
+        sum +
+        (part.type === "text"
+          ? 0
+          : (part.estimatedInputTokens ??
+            CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS)),
+      0,
+    ) ?? 0;
+  return {
+    textTokens,
+    mediaTokens,
+    totalTokens: textTokens + mediaTokens,
+  };
+}
+
+function contextTokenBudget(
+  blocks: readonly ContextBlock[],
+): ContextTokenBudgetBreakdown {
+  return blocks.reduce<ContextTokenBudgetBreakdown>(
+    (sum, block) => {
+      const next = contextBlockTokenBudget(block);
+      return {
+        textTokens: sum.textTokens + next.textTokens,
+        mediaTokens: sum.mediaTokens + next.mediaTokens,
+        totalTokens: sum.totalTokens + next.totalTokens,
+      };
+    },
+    { textTokens: 0, mediaTokens: 0, totalTokens: 0 },
+  );
+}
+
+function contextManifestItems(blocks: readonly ContextBlock[]) {
+  return blocks.map((block) => {
+    const bytes = utf8Bytes(block.content);
+    return {
+      id: block.id,
+      trust: block.trust,
+      kind: block.mediaType,
+      referenceId: block.sourceRef,
+      byteLength: bytes,
+      tokenEstimate: contextBlockTokenBudget(block).totalTokens,
+      digest: sha256(canonicalJson(contextBlockCommitment(block))),
+    };
+  });
 }
 
 /** Return a deterministic prefix without ever exceeding the byte fence. */
@@ -502,7 +569,37 @@ export interface AssistantContextAssetHandleMinter {
   }): Promise<ContextAssetHandle>;
 }
 
-type RetrievedCandidate = HybridSearchResult["candidates"][number];
+export type RetrievedCandidate = HybridSearchResult["candidates"][number];
+
+/**
+ * Compose evidence without allowing the broad historical lexical fallback to
+ * evict version-fenced hybrid evidence. The fallback only fills unused slots.
+ */
+export function composeAssistantRetrievalCandidates(input: {
+  explicitHybrid: readonly RetrievedCandidate[];
+  snapshotLexicalFallback: readonly RetrievedCandidate[];
+  remainingTiers: readonly (readonly RetrievedCandidate[])[];
+  limit?: number;
+}) {
+  const limit = Math.max(1, Math.min(100, input.limit ?? 12));
+  const tiers: readonly (readonly RetrievedCandidate[])[] = [
+    input.explicitHybrid,
+    input.snapshotLexicalFallback,
+    ...input.remainingTiers,
+  ];
+  const candidates: RetrievedCandidate[] = [];
+  const seen = new Set<string>();
+  for (const tier of tiers) {
+    for (const candidate of tier) {
+      const identity = `${candidate.versionId}:${candidate.chunkId}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      candidates.push(candidate);
+      if (candidates.length >= limit) return candidates;
+    }
+  }
+  return candidates;
+}
 
 async function candidateVisualContextPart(input: {
   client: AssistantSqlClient;
@@ -611,6 +708,11 @@ async function candidateVisualContextPart(input: {
         assetHandle,
         mime: selected.mime as "image/png" | "image/jpeg" | "image/webp",
         evidence,
+        // Stored derivative estimates serve embedding jobs and are not
+        // comparable across response providers. Charge the neutral upper bound
+        // for every route that can receive this immutable visual unit.
+        estimatedInputTokens: CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS,
+        tokenEstimationPolicy: "conservative-provider-neutral-v1",
         fallbackText,
       }
     : {
@@ -618,6 +720,8 @@ async function candidateVisualContextPart(input: {
         assetHandle,
         mime: "application/pdf",
         evidence,
+        estimatedInputTokens: CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS,
+        tokenEstimationPolicy: "conservative-provider-neutral-v1",
         fallbackText,
       };
 }
@@ -953,32 +1057,19 @@ export class AssistantGraphExecutor {
             : 16_384,
       ),
     );
-    const usedTokens = Math.ceil(
-      blocks.reduce(
-        (sum, block) =>
-          sum + new TextEncoder().encode(block.content).byteLength,
-        0,
-      ) / 4,
-    );
+    const budget = contextTokenBudget(blocks);
     const manifest = await this.#manifests.commit({
       ownerId,
       runId,
       budget: {
         maxTokens,
-        usedTokens: Math.min(usedTokens, maxTokens),
-        reservedOutputTokens: Math.max(0, maxTokens - usedTokens),
+        usedTokens: budget.totalTokens,
+        reservedOutputTokens: Math.max(0, maxTokens - budget.totalTokens),
+        textTokens: budget.textTokens,
+        mediaTokens: budget.mediaTokens,
+        estimationPolicy: "utf8-text-plus-conservative-media-v1",
       },
-      items: blocks.map((block) => ({
-        id: block.id,
-        trust: block.trust,
-        kind: block.mediaType,
-        referenceId: block.sourceRef,
-        byteLength: new TextEncoder().encode(block.content).byteLength,
-        tokenEstimate: Math.ceil(
-          new TextEncoder().encode(block.content).byteLength / 4,
-        ),
-        digest: sha256(canonicalJson(contextBlockCommitment(block))),
-      })),
+      items: contextManifestItems(blocks),
       evidence: state.evidence,
     });
     const contextEvent = await this.conversations.appendRunEvent({
@@ -1342,6 +1433,7 @@ export class AssistantGraphExecutor {
         (maxTokens - reservedOutputTokens) * 4,
       );
       let contextBytes = 0;
+      let contextTokens = 0;
       const blocks: ContextBlock[] = [];
       const evidence: Array<{
         sourceVersionId: string;
@@ -1352,9 +1444,17 @@ export class AssistantGraphExecutor {
       }> = [];
       const includedChunks = new Set<string>();
       const addBlock = (block: ContextBlock) => {
-        const bytes = new TextEncoder().encode(block.content).byteLength;
+        const bytes = utf8Bytes(block.content);
+        const tokens = contextBlockTokenBudget(block).totalTokens;
         if (contextBytes + bytes > contextByteBudget) return false;
+        if (
+          contextTokens + tokens >
+          Math.max(0, maxTokens - reservedOutputTokens)
+        ) {
+          return false;
+        }
         contextBytes += bytes;
+        contextTokens += tokens;
         blocks.push(block);
         return true;
       };
@@ -1406,23 +1506,77 @@ export class AssistantGraphExecutor {
         : [];
       const yearIds: string[] = [];
       const subjectIds: string[] = [];
-      const explicitSources: Array<{ kind: string; originId: string }> = [];
+      const explicitSources: Array<{
+        attachmentId: string;
+        kind: OwnedSourceIdentity["originKind"] | null;
+        originId: string;
+        label: string;
+        snapshotVersion: string | null;
+      }> = [];
+      const unavailableTaskAttachments: Array<{
+        attachmentId: string;
+        label: string;
+      }> = [];
+      let taskAttachmentCount = 0;
+      let loadedTaskAttachmentCount = 0;
       for (const attachment of attachments.rows) {
         const kind = String(attachment.kind);
         const referenceId = String(attachment.referenceId);
+        const attachmentId = String(attachment.id);
+        const label = String(attachment.label);
+        const snapshotVersion =
+          attachment.snapshotVersion === null
+            ? null
+            : String(attachment.snapshotVersion);
         if (kind === "project") {
           projectIds.push(referenceId);
         } else if (kind === "year") {
           yearIds.push(referenceId);
-        } else if (kind === "subject") {
-          subjectIds.push(referenceId);
-          explicitSources.push({ kind: "subject", originId: referenceId });
+        } else if (kind === "task") {
+          taskAttachmentCount += 1;
+          let taskSnapshot = null;
+          try {
+            taskSnapshot =
+              await this.conversations.freezeTaskAttachmentSnapshot({
+                ownerId,
+                attachmentId,
+              });
+          } catch (error) {
+            signal.throwIfAborted();
+            console.error(
+              "[assistant] task attachment snapshot unavailable",
+              error instanceof Error ? error.message : "Unknown error",
+            );
+          }
+          if (!taskSnapshot) {
+            unavailableTaskAttachments.push({ attachmentId, label });
+            continue;
+          }
+          if (
+            !addBlock({
+              id: newId("ctx"),
+              trust: "application-data",
+              mediaType: "application/vnd.avermate.planning-task+json",
+              content: taskSnapshot.payloadJson,
+              sourceRef: `task:${referenceId}@${taskSnapshot.payloadDigest}`,
+              redactions: [],
+            })
+          ) {
+            throw new Error(
+              "Attached task exceeds the assistant context budget",
+            );
+          }
+          loadedTaskAttachmentCount += 1;
         } else if (kind in sourceKindForAttachment) {
+          if (kind === "subject") subjectIds.push(referenceId);
           explicitSources.push({
+            attachmentId,
             kind: sourceKindForAttachment[
               kind as keyof typeof sourceKindForAttachment
             ],
             originId: referenceId,
+            label,
+            snapshotVersion,
           });
         } else if (kind === "file") {
           const material = await this.client.execute({
@@ -1432,8 +1586,22 @@ export class AssistantGraphExecutor {
           });
           if (material.rows[0]) {
             explicitSources.push({
+              attachmentId,
               kind: "material",
               originId: String(material.rows[0].id),
+              label,
+              snapshotVersion,
+            });
+          } else {
+            // Keep the failed mapping as an explicit request. Dropping it here
+            // would turn a global attachment-only question into an all-corpus
+            // search later in the pipeline.
+            explicitSources.push({
+              attachmentId,
+              kind: null,
+              originId: referenceId,
+              label,
+              snapshotVersion,
             });
           }
         }
@@ -1563,62 +1731,61 @@ export class AssistantGraphExecutor {
         throw new Error("Assistant input exceeds the context budget");
       }
 
-      const attachmentContextBudget = Math.min(
-        12 * 1024,
-        Math.max(512, Math.floor(contextByteBudget / 12)),
-      );
-      let attachmentContextBytes = 0;
-      for (const attachment of attachments.rows) {
-        const content = canonicalJson({
-          kind: String(attachment.kind),
-          referenceId: String(attachment.referenceId),
-          label: String(attachment.label),
-          snapshotVersion:
-            attachment.snapshotVersion === null
-              ? null
-              : String(attachment.snapshotVersion),
-        });
-        const bytes = utf8Bytes(content);
-        if (attachmentContextBytes + bytes > attachmentContextBudget) break;
-        if (
-          addBlock({
-            id: newId("ctx"),
-            trust: "application-data",
-            mediaType: "application/vnd.avermate.reference+json",
-            content,
-            sourceRef: `attachment:${String(attachment.id)}`,
-            redactions: [],
-          })
-        ) {
-          attachmentContextBytes += bytes;
-        }
-      }
-
-      const uniqueExplicitSources = [
-        ...new Map(
-          explicitSources.map((source) => [
-            `${source.kind}:${source.originId}`,
-            source,
-          ]),
-        ).values(),
-      ].slice(0, 50);
-      const explicitSourceIds: string[] = [];
+      // Every attachment owns its own immutable snapshot edge. Do not collapse
+      // two attachment rows before each one has been frozen and made GC
+      // reachable, even when they currently point at the same source head.
+      const uniqueExplicitSources = explicitSources.slice(0, 50);
+      const resolvedExplicitSources: Array<{
+        attachmentId: string;
+        sourceId: string;
+        versionId: string;
+        snapshotVersion: string | null;
+      }> = [];
+      const unavailableExplicitSources: Array<{
+        attachmentId: string;
+        label: string;
+        reason:
+          | "source-mapping-unavailable"
+          | "source-not-indexed"
+          | "snapshot-version-unavailable";
+      }> = [];
       for (const source of uniqueExplicitSources) {
+        if (source.kind === null) {
+          unavailableExplicitSources.push({
+            attachmentId: source.attachmentId,
+            label: source.label,
+            reason: "source-mapping-unavailable",
+          });
+          continue;
+        }
         let indexed = await this.client.execute({
           sql: `SELECT id, currentVersionId FROM content_sources
             WHERE userId = ? AND originKind = ? AND originId = ? LIMIT 1`,
           args: [ownerId, source.kind, source.originId],
         });
-        if (!indexed.rows[0]?.currentVersionId && this.sourceIndexer) {
+        let indexedVersionId: string | null = null;
+        if (
+          source.snapshotVersion === null &&
+          !indexed.rows[0]?.currentVersionId &&
+          this.sourceIndexer
+        ) {
           try {
-            await this.sourceIndexer.indexSource(
+            const indexedResult = await this.sourceIndexer.indexSource(
               {
                 ownerId,
-                originKind: source.kind as OwnedSourceIdentity["originKind"],
+                originKind: source.kind,
                 originId: source.originId,
               },
               { signal },
             );
+            if (
+              indexedResult &&
+              typeof indexedResult === "object" &&
+              "versionId" in indexedResult &&
+              typeof indexedResult.versionId === "string"
+            ) {
+              indexedVersionId = indexedResult.versionId;
+            }
             indexed = await this.client.execute({
               sql: `SELECT id, currentVersionId FROM content_sources
                 WHERE userId = ? AND originKind = ? AND originId = ? LIMIT 1`,
@@ -1633,42 +1800,453 @@ export class AssistantGraphExecutor {
           }
         }
         const row = indexed.rows[0];
-        if (row?.id && row.currentVersionId) {
-          explicitSourceIds.push(String(row.id));
+        if (!row?.id) {
+          unavailableExplicitSources.push({
+            attachmentId: source.attachmentId,
+            label: source.label,
+            reason: "source-not-indexed",
+          });
+          continue;
         }
+        const sourceId = String(row.id);
+        let frozenVersionId = source.snapshotVersion;
+        try {
+          if (frozenVersionId === null) {
+            frozenVersionId = await this.conversations.freezeAttachmentSnapshot(
+              {
+                ownerId,
+                attachmentId: source.attachmentId,
+                expectedVersionId:
+                  indexedVersionId ??
+                  (row.currentVersionId === null
+                    ? null
+                    : String(row.currentVersionId)),
+              },
+            );
+          } else {
+            // Repair the durable reachability edge for attachments created by
+            // an older server without ever changing their frozen version.
+            frozenVersionId = await this.conversations.freezeAttachmentSnapshot(
+              {
+                ownerId,
+                attachmentId: source.attachmentId,
+                expectedVersionId: frozenVersionId,
+              },
+            );
+          }
+        } catch (error) {
+          signal.throwIfAborted();
+          console.error(
+            "[assistant] explicit source snapshot freeze failed",
+            error instanceof Error ? error.message : "Unknown error",
+          );
+          frozenVersionId = null;
+        }
+        if (frozenVersionId !== null) {
+          // `snapshotVersion` is an immutable content-version id. Never follow
+          // the source head when the claimed snapshot is missing, belongs to a
+          // different source, or belongs to another owner.
+          const snapshot = await this.client.execute({
+            sql: `SELECT versions.id
+              FROM content_versions AS versions
+              JOIN content_sources AS sources ON sources.id = versions.sourceId
+              WHERE versions.id = ? AND versions.sourceId = ?
+                AND sources.userId = ? LIMIT 1`,
+            args: [frozenVersionId, sourceId, ownerId],
+          });
+          if (!snapshot.rows[0]?.id) {
+            unavailableExplicitSources.push({
+              attachmentId: source.attachmentId,
+              label: source.label,
+              reason: "snapshot-version-unavailable",
+            });
+            continue;
+          }
+          resolvedExplicitSources.push({
+            attachmentId: source.attachmentId,
+            sourceId,
+            versionId: String(snapshot.rows[0].id),
+            snapshotVersion: frozenVersionId,
+          });
+          continue;
+        }
+        if (!row.currentVersionId) {
+          unavailableExplicitSources.push({
+            attachmentId: source.attachmentId,
+            label: source.label,
+            reason: "source-not-indexed",
+          });
+          continue;
+        }
+        // A corpus attachment is never allowed to follow a mutable head. The
+        // only success path is a snapshot stored by the CAS above.
+        unavailableExplicitSources.push({
+          attachmentId: source.attachmentId,
+          label: source.label,
+          reason: "snapshot-version-unavailable",
+        });
       }
 
-      const uniqueExplicitSourceIds = [...new Set(explicitSourceIds)];
-      const explicitScopeRequested = uniqueExplicitSources.length > 0;
+      const uniqueExplicitSourceIds = [
+        ...new Set(resolvedExplicitSources.map((source) => source.sourceId)),
+      ];
+      const uniqueExplicitVersionIds = [
+        ...new Set(resolvedExplicitSources.map((source) => source.versionId)),
+      ];
+      const explicitScopeRequested =
+        uniqueExplicitSources.length > 0 || taskAttachmentCount > 0;
+      const frozenSnapshotsByAttachmentId = new Map(
+        resolvedExplicitSources.map((source) => [
+          source.attachmentId,
+          source.snapshotVersion,
+        ]),
+      );
+      const attachmentContextBudget = Math.min(
+        12 * 1024,
+        Math.max(512, Math.floor(contextByteBudget / 12)),
+      );
+      let attachmentContextBytes = 0;
+      for (const attachment of attachments.rows) {
+        const attachmentId = String(attachment.id);
+        const content = canonicalJson({
+          kind: String(attachment.kind),
+          referenceId: String(attachment.referenceId),
+          label: String(attachment.label),
+          snapshotVersion:
+            frozenSnapshotsByAttachmentId.get(attachmentId) ??
+            (attachment.snapshotVersion === null
+              ? null
+              : String(attachment.snapshotVersion)),
+        });
+        const bytes = utf8Bytes(content);
+        if (attachmentContextBytes + bytes > attachmentContextBudget) break;
+        if (
+          addBlock({
+            id: newId("ctx"),
+            trust: "application-data",
+            mediaType: "application/vnd.avermate.reference+json",
+            content,
+            sourceRef: `attachment:${attachmentId}`,
+            redactions: [],
+          })
+        ) {
+          attachmentContextBytes += bytes;
+        }
+      }
       const retrievalQuery = contextualRetrievalQuery({
         question: boundedQuestion,
         history: conversationHistory,
         projectTitles: retrievalProjectTitles,
       });
-      const retrieval = await this.#retrieval(
-        {
-          ownerId,
-          query: retrievalQuery.resolvedQuery,
-          mode: "terms",
-          projectIds: uniqueProjectIds,
-          ...(uniqueExplicitSourceIds.length > 0
-            ? { sourceIds: uniqueExplicitSourceIds }
-            : {}),
-          yearIds: [...new Set(yearIds)],
-          subjectIds: [...new Set(subjectIds)],
-          originKinds: [],
-          contextAccess: "automatic",
-          limit: 12,
-          cursor: null,
-        },
-        {
+      if (
+        unavailableExplicitSources.length > 0 ||
+        unavailableTaskAttachments.length > 0
+      ) {
+        const unavailableBlockAdded = addBlock({
+          id: newId("ctx"),
+          trust: "system-policy",
+          mediaType:
+            "application/vnd.avermate.explicit-source-unavailable+json",
+          content: canonicalJson({
+            kind: "explicit-source-unavailable",
+            requestedSourceCount:
+              uniqueExplicitSources.length + taskAttachmentCount,
+            searchableSourceCount:
+              uniqueExplicitSourceIds.length + loadedTaskAttachmentCount,
+            unavailableSourceCount:
+              unavailableExplicitSources.length +
+              unavailableTaskAttachments.length,
+            unavailable: [
+              ...unavailableExplicitSources.map((source) => ({
+                attachmentId: source.attachmentId,
+                reason: source.reason,
+              })),
+              ...unavailableTaskAttachments.map((task) => ({
+                attachmentId: task.attachmentId,
+                reason: "task-unavailable",
+              })),
+            ],
+            scopeBehavior:
+              uniqueProjectIds.length > 0
+                ? "project-context-retained-unavailable-attachments-omitted"
+                : "closed-empty-when-no-searchable-attachment",
+            instruction:
+              "Do not claim to have read, searched, or cited an unavailable explicit attachment. State that it is unavailable when the answer depends on it.",
+          }),
+          sourceRef: null,
+          redactions: [],
+        });
+        if (!unavailableBlockAdded) {
+          throw new Error(
+            "Assistant context cannot represent unavailable explicit sources",
+          );
+        }
+      }
+
+      const retrievalRuns: Array<{
+        scope: "project" | "explicit-attachment" | "global";
+        result: HybridSearchResult;
+      }> = [];
+      const runRetrieval = async (
+        scope: (typeof retrievalRuns)[number]["scope"],
+        input: OwnedLexicalQuery,
+        policyProjectIds: readonly string[],
+      ) => {
+        const result = await this.#retrieval(input, {
           client: this.client,
           lexical: this.#lexical,
           signal,
-          policyProjectIds: uniqueProjectIds,
-        },
-      );
+          policyProjectIds,
+        });
+        retrievalRuns.push({ scope, result });
+        return result;
+      };
+
+      // Project membership and direct attachments form an explicit union, but
+      // their immutable-version rules differ. Separate retrievals preserve the
+      // project policy while allowing attachment versions to be fenced exactly.
+      if (uniqueProjectIds.length > 0) {
+        await runRetrieval(
+          "project",
+          {
+            ownerId,
+            query: retrievalQuery.resolvedQuery,
+            mode: "terms",
+            projectIds: uniqueProjectIds,
+            yearIds: [...new Set(yearIds)],
+            subjectIds: [],
+            originKinds: [],
+            contextAccess: "automatic",
+            limit: 12,
+            cursor: null,
+          },
+          uniqueProjectIds,
+        );
+      }
+      if (explicitScopeRequested) {
+        await runRetrieval(
+          "explicit-attachment",
+          {
+            ownerId,
+            query: retrievalQuery.resolvedQuery,
+            mode: "terms",
+            projectIds: [],
+            ...(uniqueExplicitSourceIds.length > 0
+              ? { sourceIds: uniqueExplicitSourceIds }
+              : {}),
+            ...(uniqueExplicitVersionIds.length > 0
+              ? { versionIds: uniqueExplicitVersionIds }
+              : {}),
+            yearIds: [],
+            subjectIds: [],
+            originKinds: [],
+            contextAccess: "explicit-attachment",
+            limit: 12,
+            cursor: null,
+          },
+          uniqueProjectIds,
+        );
+      }
+      if (uniqueProjectIds.length === 0 && !explicitScopeRequested) {
+        await runRetrieval(
+          "global",
+          {
+            ownerId,
+            query: retrievalQuery.resolvedQuery,
+            mode: "terms",
+            projectIds: [],
+            yearIds: [...new Set(yearIds)],
+            subjectIds: [...new Set(subjectIds)],
+            originKinds: [],
+            contextAccess: "automatic",
+            limit: 12,
+            cursor: null,
+          },
+          [],
+        );
+      }
       signal.throwIfAborted();
+
+      const allowedExplicitVersions = new Set(
+        resolvedExplicitSources.map(
+          (source) => `${source.sourceId}:${source.versionId}`,
+        ),
+      );
+      const explicitRun = retrievalRuns.find(
+        (run) => run.scope === "explicit-attachment",
+      );
+      const explicitCandidates = (explicitRun?.result.candidates ?? []).filter(
+        (candidate) =>
+          allowedExplicitVersions.has(
+            `${candidate.sourceId}:${candidate.versionId}`,
+          ),
+      );
+
+      // The hybrid kernel is version-fenced too, but advanced retrieval can be
+      // unavailable on a deployment. This owner/source/version-fenced lexical
+      // fallback lets retries still quote N after the head advances to N+1;
+      // it may only supplement, never evict, kernel-ranked evidence below.
+      const snapshotSources = resolvedExplicitSources.filter(
+        (source) => source.snapshotVersion !== null,
+      );
+      const snapshotCandidates: RetrievedCandidate[] = [];
+      if (snapshotSources.length > 0) {
+        const snapshotSourceIds = [
+          ...new Set(snapshotSources.map((source) => source.sourceId)),
+        ];
+        const snapshotVersionIds = [
+          ...new Set(snapshotSources.map((source) => source.versionId)),
+        ];
+        const relaxedSnapshotTerms = [
+          ...new Set(
+            normalizeForSearch(retrievalQuery.resolvedQuery).match(
+              /[\p{L}\p{N}_]+/gu,
+            ) ?? [],
+          ),
+        ]
+          .filter((term) => term.length >= 3)
+          .sort(
+            (left, right) =>
+              right.length - left.length || left.localeCompare(right, "en"),
+          )
+          .slice(0, 8);
+        const lexicalSnapshots: LexicalCandidate[] = [];
+        const seenLexicalSnapshotIds = new Set<string>();
+        for (const query of [
+          retrievalQuery.resolvedQuery,
+          ...relaxedSnapshotTerms,
+        ]) {
+          const candidates = await this.#lexical.search({
+            ownerId,
+            query,
+            mode: "terms",
+            projectIds: [],
+            sourceIds: snapshotSourceIds,
+            versionIds: snapshotVersionIds,
+            yearIds: [],
+            subjectIds: [],
+            originKinds: [],
+            contextAccess: "explicit-attachment",
+            limit: 12,
+            cursor: null,
+          });
+          for (const candidate of candidates) {
+            if (seenLexicalSnapshotIds.has(candidate.chunkId)) continue;
+            seenLexicalSnapshotIds.add(candidate.chunkId);
+            lexicalSnapshots.push(candidate);
+          }
+        }
+        const lexicalById = new Map(
+          lexicalSnapshots.map((candidate, index) => [
+            candidate.chunkId,
+            { candidate, index },
+          ]),
+        );
+        const candidateIds = [...lexicalById.keys()];
+        const scopedRows = await this.client.execute({
+          sql: `WITH scoped AS (
+              SELECT chunks.id AS chunkId, chunks.versionId, chunks.ordinal,
+                chunks.text, chunks.tokenEstimate, chunks.contentHash,
+                chunks.locatorJson, chunks.headingPathJson,
+                chunks.evidenceKind, versions.sourceId,
+                row_number() OVER (
+                  PARTITION BY versions.id ORDER BY chunks.ordinal, chunks.id
+                ) AS sourceRank
+              FROM content_chunks AS chunks
+              JOIN content_versions AS versions ON versions.id = chunks.versionId
+              JOIN content_sources AS sources ON sources.id = versions.sourceId
+              WHERE sources.userId = ? AND sources.placement = 'core'
+                AND sources.id IN (${snapshotSourceIds.map(() => "?").join(", ")})
+                AND versions.id IN (${snapshotVersionIds.map(() => "?").join(", ")})
+            )
+            SELECT * FROM scoped
+            WHERE sourceRank <= 2${candidateIds.length > 0 ? ` OR chunkId IN (${candidateIds.map(() => "?").join(", ")})` : ""}
+            ORDER BY sourceRank, chunkId LIMIT 100`,
+          args: [
+            ownerId,
+            ...snapshotSourceIds,
+            ...snapshotVersionIds,
+            ...candidateIds,
+          ],
+        });
+        const snapshotPairSet = new Set(
+          snapshotSources.map(
+            (source) => `${source.sourceId}:${source.versionId}`,
+          ),
+        );
+        const authorized = scopedRows.rows.filter((row) =>
+          snapshotPairSet.has(
+            `${String(row.sourceId)}:${String(row.versionId)}`,
+          ),
+        );
+        authorized.sort((left, right) => {
+          const leftLexical = lexicalById.get(String(left.chunkId));
+          const rightLexical = lexicalById.get(String(right.chunkId));
+          return (
+            Number(!leftLexical) - Number(!rightLexical) ||
+            (leftLexical?.index ?? Number.MAX_SAFE_INTEGER) -
+              (rightLexical?.index ?? Number.MAX_SAFE_INTEGER) ||
+            Number(left.ordinal) - Number(right.ordinal) ||
+            String(left.chunkId).localeCompare(String(right.chunkId), "en")
+          );
+        });
+        for (const [index, row] of authorized.entries()) {
+          const lexical = lexicalById.get(String(row.chunkId))?.candidate;
+          const text = String(row.text);
+          const headingPath =
+            row.headingPathJson === null
+              ? null
+              : (jsonValue(row.headingPathJson) as string[]);
+          snapshotCandidates.push({
+            sourceId: String(row.sourceId),
+            versionId: String(row.versionId),
+            chunkId: String(row.chunkId),
+            ordinal: Number(row.ordinal),
+            score: lexical?.score ?? 0,
+            snippet: lexical?.snippet ?? boundedUtf8Prefix(text, 2_048),
+            locator: sourceLocatorV1Schema.parse(jsonValue(row.locatorJson)),
+            contentHash: String(row.contentHash),
+            evidenceKind:
+              row.evidenceKind as RetrievedCandidate["evidenceKind"],
+            channels: ["lexical"],
+            fusedScore: lexical ? 1 / (61 + index) : 0,
+            text,
+            tokenEstimate: Number(row.tokenEstimate),
+            headingPath,
+          });
+        }
+      }
+
+      const retrievalCandidates = composeAssistantRetrievalCandidates({
+        // The version-fenced kernel preserves dense visual relevance. The
+        // historical lexical path exists only as a bounded gap filler when an
+        // immutable vector generation cannot contribute enough evidence.
+        explicitHybrid: explicitCandidates,
+        snapshotLexicalFallback: snapshotCandidates,
+        remainingTiers: retrievalRuns
+          .filter((run) => run.scope !== "explicit-attachment")
+          .map((run) => run.result.candidates),
+        limit: 12,
+      });
+      const primaryRetrieval = retrievalRuns[0]?.result;
+      if (!primaryRetrieval) {
+        throw new Error("Assistant retrieval did not execute a scoped run");
+      }
+      const retrievalModes = new Set(
+        retrievalRuns.map((run) => run.result.retrievalMode),
+      );
+      const retrievalMode = retrievalModes.has("reranked")
+        ? "reranked"
+        : retrievalModes.has("hybrid")
+          ? "hybrid"
+          : "lexical";
+      const fallbackReasons = [
+        ...new Set(
+          retrievalRuns.flatMap((run) =>
+            run.result.fallbackReason ? [run.result.fallbackReason] : [],
+          ),
+        ),
+      ];
       addBlock({
         id: newId("ctx"),
         trust: "application-data",
@@ -1679,9 +2257,17 @@ export class AssistantGraphExecutor {
             projectIds: uniqueProjectIds,
             explicitSourceCount: uniqueExplicitSources.length,
             searchableExplicitSourceCount: uniqueExplicitSourceIds.length,
+            unavailableExplicitSourceCount: unavailableExplicitSources.length,
             yearIds: [...new Set(yearIds)],
             subjectIds: [...new Set(subjectIds)],
-            contextAccess: "automatic",
+            contextAccess:
+              explicitScopeRequested && uniqueProjectIds.length === 0
+                ? "explicit-attachment"
+                : "automatic",
+            composition:
+              explicitScopeRequested && uniqueProjectIds.length > 0
+                ? "union-project-and-explicit-attachments"
+                : "single-scope",
           },
           query: {
             original: retrievalQuery.originalQuery,
@@ -1690,19 +2276,27 @@ export class AssistantGraphExecutor {
             policy: retrievalQuery.policy,
             previousUserMessageIds: retrievalQuery.previousUserMessageIds,
           },
-          mode: retrieval.retrievalMode,
+          mode: retrievalMode,
           fallbackReason:
-            retrieval.fallbackReason ??
+            fallbackReasons.join("; ") ||
             (explicitScopeRequested && uniqueExplicitSourceIds.length === 0
-              ? "explicit-sources-not-indexed; project scope retained"
+              ? uniqueProjectIds.length > 0
+                ? "explicit-sources-unavailable; project scope retained"
+                : "explicit-sources-unavailable; search closed empty"
               : null),
-          operationId: retrieval.operationId,
-          evidenceCount: retrieval.candidates.length,
+          operationId: primaryRetrieval.operationId,
+          operations: retrievalRuns.map((run) => ({
+            scope: run.scope,
+            operationId: run.result.operationId,
+            mode: run.result.retrievalMode,
+            evidenceCount: run.result.candidates.length,
+          })),
+          evidenceCount: retrievalCandidates.length,
         }),
-        sourceRef: retrieval.operationId,
+        sourceRef: primaryRetrieval.operationId,
         redactions: [],
       });
-      for (const candidate of retrieval.candidates) {
+      for (const candidate of retrievalCandidates) {
         if (includedChunks.has(candidate.chunkId)) continue;
         const text = candidate.text ?? candidate.snippet;
         const evidenceKey = evidenceKeyForOrdinal(evidence.length);
@@ -1720,33 +2314,43 @@ export class AssistantGraphExecutor {
           deliveryEnabled: visualDeliveryDescriptor !== null,
           fallbackText: text,
         });
-        if (
-          addBlock({
-            id: newId("ctx"),
+        const textPart = {
+          type: "text" as const,
+          text: content,
+          mime: "application/vnd.avermate.evidence+json",
+          evidence: {
+            chunkId: candidate.chunkId,
+            locator,
+            digest: candidate.contentHash,
+          },
+        };
+        const blockId = newId("ctx");
+        let deliveredVisualPart = visualPart;
+        let added = addBlock({
+          id: blockId,
+          trust: "retrieved-untrusted",
+          mediaType: "application/vnd.avermate.evidence+json",
+          content,
+          ...(visualPart ? { parts: [textPart, visualPart] } : {}),
+          sourceRef: candidate.chunkId,
+          redactions: [],
+        });
+        if (!added && visualPart) {
+          // A media unit may not fit the smallest frozen route even when its
+          // bounded text fallback does. Preserve truthful text evidence while
+          // never under-accounting or silently overflowing the media budget.
+          deliveredVisualPart = null;
+          added = addBlock({
+            id: blockId,
             trust: "retrieved-untrusted",
             mediaType: "application/vnd.avermate.evidence+json",
             content,
-            ...(visualPart
-              ? {
-                  parts: [
-                    {
-                      type: "text" as const,
-                      text: content,
-                      mime: "application/vnd.avermate.evidence+json",
-                      evidence: {
-                        chunkId: candidate.chunkId,
-                        locator,
-                        digest: candidate.contentHash,
-                      },
-                    },
-                    visualPart,
-                  ],
-                }
-              : {}),
+            parts: [textPart],
             sourceRef: candidate.chunkId,
             redactions: [],
-          })
-        ) {
+          });
+        }
+        if (added) {
           includedChunks.add(candidate.chunkId);
           evidence.push({
             sourceVersionId: candidate.versionId,
@@ -1755,40 +2359,28 @@ export class AssistantGraphExecutor {
             // A citation to visual-only evidence must remain bound to the
             // exact immutable bytes dispatched to the model. The chunk hash
             // remains available as quotedContentHash for corpus integrity.
-            evidenceDigest: visualPart?.evidence.digest ?? sha256(text),
+            evidenceDigest:
+              deliveredVisualPart?.evidence.digest ?? sha256(text),
             quotedContentHash: candidate.contentHash,
           });
         }
       }
-      const usedTokens = Math.ceil(
-        blocks.reduce(
-          (sum, block) =>
-            sum + new TextEncoder().encode(block.content).byteLength,
-          0,
-        ) / 4,
-      );
+      const budget = contextTokenBudget(blocks);
       let manifest = await this.#manifests.commit({
         ownerId,
         runId,
         budget: {
           maxTokens,
-          usedTokens,
+          usedTokens: budget.totalTokens,
           reservedOutputTokens: Math.min(
             reservedOutputTokens,
-            Math.max(0, maxTokens - usedTokens),
+            Math.max(0, maxTokens - budget.totalTokens),
           ),
+          textTokens: budget.textTokens,
+          mediaTokens: budget.mediaTokens,
+          estimationPolicy: "utf8-text-plus-conservative-media-v1",
         },
-        items: blocks.map((block) => ({
-          id: block.id,
-          trust: block.trust,
-          kind: block.mediaType,
-          referenceId: block.sourceRef,
-          byteLength: new TextEncoder().encode(block.content).byteLength,
-          tokenEstimate: Math.ceil(
-            new TextEncoder().encode(block.content).byteLength / 4,
-          ),
-          digest: sha256(canonicalJson(contextBlockCommitment(block))),
-        })),
+        items: contextManifestItems(blocks),
         evidence,
       });
       await control?.freezeContextManifest(
@@ -2153,29 +2745,22 @@ export class AssistantGraphExecutor {
         activeDispatchRound = null;
         if (invokedThisRound === 0) break;
         if (round === 3) throw new Error("Assistant tool round limit exceeded");
-        const nextUsedTokens = Math.ceil(contextBytes / 4);
+        const nextBudget = contextTokenBudget(blocks);
         manifest = await this.#manifests.commit({
           ownerId,
           runId,
           budget: {
             maxTokens,
-            usedTokens: nextUsedTokens,
+            usedTokens: nextBudget.totalTokens,
             reservedOutputTokens: Math.min(
               reservedOutputTokens,
-              Math.max(0, maxTokens - nextUsedTokens),
+              Math.max(0, maxTokens - nextBudget.totalTokens),
             ),
+            textTokens: nextBudget.textTokens,
+            mediaTokens: nextBudget.mediaTokens,
+            estimationPolicy: "utf8-text-plus-conservative-media-v1",
           },
-          items: blocks.map((block) => ({
-            id: block.id,
-            trust: block.trust,
-            kind: block.mediaType,
-            referenceId: block.sourceRef,
-            byteLength: new TextEncoder().encode(block.content).byteLength,
-            tokenEstimate: Math.ceil(
-              new TextEncoder().encode(block.content).byteLength / 4,
-            ),
-            digest: sha256(canonicalJson(contextBlockCommitment(block))),
-          })),
+          items: contextManifestItems(blocks),
           evidence,
         });
         const toolRoundEvent = await this.conversations.appendRunEvent({

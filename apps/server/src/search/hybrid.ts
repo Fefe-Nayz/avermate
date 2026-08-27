@@ -22,6 +22,7 @@ import {
   deduplicateRetrievalCandidates,
   diversifyRetrievalCandidates,
   expandParentAndNeighbors,
+  mergeRerankedTextWithVisualCandidates,
   packRetrievalContext,
   rerankRetrievalCandidates,
   retrievalScopeDigest,
@@ -45,6 +46,10 @@ import {
   readEmbeddingPublicationFence,
   type EmbeddingPublicationFence,
 } from "./embedding-publication-fence";
+import {
+  selectOwnedEmbeddingGenerations,
+  type OwnedEmbeddingGenerationSelection,
+} from "./embedding-generation-selection";
 
 type SqlClient = Pick<Client, "execute" | "transaction">;
 
@@ -97,7 +102,9 @@ function authorizationSql(input: OwnedLexicalQuery, args: InValue[]) {
     ...input,
     args,
     sourceSql: (placeholders) =>
-      `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
+      (input.versionIds?.length ?? 0) > 0
+        ? `sources.id IN (${placeholders})`
+        : `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
     projectSql: (contextModeSql) => ({
       sql: `EXISTS (
         SELECT 1
@@ -598,25 +605,6 @@ async function authorizedNeighborUniverse(
   });
 }
 
-async function activeGenerationId(
-  client: SqlClient,
-  ownerId: string,
-  spaceId: string,
-) {
-  try {
-    const rows = await client.execute({
-      sql: `SELECT id FROM corpus_embedding_generations
-        WHERE userId = ? AND spaceId = ? AND state = 'active'
-        LIMIT 1`,
-      args: [ownerId, spaceId],
-    });
-    return rows.rows[0] ? String(rows.rows[0].id) : null;
-  } catch (error) {
-    if (missingRetrievalSchema(error)) return null;
-    throw error;
-  }
-}
-
 async function persistTrace(
   client: SqlClient,
   input: {
@@ -710,6 +698,15 @@ export async function hybridCorpusSearch(
   const stages: RetrievalStageTrace[] = [];
   let fallbackReason: string | null = null;
   let corpusGenerationId: string | null = options.corpusGenerationId ?? null;
+  let corpusGenerationSelections:
+    readonly OwnedEmbeddingGenerationSelection[] | null = corpusGenerationId
+    ? [
+        {
+          generationId: corpusGenerationId,
+          versionIds: [...new Set(input.versionIds ?? [])],
+        },
+      ]
+    : null;
   const stage = (
     name: RetrievalStageTrace["stage"],
     descriptorId: string | null,
@@ -775,6 +772,10 @@ export async function hybridCorpusSearch(
     ...input,
     limit: Math.min(LEXICAL_POOL, Math.max(input.limit, LEXICAL_POOL)),
   });
+  // Source overviews below are a truthful lexical-only fallback, not query
+  // matches. Feeding their arbitrary first-page order into RRF would let a
+  // same-title cover page outrank a genuinely relevant dense PDF page.
+  const fusionLexicalCandidates = lexicalSearch.candidates;
   let lexicalCandidates = lexicalSearch.candidates;
   let lexicalFallbackReason: string | null = null;
   if ((input.sourceIds?.length ?? 0) > 0) {
@@ -974,21 +975,36 @@ export async function hybridCorpusSearch(
     ) {
       throw new Error("dense-project-space-not-configured");
     }
-    if (!corpusGenerationId) {
-      corpusGenerationId = await activeGenerationId(
-        client,
-        input.ownerId,
-        runtime.embedding.descriptor().id,
-      );
+    if (!corpusGenerationSelections) {
+      try {
+        corpusGenerationSelections = await selectOwnedEmbeddingGenerations({
+          client,
+          ownerId: input.ownerId,
+          spaceId: runtime.embedding.descriptor().id,
+          publicationEpoch: queryPublicationFence?.publicationEpoch ?? 0,
+          versionIds: input.versionIds,
+        });
+      } catch (error) {
+        if (!missingRetrievalSchema(error)) throw error;
+      }
     }
-    if (!corpusGenerationId) throw new Error("dense-generation-unavailable");
-    const generationVector = runtime.vector.forGeneration(
-      input.ownerId,
-      corpusGenerationId,
-    );
-    const capabilities = await generationVector.capabilities();
-    vectorImplementation = capabilities.implementation;
-    if (!capabilities.available) throw new Error("dense-index-unavailable");
+    if (
+      !corpusGenerationSelections ||
+      corpusGenerationSelections.length === 0
+    ) {
+      throw new Error("dense-generation-unavailable");
+    }
+    // Direct attachments are capped at 100 sources by the public contract. A
+    // still more fragmented internal scope fails as one unit instead of
+    // issuing an unbounded number of collection reads or returning a partial
+    // answer that silently omits snapshots.
+    if (corpusGenerationSelections.length > 100) {
+      throw new Error("dense-generation-scope-too-fragmented");
+    }
+    corpusGenerationId =
+      corpusGenerationSelections.length === 1
+        ? corpusGenerationSelections[0]!.generationId
+        : null;
     const authorizeEmbedding = async () => {
       if (queryPublicationFence) {
         await assertEmbeddingPublicationFence(
@@ -1021,12 +1037,65 @@ export async function hybridCorpusSearch(
     // Re-authorize before the now-stale vector can be used for a read.
     await authorizeEmbedding();
     if (!queryVector) throw new Error("dense-query-vector-missing");
-    const raw = await generationVector.search({
-      ownerId: input.ownerId,
-      spaceId: runtime.embedding.descriptor().id,
-      values: queryVector.values,
-      limit: DENSE_POOL,
-    });
+    const implementations = new Set<string>();
+    const rawByGeneration: VectorCandidate[][] = [];
+    for (const selection of corpusGenerationSelections) {
+      await authorizeEmbedding();
+      const generationVector = runtime.vector.forGeneration(
+        input.ownerId,
+        selection.generationId,
+      );
+      const capabilities = await generationVector.capabilities();
+      implementations.add(capabilities.implementation);
+      if (!capabilities.available) throw new Error("dense-index-unavailable");
+      const allowedVersions =
+        selection.versionIds.length > 0 ? new Set(selection.versionIds) : null;
+      const raw = await generationVector.search({
+        ownerId: input.ownerId,
+        spaceId: runtime.embedding.descriptor().id,
+        values: queryVector.values,
+        limit: DENSE_POOL,
+        ...(selection.versionIds.length > 0
+          ? { versionIds: selection.versionIds }
+          : {}),
+      });
+      // Defense in depth for custom/test vector adapters that do not yet
+      // implement the optional backend filter.
+      rawByGeneration.push(
+        raw.filter(
+          (candidate) =>
+            !allowedVersions || allowedVersions.has(candidate.versionId),
+        ),
+      );
+    }
+    vectorImplementation =
+      implementations.size === 1
+        ? ([...implementations][0] ?? null)
+        : "immutable-multi-generation-vector-v1";
+    // hydrateOwnedVectorCandidates has a hard 800-id authorization bound. Put
+    // one best result from every immutable collection in that window first,
+    // then fill it by global score. Hydration restores the final score order.
+    const reserved = rawByGeneration.flatMap((entries) => entries.slice(0, 1));
+    const reservedIds = new Set(
+      reserved.map(
+        (candidate) =>
+          `${candidate.sourceId}:${candidate.versionId}:${candidate.chunkId}`,
+      ),
+    );
+    const remaining = rawByGeneration
+      .flat()
+      .filter(
+        (candidate) =>
+          !reservedIds.has(
+            `${candidate.sourceId}:${candidate.versionId}:${candidate.chunkId}`,
+          ),
+      )
+      .sort(
+        (left, right) =>
+          right.score - left.score ||
+          left.chunkId.localeCompare(right.chunkId, "en"),
+      );
+    const raw = [...reserved, ...remaining].slice(0, 800);
     const hydratedDenseCandidates = await hydrateOwnedVectorCandidates(
       raw,
       input,
@@ -1069,11 +1138,11 @@ export async function hybridCorpusSearch(
 
   const fusionStarted = Date.now();
   const fused = reciprocalRankFusion({
-    lexical: lexicalCandidates,
+    lexical: fusionLexicalCandidates,
     vector: denseCandidates,
   });
   const lexicalById = new Map(
-    lexicalCandidates.map((entry) => [entry.chunkId, entry]),
+    fusionLexicalCandidates.map((entry) => [entry.chunkId, entry]),
   );
   const denseById = new Map(
     denseCandidates.map((entry) => [entry.chunkId, entry]),
@@ -1096,30 +1165,39 @@ export async function hybridCorpusSearch(
   stage(
     "fusion",
     "weighted-rrf-k60-v1",
-    lexicalCandidates.length + denseCandidates.length,
+    fusionLexicalCandidates.length + denseCandidates.length,
     deduplicated.length,
     fusionStarted,
     "used",
   );
 
-  const diversityStarted = Date.now();
-  let selected = diversifyRetrievalCandidates(deduplicated, {
+  // Build one bounded, source-diverse provider window first. Purely visual
+  // evidence is split out after hydration and never sent to the text-only
+  // reranker.
+  let candidateWindow = diversifyRetrievalCandidates(deduplicated, {
     limit: RERANK_WINDOW,
     maximumPerSource: 4,
     maximumPerLocator: 2,
     prioritySourceIds: input.sourceIds,
   });
-  stage(
-    "diversity",
-    (input.sourceIds?.length ?? 0) > 0
-      ? "round-robin-source-locator-explicit-first-v2"
-      : "round-robin-source-locator-v1",
-    deduplicated.length,
-    selected.length,
-    diversityStarted,
-    "used",
+  candidateWindow = await hydrateAuthorizedBodies(
+    client,
+    input,
+    candidateWindow,
   );
-  selected = await hydrateAuthorizedBodies(client, input, selected);
+  const visualCandidates = candidateWindow
+    .filter((candidate) => candidate.evidenceKind === "visual-only")
+    // The source round-robin used to bound the provider window must not become
+    // a replacement score for visuals. Restore their exact fused ranking
+    // before reserving the protected visual tier.
+    .sort(
+      (left, right) =>
+        right.fusedScore - left.fusedScore ||
+        left.chunkId.localeCompare(right.chunkId),
+    );
+  let textCandidates = candidateWindow.filter(
+    (candidate) => candidate.evidenceKind !== "visual-only",
+  );
 
   let rerankUsed = false;
   let rerankImplementation: string | null = null;
@@ -1129,11 +1207,23 @@ export async function hybridCorpusSearch(
     stage(
       "rerank",
       rerankSpaceId,
-      selected.length,
-      selected.length,
+      textCandidates.length,
+      textCandidates.length,
       rerankStarted,
       "degraded",
       unavailableReason ?? "rerank-unavailable",
+    );
+  } else if (textCandidates.length === 0) {
+    // A text reranker has no useful input for a visual-only retrieval window.
+    // Dense/RRF remains authoritative, without requiring a multimodal reranker.
+    stage(
+      "rerank",
+      rerankSpaceId,
+      0,
+      0,
+      rerankStarted,
+      "skipped",
+      "visual-only-window",
     );
   } else {
     try {
@@ -1146,22 +1236,22 @@ export async function hybridCorpusSearch(
         throw new Error("rerank-project-space-not-configured");
       }
       rerankImplementation = reranker.descriptor().id;
-      selected = await rerankRetrievalCandidates({
+      textCandidates = await rerankRetrievalCandidates({
         operationId,
         query: input.query,
-        candidates: selected,
+        candidates: textCandidates,
         provider: reranker,
-        // Keep the whole bounded window so an explicit attachment cannot be
-        // discarded before the deterministic scope-priority tier is applied.
-        topN: selected.length,
+        // Keep the whole bounded text window so an explicit attachment cannot
+        // be discarded before the deterministic scope-priority tier.
+        topN: textCandidates.length,
         signal,
       });
       rerankUsed = true;
       stage(
         "rerank",
         rerankImplementation,
-        deduplicated.length,
-        selected.length,
+        candidateWindow.length - visualCandidates.length,
+        textCandidates.length,
         rerankStarted,
         "used",
       );
@@ -1172,7 +1262,7 @@ export async function hybridCorpusSearch(
       stage(
         "rerank",
         rerankImplementation,
-        selected.length,
+        textCandidates.length,
         0,
         rerankStarted,
         fallbackPolicy === "fail" ? "failed" : "degraded",
@@ -1184,24 +1274,30 @@ export async function hybridCorpusSearch(
         throw new Error("RETRIEVAL_RERANK_FAILED");
       }
       if (fallbackPolicy === "lexical-only") {
-        const lexicalSelected = diversifyRetrievalCandidates(
-          deduplicateRetrievalCandidates(policyFromLexical(lexicalCandidates)),
-          {
-            limit: Math.min(
-              RERANK_WINDOW,
-              Math.max(input.limit, input.limit * 2),
-            ),
-            prioritySourceIds: input.sourceIds,
-          },
-        );
-        selected = await hydrateAuthorizedBodies(
-          client,
-          input,
-          lexicalSelected,
-        );
+        return lexicalOnly(fallbackReason);
       }
     }
   }
+
+  const diversityStarted = Date.now();
+  let selected = mergeRerankedTextWithVisualCandidates({
+    textCandidates,
+    visualCandidates,
+    limit: candidateWindow.length,
+    visualReservationLimit: input.limit,
+    maximumPerSource: 4,
+    maximumPerLocator: 2,
+  });
+  stage(
+    "diversity",
+    (input.sourceIds?.length ?? 0) > 0
+      ? "visual-reserved-source-locator-explicit-first-v1"
+      : "visual-reserved-source-locator-v1",
+    candidateWindow.length,
+    selected.length,
+    diversityStarted,
+    "used",
+  );
 
   const winners = prioritizeExplicitSources(selected, input.sourceIds).slice(
     0,

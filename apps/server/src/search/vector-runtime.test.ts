@@ -352,6 +352,16 @@ describe("persistent Qdrant vector adapter", () => {
                     chunkId: "private-chunk",
                   },
                 },
+                {
+                  score: 0.95,
+                  payload: {
+                    ownerId: "owner-a",
+                    spaceId: descriptor.id,
+                    sourceId: "source-current",
+                    versionId: "current-n-plus-one",
+                    chunkId: "hostile-unfenced-version",
+                  },
+                },
               ],
             },
           });
@@ -366,6 +376,7 @@ describe("persistent Qdrant vector adapter", () => {
       spaceId: descriptor.id,
       values: [1, 0, 0],
       limit: 5,
+      versionIds: ["version-a"],
     });
     expect(apiKeys).toContain("qdrant-secret");
     expect(queryBody).toMatchObject({
@@ -373,6 +384,7 @@ describe("persistent Qdrant vector adapter", () => {
         must: [
           { key: "ownerId", match: { value: "owner-a" } },
           { key: "spaceId", match: { value: descriptor.id } },
+          { key: "versionId", match: { any: ["version-a"] } },
         ],
       },
     });

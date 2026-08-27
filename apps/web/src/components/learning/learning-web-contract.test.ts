@@ -43,7 +43,9 @@ describe("learning Web contract", () => {
   test("separates measured progress, measurement quality and cautious history", async () => {
     const hub = await source("./learning-client.tsx")
 
-    expect(hub).toContain('const [tab, setTab] = useState("overview")')
+    expect(hub).toContain(
+      "const [tab, setTab] = useState<LearningTab>(initialTab)"
+    )
     expect(hub).toContain(
       "orpc.learning.progress.queryOptions({ input: scope })"
     )
@@ -68,16 +70,35 @@ describe("learning Web contract", () => {
     )
   })
 
-  test("hydrates the exact unfiltered learning query keys used by the client", async () => {
-    const page = await source("../../app/(app)/learning/page.tsx")
+  test("hydrates the exact validated deep-link scope used by the client", async () => {
+    const [page, hub] = await Promise.all([
+      source("../../app/(app)/learning/page.tsx"),
+      source("./learning-client.tsx"),
+    ])
+
+    expect(page).toContain(
+      "const scope = { yearId: initialYearId, subjectId: initialSubjectId }"
+    )
+    expect(page).toContain("years.some((year) => year.id === requestedYearId)")
+    expect(page).toContain("subject.id === requestedSubjectId")
 
     for (const procedure of ["copies.list", "plan.list", "progress"]) {
       const start = page.indexOf(`orpc.learning.${procedure}.queryOptions`)
       expect(start).toBeGreaterThan(-1)
-      expect(page.slice(start, start + 220)).toContain(
-        "input: { yearId: activeYearId, subjectId: null }"
-      )
+      expect(page.slice(start, start + 220)).toContain("input: scope")
     }
+    expect(hub).toContain(
+      'const scope = { yearId: scopedYearId ?? "", subjectId }'
+    )
+    expect(hub).toContain("enabled: Boolean(scopedYearId)")
+    expect(hub).toContain(
+      "const [pendingYearId, setPendingYearId] = useState(initialYearId)"
+    )
+    expect(hub).toContain("const scopedYearId = pendingYearId ?? yearId")
+    expect(hub).toContain("if (!cancelled) setPendingYearId(null)")
+    expect(hub).toContain("subjectSelection.yearId === scopedYearId")
+    expect(hub).toContain("setSubjectSelection({")
+    expect(hub).not.toContain("const scopedYearId = initialYearId ?? yearId")
   })
 
   test("labels interactive copy controls and embeds the PDF with a title", async () => {

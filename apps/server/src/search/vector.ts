@@ -74,10 +74,16 @@ export class InMemoryVectorIndex implements VectorIndex {
 
   async search(query: VectorQuery): Promise<VectorCandidate[]> {
     if (!this.supportedDimensions.has(query.values.length)) return [];
+    const versionIds =
+      query.versionIds && query.versionIds.length > 0
+        ? new Set(query.versionIds)
+        : null;
     return [...this.values.values()]
       .filter(
         (entry) =>
-          entry.ownerId === query.ownerId && entry.spaceId === query.spaceId,
+          entry.ownerId === query.ownerId &&
+          entry.spaceId === query.spaceId &&
+          (!versionIds || versionIds.has(entry.versionId)),
       )
       .map((entry) => ({
         sourceId: entry.sourceId,

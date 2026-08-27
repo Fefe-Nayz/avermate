@@ -14,6 +14,7 @@ import {
   FileOutputIcon,
   FilePlus2Icon,
   FolderKanbanIcon,
+  GraduationCapIcon,
   LibraryIcon,
   MessageSquareTextIcon,
   MoreHorizontalIcon,
@@ -95,6 +96,7 @@ import {
 } from "@/lib/route-query-inputs"
 import { buildSourceCatalogue, type ProjectSourceOption } from "./project-model"
 import { ProjectAddSourceDialog } from "./project-add-source-dialog"
+import { ProjectLearningOverview } from "./project-learning-overview"
 import {
   ProjectDialog,
   type EditableProject,
@@ -125,7 +127,7 @@ export function ProjectsClient({
   const t = useExtracted()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { yearId, subjects } = useYear()
+  const { yearId, years, subjects } = useYear()
   const { artifactKindLabel } = useMediaStudioCopy()
   const [editorOpen, setEditorOpen] = useState(false)
   const [workspaceTab, setWorkspaceTab] = useState("overview")
@@ -467,7 +469,7 @@ export function ProjectsClient({
                   {selected.yearId ? (
                     <Badge variant="outline">{t("Linked year")}</Badge>
                   ) : (
-                    <Badge variant="outline">{t("Active year")}</Badge>
+                    <Badge variant="outline">{t("No linked year")}</Badge>
                   )}
                   <Badge variant="secondary">
                     {t("Updated {date}", {
@@ -527,6 +529,10 @@ export function ProjectsClient({
                 <TabsTrigger value="sources">
                   <BookOpenTextIcon data-icon="inline-start" />
                   {t("Sources")}
+                </TabsTrigger>
+                <TabsTrigger value="learning">
+                  <GraduationCapIcon data-icon="inline-start" />
+                  {t("Learning")}
                 </TabsTrigger>
                 <TabsTrigger value="productions">
                   <FileOutputIcon data-icon="inline-start" />
@@ -593,6 +599,23 @@ export function ProjectsClient({
                   onRetry={(input) => retry.mutate(input)}
                   onTracking={(input) => setItemTracking.mutate(input)}
                   onContextMode={(input) => setItemContextMode.mutate(input)}
+                />
+              </TabsContent>
+
+              <TabsContent value="learning" className="pt-4">
+                <ProjectLearningOverview
+                  yearId={selected.yearId}
+                  subjectId={selected.subjectId}
+                  yearName={
+                    years.find((candidate) => candidate.id === selected.yearId)
+                      ?.name ?? null
+                  }
+                  subjectName={
+                    subjects.find(
+                      (candidate) => candidate.id === selected.subjectId
+                    )?.name ?? null
+                  }
+                  onEditProject={() => setEditorOpen(true)}
                 />
               </TabsContent>
 

@@ -151,6 +151,9 @@ describe("assistant v1 contracts", () => {
         maxTokens: 8_000,
         usedTokens: 1_000,
         reservedOutputTokens: 2_000,
+        textTokens: 744,
+        mediaTokens: 256,
+        estimationPolicy: "utf8-text-plus-conservative-media-v1",
       },
       items: [
         {
@@ -193,6 +196,11 @@ describe("assistant v1 contracts", () => {
     });
 
     expect(manifest.proofHandles[0]?.runId).toBe("run-a");
+    expect(manifest.budget).toMatchObject({
+      textTokens: 744,
+      mediaTokens: 256,
+      estimationPolicy: "utf8-text-plus-conservative-media-v1",
+    });
     expect(() =>
       assistantContextManifestSchema.parse({
         ...manifest,

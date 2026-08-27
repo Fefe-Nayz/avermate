@@ -13,6 +13,7 @@ import {
   assistantThreadSchema,
   assistantUsageSchema,
   avermateAgentEventV1Schema,
+  sourceLocatorV1Schema,
   storedConversationEventSchema,
   type AssistantAttachment,
   type AssistantAttachmentKind,
@@ -33,10 +34,12 @@ import {
   type SourceLocatorV1,
 } from "@avermate/agent-contracts";
 import { newId } from "../lib/id";
+import { retrySqliteBusy } from "../lib/sqlite-busy";
 import {
   canonicalJson,
   isoFromSqlite,
   jsonValue,
+  referenceKey,
   sha256,
 } from "../search/values";
 
@@ -347,6 +350,484 @@ async function currentDomainCursorRef(
     [ownerId],
   );
   return `domain:${ownerId}:${Number(row?.nextSequence ?? 0)}`;
+}
+
+const corpusOriginKindByAttachmentKind = {
+  material: "material",
+  document: "study-document",
+  transcript: "recording",
+  grade: "grade",
+  subject: "subject",
+  artifact: "artifact",
+} as const;
+
+function attachmentSupportsCorpusSnapshot(kind: AssistantAttachmentKind) {
+  return kind === "file" || kind in corpusOriginKindByAttachmentKind;
+}
+
+function assertAttachmentSnapshotInput(
+  kind: AssistantAttachmentKind,
+  snapshotVersion: string | null | undefined,
+) {
+  if (snapshotVersion != null && !attachmentSupportsCorpusSnapshot(kind)) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "This attachment kind does not support corpus snapshot versions",
+    );
+  }
+}
+
+type CorpusAttachmentIdentity = {
+  originKind: (typeof corpusOriginKindByAttachmentKind)[keyof typeof corpusOriginKindByAttachmentKind];
+  originId: string;
+};
+
+async function corpusAttachmentIdentity(
+  target: AssistantSqlClient | Transaction,
+  input: {
+    ownerId: string;
+    kind: AssistantAttachmentKind;
+    referenceId: string;
+  },
+): Promise<CorpusAttachmentIdentity | null> {
+  if (input.kind === "file") {
+    const material = await one(
+      target,
+      `SELECT id FROM material_documents
+        WHERE fileId = ? AND userId = ? AND deletedAt IS NULL LIMIT 1`,
+      [input.referenceId, input.ownerId],
+    );
+    return material
+      ? { originKind: "material", originId: String(material.id) }
+      : null;
+  }
+  if (!(input.kind in corpusOriginKindByAttachmentKind)) return null;
+  return {
+    originKind:
+      corpusOriginKindByAttachmentKind[
+        input.kind as keyof typeof corpusOriginKindByAttachmentKind
+      ],
+    originId: input.referenceId,
+  };
+}
+
+type AttachmentSnapshotCandidate = {
+  sourceId: string;
+  versionId: string;
+  locator: SourceLocatorV1;
+};
+
+const TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION = 1 as const;
+const TASK_ATTACHMENT_TEXT_FIELD_BYTES = 8 * 1024;
+const TASK_ATTACHMENT_TITLE_BYTES = 2 * 1024;
+const TASK_ATTACHMENT_PAYLOAD_BYTES = 32 * 1024;
+
+export type FrozenTaskAttachmentSnapshot = {
+  payloadVersion: typeof TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION;
+  payloadJson: string;
+  payloadDigest: string;
+  sourceRevision: number | null;
+};
+
+function boundedTaskSnapshotText(value: string, maximumBytes: number) {
+  const encoder = new TextEncoder();
+  if (encoder.encode(value).byteLength <= maximumBytes) return value;
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (encoder.encode(value.slice(0, middle)).byteLength <= maximumBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return value.slice(0, low);
+}
+
+function frozenTaskSnapshotFromRow(
+  row: Row,
+): FrozenTaskAttachmentSnapshot | null {
+  if (
+    row.frozenPayloadVersion === null ||
+    row.frozenPayloadVersion === undefined ||
+    row.frozenPayloadJson === null ||
+    row.frozenPayloadJson === undefined ||
+    row.frozenPayloadDigest === null ||
+    row.frozenPayloadDigest === undefined
+  ) {
+    return null;
+  }
+  const payloadVersion = Number(row.frozenPayloadVersion);
+  const payloadJson =
+    typeof row.frozenPayloadJson === "string"
+      ? row.frozenPayloadJson
+      : canonicalJson(row.frozenPayloadJson);
+  const payloadDigest = String(row.frozenPayloadDigest);
+  if (
+    payloadVersion !== TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION ||
+    new TextEncoder().encode(payloadJson).byteLength >
+      TASK_ATTACHMENT_PAYLOAD_BYTES ||
+    !/^[a-f0-9]{64}$/u.test(payloadDigest) ||
+    sha256(payloadJson) !== payloadDigest
+  ) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "The frozen task attachment snapshot is invalid",
+    );
+  }
+  return {
+    payloadVersion: TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION,
+    payloadJson,
+    payloadDigest,
+    sourceRevision:
+      row.frozenSourceRevision === null ||
+      row.frozenSourceRevision === undefined
+        ? null
+        : Number(row.frozenSourceRevision),
+  };
+}
+
+async function ownedTaskSnapshotCandidate(
+  target: AssistantSqlClient | Transaction,
+  ownerId: string,
+  taskId: string,
+): Promise<FrozenTaskAttachmentSnapshot | null> {
+  const canonicalTask = await one(
+    target,
+    `SELECT id, title, notes, localNote, startsAt, scheduledAt,
+        dueAt, status, completedAt, subjectId, yearId, revision,
+        sourceConnectionId, syncState
+      FROM planning_tasks
+      WHERE id = ? AND userId = ? AND trashedAt IS NULL LIMIT 1`,
+    [taskId, ownerId],
+  );
+  const legacyTask = canonicalTask
+    ? null
+    : await one(
+        target,
+        `SELECT id, kind, title, notes, startsAt, endsAt, allDay,
+            status, completedAt, subjectId, yearId
+          FROM planner_items
+          WHERE id = ? AND userId = ? AND kind = 'task' LIMIT 1`,
+        [taskId, ownerId],
+      );
+  const task = canonicalTask ?? legacyTask;
+  if (!task) return null;
+  const payloadJson = canonicalJson({
+    kind: "planning-task",
+    taskId: String(task.id),
+    title: boundedTaskSnapshotText(
+      String(task.title),
+      TASK_ATTACHMENT_TITLE_BYTES,
+    ),
+    notes:
+      task.notes === null
+        ? null
+        : boundedTaskSnapshotText(
+            String(task.notes),
+            TASK_ATTACHMENT_TEXT_FIELD_BYTES,
+          ),
+    localNote:
+      task.localNote === undefined || task.localNote === null
+        ? null
+        : boundedTaskSnapshotText(
+            String(task.localNote),
+            TASK_ATTACHMENT_TEXT_FIELD_BYTES,
+          ),
+    startsAt: task.startsAt ?? null,
+    scheduledAt: task.scheduledAt ?? null,
+    dueAt: task.dueAt ?? task.endsAt ?? null,
+    allDay: task.allDay ?? null,
+    status: String(task.status),
+    completedAt: task.completedAt ?? null,
+    subjectId: task.subjectId === null ? null : String(task.subjectId),
+    yearId: String(task.yearId),
+    revision: task.revision === undefined ? null : Number(task.revision),
+    managed:
+      task.sourceConnectionId === undefined
+        ? false
+        : task.sourceConnectionId !== null,
+    syncState: task.syncState === undefined ? null : String(task.syncState),
+  });
+  if (
+    new TextEncoder().encode(payloadJson).byteLength >
+    TASK_ATTACHMENT_PAYLOAD_BYTES
+  ) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "The attached task snapshot exceeds the supported size",
+    );
+  }
+  return {
+    payloadVersion: TASK_ATTACHMENT_SNAPSHOT_PAYLOAD_VERSION,
+    payloadJson,
+    payloadDigest: sha256(payloadJson),
+    sourceRevision: task.revision === undefined ? null : Number(task.revision),
+  };
+}
+
+async function freezeTaskAttachmentSnapshotInTransaction(
+  target: AssistantSqlClient | Transaction,
+  input: { ownerId: string; attachmentId: string; rejectUnavailable?: boolean },
+): Promise<FrozenTaskAttachmentSnapshot | null> {
+  const attachment = await one(
+    target,
+    `SELECT attachments.* FROM assistant_attachments AS attachments
+      JOIN assistant_messages AS messages ON messages.id = attachments.messageId
+      JOIN assistant_threads AS threads ON threads.id = messages.threadId
+      WHERE attachments.id = ? AND threads.userId = ? LIMIT 1`,
+    [input.attachmentId, input.ownerId],
+  );
+  if (!attachment) {
+    throw new ConversationStoreError("not_found", "Attachment not found");
+  }
+  if (String(attachment.kind) !== "task") {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "Only task attachments have structured task snapshots",
+    );
+  }
+  if (nullString(attachment.snapshotVersion) !== null) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "Task attachments do not support corpus snapshot versions",
+    );
+  }
+  const existing = frozenTaskSnapshotFromRow(attachment);
+  if (existing) return existing;
+  const candidate = await ownedTaskSnapshotCandidate(
+    target,
+    input.ownerId,
+    String(attachment.referenceId),
+  );
+  if (!candidate) {
+    if (input.rejectUnavailable) {
+      throw new ConversationStoreError(
+        "not_found",
+        "The attached task was not found",
+      );
+    }
+    return null;
+  }
+  await execute(target, {
+    sql: `UPDATE assistant_attachments
+      SET frozenPayloadVersion = ?, frozenPayloadJson = ?,
+        frozenPayloadDigest = ?, frozenSourceRevision = ?
+      WHERE id = ? AND frozenPayloadJson IS NULL`,
+    args: [
+      candidate.payloadVersion,
+      candidate.payloadJson,
+      candidate.payloadDigest,
+      candidate.sourceRevision,
+      input.attachmentId,
+    ],
+  });
+  const winner = await one(
+    target,
+    `SELECT frozenPayloadVersion, frozenPayloadJson, frozenPayloadDigest,
+        frozenSourceRevision
+      FROM assistant_attachments WHERE id = ? LIMIT 1`,
+    [input.attachmentId],
+  );
+  const frozen = winner ? frozenTaskSnapshotFromRow(winner) : null;
+  if (!frozen) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "The task attachment snapshot could not be frozen",
+    );
+  }
+  return frozen;
+}
+
+async function attachmentSnapshotCandidate(
+  target: AssistantSqlClient | Transaction,
+  input: {
+    ownerId: string;
+    identity: CorpusAttachmentIdentity;
+    requestedVersionId?: string | null;
+  },
+): Promise<AttachmentSnapshotCandidate | null> {
+  const requested = input.requestedVersionId ?? null;
+  const row = await one(
+    target,
+    `SELECT sources.id AS sourceId, versions.id AS versionId,
+        chunks.locatorJson
+      FROM content_sources AS sources
+      JOIN content_versions AS versions
+        ON versions.sourceId = sources.id
+        AND versions.id = ${requested === null ? "sources.currentVersionId" : "?"}
+      JOIN content_chunks AS chunks
+        ON chunks.id = (
+          SELECT firstChunk.id FROM content_chunks AS firstChunk
+          WHERE firstChunk.versionId = versions.id
+          ORDER BY firstChunk.ordinal, firstChunk.id LIMIT 1
+        )
+      WHERE sources.userId = ? AND sources.originKind = ?
+        AND sources.originId = ? LIMIT 1`,
+    [
+      ...(requested === null ? [] : [requested]),
+      input.ownerId,
+      input.identity.originKind,
+      input.identity.originId,
+    ],
+  );
+  if (!row) return null;
+  return {
+    sourceId: String(row.sourceId),
+    versionId: String(row.versionId),
+    locator: sourceLocatorV1Schema.parse(jsonValue(row.locatorJson)),
+  };
+}
+
+async function createAttachmentVersionReference(
+  target: AssistantSqlClient | Transaction,
+  input: {
+    ownerId: string;
+    attachmentId: string;
+    candidate: AttachmentSnapshotCandidate;
+    now: number;
+  },
+): Promise<void> {
+  const key = referenceKey({
+    sourceVersionId: input.candidate.versionId,
+    chunkId: null,
+    locatorSchemaVersion: 1,
+    locator: input.candidate.locator,
+  });
+  await execute(target, {
+    sql: `INSERT INTO content_version_references (
+        id, userId, ownerKind, ownerId, sourceVersionId, chunkId,
+        locatorSchemaVersion, locatorJson, quotedContentHash, referenceKey,
+        createdAt
+      ) VALUES (?, ?, 'assistant-citation', ?, ?, NULL, 1, ?, NULL, ?, ?)
+      ON CONFLICT(ownerKind, ownerId, referenceKey) DO NOTHING`,
+    args: [
+      newId("cref"),
+      input.ownerId,
+      input.attachmentId,
+      input.candidate.versionId,
+      canonicalJson(input.candidate.locator),
+      key,
+      input.now,
+    ],
+  });
+}
+
+/**
+ * Freezes one corpus attachment exactly once and creates its GC reachability
+ * edge in the same write transaction. A caller may pass the version returned
+ * by indexing so a concurrent head publication cannot silently move N to N+1.
+ */
+async function freezeAttachmentSnapshotInTransaction(
+  target: AssistantSqlClient | Transaction,
+  input: {
+    ownerId: string;
+    attachmentId: string;
+    expectedVersionId?: string | null;
+    rejectUnavailableExpectedVersion?: boolean;
+  },
+): Promise<string | null> {
+  const attachment = await one(
+    target,
+    `SELECT attachments.kind, attachments.referenceId,
+        attachments.snapshotVersion
+      FROM assistant_attachments AS attachments
+      JOIN assistant_messages AS messages ON messages.id = attachments.messageId
+      JOIN assistant_threads AS threads ON threads.id = messages.threadId
+      WHERE attachments.id = ? AND threads.userId = ? LIMIT 1`,
+    [input.attachmentId, input.ownerId],
+  );
+  if (!attachment) {
+    throw new ConversationStoreError("not_found", "Attachment not found");
+  }
+  const attachmentKind = attachment.kind as AssistantAttachmentKind;
+  const existingVersionId = nullString(attachment.snapshotVersion);
+  const expectedVersionId = input.expectedVersionId ?? null;
+  const hasCorpusSnapshotSemantics =
+    attachmentSupportsCorpusSnapshot(attachmentKind);
+  if (!hasCorpusSnapshotSemantics) {
+    if (existingVersionId !== null || expectedVersionId !== null) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "This attachment kind does not support corpus snapshot versions",
+      );
+    }
+    return null;
+  }
+  const identity = await corpusAttachmentIdentity(target, {
+    ownerId: input.ownerId,
+    kind: attachmentKind,
+    referenceId: String(attachment.referenceId),
+  });
+  if (!identity) {
+    if (
+      existingVersionId !== null ||
+      (expectedVersionId !== null && input.rejectUnavailableExpectedVersion)
+    ) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Attachment snapshot is not owned or its source mapping is unavailable",
+      );
+    }
+    return null;
+  }
+
+  const requestedVersionId = existingVersionId ?? expectedVersionId;
+  const candidate = await attachmentSnapshotCandidate(target, {
+    ownerId: input.ownerId,
+    identity,
+    requestedVersionId,
+  });
+  if (!candidate) {
+    if (
+      requestedVersionId !== null &&
+      (existingVersionId !== null || input.rejectUnavailableExpectedVersion)
+    ) {
+      throw new ConversationStoreError(
+        "invalid_state",
+        "Attachment snapshot is not owned, has no evidence, or does not belong to this source",
+      );
+    }
+    return null;
+  }
+
+  if (existingVersionId === null) {
+    await execute(target, {
+      sql: `UPDATE assistant_attachments SET snapshotVersion = ?
+        WHERE id = ? AND snapshotVersion IS NULL`,
+      args: [candidate.versionId, input.attachmentId],
+    });
+  }
+  const winner = await one(
+    target,
+    `SELECT snapshotVersion FROM assistant_attachments
+      WHERE id = ? LIMIT 1`,
+    [input.attachmentId],
+  );
+  const winnerVersionId = nullString(winner?.snapshotVersion);
+  if (!winnerVersionId) return null;
+  const winnerCandidate =
+    winnerVersionId === candidate.versionId
+      ? candidate
+      : await attachmentSnapshotCandidate(target, {
+          ownerId: input.ownerId,
+          identity,
+          requestedVersionId: winnerVersionId,
+        });
+  if (!winnerCandidate) {
+    throw new ConversationStoreError(
+      "invalid_state",
+      "The frozen attachment snapshot is no longer reachable",
+    );
+  }
+  await createAttachmentVersionReference(target, {
+    ownerId: input.ownerId,
+    attachmentId: input.attachmentId,
+    candidate: winnerCandidate,
+    now: sqlTimestamp(),
+  });
+  return winnerCandidate.versionId;
 }
 
 async function ownedThread(
@@ -1087,12 +1568,17 @@ export class CoreConversationStore {
         ],
       });
       for (const attachment of input.attachments ?? []) {
+        assertAttachmentSnapshotInput(
+          attachment.kind,
+          attachment.snapshotVersion,
+        );
+        const attachmentId = newId("aatt");
         await execute(transaction, {
           sql: `INSERT INTO assistant_attachments
             (id, messageId, kind, referenceId, snapshotVersion, label, fileId, createdAt)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           args: [
-            newId("aatt"),
+            attachmentId,
             messageId,
             attachment.kind,
             attachment.referenceId,
@@ -1102,6 +1588,21 @@ export class CoreConversationStore {
             now,
           ],
         });
+        await freezeAttachmentSnapshotInTransaction(transaction, {
+          ownerId: input.ownerId,
+          attachmentId,
+          expectedVersionId: attachment.snapshotVersion ?? null,
+          rejectUnavailableExpectedVersion:
+            attachment.snapshotVersion !== undefined &&
+            attachment.snapshotVersion !== null,
+        });
+        if (attachment.kind === "task") {
+          await freezeTaskAttachmentSnapshotInTransaction(transaction, {
+            ownerId: input.ownerId,
+            attachmentId,
+            rejectUnavailable: true,
+          });
+        }
       }
       await execute(transaction, {
         sql: `INSERT INTO assistant_runs
@@ -2203,11 +2704,27 @@ export class CoreConversationStore {
         AND purgeAfter <= ? ${ownerId ? "AND userId = ?" : ""}`,
       args: ownerId ? [now, ownerId] : [now],
     });
-    const ids = result.rows.map((row) => String(row.id));
+    let ids = result.rows.map((row) => String(row.id));
     if (ids.length) {
-      const placeholders = ids.map(() => "?").join(",");
       const transaction = await this.client.transaction("write");
       try {
+        // The maintenance scan above is only a candidate list. Restore can
+        // race that read, so establish the destructive fence again inside the
+        // write transaction before touching any dependent graph rows.
+        const candidatePlaceholders = ids.map(() => "?").join(",");
+        const eligible = await execute(transaction, {
+          sql: `SELECT id FROM assistant_threads
+            WHERE id IN (${candidatePlaceholders})
+              AND deletedAt IS NOT NULL AND purgeAfter <= ?
+              ${ownerId ? "AND userId = ?" : ""}`,
+          args: ownerId ? [...ids, now, ownerId] : [...ids, now],
+        });
+        ids = eligible.rows.map((row) => String(row.id));
+        if (ids.length === 0) {
+          await transaction.commit();
+          return [];
+        }
+        const placeholders = ids.map(() => "?").join(",");
         await execute(transaction, {
           sql: `UPDATE content_versions SET gcRequestedAt = ?
             WHERE id IN (
@@ -2253,6 +2770,15 @@ export class CoreConversationStore {
             )`,
           args: [...ids, ...ids],
         });
+        // Break the run -> manifest/checkpoint half of the intentionally
+        // immutable circular graph before deleting its leaves. Both targets
+        // are still owner/thread scoped by the surrounding purge transaction.
+        await execute(transaction, {
+          sql: `UPDATE assistant_runs
+            SET contextManifestId = NULL, conversationCheckpointRef = NULL
+            WHERE threadId IN (${placeholders})`,
+          args: ids,
+        });
         await execute(transaction, {
           sql: `DELETE FROM assistant_citations
             WHERE runId IN (
@@ -2272,11 +2798,19 @@ export class CoreConversationStore {
         await execute(transaction, {
           sql: `DELETE FROM content_version_references
             WHERE ownerKind = 'assistant-citation'
-              AND ownerId IN (
-                SELECT id FROM assistant_runs
-                WHERE threadId IN (${placeholders})
+              AND (
+                ownerId IN (
+                  SELECT id FROM assistant_runs
+                  WHERE threadId IN (${placeholders})
+                )
+                OR ownerId IN (
+                  SELECT attachments.id FROM assistant_attachments AS attachments
+                  JOIN assistant_messages AS messages
+                    ON messages.id = attachments.messageId
+                  WHERE messages.threadId IN (${placeholders})
+                )
               )`,
-          args: ids,
+          args: [...ids, ...ids],
         });
         await execute(transaction, {
           sql: `DELETE FROM assistant_context_manifests
@@ -2378,43 +2912,110 @@ export class CoreConversationStore {
     snapshotVersion?: string | null;
     label: string;
   }): Promise<AssistantAttachment> {
-    const message = await one(
-      this.client,
-      `SELECT m.* FROM assistant_messages m JOIN assistant_threads t ON t.id = m.threadId
-       WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL`,
-      [input.messageId, input.ownerId],
-    );
-    if (!message)
-      throw new ConversationStoreError("not_found", "Message not found");
-    if (message.role !== "user") {
-      throw new ConversationStoreError(
-        "invalid_state",
-        "Attachments may only be added to a user message",
+    assertAttachmentSnapshotInput(input.kind, input.snapshotVersion);
+    const transaction = await this.client.transaction("write");
+    try {
+      const message = await one(
+        transaction,
+        `SELECT m.* FROM assistant_messages m JOIN assistant_threads t ON t.id = m.threadId
+         WHERE m.id = ? AND t.userId = ? AND t.deletedAt IS NULL`,
+        [input.messageId, input.ownerId],
       );
+      if (!message)
+        throw new ConversationStoreError("not_found", "Message not found");
+      if (message.role !== "user") {
+        throw new ConversationStoreError(
+          "invalid_state",
+          "Attachments may only be added to a user message",
+        );
+      }
+      const id = newId("aatt");
+      const now = sqlTimestamp();
+      await execute(transaction, {
+        sql: `INSERT INTO assistant_attachments
+          (id, messageId, kind, referenceId, snapshotVersion, label, fileId, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id,
+          input.messageId,
+          input.kind,
+          input.referenceId,
+          input.snapshotVersion ?? null,
+          input.label,
+          input.kind === "file" ? input.referenceId : null,
+          now,
+        ],
+      });
+      await freezeAttachmentSnapshotInTransaction(transaction, {
+        ownerId: input.ownerId,
+        attachmentId: id,
+        expectedVersionId: input.snapshotVersion ?? null,
+        rejectUnavailableExpectedVersion:
+          input.snapshotVersion !== undefined && input.snapshotVersion !== null,
+      });
+      if (input.kind === "task") {
+        await freezeTaskAttachmentSnapshotInTransaction(transaction, {
+          ownerId: input.ownerId,
+          attachmentId: id,
+          rejectUnavailable: true,
+        });
+      }
+      const row = await one(
+        transaction,
+        `SELECT * FROM assistant_attachments WHERE id = ?`,
+        [id],
+      );
+      await transaction.commit();
+      return attachmentFromRow(row!);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
     }
-    const id = newId("aatt");
-    const now = sqlTimestamp();
-    await this.client.execute({
-      sql: `INSERT INTO assistant_attachments
-        (id, messageId, kind, referenceId, snapshotVersion, label, fileId, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        id,
-        input.messageId,
-        input.kind,
-        input.referenceId,
-        input.snapshotVersion ?? null,
-        input.label,
-        input.kind === "file" ? input.referenceId : null,
-        now,
-      ],
+  }
+
+  async freezeAttachmentSnapshot(input: {
+    ownerId: string;
+    attachmentId: string;
+    /** Exact version returned by the index publication, when available. */
+    expectedVersionId?: string | null;
+  }): Promise<string | null> {
+    return retrySqliteBusy(async () => {
+      const transaction = await this.client.transaction("write");
+      try {
+        const versionId = await freezeAttachmentSnapshotInTransaction(
+          transaction,
+          {
+            ...input,
+            rejectUnavailableExpectedVersion: input.expectedVersionId != null,
+          },
+        );
+        await transaction.commit();
+        return versionId;
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
     });
-    const row = await one(
-      this.client,
-      `SELECT * FROM assistant_attachments WHERE id = ?`,
-      [id],
-    );
-    return attachmentFromRow(row!);
+  }
+
+  async freezeTaskAttachmentSnapshot(input: {
+    ownerId: string;
+    attachmentId: string;
+  }): Promise<FrozenTaskAttachmentSnapshot | null> {
+    return retrySqliteBusy(async () => {
+      const transaction = await this.client.transaction("write");
+      try {
+        const snapshot = await freezeTaskAttachmentSnapshotInTransaction(
+          transaction,
+          { ...input, rejectUnavailable: false },
+        );
+        await transaction.commit();
+        return snapshot;
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      }
+    });
   }
 
   async manifests(

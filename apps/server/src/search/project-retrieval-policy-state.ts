@@ -180,6 +180,10 @@ export function deriveProjectRetrievalPolicyState(
   } else {
     effectiveMode = "unavailable";
   }
+  const intentionallyHybrid =
+    configured.retrievalMode === "advanced-auto" &&
+    configured.fallbackPolicy === "hybrid-without-rerank" &&
+    denseReady;
 
   return {
     projectId: configured.projectId,
@@ -190,8 +194,16 @@ export function deriveProjectRetrievalPolicyState(
       embeddingSpaceId: configured.embeddingSpaceId,
       rerankSpaceId: configured.rerankSpaceId,
     },
-    status: reasons.length === 0 ? ("active" as const) : ("degraded" as const),
+    status:
+      reasons.length === 0 || intentionallyHybrid
+        ? ("active" as const)
+        : ("degraded" as const),
     effectiveMode,
+    // Keep the optional reranker separate from dense readiness. Consumers use
+    // this to distinguish an intentional lexical+dense pipeline from a
+    // degraded reranked pipeline without reverse-engineering reason strings.
+    denseReady,
+    rerankReady,
     fallbackActive:
       configured.retrievalMode === "advanced-auto" && !advancedReady,
     reasons,

@@ -155,6 +155,10 @@ describe("Moodle integration read model", () => {
     expect(section).toContain("Local TEI reranker")
     expect(section).toContain("Cohere Rerank")
     expect(section).toContain("embedding.generations")
+    expect(section).toContain("generation.effectiveState")
+    expect(section).not.toContain(
+      '<Badge variant="outline">{generation.state}</Badge>'
+    )
     expect(section).toContain("fallbackPolicy")
     expect(section).toContain("queryDigest")
   })

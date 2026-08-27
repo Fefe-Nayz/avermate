@@ -431,10 +431,7 @@ export type ContentDerivativeKind =
   | "audio-segment"
   | "video-segment";
 export type ContentDerivativeStatus =
-  | "pending"
-  | "ready"
-  | "failed"
-  | "deleted";
+  "pending" | "ready" | "failed" | "deleted";
 
 /** Exact, disposable visual/media units produced only by an attested worker. */
 export const contentDerivatives = sqliteTable(
@@ -461,7 +458,10 @@ export const contentDerivatives = sqliteTable(
         onUpdate: "cascade",
       }),
     kind: text().$type<ContentDerivativeKind>().notNull(),
-    status: text().$type<ContentDerivativeStatus>().notNull().default("pending"),
+    status: text()
+      .$type<ContentDerivativeStatus>()
+      .notNull()
+      .default("pending"),
     locatorSchemaVersion: integer().notNull().default(1),
     locatorJson: text({ mode: "json" }).$type<SourceLocatorV1>().notNull(),
     contentHash: text().notNull(),
@@ -560,10 +560,7 @@ export const corpusEmbeddingOwnerStates = sqliteTable(
 );
 
 export type CorpusEmbeddingGenerationState =
-  | "staging"
-  | "active"
-  | "failed"
-  | "superseded";
+  "staging" | "active" | "failed" | "superseded";
 
 /** A generation is published only after its complete version set is indexed. */
 export const corpusEmbeddingGenerations = sqliteTable(
@@ -583,6 +580,13 @@ export const corpusEmbeddingGenerations = sqliteTable(
       .$type<CorpusEmbeddingGenerationState>()
       .notNull()
       .default("staging"),
+    /**
+     * Owner publication epoch that authorized this immutable generation.
+     * A disable/re-enable rotates the owner fence, so generations from an
+     * earlier epoch can remain available for physical cleanup without ever
+     * becoming searchable again.
+     */
+    publicationEpoch: integer().notNull().default(0),
     versionSetDigest: text().notNull(),
     expectedVersionCount: integer().notNull(),
     indexedVersionCount: integer().notNull().default(0),
@@ -689,9 +693,7 @@ export const retrievalTraces = sqliteTable(
       onUpdate: "cascade",
     }),
     scopeDigest: text().notNull(),
-    stagesJson: text({ mode: "json" })
-      .$type<RetrievalStageTrace[]>()
-      .notNull(),
+    stagesJson: text({ mode: "json" }).$type<RetrievalStageTrace[]>().notNull(),
     fallbackPolicy: text().$type<RetrievalFallbackPolicy>().notNull(),
     fallbackReason: text(),
     packedEvidenceIdsJson: text({ mode: "json" }).$type<string[]>().notNull(),

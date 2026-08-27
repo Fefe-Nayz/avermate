@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS,
+  CONTEXT_MEDIA_TOKEN_ESTIMATION_POLICY,
   contextAssetHandleSchema,
   createContextManifest,
 } from "./context";
@@ -97,6 +99,8 @@ describe("context trust boundary", () => {
               type: "pdf-page",
               assetHandle: `cah1.${"a".repeat(32)}`,
               mime: "application/pdf",
+              estimatedInputTokens: CONSERVATIVE_CONTEXT_MEDIA_INPUT_TOKENS,
+              tokenEstimationPolicy: CONTEXT_MEDIA_TOKEN_ESTIMATION_POLICY,
               fallbackText: "OCR fallback",
               evidence: {
                 chunkId: "chunk-7",
@@ -112,7 +116,11 @@ describe("context trust boundary", () => {
     });
 
     expect(legacy.blocks[0]?.parts).toBeUndefined();
-    expect(legacy.blocks[1]?.parts?.[0]?.type).toBe("pdf-page");
+    expect(legacy.blocks[1]?.parts?.[0]).toMatchObject({
+      type: "pdf-page",
+      estimatedInputTokens: 8_192,
+      tokenEstimationPolicy: "conservative-provider-neutral-v1",
+    });
   });
 
   test("rejects URLs, paths and mismatched PDF locators as asset metadata", () => {

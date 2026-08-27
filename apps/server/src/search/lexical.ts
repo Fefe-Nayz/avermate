@@ -81,7 +81,9 @@ function filterSql(input: OwnedLexicalQuery, args: InValue[]) {
     ...input,
     args,
     sourceSql: (placeholders) =>
-      `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
+      (input.versionIds?.length ?? 0) > 0
+        ? `sources.id IN (${placeholders})`
+        : `(sources.id IN (${placeholders}) AND sources.currentVersionId = versions.id)`,
     projectSql: (contextModeSql) => ({
       sql: `EXISTS (
         SELECT 1

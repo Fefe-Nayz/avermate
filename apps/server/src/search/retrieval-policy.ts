@@ -125,6 +125,105 @@ export function diversifyRetrievalCandidates(
   return output;
 }
 
+const MAXIMUM_RESERVED_VISUAL_CANDIDATES = 4;
+
+/**
+ * Combine incomparable ranking channels without pretending a textual rerank
+ * score can be compared with a multimodal dense/RRF score.
+ *
+ * Purely visual evidence keeps its incoming dense/RRF order. Visuals actually
+ * recalled by the dense channel own a small, bounded part of the final window;
+ * a title-only lexical match does not gain that protection. Text-rich evidence
+ * keeps the rerank order. Source and locator limits are enforced across both
+ * groups, so the protected visual tier cannot defeat the diversity policy.
+ */
+export function mergeRerankedTextWithVisualCandidates(input: {
+  textCandidates: readonly PolicyCandidate[];
+  visualCandidates: readonly PolicyCandidate[];
+  limit: number;
+  /** The final winner count, which defines the reservation independently of a larger expansion window. */
+  visualReservationLimit?: number;
+  maximumPerSource?: number;
+  maximumPerLocator?: number;
+}) {
+  const maximumPerSource = input.maximumPerSource ?? 4;
+  const maximumPerLocator = input.maximumPerLocator ?? 2;
+  const visualReservationLimit = Math.min(
+    input.limit,
+    input.visualReservationLimit ?? input.limit,
+  );
+  if (
+    !Number.isSafeInteger(input.limit) ||
+    !Number.isSafeInteger(visualReservationLimit) ||
+    !Number.isSafeInteger(maximumPerSource) ||
+    !Number.isSafeInteger(maximumPerLocator) ||
+    Math.min(
+      input.limit,
+      visualReservationLimit,
+      maximumPerSource,
+      maximumPerLocator,
+    ) < 0
+  ) {
+    throw new Error("RETRIEVAL_MIXED_MODALITY_LIMIT_INVALID");
+  }
+
+  const denseVisualCandidates = input.visualCandidates.filter((candidate) =>
+    candidate.channels.includes("dense"),
+  );
+  const reservedVisualCount =
+    denseVisualCandidates.length === 0 || visualReservationLimit === 0
+      ? 0
+      : Math.min(
+          MAXIMUM_RESERVED_VISUAL_CANDIDATES,
+          Math.max(1, Math.ceil(visualReservationLimit / 3)),
+        );
+  const sourceCounts = new Map<string, number>();
+  const locatorCounts = new Map<string, number>();
+  const used = new Set<string>();
+  const output: PolicyCandidate[] = [];
+
+  const take = (
+    candidates: readonly PolicyCandidate[],
+    maximumToAdd: number,
+  ) => {
+    let added = 0;
+    for (const candidate of candidates) {
+      if (used.has(candidate.chunkId)) continue;
+      if (output.length >= input.limit || added >= maximumToAdd) continue;
+      const locator = locatorIdentity(candidate.locator);
+      const locatorKey = locator
+        ? `${candidate.versionId}:${locator}`
+        : candidate.chunkId;
+      if (
+        (sourceCounts.get(candidate.sourceId) ?? 0) >= maximumPerSource ||
+        (locatorCounts.get(locatorKey) ?? 0) >= maximumPerLocator
+      ) {
+        continue;
+      }
+      output.push(candidate);
+      used.add(candidate.chunkId);
+      sourceCounts.set(
+        candidate.sourceId,
+        (sourceCounts.get(candidate.sourceId) ?? 0) + 1,
+      );
+      locatorCounts.set(locatorKey, (locatorCounts.get(locatorKey) ?? 0) + 1);
+      added += 1;
+    }
+  };
+
+  // Reserve the protected visual tier first. The relative order here is the
+  // dense/RRF order received from the caller, never a textual proxy score.
+  take(denseVisualCandidates, reservedVisualCount);
+  take(input.textCandidates, input.limit - output.length);
+  // If there is not enough usable text, visual evidence may fill the rest of
+  // the bounded window while still respecting the shared diversity counters.
+  take(
+    input.visualCandidates.filter((candidate) => !used.has(candidate.chunkId)),
+    input.limit - output.length,
+  );
+  return output;
+}
+
 export async function rerankRetrievalCandidates(input: {
   operationId: string;
   query: string;
@@ -133,6 +232,16 @@ export async function rerankRetrievalCandidates(input: {
   topN: number;
   signal: AbortSignal;
 }) {
+  if (
+    input.candidates.some(
+      (candidate) => candidate.evidenceKind === "visual-only",
+    )
+  ) {
+    // RerankProvider deliberately declares text as its only modality. Keep
+    // this boundary fail-closed so future callers cannot silently regress the
+    // protected multimodal ranking implemented by the hybrid pipeline.
+    throw new Error("RERANK_TEXT_ONLY_CANDIDATES_REQUIRED");
+  }
   const window = input.candidates.slice(
     0,
     Math.min(50, input.provider.descriptor().maximumCandidates),

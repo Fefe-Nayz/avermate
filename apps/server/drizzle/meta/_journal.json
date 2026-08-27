@@ -470,6 +470,20 @@
       "when": 1787854322830,
       "tag": "0066_corpus_embedding_owner_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1787865595774,
+      "tag": "0067_solid_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "6",
+      "when": 1787867440477,
+      "tag": "0068_dusty_vermin",
+      "breakpoints": true
     }
   ]
 }
